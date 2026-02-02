@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MapSeek Example - GeoJSON Viewer</title>
+  <title>Mapseek Example - GeoJSON Viewer</title>
   <style>
     body {
       margin: 0;
@@ -39,20 +39,30 @@
 <body>
   <div id="header">
     <strong>Mapseek Example</strong>
-    <input type="file" id="file-input" accept=".json,.geojson" />
+    <input type="file" id="file-input" accept=".json,.geojson,.zip" />
     <div class="info" id="status">Upload a GeoJSON file to start</div>
   </div>
   <div id="map"></div>
 
+  <!-- Import default styles for controls -->
+  <link rel="stylesheet" href="../../src/ui/controls.css">
   <!-- Import the dev bundle by default -->
   <script src="../../dist/mapseek-dev.js"></script>
   <script>
     // Use the global 'mapseek' object exposed by the IIFE bundle
-    const { Map, TopologySource } = mapseek;
+    const { MapseekMap, TopologySource } = mapseek;
 
-    const map = new Map({
+    const map = new MapseekMap({
       container: 'map'
     });
+
+    // Add UI Controls
+    map.addControl(new mapseek.NavigationControl(), 'top-left');
+    map.addControl(new mapseek.BasemapControl(), 'top-right');
+    map.addControl(new mapseek.StatusControl({
+      alignment: 'right',
+      showEPSG: true
+    }), 'bottom-right');
 
     const fileInput = document.getElementById('file-input');
     const status = document.getElementById('status');

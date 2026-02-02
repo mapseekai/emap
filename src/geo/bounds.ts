@@ -41,6 +41,14 @@ export class Bounds {
     if (y > this.ymax) this.ymax = y;
   }
 
+  merge(other: Bounds): void {
+    if (!other.hasBounds()) return;
+    if (other.xmin < this.xmin) this.xmin = other.xmin;
+    if (other.xmax > this.xmax) this.xmax = other.xmax;
+    if (other.ymin < this.ymin) this.ymin = other.ymin;
+    if (other.ymax > this.ymax) this.ymax = other.ymax;
+  }
+
   fillOut(aspect: number, focusX: number = 0.5, focusY: number = 0.5): this {
     const w = this.width;
     const h = this.height;
@@ -56,5 +64,16 @@ export class Bounds {
       this.ymax += focusY * pad;
     }
     return this;
+  }
+
+  scale(k: number): void {
+    const cx = this.centerX;
+    const cy = this.centerY;
+    const w = this.width * k;
+    const h = this.height * k;
+    this.xmin = cx - w / 2;
+    this.xmax = cx + w / 2;
+    this.ymin = cy - h / 2;
+    this.ymax = cy + h / 2;
   }
 }

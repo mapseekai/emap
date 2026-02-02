@@ -1,0 +1,236 @@
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { Control } from './control';
+import { MapseekMap } from '../map/map';
+
+export interface BasemapStyle {
+  name: string;
+  url: string;
+  type?: 'vector' | 'raster';
+}
+
+export interface BasemapOptions {
+  styles?: BasemapStyle[];
+  defaultStyle?: string;
+}
+
+// Default styles using free tile services
+const DEFAULT_STYLES: BasemapStyle[] = [
+  {
+    name: 'OSM',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    type: 'raster'
+  },
+  {
+    name: 'CartoDB Light',
+    url: 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+    type: 'raster'
+  },
+  {
+    name: 'CartoDB Dark',
+    url: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+    type: 'raster'
+  }
+];
+
+export class BasemapControl implements Control {
+  private _map: MapseekMap | null = null;
+  private _container: HTMLElement | null = null;
+  private _basemapContainer: HTMLElement | null = null;
+  private _maplibreMap: maplibregl.Map | null = null;
+  private _styles: BasemapStyle[];
+  private _activeStyle: BasemapStyle | null = null;
+  private _isOn: boolean = false;
+
+  constructor(options: BasemapOptions = {}) {
+    this._styles = options.styles || DEFAULT_STYLES;
+  }
+
+  onAdd(map: MapseekMap): HTMLElement {
+    this._map = map;
+
+    // Create control container for buttons
+    this._container = document.createElement('div');
+    this._container.className = 'mapseek-ctrl mapseek-basemap-ctrl';
+
+    // Create buttons for each style
+    this._styles.forEach((style) => {
+      const btn = document.createElement('button');
+      btn.className = 'mapseek-basemap-btn';
+      btn.textContent = style.name;
+      btn.onclick = () => this._toggleStyle(style);
+      this._container!.appendChild(btn);
+    });
+
+    // Create basemap container (behind canvas)
+    this._createBasemapLayer();
+
+    // Listen for map move events to sync basemap
+    this._map.on('move', this._syncBasemap.bind(this));
+
+    return this._container;
+  }
+
+  private _createBasemapLayer(): void {
+    if (!this._map) return;
+
+    const canvasContainer = this._map.getCanvasContainer();
+
+    // Create basemap container and insert before canvas
+    this._basemapContainer = document.createElement('div');
+    this._basemapContainer.className = 'mapseek-basemap';
+    this._basemapContainer.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      display: none;
+    `;
+
+    // Insert basemap BEHIND the canvas (Z = 0, canvas has higher Z)
+    canvasContainer.insertBefore(this._basemapContainer, canvasContainer.firstChild);
+  }
+
+  private _toggleStyle(style: BasemapStyle): void {
+    if (this._activeStyle === style) {
+      // Turn off basemap
+      this._turnOff();
+    } else {
+      // Turn on or switch style
+      this._showBasemap(style);
+    }
+    this._updateButtons();
+  }
+
+  private async _showBasemap(style: BasemapStyle): Promise<void> {
+    this._activeStyle = style;
+    this._isOn = true;
+
+    if (!this._basemapContainer || !this._map) return;
+    this._basemapContainer.style.display = 'block';
+
+    // Ensure Map is in Web Mercator if it's not already
+    const currentCrs = (this._map.getCRS() || '').toLowerCase();
+    if (currentCrs !== 'webmercator' && currentCrs !== 'epsg:3857' && this._map.reproject) {
+      // Use 'webmercator' as the target for mapshaper
+      await this._map.reproject('webmercator');
+    }
+
+    if (!this._maplibreMap) {
+      await this._initMapLibre(style);
+    } else {
+      this._maplibreMap.resize(); // Ensure map handles container visibility change
+      this._setStyle(style);
+      this._syncBasemap();
+    }
+  }
+
+  private async _initMapLibre(style: BasemapStyle): Promise<void> {
+    if (!this._basemapContainer || !this._map) return;
+
+    const maplibreStyle = this._createMapLibreStyle(style);
+
+    console.log('maplibregl object:', maplibregl);
+    console.log('maplibregl.Map:', maplibregl.Map);
+
+    this._maplibreMap = new maplibregl.Map({
+      container: this._basemapContainer,
+      style: maplibreStyle,
+      center: this._map.getCenter(),
+      zoom: this._map.getZoom(),
+      interactive: false,  // Disable all interaction - we sync from parent map
+      attributionControl: false,
+      maxPitch: 0,
+      projection: ({ name: 'mercator' } as any), // Fix for MapLibre/Mapbox projection types
+      renderWorldCopies: true,
+    });
+
+    this._maplibreMap.on('load', () => {
+      this._syncBasemap();
+    });
+  }
+
+  private _setStyle(style: BasemapStyle): void {
+    if (!this._maplibreMap) return;
+    const maplibreStyle = this._createMapLibreStyle(style);
+    this._maplibreMap.setStyle(maplibreStyle);
+  }
+
+  private _createMapLibreStyle(style: BasemapStyle): any {
+    if (style.type === 'raster' || style.url.includes('{z}')) {
+      // Raster tile style
+      return {
+        version: 8,
+        sources: {
+          'basemap-tiles': {
+            type: 'raster',
+            tiles: [style.url],
+            tileSize: 512,
+          }
+        },
+        layers: [{
+          id: 'basemap-layer',
+          type: 'raster',
+          source: 'basemap-tiles',
+          minzoom: 0,
+          maxzoom: 22,
+        }]
+      };
+    } else {
+      // Assume vector style URL
+      return style.url;
+    }
+  }
+
+
+  private _syncBasemap(): void {
+    if (!this._maplibreMap || !this._map || !this._isOn) return;
+    try {
+      this._maplibreMap.jumpTo({
+        center: this._map.getCenter(),
+        zoom: this._map.getZoom(),
+        animate: false
+      });
+    } catch (e) {
+      console.warn('Sync basemap failed:', e);
+    }
+  }
+
+  private _turnOff(): void {
+    this._activeStyle = null;
+    this._isOn = false;
+    if (this._basemapContainer) {
+      this._basemapContainer.style.display = 'none';
+    }
+  }
+
+  private _updateButtons(): void {
+    if (!this._container) return;
+
+    const buttons = this._container.querySelectorAll('.mapseek-basemap-btn');
+    buttons.forEach((btn, index) => {
+      const isActive = this._styles[index] === this._activeStyle;
+      btn.classList.toggle('active', isActive);
+    });
+  }
+
+  isOn(): boolean {
+    return this._isOn;
+  }
+
+  onRemove(): void {
+    if (this._maplibreMap) {
+      this._maplibreMap.remove();
+      this._maplibreMap = null;
+    }
+    if (this._basemapContainer?.parentNode) {
+      this._basemapContainer.parentNode.removeChild(this._basemapContainer);
+    }
+    if (this._container?.parentNode) {
+      this._container.parentNode.removeChild(this._container);
+    }
+    this._map = null;
+  }
+}

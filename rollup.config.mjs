@@ -5,6 +5,7 @@ import nodePolyfills from 'rollup-plugin-polyfill-node';
 import terser from '@rollup/plugin-terser';
 import alias from '@rollup/plugin-alias';
 import json from '@rollup/plugin-json';
+import postcss from 'rollup-plugin-postcss';
 
 const isProduction = process.env.BUILD === 'production';
 const outputFile = isProduction ? 'dist/mapseek.js' : 'dist/mapseek-dev.js';
@@ -31,6 +32,10 @@ export default {
       ignoreDynamicRequires: true
     }),
     json(),
+    postcss({
+      inject: true,  // Inject CSS into <head>
+      minimize: isProduction,
+    }),
     nodePolyfills(),
     typescript({
       tsconfig: './tsconfig.json'

@@ -30,11 +30,18 @@
     "@rollup/plugin-typescript": "^11.0.0",
     "rollup": "^4.0.0",
     "rollup-plugin-polyfill-node": "^0.13.0",
+    "rollup-plugin-postcss": "^4.0.2",
     "tslib": "^2.6.0",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"
   },
   "dependencies": {
-    "mapshaper": "^0.6.113"
+    "canvaskit-wasm": "^0.40.0",
+    "fflate": "^0.8.2",
+    "flatbush": "^4.5.0",
+    "kdbush": "^4.0.2",
+    "maplibre-gl": "^5.17.0",
+    "mapshaper": "^0.6.113",
+    "mproj": "^0.0.40"
   }
 }

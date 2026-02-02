@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MapSeek Example - CanvasKit Viewer</title>
+  <script src="https://unpkg.com/canvaskit-wasm@0.40.0/bin/full/canvaskit.js"></script>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    #header {
+      padding: 10px;
+      background: #2c3e50;
+      color: white;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
+
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+    }
+
+    .info {
+      margin-left: auto;
+      font-size: 0.85em;
+    }
+
+    .renderer-badge {
+      background: #e67e22;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <strong>Mapseek CanvasKit</strong>
+    <span class="renderer-badge">SKIA WASM</span>
+    <input type="file" id="file-input" accept=".json,.geojson" />
+    <div class="info" id="status">Initializing CanvasKit...</div>
+  </div>
+  <div id="map"></div>
+
+  <!-- Import the dev bundle -->
+  <script src="../../dist/mapseek-dev.js"></script>
+  <script>
+    const { Map, TopologySource } = mapseek;
+    const fileInput = document.getElementById('file-input');
+    const status = document.getElementById('status');
+
+    let map = null;
+
+    // Initialize CanvasKit
+    CanvasKitInit({
+      locateFile: (file) => `https://unpkg.com/canvaskit-wasm@0.40.0/bin/full/${file}`
+    }).then((ck) => {
+      status.textContent = "CanvasKit Ready. Upload GeoJSON.";
+
+      map = new Map({
+        container: 'map',
+        renderer: 'canvaskit',
+        canvasKit: ck
+      });
+
+      setupFileInput();
+    }).catch(err => {
+      console.error(err);
+      status.textContent = "Failed to load CanvasKit.";
+    });
+
+    function setupFileInput() {
+      fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file || !map) return;
+
+        status.textContent = `Processing ${file.name}...`;
+
+        try {
+          const reader = new FileReader();
+          reader.onload = async (event) => {
+            const content = new Uint8Array(event.target.result);
+            const source = new TopologySource('test-source');
+
+            await source.load({
+              filename: file.name,
+              content: content
+            });
+
+            map.addSource('test-source', source);
+            map.setExtent(source.getExtent());
+
+            status.textContent = `Viewing with CanvasKit: ${file.name}`;
+          };
+          reader.readAsArrayBuffer(file);
+        } catch (err) {
+          console.error(err);
+          status.textContent = 'Error processing file';
+        }
+      });
+    }
+
+    window.addEventListener('resize', () => {
+      if (map) map.resize();
+    });
+  </script>
+</body>
+
+</html>

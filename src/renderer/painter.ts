@@ -7,6 +7,7 @@ export interface Painter {
   resize(width: number, height: number): void;
   setTransform(transform: any): void;
   setPixelRatio(ratio: number): void;
+  flush?(): void; // Optional: used by CanvasKit to flush GPU commands
 }
 
 export interface RenderOptions {
