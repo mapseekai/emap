@@ -2,11 +2,16 @@ import mapshaper from 'mapshaper';
 import { TopologySource as ITopologySource } from './source';
 import { Bounds } from '../geo/bounds';
 import { unzipSync, strFromU8 } from 'fflate';
+import { DisplayArcs } from './display-arcs';
+
+/** File size threshold for skipping -clean during import (5MB) */
+const LARGE_FILE_THRESHOLD_BYTES = 5 * 1024 * 1024;
 
 export class TopologySource implements ITopologySource {
   public id: string;
   public type: 'topology' = 'topology';
   private _dataset: any;
+  private _displayArcs: DisplayArcs | null = null;
 
   constructor(id: string) {
     this.id = id;
@@ -16,7 +21,7 @@ export class TopologySource implements ITopologySource {
     if (!input) return;
 
     let inputFiles: Record<string, Uint8Array | string>;
-    let primaryFile: string = input.filename;
+    let primaryFile = input.filename;
 
     // Check if this is a zip file
     if (this._isZipFile(input.filename)) {
@@ -30,8 +35,11 @@ export class TopologySource implements ITopologySource {
       inputFiles = { [input.filename]: input.content };
     }
 
-    // Add -clean to fix topology errors and ensure consistent state on load
-    const cmd = `-i ${primaryFile} -clean -merge-layers`;
+    // For large files, skip -clean to speed up import. 
+    // Always run -simplify 100% to generate thresholds for dynamic rendering.
+    const isLarge = input.content.length > LARGE_FILE_THRESHOLD_BYTES;
+    const cleanFlag = isLarge ? '' : '-clean';
+    const cmd = `-i ${primaryFile} ${cleanFlag} -merge-layers -simplify 100%`;
     const commands = mapshaper.internal.parseCommands(cmd);
 
     // Inject input files into the import command
@@ -52,6 +60,11 @@ export class TopologySource implements ITopologySource {
         }
       });
     });
+
+    // Initialize LOD wrapper for large datasets
+    if (this._dataset?.arcs) {
+      this._displayArcs = new DisplayArcs(this._dataset.arcs);
+    }
   }
 
   public getDataset(): any {
@@ -148,6 +161,10 @@ export class TopologySource implements ITopologySource {
           const targets = finishedJob.catalog.getDefaultTargets();
           if (targets.length > 0) {
             this._dataset = targets[0].dataset;
+            // Re-initialize DisplayArcs with new arcs after reprojection
+            if (this._dataset?.arcs) {
+              this._displayArcs = new DisplayArcs(this._dataset.arcs);
+            }
             resolve();
           } else {
             // Reprojection might act in-place or return new dataset
@@ -166,6 +183,14 @@ export class TopologySource implements ITopologySource {
 
   getArcs(): any {
     return this._dataset?.arcs;
+  }
+
+  /**
+   * Returns the DisplayArcs wrapper for LOD support.
+   * Use getScaledArcs(unitsPerPixel) to get the appropriate LOD.
+   */
+  getDisplayArcs(): DisplayArcs | null {
+    return this._displayArcs;
   }
 
   getLayers(): any[] {

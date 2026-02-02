@@ -1,4 +1,4 @@
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Control } from './control';
 import { MapseekMap } from '../map/map';
@@ -32,6 +32,9 @@ const DEFAULT_STYLES: BasemapStyle[] = [
     type: 'raster'
   }
 ];
+
+/** MapLibre tile size - must match zoom calculation in map.ts */
+const MAPLIBRE_TILE_SIZE = 512;
 
 export class BasemapControl implements Control {
   private _map: MapseekMap | null = null;
@@ -132,9 +135,6 @@ export class BasemapControl implements Control {
 
     const maplibreStyle = this._createMapLibreStyle(style);
 
-    console.log('maplibregl object:', maplibregl);
-    console.log('maplibregl.Map:', maplibregl.Map);
-
     this._maplibreMap = new maplibregl.Map({
       container: this._basemapContainer,
       style: maplibreStyle,
@@ -143,7 +143,7 @@ export class BasemapControl implements Control {
       interactive: false,  // Disable all interaction - we sync from parent map
       attributionControl: false,
       maxPitch: 0,
-      projection: ({ name: 'mercator' } as any), // Fix for MapLibre/Mapbox projection types
+
       renderWorldCopies: true,
     });
 
@@ -158,7 +158,7 @@ export class BasemapControl implements Control {
     this._maplibreMap.setStyle(maplibreStyle);
   }
 
-  private _createMapLibreStyle(style: BasemapStyle): any {
+  private _createMapLibreStyle(style: BasemapStyle): maplibregl.StyleSpecification | string {
     if (style.type === 'raster' || style.url.includes('{z}')) {
       // Raster tile style
       return {
@@ -167,7 +167,7 @@ export class BasemapControl implements Control {
           'basemap-tiles': {
             type: 'raster',
             tiles: [style.url],
-            tileSize: 512,
+            tileSize: MAPLIBRE_TILE_SIZE,
           }
         },
         layers: [{
@@ -190,8 +190,7 @@ export class BasemapControl implements Control {
     try {
       this._maplibreMap.jumpTo({
         center: this._map.getCenter(),
-        zoom: this._map.getZoom(),
-        animate: false
+        zoom: this._map.getZoom()
       });
     } catch (e) {
       console.warn('Sync basemap failed:', e);

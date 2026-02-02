@@ -497,12 +497,15 @@ export class MapseekMap extends EventDispatcher {
     const strokeWidth = defaultWidth * lineScale;
 
     this._sources.forEach((source: TopologySource) => {
-      const arcs = source.getArcs();
+      const displayArcs = source.getDisplayArcs();
+      const pixelSize = 1 / Math.abs(this._transform.mx);
+
+      // Get arcs with LOD switching - uses low-detail copy when zoomed out
+      const arcs = displayArcs ? displayArcs.getScaledArcs(pixelSize) : source.getArcs();
 
       // Set dynamic simplification threshold based on pixel size
       // This causes getArcIter() to skip vertices below this threshold
       // Only set if we have simplification thresholds (isFlat() is false)
-      const pixelSize = 1 / Math.abs(this._transform.mx);
       if (arcs && arcs.setRetainedInterval && (typeof arcs.isFlat !== 'function' || !arcs.isFlat())) {
         arcs.setRetainedInterval(pixelSize * 0.5);
       }

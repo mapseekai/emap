@@ -1,23 +1,26 @@
-export class EventDispatcher {
-  private _listeners: Record<string, Function[]> = {};
+/** Event listener function type with typed event data */
+export type EventListener<T = Record<string, unknown>> = (event: { type: string } & T) => void;
 
-  on(type: string, listener: Function) {
+export class EventDispatcher {
+  private _listeners: Record<string, EventListener[]> = {};
+
+  on<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this {
     if (!this._listeners[type]) {
       this._listeners[type] = [];
     }
-    this._listeners[type].push(listener);
+    this._listeners[type].push(listener as EventListener);
     return this;
   }
 
-  off(type: string, listener: Function) {
+  off<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this {
     if (!this._listeners[type]) return this;
     this._listeners[type] = this._listeners[type].filter(l => l !== listener);
     return this;
   }
 
-  fire(type: string, data?: any) {
+  fire<T = Record<string, unknown>>(type: string, data?: T): this {
     if (!this._listeners[type]) return this;
-    const event = { type, ...data };
+    const event = { type, ...data } as { type: string } & T;
     this._listeners[type].forEach(l => l(event));
     return this;
   }
