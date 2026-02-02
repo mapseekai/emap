@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MapSeek Example - GeoJSON Viewer</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    #header {
+      padding: 10px;
+      background: #34495e;
+      color: white;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
+
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+    }
+
+    .info {
+      margin-left: auto;
+      font-size: 0.85em;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <strong>Mapseek Example</strong>
+    <input type="file" id="file-input" accept=".json,.geojson" />
+    <div class="info" id="status">Upload a GeoJSON file to start</div>
+  </div>
+  <div id="map"></div>
+
+  <!-- Import the dev bundle by default -->
+  <script src="../../dist/mapseek-dev.js"></script>
+  <script>
+    // Use the global 'mapseek' object exposed by the IIFE bundle
+    const { Map, TopologySource } = mapseek;
+
+    const map = new Map({
+      container: 'map'
+    });
+
+    const fileInput = document.getElementById('file-input');
+    const status = document.getElementById('status');
+
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      status.textContent = `Processing ${file.name}...`;
+
+      try {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const content = new Uint8Array(event.target.result);
+          const source = new TopologySource('test-source');
+
+          await source.load({
+            filename: file.name,
+            content: content
+          });
+
+          map.addSource('test-source', source);
+          map.setExtent(source.getExtent());
+
+          status.textContent = `Viewing: ${file.name}`;
+        };
+        reader.readAsArrayBuffer(file);
+      } catch (err) {
+        console.error(err);
+        status.textContent = 'Error processing file';
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      map.resize();
+    });
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,40 @@
+{
+  "name": "mapseek",
+  "version": "0.1.0",
+  "description": "A modern, decoupled rendering engine for mapshaper data",
+  "main": "dist/mapseek.js",
+  "module": "dist/mapseek.mjs",
+  "types": "dist/mapseek.d.ts",
+  "scripts": {
+    "dev": "rollup -c --environment BUILD:development -w",
+    "dev-build": "rollup -c --environment BUILD:development",
+    "build": "rollup -c --environment BUILD:production",
+    "test": "vitest"
+  },
+  "keywords": [
+    "mapshaper",
+    "mapseek",
+    "gis",
+    "renderer",
+    "canvas",
+    "canvaskit"
+  ],
+  "author": "",
+  "license": "MPL-2.0",
+  "devDependencies": {
+    "@rollup/plugin-alias": "^6.0.0",
+    "@rollup/plugin-commonjs": "^25.0.0",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^11.0.0",
+    "rollup": "^4.0.0",
+    "rollup-plugin-polyfill-node": "^0.13.0",
+    "tslib": "^2.6.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "dependencies": {
+    "mapshaper": "^0.6.113"
+  }
+}
