@@ -8,14 +8,14 @@ import json from '@rollup/plugin-json';
 import postcss from 'rollup-plugin-postcss';
 
 const isProduction = process.env.BUILD === 'production';
-const outputFile = isProduction ? 'dist/mapseek.js' : 'dist/mapseek-dev.js';
+const outputFile = isProduction ? 'dist/emap.js' : 'dist/emap-dev.js';
 
 export default {
   input: 'src/index.ts',
   output: {
     file: outputFile,
     format: 'iife',
-    name: 'mapseek',
+    name: 'emap',
     sourcemap: true,
   },
   plugins: [

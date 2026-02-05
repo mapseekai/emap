@@ -1,7 +1,7 @@
 import './shim';
 import 'mapshaper';
 
-export { MapseekMap } from './map/map';
+export { Emap } from './map/map';
 export * from './core/events';
 export * from './source/topology-source';
 export * from './renderer/canvas-painter';

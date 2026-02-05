@@ -1,5 +1,5 @@
 import { Control } from './control';
-import { MapseekMap } from '../map/map';
+import { Emap } from '../map/map';
 
 export interface StatusOptions {
   showMousePos?: boolean;
@@ -9,7 +9,7 @@ export interface StatusOptions {
 }
 
 export class StatusControl implements Control {
-  private _map: MapseekMap | null = null;
+  private _map: Emap | null = null;
   private _container: HTMLElement | null = null;
   private _options: StatusOptions;
   private _mousePosEl: HTMLElement | null = null;
@@ -24,20 +24,20 @@ export class StatusControl implements Control {
     };
   }
 
-  onAdd(map: MapseekMap): HTMLElement {
+  onAdd(map: Emap): HTMLElement {
     this._map = map;
     this._container = document.createElement('div');
-    this._container.className = `mapseek-ctrl mapseek-status-ctrl mapseek-align-${this._options.alignment} ${this._options.className || ''}`;
+    this._container.className = `emap-ctrl emap-status-ctrl emap-align-${this._options.alignment} ${this._options.className || ''}`;
 
     if (this._options.showMousePos) {
       this._mousePosEl = document.createElement('span');
-      this._mousePosEl.className = 'mapseek-status-mousepos';
+      this._mousePosEl.className = 'emap-status-mousepos';
       this._container.appendChild(this._mousePosEl);
     }
 
     if (this._options.showEPSG) {
       this._epsgEl = document.createElement('span');
-      this._epsgEl.className = 'mapseek-status-epsg';
+      this._epsgEl.className = 'emap-status-epsg';
       this._container.appendChild(this._epsgEl);
       this._updateEPSG();
     }

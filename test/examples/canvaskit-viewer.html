@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MapSeek Example - CanvasKit Viewer</title>
+  <title>Emap Example - CanvasKit Viewer</title>
   <script src="https://unpkg.com/canvaskit-wasm@0.40.0/bin/full/canvaskit.js"></script>
   <style>
     body {
@@ -47,7 +47,7 @@
 
 <body>
   <div id="header">
-    <strong>Mapseek CanvasKit</strong>
+    <strong>Emap CanvasKit</strong>
     <span class="renderer-badge">SKIA WASM</span>
     <input type="file" id="file-input" accept=".json,.geojson" />
     <div class="info" id="status">Initializing CanvasKit...</div>
@@ -55,9 +55,9 @@
   <div id="map"></div>
 
   <!-- Import the dev bundle -->
-  <script src="../../dist/mapseek-dev.js"></script>
+  <script src="../../dist/emap-dev.js"></script>
   <script>
-    const { Map, TopologySource } = mapseek;
+    const { Emap, TopologySource } = emap;
     const fileInput = document.getElementById('file-input');
     const status = document.getElementById('status');
 
@@ -69,7 +69,7 @@
     }).then((ck) => {
       status.textContent = "CanvasKit Ready. Upload GeoJSON.";
 
-      map = new Map({
+      map = new Emap({
         container: 'map',
         renderer: 'canvaskit',
         canvasKit: ck

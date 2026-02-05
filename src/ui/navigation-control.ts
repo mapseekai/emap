@@ -1,5 +1,5 @@
 import { Control } from './control';
-import { MapseekMap } from '../map/map';
+import { Emap } from '../map/map';
 
 export interface NavigationOptions {
   showZoom?: boolean;
@@ -8,7 +8,7 @@ export interface NavigationOptions {
 }
 
 export class NavigationControl implements Control {
-  private _map: MapseekMap | null = null;
+  private _map: Emap | null = null;
   private _container: HTMLElement | null = null;
   private _options: NavigationOptions;
 
@@ -20,10 +20,10 @@ export class NavigationControl implements Control {
     };
   }
 
-  onAdd(map: MapseekMap): HTMLElement {
+  onAdd(map: Emap): HTMLElement {
     this._map = map;
     this._container = document.createElement('div');
-    this._container.className = `mapseek-ctrl mapseek-ctrl-group ${this._options.className || ''}`;
+    this._container.className = `emap-ctrl emap-ctrl-group ${this._options.className || ''}`;
 
     if (this._options.showZoom) {
       this._createButton('zoom-in', '+', 'Zoom In', () => {
@@ -46,10 +46,10 @@ export class NavigationControl implements Control {
 
   private _createButton(id: string, label: string, title: string, onClick: () => void): void {
     const btn = document.createElement('button');
-    btn.className = `mapseek-ctrl-${id}`;
+    btn.className = `emap-ctrl-${id}`;
     btn.type = 'button';
     btn.title = title;
-    btn.innerHTML = `<span class="mapseek-ctrl-icon">${label}</span>`;
+    btn.innerHTML = `<span class="emap-ctrl-icon">${label}</span>`;
     btn.addEventListener('click', onClick);
     this._container?.appendChild(btn);
   }

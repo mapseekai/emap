@@ -1,7 +1,7 @@
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Control } from './control';
-import { MapseekMap } from '../map/map';
+import { Emap } from '../map/map';
 
 export interface BasemapStyle {
   name: string;
@@ -37,7 +37,7 @@ const DEFAULT_STYLES: BasemapStyle[] = [
 const MAPLIBRE_TILE_SIZE = 512;
 
 export class BasemapControl implements Control {
-  private _map: MapseekMap | null = null;
+  private _map: Emap | null = null;
   private _container: HTMLElement | null = null;
   private _basemapContainer: HTMLElement | null = null;
   private _maplibreMap: maplibregl.Map | null = null;
@@ -49,17 +49,17 @@ export class BasemapControl implements Control {
     this._styles = options.styles || DEFAULT_STYLES;
   }
 
-  onAdd(map: MapseekMap): HTMLElement {
+  onAdd(map: Emap): HTMLElement {
     this._map = map;
 
     // Create control container for buttons
     this._container = document.createElement('div');
-    this._container.className = 'mapseek-ctrl mapseek-basemap-ctrl';
+    this._container.className = 'emap-ctrl emap-basemap-ctrl';
 
     // Create buttons for each style
     this._styles.forEach((style) => {
       const btn = document.createElement('button');
-      btn.className = 'mapseek-basemap-btn';
+      btn.className = 'emap-basemap-btn';
       btn.textContent = style.name;
       btn.onclick = () => this._toggleStyle(style);
       this._container!.appendChild(btn);
@@ -81,7 +81,7 @@ export class BasemapControl implements Control {
 
     // Create basemap container and insert before canvas
     this._basemapContainer = document.createElement('div');
-    this._basemapContainer.className = 'mapseek-basemap';
+    this._basemapContainer.className = 'emap-basemap';
     this._basemapContainer.style.cssText = `
       position: absolute;
       top: 0;
@@ -208,7 +208,7 @@ export class BasemapControl implements Control {
   private _updateButtons(): void {
     if (!this._container) return;
 
-    const buttons = this._container.querySelectorAll('.mapseek-basemap-btn');
+    const buttons = this._container.querySelectorAll('.emap-basemap-btn');
     buttons.forEach((btn, index) => {
       const isActive = this._styles[index] === this._activeStyle;
       btn.classList.toggle('active', isActive);

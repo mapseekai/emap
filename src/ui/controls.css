@@ -1,105 +1,105 @@
 /* Navigation Controls */
-.mapseek-ctrl-group {
-    background-color: #fff;
-    border-radius: 4px;
-    box-shadow: 0 0 0 2px rgba(0, 0, 0, .1);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
+.emap-ctrl-group {
+  background-color: #fff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-.mapseek-ctrl-group button {
-    width: 30px;
-    height: 30px;
-    display: block;
-    padding: 0;
-    outline: none;
-    border: 0;
-    box-sizing: border-box;
-    background-color: transparent;
-    cursor: pointer;
-    border-bottom: 1px solid #ddd;
+.emap-ctrl-group button {
+  width: 30px;
+  height: 30px;
+  display: block;
+  padding: 0;
+  outline: none;
+  border: 0;
+  box-sizing: border-box;
+  background-color: transparent;
+  cursor: pointer;
+  border-bottom: 1px solid #ddd;
 }
 
-.mapseek-ctrl-group button:last-child {
-    border-bottom: 0;
+.emap-ctrl-group button:last-child {
+  border-bottom: 0;
 }
 
-.mapseek-ctrl-group button:hover {
-    background-color: #f2f2f2;
+.emap-ctrl-group button:hover {
+  background-color: #f2f2f2;
 }
 
-.mapseek-ctrl-icon {
-    font-size: 18px;
-    line-height: 30px;
+.emap-ctrl-icon {
+  font-size: 18px;
+  line-height: 30px;
 }
 
 /* Status Controls */
-.mapseek-status-ctrl {
-    background-color: rgba(255, 255, 255, 0.8);
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    color: #333;
-    pointer-events: auto;
-    white-space: nowrap;
-    display: flex;
-    align-items: center;
+.emap-status-ctrl {
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #333;
+  pointer-events: auto;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
 }
 
-.mapseek-align-left {
-    align-self: flex-start;
+.emap-align-left {
+  align-self: flex-start;
 }
 
-.mapseek-align-right {
-    align-self: flex-end;
+.emap-align-right {
+  align-self: flex-end;
 }
 
-.mapseek-align-center {
-    align-self: center;
+.emap-align-center {
+  align-self: center;
 }
 
-.mapseek-status-zoom,
-.mapseek-status-mousepos,
-.mapseek-status-epsg {
-    display: inline-block;
-    margin-right: 15px;
+.emap-status-zoom,
+.emap-status-mousepos,
+.emap-status-epsg {
+  display: inline-block;
+  margin-right: 15px;
 }
 
-.mapseek-status-epsg {
-    margin-right: 0;
+.emap-status-epsg {
+  margin-right: 0;
 }
 
 /* Basemap Controls */
-.mapseek-basemap-ctrl {
-    background-color: #fff;
-    border-radius: 4px;
-    box-shadow: 0 0 0 2px rgba(0, 0, 0, .1);
-    overflow: hidden;
-    display: flex;
-    flex-direction: row;
-    gap: 1px;
+.emap-basemap-ctrl {
+  background-color: #fff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: row;
+  gap: 1px;
 }
 
-.mapseek-basemap-btn {
-    padding: 6px 10px;
-    background-color: #fff;
-    border: 0;
-    cursor: pointer;
-    font-size: 11px;
-    transition: background-color 0.15s ease;
+.emap-basemap-btn {
+  padding: 6px 10px;
+  background-color: #fff;
+  border: 0;
+  cursor: pointer;
+  font-size: 11px;
+  transition: background-color 0.15s ease;
 }
 
-.mapseek-basemap-btn:hover {
-    background-color: #f2f2f2;
+.emap-basemap-btn:hover {
+  background-color: #f2f2f2;
 }
 
-.mapseek-basemap-btn.active {
-    background-color: #0078ff;
-    color: #fff;
+.emap-basemap-btn.active {
+  background-color: #0078ff;
+  color: #fff;
 }
 
 /* Basemap container needs MapLibre CSS import */
-.mapseek-basemap {
-    pointer-events: none;
+.emap-basemap {
+  pointer-events: none;
 }

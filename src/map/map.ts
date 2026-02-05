@@ -27,7 +27,7 @@ export interface MapOptions {
   canvasKit?: CanvasKit;
 }
 
-export class MapseekMap extends EventDispatcher {
+export class Emap extends EventDispatcher {
   private _container: HTMLElement;
   private _canvasContainer: HTMLElement;
   private _canvas: HTMLCanvasElement;
@@ -155,13 +155,13 @@ export class MapseekMap extends EventDispatcher {
     el.style.width = '100%';
     el.style.height = '100%';
     el.style.overflow = 'hidden';
-    el.className = 'mapseek-canvas-container';
+    el.className = 'emap-canvas-container';
 
     // Create control corners
     const corners: ControlPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
     corners.forEach(pos => {
       const container = document.createElement('div');
-      container.className = `mapseek-ctrl-${pos}`;
+      container.className = `emap-ctrl-${pos}`;
       container.style.position = 'absolute';
       container.style.pointerEvents = 'none';
       container.style.zIndex = '10';

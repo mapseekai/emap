@@ -1,10 +1,10 @@
 {
-  "name": "mapseek",
+  "name": "emap",
   "version": "0.1.0",
   "description": "A modern, decoupled rendering engine for mapshaper data",
-  "main": "dist/mapseek.js",
-  "module": "dist/mapseek.mjs",
-  "types": "dist/mapseek.d.ts",
+  "main": "dist/emap.js",
+  "module": "dist/emap.mjs",
+  "types": "dist/emap.d.ts",
   "scripts": {
     "dev": "rollup -c --environment BUILD:development -w",
     "dev-build": "rollup -c --environment BUILD:development",
@@ -13,7 +13,8 @@
   },
   "keywords": [
     "mapshaper",
-    "mapseek",
+    "mapshaper",
+    "emap",
     "gis",
     "renderer",
     "canvas",
