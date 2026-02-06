@@ -169,7 +169,43 @@ export class CanvasKitPainter implements Painter {
   }
 
   drawPoints(_shapes: any[], _style: any): void {
-    // Point drawing logic
+    if (!this._canvas || !this._paint) return;
+    const pr = this._pixelRatio;
+    const mx = this._transform.mx * pr;
+    const my = this._transform.my * pr;
+    const bx = this._transform.bx * pr;
+    const by = this._transform.by * pr;
+    const radius = (Number(_style?.radius) || 4) * pr;
+    const color = this._parseColor(_style?.color || '#333');
+    const fill = _style?.fill !== false;
+
+    this._paint.setColor(color);
+    this._paint.setStyle(fill ? this._ck.PaintStyle.Fill : this._ck.PaintStyle.Stroke);
+    this._paint.setStrokeWidth(1 * pr);
+
+    _shapes.forEach(shape => {
+      if (!shape) return;
+      const points = this._normalizePointShape(shape);
+      points.forEach((p: number[]) => {
+        const x = p[0] * mx + bx;
+        const y = p[1] * my + by;
+        this._canvas!.drawCircle(x, y, radius, this._paint!);
+      });
+    });
+
+    // Reset to stroke for subsequent draw calls
+    this._paint.setStyle(this._ck.PaintStyle.Stroke);
+  }
+
+  private _normalizePointShape(shape: any): number[][] {
+    if (!shape) return [];
+    if (typeof shape[0] === 'number') {
+      return [shape as number[]];
+    }
+    if (Array.isArray(shape[0])) {
+      return shape as number[][];
+    }
+    return [];
   }
 
   clear(): void {

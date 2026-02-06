@@ -117,7 +117,47 @@ export class CanvasPainter implements Painter {
   }
 
   drawPoints(_shapes: any[], _style: any): void {
-    // Point drawing logic
+    const ctx = this._ctx;
+    const pr = this._pixelRatio;
+    const mx = this._transform.mx * pr;
+    const my = this._transform.my * pr;
+    const bx = this._transform.bx * pr;
+    const by = this._transform.by * pr;
+    const radius = (Number(_style?.radius) || 4) * pr;
+    const color = _style?.color || '#333';
+    const fill = _style?.fill !== false;
+
+    ctx.beginPath();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+
+    _shapes.forEach(shape => {
+      if (!shape) return;
+      const points = this._normalizePointShape(shape);
+      points.forEach((p: number[]) => {
+        const x = p[0] * mx + bx;
+        const y = p[1] * my + by;
+        ctx.moveTo(x + radius, y);
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+      });
+    });
+
+    if (fill) {
+      ctx.fill();
+    } else {
+      ctx.stroke();
+    }
+  }
+
+  private _normalizePointShape(shape: any): number[][] {
+    if (!shape) return [];
+    if (typeof shape[0] === 'number') {
+      return [shape as number[]];
+    }
+    if (Array.isArray(shape[0])) {
+      return shape as number[][];
+    }
+    return [];
   }
 
   clear(): void {

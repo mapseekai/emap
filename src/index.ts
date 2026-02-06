@@ -2,6 +2,12 @@ import './shim';
 import 'mapshaper';
 
 export { Emap } from './map/map';
+export type {
+  QueryRenderedFeaturesOptions,
+  RenderedFeatureAttributes,
+  HighlightFeatureRef,
+  HighlightStyle
+} from './map/map';
 export * from './core/events';
 export * from './source/topology-source';
 export * from './renderer/canvas-painter';
