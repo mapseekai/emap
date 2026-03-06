@@ -1,6 +1,7 @@
 import { Painter } from './painter';
 import { Transform } from '../geo/transform';
 import type { CanvasKit, Canvas, Surface, Paint, Path } from 'canvaskit-wasm';
+import type { ArcCollection, StrokeStyle, PointStyle } from '../types/mapshaper-types';
 
 /**
  * CanvasKit (Skia WASM) based painter implementation.
@@ -53,7 +54,7 @@ export class CanvasKitPainter implements Painter {
     this._pixelRatio = ratio;
   }
 
-  drawPaths(shapes: any[], style: any, arcs: any): void {
+  drawPaths(shapes: any[], style: StrokeStyle, arcs: ArcCollection): void {
     if (!this._canvas || !this._paint) return;
 
     const path = new this._ck.Path();
@@ -73,7 +74,7 @@ export class CanvasKitPainter implements Painter {
     path.delete();
   }
 
-  drawArcs(arcs: any, style: any, filter?: (i: number) => boolean): void {
+  drawArcs(arcs: ArcCollection, style: StrokeStyle, filter?: (i: number) => boolean): void {
     if (!this._canvas || !this._paint) return;
 
     const n = arcs.size();
@@ -114,7 +115,7 @@ export class CanvasKitPainter implements Painter {
     path.delete();
   }
 
-  private _setupStyle(style: any): void {
+  private _setupStyle(style: StrokeStyle): void {
     if (!this._paint) return;
     const color = this._parseColor(style.color || '#333');
     this._paint.setColor(color);
@@ -168,7 +169,7 @@ export class CanvasKitPainter implements Painter {
     }
   }
 
-  drawPoints(_shapes: any[], _style: any): void {
+  drawPoints(_shapes: any[], _style: PointStyle): void {
     if (!this._canvas || !this._paint) return;
     const pr = this._pixelRatio;
     const mx = this._transform.mx * pr;

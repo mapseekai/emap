@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap - Vertex Editing</title>
+  <style>
+    * {
+      margin: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: -apple-system, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+    }
+
+    #header {
+      padding: 10px 16px;
+      background: #16213e;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      border-bottom: 1px solid #0f3460;
+    }
+
+    #header strong {
+      color: #e94560;
+    }
+
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+    }
+
+    #event-log {
+      position: absolute;
+      bottom: 50px;
+      right: 10px;
+      width: 340px;
+      max-height: 200px;
+      overflow-y: auto;
+      background: rgba(0, 0, 0, 0.75);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 12px;
+      font-family: monospace;
+      color: #7cfc00;
+      z-index: 100;
+      pointer-events: auto;
+    }
+
+    #event-log .log-entry {
+      margin-bottom: 4px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 4px;
+    }
+
+    .info {
+      margin-left: auto;
+      font-size: 0.85em;
+      color: #aaa;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <strong>Emap</strong> Vertex Editing Demo
+    <input type="file" id="file-input" accept=".json,.geojson,.zip" />
+    <div class="info" id="status">Upload a GeoJSON file to start</div>
+  </div>
+  <div id="map">
+    <div id="event-log">
+      <div style="color:#aaa; margin-bottom:6px;">vertex_moved events:</div>
+    </div>
+  </div>
+
+  <!-- Import default styles for controls -->
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <!-- Import the dev bundle -->
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, EditToolbar } = emap;
+
+    const map = new Emap({ container: "map" });
+
+    // Add UI Controls
+    map.addControl(new emap.NavigationControl(), "top-left");
+    map.addControl(new EditToolbar(), "top-left");
+    map.addControl(new emap.BasemapControl(), "top-right");
+    map.addControl(
+      new emap.StatusControl({ alignment: "right", showEPSG: true }),
+      "bottom-right"
+    );
+
+    // Listen for vertex_moved events
+    const logEl = document.getElementById("event-log");
+    map.on("vertex_moved", (e) => {
+      const entry = document.createElement("div");
+      entry.className = "log-entry";
+      const coords = e.coords
+        ? `[${e.coords[0].toFixed(6)}, ${e.coords[1].toFixed(6)}]`
+        : "?";
+      const moved = Array.isArray(e.vertexIds) ? e.vertexIds.join(",") : "?";
+      entry.textContent = `id=${e.id} vtx=[${moved}] → ${coords}`;
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+    });
+
+    // File loading
+    const fileInput = document.getElementById("file-input");
+    const status = document.getElementById("status");
+
+    fileInput.addEventListener("change", async (ev) => {
+      const file = ev.target.files[0];
+      if (!file) return;
+      status.textContent = `Processing ${file.name}...`;
+      try {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const content = new Uint8Array(event.target.result);
+          const source = new TopologySource("test-source");
+          await source.load({ filename: file.name, content });
+          map.addSource("test-source", source);
+          map.setExtent(source.getExtent());
+          status.textContent = `Viewing: ${file.name} — click ✏ to edit`;
+        };
+        reader.readAsArrayBuffer(file);
+      } catch (err) {
+        console.error(err);
+        status.textContent = "Error processing file";
+      }
+    });
+
+    window.addEventListener("resize", () => map.resize());
+  </script>
+</body>
+
+</html>

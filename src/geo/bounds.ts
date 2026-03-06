@@ -3,8 +3,8 @@ export class Bounds {
     public xmin: number = Infinity,
     public ymin: number = Infinity,
     public xmax: number = -Infinity,
-    public ymax: number = -Infinity
-  ) { }
+    public ymax: number = -Infinity,
+  ) {}
 
   static fromArray(arr: [number, number, number, number]): Bounds {
     return new Bounds(arr[0], arr[1], arr[2], arr[3]);

@@ -103,3 +103,17 @@
 .emap-basemap {
   pointer-events: none;
 }
+
+/* Vertex Edit Controls */
+.emap-ctrl-edit {
+  font-size: 14px;
+}
+
+.emap-ctrl-edit.active {
+  background-color: #0078ff !important;
+  color: #fff;
+}
+
+.emap-edit-active {
+  cursor: crosshair;
+}

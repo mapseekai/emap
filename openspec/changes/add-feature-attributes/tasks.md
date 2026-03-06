@@ -6,4 +6,4 @@
 
 ## 2. Validation
 - [x] 2.1 Run `openspec validate add-feature-attributes --strict`.
-- [ ] 2.2 Manually open the new HTML example and verify feature attribute output + highlight.
+- [x] 2.2 Manually open the new HTML example and verify feature attribute output + highlight.

@@ -1,5 +1,6 @@
 import { Painter } from './painter';
 import { Transform } from '../geo/transform';
+import type { ArcCollection, StrokeStyle, PointStyle, VertexDotStyle } from '../types/mapshaper-types';
 
 export class CanvasPainter implements Painter {
   private _ctx: CanvasRenderingContext2D;
@@ -24,7 +25,7 @@ export class CanvasPainter implements Painter {
     this._pixelRatio = ratio;
   }
 
-  drawPaths(shapes: any[], style: any, arcs: any): void {
+  drawPaths(shapes: any[], style: StrokeStyle, arcs: ArcCollection): void {
     const ctx = this._ctx;
     const batchSize = 25; // Mapshaper uses batch of 25 for optimal performance
 
@@ -55,7 +56,7 @@ export class CanvasPainter implements Painter {
   }
 
   // Direct arc rendering for maximum performance (bypasses shape iteration)
-  drawArcs(arcs: any, style: any, filter?: (i: number) => boolean): void {
+  drawArcs(arcs: ArcCollection, style: StrokeStyle, filter?: (i: number) => boolean): void {
     const ctx = this._ctx;
     const batchSize = 25;
     const n = arcs.size();
@@ -116,7 +117,7 @@ export class CanvasPainter implements Painter {
     }
   }
 
-  drawPoints(_shapes: any[], _style: any): void {
+  drawPoints(_shapes: any[], _style: PointStyle): void {
     const ctx = this._ctx;
     const pr = this._pixelRatio;
     const mx = this._transform.mx * pr;
@@ -146,6 +147,68 @@ export class CanvasPainter implements Painter {
       ctx.fill();
     } else {
       ctx.stroke();
+    }
+  }
+
+  /**
+   * Draw vertex dots on the main canvas context.
+   * Called during render() when in vertex edit mode.
+   */
+  drawVertexDots(
+    shapes: any[],
+    arcs: ArcCollection,
+    style: VertexDotStyle = {},
+  ): void {
+    const ctx = this._ctx;
+
+    const pr = this._pixelRatio;
+    const mx = this._transform.mx * pr;
+    const my = this._transform.my * pr;
+    const bx = this._transform.bx * pr;
+    const by = this._transform.by * pr;
+
+    const dotColor = style.dotColor || '#333';
+    const dotRadius = (style.dotRadius || 3) * pr;
+    const hoverColor = style.hoverColor || '#cc6acc';
+    const hoverRadius = (style.hoverRadius || 6) * pr;
+    const hoverVertex = style.hoverVertex;
+    let hoverPx: [number, number] | null = null;
+    if (hoverVertex) {
+      hoverPx = [
+        hoverVertex[0] * mx + bx,
+        hoverVertex[1] * my + by
+      ];
+    }
+
+    // Draw normal vertex dots
+    ctx.fillStyle = dotColor;
+    ctx.beginPath();
+
+    shapes.forEach(shape => {
+      if (!shape) return;
+      shape.forEach((part: number[]) => {
+        part.forEach((arcId: number) => {
+          const absId = arcId >= 0 ? arcId : ~arcId;
+          const iter = arcs.getArcIter(absId);
+          while (iter.hasNext()) {
+            const x = iter.x * mx + bx;
+            const y = iter.y * my + by;
+            // Skip hover vertex (drawn separately with larger radius)
+            if (hoverPx && Math.abs(x - hoverPx[0]) < 1 && Math.abs(y - hoverPx[1]) < 1) continue;
+            ctx.moveTo(x + dotRadius, y);
+            ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
+          }
+        });
+      });
+    });
+    ctx.fill();
+
+    // Draw hover highlight vertex
+    if (hoverPx) {
+      ctx.fillStyle = hoverColor;
+      ctx.beginPath();
+      ctx.arc(hoverPx[0], hoverPx[1], hoverRadius, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 
