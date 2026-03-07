@@ -3,6 +3,7 @@ import { TopologySource as ITopologySource } from './source';
 import { Bounds } from '../geo/bounds';
 import { unzipSync, strFromU8 } from 'fflate';
 import { DisplayArcs } from './display-arcs';
+import type { MapshaperDataset } from '../types/mapshaper-types';
 
 /** File size threshold for skipping -clean during import (5MB) */
 const LARGE_FILE_THRESHOLD_BYTES = 5 * 1024 * 1024;
@@ -10,7 +11,7 @@ const LARGE_FILE_THRESHOLD_BYTES = 5 * 1024 * 1024;
 export class TopologySource implements ITopologySource {
   public id: string;
   public type: 'topology' = 'topology';
-  private _dataset: any;
+  private _dataset: MapshaperDataset | undefined;
   private _displayArcs: DisplayArcs | null = null;
 
   constructor(id: string) {
@@ -67,7 +68,7 @@ export class TopologySource implements ITopologySource {
     }
   }
 
-  public getDataset(): any {
+  public getDataset(): MapshaperDataset | undefined {
     return this._dataset;
   }
 

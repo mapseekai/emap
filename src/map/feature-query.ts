@@ -1,7 +1,22 @@
 import mapshaper from 'mapshaper';
-import { Transform } from '../geo/transform';
+import { AffineTransform } from '../geo/transform';
 import { TopologySource } from '../source/source';
+import { getLayerId } from '../source/layer-utils';
 import type { QueryRenderedFeaturesOptions, RenderedFeatureAttributes } from './map';
+import type { ArcCollection, MapshaperLayer } from '../types/mapshaper-types';
+
+/** Pixel distance for a bullseye hit on point features */
+const POINT_BULLSEYE_DIST = 2;
+
+/** Default pixel threshold for point hit-testing */
+const POINT_HIT_THRESHOLD = 25;
+
+interface HitCandidate {
+  shape: number[][];
+  id: number;
+  dist: number;
+  info?: { distance: number };
+}
 
 /**
  * Handles spatial feature queries (point hit-testing, bbox selection).
@@ -9,13 +24,13 @@ import type { QueryRenderedFeaturesOptions, RenderedFeatureAttributes } from './
  */
 export class FeatureQuery {
   private _sources: globalThis.Map<string, TopologySource>;
-  private _getTransform: () => Transform;
+  private _getTransform: () => AffineTransform;
   private _getSize: () => { width: number; height: number };
   private _getInitialMX: () => number;
 
   constructor(
     sources: globalThis.Map<string, TopologySource>,
-    getTransform: () => Transform,
+    getTransform: () => AffineTransform,
     getSize: () => { width: number; height: number },
     getInitialMX: () => number,
   ) {
@@ -55,19 +70,13 @@ export class FeatureQuery {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  private _getLayerId(layer: any, index: number): string {
-    if (layer?.name) return String(layer.name);
-    if (layer?.id) return String(layer.id);
-    return `layer-${index}`;
-  }
-
   private _layerMatchesFilter(
-    layer: any,
+    layer: MapshaperLayer,
     index: number,
     layers?: string[],
   ): boolean {
     if (!layers || layers.length === 0) return true;
-    const layerId = this._getLayerId(layer, index);
+    const layerId = getLayerId(layer, index);
     if (layers.includes(layerId)) return true;
     if (layer?.name && layers.includes(layer.name)) return true;
     if (layer?.id && layers.includes(layer.id)) return true;
@@ -78,184 +87,196 @@ export class FeatureQuery {
     return this._getTransform().unproject(px, py);
   }
 
+  private _getHitBuffer(pix: number): number {
+    return pix / Math.abs(this._getTransform().mx || 1);
+  }
+
+  private _getZoomAdjustedHitBuffer(pix: number, minPix: number): number {
+    const transform = this._getTransform();
+    const initialMX = this._getInitialMX();
+    const scale = Math.abs(transform.mx) / (initialMX || Math.abs(transform.mx) || 1);
+    if (scale < 1) pix *= scale;
+    if (minPix > 0 && pix < minPix) pix = minPix;
+    return this._getHitBuffer(pix);
+  }
+
   // ---------------------------------------------------------------------------
-  // Point query (with full hit-testing logic ported from Mapshaper)
+  // Hit-testing primitives (promoted from local functions)
+  // ---------------------------------------------------------------------------
+
+  private _findHitCandidates(
+    layer: MapshaperLayer,
+    arcs: ArcCollection,
+    x: number,
+    y: number,
+    dist: number,
+  ): HitCandidate[] {
+    const cands: HitCandidate[] = [];
+    const index: Record<number, HitCandidate> = {};
+    const bbox: number[] = [];
+    const shapes = layer.shapes;
+    if (!shapes) return cands;
+
+    for (let shpId = 0; shpId < shapes.length; shpId++) {
+      const shp = shapes[shpId];
+      if (!shp) continue;
+      for (let i = 0; i < shp.length; i++) {
+        arcs.getSimpleShapeBbox!(shp[i], bbox);
+        if (
+          x + dist < bbox[0] ||
+          x - dist > bbox[2] ||
+          y + dist < bbox[1] ||
+          y - dist > bbox[3]
+        ) {
+          continue;
+        }
+        let cand = index[shpId];
+        if (!cand) {
+          cand = index[shpId] = { shape: [], id: shpId, dist: 0 };
+          cands.push(cand);
+        }
+        cand.shape.push(shp[i]);
+      }
+    }
+    return cands;
+  }
+
+  private _sortByDistance(x: number, y: number, cands: HitCandidate[], arcs: ArcCollection): void {
+    const geom = (mapshaper as any).geom;
+    for (const cand of cands) {
+      cand.info = geom.getPointToShapeInfo(x, y, cand.shape, arcs);
+      cand.dist = cand.info!.distance;
+    }
+    cands.sort((a, b) => a.dist - b.dist);
+  }
+
+  private _pickNearestCandidates(
+    sorted: HitCandidate[],
+    bufDist: number,
+    maxDist: number,
+  ): HitCandidate[] {
+    const hits: HitCandidate[] = [];
+    let minDist = 0;
+    for (let i = 0; i < sorted.length; i++) {
+      const cand = sorted[i];
+      if (!(cand.dist < maxDist)) break;
+      if (i === 0) {
+        minDist = cand.dist;
+      } else if (cand.dist - minDist > bufDist) {
+        break;
+      }
+      hits.push(cand);
+    }
+    return hits;
+  }
+
+  private _pointTest(layer: MapshaperLayer, x: number, y: number): number[] {
+    const geom = (mapshaper as any).geom;
+    const toPx = Math.abs(this._getTransform().mx || 1);
+    let bestId = -1;
+    let bestDist = Infinity;
+    let hitThreshold = POINT_HIT_THRESHOLD;
+    const shapes = layer.shapes;
+    if (!shapes) return [];
+
+    for (let id = 0; id < shapes.length; id++) {
+      const shp = shapes[id];
+      if (!shp) continue;
+      for (const p of shp) {
+        if (!p) continue;
+        const dist = geom.distance2D(x, y, p[0], p[1]) * toPx;
+        if (dist > hitThreshold) continue;
+        if (dist < hitThreshold && hitThreshold > POINT_BULLSEYE_DIST) {
+          hitThreshold = Math.max(POINT_BULLSEYE_DIST, dist);
+        }
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestId = id;
+        }
+      }
+    }
+    return bestId === -1 ? [] : [bestId];
+  }
+
+  private _polylineTest(
+    layer: MapshaperLayer,
+    arcs: ArcCollection,
+    x: number,
+    y: number,
+    bufArg: number,
+  ): number[] {
+    const maxDist = this._getZoomAdjustedHitBuffer(15, 2);
+    const bufPix = bufArg >= 0 ? bufArg : 0.05;
+    const bufDist = this._getZoomAdjustedHitBuffer(bufPix, 0);
+    let cands = this._findHitCandidates(layer, arcs, x, y, maxDist);
+    this._sortByDistance(x, y, cands, arcs);
+    cands = this._pickNearestCandidates(cands, bufDist, maxDist);
+    return cands.length ? [cands[0].id] : [];
+  }
+
+  private _polygonTest(layer: MapshaperLayer, arcs: ArcCollection, x: number, y: number): number[] {
+    const geom = (mapshaper as any).geom;
+    const maxDist = this._getZoomAdjustedHitBuffer(10, 1);
+    const cands = this._findHitCandidates(layer, arcs, x, y, maxDist);
+    let hits: HitCandidate[] = [];
+    for (const cand of cands) {
+      if (geom.testPointInPolygon(x, y, cand.shape, arcs)) {
+        hits.push(cand);
+      }
+    }
+    if (cands.length > 0 && hits.length === 0) {
+      this._sortByDistance(x, y, cands, arcs);
+      hits = this._pickNearestCandidates(cands, 0, maxDist);
+    } else if (hits.length > 1) {
+      this._sortByDistance(x, y, hits, arcs);
+    }
+    return hits.length ? [hits[0].id] : [];
+  }
+
+  private _polygonVertexTest(layer: MapshaperLayer, arcs: ArcCollection, x: number, y: number): number[] {
+    const a = this._polygonTest(layer, arcs, x, y);
+    const b = this._polylineTest(layer, arcs, x, y, 5);
+    return a.length ? a : b;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Point query
   // ---------------------------------------------------------------------------
 
   private _queryFeaturesAtPoint(
     point: [number, number],
     options: QueryRenderedFeaturesOptions,
   ): RenderedFeatureAttributes[] {
-    const mapshaperAny: any = mapshaper as any;
-    const geom = mapshaperAny.geom;
-    if (!geom) return [];
-
     const transform = this._getTransform();
-    const initialMX = this._getInitialMX();
     const results: RenderedFeatureAttributes[] = [];
     const [mx, my] = this._unproject(point[0], point[1]);
     const pixelSize = 1 / Math.abs(transform.mx || 1);
 
-    const getHitBuffer = (pix: number) =>
-      pix / Math.abs(transform.mx || 1);
-    const getZoomAdjustedHitBuffer = (pix: number, minPix: number) => {
-      const scale =
-        Math.abs(transform.mx) /
-        (initialMX || Math.abs(transform.mx) || 1);
-      if (scale < 1) pix *= scale;
-      if (minPix > 0 && pix < minPix) pix = minPix;
-      return getHitBuffer(pix);
-    };
-
-    const findHitCandidates = (
-      layer: any,
-      arcs: any,
-      x: number,
-      y: number,
-      dist: number,
-    ) => {
-      const cands: any[] = [];
-      const index: Record<number, any> = {};
-      const bbox: number[] = [];
-      layer.shapes.forEach((shp: any, shpId: number) => {
-        if (!shp) return;
-        for (let i = 0, n = shp.length; i < n; i++) {
-          arcs.getSimpleShapeBbox(shp[i], bbox);
-          if (
-            x + dist < bbox[0] ||
-            x - dist > bbox[2] ||
-            y + dist < bbox[1] ||
-            y - dist > bbox[3]
-          ) {
-            continue;
-          }
-          let cand = index[shpId];
-          if (!cand) {
-            cand = index[shpId] = { shape: [], id: shpId, dist: 0 };
-            cands.push(cand);
-          }
-          cand.shape.push(shp[i]);
-        }
-      });
-      return cands;
-    };
-
-    const sortByDistance = (x: number, y: number, cands: any[], arcs: any) => {
-      cands.forEach((cand) => {
-        cand.info = geom.getPointToShapeInfo(x, y, cand.shape, arcs);
-        cand.dist = cand.info.distance;
-      });
-      cands.sort((a: any, b: any) => a.dist - b.dist);
-    };
-
-    const pickNearestCandidates = (
-      sorted: any[],
-      bufDist: number,
-      maxDist: number,
-    ) => {
-      const hits: any[] = [];
-      let minDist = 0;
-      for (let i = 0; i < sorted.length; i++) {
-        const cand = sorted[i];
-        if (cand.dist < maxDist !== true) {
-          break;
-        } else if (i === 0) {
-          minDist = cand.dist;
-        } else if (cand.dist - minDist > bufDist) {
-          break;
-        }
-        hits.push(cand);
-      }
-      return hits;
-    };
-
-    const pointTest = (layer: any, x: number, y: number) => {
-      const bullseyeDist = 2;
-      let hitThreshold = 25;
-      const toPx = Math.abs(transform.mx || 1);
-      let bestId = -1;
-      let bestDist = Infinity;
-
-      layer.shapes.forEach((shp: any, id: number) => {
-        if (!shp) return;
-        shp.forEach((p: number[]) => {
-          if (!p) return;
-          const dist = geom.distance2D(x, y, p[0], p[1]) * toPx;
-          if (dist > hitThreshold) return;
-          if (dist < hitThreshold && hitThreshold > bullseyeDist) {
-            hitThreshold = Math.max(bullseyeDist, dist);
-          }
-          if (dist < bestDist) {
-            bestDist = dist;
-            bestId = id;
-          }
-        });
-      });
-      return bestId === -1 ? [] : [bestId];
-    };
-
-    const polylineTest = (
-      layer: any,
-      arcs: any,
-      x: number,
-      y: number,
-      bufArg: number,
-    ) => {
-      const maxDist = getZoomAdjustedHitBuffer(15, 2);
-      const bufPix = bufArg >= 0 ? bufArg : 0.05;
-      const bufDist = getZoomAdjustedHitBuffer(bufPix, 0);
-      let cands = findHitCandidates(layer, arcs, x, y, maxDist);
-      sortByDistance(x, y, cands, arcs);
-      cands = pickNearestCandidates(cands, bufDist, maxDist);
-      return cands.length ? [cands[0].id] : [];
-    };
-
-    const polygonTest = (layer: any, arcs: any, x: number, y: number) => {
-      const maxDist = getZoomAdjustedHitBuffer(10, 1);
-      const cands = findHitCandidates(layer, arcs, x, y, maxDist);
-      let hits: any[] = [];
-      cands.forEach((cand: any) => {
-        if (geom.testPointInPolygon(x, y, cand.shape, arcs)) {
-          hits.push(cand);
-        }
-      });
-      if (cands.length > 0 && hits.length === 0) {
-        sortByDistance(x, y, cands, arcs);
-        hits = pickNearestCandidates(cands, 0, maxDist);
-      } else if (hits.length > 1) {
-        sortByDistance(x, y, hits, arcs);
-      }
-      return hits.length ? [hits[0].id] : [];
-    };
-
-    const polygonVertexTest = (layer: any, arcs: any, x: number, y: number) => {
-      const a = polygonTest(layer, arcs, x, y);
-      const b = polylineTest(layer, arcs, x, y, 5);
-      return a.length ? a : b;
-    };
-
-    this._sources.forEach((source: TopologySource, sourceId: string) => {
+    for (const [sourceId, source] of this._sources) {
       const layers = source.getLayers();
       const displayArcs = source.getDisplayArcs();
       const arcs = displayArcs
         ? displayArcs.getScaledArcs(pixelSize)
         : source.getArcs();
-      layers.forEach((layer: any, layerIndex: number) => {
-        if (!layer?.shapes) return;
-        if (!this._layerMatchesFilter(layer, layerIndex, options.layers))
-          return;
+
+      for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+        const layer = layers[layerIndex] as MapshaperLayer;
+        if (!layer?.shapes) continue;
+        if (!this._layerMatchesFilter(layer, layerIndex, options.layers)) continue;
+
         const geometryType = layer.geometry_type;
         let ids: number[] = [];
         if (geometryType === 'point') {
-          ids = pointTest(layer, mx, my);
+          ids = this._pointTest(layer, mx, my);
         } else if (geometryType === 'polyline' && arcs) {
-          ids = polylineTest(layer, arcs, mx, my, -1);
+          ids = this._polylineTest(layer, arcs, mx, my, -1);
         } else if (geometryType === 'polygon' && arcs) {
-          ids = polygonVertexTest(layer, arcs, mx, my);
+          ids = this._polygonVertexTest(layer, arcs, mx, my);
         }
-        if (ids.length === 0) return;
-        const layerId = this._getLayerId(layer, layerIndex);
-        ids.forEach((id) => {
+        if (ids.length === 0) continue;
+
+        const layerId = getLayerId(layer, layerIndex);
+        for (const id of ids) {
           const table = layer.data;
           const record =
             table?.getRecordAt?.(id) ?? table?.getRecords?.()?.[id] ?? {};
@@ -266,9 +287,9 @@ export class FeatureQuery {
             geometryType: geometryType || 'unknown',
             properties: { ...record },
           });
-        });
-      });
-    });
+        }
+      }
+    }
 
     return results;
   }
@@ -292,22 +313,26 @@ export class FeatureQuery {
     const ymax = Math.max(a[1], b[1]);
     const pixelSize = 1 / Math.abs(transform.mx || 1);
 
-    this._sources.forEach((source: TopologySource, sourceId: string) => {
+    for (const [sourceId, source] of this._sources) {
       const layers = source.getLayers();
       const displayArcs = source.getDisplayArcs();
       const arcs = displayArcs
         ? displayArcs.getScaledArcs(pixelSize)
         : source.getArcs();
-      layers.forEach((layer: any, layerIndex: number) => {
-        if (!layer?.shapes) return;
-        if (!this._layerMatchesFilter(layer, layerIndex, options.layers))
-          return;
-        const layerId = this._getLayerId(layer, layerIndex);
+
+      for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+        const layer = layers[layerIndex] as MapshaperLayer;
+        if (!layer?.shapes) continue;
+        if (!this._layerMatchesFilter(layer, layerIndex, options.layers)) continue;
+
+        const layerId = getLayerId(layer, layerIndex);
         const geometryType = layer.geometry_type;
         const table = layer.data;
         const bboxTmp: number[] = [];
-        layer.shapes.forEach((shp: any, id: number) => {
-          if (!shp) return;
+
+        for (let id = 0; id < layer.shapes.length; id++) {
+          const shp = layer.shapes[id];
+          if (!shp) continue;
           let hit = false;
           if (geometryType === 'point') {
             const points = Array.isArray(shp[0]) ? shp : [shp];
@@ -316,8 +341,8 @@ export class FeatureQuery {
                 p[0] >= xmin && p[0] <= xmax && p[1] >= ymin && p[1] <= ymax,
             );
           } else if (arcs) {
-            for (let i = 0, n = shp.length; i < n; i++) {
-              arcs.getSimpleShapeBbox(shp[i], bboxTmp);
+            for (let i = 0; i < shp.length; i++) {
+              arcs.getSimpleShapeBbox!(shp[i], bboxTmp);
               if (
                 xmax < bboxTmp[0] ||
                 xmin > bboxTmp[2] ||
@@ -330,7 +355,7 @@ export class FeatureQuery {
               break;
             }
           }
-          if (!hit) return;
+          if (!hit) continue;
           const record =
             table?.getRecordAt?.(id) ?? table?.getRecords?.()?.[id] ?? {};
           results.push({
@@ -340,9 +365,9 @@ export class FeatureQuery {
             geometryType: geometryType || 'unknown',
             properties: { ...record },
           });
-        });
-      });
-    });
+        }
+      }
+    }
 
     return results;
   }

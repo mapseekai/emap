@@ -21,10 +21,7 @@ function limitedAverage(maxSize: number) {
   return function (val: number) {
     arr.push(val);
     if (arr.length > maxSize) arr.shift();
-    let sum = 0;
-    for (let i = 0; i < arr.length; i++) {
-      sum += arr[i];
-    }
+    const sum = arr.reduce((acc, v) => acc + v, 0);
     return sum / arr.length;
   };
 }

@@ -1,5 +1,6 @@
 import { Painter } from './painter';
-import { Transform } from '../geo/transform';
+import { AffineTransform } from '../geo/transform';
+import { normalizePointShape } from '../source/layer-utils';
 import type { CanvasKit, Canvas, Surface, Paint, Path } from 'canvaskit-wasm';
 import type { ArcCollection, StrokeStyle, PointStyle } from '../types/mapshaper-types';
 
@@ -12,7 +13,7 @@ export class CanvasKitPainter implements Painter {
   private _surface: Surface | null = null;
   private _canvas: Canvas | null = null;
   private _ck: CanvasKit;
-  private _transform: Transform = new Transform();
+  private _transform: AffineTransform = new AffineTransform();
   private _pixelRatio: number = 1;
   private _htmlCanvas: HTMLCanvasElement;
   private _paint: Paint | null = null;
@@ -46,7 +47,7 @@ export class CanvasKitPainter implements Painter {
     // Called before each frame
   }
 
-  setTransform(transform: Transform): void {
+  setTransform(transform: AffineTransform): void {
     this._transform = transform;
   }
 
@@ -186,7 +187,7 @@ export class CanvasKitPainter implements Painter {
 
     _shapes.forEach(shape => {
       if (!shape) return;
-      const points = this._normalizePointShape(shape);
+      const points = normalizePointShape(shape);
       points.forEach((p: number[]) => {
         const x = p[0] * mx + bx;
         const y = p[1] * my + by;
@@ -198,16 +199,7 @@ export class CanvasKitPainter implements Painter {
     this._paint.setStyle(this._ck.PaintStyle.Stroke);
   }
 
-  private _normalizePointShape(shape: any): number[][] {
-    if (!shape) return [];
-    if (typeof shape[0] === 'number') {
-      return [shape as number[]];
-    }
-    if (Array.isArray(shape[0])) {
-      return shape as number[][];
-    }
-    return [];
-  }
+
 
   clear(): void {
     if (!this._canvas) return;

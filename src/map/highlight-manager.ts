@@ -1,6 +1,7 @@
 import { Painter } from '../renderer/painter';
-import { Transform } from '../geo/transform';
+import { AffineTransform } from '../geo/transform';
 import { TopologySource } from '../source/source';
+import { getLayerId } from '../source/layer-utils';
 import type { HighlightStyle, HighlightFeatureRef, RenderedFeatureAttributes } from './map';
 
 /**
@@ -32,14 +33,14 @@ export class HighlightManager {
     if (style) {
       this._highlightStyle = { ...this._highlightStyle, ...style };
     }
-    features.forEach((feature) => {
+    for (const feature of features) {
       const sourceMap =
         this._highlighted.get(feature.source) || new globalThis.Map();
       const ids = sourceMap.get(feature.layer) || new Set<number>();
       ids.add(feature.id);
       sourceMap.set(feature.layer, ids);
       this._highlighted.set(feature.source, sourceMap);
-    });
+    }
   }
 
   clearHighlightedFeatures(): boolean {
@@ -56,7 +57,7 @@ export class HighlightManager {
   renderHighlights(
     painter: Painter,
     sources: globalThis.Map<string, TopologySource>,
-    transform: Transform,
+    transform: AffineTransform,
     lineScale: number,
   ): void {
     if (this._highlighted.size === 0) return;
@@ -66,45 +67,41 @@ export class HighlightManager {
     const highlightFill = this._highlightStyle.fill !== false;
     const pixelSize = 1 / Math.abs(transform.mx || 1);
 
-    sources.forEach((source: TopologySource, sourceId: string) => {
+    for (const [sourceId, source] of sources) {
       const sourceHighlights = this._highlighted.get(sourceId);
-      if (!sourceHighlights) return;
+      if (!sourceHighlights) continue;
       const layers = source.getLayers();
       const displayArcs = source.getDisplayArcs();
       const arcs = displayArcs
         ? displayArcs.getScaledArcs(pixelSize)
         : source.getArcs();
-      layers.forEach((layer: any, layerIndex: number) => {
-        if (!layer?.shapes) return;
-        const layerId = this._getLayerId(layer, layerIndex);
+
+      for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+        const layer = layers[layerIndex];
+        if (!layer?.shapes) continue;
+        const layerId = getLayerId(layer, layerIndex);
         const ids = sourceHighlights.get(layerId);
-        if (!ids || ids.size === 0) return;
-        const shapes: any[] = [];
-        ids.forEach((id) => {
+        if (!ids || ids.size === 0) continue;
+        const shapes: unknown[] = [];
+        for (const id of ids) {
           const shape = layer.shapes[id];
           if (shape) shapes.push(shape);
-        });
-        if (shapes.length === 0) return;
+        }
+        if (shapes.length === 0) continue;
         if (layer.geometry_type === 'point') {
           painter.drawPoints(shapes, {
             color: highlightColor,
             radius: highlightRadius,
             fill: highlightFill,
           });
-        } else {
+        } else if (arcs) {
           painter.drawPaths(
             shapes,
             { color: highlightColor, width: highlightWidth },
             arcs,
           );
         }
-      });
-    });
-  }
-
-  private _getLayerId(layer: any, index: number): string {
-    if (layer?.name) return String(layer.name);
-    if (layer?.id) return String(layer.id);
-    return `layer-${index}`;
+      }
+    }
   }
 }

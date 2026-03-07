@@ -10,6 +10,7 @@ import { EventDispatcher } from './events';
  *   'panend' — drag ended
  */
 export class DragPanHandler extends EventDispatcher {
+  private _element: HTMLElement;
   private _isDragging: boolean = false;
   private _lastMousePos: [number, number] = [0, 0];
   private _enabled: boolean = true;
@@ -20,6 +21,7 @@ export class DragPanHandler extends EventDispatcher {
 
   constructor(element: HTMLElement) {
     super();
+    this._element = element;
     this._onMouseDownBound = this._onMouseDown.bind(this);
     this._onMouseMoveBound = this._onMouseMove.bind(this);
     this._onMouseUpBound = this._onMouseUp.bind(this);
@@ -47,8 +49,7 @@ export class DragPanHandler extends EventDispatcher {
   }
 
   destroy(): void {
-    // Note: we can't remove window listeners without reference to the original element,
-    // but the bound functions are unique so this works.
+    this._element.removeEventListener('mousedown', this._onMouseDownBound);
     window.removeEventListener('mousemove', this._onMouseMoveBound);
     window.removeEventListener('mouseup', this._onMouseUpBound);
   }

@@ -1,10 +1,11 @@
 import { Painter } from './painter';
-import { Transform } from '../geo/transform';
+import { AffineTransform } from '../geo/transform';
+import { normalizePointShape } from '../source/layer-utils';
 import type { ArcCollection, StrokeStyle, PointStyle, VertexDotStyle } from '../types/mapshaper-types';
 
 export class CanvasPainter implements Painter {
   private _ctx: CanvasRenderingContext2D;
-  private _transform: Transform = new Transform();
+  private _transform: AffineTransform = new AffineTransform();
   private _pixelRatio: number = window.devicePixelRatio || 1;
 
   constructor(private _canvas: HTMLCanvasElement) {
@@ -17,7 +18,7 @@ export class CanvasPainter implements Painter {
     // Basic setup before drawing a frame
   }
 
-  setTransform(transform: Transform): void {
+  setTransform(transform: AffineTransform): void {
     this._transform = transform;
   }
 
@@ -134,7 +135,7 @@ export class CanvasPainter implements Painter {
 
     _shapes.forEach(shape => {
       if (!shape) return;
-      const points = this._normalizePointShape(shape);
+      const points = normalizePointShape(shape);
       points.forEach((p: number[]) => {
         const x = p[0] * mx + bx;
         const y = p[1] * my + by;
@@ -212,16 +213,7 @@ export class CanvasPainter implements Painter {
     }
   }
 
-  private _normalizePointShape(shape: any): number[][] {
-    if (!shape) return [];
-    if (typeof shape[0] === 'number') {
-      return [shape as number[]];
-    }
-    if (Array.isArray(shape[0])) {
-      return shape as number[][];
-    }
-    return [];
-  }
+
 
   clear(): void {
     this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);

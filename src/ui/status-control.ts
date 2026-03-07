@@ -15,6 +15,11 @@ export class StatusControl implements Control {
   private _mousePosEl: HTMLElement | null = null;
   private _epsgEl: HTMLElement | null = null;
 
+  // Bound handlers (bound once to avoid memory leaks)
+  private _onMouseMoveBound: (e: MouseEvent) => void;
+  private _onUpdateEPSGBound: () => void;
+  private _rafPending = false;
+
   constructor(options: StatusOptions = {}) {
     this._options = {
       showMousePos: true,
@@ -22,6 +27,8 @@ export class StatusControl implements Control {
       alignment: 'left',
       ...options
     };
+    this._onMouseMoveBound = this._onMouseMove.bind(this);
+    this._onUpdateEPSGBound = this._updateEPSG.bind(this);
   }
 
   onAdd(map: Emap): HTMLElement {
@@ -42,9 +49,8 @@ export class StatusControl implements Control {
       this._updateEPSG();
     }
 
-    this._map.on('crschange', this._updateEPSG.bind(this));
-    // We need 'mousemove' on the map container
-    this._map.getCanvasContainer().addEventListener('mousemove', this._onMouseMove.bind(this));
+    this._map.on('crschange', this._onUpdateEPSGBound);
+    this._map.getCanvasContainer().addEventListener('mousemove', this._onMouseMoveBound);
 
     return this._container;
   }
@@ -52,15 +58,25 @@ export class StatusControl implements Control {
   private _onMouseMove(e: MouseEvent): void {
     if (!this._map || !this._mousePosEl || !this._options.showMousePos) return;
 
-    // Get mouse position in map coordinates
-    const rect = this._map.getCanvasContainer().getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Throttle DOM updates to one per animation frame
+    if (this._rafPending) return;
+    this._rafPending = true;
 
-    const [mx, my] = this._map.unproject(x, y);
-    this._mousePosEl.textContent = ` ${mx.toFixed(4)}, ${my.toFixed(4)}`;
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+
+    requestAnimationFrame(() => {
+      this._rafPending = false;
+      if (!this._map || !this._mousePosEl) return;
+
+      const rect = this._map.getCanvasContainer().getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+
+      const [mx, my] = this._map.unproject(x, y);
+      this._mousePosEl.textContent = ` ${mx.toFixed(4)}, ${my.toFixed(4)}`;
+    });
   }
-
 
   private _updateEPSG(): void {
     if (!this._map || !this._epsgEl) return;
@@ -70,9 +86,10 @@ export class StatusControl implements Control {
 
   onRemove(): void {
     if (this._map) {
-      this._map.getCanvasContainer().removeEventListener('mousemove', this._onMouseMove.bind(this));
+      this._map.getCanvasContainer().removeEventListener('mousemove', this._onMouseMoveBound);
+      this._map.off('crschange', this._onUpdateEPSGBound);
     }
-    if (this._container && this._container.parentNode) {
+    if (this._container?.parentNode) {
       this._container.parentNode.removeChild(this._container);
     }
     this._map = null;

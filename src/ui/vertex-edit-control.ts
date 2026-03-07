@@ -174,7 +174,7 @@ export class VertexEditControl implements Control {
     const source = this._map.getSource(hit.source);
     if (!source) return;
     const layers = source.getLayers();
-    const arcs = source.getArcs();
+    const arcs = source.getArcs() as EditableArcs | undefined;
     if (!arcs) return;
 
     let shape: EditVertexShape | null = null;
