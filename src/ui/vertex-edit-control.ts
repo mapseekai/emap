@@ -36,6 +36,10 @@ interface VertexOpsInternal {
   ): [number, number];
   insertVertex(arcs: EditableArcs, id: number, point: [number, number]): void;
   findArcIdFromVertexId(vertexId: number, ii: Int32Array): number;
+  /** Delete a vertex at index i from arcs collection */
+  deleteVertex(arcs: EditableArcs, i: number): void;
+  /** Check if vertex is an arc start or end endpoint (cannot be deleted) */
+  vertexIsArcEndpoint(idx: number, arcs: EditableArcs): boolean;
 }
 
 const vertexOps = mapshaper.internal as unknown as VertexOpsInternal;
@@ -90,6 +94,7 @@ export class VertexEditControl implements Control {
   private _onMouseDownBound: (e: MouseEvent) => void;
   private _onMouseUpBound: (e: MouseEvent) => void;
   private _onMoveHandlerBound: () => void;
+  private _onContextMenuBound: (e: MouseEvent) => void;
 
   constructor(options: VertexEditControlOptions = {}) {
     this._polygonFillColor = options.polygonFillColor !== undefined
@@ -99,6 +104,7 @@ export class VertexEditControl implements Control {
     this._onMouseDownBound = this._onMouseDown.bind(this);
     this._onMouseUpBound = this._onMouseUp.bind(this);
     this._onMoveHandlerBound = this._onMapMove.bind(this);
+    this._onContextMenuBound = this._onContextMenu.bind(this);
   }
 
   onAdd(map: Emap): HTMLElement {
@@ -145,6 +151,7 @@ export class VertexEditControl implements Control {
     container.classList.add('emap-edit-active');
     container.addEventListener('mousemove', this._onMouseMoveBound);
     container.addEventListener('mousedown', this._onMouseDownBound);
+    container.addEventListener('contextmenu', this._onContextMenuBound);
     window.addEventListener('mouseup', this._onMouseUpBound);
     this._map.on('move', this._onMoveHandlerBound);
   }
@@ -167,6 +174,7 @@ export class VertexEditControl implements Control {
     container.classList.remove('emap-edit-active');
     container.removeEventListener('mousemove', this._onMouseMoveBound);
     container.removeEventListener('mousedown', this._onMouseDownBound);
+    container.removeEventListener('contextmenu', this._onContextMenuBound);
     window.removeEventListener('mouseup', this._onMouseUpBound);
     this._map.off('move', this._onMoveHandlerBound);
     this._map.render();
@@ -178,6 +186,105 @@ export class VertexEditControl implements Control {
       this._updateEditState();
       this._map?.render();
     }
+  }
+
+  /**
+   * Right-click handler: show a context menu to delete the hovered vertex.
+   * Guard rules (same as mapshaper):
+   *   - Must be hovering a vertex (not an interpolated edge point)
+   *   - Not currently dragging
+   *   - Vertex must NOT be an arc endpoint (deleting an endpoint breaks topology)
+   */
+  private _onContextMenu(e: MouseEvent): void {
+    e.preventDefault(); // always suppress browser default right-click menu
+    if (this._dragging) return;
+    if (this._hoverType !== 'vertex' || this._hoverVertexIds.length === 0) return;
+    if (!this._hoveredFeature) return;
+
+    const vtxId = this._hoverVertexIds[0];
+    const arcs = this._hoveredFeature.arcs;
+
+    // Arc endpoints cannot be deleted — they are shared topology nodes
+    if (vertexOps.vertexIsArcEndpoint(vtxId, arcs)) return;
+
+    this._showContextMenu(e.clientX, e.clientY, () => {
+      this._deleteHoveredVertex();
+    });
+  }
+
+  /** Delete the currently hovered vertex from the arc collection */
+  private _deleteHoveredVertex(): void {
+    if (!this._hoveredFeature || this._hoverVertexIds.length === 0) return;
+    const arcs = this._hoveredFeature.arcs;
+    const vtxId = this._hoverVertexIds[0];
+
+    // Delete vertex from arcs (mapshaper internal API)
+    vertexOps.deleteVertex(arcs, vtxId);
+
+    // Recalculate arc bounding boxes (same pattern as dragend in mapshaper)
+    if (arcs.transformPoints) {
+      arcs.transformPoints(() => { });
+    }
+
+    // Clear hover state (the vertex no longer exists)
+    this._hoverVertexCoords = null;
+    this._hoverVertexIds = [];
+    this._hoverType = null;
+    this._hoverInsertionId = -1;
+    this._neighborShapes = [];
+    this._map?.clearEditVertexState();
+    this._map?.render();
+  }
+
+  /**
+   * Show a minimal context menu at (x, y) in viewport coords.
+   * Auto-dismissed when user clicks anywhere else.
+   */
+  private _showContextMenu(x: number, y: number, onDelete: () => void): void {
+    // Remove any existing menu
+    document.getElementById('emap-ctx-menu')?.remove();
+
+    const menu = document.createElement('div');
+    menu.id = 'emap-ctx-menu';
+    Object.assign(menu.style, {
+      position: 'fixed',
+      left: `${x}px`,
+      top: `${y}px`,
+      background: '#fff',
+      border: '1px solid #ccc',
+      borderRadius: '4px',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+      padding: '4px 0',
+      zIndex: '9999',
+      minWidth: '120px',
+      font: '13px/1.5 system-ui, sans-serif',
+    });
+
+    const item = document.createElement('div');
+    item.textContent = '删除节点';
+    Object.assign(item.style, {
+      padding: '6px 16px',
+      cursor: 'pointer',
+      color: '#d32',
+    });
+    item.addEventListener('mouseenter', () => { item.style.background = '#f5f5f5'; });
+    item.addEventListener('mouseleave', () => { item.style.background = ''; });
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menu.remove();
+      document.removeEventListener('click', dismiss);
+      onDelete();
+    });
+    menu.appendChild(item);
+    document.body.appendChild(menu);
+
+    // Dismiss on any click outside
+    const dismiss = () => {
+      menu.remove();
+      document.removeEventListener('click', dismiss);
+    };
+    // Use setTimeout so this listener doesn't fire immediately from the right-click
+    setTimeout(() => document.addEventListener('click', dismiss), 0);
   }
 
   private _onMouseMove(e: MouseEvent): void {
@@ -410,8 +517,12 @@ export class VertexEditControl implements Control {
   private _updateEditState(): void {
     if (!this._map || !this._hoveredFeature) return;
     const geomType = this._hoveredFeature.geometryType;
+    // Include neighbor shapes in `shapes` so drawVertexDots renders their vertices too
+    const allShapes = this._neighborShapes.length > 0
+      ? [this._hoveredFeature.shape, ...this._neighborShapes]
+      : [this._hoveredFeature.shape];
     this._map.setEditVertexState({
-      shapes: [this._hoveredFeature.shape],
+      shapes: allShapes,
       arcs: this._hoveredFeature.arcs,
       hoverVertex: this._hoverVertexCoords,
       geometryType: geomType,
