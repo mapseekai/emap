@@ -11,10 +11,6 @@ const EARTH_CIRCUMFERENCE_WEB_MERCATOR = 40075016.6855;
 /** Padding factor for initial extent after reprojection */
 const INITIAL_EXTENT_PADDING = 1.07;
 
-// ---------------------------------------------------------------------------
-// Projection — manages CRS and coordinate conversion
-// ---------------------------------------------------------------------------
-
 /**
  * Projection manages the coordinate reference system and provides
  * coordinate conversion between CRS-specific units and view-agnostic

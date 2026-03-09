@@ -40,7 +40,7 @@ export class TopologySource implements ITopologySource {
     // Always run -simplify 100% to generate thresholds for dynamic rendering.
     const isLarge = input.content.length > LARGE_FILE_THRESHOLD_BYTES;
     const cleanFlag = isLarge ? '' : '-clean';
-    const cmd = `-i ${primaryFile} ${cleanFlag} -merge-layers -simplify 100%`;
+    const cmd = `-i ${primaryFile} ${cleanFlag} -simplify 100%`;
     const commands = mapshaper.internal.parseCommands(cmd);
 
     // Inject input files into the import command

@@ -64,12 +64,22 @@ export interface EditVertexArcs {
     y: number;
     hasNext(): boolean;
   };
+  getShapeIter?(part: number[]): {
+    x: number;
+    y: number;
+    hasNext(): boolean;
+  };
 }
 
 export interface EditVertexState {
   shapes: EditVertexShape[];
   arcs: EditVertexArcs;
   hoverVertex: [number, number] | null;
+  /** CSS color string for polygon fill in vertex edit mode. Null = no fill. */
+  polygonFill?: string | null;
+  geometryType?: string;
+  /** Neighbor shapes sharing the hovered arc (different polygon fill) */
+  neighborShapes?: EditVertexShape[];
 }
 
 export class Emap extends EventDispatcher {
@@ -386,6 +396,32 @@ export class Emap extends EventDispatcher {
       transform,
       lineScale,
     );
+
+    // Polygon fill in vertex edit mode (drawn before dots so dots appear on top)
+    if (
+      this._editMode === 'vertex' &&
+      this._editVertexState &&
+      this._editVertexState.geometryType === 'polygon' &&
+      this._editVertexState.polygonFill
+    ) {
+      const painter = this._painter as CanvasPainter;
+      if (painter.drawPolygonFill) {
+        // Draw neighbor shapes first (slightly lighter)
+        if (this._editVertexState.neighborShapes?.length) {
+          painter.drawPolygonFill(
+            this._editVertexState.neighborShapes,
+            this._editVertexState.arcs as unknown as import('../types/mapshaper-types').ArcCollection,
+            this._editVertexState.polygonFill,
+          );
+        }
+        // Draw primary hovered shape
+        painter.drawPolygonFill(
+          this._editVertexState.shapes,
+          this._editVertexState.arcs as unknown as import('../types/mapshaper-types').ArcCollection,
+          this._editVertexState.polygonFill,
+        );
+      }
+    }
 
     // Vertex dots via Painter interface
     if (

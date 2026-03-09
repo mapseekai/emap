@@ -99,4 +99,7 @@ export interface VertexDotStyle {
   hoverVertex?: [number, number] | null;
   hoverColor?: string;
   hoverRadius?: number;
+  /** Fill color for polygon shapes in vertex edit mode */
+  polygonFill?: string | null;
+  geometryType?: string;
 }

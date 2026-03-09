@@ -4,7 +4,9 @@ import { Emap, EditVertexShape, EditVertexArcs } from '../map/map';
 
 interface EditableArcs extends EditVertexArcs {
   getVertex2(vertexId: number): [number, number] | null;
+  getShapeIter?(part: number[]): { x: number; y: number; hasNext(): boolean };
   transformPoints?: (cb: (x: number, y: number) => void) => void;
+  getVertexData(): { xx: Float64Array; yy: Float64Array; nn: Int32Array; ii: Int32Array };
 }
 
 interface HoveredFeature {
@@ -14,17 +16,45 @@ interface HoveredFeature {
   shape: EditVertexShape;
   arcs: EditableArcs;
   geometryType: string;
+  /** All layers in the source, for neighbor-shape lookup */
+  allLayers: Array<{ shapes?: EditVertexShape[] }>;
 }
 
 interface VertexOpsInternal {
   findNearestVertices(point: [number, number], shape: EditVertexShape, arcs: EditableArcs): number[];
   snapVerticesToPoint(vertexIds: number[], point: [number, number], arcs: EditableArcs): void;
+  forEachSegmentInShape(
+    shape: EditVertexShape,
+    arcs: EditableArcs,
+    cb: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void
+  ): void;
+  findClosestPointOnSeg(
+    px: number, py: number,
+    ax: number, ay: number,
+    bx: number, by: number,
+    snapArg: number
+  ): [number, number];
+  insertVertex(arcs: EditableArcs, id: number, point: [number, number]): void;
+  findArcIdFromVertexId(vertexId: number, ii: Int32Array): number;
 }
 
 const vertexOps = mapshaper.internal as unknown as VertexOpsInternal;
 
 /** Pixel threshold for vertex hover detection */
 const VERTEX_HIT_THRESHOLD = 10;
+
+/** Options for VertexEditControl */
+export interface VertexEditControlOptions {
+  /**
+   * Fill color for polygon shapes in vertex edit mode.
+   * Any CSS color string. Set to null to disable fill.
+   * @default 'rgba(0,0,0,0.15)'
+   */
+  polygonFillColor?: string | null;
+}
+
+/** Default light grey fill at ~30% opacity, matching mapshaper's hover style */
+const DEFAULT_POLYGON_FILL = 'rgba(0,0,0,0.15)';
 
 /**
  * VertexEditControl enables interactive vertex editing with topology awareness.
@@ -33,20 +63,27 @@ const VERTEX_HIT_THRESHOLD = 10;
  * Uses mapshaper.internal.findNearestVertices to discover topologically-shared
  * vertices, and snapVerticesToPoint to move them all simultaneously.
  *
- * Usage:
+ * @example
  *   map.addControl(new VertexEditControl(), 'top-left');
+ *   // With custom polygon fill:
+ *   map.addControl(new VertexEditControl({ polygonFillColor: 'rgba(100,150,255,0.2)' }), 'top-left');
  */
 export class VertexEditControl implements Control {
   private _map: Emap | null = null;
   private _container: HTMLElement | null = null;
   private _btn: HTMLButtonElement | null = null;
   private _active: boolean = false;
+  private _polygonFillColor: string | null;
 
   // Hover / drag state
   private _hoveredFeature: HoveredFeature | null = null;
   private _hoverVertexCoords: [number, number] | null = null;
   private _hoverVertexIds: number[] = [];  // ALL vertex indices sharing this topological node
+  private _hoverType: 'vertex' | 'interpolated' | null = null;
+  private _hoverInsertionId: number = -1;  // vertex insertion index for interpolated points
   private _dragging: boolean = false;
+  /** Shapes of neighboring polygons sharing the hovered arc (for shared-edge highlight) */
+  private _neighborShapes: EditVertexShape[] = [];
 
   // Bound handlers
   private _onMouseMoveBound: (e: MouseEvent) => void;
@@ -54,7 +91,10 @@ export class VertexEditControl implements Control {
   private _onMouseUpBound: (e: MouseEvent) => void;
   private _onMoveHandlerBound: () => void;
 
-  constructor() {
+  constructor(options: VertexEditControlOptions = {}) {
+    this._polygonFillColor = options.polygonFillColor !== undefined
+      ? options.polygonFillColor
+      : DEFAULT_POLYGON_FILL;
     this._onMouseMoveBound = this._onMouseMove.bind(this);
     this._onMouseDownBound = this._onMouseDown.bind(this);
     this._onMouseUpBound = this._onMouseUp.bind(this);
@@ -118,6 +158,9 @@ export class VertexEditControl implements Control {
     this._hoveredFeature = null;
     this._hoverVertexCoords = null;
     this._hoverVertexIds = [];
+    this._hoverType = null;
+    this._hoverInsertionId = -1;
+    this._neighborShapes = [];
     this._dragging = false;
 
     const container = this._map.getCanvasContainer();
@@ -155,6 +198,9 @@ export class VertexEditControl implements Control {
       this._hoveredFeature = null;
       this._hoverVertexCoords = null;
       this._hoverVertexIds = [];
+      this._hoverType = null;
+      this._hoverInsertionId = -1;
+      this._neighborShapes = [];
       this._map.clearEditVertexState();
       this._map.render();
       return;
@@ -165,6 +211,9 @@ export class VertexEditControl implements Control {
       this._hoveredFeature = null;
       this._hoverVertexCoords = null;
       this._hoverVertexIds = [];
+      this._hoverType = null;
+      this._hoverInsertionId = -1;
+      this._neighborShapes = [];
       this._map.clearEditVertexState();
       this._map.render();
       return;
@@ -192,11 +241,18 @@ export class VertexEditControl implements Control {
       id: hit.id,
       shape,
       arcs,
-      geometryType: hit.geometryType
+      geometryType: hit.geometryType,
+      allLayers: layers as Array<{ shapes?: EditVertexShape[] }>
     };
 
-    // Find nearest vertex using topology-aware API
+    // Find nearest vertex using topology-aware API;
+    // fall back to edge snapping if no vertex is close enough
     this._findNearestVertices(shape, arcs, px, py);
+    if (!this._hoverVertexCoords) {
+      this._findInterpolatedPoint(shape, arcs, px, py);
+    }
+    // Find neighbor shapes sharing the hovered arc (for shared-edge highlight)
+    this._findNeighborShapes(arcs);
     this._updateEditState();
     this._map.render();
   }
@@ -236,19 +292,131 @@ export class VertexEditControl implements Control {
     if (dist <= VERTEX_HIT_THRESHOLD) {
       this._hoverVertexCoords = [vtxCoords[0], vtxCoords[1]];
       this._hoverVertexIds = ids;
+      this._hoverType = 'vertex';
+      this._hoverInsertionId = -1;
     } else {
       this._hoverVertexCoords = null;
       this._hoverVertexIds = [];
+      this._hoverType = null;
+      this._hoverInsertionId = -1;
     }
   }
 
-  /** Update the edit vertex state on the map so render() draws vertex dots */
+  /**
+   * Find the closest point along any segment edge (not just vertices).
+   * Uses mapshaper's forEachSegmentInShape + findClosestPointOnSeg.
+   * Called as fallback when no existing vertex is within hover threshold.
+   */
+  private _findInterpolatedPoint(shape: EditVertexShape, arcs: EditableArcs, px: number, py: number): void {
+    if (!this._map) return;
+
+    const p = this._map.unproject(px, py);
+    let minDist = Infinity;
+    let closest: { insertionId: number; point: [number, number] } | null = null;
+
+    vertexOps.forEachSegmentInShape(shape, arcs, (i, j, xx, yy) => {
+      const x1 = xx[i], y1 = yy[i];
+      const x2 = xx[j], y2 = yy[j];
+      const p2 = vertexOps.findClosestPointOnSeg(p[0], p[1], x1, y1, x2, y2, 0);
+      const dx = p2[0] - p[0];
+      const dy = p2[1] - p[1];
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < minDist) {
+        minDist = dist;
+        closest = {
+          insertionId: (i < j ? i : j) + 1,
+          point: [p2[0], p2[1]]
+        };
+      }
+    });
+
+    if (!closest) return;
+
+    // Extract after null guard to avoid TS closure narrowing issue
+    const closestResult = closest as { insertionId: number; point: [number, number] };
+
+    // Convert data-space distance to pixel distance
+    const projected = this._map.project(closestResult.point[0], closestResult.point[1]);
+    const pixelDist = Math.sqrt(
+      (projected[0] - px) * (projected[0] - px) +
+      (projected[1] - py) * (projected[1] - py)
+    );
+
+    if (pixelDist <= VERTEX_HIT_THRESHOLD) {
+      this._hoverVertexCoords = closestResult.point;
+      this._hoverVertexIds = [];
+      this._hoverType = 'interpolated';
+      this._hoverInsertionId = closestResult.insertionId;
+    }
+  }
+
+  /**
+   * Find all shapes (polygons) in the source that share any arc with the hovered vertex/edge.
+   * Handles two cases:
+   *   - Vertex hover: hoverVertexIds → arcIds via findArcIdFromVertexId
+   *   - Edge hover (interpolated): hoverInsertionId - 1 → arcId via findArcIdFromVertexId
+   * Only runs when geometry is polygon. Populates _neighborShapes.
+   */
+  private _findNeighborShapes(arcs: EditableArcs): void {
+    this._neighborShapes = [];
+    if (!this._hoveredFeature || this._hoveredFeature.geometryType !== 'polygon') return;
+
+    const { ii } = arcs.getVertexData();
+    const hoveredShapeId = this._hoveredFeature.id;
+
+    // Build set of arc IDs to check for neighbors
+    const arcIdSet = new Set<number>();
+
+    if (this._hoverVertexIds.length > 0) {
+      // Vertex hover: map each shared vertex → arc ID
+      for (const vtxId of this._hoverVertexIds) {
+        arcIdSet.add(vertexOps.findArcIdFromVertexId(vtxId, ii));
+      }
+    } else if (this._hoverType === 'interpolated' && this._hoverInsertionId > 0) {
+      // Edge hover: the vertex at (insertionId - 1) is always on the hovered arc
+      arcIdSet.add(vertexOps.findArcIdFromVertexId(this._hoverInsertionId - 1, ii));
+    }
+
+    if (arcIdSet.size === 0) return;
+
+    // Scan all layers for shapes containing any of these arc IDs
+    const neighborShapes: EditVertexShape[] = [];
+    for (const lyr of this._hoveredFeature.allLayers) {
+      if (!lyr.shapes) continue;
+      for (let shapeIdx = 0; shapeIdx < lyr.shapes.length; shapeIdx++) {
+        if (shapeIdx === hoveredShapeId) continue; // skip the hovered shape itself
+        const shape = lyr.shapes[shapeIdx];
+        if (!shape) continue;
+        // Check if this shape contains any of the hovered arc IDs
+        let found = false;
+        for (const part of shape) {
+          for (const rawArcId of part) {
+            const absArcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
+            if (arcIdSet.has(absArcId)) {
+              found = true;
+              break;
+            }
+          }
+          if (found) break;
+        }
+        if (found) neighborShapes.push(shape);
+      }
+    }
+    this._neighborShapes = neighborShapes;
+  }
+
+
+  /** Update the edit vertex state on the map so render() draws vertex dots (and polygon fill) */
   private _updateEditState(): void {
     if (!this._map || !this._hoveredFeature) return;
+    const geomType = this._hoveredFeature.geometryType;
     this._map.setEditVertexState({
       shapes: [this._hoveredFeature.shape],
       arcs: this._hoveredFeature.arcs,
-      hoverVertex: this._hoverVertexCoords
+      hoverVertex: this._hoverVertexCoords,
+      geometryType: geomType,
+      polygonFill: geomType === 'polygon' ? this._polygonFillColor : null,
+      neighborShapes: this._neighborShapes.length > 0 ? this._neighborShapes : undefined
     });
   }
 
@@ -256,6 +424,15 @@ export class VertexEditControl implements Control {
     if (!this._hoverVertexCoords || !this._hoveredFeature) return;
     e.preventDefault();
     e.stopPropagation();
+
+    // Insert a new vertex when dragging from an interpolated edge point
+    if (this._hoverType === 'interpolated' && this._hoverInsertionId >= 0) {
+      const arcs = this._hoveredFeature.arcs;
+      vertexOps.insertVertex(arcs, this._hoverInsertionId, this._hoverVertexCoords);
+      this._hoverVertexIds = [this._hoverInsertionId];
+      this._hoverType = 'vertex';
+    }
+
     this._dragging = true;
   }
 

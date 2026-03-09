@@ -213,6 +213,48 @@ export class CanvasPainter implements Painter {
     }
   }
 
+  /**
+   * Draw a fill for polygon shapes in vertex edit mode.
+   *
+   * IMPORTANT: Must use getShapeIter (not getArcIter) so that reversed arcs
+   * (~arcId) are traversed backwards, preserving correct polygon winding order.
+   * This is what mapshaper does via ShapeIter and is the reason plain getArcIter
+   * produces incorrect fills (doesn't cover the whole polygon, or fills holes).
+   */
+  drawPolygonFill(
+    shapes: any[],
+    arcs: ArcCollection & { getShapeIter?: (part: number[]) => { x: number; y: number; hasNext(): boolean } },
+    fillColor: string,
+  ): void {
+    if (!arcs.getShapeIter) return; // guard: need shape-aware iterator
+
+    const ctx = this._ctx;
+    const pr = this._pixelRatio;
+    const mx = this._transform.mx * pr;
+    const my = this._transform.my * pr;
+    const bx = this._transform.bx * pr;
+    const by = this._transform.by * pr;
+
+    ctx.beginPath();
+    for (const shape of shapes) {
+      if (!shape) continue;
+      for (const part of shape) {
+        // getShapeIter respects arc direction (reversed arcs traversed backwards)
+        const iter = arcs.getShapeIter!(part);
+        if (!iter.hasNext()) continue;
+        ctx.moveTo(iter.x * mx + bx, iter.y * my + by);
+        while (iter.hasNext()) {
+          ctx.lineTo(iter.x * mx + bx, iter.y * my + by);
+        }
+        ctx.closePath();
+      }
+    }
+    ctx.fillStyle = fillColor;
+    ctx.fill('evenodd');
+  }
+
+
+
 
 
   clear(): void {

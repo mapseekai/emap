@@ -52,10 +52,6 @@ export class Viewport {
     this._crs = crs;
   }
 
-  // -----------------------------------------------------------------------
-  // Accessors
-  // -----------------------------------------------------------------------
-
   get transform(): AffineTransform {
     return this._transform;
   }
@@ -76,18 +72,10 @@ export class Viewport {
     return this._initialMX;
   }
 
-  // -----------------------------------------------------------------------
-  // Size
-  // -----------------------------------------------------------------------
-
   updateSize(width: number, height: number): void {
     this._width = width;
     this._height = height;
   }
-
-  // -----------------------------------------------------------------------
-  // Extent / transform
-  // -----------------------------------------------------------------------
 
   setExtent(bounds: Bounds): void {
     this._extent = bounds.clone();
@@ -121,10 +109,6 @@ export class Viewport {
     }
   }
 
-  // -----------------------------------------------------------------------
-  // Pan
-  // -----------------------------------------------------------------------
-
   pan(dx: number, dy: number): void {
     this._transform.translate(dx, dy);
     this._applyConstraints();
@@ -135,20 +119,12 @@ export class Viewport {
     this._animatingTransform = null;
   }
 
-  // -----------------------------------------------------------------------
-  // Wheel zoom
-  // -----------------------------------------------------------------------
-
   applyWheelZoom(direction: number, multiplier: number, x: number, y: number): void {
     const k = 1 + ZOOM_TICK_FRACTION * multiplier;
     const delta = direction > 0 ? k : 1 / k;
     this._transform.scale(delta, x, y);
     this._applyConstraints();
   }
-
-  // -----------------------------------------------------------------------
-  // Animated zoom
-  // -----------------------------------------------------------------------
 
   zoomIn(): void {
     this._zoomTo(ZOOM_STEP_FACTOR);
@@ -183,10 +159,6 @@ export class Viewport {
     });
   }
 
-  // -----------------------------------------------------------------------
-  // Projection helpers (project / unproject through the current transform)
-  // -----------------------------------------------------------------------
-
   project(x: number, y: number): [number, number] {
     return this._transform.project(x, y);
   }
@@ -194,10 +166,6 @@ export class Viewport {
   unproject(px: number, py: number): [number, number] {
     return this._transform.unproject(px, py);
   }
-
-  // -----------------------------------------------------------------------
-  // Rendering helpers
-  // -----------------------------------------------------------------------
 
   getLineScale(): number {
     if (this._initialMX === 0) return 1;
@@ -243,10 +211,6 @@ export class Viewport {
       Math.max(y1, y2),
     ];
   }
-
-  // -----------------------------------------------------------------------
-  // View constraints
-  // -----------------------------------------------------------------------
 
   private _applyConstraints(): void {
     const t = this._transform;
