@@ -68,6 +68,79 @@ export class TopologySource implements ITopologySource {
     }
   }
 
+  /**
+   * Load geographic data from an online URL.
+   * Supports GeoJSON (.json/.geojson), TopoJSON (.topojson), and ZIP Shapefiles (.zip).
+   *
+   * The filename is inferred from the URL path; if not determinable, it falls back
+   * to the response `Content-Type` header.
+   *
+   * @param url - The URL to fetch data from.
+   */
+  async loadFromUrl(url: string): Promise<void> {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
+    }
+
+    const buf = await response.arrayBuffer();
+    const content = new Uint8Array(buf);
+
+    // Try to infer filename from URL path
+    const urlPath = new URL(url).pathname;
+    let filename = urlPath.split('/').pop() || '';
+
+    // If no recognizable extension, try to infer from Content-Type
+    if (!this._hasSupportedExtension(filename)) {
+      const contentType = response.headers.get('Content-Type') || '';
+      filename = this._filenameFromContentType(contentType, filename);
+    }
+
+    if (!filename) {
+      filename = 'data.json'; // safe default
+    }
+
+    await this.load({ filename, content });
+  }
+
+  /**
+   * Static factory method: create a `TopologySource` and immediately load from a URL.
+   *
+   * @param id  - Source ID (used when adding to a map via `map.addSource(id, source)`).
+   * @param url - The URL to fetch. Supports GeoJSON, TopoJSON and ZIP Shapefile.
+   * @returns   A fully loaded `TopologySource` instance.
+   *
+   * @example
+   * const source = await TopologySource.fromUrl('china', 'https://example.com/china.topo.json');
+   * map.addSource('china', source);
+   */
+  static async fromUrl(id: string, url: string): Promise<TopologySource> {
+    const source = new TopologySource(id);
+    await source.loadFromUrl(url);
+    return source;
+  }
+
+  private _hasSupportedExtension(filename: string): boolean {
+    return /\.(json|geojson|topojson|zip|shp|kml)$/i.test(filename);
+  }
+
+  private _filenameFromContentType(contentType: string, fallbackName: string): string {
+    const ct = contentType.toLowerCase().split(';')[0].trim();
+    const extMap: Record<string, string> = {
+      'application/json': '.json',
+      'application/geo+json': '.geojson',
+      'application/vnd.geo+json': '.geojson',
+      'application/topojson+json': '.topojson',
+      'application/zip': '.zip',
+      'application/x-zip-compressed': '.zip',
+      'application/octet-stream': '.zip',
+      'application/vnd.google-earth.kml+xml': '.kml',
+      'text/plain': '.json',
+    };
+    const ext = extMap[ct] || '.json';
+    return (fallbackName || 'data') + ext;
+  }
+
   public getDataset(): MapshaperDataset | undefined {
     return this._dataset;
   }

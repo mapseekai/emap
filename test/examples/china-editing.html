@@ -211,12 +211,10 @@
       topojson: {
         url: "https://geojson.cn/api/china/1.6.3/china.topo.json",
         label: "TopoJSON",
-        filename: "china.topo.json",
       },
       geojson: {
         url: "https://geojson.cn/api/china/1.6.3/china.json",
         label: "GeoJSON",
-        filename: "china.json",
       },
     };
 
@@ -249,22 +247,14 @@
 
       setButtonsDisabled(true);
       setActiveButton(sourceId);
-      showLoading(`正在获取 ${info.label}...`);
+      showLoading(`正在加载 ${info.label}...`);
 
       try {
         if (currentSourceId) {
           try { map.removeSource(currentSourceId); } catch (_) { }
         }
 
-        const resp = await fetch(info.url);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const buf = await resp.arrayBuffer();
-        const content = new Uint8Array(buf);
-
-        showLoading(`正在处理 ${info.label}...`);
-
-        const source = new TopologySource(sourceId);
-        await source.load({ filename: info.filename, content });
+        const source = await TopologySource.fromUrl(sourceId, info.url);
         map.addSource(sourceId, source);
         map.setExtent(source.getExtent());
 
