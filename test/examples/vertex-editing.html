@@ -127,10 +127,23 @@
         reader.onload = async (event) => {
           const content = new Uint8Array(event.target.result);
           const source = new TopologySource("test-source");
-          await source.load({ filename: file.name, content });
+
+          source.on('data', () => {
+            map.setExtent(source.getExtent());
+            status.textContent = `Viewing: ${file.name} — click ✏ to edit`;
+          });
+
+          source.on('error', (e) => {
+            console.error(e);
+            status.textContent = "Error processing file";
+          });
+
+          if (map.getSource("test-source")) {
+            map.removeSource("test-source");
+          }
+
+          source.setData({ filename: file.name, content });
           map.addSource("test-source", source);
-          map.setExtent(source.getExtent());
-          status.textContent = `Viewing: ${file.name} — click ✏ to edit`;
         };
         reader.readAsArrayBuffer(file);
       } catch (err) {

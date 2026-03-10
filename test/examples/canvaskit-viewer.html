@@ -94,15 +94,26 @@
             const content = new Uint8Array(event.target.result);
             const source = new TopologySource('test-source');
 
-            await source.load({
+            source.on('data', () => {
+              map.setExtent(source.getExtent());
+              status.textContent = `Viewing with CanvasKit: ${file.name}`;
+            });
+
+            source.on('error', (e) => {
+              console.error(e);
+              status.textContent = 'Error processing file';
+            });
+
+            if (map.getSource("test-source")) {
+              map.removeSource("test-source");
+            }
+
+            source.setData({
               filename: file.name,
               content: content
             });
 
             map.addSource('test-source', source);
-            map.setExtent(source.getExtent());
-
-            status.textContent = `Viewing with CanvasKit: ${file.name}`;
           };
           reader.readAsArrayBuffer(file);
         } catch (err) {

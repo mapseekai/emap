@@ -1,198 +1,211 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Emap Example - Feature Attributes</title>
-    <style>
-      body {
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-        font-family: sans-serif;
-      }
 
-      #header {
-        padding: 10px;
-        background: #2c3e50;
-        color: white;
-        display: flex;
-        gap: 12px;
-        align-items: center;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap Example - Feature Attributes</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: sans-serif;
+    }
 
-      #map {
-        flex: 1;
-        background: #ffffff;
-        position: relative;
-      }
+    #header {
+      padding: 10px;
+      background: #2c3e50;
+      color: white;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
 
-      #panel {
-        position: absolute;
-        top: 12px;
-        right: 12px;
-        width: 280px;
-        max-height: 60vh;
-        overflow: auto;
-        background: rgba(255, 255, 255, 0.95);
-        border: 1px solid #e0e0e0;
-        border-radius: 6px;
-        padding: 10px;
-        font-size: 12px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-      }
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+    }
 
-      #panel h3 {
-        margin: 0 0 8px 0;
-        font-size: 13px;
-      }
+    #panel {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 280px;
+      max-height: 60vh;
+      overflow: auto;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
 
-      #panel pre {
-        margin: 0;
-        white-space: pre-wrap;
-        word-break: break-word;
-      }
+    #panel h3 {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+    }
 
-      .info {
-        margin-left: auto;
-        font-size: 0.85em;
-        opacity: 0.9;
-      }
-    </style>
-  </head>
+    #panel pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
 
-  <body>
-    <div id="header">
-      <strong>Emap Example</strong>
-      <input type="file" id="file-input" accept=".json,.geojson,.zip" />
-      <label for="layer-select">Layer:</label>
-      <select id="layer-select">
-        <option value="">All</option>
-      </select>
-      <label for="hl-color">Color:</label>
-      <input type="color" id="hl-color" value="#ff7a00" />
-      <label for="hl-width">Width:</label>
-      <input type="number" id="hl-width" min="0.5" step="0.1" value="2.5" />
-      <label for="hl-radius">Radius:</label>
-      <input type="number" id="hl-radius" min="1" step="1" value="6" />
-      <label for="hl-fill">Fill:</label>
-      <input type="checkbox" id="hl-fill" checked />
-      <div class="info" id="status">Upload a GeoJSON file to start</div>
+    .info {
+      margin-left: auto;
+      font-size: 0.85em;
+      opacity: 0.9;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <strong>Emap Example</strong>
+    <input type="file" id="file-input" accept=".json,.geojson,.zip" />
+    <label for="layer-select">Layer:</label>
+    <select id="layer-select">
+      <option value="">All</option>
+    </select>
+    <label for="hl-color">Color:</label>
+    <input type="color" id="hl-color" value="#ff7a00" />
+    <label for="hl-width">Width:</label>
+    <input type="number" id="hl-width" min="0.5" step="0.1" value="2.5" />
+    <label for="hl-radius">Radius:</label>
+    <input type="number" id="hl-radius" min="1" step="1" value="6" />
+    <label for="hl-fill">Fill:</label>
+    <input type="checkbox" id="hl-fill" checked />
+    <div class="info" id="status">Upload a GeoJSON file to start</div>
+  </div>
+  <div id="map">
+    <div id="panel">
+      <h3>Feature Attributes</h3>
+      <pre id="attributes">(click a feature)</pre>
     </div>
-    <div id="map">
-      <div id="panel">
-        <h3>Feature Attributes</h3>
-        <pre id="attributes">(click a feature)</pre>
-      </div>
-    </div>
+  </div>
 
-    <!-- Import default styles for controls -->
-    <link rel="stylesheet" href="../../src/ui/controls.css" />
-    <!-- Import the dev bundle by default -->
-    <script src="../../dist/emap-dev.js"></script>
-    <script>
-      // Use the global 'emap' object exposed by the IIFE bundle
-      const { Emap, TopologySource } = emap;
+  <!-- Import default styles for controls -->
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <!-- Import the dev bundle by default -->
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    // Use the global 'emap' object exposed by the IIFE bundle
+    const { Emap, TopologySource } = emap;
 
-      const map = new Emap({
-        container: "map",
+    const map = new Emap({
+      container: "map",
+    });
+
+    map.addControl(new emap.NavigationControl(), "top-left");
+    map.addControl(new emap.BasemapControl(), "top-right");
+    map.addControl(
+      new emap.StatusControl({
+        alignment: "right",
+        showEPSG: true,
+      }),
+      "bottom-right",
+    );
+
+    const fileInput = document.getElementById("file-input");
+    const status = document.getElementById("status");
+    const layerSelect = document.getElementById("layer-select");
+    const attributes = document.getElementById("attributes");
+    const hlColor = document.getElementById("hl-color");
+    const hlWidth = document.getElementById("hl-width");
+    const hlRadius = document.getElementById("hl-radius");
+    const hlFill = document.getElementById("hl-fill");
+    const mapContainer = map.getCanvasContainer();
+
+    let activeSource = null;
+
+    function populateLayers(source) {
+      layerSelect.innerHTML = '<option value="">All</option>';
+      const layers = source.getLayers();
+      layers.forEach((layer, idx) => {
+        const name = layer?.name || layer?.id || `layer-${idx}`;
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        layerSelect.appendChild(option);
       });
+    }
 
-      map.addControl(new emap.NavigationControl(), "top-left");
-      map.addControl(new emap.BasemapControl(), "top-right");
-      map.addControl(
-        new emap.StatusControl({
-          alignment: "right",
-          showEPSG: true,
-        }),
-        "bottom-right",
-      );
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
 
-      const fileInput = document.getElementById("file-input");
-      const status = document.getElementById("status");
-      const layerSelect = document.getElementById("layer-select");
-      const attributes = document.getElementById("attributes");
-      const hlColor = document.getElementById("hl-color");
-      const hlWidth = document.getElementById("hl-width");
-      const hlRadius = document.getElementById("hl-radius");
-      const hlFill = document.getElementById("hl-fill");
-      const mapContainer = map.getCanvasContainer();
+      status.textContent = `Processing ${file.name}...`;
+      attributes.textContent = "(click a feature)";
+      map.clearHighlightedFeatures();
 
-      let activeSource = null;
+      try {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const content = new Uint8Array(event.target.result);
+          const source = new TopologySource("test-source");
 
-      function populateLayers(source) {
-        layerSelect.innerHTML = '<option value="">All</option>';
-        const layers = source.getLayers();
-        layers.forEach((layer, idx) => {
-          const name = layer?.name || layer?.id || `layer-${idx}`;
-          const option = document.createElement("option");
-          option.value = name;
-          option.textContent = name;
-          layerSelect.appendChild(option);
-        });
-      }
-
-      fileInput.addEventListener("change", async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        status.textContent = `Processing ${file.name}...`;
-        attributes.textContent = "(click a feature)";
-        map.clearHighlightedFeatures();
-
-        try {
-          const reader = new FileReader();
-          reader.onload = async (event) => {
-            const content = new Uint8Array(event.target.result);
-            const source = new TopologySource("test-source");
-
-            await source.load({
-              filename: file.name,
-              content: content,
-            });
-
-            activeSource = source;
-            map.addSource("test-source", source);
+          source.on('data', () => {
             map.setExtent(source.getExtent());
             populateLayers(source);
-
             status.textContent = `Viewing: ${file.name}`;
-          };
-          reader.readAsArrayBuffer(file);
-        } catch (err) {
-          console.error(err);
-          status.textContent = "Error processing file";
-        }
+          });
+
+          source.on('error', (e) => {
+            console.error(e);
+            status.textContent = "Error processing file";
+          });
+
+          if (map.getSource("test-source")) {
+            map.removeSource("test-source");
+          }
+          activeSource = source;
+
+          source.setData({
+            filename: file.name,
+            content: content,
+          });
+
+          map.addSource("test-source", source);
+        };
+        reader.readAsArrayBuffer(file);
+      } catch (err) {
+        console.error(err);
+        status.textContent = "Error processing file";
+      }
+    });
+
+    mapContainer.addEventListener("click", (e) => {
+      if (!activeSource) return;
+      const rect = mapContainer.getBoundingClientRect();
+      const point = [e.clientX - rect.left, e.clientY - rect.top];
+      const layers = layerSelect.value ? [layerSelect.value] : undefined;
+      const features = map.queryRenderedFeatures(point, { layers });
+
+      if (!features.length) {
+        attributes.textContent = "(no feature hit)";
+        map.clearHighlightedFeatures();
+        return;
+      }
+
+      map.setHighlightedFeatures(features, {
+        color: hlColor.value,
+        width: Number(hlWidth.value) || 2.5,
+        radius: Number(hlRadius.value) || 6,
+        fill: !!hlFill.checked,
       });
+      attributes.textContent =
+        `Hit ${features.length} feature(s)\n\n` +
+        JSON.stringify(features[0].properties, null, 2);
+    });
 
-      mapContainer.addEventListener("click", (e) => {
-        if (!activeSource) return;
-        const rect = mapContainer.getBoundingClientRect();
-        const point = [e.clientX - rect.left, e.clientY - rect.top];
-        const layers = layerSelect.value ? [layerSelect.value] : undefined;
-        const features = map.queryRenderedFeatures(point, { layers });
+    window.addEventListener("resize", () => {
+      map.resize();
+    });
+  </script>
+</body>
 
-        if (!features.length) {
-          attributes.textContent = "(no feature hit)";
-          map.clearHighlightedFeatures();
-          return;
-        }
-
-        map.setHighlightedFeatures(features, {
-          color: hlColor.value,
-          width: Number(hlWidth.value) || 2.5,
-          radius: Number(hlRadius.value) || 6,
-          fill: !!hlFill.checked,
-        });
-        attributes.textContent =
-          `Hit ${features.length} feature(s)\n\n` +
-          JSON.stringify(features[0].properties, null, 2);
-      });
-
-      window.addEventListener("resize", () => {
-        map.resize();
-      });
-    </script>
-  </body>
 </html>
