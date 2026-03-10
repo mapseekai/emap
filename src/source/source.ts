@@ -1,11 +1,11 @@
+import { EventDispatcher } from '../core/events';
 import type { ArcCollection, MapshaperDataset } from '../types/mapshaper-types';
 import type { DisplayArcs } from './display-arcs';
 import type { Bounds } from '../geo/bounds';
 
-export interface Source {
+export interface Source extends EventDispatcher {
   id: string;
   type: 'topology' | 'geojson';
-  load(): Promise<void>;
   getExtent(): Bounds;
 }
 

@@ -1,106 +1,119 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Emap Example - GeoJSON Viewer</title>
-    <style>
-      body {
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-        font-family: sans-serif;
-      }
 
-      #header {
-        padding: 10px;
-        background: #34495e;
-        color: white;
-        display: flex;
-        gap: 15px;
-        align-items: center;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap Example - GeoJSON Viewer</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: sans-serif;
+    }
 
-      #map {
-        flex: 1;
-        background: #ffffff;
-        position: relative;
-      }
+    #header {
+      padding: 10px;
+      background: #34495e;
+      color: white;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
 
-      .info {
-        margin-left: auto;
-        font-size: 0.85em;
-      }
-    </style>
-  </head>
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+    }
 
-  <body>
-    <div id="header">
-      <strong>Emap Example</strong>
-      <input type="file" id="file-input" accept=".json,.geojson,.zip" />
-      <div class="info" id="status">Upload a GeoJSON file to start</div>
-    </div>
-    <div id="map"></div>
+    .info {
+      margin-left: auto;
+      font-size: 0.85em;
+    }
+  </style>
+</head>
 
-    <!-- Import default styles for controls -->
-    <link rel="stylesheet" href="../../src/ui/controls.css" />
-    <!-- Import the dev bundle by default -->
-    <script src="../../dist/emap-dev.js"></script>
-    <script>
-      // Use the global 'emap' object exposed by the IIFE bundle
-      const { Emap, TopologySource } = emap;
+<body>
+  <div id="header">
+    <strong>Emap Example</strong>
+    <input type="file" id="file-input" accept=".json,.geojson,.zip" />
+    <div class="info" id="status">Upload a GeoJSON file to start</div>
+  </div>
+  <div id="map"></div>
 
-      const map = new Emap({
-        container: "map",
-      });
+  <!-- Import default styles for controls -->
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <!-- Import the dev bundle by default -->
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    // Use the global 'emap' object exposed by the IIFE bundle
+    const { Emap, TopologySource } = emap;
 
-      // Add UI Controls
-      map.addControl(new emap.NavigationControl(), "top-left");
-      map.addControl(new emap.BasemapControl(), "top-right");
-      map.addControl(
-        new emap.StatusControl({
-          alignment: "right",
-          showEPSG: true,
-        }),
-        "bottom-right",
-      );
+    const map = new Emap({
+      container: "map",
+    });
 
-      const fileInput = document.getElementById("file-input");
-      const status = document.getElementById("status");
+    // Add UI Controls
+    map.addControl(new emap.NavigationControl(), "top-left");
+    map.addControl(new emap.BasemapControl(), "top-right");
+    map.addControl(
+      new emap.StatusControl({
+        alignment: "right",
+        showEPSG: true,
+      }),
+      "bottom-right",
+    );
 
-      fileInput.addEventListener("change", async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    const fileInput = document.getElementById("file-input");
+    const status = document.getElementById("status");
 
-        status.textContent = `Processing ${file.name}...`;
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
 
-        try {
-          const reader = new FileReader();
-          reader.onload = async (event) => {
-            const content = new Uint8Array(event.target.result);
-            const source = new TopologySource("test-source");
+      status.textContent = `Processing ${file.name}...`;
 
-            await source.load({
-              filename: file.name,
-              content: content,
-            });
+      try {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const content = new Uint8Array(event.target.result);
+          const source = new TopologySource("test-source");
 
-            map.addSource("test-source", source);
+          source.on('data', () => {
             map.setExtent(source.getExtent());
-
             status.textContent = `Viewing: ${file.name}`;
-          };
-          reader.readAsArrayBuffer(file);
-        } catch (err) {
-          console.error(err);
-          status.textContent = "Error processing file";
-        }
-      });
+          });
 
-      window.addEventListener("resize", () => {
-        map.resize();
-      });
-    </script>
-  </body>
+          source.on('error', (e) => {
+            console.error(e);
+            status.textContent = "Error processing file";
+          });
+
+          if (map.getSource("test-source")) {
+            map.removeSource("test-source");
+          }
+
+          source.setData({
+            filename: file.name,
+            content: content,
+          });
+
+          map.addSource("test-source", source);
+        };
+        reader.readAsArrayBuffer(file);
+      } catch (err) {
+        console.error(err);
+        status.textContent = "Error processing file";
+      }
+    });
+
+    window.addEventListener("resize", () => {
+      map.resize();
+    });
+  </script>
+</body>
+
 </html>

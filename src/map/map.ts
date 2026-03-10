@@ -91,6 +91,8 @@ export class Emap extends EventDispatcher {
   private _projection: Projection = new Projection();
   private _sources: globalThis.Map<string, TopologySource> =
     new globalThis.Map();
+  private _sourceListeners: globalThis.Map<string, (e: any) => void> =
+    new globalThis.Map();
 
   // Interactions (delegated)
   private _mouseWheel: MouseWheel;
@@ -249,11 +251,39 @@ export class Emap extends EventDispatcher {
 
   public addSource(id: string, source: TopologySource): void {
     this._sources.set(id, source);
-    if (this._sources.size === 1 && source.getCRS) {
-      const crs = source.getCRS();
-      this._projection.setCRS(crs);
-      this._viewport.setCRS(crs);
-      this.fire('crschange');
+
+    const onData = (e: any) => {
+      if (this._sources.size === 1 && source.getCRS) {
+        const crs = source.getCRS();
+        if (crs && this._projection.crs !== crs) {
+          this._projection.setCRS(crs);
+          this._viewport.setCRS(crs);
+          this.fire('crschange');
+        }
+      }
+      this.fire('data', { sourceId: id, ...e });
+      this._scheduleRender();
+    };
+
+    this._sourceListeners.set(id, onData);
+    source.on('data', onData);
+
+    // If source already has data, trigger logic once manually
+    if (source.getDataset && source.getDataset()) {
+      onData({ type: 'data' });
+    }
+  }
+
+  public removeSource(id: string): void {
+    const source = this._sources.get(id);
+    if (source) {
+      const listener = this._sourceListeners.get(id);
+      if (listener) {
+        source.off('data', listener);
+        this._sourceListeners.delete(id);
+      }
+      this._sources.delete(id);
+      this._scheduleRender();
     }
   }
 

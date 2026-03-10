@@ -254,17 +254,29 @@
           try { map.removeSource(currentSourceId); } catch (_) { }
         }
 
-        const source = await TopologySource.fromUrl(sourceId, info.url);
-        map.addSource(sourceId, source);
-        map.setExtent(source.getExtent());
+        const source = new TopologySource(sourceId, { data: info.url });
 
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          status.textContent = `${info.label} 已加载 — 点击 ✏ 编辑顶点`;
+          hideLoading();
+          setButtonsDisabled(false);
+        });
+
+        source.on('error', (e) => {
+          console.error(e);
+          status.textContent = `错误: ${e.error?.message || '加载失败'}`;
+          setActiveButton(null);
+          hideLoading();
+          setButtonsDisabled(false);
+        });
+
+        map.addSource(sourceId, source);
         currentSourceId = sourceId;
-        status.textContent = `${info.label} 已加载 — 点击 ✏ 编辑顶点`;
       } catch (err) {
         console.error(err);
         status.textContent = `错误: ${err.message}`;
         setActiveButton(null);
-      } finally {
         hideLoading();
         setButtonsDisabled(false);
       }

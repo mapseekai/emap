@@ -1,4 +1,5 @@
 import mapshaper from 'mapshaper';
+import { EventDispatcher } from '../core/events';
 import { TopologySource as ITopologySource } from './source';
 import { Bounds } from '../geo/bounds';
 import { unzipSync, strFromU8 } from 'fflate';
@@ -8,116 +9,123 @@ import type { MapshaperDataset } from '../types/mapshaper-types';
 /** File size threshold for skipping -clean during import (5MB) */
 const LARGE_FILE_THRESHOLD_BYTES = 5 * 1024 * 1024;
 
-export class TopologySource implements ITopologySource {
+export type TopologySourceData = string | { filename: string, content: Uint8Array };
+
+export interface TopologySourceOptions {
+  data?: TopologySourceData;
+}
+
+export class TopologySource extends EventDispatcher implements ITopologySource {
   public id: string;
   public type: 'topology' = 'topology';
   private _dataset: MapshaperDataset | undefined;
   private _displayArcs: DisplayArcs | null = null;
+  private _options: TopologySourceOptions;
+  private _data: TopologySourceData | undefined;
 
-  constructor(id: string) {
+  constructor(id: string, options?: TopologySourceOptions) {
+    super();
     this.id = id;
+    this._options = options || {};
+    this._data = this._options.data;
+
+    if (this._data) {
+      this._updateData();
+    }
   }
 
-  async load(input?: { filename: string, content: Uint8Array }): Promise<void> {
-    if (!input) return;
+  setData(data: TopologySourceData): this {
+    this._data = data;
+    this._updateData();
+    return this;
+  }
 
-    let inputFiles: Record<string, Uint8Array | string>;
-    let primaryFile = input.filename;
+  private async _updateData(): Promise<void> {
+    if (!this._data) return;
 
-    // Check if this is a zip file
-    if (this._isZipFile(input.filename)) {
-      inputFiles = this._extractZip(input.content);
-      // Find the primary file (.shp, .geojson, etc.)
-      primaryFile = this._findPrimaryFile(inputFiles);
-      if (!primaryFile) {
-        throw new Error('No importable file found in zip archive');
-      }
-    } else {
-      inputFiles = { [input.filename]: input.content };
-    }
+    this.fire('dataloading');
 
-    // For large files, skip -clean to speed up import. 
-    // Always run -simplify 100% to generate thresholds for dynamic rendering.
-    const isLarge = input.content.length > LARGE_FILE_THRESHOLD_BYTES;
-    const cleanFlag = isLarge ? '' : '-clean';
-    const cmd = `-i ${primaryFile} ${cleanFlag} -simplify 100%`;
-    const commands = mapshaper.internal.parseCommands(cmd);
+    try {
+      let input: { filename: string, content: Uint8Array };
 
-    // Inject input files into the import command
-    if (commands.length > 0 && commands[0].name === 'i') {
-      commands[0].options.input = inputFiles;
-    }
-
-    this._dataset = await new Promise((resolve, reject) => {
-      mapshaper.internal.runParsedCommands(commands, new mapshaper.internal.Job(), (err: any, job: any) => {
-        if (err) reject(err);
-        else {
-          const targets = job.catalog.getDefaultTargets();
-          if (targets.length > 0) {
-            resolve(targets[0].dataset);
-          } else {
-            reject(new Error('No layers found in dataset'));
-          }
+      if (typeof this._data === 'string') {
+        // Load from URL
+        const url = this._data;
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
         }
+
+        const buf = await response.arrayBuffer();
+        const content = new Uint8Array(buf);
+
+        const urlPath = new URL(url).pathname;
+        let filename = urlPath.split('/').pop() || '';
+
+        if (!this._hasSupportedExtension(filename)) {
+          const contentType = response.headers.get('Content-Type') || '';
+          filename = this._filenameFromContentType(contentType, filename);
+        }
+
+        if (!filename) {
+          filename = 'data.json';
+        }
+
+        input = { filename, content };
+      } else {
+        input = this._data;
+      }
+
+      let inputFiles: Record<string, Uint8Array | string>;
+      let primaryFile = input.filename;
+
+      // Check if this is a zip file
+      if (this._isZipFile(input.filename)) {
+        inputFiles = this._extractZip(input.content);
+        // Find the primary file (.shp, .geojson, etc.)
+        primaryFile = this._findPrimaryFile(inputFiles);
+        if (!primaryFile) {
+          throw new Error('No importable file found in zip archive');
+        }
+      } else {
+        inputFiles = { [input.filename]: input.content };
+      }
+
+      // For large files, skip -clean to speed up import. 
+      // Always run -simplify 100% to generate thresholds for dynamic rendering.
+      const isLarge = input.content.length > LARGE_FILE_THRESHOLD_BYTES;
+      const cleanFlag = isLarge ? '' : '-clean';
+      const cmd = `-i ${primaryFile} ${cleanFlag} -simplify 100%`;
+      const commands = mapshaper.internal.parseCommands(cmd);
+
+      // Inject input files into the import command
+      if (commands.length > 0 && commands[0].name === 'i') {
+        commands[0].options.input = inputFiles;
+      }
+
+      this._dataset = await new Promise((resolve, reject) => {
+        mapshaper.internal.runParsedCommands(commands, new mapshaper.internal.Job(), (err: any, job: any) => {
+          if (err) reject(err);
+          else {
+            const targets = job.catalog.getDefaultTargets();
+            if (targets.length > 0) {
+              resolve(targets[0].dataset);
+            } else {
+              reject(new Error('No layers found in dataset'));
+            }
+          }
+        });
       });
-    });
 
-    // Initialize LOD wrapper for large datasets
-    if (this._dataset?.arcs) {
-      this._displayArcs = new DisplayArcs(this._dataset.arcs);
+      // Initialize LOD wrapper for large datasets
+      if (this._dataset?.arcs) {
+        this._displayArcs = new DisplayArcs(this._dataset.arcs);
+      }
+
+      this.fire('data');
+    } catch (err: any) {
+      this.fire('error', { error: err });
     }
-  }
-
-  /**
-   * Load geographic data from an online URL.
-   * Supports GeoJSON (.json/.geojson), TopoJSON (.topojson), and ZIP Shapefiles (.zip).
-   *
-   * The filename is inferred from the URL path; if not determinable, it falls back
-   * to the response `Content-Type` header.
-   *
-   * @param url - The URL to fetch data from.
-   */
-  async loadFromUrl(url: string): Promise<void> {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
-    }
-
-    const buf = await response.arrayBuffer();
-    const content = new Uint8Array(buf);
-
-    // Try to infer filename from URL path
-    const urlPath = new URL(url).pathname;
-    let filename = urlPath.split('/').pop() || '';
-
-    // If no recognizable extension, try to infer from Content-Type
-    if (!this._hasSupportedExtension(filename)) {
-      const contentType = response.headers.get('Content-Type') || '';
-      filename = this._filenameFromContentType(contentType, filename);
-    }
-
-    if (!filename) {
-      filename = 'data.json'; // safe default
-    }
-
-    await this.load({ filename, content });
-  }
-
-  /**
-   * Static factory method: create a `TopologySource` and immediately load from a URL.
-   *
-   * @param id  - Source ID (used when adding to a map via `map.addSource(id, source)`).
-   * @param url - The URL to fetch. Supports GeoJSON, TopoJSON and ZIP Shapefile.
-   * @returns   A fully loaded `TopologySource` instance.
-   *
-   * @example
-   * const source = await TopologySource.fromUrl('china', 'https://example.com/china.topo.json');
-   * map.addSource('china', source);
-   */
-  static async fromUrl(id: string, url: string): Promise<TopologySource> {
-    const source = new TopologySource(id);
-    await source.loadFromUrl(url);
-    return source;
   }
 
   private _hasSupportedExtension(filename: string): boolean {
