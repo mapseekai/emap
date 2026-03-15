@@ -35,4 +35,5 @@ export * from './ui/status-control';
 export * from './ui/basemap-control';
 export * from './ui/vertex-edit-control';
 export * from './ui/edit-toolbar';
+export * from './ui/draw-feature-control';
 export * from './types/mapshaper-types';

@@ -16,6 +16,7 @@ import { getLayerId } from '../source/layer-utils';
 import { resolveStrokeStyle, resolvePointStyle } from './layer';
 import type { LayerSpecification, FillPaint, LinePaint, CirclePaint } from './layer';
 import type { MapshaperLayer } from '../types/mapshaper-types';
+import type { DrawGeometryType } from '../ui/draw-feature-control';
 import type { CanvasKit } from 'canvaskit-wasm';
 
 export interface MapOptions {
@@ -86,6 +87,14 @@ export interface EditVertexState {
   neighborShapes?: EditVertexShape[];
 }
 
+export interface EditDrawState {
+  vertices: [number, number][];
+  cursorCoord: [number, number] | null;
+  snapCoord: [number, number] | null;
+  geometryType: DrawGeometryType;
+  drawColor: string;
+}
+
 export class Emap extends EventDispatcher {
   private _container: HTMLElement;
   private _canvasContainer: HTMLElement;
@@ -116,8 +125,9 @@ export class Emap extends EventDispatcher {
   private _featureQuery: FeatureQuery;
 
   // Edit mode
-  private _editMode: 'none' | 'vertex' = 'none';
+  private _editMode: 'none' | 'vertex' | 'draw' = 'none';
   private _editVertexState: EditVertexState | null = null;
+  private _editDrawState: EditDrawState | null = null;
 
   constructor(options: MapOptions) {
     super();
@@ -177,11 +187,11 @@ export class Emap extends EventDispatcher {
     return this._canvasContainer;
   }
 
-  public getEditMode(): 'none' | 'vertex' {
+  public getEditMode(): 'none' | 'vertex' | 'draw' {
     return this._editMode;
   }
 
-  public setEditMode(mode: 'none' | 'vertex'): void {
+  public setEditMode(mode: 'none' | 'vertex' | 'draw'): void {
     this._editMode = mode;
     this._dragPan.setEnabled(mode === 'none');
     this.fire('editmodechange', { mode });
@@ -195,6 +205,13 @@ export class Emap extends EventDispatcher {
     this._editVertexState = null;
   }
 
+  public setEditDrawState(state: EditDrawState): void {
+    this._editDrawState = state;
+  }
+
+  public clearEditDrawState(): void {
+    this._editDrawState = null;
+  }
 
   private _attachEventListeners(): void {
     this._dragPan.on('pan', (e: { dx: number; dy: number }) => {
@@ -655,6 +672,14 @@ export class Emap extends EventDispatcher {
           hoverRadius: 6,
         },
       );
+    }
+
+    // Drawing overlay (feature creation in progress)
+    if (this._editMode === 'draw' && this._editDrawState) {
+      const painter = this._painter as CanvasPainter;
+      if (painter.drawDrawingOverlay) {
+        painter.drawDrawingOverlay(this._editDrawState);
+      }
     }
 
     // Flush GPU commands for CanvasKit
