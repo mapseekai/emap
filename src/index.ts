@@ -10,6 +10,16 @@ export type {
 } from './map/map';
 export { FeatureQuery } from './map/feature-query';
 export { HighlightManager } from './map/highlight-manager';
+export type {
+  LayerSpecification,
+  LayerType,
+  LayerPaint,
+  LayerLayout,
+  FillPaint,
+  LinePaint,
+  CirclePaint,
+} from './map/layer';
+export { resolveStrokeStyle, resolvePointStyle } from './map/layer';
 export * from './core/events';
 export { DragPanHandler } from './core/drag-pan-handler';
 export * from './source/topology-source';

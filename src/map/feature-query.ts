@@ -46,6 +46,7 @@ export class FeatureQuery {
       | [[number, number], [number, number]]
       | QueryRenderedFeaturesOptions,
     options?: QueryRenderedFeaturesOptions,
+    visibleLayers?: Set<string>,
   ): RenderedFeatureAttributes[] {
     const { width, height } = this._getSize();
     const isGeometry = Array.isArray(geometryOrOptions);
@@ -59,11 +60,11 @@ export class FeatureQuery {
 
     if (Array.isArray(geometry) && typeof geometry[0] === 'number') {
       const point = geometry as [number, number];
-      return this._queryFeaturesAtPoint(point, opts);
+      return this._queryFeaturesAtPoint(point, opts, visibleLayers);
     }
 
     const bbox = geometry as [[number, number], [number, number]];
-    return this._queryFeaturesInBBox(bbox, opts);
+    return this._queryFeaturesInBBox(bbox, opts, visibleLayers);
   }
 
   // ---------------------------------------------------------------------------
@@ -246,6 +247,7 @@ export class FeatureQuery {
   private _queryFeaturesAtPoint(
     point: [number, number],
     options: QueryRenderedFeaturesOptions,
+    visibleLayers?: Set<string>,
   ): RenderedFeatureAttributes[] {
     const transform = this._getTransform();
     const results: RenderedFeatureAttributes[] = [];
@@ -264,6 +266,9 @@ export class FeatureQuery {
         if (!layer?.shapes) continue;
         if (!this._layerMatchesFilter(layer, layerIndex, options.layers)) continue;
 
+        const layerId = getLayerId(layer, layerIndex);
+        if (visibleLayers && !visibleLayers.has(`${sourceId}:${layerId}`)) continue;
+
         const geometryType = layer.geometry_type;
         let ids: number[] = [];
         if (geometryType === 'point') {
@@ -275,7 +280,6 @@ export class FeatureQuery {
         }
         if (ids.length === 0) continue;
 
-        const layerId = getLayerId(layer, layerIndex);
         for (const id of ids) {
           const table = layer.data;
           const record =
@@ -301,6 +305,7 @@ export class FeatureQuery {
   private _queryFeaturesInBBox(
     bbox: [[number, number], [number, number]],
     options: QueryRenderedFeaturesOptions,
+    visibleLayers?: Set<string>,
   ): RenderedFeatureAttributes[] {
     const transform = this._getTransform();
     const results: RenderedFeatureAttributes[] = [];
@@ -326,6 +331,8 @@ export class FeatureQuery {
         if (!this._layerMatchesFilter(layer, layerIndex, options.layers)) continue;
 
         const layerId = getLayerId(layer, layerIndex);
+        if (visibleLayers && !visibleLayers.has(`${sourceId}:${layerId}`)) continue;
+
         const geometryType = layer.geometry_type;
         const table = layer.data;
         const bboxTmp: number[] = [];

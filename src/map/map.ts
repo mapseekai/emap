@@ -12,6 +12,10 @@ import { DragPanHandler } from '../core/drag-pan-handler';
 import { FeatureQuery } from './feature-query';
 import { HighlightManager } from './highlight-manager';
 import { Control, ControlPosition } from '../ui/control';
+import { getLayerId } from '../source/layer-utils';
+import { resolveStrokeStyle, resolvePointStyle } from './layer';
+import type { LayerSpecification, FillPaint, LinePaint, CirclePaint } from './layer';
+import type { MapshaperLayer } from '../types/mapshaper-types';
 import type { CanvasKit } from 'canvaskit-wasm';
 
 export interface MapOptions {
@@ -93,6 +97,7 @@ export class Emap extends EventDispatcher {
     new globalThis.Map();
   private _sourceListeners: globalThis.Map<string, (e: any) => void> =
     new globalThis.Map();
+  private _layers: LayerSpecification[] = [];
 
   // Interactions (delegated)
   private _mouseWheel: MouseWheel;
@@ -291,6 +296,153 @@ export class Emap extends EventDispatcher {
     return this._sources.get(id);
   }
 
+  // ---------------------------------------------------------------------------
+  // Layer management
+  // ---------------------------------------------------------------------------
+
+  public addLayer(layer: LayerSpecification, before?: string): void {
+    if (!this._sources.has(layer.source)) {
+      throw new Error(`Source "${layer.source}" not found`);
+    }
+    if (this._layers.some((l) => l.id === layer.id)) {
+      throw new Error(`Layer "${layer.id}" already exists`);
+    }
+    if (before) {
+      const idx = this._layers.findIndex((l) => l.id === before);
+      if (idx === -1) {
+        throw new Error(`Layer "${before}" not found`);
+      }
+      this._layers.splice(idx, 0, { ...layer });
+    } else {
+      this._layers.push({ ...layer });
+    }
+    this._scheduleRender();
+  }
+
+  public removeLayer(id: string): void {
+    const idx = this._layers.findIndex((l) => l.id === id);
+    if (idx !== -1) {
+      this._layers.splice(idx, 1);
+      this._scheduleRender();
+    }
+  }
+
+  public getLayer(id: string): LayerSpecification | undefined {
+    return this._layers.find((l) => l.id === id);
+  }
+
+  public getLayers(): LayerSpecification[] {
+    return [...this._layers];
+  }
+
+  public setLayerVisibility(id: string, visibility: 'visible' | 'none'): void {
+    const layer = this._layers.find((l) => l.id === id);
+    if (layer) {
+      if (!layer.layout) layer.layout = {};
+      layer.layout.visibility = visibility;
+      this._scheduleRender();
+    }
+  }
+
+  public setPaintProperty(id: string, name: string, value: unknown): void {
+    const layer = this._layers.find((l) => l.id === id);
+    if (layer) {
+      if (!layer.paint) layer.paint = {};
+      (layer.paint as Record<string, unknown>)[name] = value;
+      this._scheduleRender();
+    }
+  }
+
+  public moveLayer(id: string, beforeId?: string): void {
+    const idx = this._layers.findIndex((l) => l.id === id);
+    if (idx === -1) return;
+    const [layer] = this._layers.splice(idx, 1);
+    if (beforeId) {
+      const beforeIdx = this._layers.findIndex((l) => l.id === beforeId);
+      if (beforeIdx === -1) {
+        this._layers.push(layer);
+      } else {
+        this._layers.splice(beforeIdx, 0, layer);
+      }
+    } else {
+      this._layers.push(layer);
+    }
+    this._scheduleRender();
+  }
+
+  private _getEffectiveLayers(): LayerSpecification[] {
+    if (this._layers.length > 0) return this._layers;
+
+    const defaults: LayerSpecification[] = [];
+    for (const [sourceId, source] of this._sources) {
+      const mapshaperLayers = source.getLayers() as MapshaperLayer[];
+      if (mapshaperLayers.length === 0) {
+        defaults.push({
+          id: `${sourceId}:default`,
+          type: 'line',
+          source: sourceId,
+          paint: { 'line-color': '#333', 'line-width': 0.8 },
+        });
+      } else {
+        for (let i = 0; i < mapshaperLayers.length; i++) {
+          const ml = mapshaperLayers[i];
+          const layerId = getLayerId(ml, i);
+          const geomType = ml.geometry_type;
+          defaults.push({
+            id: `${sourceId}:${layerId}`,
+            type:
+              geomType === 'point'
+                ? 'circle'
+                : geomType === 'polygon'
+                  ? 'fill'
+                  : 'line',
+            source: sourceId,
+            'source-layer': layerId,
+            paint:
+              geomType === 'point'
+                ? { 'circle-color': '#333', 'circle-radius': 4 }
+                : geomType === 'polygon'
+                  ? { 'fill-color': '#333', 'line-width': 0.8 } as FillPaint
+                  : { 'line-color': '#333', 'line-width': 0.8 },
+          });
+        }
+      }
+    }
+    return defaults;
+  }
+
+  private _resolveSourceLayer(
+    source: TopologySource,
+    sourceLayerName?: string,
+  ): MapshaperLayer | null {
+    const layers = source.getLayers() as MapshaperLayer[];
+    if (!layers.length) return null;
+    if (!sourceLayerName) return layers[0];
+    for (let i = 0; i < layers.length; i++) {
+      const lid = getLayerId(layers[i], i);
+      if (lid === sourceLayerName) return layers[i];
+    }
+    return null;
+  }
+
+  private _getVisibleLayerKeys(): Set<string> {
+    const keys = new Set<string>();
+    const layers = this._getEffectiveLayers();
+    for (const layer of layers) {
+      if (layer.layout?.visibility === 'none') continue;
+      const source = this._sources.get(layer.source);
+      if (!source) continue;
+      const ml = this._resolveSourceLayer(source, layer['source-layer']);
+      if (ml) {
+        const mapshaperLayers = source.getLayers() as MapshaperLayer[];
+        const idx = mapshaperLayers.indexOf(ml);
+        const lid = getLayerId(ml, idx >= 0 ? idx : 0);
+        keys.add(`${layer.source}:${lid}`);
+      }
+    }
+    return keys;
+  }
+
   public getPainter(): Painter {
     return this._painter;
   }
@@ -391,40 +543,73 @@ export class Emap extends EventDispatcher {
     this._painter.clear();
 
     const lineScale = this._viewport.getLineScale();
-    const defaultWidth = 0.8;
-    const strokeWidth = defaultWidth * lineScale;
+    const pixelSize = 1 / Math.abs(transform.mx);
+    const effectiveLayers = this._getEffectiveLayers();
 
-    for (const source of this._sources.values()) {
+    for (const layer of effectiveLayers) {
+      if (layer.layout?.visibility === 'none') continue;
+
+      const source = this._sources.get(layer.source);
+      if (!source) continue;
+
       const displayArcs = source.getDisplayArcs();
-      const pixelSize = 1 / Math.abs(transform.mx);
-
       const arcs = displayArcs
         ? displayArcs.getScaledArcs(pixelSize)
         : source.getArcs();
-      if (!arcs) continue;
 
-      if (
-        arcs.setRetainedInterval &&
-        (typeof arcs.isFlat !== 'function' || !arcs.isFlat())
-      ) {
-        arcs.setRetainedInterval(pixelSize * 0.5);
+      if (arcs) {
+        if (
+          arcs.setRetainedInterval &&
+          (typeof arcs.isFlat !== 'function' || !arcs.isFlat())
+        ) {
+          arcs.setRetainedInterval(pixelSize * 0.5);
+        }
       }
 
-      const filter = this._viewport.getArcFilter(arcs);
+      const ml = this._resolveSourceLayer(source, layer['source-layer']);
 
-      this._painter.drawArcs(
-        arcs,
-        { color: '#333', width: strokeWidth },
-        filter,
-      );
+      if (layer.type === 'line') {
+        if (ml?.shapes && arcs) {
+          const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
+          this._painter.drawPaths(ml.shapes, style, arcs);
+        } else if (arcs) {
+          // Fallback: draw all arcs (default layer for source with no resolved layer)
+          const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
+          const filter = this._viewport.getArcFilter(arcs);
+          this._painter.drawArcs(arcs, style, filter);
+        }
+      } else if (layer.type === 'fill') {
+        if (ml?.shapes && arcs) {
+          // Draw fill
+          const fillColor = (layer.paint as FillPaint)?.['fill-color'] || '#333';
+          const painter = this._painter as CanvasPainter;
+          if (painter.drawPolygonFill) {
+            painter.drawPolygonFill(
+              ml.shapes,
+              arcs,
+              fillColor,
+            );
+          }
+          // Draw outline
+          const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
+          this._painter.drawPaths(ml.shapes, style, arcs);
+        }
+      } else if (layer.type === 'circle') {
+        if (ml?.shapes) {
+          const style = resolvePointStyle(layer.paint as CirclePaint);
+          this._painter.drawPoints(ml.shapes, style);
+        }
+      }
     }
 
     // Delegated highlight rendering
+    const visibleKeys = this._getVisibleLayerKeys();
     this._highlightManager.renderHighlights(
       this._painter,
       this._sources,
       transform,
       lineScale,
+      visibleKeys,
     );
 
     // Polygon fill in vertex edit mode (drawn before dots so dots appear on top)
@@ -499,7 +684,8 @@ export class Emap extends EventDispatcher {
       | QueryRenderedFeaturesOptions,
     options?: QueryRenderedFeaturesOptions,
   ): RenderedFeatureAttributes[] {
-    return this._featureQuery.query(geometryOrOptions, options);
+    const visibleKeys = this._getVisibleLayerKeys();
+    return this._featureQuery.query(geometryOrOptions, options, visibleKeys);
   }
 
   public setHighlightedFeatures(
