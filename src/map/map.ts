@@ -419,7 +419,7 @@ export class Emap extends EventDispatcher {
               geomType === 'point'
                 ? { 'circle-color': '#333', 'circle-radius': 4 }
                 : geomType === 'polygon'
-                  ? { 'fill-color': '#333', 'line-width': 0.8 } as FillPaint
+                  ? { 'fill-color': 'rgba(200, 200, 200, 0.4)', 'line-color': '#333', 'line-width': 0.8 } as FillPaint & LinePaint
                   : { 'line-color': '#333', 'line-width': 0.8 },
           });
         }
@@ -598,7 +598,7 @@ export class Emap extends EventDispatcher {
       } else if (layer.type === 'fill') {
         if (ml?.shapes && arcs) {
           // Draw fill
-          const fillColor = (layer.paint as FillPaint)?.['fill-color'] || '#333';
+          const fillColor = (layer.paint as FillPaint)?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
           const painter = this._painter as CanvasPainter;
           if (painter.drawPolygonFill) {
             painter.drawPolygonFill(
