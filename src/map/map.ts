@@ -107,6 +107,9 @@ export class Emap extends EventDispatcher {
   private _sourceListeners: globalThis.Map<string, (e: any) => void> =
     new globalThis.Map();
   private _layers: LayerSpecification[] = [];
+  private _effectiveLayersCache: LayerSpecification[] = [];
+  private _defaultLayersDirty = true;
+  private _layerArcFlagsCache: globalThis.Map<string, Uint8Array> = new globalThis.Map();
 
   // Interactions (delegated)
   private _mouseWheel: MouseWheel;
@@ -284,6 +287,8 @@ export class Emap extends EventDispatcher {
         }
       }
       this.fire('data', { sourceId: id, ...e });
+      this._defaultLayersDirty = true;
+      this._layerArcFlagsCache.clear();
       this._scheduleRender();
     };
 
@@ -305,6 +310,15 @@ export class Emap extends EventDispatcher {
         this._sourceListeners.delete(id);
       }
       this._sources.delete(id);
+      this._defaultLayersDirty = true;
+      this._layerArcFlagsCache.delete(id);
+      
+      // Remove all cached arc flags for this source
+      for (const key of this._layerArcFlagsCache.keys()) {
+        if (key.startsWith(`${id}:`)) {
+          this._layerArcFlagsCache.delete(key);
+        }
+      }
       this._scheduleRender();
     }
   }
@@ -333,6 +347,7 @@ export class Emap extends EventDispatcher {
     } else {
       this._layers.push({ ...layer });
     }
+    this._defaultLayersDirty = true;
     this._scheduleRender();
   }
 
@@ -340,6 +355,7 @@ export class Emap extends EventDispatcher {
     const idx = this._layers.findIndex((l) => l.id === id);
     if (idx !== -1) {
       this._layers.splice(idx, 1);
+      this._defaultLayersDirty = true;
       this._scheduleRender();
     }
   }
@@ -384,11 +400,16 @@ export class Emap extends EventDispatcher {
     } else {
       this._layers.push(layer);
     }
+    this._defaultLayersDirty = true;
     this._scheduleRender();
   }
 
   private _getEffectiveLayers(): LayerSpecification[] {
     if (this._layers.length > 0) return this._layers;
+
+    if (!this._defaultLayersDirty) {
+      return this._effectiveLayersCache;
+    }
 
     const defaults: LayerSpecification[] = [];
     for (const [sourceId, source] of this._sources) {
@@ -407,24 +428,20 @@ export class Emap extends EventDispatcher {
           const geomType = ml.geometry_type;
           defaults.push({
             id: `${sourceId}:${layerId}`,
-            type:
-              geomType === 'point'
-                ? 'circle'
-                : geomType === 'polygon'
-                  ? 'fill'
-                  : 'line',
+            type: geomType === 'point' ? 'circle' : 'line',
             source: sourceId,
             'source-layer': layerId,
             paint:
               geomType === 'point'
                 ? { 'circle-color': '#333', 'circle-radius': 4 }
-                : geomType === 'polygon'
-                  ? { 'fill-color': 'rgba(200, 200, 200, 0.4)', 'line-color': '#333', 'line-width': 0.8 } as FillPaint & LinePaint
-                  : { 'line-color': '#333', 'line-width': 0.8 },
+                : { 'line-color': '#333', 'line-width': 0.8 },
           });
         }
       }
     }
+    
+    this._effectiveLayersCache = defaults;
+    this._defaultLayersDirty = false;
     return defaults;
   }
 
@@ -440,6 +457,34 @@ export class Emap extends EventDispatcher {
       if (lid === sourceLayerName) return layers[i];
     }
     return null;
+  }
+
+  /**
+   * Generates a boolean flag array for arcs that belong to a specific source layer.
+   * Cached to prevent walking shapes on every frame.
+   */
+  private _getLayerArcFlags(ml: MapshaperLayer, arcs: any, cacheKey: string): Uint8Array | null {
+    if (!ml || !ml.shapes || !arcs) return null;
+    
+    let flags = this._layerArcFlagsCache.get(cacheKey);
+    if (flags) return flags;
+
+    const arcCount = arcs.size();
+    flags = new Uint8Array(arcCount);
+    
+    // Tag all arcs used by this layer's shapes
+    for (const shape of ml.shapes) {
+      if (!shape) continue;
+      for (const part of shape) {
+        for (const arcId of part) {
+          const absId = arcId >= 0 ? arcId : ~arcId;
+          flags[absId] = 1;
+        }
+      }
+    }
+    
+    this._layerArcFlagsCache.set(cacheKey, flags);
+    return flags;
   }
 
   private _getVisibleLayerKeys(): Set<string> {
@@ -584,14 +629,28 @@ export class Emap extends EventDispatcher {
       }
 
       const ml = this._resolveSourceLayer(source, layer['source-layer']);
+      const cacheKey = `${layer.source}:${layer['source-layer'] || 'default'}`;
 
       if (layer.type === 'line') {
+        const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
+        
         if (ml?.shapes && arcs) {
-          const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
-          this._painter.drawPaths(ml.shapes, style, arcs);
+          // Optimized layer line rendering: use drawArcs with a boolean arc presence filter
+          const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
+          const viewportFilter = this._viewport.getArcFilter(arcs);
+          
+          let combinedFilter;
+          if (flags && viewportFilter) {
+            combinedFilter = (i: number) => flags[i] === 1 && viewportFilter(i);
+          } else if (flags) {
+            combinedFilter = (i: number) => flags[i] === 1;
+          } else {
+            combinedFilter = viewportFilter;
+          }
+          
+          this._painter.drawArcs(arcs, style, combinedFilter);
         } else if (arcs) {
-          // Fallback: draw all arcs (default layer for source with no resolved layer)
-          const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
+          // Fallback: draw all arcs
           const filter = this._viewport.getArcFilter(arcs);
           this._painter.drawArcs(arcs, style, filter);
         }

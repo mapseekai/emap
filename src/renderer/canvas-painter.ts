@@ -243,9 +243,15 @@ export class CanvasPainter implements Painter {
         // getShapeIter respects arc direction (reversed arcs traversed backwards)
         const iter = arcs.getShapeIter!(part);
         if (!iter.hasNext()) continue;
-        ctx.moveTo(iter.x * mx + bx, iter.y * my + by);
+        
+        let x = (iter.x * mx + bx) * 2 | 0;
+        let y = (iter.y * my + by) * 2 | 0;
+        ctx.moveTo(x / 2, y / 2);
+        
         while (iter.hasNext()) {
-          ctx.lineTo(iter.x * mx + bx, iter.y * my + by);
+          x = (iter.x * mx + bx) * 2 | 0;
+          y = (iter.y * my + by) * 2 | 0;
+          ctx.lineTo(x / 2, y / 2);
         }
         ctx.closePath();
       }
