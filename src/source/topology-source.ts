@@ -275,6 +275,16 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     return this._displayArcs;
   }
 
+  /**
+   * Re-initialize DisplayArcs from the current dataset arcs.
+   * Call after modifying the arc collection (e.g. adding new features).
+   */
+  refreshDisplayArcs(): void {
+    if (this._dataset?.arcs) {
+      this._displayArcs = new DisplayArcs(this._dataset.arcs);
+    }
+  }
+
   getLayers(): any[] {
     return this._dataset?.layers || [];
   }

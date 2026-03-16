@@ -59,6 +59,7 @@ export class HighlightManager {
     sources: globalThis.Map<string, TopologySource>,
     transform: AffineTransform,
     lineScale: number,
+    visibleLayers?: Set<string>,
   ): void {
     if (this._highlighted.size === 0) return;
     const highlightColor = this._highlightStyle.color || '#ff7a00';
@@ -80,6 +81,7 @@ export class HighlightManager {
         const layer = layers[layerIndex];
         if (!layer?.shapes) continue;
         const layerId = getLayerId(layer, layerIndex);
+        if (visibleLayers && !visibleLayers.has(`${sourceId}:${layerId}`)) continue;
         const ids = sourceHighlights.get(layerId);
         if (!ids || ids.size === 0) continue;
         const shapes: unknown[] = [];
