@@ -237,6 +237,12 @@ export class CanvasPainter implements Painter {
     const bx = this._transform.bx * pr;
     const by = this._transform.by * pr;
 
+    ctx.fillStyle = fillColor;
+    
+    // Batch path building to prevent browser freezes on massive datasets
+    const batchSize = 1000;
+    let counts = 0;
+
     ctx.beginPath();
     for (let sIdx = 0; sIdx < shapes.length; sIdx++) {
       const shape = shapes[sIdx];
@@ -260,6 +266,13 @@ export class CanvasPainter implements Painter {
 
       if (!isVisible) continue;
 
+      // When batch limit reached, fill and start new path
+      if (counts > 0 && counts >= batchSize) {
+        ctx.fill('evenodd');
+        ctx.beginPath();
+        counts = 0;
+      }
+
       for (const part of shape) {
         // getShapeIter respects arc direction (reversed arcs traversed backwards)
         const iter = arcs.getShapeIter!(part);
@@ -272,9 +285,13 @@ export class CanvasPainter implements Painter {
         }
         ctx.closePath();
       }
+      
+      counts++;
     }
-    ctx.fillStyle = fillColor;
-    ctx.fill('evenodd');
+    
+    if (counts > 0) {
+      ctx.fill('evenodd');
+    }
   }
 
 
