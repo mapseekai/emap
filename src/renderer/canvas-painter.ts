@@ -278,10 +278,21 @@ export class CanvasPainter implements Painter {
         const iter = arcs.getShapeIter!(part);
         if (!iter.hasNext()) continue;
         
-        ctx.moveTo(iter.x * mx + bx, iter.y * my + by);
+        let xp: number, yp: number;
+        // Use half-pixel snapping for consistency and to avoid floating point math overhead
+        let x = (iter.x * mx + bx) * 2 | 0;
+        let y = (iter.y * my + by) * 2 | 0;
+        ctx.moveTo(x / 2, y / 2);
         
         while (iter.hasNext()) {
-          ctx.lineTo(iter.x * mx + bx, iter.y * my + by);
+          xp = x;
+          yp = y;
+          x = (iter.x * mx + bx) * 2 | 0;
+          y = (iter.y * my + by) * 2 | 0;
+          
+          if (x !== xp || y !== yp) {
+            ctx.lineTo(x / 2, y / 2);
+          }
         }
         ctx.closePath();
       }
