@@ -226,6 +226,7 @@ export class CanvasPainter implements Painter {
     shapes: any[],
     arcs: ArcCollection & { getShapeIter?: (part: number[]) => { x: number; y: number; hasNext(): boolean } },
     fillColor: string,
+    filter?: (i: number) => boolean
   ): void {
     if (!arcs.getShapeIter) return; // guard: need shape-aware iterator
 
@@ -237,21 +238,37 @@ export class CanvasPainter implements Painter {
     const by = this._transform.by * pr;
 
     ctx.beginPath();
-    for (const shape of shapes) {
+    for (let sIdx = 0; sIdx < shapes.length; sIdx++) {
+      const shape = shapes[sIdx];
       if (!shape) continue;
+      
+      let isVisible = true;
+      if (filter) {
+        // Find if this shape shares any arc with the viewport
+        isVisible = false;
+        for (const part of shape) {
+          for (const arcId of part) {
+            const absId = arcId >= 0 ? arcId : ~arcId;
+            if (filter(absId)) {
+              isVisible = true;
+              break;
+            }
+          }
+          if (isVisible) break;
+        }
+      }
+
+      if (!isVisible) continue;
+
       for (const part of shape) {
         // getShapeIter respects arc direction (reversed arcs traversed backwards)
         const iter = arcs.getShapeIter!(part);
         if (!iter.hasNext()) continue;
         
-        let x = (iter.x * mx + bx) * 2 | 0;
-        let y = (iter.y * my + by) * 2 | 0;
-        ctx.moveTo(x / 2, y / 2);
+        ctx.moveTo(iter.x * mx + bx, iter.y * my + by);
         
         while (iter.hasNext()) {
-          x = (iter.x * mx + bx) * 2 | 0;
-          y = (iter.y * my + by) * 2 | 0;
-          ctx.lineTo(x / 2, y / 2);
+          ctx.lineTo(iter.x * mx + bx, iter.y * my + by);
         }
         ctx.closePath();
       }

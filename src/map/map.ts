@@ -660,10 +660,12 @@ export class Emap extends EventDispatcher {
           const fillColor = (layer.paint as FillPaint)?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
           const painter = this._painter as CanvasPainter;
           if (painter.drawPolygonFill) {
+            const filter = this._viewport.getArcFilter(arcs);
             painter.drawPolygonFill(
               ml.shapes,
               arcs,
               fillColor,
+              filter
             );
           }
           // Draw outline
