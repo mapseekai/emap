@@ -697,15 +697,6 @@ export class Emap extends EventDispatcher {
     ) {
       const painter = this._painter as CanvasPainter;
       if (painter.drawPolygonFill) {
-        // Draw neighbor shapes first (slightly lighter)
-        if (this._editVertexState.neighborShapes?.length) {
-          painter.drawPolygonFill(
-            this._editVertexState.neighborShapes,
-            this._editVertexState.arcs as unknown as import('../types/mapshaper-types').ArcCollection,
-            this._editVertexState.polygonFill,
-          );
-        }
-        // Draw primary hovered shape
         painter.drawPolygonFill(
           this._editVertexState.shapes,
           this._editVertexState.arcs as unknown as import('../types/mapshaper-types').ArcCollection,
