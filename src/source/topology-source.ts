@@ -115,10 +115,17 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         inputFiles = { [input.filename]: input.content };
       }
 
-      // -clean fixes coincident-vertex / overlap / topology issues at import time
-      // (matches mapshaper CLI behavior). -simplify 100% precomputes thresholds so
-      // dynamic LOD can later switch detail without recomputing.
-      const cmd = `-i ${primaryFile} -clean -simplify 100%`;
+      // Match mapshaper GUI's import path: bare `-i FILE`. mapshaper's
+      // importContent already runs cleanPathsAfterImport (deduplication +
+      // defective-path removal) and buildTopology (coincident-endpoint
+      // sharing required by topology-aware vertex editing), both cheap.
+      // We deliberately do NOT run `-clean` (intersection cuts, sliver
+      // removal, polygon repair) or `-simplify 100%` (Visvalingam-Whyatt
+      // threshold precomputation) here — both are O(N²) / O(N log N) and
+      // make interactive imports of moderate-sized files unusable. Users
+      // can call `Emap.cleanLayer()` and `source.simplifyArcs()` explicitly
+      // when they need those passes.
+      const cmd = `-i ${primaryFile}`;
       const commands = mapshaper.internal.parseCommands(cmd);
 
       // Inject input files into the import command

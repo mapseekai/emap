@@ -255,7 +255,10 @@ describe('Emap layer management', () => {
       expect(effective[0].type).toBe('line');
     });
 
-    it('maps polygon geometry to fill layer type', () => {
+    it('maps polygon geometry to a line (outline-only) layer by default', () => {
+      // Default polygon rendering is outline-only — Canvas 2D fill is much
+      // more expensive than stroke for many-polygon datasets, and matches
+      // mapshaper GUI's behaviour. Callers opt into fills via addLayer().
       const layers = [
         { name: 'countries', geometry_type: 'polygon', shapes: [[[1]]] },
       ];
@@ -263,7 +266,8 @@ describe('Emap layer management', () => {
       map.addSource('src1', source as any);
 
       const effective = callPrivate(map, '_getEffectiveLayers') as LayerSpecification[];
-      expect(effective[0].type).toBe('fill');
+      expect(effective[0].type).toBe('line');
+      expect((effective[0].paint as any)['line-color']).toBe('#333');
     });
   });
 
@@ -727,6 +731,19 @@ describe('Emap clipLayer / eraseLayer', () => {
     afterDataset.layers.push({ name: 'weird"name', geometry_type: 'polygon', shapes: [] });
     await map.clipLayer({ source: 'src1', target: 'roads', mask: 'weird"name' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clip source="weird\\"name"');
+  });
+
+  it('cleanLayer constructs a -clean command and pushes a single history entry', async () => {
+    const ok = await map.cleanLayer({ source: 'src1', target: 'roads' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clean');
+    expect(map.canUndo()).toBe(true);
+  });
+
+  it('cleanLayer returns false when source / target is missing', async () => {
+    expect(await map.cleanLayer({ source: 'nope', target: 'roads' })).toBe(false);
+    expect(await map.cleanLayer({ source: 'src1', target: 'missing' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 });
 

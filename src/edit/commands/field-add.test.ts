@@ -43,7 +43,7 @@ describe('FieldAddCommand', () => {
   });
 
   it('defaults to null when no defaultValue is given', () => {
-    const records = [{ name: 'A' }];
+    const records: Record<string, unknown>[] = [{ name: 'A' }];
     const layer = makeLayer(records);
     const cmd = new FieldAddCommand({ layer, field: 'tmp' });
     cmd.do();
