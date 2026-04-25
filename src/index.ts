@@ -5,11 +5,14 @@ export { Emap } from './map/map';
 export type {
   QueryRenderedFeaturesOptions,
   RenderedFeatureAttributes,
+  FeatureRef,
   HighlightFeatureRef,
   HighlightStyle
 } from './map/map';
 export { FeatureQuery } from './map/feature-query';
 export { HighlightManager } from './map/highlight-manager';
+export { Selection } from './map/selection';
+export type { SelectMode, SelectionDiff } from './map/selection';
 export type {
   LayerSpecification,
   LayerType,

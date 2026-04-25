@@ -11,6 +11,7 @@ import { MouseWheel } from '../core/interactions';
 import { DragPanHandler } from '../core/drag-pan-handler';
 import { FeatureQuery } from './feature-query';
 import { HighlightManager } from './highlight-manager';
+import { Selection, SelectMode, SelectionDiff } from './selection';
 import { Control, ControlPosition } from '../ui/control';
 import { getLayerId } from '../source/layer-utils';
 import { resolveStrokeStyle, resolvePointStyle } from './layer';
@@ -47,11 +48,18 @@ export interface RenderedFeatureAttributes {
   properties: Record<string, unknown>;
 }
 
-export interface HighlightFeatureRef {
+/**
+ * Canonical reference to a single feature within a source/layer.
+ * Used by selection, highlight, and downstream geometry operations.
+ */
+export interface FeatureRef {
   id: number;
   source: string;
   layer: string;
 }
+
+/** @deprecated Use {@link FeatureRef}. Kept as an alias for back-compat. */
+export type HighlightFeatureRef = FeatureRef;
 
 export interface HighlightStyle {
   color?: string;
@@ -123,6 +131,7 @@ export class Emap extends EventDispatcher {
   // Delegated managers
   private _highlightManager: HighlightManager = new HighlightManager();
   private _featureQuery: FeatureQuery;
+  private _selection: Selection = new Selection();
 
   // Edit mode
   private _editMode: 'none' | 'vertex' | 'draw' = 'none';
@@ -731,6 +740,62 @@ export class Emap extends EventDispatcher {
     if (this._highlightManager.setHighlightStyle(style)) {
       this._scheduleRender();
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Selection
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Mutate the persistent feature selection.
+   *
+   * @param features Refs to apply. `RenderedFeatureAttributes` is structurally
+   *   compatible with `FeatureRef`, so results from `queryRenderedFeatures` can
+   *   be passed directly.
+   * @param options.mode `'replace'` (default) wipes prior contents,
+   *   `'add'` unions, `'toggle'` flips membership.
+   *
+   * Fires a `selectionchange` event with `{ selected, added, removed }` only
+   * when the set actually changes.
+   */
+  public select(
+    features: ReadonlyArray<FeatureRef>,
+    options?: { mode?: SelectMode },
+  ): void {
+    const mode = options?.mode ?? 'replace';
+    const diff = this._selection.apply(features, mode);
+    this._fireSelectionChange(diff);
+  }
+
+  /** Remove the listed features from the selection. No-op if absent. */
+  public deselect(features: ReadonlyArray<FeatureRef>): void {
+    const diff = this._selection.remove(features);
+    this._fireSelectionChange(diff);
+  }
+
+  /** Empty the selection. No-op (and no event) if it was already empty. */
+  public clearSelection(): void {
+    const diff = this._selection.clear();
+    this._fireSelectionChange(diff);
+  }
+
+  /** Snapshot of the current selection as a flat list of refs. */
+  public getSelection(): FeatureRef[] {
+    return this._selection.getAll();
+  }
+
+  /** Test whether a single feature is currently selected. */
+  public isSelected(feature: FeatureRef): boolean {
+    return this._selection.has(feature);
+  }
+
+  private _fireSelectionChange(diff: SelectionDiff): void {
+    if (!diff.changed) return;
+    this.fire('selectionchange', {
+      selected: this._selection.getAll(),
+      added: diff.added,
+      removed: diff.removed,
+    });
   }
 
   public remove(): void {

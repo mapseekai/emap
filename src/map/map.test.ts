@@ -1,6 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { Emap } from './map';
+import type { FeatureRef } from './map';
 import type { LayerSpecification } from './layer';
+import { Selection } from './selection';
 
 function setPrivate(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
@@ -47,6 +49,10 @@ function createBareMap(): Emap {
   setPrivate(map, '_pendingRender', 0);
   setPrivate(map, '_rafId', 0);
   setPrivate(map, '_highlightManager', { clearHighlightedFeatures: vi.fn() });
+  // EventDispatcher field initializer does not run when bypassing constructor
+  setPrivate(map, '_listeners', {});
+  // Initialize selection so select / deselect / clearSelection have somewhere to write
+  setPrivate(map, '_selection', new Selection());
   // Stub _scheduleRender so it doesn't try to use requestAnimationFrame
   setPrivate(map, '_scheduleRender', vi.fn());
   return map as Emap;
@@ -332,5 +338,89 @@ describe('Emap layer management', () => {
       const keys = callPrivate(map, '_getVisibleLayerKeys') as Set<string>;
       expect(keys.has('src1:roads')).toBe(true);
     });
+  });
+});
+
+describe('Emap selection', () => {
+  let map: Emap;
+
+  const A: FeatureRef = { source: 's1', layer: 'l1', id: 1 };
+  const B: FeatureRef = { source: 's1', layer: 'l1', id: 2 };
+
+  beforeEach(() => {
+    map = createBareMap();
+  });
+
+  it('starts empty', () => {
+    expect(map.getSelection()).toEqual([]);
+    expect(map.isSelected(A)).toBe(false);
+  });
+
+  it('fires selectionchange with the diff payload on add', () => {
+    const listener = vi.fn();
+    map.on('selectionchange', listener);
+    map.select([A]);
+    expect(listener).toHaveBeenCalledTimes(1);
+    const ev = listener.mock.calls[0][0];
+    expect(ev.added).toHaveLength(1);
+    expect(ev.added[0]).toMatchObject(A);
+    expect(ev.removed).toEqual([]);
+    expect(ev.selected).toHaveLength(1);
+  });
+
+  it('does not fire when the call is a no-op', () => {
+    map.select([A]);
+    const listener = vi.fn();
+    map.on('selectionchange', listener);
+    // re-selecting the same feature in 'add' mode is a no-op
+    map.select([A], { mode: 'add' });
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('replace mode reports both added and removed', () => {
+    map.select([A]);
+    const listener = vi.fn();
+    map.on('selectionchange', listener);
+    map.select([B]); // mode defaults to 'replace'
+    expect(listener).toHaveBeenCalledTimes(1);
+    const ev = listener.mock.calls[0][0];
+    expect(ev.added).toHaveLength(1);
+    expect(ev.added[0]).toMatchObject(B);
+    expect(ev.removed).toHaveLength(1);
+    expect(ev.removed[0]).toMatchObject(A);
+  });
+
+  it('toggle mode flips membership', () => {
+    map.select([A]);
+    map.select([A], { mode: 'toggle' });
+    expect(map.isSelected(A)).toBe(false);
+    map.select([A], { mode: 'toggle' });
+    expect(map.isSelected(A)).toBe(true);
+  });
+
+  it('deselect removes only the named features', () => {
+    map.select([A, B], { mode: 'add' });
+    map.deselect([A]);
+    expect(map.isSelected(A)).toBe(false);
+    expect(map.isSelected(B)).toBe(true);
+  });
+
+  it('clearSelection empties the set and fires once', () => {
+    map.select([A, B], { mode: 'add' });
+    const listener = vi.fn();
+    map.on('selectionchange', listener);
+    map.clearSelection();
+    expect(map.getSelection()).toEqual([]);
+    expect(listener).toHaveBeenCalledTimes(1);
+    const ev = listener.mock.calls[0][0];
+    expect(ev.removed).toHaveLength(2);
+    expect(ev.selected).toEqual([]);
+  });
+
+  it('clearSelection on an empty set does not fire', () => {
+    const listener = vi.fn();
+    map.on('selectionchange', listener);
+    map.clearSelection();
+    expect(listener).not.toHaveBeenCalled();
   });
 });
