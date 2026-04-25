@@ -29,6 +29,12 @@ export interface TopologySource extends Source {
    */
   refreshDisplayArcs(): void;
   /**
+   * Replace the active dataset (used by undo/redo of dataset-replace commands
+   * and by reproject). Rebuilds DisplayArcs and fires the `data` event so the
+   * map re-renders.
+   */
+  setDataset(dataset: MapshaperDataset): void;
+  /**
    * Serialize the current in-memory dataset to a browser `Blob`.
    *
    * Always emits full-detail geometry; the source's render-time LOD interval

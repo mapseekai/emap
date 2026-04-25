@@ -7,7 +7,8 @@ export type {
   RenderedFeatureAttributes,
   FeatureRef,
   HighlightFeatureRef,
-  HighlightStyle
+  HighlightStyle,
+  ClipEraseOptions,
 } from './map/map';
 export { FeatureQuery } from './map/feature-query';
 export { HighlightManager } from './map/highlight-manager';
@@ -51,4 +52,6 @@ export { FeatureCreateCommand } from './edit/commands/feature-create';
 export { FeatureDeleteCommand } from './edit/commands/feature-delete';
 export type { FeatureDeleteCommandOptions } from './edit/commands/feature-delete';
 export { CompositeCommand } from './edit/commands/composite';
+export { DatasetReplaceCommand } from './edit/commands/dataset-replace';
+export type { DatasetReplaceCommandOptions } from './edit/commands/dataset-replace';
 export * from './types/mapshaper-types';

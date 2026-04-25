@@ -1,4 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import mapshaper from 'mapshaper';
 import { Emap } from './map';
 import type { FeatureRef } from './map';
 import type { LayerSpecification } from './layer';
@@ -575,5 +576,156 @@ describe('Emap deleteSelected', () => {
     map.undo();
     expect(layer.shapes).toEqual([['s0'], ['s1'], ['s2'], ['s3']]);
     expect(records).toEqual([{ name: 'a' }, { name: 'b' }, { name: 'c' }, { name: 'd' }]);
+  });
+});
+
+describe('Emap clipLayer / eraseLayer', () => {
+  let map: Emap;
+  let source: any;
+  let beforeDataset: any;
+  let afterDataset: any;
+  let copyDatasetSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  // Capture mapshaper internals so we can drive the runner deterministically
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+
+    beforeDataset = {
+      layers: [
+        { name: 'roads', geometry_type: 'polyline', shapes: [['orig']] },
+        { name: 'park', geometry_type: 'polygon', shapes: [[[0]]] },
+      ],
+    };
+    afterDataset = {
+      layers: [
+        { name: 'roads', geometry_type: 'polyline', shapes: [['clipped']] },
+        { name: 'park', geometry_type: 'polygon', shapes: [[[0]]] },
+      ],
+    };
+
+    source = {
+      id: 'src1',
+      type: 'topology',
+      getDataset: () => beforeDataset,
+      getLayers: () => beforeDataset.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    };
+    (map as any)._sources.set('src1', source);
+
+    copyDatasetSpy = vi.fn(() => ({ ...beforeDataset, _isCopy: true }));
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]);
+    runParsedCommandsSpy = vi.fn((_cmds: any, _job: any, cb: any) => {
+      // Simulate mapshaper mutating the input dataset by returning the
+      // afterDataset reference from the catalog.
+      cb(null, {
+        catalog: {
+          getDefaultTargets: () => [{ dataset: afterDataset }],
+        },
+      });
+    });
+
+    Reflect.set(mapshaper.internal as object, 'copyDataset', copyDatasetSpy);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('clipLayer returns false when the source does not exist', async () => {
+    const ok = await map.clipLayer({ source: 'nope', target: 'roads', mask: 'park' });
+    expect(ok).toBe(false);
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('clipLayer returns false when the target layer is missing', async () => {
+    const ok = await map.clipLayer({ source: 'src1', target: 'missing', mask: 'park' });
+    expect(ok).toBe(false);
+    expect(copyDatasetSpy).not.toHaveBeenCalled();
+  });
+
+  it('clipLayer returns false when the mask layer is missing', async () => {
+    const ok = await map.clipLayer({ source: 'src1', target: 'roads', mask: 'nope' });
+    expect(ok).toBe(false);
+  });
+
+  it('clipLayer constructs a quoted mapshaper command and swaps the dataset', async () => {
+    const ok = await map.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy).toHaveBeenCalledTimes(1);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clip source="park"');
+    expect(source.setDataset).toHaveBeenCalledWith(afterDataset);
+  });
+
+  it('eraseLayer constructs a -erase command', async () => {
+    await map.eraseLayer({ source: 'src1', target: 'roads', mask: 'park' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -erase source="park"');
+  });
+
+  it('clipLayer pushes exactly one DatasetReplaceCommand and labels it', async () => {
+    const historyListener = vi.fn();
+    map.on('historychange', historyListener);
+    await map.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
+    expect(map.canUndo()).toBe(true);
+    expect(historyListener).toHaveBeenCalledTimes(1);
+    expect(historyListener.mock.calls[0][0].label).toBe('Clip roads');
+  });
+
+  it('clipLayer clears any prior history (history barrier)', async () => {
+    // Push a fake earlier command so the history is non-empty
+    map.pushCommand({ do: () => {}, undo: () => {} });
+    expect(map.canUndo()).toBe(true);
+
+    await map.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
+    // After clip, only the dataset-replace command should remain on the stack
+    map.undo();
+    expect(source.setDataset).toHaveBeenCalledTimes(2);
+    // First call: do() applied afterDataset; second call: undo() applies the
+    // copyDataset snapshot (the value returned by copyDatasetSpy).
+    const restoredArg = source.setDataset.mock.calls[1][0];
+    expect(restoredArg._isCopy).toBe(true);
+    // No further undo is available — prior history was cleared
+    expect(map.canUndo()).toBe(false);
+  });
+
+  it('clipLayer clears the selection and fires selectionchange', async () => {
+    map.select([{ source: 'src1', layer: 'roads', id: 0 }]);
+    const selectionListener = vi.fn();
+    map.on('selectionchange', selectionListener);
+    await map.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
+    expect(map.getSelection()).toEqual([]);
+    expect(selectionListener).toHaveBeenCalled();
+  });
+
+  it('clipLayer surfaces mapshaper errors via the error event without throwing', async () => {
+    runParsedCommandsSpy.mockImplementation((_cmds: any, _job: any, cb: any) => {
+      cb(new Error('mapshaper boom'));
+    });
+    const errorListener = vi.fn();
+    map.on('error', errorListener);
+    const ok = await map.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
+    expect(ok).toBe(false);
+    expect(errorListener).toHaveBeenCalledTimes(1);
+    expect(errorListener.mock.calls[0][0].error.message).toBe('mapshaper boom');
+    // No history change on failure
+    expect(map.canUndo()).toBe(false);
+  });
+
+  it('quotes layer names containing embedded quotes', async () => {
+    beforeDataset.layers.push({ name: 'weird"name', geometry_type: 'polygon', shapes: [] });
+    afterDataset.layers.push({ name: 'weird"name', geometry_type: 'polygon', shapes: [] });
+    await map.clipLayer({ source: 'src1', target: 'roads', mask: 'weird"name' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clip source="weird\\"name"');
   });
 });

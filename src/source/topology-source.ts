@@ -315,6 +315,21 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   }
 
   /**
+   * Swap the active dataset. Used by dataset-replace commands (clip / erase /
+   * dissolve / …) and by reproject. Rebuilds the LOD copy and notifies
+   * listeners with the `data` event.
+   */
+  public setDataset(dataset: MapshaperDataset): void {
+    this._dataset = dataset;
+    if (dataset.arcs) {
+      this._displayArcs = new DisplayArcs(dataset.arcs);
+    } else {
+      this._displayArcs = null;
+    }
+    this.fire('data');
+  }
+
+  /**
    * Serialize the current dataset to a browser Blob via mapshaper's exporter.
    *
    * Multi-file shapefile output is packed into a single zip Blob using fflate

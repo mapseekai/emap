@@ -47,6 +47,12 @@ declare module 'mapshaper' {
     getDatasetBounds(dataset: MapshaperDataset): MapshaperBounds;
     layerHasGeometry(layer: MapshaperLayer): boolean;
     getLayerBounds(layer: MapshaperLayer, arcs: ArcCollection | undefined): MapshaperBounds | null;
+    /**
+     * Deep-copy a dataset (clones layers and arcs). Used to capture an
+     * undoable snapshot before running a dataset-mutating command like
+     * `-clip` / `-erase` / `-dissolve`.
+     */
+    copyDataset(dataset: MapshaperDataset): MapshaperDataset;
 
     // Export — io/mapshaper-export.mjs
     exportFileContent(

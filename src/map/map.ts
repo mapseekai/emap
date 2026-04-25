@@ -16,11 +16,13 @@ import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
 import type { EditCommand } from '../edit/edit-command';
 import { CompositeCommand } from '../edit/commands/composite';
 import { FeatureDeleteCommand } from '../edit/commands/feature-delete';
+import { DatasetReplaceCommand } from '../edit/commands/dataset-replace';
+import mapshaper from 'mapshaper';
 import { Control, ControlPosition } from '../ui/control';
 import { getLayerId } from '../source/layer-utils';
 import { resolveStrokeStyle, resolvePointStyle } from './layer';
 import type { LayerSpecification, FillPaint, LinePaint, CirclePaint } from './layer';
-import type { MapshaperLayer } from '../types/mapshaper-types';
+import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import type { DrawGeometryType } from '../ui/draw-feature-control';
 import type { CanvasKit } from 'canvaskit-wasm';
 
@@ -64,6 +66,20 @@ export interface FeatureRef {
 
 /** @deprecated Use {@link FeatureRef}. Kept as an alias for back-compat. */
 export type HighlightFeatureRef = FeatureRef;
+
+/**
+ * Options for the {@link Emap.clipLayer} / {@link Emap.eraseLayer} polygon
+ * operations. Both target and mask must reside in the same emap source —
+ * cross-source masks require a future explicit merge step.
+ */
+export interface ClipEraseOptions {
+  /** Source ID containing both layers. */
+  source: string;
+  /** Layer name (or id) of the target to be clipped/erased. */
+  target: string;
+  /** Layer name (or id) of the polygon mask. */
+  mask: string;
+}
 
 export interface HighlightStyle {
   color?: string;
@@ -980,10 +996,156 @@ export class Emap extends EventDispatcher {
     this.fire('historychange', snap);
   }
 
+  // ---------------------------------------------------------------------------
+  // Whole-dataset operations (clip / erase / future dissolve, buffer, ...)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Clip a layer to the polygons in a mask layer using mapshaper's `-clip`
+   * pipeline. Target and mask must live in the same source. Returns `true`
+   * on success, `false` for unresolvable source / target / mask.
+   *
+   * The operation is recorded as a single undoable history entry. Note that
+   * dataset-replace operations clear prior fine-grained edit history (see
+   * design.md for the rationale).
+   */
+  public async clipLayer(opts: ClipEraseOptions): Promise<boolean> {
+    return this._runClipErase(opts, 'clip');
+  }
+
+  /**
+   * Erase (cut holes from) a layer using a polygon mask layer via mapshaper's
+   * `-erase` pipeline. Same semantics as {@link clipLayer}.
+   */
+  public async eraseLayer(opts: ClipEraseOptions): Promise<boolean> {
+    return this._runClipErase(opts, 'erase');
+  }
+
+  private async _runClipErase(opts: ClipEraseOptions, op: 'clip' | 'erase'): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    // Validate that both target and mask resolve to layers in this source's
+    // dataset. mapshaper would throw an opaque error otherwise.
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!findLayerByName(dataset.layers, opts.mask)) return false;
+
+    const verb = op === 'clip' ? 'Clip' : 'Erase';
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -${op} source=${quoteMapshaperArg(opts.mask)}`;
+    return this._runDatasetCommand(opts.source, cmd, `${verb} ${opts.target}`);
+  }
+
+  /**
+   * Generic runner for whole-dataset mapshaper commands.
+   *
+   * Snapshots the dataset (`internal.copyDataset`), runs the command which
+   * mutates the original in place, clears the undo history (dataset replace
+   * is a history barrier), pushes one `DatasetReplaceCommand`, clears the
+   * selection, and fires `historychange` once. Future ops (`dissolve`,
+   * `buffer`, ...) reuse this helper.
+   */
+  private async _runDatasetCommand(
+    sourceId: string,
+    cmd: string,
+    label: string,
+  ): Promise<boolean> {
+    const source = this._sources.get(sourceId);
+    if (!source) return false;
+    const original = source.getDataset();
+    if (!original) return false;
+
+    // Deep snapshot for undo. mapshaper's clip / erase / dissolve mutate the
+    // input dataset in place; without this snapshot there is nothing to
+    // restore on undo.
+    const before: MapshaperDataset = mapshaper.internal.copyDataset(original);
+
+    let after: MapshaperDataset;
+    try {
+      after = await runMapshaperCommandOnDataset(cmd, original);
+    } catch (err) {
+      // Surface as a fire-and-forget error event; do not throw from a public
+      // edit op so that one bad command doesn't tear down the calling page.
+      this.fire('error', { error: err });
+      return false;
+    }
+
+    // Apply: swap the source's active dataset.
+    source.setDataset(after);
+
+    // History barrier: prior commands closed over the OLD dataset's layers /
+    // arcs. Clearing keeps undo predictable; the dataset-replace itself is
+    // the single new undoable step.
+    this._history.clear();
+    this._history.push(new DatasetReplaceCommand({ source, before, after, label }));
+    this._fireHistoryChange();
+
+    // Selection refs are by feature id and may now point at different
+    // features. Clear conservatively.
+    this._fireSelectionChange(this._selection.clear());
+
+    this._scheduleRender();
+    return true;
+  }
+
   public remove(): void {
     this._dragPan.destroy();
     if (this._container && this._canvasContainer) {
       this._container.removeChild(this._canvasContainer);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Module-private helpers for whole-dataset mapshaper command execution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a mapshaper layer by its name or id (matches what `mapshaper -clip
+ * source=NAME` would resolve internally). Returns null when no layer
+ * matches.
+ */
+function findLayerByName(layers: MapshaperLayer[], nameOrId: string): MapshaperLayer | null {
+  for (const layer of layers) {
+    if (layer.name === nameOrId || layer.id === nameOrId) return layer;
+  }
+  return null;
+}
+
+/**
+ * Quote a layer name so it can be embedded in a mapshaper command string.
+ * mapshaper accepts double-quoted arguments; we escape any embedded quotes.
+ */
+function quoteMapshaperArg(value: string): string {
+  return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+/**
+ * Run a mapshaper command string against a single dataset and resolve with
+ * the resulting (post-mutation) dataset. Wraps the parseCommands +
+ * runParsedCommands + Job dance in a Promise.
+ */
+function runMapshaperCommandOnDataset(
+  cmd: string,
+  dataset: MapshaperDataset,
+): Promise<MapshaperDataset> {
+  return new Promise((resolve, reject) => {
+    const job = new mapshaper.internal.Job();
+    job.catalog.addDataset(dataset);
+    const commands = mapshaper.internal.parseCommands(cmd);
+    mapshaper.internal.runParsedCommands(commands, job, (err: any, finished) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      const targets = finished.catalog.getDefaultTargets();
+      if (targets.length > 0) {
+        resolve(targets[0].dataset);
+      } else {
+        // mapshaper sometimes leaves the input dataset untouched if no target
+        // applied — treat as success and return the original ref.
+        resolve(dataset);
+      }
+    });
+  });
 }
