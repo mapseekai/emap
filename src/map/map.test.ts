@@ -620,8 +620,8 @@ describe('Emap clipLayer / eraseLayer', () => {
     };
     (map as any)._sources.set('src1', source);
 
-    copyDatasetSpy = vi.fn(() => ({ ...beforeDataset, _isCopy: true }));
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]);
+    copyDatasetSpy = vi.fn(() => ({ ...beforeDataset, _isCopy: true })) as ReturnType<typeof vi.fn>;
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
     runParsedCommandsSpy = vi.fn((_cmds: any, _job: any, cb: any) => {
       // Simulate mapshaper mutating the input dataset by returning the
       // afterDataset reference from the catalog.
@@ -630,7 +630,7 @@ describe('Emap clipLayer / eraseLayer', () => {
           getDefaultTargets: () => [{ dataset: afterDataset }],
         },
       });
-    });
+    }) as ReturnType<typeof vi.fn>;
 
     Reflect.set(mapshaper.internal as object, 'copyDataset', copyDatasetSpy);
     Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
@@ -727,5 +727,120 @@ describe('Emap clipLayer / eraseLayer', () => {
     afterDataset.layers.push({ name: 'weird"name', geometry_type: 'polygon', shapes: [] });
     await map.clipLayer({ source: 'src1', target: 'roads', mask: 'weird"name' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clip source="weird\\"name"');
+  });
+});
+
+describe('Emap dissolveLayer', () => {
+  let map: Emap;
+  let source: any;
+  let beforeDataset: any;
+  let afterDataset: any;
+  let copyDatasetSpy: ReturnType<typeof vi.fn>;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+
+    beforeDataset = {
+      layers: [
+        { name: 'states', geometry_type: 'polygon', shapes: [['s0'], ['s1'], ['s2']] },
+      ],
+    };
+    afterDataset = {
+      layers: [
+        { name: 'states', geometry_type: 'polygon', shapes: [['merged']] },
+      ],
+    };
+
+    source = {
+      id: 'src1',
+      type: 'topology',
+      getDataset: () => beforeDataset,
+      getLayers: () => beforeDataset.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    };
+    (map as any)._sources.set('src1', source);
+
+    copyDatasetSpy = vi.fn(() => ({ ...beforeDataset, _isCopy: true })) as ReturnType<typeof vi.fn>;
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    runParsedCommandsSpy = vi.fn((_cmds: any, _job: any, cb: any) => {
+      cb(null, {
+        catalog: {
+          getDefaultTargets: () => [{ dataset: afterDataset }],
+        },
+      });
+    }) as ReturnType<typeof vi.fn>;
+
+    Reflect.set(mapshaper.internal as object, 'copyDataset', copyDatasetSpy);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('whole-layer dissolve omits the field argument', async () => {
+    const ok = await map.dissolveLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -dissolve');
+    expect(source.setDataset).toHaveBeenCalledWith(afterDataset);
+  });
+
+  it('field-based dissolve emits the field as a quoted positional', async () => {
+    await map.dissolveLayer({ source: 'src1', target: 'states', field: 'region' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -dissolve "region"');
+  });
+
+  it('returns false when the source does not exist', async () => {
+    const ok = await map.dissolveLayer({ source: 'nope', target: 'states' });
+    expect(ok).toBe(false);
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when the target layer is missing', async () => {
+    const ok = await map.dissolveLayer({ source: 'src1', target: 'missing' });
+    expect(ok).toBe(false);
+    expect(copyDatasetSpy).not.toHaveBeenCalled();
+  });
+
+  it('pushes one history entry labelled "Dissolve <target>"', async () => {
+    const historyListener = vi.fn();
+    map.on('historychange', historyListener);
+    await map.dissolveLayer({ source: 'src1', target: 'states' });
+    expect(historyListener).toHaveBeenCalledTimes(1);
+    expect(historyListener.mock.calls[0][0].label).toBe('Dissolve states');
+  });
+
+  it('clears the selection on success', async () => {
+    map.select([{ source: 'src1', layer: 'states', id: 0 }]);
+    const selectionListener = vi.fn();
+    map.on('selectionchange', selectionListener);
+    await map.dissolveLayer({ source: 'src1', target: 'states' });
+    expect(map.getSelection()).toEqual([]);
+    expect(selectionListener).toHaveBeenCalled();
+  });
+
+  it('clears prior history (history barrier inherited from runner)', async () => {
+    map.pushCommand({ do: () => {}, undo: () => {} });
+    expect(map.canUndo()).toBe(true);
+    await map.dissolveLayer({ source: 'src1', target: 'states' });
+    map.undo();
+    // Only the dataset-replace step should be reachable; prior fake command is gone
+    expect(map.canUndo()).toBe(false);
+  });
+
+  it('quotes field names containing special characters', async () => {
+    await map.dissolveLayer({ source: 'src1', target: 'states', field: 'state name' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -dissolve "state name"');
   });
 });

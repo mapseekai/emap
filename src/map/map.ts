@@ -81,6 +81,23 @@ export interface ClipEraseOptions {
   mask: string;
 }
 
+/**
+ * Options for {@link Emap.dissolveLayer}. With no `field`, mapshaper merges
+ * every feature in the target layer into one. With a `field`, features
+ * sharing that field's value are merged.
+ */
+export interface DissolveOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the layer to dissolve. */
+  target: string;
+  /**
+   * Optional attribute field to group features by. When omitted, the entire
+   * target layer is dissolved into a single feature.
+   */
+  field?: string;
+}
+
 export interface HighlightStyle {
   color?: string;
   width?: number;
@@ -1034,6 +1051,25 @@ export class Emap extends EventDispatcher {
     const verb = op === 'clip' ? 'Clip' : 'Erase';
     const cmd = `-target ${quoteMapshaperArg(opts.target)} -${op} source=${quoteMapshaperArg(opts.mask)}`;
     return this._runDatasetCommand(opts.source, cmd, `${verb} ${opts.target}`);
+  }
+
+  /**
+   * Merge polygon (or point / polyline) features in the target layer using
+   * mapshaper's `-dissolve` pipeline. Without `field`, all features in the
+   * layer collapse into one; with `field`, features sharing the same field
+   * value are merged. Returns `true` on success, `false` for unresolvable
+   * source / target. Recorded as a single undoable history entry.
+   */
+  public async dissolveLayer(opts: DissolveOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    const fieldArg = opts.field ? ` ${quoteMapshaperArg(opts.field)}` : '';
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -dissolve${fieldArg}`;
+    return this._runDatasetCommand(opts.source, cmd, `Dissolve ${opts.target}`);
   }
 
   /**
