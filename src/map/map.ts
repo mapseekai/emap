@@ -1076,6 +1076,24 @@ export class Emap extends EventDispatcher {
     return this._runDatasetCommand(opts.source, cmd, `Dissolve ${opts.target}`);
   }
 
+  /**
+   * Run mapshaper's `-clean` against a layer to repair topology issues
+   * (intersection cuts, polygon overlaps, sliver removal). Heavy — O(N²) on
+   * polygon counts in the worst case — so it is opt-in instead of running on
+   * every import. Returns `Promise<boolean>`; failure modes match the other
+   * dataset-replace ops (false on unresolvable source/target, error event on
+   * mapshaper failure).
+   */
+  public async cleanLayer(opts: { source: string; target: string }): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -clean`;
+    return this._runDatasetCommand(opts.source, cmd, `Clean ${opts.target}`);
+  }
+
   // ---------------------------------------------------------------------------
   // Attribute / data-table editing
   // ---------------------------------------------------------------------------

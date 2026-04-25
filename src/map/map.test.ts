@@ -728,6 +728,19 @@ describe('Emap clipLayer / eraseLayer', () => {
     await map.clipLayer({ source: 'src1', target: 'roads', mask: 'weird"name' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clip source="weird\\"name"');
   });
+
+  it('cleanLayer constructs a -clean command and pushes a single history entry', async () => {
+    const ok = await map.cleanLayer({ source: 'src1', target: 'roads' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clean');
+    expect(map.canUndo()).toBe(true);
+  });
+
+  it('cleanLayer returns false when source / target is missing', async () => {
+    expect(await map.cleanLayer({ source: 'nope', target: 'roads' })).toBe(false);
+    expect(await map.cleanLayer({ source: 'src1', target: 'missing' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('Emap dissolveLayer', () => {
