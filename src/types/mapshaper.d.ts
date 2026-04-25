@@ -68,6 +68,7 @@ declare module 'mapshaper' {
     deleteVertex(arcs: ArcCollection, vertexId: number): void;
     appendEmptyArc(arcs: ArcCollection): void;
     appendVertex(arcs: ArcCollection, point: [number, number]): void;
+    deleteLastArc(arcs: ArcCollection): void;
     findArcIdFromVertexId(vertexId: number, ii: Int32Array | Uint32Array): number;
 
     // Segment iteration / closest-point

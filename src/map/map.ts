@@ -12,6 +12,8 @@ import { DragPanHandler } from '../core/drag-pan-handler';
 import { FeatureQuery } from './feature-query';
 import { HighlightManager } from './highlight-manager';
 import { Selection, SelectMode, SelectionDiff } from './selection';
+import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
+import type { EditCommand } from '../edit/edit-command';
 import { Control, ControlPosition } from '../ui/control';
 import { getLayerId } from '../source/layer-utils';
 import { resolveStrokeStyle, resolvePointStyle } from './layer';
@@ -132,6 +134,8 @@ export class Emap extends EventDispatcher {
   private _highlightManager: HighlightManager = new HighlightManager();
   private _featureQuery: FeatureQuery;
   private _selection: Selection = new Selection();
+  private _history: EditHistory = new EditHistory();
+  private _historyShortcutUnbind: (() => void) | null = null;
 
   // Edit mode
   private _editMode: 'none' | 'vertex' | 'draw' = 'none';
@@ -796,6 +800,100 @@ export class Emap extends EventDispatcher {
       added: diff.added,
       removed: diff.removed,
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Edit history (undo / redo)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Push an executed `EditCommand` onto the undo stack.
+   *
+   * Per the memento pattern, the caller is expected to have already performed
+   * the work; the command captures what changed so the operation can be
+   * reversed on undo. `pushCommand` does NOT call `cmd.do()`. It clears any
+   * pending redo entries and fires `historychange`.
+   */
+  public pushCommand(cmd: EditCommand): void {
+    this._history.push(cmd);
+    this._fireHistoryChange();
+  }
+
+  /**
+   * Reverse the most recent command. No-op when there is nothing to undo.
+   * Fires `historychange` and schedules a re-render after the reversal.
+   */
+  public undo(): boolean {
+    const cmd = this._history.undo();
+    if (!cmd) return false;
+    this._fireHistoryChange();
+    this._scheduleRender();
+    return true;
+  }
+
+  /**
+   * Re-apply the most recently undone command. No-op when there is nothing
+   * to redo. Fires `historychange` and schedules a re-render.
+   */
+  public redo(): boolean {
+    const cmd = this._history.redo();
+    if (!cmd) return false;
+    this._fireHistoryChange();
+    this._scheduleRender();
+    return true;
+  }
+
+  public canUndo(): boolean {
+    return this._history.canUndo();
+  }
+
+  public canRedo(): boolean {
+    return this._history.canRedo();
+  }
+
+  /** Empty both undo and redo stacks. Fires `historychange` if non-empty. */
+  public clearHistory(): void {
+    const wasNonEmpty = this._history.canUndo() || this._history.canRedo();
+    this._history.clear();
+    if (wasNonEmpty) this._fireHistoryChange();
+  }
+
+  /**
+   * Bind Ctrl/Cmd+Z (undo) and Ctrl/Cmd+Shift+Z / Ctrl+Y (redo) on the given
+   * element (default: the canvas container). Returns an unbind function. Calls
+   * to this method are idempotent — subsequent calls unbind the prior binding.
+   */
+  public bindHistoryShortcuts(target?: HTMLElement): () => void {
+    this._historyShortcutUnbind?.();
+    const el = target ?? this._canvasContainer;
+    // Ensure the element can receive focus so it gets keydown events.
+    if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const isZ = e.key === 'z' || e.key === 'Z';
+      const isY = e.key === 'y' || e.key === 'Y';
+      if (isZ && !e.shiftKey) {
+        e.preventDefault();
+        this.undo();
+      } else if ((isZ && e.shiftKey) || isY) {
+        e.preventDefault();
+        this.redo();
+      }
+    };
+    el.addEventListener('keydown', handler);
+    const unbind = () => {
+      el.removeEventListener('keydown', handler);
+      if (this._historyShortcutUnbind === unbind) this._historyShortcutUnbind = null;
+    };
+    this._historyShortcutUnbind = unbind;
+    return unbind;
+  }
+
+  private _fireHistoryChange(): void {
+    const snap: HistoryStateSnapshot = this._history.snapshot();
+    this.fire('historychange', snap);
   }
 
   public remove(): void {

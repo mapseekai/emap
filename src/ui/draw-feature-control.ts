@@ -1,6 +1,7 @@
 import { Control } from './control';
 import { Emap } from '../map/map';
 import { getLayerId } from '../source/layer-utils';
+import { FeatureCreateCommand } from '../edit/commands/feature-create';
 import type { MapshaperLayer, ArcCollection } from '../types/mapshaper-types';
 
 export type DrawGeometryType = 'polygon' | 'polyline' | 'point';
@@ -297,34 +298,53 @@ export class DrawFeatureControl implements Control {
       layer.shapes = [];
     }
 
+    let appendedShape: any[];
+    let arcVertices: [number, number][] | undefined;
+    let arcs: ArcCollection | undefined;
+
     if (this._options.type === 'point') {
-      layer.shapes.push([this._vertices[0]]);
+      appendedShape = [this._vertices[0]];
+      layer.shapes.push(appendedShape);
     } else {
       // Polyline or polygon: create new arc
-      const verts: [number, number][] = this._options.type === 'polygon'
+      arcVertices = this._options.type === 'polygon'
         ? [...this._vertices, this._vertices[0]]
         : [...this._vertices];
 
-      let arcs = dataset.arcs;
+      arcs = dataset.arcs;
       if (!arcs) {
         // Should not happen for topology sources with data, but guard
         return;
       }
 
-      const newArcId = this._appendArc(arcs, verts);
-      layer.shapes.push([[newArcId]]);
+      const newArcId = this._appendArc(arcs, arcVertices);
+      appendedShape = [[newArcId]];
+      layer.shapes.push(appendedShape);
     }
 
     // Add empty record to data table
+    let appendedRecord: Record<string, unknown> | null = null;
     if (layer.data) {
-      const records = (layer.data as any).getRecords();
+      const records = layer.data.getRecords?.();
       if (records) {
-        records.push({});
+        appendedRecord = {};
+        records.push(appendedRecord);
       }
     }
 
     // Re-initialize display arcs for LOD so the filtered copy includes the new arc
     source.refreshDisplayArcs();
+
+    // Record the creation as an undoable step.
+    this._map.pushCommand(new FeatureCreateCommand({
+      geometryType: this._options.type,
+      layer,
+      source,
+      appendedShape,
+      appendedRecord,
+      arcVertices,
+      arcs,
+    }));
 
     const featureId = layer.shapes.length - 1;
     const layerId = getLayerId(layer, layerIndex >= 0 ? layerIndex : 0);

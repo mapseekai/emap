@@ -3,6 +3,7 @@ import { Emap } from './map';
 import type { FeatureRef } from './map';
 import type { LayerSpecification } from './layer';
 import { Selection } from './selection';
+import { EditHistory } from '../edit/edit-history';
 
 function setPrivate(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
@@ -421,6 +422,75 @@ describe('Emap selection', () => {
     const listener = vi.fn();
     map.on('selectionchange', listener);
     map.clearSelection();
+    expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('Emap edit history', () => {
+  let map: Emap;
+
+  beforeEach(() => {
+    map = createBareMap();
+    // createBareMap bypasses the constructor, so initialize the history field
+    setPrivate(map, '_history', new EditHistory());
+  });
+
+  function makeCmd(label?: string) {
+    return { do: vi.fn(), undo: vi.fn(), label };
+  }
+
+  it('pushCommand fires historychange with canUndo=true', () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    map.pushCommand(makeCmd('move'));
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0]).toMatchObject({
+      canUndo: true,
+      canRedo: false,
+      label: 'move',
+    });
+  });
+
+  it('undo invokes the command\'s undo() and updates flags', () => {
+    const cmd = makeCmd();
+    map.pushCommand(cmd);
+    expect(map.undo()).toBe(true);
+    expect(cmd.undo).toHaveBeenCalledTimes(1);
+    expect(map.canUndo()).toBe(false);
+    expect(map.canRedo()).toBe(true);
+  });
+
+  it('redo invokes do() and restores undo availability', () => {
+    const cmd = makeCmd();
+    map.pushCommand(cmd);
+    map.undo();
+    expect(map.redo()).toBe(true);
+    expect(cmd.do).toHaveBeenCalledTimes(1);
+    expect(map.canUndo()).toBe(true);
+    expect(map.canRedo()).toBe(false);
+  });
+
+  it('undo on empty history is a no-op and does not fire', () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    expect(map.undo()).toBe(false);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('clearHistory empties stacks; fires once when non-empty', () => {
+    map.pushCommand(makeCmd());
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    map.clearHistory();
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(map.canUndo()).toBe(false);
+    expect(map.canRedo()).toBe(false);
+  });
+
+  it('clearHistory on empty history is silent', () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    map.clearHistory();
     expect(listener).not.toHaveBeenCalled();
   });
 });

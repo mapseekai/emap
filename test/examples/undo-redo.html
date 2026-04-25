@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap Example - Undo / Redo</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    #header {
+      padding: 10px;
+      background: #2c3e50;
+      color: white;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+      outline: none;
+    }
+
+    .hint {
+      opacity: 0.85;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>
+      Open file:
+      <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+    </label>
+    <span class="hint">Vertex / draw modes are stacked on the left. Ctrl/Cmd+Z undo, Ctrl+Shift+Z (or Ctrl+Y) redo.</span>
+    <span id="status">Load a file to begin</span>
+    <span id="last-action" style="margin-left:auto;opacity:0.85"></span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const {
+      Emap,
+      TopologySource,
+      NavigationControl,
+      HistoryControl,
+      EditToolbar,
+      VertexEditControl,
+      DrawFeatureControl,
+    } = emap;
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+
+    // Bind keyboard shortcuts on the map container so users can hit Ctrl+Z
+    // without first clicking a button.
+    map.bindHistoryShortcuts();
+    document.getElementById('map').focus();
+
+    map.on('historychange', (e) => {
+      document.getElementById('last-action').textContent =
+        e.label ? `last action: ${e.label}` : '';
+    });
+
+    const fileInput = document.getElementById('file-input');
+    const status = document.getElementById('status');
+    const SOURCE_ID = 'undo-source';
+    let editToolbar = null;
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `Loading ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          status.textContent = 'Try: pan, draw, drag a vertex, right-click a vertex to delete. Then Ctrl+Z.';
+          map.clearHistory();
+          if (editToolbar) map.removeControl(editToolbar);
+          editToolbar = new EditToolbar({
+            controls: [
+              new VertexEditControl(),
+              new DrawFeatureControl({ source: SOURCE_ID, type: 'polyline' }),
+              new DrawFeatureControl({ source: SOURCE_ID, type: 'polygon' }),
+              new DrawFeatureControl({ source: SOURCE_ID, type: 'point' }),
+            ],
+          });
+          map.addControl(editToolbar, 'top-left');
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  </script>
+</body>
+
+</html>

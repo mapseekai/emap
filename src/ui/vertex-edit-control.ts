@@ -1,6 +1,11 @@
 import mapshaper from 'mapshaper';
 import { Control } from './control';
 import { Emap, EditVertexShape, EditVertexArcs } from '../map/map';
+import { VertexMoveCommand } from '../edit/commands/vertex-move';
+import { VertexInsertCommand } from '../edit/commands/vertex-insert';
+import { VertexDeleteCommand } from '../edit/commands/vertex-delete';
+import type { ArcCollection } from '../types/mapshaper-types';
+import type { TopologySource } from '../source/source';
 
 interface EditableArcs extends EditVertexArcs {
   getVertex2(vertexId: number): [number, number] | null;
@@ -88,6 +93,8 @@ export class VertexEditControl implements Control {
   private _dragging: boolean = false;
   /** Shapes of neighboring polygons sharing the hovered arc (for shared-edge highlight) */
   private _neighborShapes: EditVertexShape[] = [];
+  /** Coordinate of the dragged node before mouse-down, captured for VertexMoveCommand. */
+  private _dragFromCoords: [number, number] | null = null;
 
   // Bound handlers
   private _onMouseMoveBound: (e: MouseEvent) => void;
@@ -214,10 +221,13 @@ export class VertexEditControl implements Control {
 
   /** Delete the currently hovered vertex from the arc collection */
   private _deleteHoveredVertex(): void {
-    if (!this._hoveredFeature || this._hoverVertexIds.length === 0) return;
+    if (!this._map || !this._hoveredFeature || this._hoverVertexIds.length === 0) return;
     const arcs = this._hoveredFeature.arcs;
     const vtxId = this._hoverVertexIds[0];
     const sourceId = this._hoveredFeature.source;
+
+    // Snapshot the vertex's coordinate BEFORE deletion so undo can re-insert it.
+    const coordsBefore = arcs.getVertex2(vtxId);
 
     // Delete vertex from arcs (mapshaper internal API).
     // mapshaper's deleteVertex calls updateVertexData() internally, which rebuilds
@@ -227,14 +237,27 @@ export class VertexEditControl implements Control {
     // Re-initialize the LOD copy in DisplayArcs since vertex layout changed.
     this._refreshSourceDisplayArcs(sourceId);
 
+    // Push an undoable VertexDeleteCommand
+    if (coordsBefore) {
+      const source = this._map.getSource(sourceId);
+      if (source) {
+        this._map.pushCommand(new VertexDeleteCommand({
+          vertexIndex: vtxId,
+          coords: [coordsBefore[0], coordsBefore[1]],
+          arcs: arcs as unknown as ArcCollection,
+          source: source as TopologySource,
+        }));
+      }
+    }
+
     // Clear hover state (the vertex no longer exists)
     this._hoverVertexCoords = null;
     this._hoverVertexIds = [];
     this._hoverType = null;
     this._hoverInsertionId = -1;
     this._neighborShapes = [];
-    this._map?.clearEditVertexState();
-    this._map?.render();
+    this._map.clearEditVertexState();
+    this._map.render();
   }
 
   /**
@@ -545,15 +568,36 @@ export class VertexEditControl implements Control {
     e.preventDefault();
     e.stopPropagation();
 
-    // Insert a new vertex when dragging from an interpolated edge point
+    // Insert a new vertex when dragging from an interpolated edge point.
+    // The insertion is itself an undoable step — push a VertexInsertCommand
+    // before the drag begins, so undo first reverses the drag, then the insert.
     if (this._hoverType === 'interpolated' && this._hoverInsertionId >= 0) {
       const arcs = this._hoveredFeature.arcs;
-      vertexOps.insertVertex(arcs, this._hoverInsertionId, this._hoverVertexCoords);
+      const point: [number, number] = [this._hoverVertexCoords[0], this._hoverVertexCoords[1]];
+      vertexOps.insertVertex(arcs, this._hoverInsertionId, point);
       this._hoverVertexIds = [this._hoverInsertionId];
       this._hoverType = 'vertex';
+
+      this._pushVertexInsertCommand(this._hoverInsertionId, point);
     }
 
+    // Capture the pre-drag coordinate so mouseup can record a VertexMoveCommand.
+    this._dragFromCoords = this._hoverVertexCoords
+      ? [this._hoverVertexCoords[0], this._hoverVertexCoords[1]]
+      : null;
     this._dragging = true;
+  }
+
+  private _pushVertexInsertCommand(insertionId: number, point: [number, number]): void {
+    if (!this._map || !this._hoveredFeature) return;
+    const source = this._map.getSource(this._hoveredFeature.source);
+    if (!source) return;
+    this._map.pushCommand(new VertexInsertCommand({
+      insertionId,
+      point,
+      arcs: this._hoveredFeature.arcs as unknown as ArcCollection,
+      source: source as TopologySource,
+    }));
   }
 
   private _handleDrag(e: MouseEvent): void {
@@ -603,6 +647,24 @@ export class VertexEditControl implements Control {
     // If the source has a low-detail LOD copy, regenerate it so the filtered
     // arcs reflect the new vertex positions.
     this._refreshSourceDisplayArcs(sourceId);
+
+    // Push an undoable VertexMoveCommand if the drag actually moved the node.
+    // (A click-without-drag returns the same coord and is not worth recording.)
+    const from = this._dragFromCoords;
+    const dragMoved = from && (from[0] !== dataCoords[0] || from[1] !== dataCoords[1]);
+    if (dragMoved && this._hoverVertexIds.length > 0) {
+      const source = this._map.getSource(sourceId);
+      if (source) {
+        this._map.pushCommand(new VertexMoveCommand({
+          vertexIds: [...this._hoverVertexIds],
+          from: [from[0], from[1]],
+          to: [dataCoords[0], dataCoords[1]],
+          arcs: arcs as unknown as ArcCollection,
+          source: source as TopologySource,
+        }));
+      }
+    }
+    this._dragFromCoords = null;
 
     // Fire vertex_moved event with topology info
     this._map.fire('vertex_moved', {
