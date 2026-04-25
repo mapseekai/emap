@@ -494,3 +494,86 @@ describe('Emap edit history', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 });
+
+describe('Emap deleteSelected', () => {
+  let map: Emap;
+  let layer: { shapes: any[]; data?: { getRecords: () => Record<string, unknown>[] } };
+  let records: Record<string, unknown>[];
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    records = [{ name: 'a' }, { name: 'b' }, { name: 'c' }, { name: 'd' }];
+    layer = {
+      shapes: [['s0'], ['s1'], ['s2'], ['s3']],
+      data: { getRecords: () => records },
+    };
+    const source = {
+      id: 'src1',
+      type: 'topology',
+      getLayers: () => [layer],
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+  });
+
+  function selectIds(ids: number[]): void {
+    map.select(ids.map((id) => ({ source: 'src1', layer: 'layer-0', id })));
+  }
+
+  it('returns false on empty selection without firing events', () => {
+    const historyListener = vi.fn();
+    const selectionListener = vi.fn();
+    map.on('historychange', historyListener);
+    map.on('selectionchange', selectionListener);
+    expect(map.deleteSelected()).toBe(false);
+    expect(historyListener).not.toHaveBeenCalled();
+    expect(selectionListener).not.toHaveBeenCalled();
+  });
+
+  it('deletes a single selected feature', () => {
+    selectIds([1]);
+    const ok = map.deleteSelected();
+    expect(ok).toBe(true);
+    expect(layer.shapes).toEqual([['s0'], ['s2'], ['s3']]);
+    expect(records).toEqual([{ name: 'a' }, { name: 'c' }, { name: 'd' }]);
+  });
+
+  it('collapses multiple deletions into one history entry', () => {
+    selectIds([0, 2, 3]);
+    const historyListener = vi.fn();
+    map.on('historychange', historyListener);
+    map.deleteSelected();
+    expect(historyListener).toHaveBeenCalledTimes(1);
+    expect(map.canUndo()).toBe(true);
+  });
+
+  it('clears the selection on success and fires selectionchange with the deleted refs', () => {
+    selectIds([1, 2]);
+    const selectionListener = vi.fn();
+    map.on('selectionchange', selectionListener);
+    map.deleteSelected();
+    expect(map.getSelection()).toEqual([]);
+    expect(selectionListener).toHaveBeenCalledTimes(1);
+    const ev = selectionListener.mock.calls[0][0];
+    expect(ev.removed).toHaveLength(2);
+    expect(ev.selected).toEqual([]);
+  });
+
+  it('descending-id deletion preserves intra-layer integrity', () => {
+    selectIds([1, 2]);
+    map.deleteSelected();
+    // Initially [s0,s1,s2,s3]; delete ids 2 then 1 → [s0,s3]
+    expect(layer.shapes).toEqual([['s0'], ['s3']]);
+    expect(records).toEqual([{ name: 'a' }, { name: 'd' }]);
+  });
+
+  it('a single undo restores all deleted features at original indices', () => {
+    selectIds([0, 2, 3]);
+    map.deleteSelected();
+    expect(layer.shapes).toEqual([['s1']]);
+    map.undo();
+    expect(layer.shapes).toEqual([['s0'], ['s1'], ['s2'], ['s3']]);
+    expect(records).toEqual([{ name: 'a' }, { name: 'b' }, { name: 'c' }, { name: 'd' }]);
+  });
+});

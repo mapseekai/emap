@@ -100,10 +100,13 @@
   <link rel="stylesheet" href="../../src/ui/controls.css" />
   <script src="../../dist/emap-dev.js"></script>
   <script>
-    const { Emap, TopologySource, NavigationControl } = emap;
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
 
     const map = new Emap({ container: 'map' });
     map.addControl(new NavigationControl(), 'top-left');
+    // Lets users Ctrl+Z to bring deleted features back
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
 
     const fileInput = document.getElementById('file-input');
     const clearBtn = document.getElementById('clear-btn');
@@ -171,10 +174,11 @@
     clearBtn.addEventListener('click', () => map.clearSelection());
 
     deleteBtn.addEventListener('click', () => {
-      // Stub — actual feature deletion arrives in the upcoming undo/redo proposal.
-      const sel = map.getSelection();
-      console.log('Would delete:', sel);
-      status.textContent = `Pretending to delete ${sel.length} feature(s); see console`;
+      const count = map.getSelection().length;
+      const ok = map.deleteSelected();
+      if (ok) {
+        status.textContent = `Deleted ${count} feature(s). Ctrl+Z to undo.`;
+      }
     });
   </script>
 </body>

@@ -48,4 +48,7 @@ export { VertexMoveCommand } from './edit/commands/vertex-move';
 export { VertexInsertCommand } from './edit/commands/vertex-insert';
 export { VertexDeleteCommand } from './edit/commands/vertex-delete';
 export { FeatureCreateCommand } from './edit/commands/feature-create';
+export { FeatureDeleteCommand } from './edit/commands/feature-delete';
+export type { FeatureDeleteCommandOptions } from './edit/commands/feature-delete';
+export { CompositeCommand } from './edit/commands/composite';
 export * from './types/mapshaper-types';

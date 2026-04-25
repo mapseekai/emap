@@ -14,6 +14,8 @@ import { HighlightManager } from './highlight-manager';
 import { Selection, SelectMode, SelectionDiff } from './selection';
 import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
 import type { EditCommand } from '../edit/edit-command';
+import { CompositeCommand } from '../edit/commands/composite';
+import { FeatureDeleteCommand } from '../edit/commands/feature-delete';
 import { Control, ControlPosition } from '../ui/control';
 import { getLayerId } from '../source/layer-utils';
 import { resolveStrokeStyle, resolvePointStyle } from './layer';
@@ -800,6 +802,88 @@ export class Emap extends EventDispatcher {
       added: diff.added,
       removed: diff.removed,
     });
+  }
+
+  /**
+   * Delete every currently-selected feature in one undoable history step.
+   *
+   * Returns `true` when at least one feature was deleted, `false` when the
+   * selection was empty (in which case nothing is pushed and no events fire).
+   *
+   * Implementation matches mapshaper's `deleteFeature` / `insertFeature`
+   * pair: shape + data record are spliced out (and back in on undo). Within
+   * each layer, deletes proceed in descending-id order so each delete's
+   * index stays valid; a single Ctrl+Z reverses the entire batch.
+   *
+   * The selection is cleared on success — the deleted refs no longer exist.
+   */
+  public deleteSelected(): boolean {
+    const refs = this._selection.getAll();
+    if (refs.length === 0) return false;
+
+    // Group ids by (sourceId, layerId) so we can sort within each layer
+    const grouped: globalThis.Map<string, globalThis.Map<string, number[]>> = new globalThis.Map();
+    for (const ref of refs) {
+      let bySource = grouped.get(ref.source);
+      if (!bySource) {
+        bySource = new globalThis.Map();
+        grouped.set(ref.source, bySource);
+      }
+      const ids = bySource.get(ref.layer) ?? [];
+      ids.push(ref.id);
+      bySource.set(ref.layer, ids);
+    }
+
+    const children: EditCommand[] = [];
+
+    for (const [sourceId, byLayer] of grouped) {
+      const source = this._sources.get(sourceId);
+      if (!source) continue;
+      const layers = source.getLayers();
+      for (const [layerId, ids] of byLayer) {
+        // Resolve the actual layer object by matching layerId to getLayerId(layer, idx)
+        let target: MapshaperLayer | null = null;
+        for (let i = 0; i < layers.length; i++) {
+          if (getLayerId(layers[i], i) === layerId) {
+            target = layers[i] as MapshaperLayer;
+            break;
+          }
+        }
+        if (!target?.shapes) continue;
+
+        // Sort descending so each splice does not invalidate later ids
+        const sortedIds = [...ids].sort((a, b) => b - a);
+        for (const featureId of sortedIds) {
+          const shape = target.shapes[featureId];
+          if (shape === undefined) continue;
+          const records = target.data?.getRecords?.();
+          const record = records ? records[featureId] : null;
+          // Build the command, then execute it now (the caller-already-did-the-work
+          // contract). The command captures pre-delete snapshots in opts.
+          const cmd = new FeatureDeleteCommand({
+            layer: target,
+            featureId,
+            shape,
+            record: record ?? null,
+            source,
+          });
+          cmd.do();
+          children.push(cmd);
+        }
+      }
+    }
+
+    if (children.length === 0) return false;
+
+    const composite = new CompositeCommand(children, `Delete ${children.length} feature${children.length > 1 ? 's' : ''}`);
+    this._history.push(composite);
+    this._fireHistoryChange();
+
+    // Clear the selection — the refs no longer exist.
+    this._fireSelectionChange(this._selection.clear());
+    this._scheduleRender();
+
+    return true;
   }
 
   // ---------------------------------------------------------------------------
