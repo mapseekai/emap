@@ -217,14 +217,15 @@ export class VertexEditControl implements Control {
     if (!this._hoveredFeature || this._hoverVertexIds.length === 0) return;
     const arcs = this._hoveredFeature.arcs;
     const vtxId = this._hoverVertexIds[0];
+    const sourceId = this._hoveredFeature.source;
 
-    // Delete vertex from arcs (mapshaper internal API)
+    // Delete vertex from arcs (mapshaper internal API).
+    // mapshaper's deleteVertex calls updateVertexData() internally, which rebuilds
+    // all arc bounds via initBounds(). No explicit updateArcBounds needed.
     vertexOps.deleteVertex(arcs, vtxId);
 
-    // Recalculate arc bounding boxes (same pattern as dragend in mapshaper)
-    if (arcs.transformPoints) {
-      arcs.transformPoints(() => { });
-    }
+    // Re-initialize the LOD copy in DisplayArcs since vertex layout changed.
+    this._refreshSourceDisplayArcs(sourceId);
 
     // Clear hover state (the vertex no longer exists)
     this._hoverVertexCoords = null;
@@ -234,6 +235,14 @@ export class VertexEditControl implements Control {
     this._neighborShapes = [];
     this._map?.clearEditVertexState();
     this._map?.render();
+  }
+
+  /**
+   * Re-initialize the source's DisplayArcs after an arc-mutating edit so that
+   * the simplified LOD copy reflects the new vertex layout.
+   */
+  private _refreshSourceDisplayArcs(sourceId: string): void {
+    this._map?.getSource(sourceId)?.refreshDisplayArcs();
   }
 
   /**
@@ -580,18 +589,25 @@ export class VertexEditControl implements Control {
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
     const dataCoords = this._map.unproject(px, py);
+    const sourceId = this._hoveredFeature.source;
 
+    // mapshaper's snapVerticesToPoint already updates per-arc bounds during the
+    // drag (see paths/mapshaper-vertex-utils.mjs). transformPoints with a no-op
+    // forces a full bounds rebuild to recover from any direct vertex mutations
+    // that bypassed the canonical helper.
     const arcs = this._hoveredFeature.arcs;
-
-    // Force arc bounding box recalculation (Mapshaper pattern)
     if (arcs.transformPoints) {
       arcs.transformPoints(function () { });
     }
 
+    // If the source has a low-detail LOD copy, regenerate it so the filtered
+    // arcs reflect the new vertex positions.
+    this._refreshSourceDisplayArcs(sourceId);
+
     // Fire vertex_moved event with topology info
     this._map.fire('vertex_moved', {
       id: this._hoveredFeature.id,
-      source: this._hoveredFeature.source,
+      source: sourceId,
       layer: this._hoveredFeature.layer,
       vertexIndex: this._hoverVertexIds[0] ?? null,
       vertexIds: this._hoverVertexIds,

@@ -15,6 +15,11 @@ export interface TopologySource extends Source {
   getLayers(): any[];
   getDataset(): MapshaperDataset | undefined;
   getDisplayArcs(): DisplayArcs | null;
+  /**
+   * Re-initialize the LOD copy in DisplayArcs from the current dataset arcs.
+   * Call after any edit that mutates arc vertex layout (insert / delete / append).
+   */
+  refreshDisplayArcs(): void;
   getCRS?(): string;
   reproject?(targetCrs: string): Promise<void>;
 }

@@ -6,9 +6,6 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { DisplayArcs } from './display-arcs';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 
-/** File size threshold for skipping -clean during import (5MB) */
-const LARGE_FILE_THRESHOLD_BYTES = 5 * 1024 * 1024;
-
 export type TopologySourceData = string | { filename: string, content: Uint8Array };
 
 export interface TopologySourceOptions {
@@ -91,11 +88,10 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         inputFiles = { [input.filename]: input.content };
       }
 
-      // For large files, skip -clean to speed up import. 
-      // Always run -simplify 100% to generate thresholds for dynamic rendering.
-      const isLarge = input.content.length > LARGE_FILE_THRESHOLD_BYTES;
-      const cleanFlag = isLarge ? '' : '-clean';
-      const cmd = `-i ${primaryFile} ${cleanFlag} -simplify 100%`;
+      // -clean fixes coincident-vertex / overlap / topology issues at import time
+      // (matches mapshaper CLI behavior). -simplify 100% precomputes thresholds so
+      // dynamic LOD can later switch detail without recomputing.
+      const cmd = `-i ${primaryFile} -clean -simplify 100%`;
       const commands = mapshaper.internal.parseCommands(cmd);
 
       // Inject input files into the import command
@@ -219,13 +215,20 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   public async reproject(targetCrs: string): Promise<void> {
     if (!this._dataset) return;
 
-    // Use mapshaper's -proj command
-    // Add -clean BEFORE projection to ensure topology is valid and simplify state is consistent.
-    // Also use -clean AFTER could be an option but before is critical for 'flatten' error.
-    // Reset any dynamic simplification state before running mapshaper commands.
-    // Mapshaper's -proj internally calls flatten(), which crashes if an interval is set but thresholds are missing.
+    // Reset dynamic simplification before running -proj. Mapshaper's -proj
+    // internally calls arcs.flatten(), which errors if an interval is set but
+    // simplification thresholds are missing.
     if (this._dataset?.arcs?.setRetainedInterval) {
       this._dataset.arcs.setRetainedInterval(0);
+    }
+
+    // Drop stale CRS identifiers BEFORE projection. Mapshaper's -proj only
+    // updates dataset.info.crs; it leaves crs_string / prj / wkt1 untouched, so
+    // without this reset getCRS() would keep returning the source CRS.
+    if (this._dataset.info) {
+      delete this._dataset.info.crs_string;
+      delete this._dataset.info.prj;
+      delete this._dataset.info.wkt1;
     }
 
     const cmd = `-proj ${targetCrs}`;
@@ -238,21 +241,20 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       const commands = mapshaper.internal.parseCommands(cmd);
 
       mapshaper.internal.runParsedCommands(commands, job, (err: any, finishedJob: any) => {
-        if (err) reject(err);
-        else {
-          const targets = finishedJob.catalog.getDefaultTargets();
-          if (targets.length > 0) {
-            this._dataset = targets[0].dataset;
-            // Re-initialize DisplayArcs with new arcs after reprojection
-            if (this._dataset?.arcs) {
-              this._displayArcs = new DisplayArcs(this._dataset.arcs);
-            }
-            resolve();
-          } else {
-            // Reprojection might act in-place or return new dataset
-            resolve();
-          }
+        if (err) {
+          reject(err);
+          return;
         }
+        const targets = finishedJob.catalog.getDefaultTargets();
+        if (targets.length > 0) {
+          this._dataset = targets[0].dataset;
+        }
+        // Re-initialize DisplayArcs (including LOD threshold detection) against
+        // the post-projection arcs — coordinates and z-values may have changed.
+        if (this._dataset?.arcs) {
+          this._displayArcs = new DisplayArcs(this._dataset.arcs);
+        }
+        resolve();
       });
     });
   }

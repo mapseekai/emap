@@ -323,10 +323,8 @@ export class DrawFeatureControl implements Control {
       }
     }
 
-    // Re-initialize display arcs for LOD
-    if (typeof (source as any).refreshDisplayArcs === 'function') {
-      (source as any).refreshDisplayArcs();
-    }
+    // Re-initialize display arcs for LOD so the filtered copy includes the new arc
+    source.refreshDisplayArcs();
 
     const featureId = layer.shapes.length - 1;
     const layerId = getLayerId(layer, layerIndex >= 0 ? layerIndex : 0);
