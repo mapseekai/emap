@@ -457,22 +457,21 @@ export class Emap extends EventDispatcher {
           const ml = mapshaperLayers[i];
           const layerId = getLayerId(ml, i);
           const geomType = ml.geometry_type;
+          // Default polygon rendering is outline-only (`type: 'line'`) to match
+          // mapshaper GUI's behaviour and emap's pre-layer-concept default.
+          // Canvas 2D fill is significantly more expensive than stroke for
+          // many-polygon datasets (winding-rule rasterization vs straight
+          // strokes). Callers who want a filled appearance add an explicit
+          // `type: 'fill'` layer via addLayer().
           defaults.push({
             id: `${sourceId}:${layerId}`,
-            type:
-              geomType === 'point'
-                ? 'circle'
-                : geomType === 'polygon'
-                  ? 'fill'
-                  : 'line',
+            type: geomType === 'point' ? 'circle' : 'line',
             source: sourceId,
             'source-layer': layerId,
             paint:
               geomType === 'point'
                 ? { 'circle-color': '#333', 'circle-radius': 4 }
-                : geomType === 'polygon'
-                  ? { 'fill-color': '#333', 'line-width': 0.8 } as FillPaint
-                  : { 'line-color': '#333', 'line-width': 0.8 },
+                : { 'line-color': '#333', 'line-width': 0.8 },
           });
         }
       }

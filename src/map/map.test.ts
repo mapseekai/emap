@@ -255,7 +255,10 @@ describe('Emap layer management', () => {
       expect(effective[0].type).toBe('line');
     });
 
-    it('maps polygon geometry to fill layer type', () => {
+    it('maps polygon geometry to a line (outline-only) layer by default', () => {
+      // Default polygon rendering is outline-only — Canvas 2D fill is much
+      // more expensive than stroke for many-polygon datasets, and matches
+      // mapshaper GUI's behaviour. Callers opt into fills via addLayer().
       const layers = [
         { name: 'countries', geometry_type: 'polygon', shapes: [[[1]]] },
       ];
@@ -263,7 +266,8 @@ describe('Emap layer management', () => {
       map.addSource('src1', source as any);
 
       const effective = callPrivate(map, '_getEffectiveLayers') as LayerSpecification[];
-      expect(effective[0].type).toBe('fill');
+      expect(effective[0].type).toBe('line');
+      expect((effective[0].paint as any)['line-color']).toBe('#333');
     });
   });
 
