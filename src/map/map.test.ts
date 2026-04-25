@@ -844,3 +844,147 @@ describe('Emap dissolveLayer', () => {
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -dissolve "state name"');
   });
 });
+
+describe('Emap attribute editing', () => {
+  let map: Emap;
+  let records: Record<string, unknown>[];
+  let layer: { name: string; shapes: any[]; data: { getRecords: () => Record<string, unknown>[] } };
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    records = [
+      { name: 'A', pop: 100 },
+      { name: 'B', pop: 200 },
+      { name: 'C', pop: 300 },
+    ];
+    layer = {
+      name: 'cities',
+      shapes: [['s0'], ['s1'], ['s2']],
+      data: { getRecords: () => records },
+    };
+    const source = {
+      id: 'src1',
+      type: 'topology',
+      getLayers: () => [layer],
+    } as any;
+    (map as any)._sources.set('src1', source);
+  });
+
+  describe('setFeatureProperty / setFeatureProperties', () => {
+    it('overwrites a key and pushes one history entry', () => {
+      const ok = map.setFeatureProperty(
+        { source: 'src1', layer: 'cities', id: 1 },
+        'name',
+        'B-renamed',
+      );
+      expect(ok).toBe(true);
+      expect(records[1]).toEqual({ name: 'B-renamed', pop: 200 });
+      expect(map.canUndo()).toBe(true);
+    });
+
+    it('returns false for a no-op (value already matches)', () => {
+      const ok = map.setFeatureProperty(
+        { source: 'src1', layer: 'cities', id: 0 },
+        'name',
+        'A',
+      );
+      expect(ok).toBe(false);
+      expect(map.canUndo()).toBe(false);
+    });
+
+    it('setting undefined deletes the key', () => {
+      const ok = map.setFeatureProperty(
+        { source: 'src1', layer: 'cities', id: 0 },
+        'pop',
+        undefined,
+      );
+      expect(ok).toBe(true);
+      expect('pop' in records[0]).toBe(false);
+      map.undo();
+      expect(records[0]).toEqual({ name: 'A', pop: 100 });
+    });
+
+    it('multi-key patch is one history entry and one historychange event', () => {
+      const listener = vi.fn();
+      map.on('historychange', listener);
+      map.setFeatureProperties(
+        { source: 'src1', layer: 'cities', id: 0 },
+        { name: 'A2', pop: 999 },
+      );
+      expect(records[0]).toEqual({ name: 'A2', pop: 999 });
+      expect(listener).toHaveBeenCalledTimes(1);
+      map.undo();
+      expect(records[0]).toEqual({ name: 'A', pop: 100 });
+    });
+
+    it('returns false when the ref does not resolve to a record', () => {
+      const ok = map.setFeatureProperty(
+        { source: 'src1', layer: 'cities', id: 999 },
+        'name',
+        'X',
+      );
+      expect(ok).toBe(false);
+    });
+  });
+
+  describe('addField / removeField / renameField', () => {
+    it('addField sets default on records that did not have the key', () => {
+      records.push({ name: 'D' }); // no pop
+      map.addField({ source: 'src1', target: 'cities', field: 'pop', defaultValue: 0 });
+      expect(records[3]).toEqual({ name: 'D', pop: 0 });
+      // Pre-existing records keep their original pop
+      expect(records[0]).toEqual({ name: 'A', pop: 100 });
+      map.undo();
+      expect('pop' in records[3]).toBe(false);
+    });
+
+    it('removeField round-trips exact values', () => {
+      const before = JSON.parse(JSON.stringify(records));
+      map.removeField({ source: 'src1', target: 'cities', field: 'pop' });
+      expect(records.every((r) => !('pop' in r))).toBe(true);
+      map.undo();
+      expect(records).toEqual(before);
+    });
+
+    it('renameField refuses on collision', () => {
+      records[0]['pop_v2'] = 'x'; // record 0 now has both pop and pop_v2
+      const ok = map.renameField({ source: 'src1', target: 'cities', from: 'pop', to: 'pop_v2' });
+      expect(ok).toBe(false);
+      // Records were not mutated
+      expect(records[0]).toEqual({ name: 'A', pop: 100, pop_v2: 'x' });
+      expect(map.canUndo()).toBe(false);
+    });
+
+    it('renameField round-trips when no collision', () => {
+      map.renameField({ source: 'src1', target: 'cities', from: 'pop', to: 'population' });
+      expect(records[0]).toEqual({ name: 'A', population: 100 });
+      map.undo();
+      expect(records[0]).toEqual({ name: 'A', pop: 100 });
+    });
+
+    it('addField returns false when the layer has no data table', () => {
+      const noDataLayer = { name: 'no_data', shapes: [], data: undefined } as any;
+      const source = { id: 'src1', type: 'topology', getLayers: () => [noDataLayer] };
+      (map as any)._sources.set('src1', source);
+      const ok = map.addField({ source: 'src1', target: 'no_data', field: 'x' });
+      expect(ok).toBe(false);
+    });
+  });
+
+  describe('history composition', () => {
+    it('attribute and dataset commands interleave in one timeline', () => {
+      // Attribute write
+      map.setFeatureProperty({ source: 'src1', layer: 'cities', id: 0 }, 'name', 'A2');
+      // Manual fake "geometry" command
+      const geomUndo = vi.fn();
+      map.pushCommand({ do: () => {}, undo: geomUndo, label: 'fake geom' });
+
+      // Two undos should reverse in reverse order: geom first, then attribute.
+      map.undo();
+      expect(geomUndo).toHaveBeenCalledTimes(1);
+      map.undo();
+      expect(records[0]).toEqual({ name: 'A', pop: 100 });
+    });
+  });
+});

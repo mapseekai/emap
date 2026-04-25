@@ -55,4 +55,12 @@ export type { FeatureDeleteCommandOptions } from './edit/commands/feature-delete
 export { CompositeCommand } from './edit/commands/composite';
 export { DatasetReplaceCommand } from './edit/commands/dataset-replace';
 export type { DatasetReplaceCommandOptions } from './edit/commands/dataset-replace';
+export { FeaturePropertyChangeCommand } from './edit/commands/feature-property-change';
+export type { FeaturePropertyChangeCommandOptions } from './edit/commands/feature-property-change';
+export { FieldAddCommand } from './edit/commands/field-add';
+export type { FieldAddCommandOptions } from './edit/commands/field-add';
+export { FieldRemoveCommand } from './edit/commands/field-remove';
+export type { FieldRemoveCommandOptions } from './edit/commands/field-remove';
+export { FieldRenameCommand } from './edit/commands/field-rename';
+export type { FieldRenameCommandOptions } from './edit/commands/field-rename';
 export * from './types/mapshaper-types';
