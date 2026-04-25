@@ -11,11 +11,22 @@ import { MouseWheel } from '../core/interactions';
 import { DragPanHandler } from '../core/drag-pan-handler';
 import { FeatureQuery } from './feature-query';
 import { HighlightManager } from './highlight-manager';
+import { Selection, SelectMode, SelectionDiff } from './selection';
+import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
+import type { EditCommand } from '../edit/edit-command';
+import { CompositeCommand } from '../edit/commands/composite';
+import { FeatureDeleteCommand } from '../edit/commands/feature-delete';
+import { DatasetReplaceCommand } from '../edit/commands/dataset-replace';
+import { FeaturePropertyChangeCommand } from '../edit/commands/feature-property-change';
+import { FieldAddCommand } from '../edit/commands/field-add';
+import { FieldRemoveCommand } from '../edit/commands/field-remove';
+import { FieldRenameCommand } from '../edit/commands/field-rename';
+import mapshaper from 'mapshaper';
 import { Control, ControlPosition } from '../ui/control';
 import { getLayerId } from '../source/layer-utils';
 import { resolveStrokeStyle, resolvePointStyle } from './layer';
 import type { LayerSpecification, FillPaint, LinePaint, CirclePaint } from './layer';
-import type { MapshaperLayer } from '../types/mapshaper-types';
+import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import type { DrawGeometryType } from '../ui/draw-feature-control';
 import type { CanvasKit } from 'canvaskit-wasm';
 
@@ -47,10 +58,48 @@ export interface RenderedFeatureAttributes {
   properties: Record<string, unknown>;
 }
 
-export interface HighlightFeatureRef {
+/**
+ * Canonical reference to a single feature within a source/layer.
+ * Used by selection, highlight, and downstream geometry operations.
+ */
+export interface FeatureRef {
   id: number;
   source: string;
   layer: string;
+}
+
+/** @deprecated Use {@link FeatureRef}. Kept as an alias for back-compat. */
+export type HighlightFeatureRef = FeatureRef;
+
+/**
+ * Options for the {@link Emap.clipLayer} / {@link Emap.eraseLayer} polygon
+ * operations. Both target and mask must reside in the same emap source —
+ * cross-source masks require a future explicit merge step.
+ */
+export interface ClipEraseOptions {
+  /** Source ID containing both layers. */
+  source: string;
+  /** Layer name (or id) of the target to be clipped/erased. */
+  target: string;
+  /** Layer name (or id) of the polygon mask. */
+  mask: string;
+}
+
+/**
+ * Options for {@link Emap.dissolveLayer}. With no `field`, mapshaper merges
+ * every feature in the target layer into one. With a `field`, features
+ * sharing that field's value are merged.
+ */
+export interface DissolveOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the layer to dissolve. */
+  target: string;
+  /**
+   * Optional attribute field to group features by. When omitted, the entire
+   * target layer is dissolved into a single feature.
+   */
+  field?: string;
 }
 
 export interface HighlightStyle {
@@ -123,6 +172,9 @@ export class Emap extends EventDispatcher {
   // Delegated managers
   private _highlightManager: HighlightManager = new HighlightManager();
   private _featureQuery: FeatureQuery;
+  private _selection: Selection = new Selection();
+  private _history: EditHistory = new EditHistory();
+  private _historyShortcutUnbind: (() => void) | null = null;
 
   // Edit mode
   private _editMode: 'none' | 'vertex' | 'draw' = 'none';
@@ -733,10 +785,561 @@ export class Emap extends EventDispatcher {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Selection
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Mutate the persistent feature selection.
+   *
+   * @param features Refs to apply. `RenderedFeatureAttributes` is structurally
+   *   compatible with `FeatureRef`, so results from `queryRenderedFeatures` can
+   *   be passed directly.
+   * @param options.mode `'replace'` (default) wipes prior contents,
+   *   `'add'` unions, `'toggle'` flips membership.
+   *
+   * Fires a `selectionchange` event with `{ selected, added, removed }` only
+   * when the set actually changes.
+   */
+  public select(
+    features: ReadonlyArray<FeatureRef>,
+    options?: { mode?: SelectMode },
+  ): void {
+    const mode = options?.mode ?? 'replace';
+    const diff = this._selection.apply(features, mode);
+    this._fireSelectionChange(diff);
+  }
+
+  /** Remove the listed features from the selection. No-op if absent. */
+  public deselect(features: ReadonlyArray<FeatureRef>): void {
+    const diff = this._selection.remove(features);
+    this._fireSelectionChange(diff);
+  }
+
+  /** Empty the selection. No-op (and no event) if it was already empty. */
+  public clearSelection(): void {
+    const diff = this._selection.clear();
+    this._fireSelectionChange(diff);
+  }
+
+  /** Snapshot of the current selection as a flat list of refs. */
+  public getSelection(): FeatureRef[] {
+    return this._selection.getAll();
+  }
+
+  /** Test whether a single feature is currently selected. */
+  public isSelected(feature: FeatureRef): boolean {
+    return this._selection.has(feature);
+  }
+
+  private _fireSelectionChange(diff: SelectionDiff): void {
+    if (!diff.changed) return;
+    this.fire('selectionchange', {
+      selected: this._selection.getAll(),
+      added: diff.added,
+      removed: diff.removed,
+    });
+  }
+
+  /**
+   * Delete every currently-selected feature in one undoable history step.
+   *
+   * Returns `true` when at least one feature was deleted, `false` when the
+   * selection was empty (in which case nothing is pushed and no events fire).
+   *
+   * Implementation matches mapshaper's `deleteFeature` / `insertFeature`
+   * pair: shape + data record are spliced out (and back in on undo). Within
+   * each layer, deletes proceed in descending-id order so each delete's
+   * index stays valid; a single Ctrl+Z reverses the entire batch.
+   *
+   * The selection is cleared on success — the deleted refs no longer exist.
+   */
+  public deleteSelected(): boolean {
+    const refs = this._selection.getAll();
+    if (refs.length === 0) return false;
+
+    // Group ids by (sourceId, layerId) so we can sort within each layer
+    const grouped: globalThis.Map<string, globalThis.Map<string, number[]>> = new globalThis.Map();
+    for (const ref of refs) {
+      let bySource = grouped.get(ref.source);
+      if (!bySource) {
+        bySource = new globalThis.Map();
+        grouped.set(ref.source, bySource);
+      }
+      const ids = bySource.get(ref.layer) ?? [];
+      ids.push(ref.id);
+      bySource.set(ref.layer, ids);
+    }
+
+    const children: EditCommand[] = [];
+
+    for (const [sourceId, byLayer] of grouped) {
+      const source = this._sources.get(sourceId);
+      if (!source) continue;
+      const layers = source.getLayers();
+      for (const [layerId, ids] of byLayer) {
+        // Resolve the actual layer object by matching layerId to getLayerId(layer, idx)
+        let target: MapshaperLayer | null = null;
+        for (let i = 0; i < layers.length; i++) {
+          if (getLayerId(layers[i], i) === layerId) {
+            target = layers[i] as MapshaperLayer;
+            break;
+          }
+        }
+        if (!target?.shapes) continue;
+
+        // Sort descending so each splice does not invalidate later ids
+        const sortedIds = [...ids].sort((a, b) => b - a);
+        for (const featureId of sortedIds) {
+          const shape = target.shapes[featureId];
+          if (shape === undefined) continue;
+          const records = target.data?.getRecords?.();
+          const record = records ? records[featureId] : null;
+          // Build the command, then execute it now (the caller-already-did-the-work
+          // contract). The command captures pre-delete snapshots in opts.
+          const cmd = new FeatureDeleteCommand({
+            layer: target,
+            featureId,
+            shape,
+            record: record ?? null,
+            source,
+          });
+          cmd.do();
+          children.push(cmd);
+        }
+      }
+    }
+
+    if (children.length === 0) return false;
+
+    const composite = new CompositeCommand(children, `Delete ${children.length} feature${children.length > 1 ? 's' : ''}`);
+    this._history.push(composite);
+    this._fireHistoryChange();
+
+    // Clear the selection — the refs no longer exist.
+    this._fireSelectionChange(this._selection.clear());
+    this._scheduleRender();
+
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Edit history (undo / redo)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Push an executed `EditCommand` onto the undo stack.
+   *
+   * Per the memento pattern, the caller is expected to have already performed
+   * the work; the command captures what changed so the operation can be
+   * reversed on undo. `pushCommand` does NOT call `cmd.do()`. It clears any
+   * pending redo entries and fires `historychange`.
+   */
+  public pushCommand(cmd: EditCommand): void {
+    this._history.push(cmd);
+    this._fireHistoryChange();
+  }
+
+  /**
+   * Reverse the most recent command. No-op when there is nothing to undo.
+   * Fires `historychange` and schedules a re-render after the reversal.
+   */
+  public undo(): boolean {
+    const cmd = this._history.undo();
+    if (!cmd) return false;
+    this._fireHistoryChange();
+    this._scheduleRender();
+    return true;
+  }
+
+  /**
+   * Re-apply the most recently undone command. No-op when there is nothing
+   * to redo. Fires `historychange` and schedules a re-render.
+   */
+  public redo(): boolean {
+    const cmd = this._history.redo();
+    if (!cmd) return false;
+    this._fireHistoryChange();
+    this._scheduleRender();
+    return true;
+  }
+
+  public canUndo(): boolean {
+    return this._history.canUndo();
+  }
+
+  public canRedo(): boolean {
+    return this._history.canRedo();
+  }
+
+  /** Empty both undo and redo stacks. Fires `historychange` if non-empty. */
+  public clearHistory(): void {
+    const wasNonEmpty = this._history.canUndo() || this._history.canRedo();
+    this._history.clear();
+    if (wasNonEmpty) this._fireHistoryChange();
+  }
+
+  /**
+   * Bind Ctrl/Cmd+Z (undo) and Ctrl/Cmd+Shift+Z / Ctrl+Y (redo) on the given
+   * element (default: the canvas container). Returns an unbind function. Calls
+   * to this method are idempotent — subsequent calls unbind the prior binding.
+   */
+  public bindHistoryShortcuts(target?: HTMLElement): () => void {
+    this._historyShortcutUnbind?.();
+    const el = target ?? this._canvasContainer;
+    // Ensure the element can receive focus so it gets keydown events.
+    if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const isZ = e.key === 'z' || e.key === 'Z';
+      const isY = e.key === 'y' || e.key === 'Y';
+      if (isZ && !e.shiftKey) {
+        e.preventDefault();
+        this.undo();
+      } else if ((isZ && e.shiftKey) || isY) {
+        e.preventDefault();
+        this.redo();
+      }
+    };
+    el.addEventListener('keydown', handler);
+    const unbind = () => {
+      el.removeEventListener('keydown', handler);
+      if (this._historyShortcutUnbind === unbind) this._historyShortcutUnbind = null;
+    };
+    this._historyShortcutUnbind = unbind;
+    return unbind;
+  }
+
+  private _fireHistoryChange(): void {
+    const snap: HistoryStateSnapshot = this._history.snapshot();
+    this.fire('historychange', snap);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Whole-dataset operations (clip / erase / future dissolve, buffer, ...)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Clip a layer to the polygons in a mask layer using mapshaper's `-clip`
+   * pipeline. Target and mask must live in the same source. Returns `true`
+   * on success, `false` for unresolvable source / target / mask.
+   *
+   * The operation is recorded as a single undoable history entry. Note that
+   * dataset-replace operations clear prior fine-grained edit history (see
+   * design.md for the rationale).
+   */
+  public async clipLayer(opts: ClipEraseOptions): Promise<boolean> {
+    return this._runClipErase(opts, 'clip');
+  }
+
+  /**
+   * Erase (cut holes from) a layer using a polygon mask layer via mapshaper's
+   * `-erase` pipeline. Same semantics as {@link clipLayer}.
+   */
+  public async eraseLayer(opts: ClipEraseOptions): Promise<boolean> {
+    return this._runClipErase(opts, 'erase');
+  }
+
+  private async _runClipErase(opts: ClipEraseOptions, op: 'clip' | 'erase'): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    // Validate that both target and mask resolve to layers in this source's
+    // dataset. mapshaper would throw an opaque error otherwise.
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!findLayerByName(dataset.layers, opts.mask)) return false;
+
+    const verb = op === 'clip' ? 'Clip' : 'Erase';
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -${op} source=${quoteMapshaperArg(opts.mask)}`;
+    return this._runDatasetCommand(opts.source, cmd, `${verb} ${opts.target}`);
+  }
+
+  /**
+   * Merge polygon (or point / polyline) features in the target layer using
+   * mapshaper's `-dissolve` pipeline. Without `field`, all features in the
+   * layer collapse into one; with `field`, features sharing the same field
+   * value are merged. Returns `true` on success, `false` for unresolvable
+   * source / target. Recorded as a single undoable history entry.
+   */
+  public async dissolveLayer(opts: DissolveOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    const fieldArg = opts.field ? ` ${quoteMapshaperArg(opts.field)}` : '';
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -dissolve${fieldArg}`;
+    return this._runDatasetCommand(opts.source, cmd, `Dissolve ${opts.target}`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Attribute / data-table editing
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Set or overwrite a single property on a single feature. Setting `value` to
+   * `undefined` deletes the key. Returns `false` for unresolvable refs or when
+   * the call is a no-op (existing value already matches).
+   */
+  public setFeatureProperty(ref: FeatureRef, key: string, value: unknown): boolean {
+    return this.setFeatureProperties(ref, { [key]: value });
+  }
+
+  /**
+   * Set multiple properties on one feature in a single undo entry.
+   *
+   * Per-key semantics:
+   * - `props[key] === undefined` → delete the key from the record
+   * - any other value → set / overwrite the key
+   *
+   * Returns `false` for unresolvable refs or when every key already has the
+   * requested value (no-op call); no command is pushed and no events fire.
+   */
+  public setFeatureProperties(
+    ref: FeatureRef,
+    props: Record<string, unknown>,
+  ): boolean {
+    const layer = this._resolveLayer(ref.source, ref.layer);
+    if (!layer) return false;
+    const records = layer.data?.getRecords?.();
+    const record = records?.[ref.id];
+    if (!record) return false;
+
+    const prev: Record<string, unknown> = {};
+    const next: Record<string, unknown> = {};
+
+    for (const key of Object.keys(props)) {
+      const had = key in record;
+      const prevValue = had ? record[key] : undefined;
+      const nextValue = props[key];
+
+      // Detect no-ops at the key level so the diff stays minimal.
+      if (nextValue === undefined && !had) continue;
+      if (nextValue !== undefined && had && record[key] === nextValue) continue;
+
+      if (had) prev[key] = prevValue;
+      if (nextValue !== undefined) next[key] = nextValue;
+    }
+
+    if (Object.keys(prev).length === 0 && Object.keys(next).length === 0) {
+      return false;
+    }
+
+    const cmd = new FeaturePropertyChangeCommand({
+      layer,
+      featureId: ref.id,
+      prev,
+      next,
+    });
+    cmd.do();
+    this._history.push(cmd);
+    this._fireHistoryChange();
+    this._scheduleRender();
+    return true;
+  }
+
+  /**
+   * Add a new column to a layer's data table. Records that already carry the
+   * key are skipped (and not rolled back by undo). `defaultValue` defaults to
+   * `null`. Returns `false` if the source / target / data table cannot be
+   * resolved.
+   */
+  public addField(opts: {
+    source: string;
+    target: string;
+    field: string;
+    defaultValue?: unknown;
+  }): boolean {
+    const layer = this._resolveLayer(opts.source, opts.target);
+    if (!layer?.data) return false;
+    const cmd = new FieldAddCommand({
+      layer,
+      field: opts.field,
+      defaultValue: opts.defaultValue,
+    });
+    cmd.do();
+    this._history.push(cmd);
+    this._fireHistoryChange();
+    this._scheduleRender();
+    return true;
+  }
+
+  /**
+   * Drop a column from a layer's data table. Per-record values are
+   * snapshotted for undo so removing the field is fully reversible.
+   * Returns `false` if the source / target / data table cannot be resolved.
+   */
+  public removeField(opts: {
+    source: string;
+    target: string;
+    field: string;
+  }): boolean {
+    const layer = this._resolveLayer(opts.source, opts.target);
+    if (!layer?.data) return false;
+    const cmd = new FieldRemoveCommand({ layer, field: opts.field });
+    cmd.do();
+    this._history.push(cmd);
+    this._fireHistoryChange();
+    this._scheduleRender();
+    return true;
+  }
+
+  /**
+   * Rename a column on every record in a layer. Refuses (returns `false`) when
+   * any record already carries both `from` and `to` so silent overwrites are
+   * impossible. Use `removeField(to)` first if that is the intent.
+   */
+  public renameField(opts: {
+    source: string;
+    target: string;
+    from: string;
+    to: string;
+  }): boolean {
+    const layer = this._resolveLayer(opts.source, opts.target);
+    if (!layer?.data) return false;
+    const records = layer.data.getRecords?.();
+    if (!records) return false;
+    if (opts.from === opts.to) return false;
+    for (const r of records) {
+      if (r && opts.from in r && opts.to in r) {
+        return false;
+      }
+    }
+    const cmd = new FieldRenameCommand({ layer, from: opts.from, to: opts.to });
+    cmd.do();
+    this._history.push(cmd);
+    this._fireHistoryChange();
+    this._scheduleRender();
+    return true;
+  }
+
+  /** Resolve a (sourceId, layerId) pair to the actual MapshaperLayer object. */
+  private _resolveLayer(sourceId: string, layerId: string): MapshaperLayer | null {
+    const source = this._sources.get(sourceId);
+    if (!source) return null;
+    const layers = source.getLayers();
+    for (let i = 0; i < layers.length; i++) {
+      if (getLayerId(layers[i], i) === layerId) {
+        return layers[i] as MapshaperLayer;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Generic runner for whole-dataset mapshaper commands.
+   *
+   * Snapshots the dataset (`internal.copyDataset`), runs the command which
+   * mutates the original in place, clears the undo history (dataset replace
+   * is a history barrier), pushes one `DatasetReplaceCommand`, clears the
+   * selection, and fires `historychange` once. Future ops (`dissolve`,
+   * `buffer`, ...) reuse this helper.
+   */
+  private async _runDatasetCommand(
+    sourceId: string,
+    cmd: string,
+    label: string,
+  ): Promise<boolean> {
+    const source = this._sources.get(sourceId);
+    if (!source) return false;
+    const original = source.getDataset();
+    if (!original) return false;
+
+    // Deep snapshot for undo. mapshaper's clip / erase / dissolve mutate the
+    // input dataset in place; without this snapshot there is nothing to
+    // restore on undo.
+    const before: MapshaperDataset = mapshaper.internal.copyDataset(original);
+
+    let after: MapshaperDataset;
+    try {
+      after = await runMapshaperCommandOnDataset(cmd, original);
+    } catch (err) {
+      // Surface as a fire-and-forget error event; do not throw from a public
+      // edit op so that one bad command doesn't tear down the calling page.
+      this.fire('error', { error: err });
+      return false;
+    }
+
+    // Apply: swap the source's active dataset.
+    source.setDataset(after);
+
+    // History barrier: prior commands closed over the OLD dataset's layers /
+    // arcs. Clearing keeps undo predictable; the dataset-replace itself is
+    // the single new undoable step.
+    this._history.clear();
+    this._history.push(new DatasetReplaceCommand({ source, before, after, label }));
+    this._fireHistoryChange();
+
+    // Selection refs are by feature id and may now point at different
+    // features. Clear conservatively.
+    this._fireSelectionChange(this._selection.clear());
+
+    this._scheduleRender();
+    return true;
+  }
+
   public remove(): void {
     this._dragPan.destroy();
     if (this._container && this._canvasContainer) {
       this._container.removeChild(this._canvasContainer);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Module-private helpers for whole-dataset mapshaper command execution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a mapshaper layer by its name or id (matches what `mapshaper -clip
+ * source=NAME` would resolve internally). Returns null when no layer
+ * matches.
+ */
+function findLayerByName(layers: MapshaperLayer[], nameOrId: string): MapshaperLayer | null {
+  for (const layer of layers) {
+    if (layer.name === nameOrId || layer.id === nameOrId) return layer;
+  }
+  return null;
+}
+
+/**
+ * Quote a layer name so it can be embedded in a mapshaper command string.
+ * mapshaper accepts double-quoted arguments; we escape any embedded quotes.
+ */
+function quoteMapshaperArg(value: string): string {
+  return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+/**
+ * Run a mapshaper command string against a single dataset and resolve with
+ * the resulting (post-mutation) dataset. Wraps the parseCommands +
+ * runParsedCommands + Job dance in a Promise.
+ */
+function runMapshaperCommandOnDataset(
+  cmd: string,
+  dataset: MapshaperDataset,
+): Promise<MapshaperDataset> {
+  return new Promise((resolve, reject) => {
+    const job = new mapshaper.internal.Job();
+    job.catalog.addDataset(dataset);
+    const commands = mapshaper.internal.parseCommands(cmd);
+    mapshaper.internal.runParsedCommands(commands, job, (err: any, finished) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      const targets = finished.catalog.getDefaultTargets();
+      if (targets.length > 0) {
+        resolve(targets[0].dataset);
+      } else {
+        // mapshaper sometimes leaves the input dataset untouched if no target
+        // applied — treat as success and return the original ref.
+        resolve(dataset);
+      }
+    });
+  });
 }

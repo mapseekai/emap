@@ -72,8 +72,8 @@ export class Projection {
       const dataset = source.getDataset();
       if (dataset?.layers) {
         for (const layer of dataset.layers) {
-          if ((mapshaper as any).internal.layerHasGeometry(layer)) {
-            const bb = (mapshaper as any).internal.getLayerBounds(
+          if (mapshaper.internal.layerHasGeometry(layer)) {
+            const bb = mapshaper.internal.getLayerBounds(
               layer,
               dataset.arcs,
             );

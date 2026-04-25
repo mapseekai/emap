@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap Example - Export Round-trip</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    #header {
+      padding: 10px;
+      background: #2c3e50;
+      color: white;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    #header label {
+      font-size: 13px;
+    }
+
+    #header button {
+      padding: 4px 12px;
+      background: #16a085;
+      color: white;
+      border: 0;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    #header button:disabled {
+      background: #7f8c8d;
+      cursor: not-allowed;
+    }
+
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+    }
+
+    #status {
+      font-size: 12px;
+      opacity: 0.85;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>
+      Open file:
+      <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+    </label>
+    <label>
+      Format:
+      <select id="format">
+        <option value="geojson">GeoJSON</option>
+        <option value="topojson">TopoJSON</option>
+        <option value="shapefile">Shapefile (.zip)</option>
+      </select>
+    </label>
+    <button id="export-btn" disabled>Export &amp; Download</button>
+    <span id="status">Load a file to begin</span>
+  </div>
+  <div id="map">
+  </div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, EditToolbar, DrawFeatureControl } = emap;
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+
+    const fileInput = document.getElementById('file-input');
+    const formatSelect = document.getElementById('format');
+    const exportBtn = document.getElementById('export-btn');
+    const status = document.getElementById('status');
+
+    const SOURCE_ID = 'export-source';
+    let activeSource = null;
+    let drawToolbar = null;
+
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      status.textContent = `Processing ${file.name}...`;
+      exportBtn.disabled = true;
+
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          status.textContent = `Loaded: ${file.name}. Optionally draw features, then export.`;
+          exportBtn.disabled = false;
+        });
+        source.on('error', (err) => {
+          console.error(err);
+          status.textContent = 'Error processing file';
+        });
+
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        activeSource = source;
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+
+        if (drawToolbar) map.removeControl(drawToolbar);
+        // Wire a draw control so users can demonstrate "edit then export"
+        drawToolbar = new EditToolbar({
+          controls: [
+            new DrawFeatureControl({ source: SOURCE_ID, type: 'polyline' }),
+            new DrawFeatureControl({ source: SOURCE_ID, type: 'polygon' }),
+          ],
+        });
+        map.addControl(drawToolbar, 'top-left');
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    exportBtn.addEventListener('click', async () => {
+      if (!activeSource) return;
+      const format = formatSelect.value;
+      status.textContent = `Exporting as ${format}...`;
+      exportBtn.disabled = true;
+
+      try {
+        const blob = await activeSource.export({ format });
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download =
+          format === 'shapefile' ? 'export.zip'
+            : format === 'topojson' ? 'export.topojson'
+              : 'export.geojson';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        // Release the blob URL after the download has dispatched
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+        status.textContent = `Exported ${blob.size} bytes as ${a.download}`;
+      } catch (err) {
+        console.error(err);
+        status.textContent = `Export failed: ${err.message || err}`;
+      } finally {
+        exportBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+
+</html>
