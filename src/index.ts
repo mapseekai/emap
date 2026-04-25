@@ -23,6 +23,7 @@ export { resolveStrokeStyle, resolvePointStyle } from './map/layer';
 export * from './core/events';
 export { DragPanHandler } from './core/drag-pan-handler';
 export * from './source/topology-source';
+export type { ExportFormat, ExportOptions } from './source/source';
 export * from './renderer/canvas-painter';
 export * from './renderer/canvaskit-painter';
 export * from './geo/bounds';

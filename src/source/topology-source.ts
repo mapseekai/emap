@@ -2,11 +2,38 @@ import mapshaper from 'mapshaper';
 import { EventDispatcher } from '../core/events';
 import { TopologySource as ITopologySource } from './source';
 import { Bounds } from '../geo/bounds';
-import { unzipSync, strFromU8 } from 'fflate';
+import { unzipSync, strFromU8, zipSync } from 'fflate';
 import { DisplayArcs } from './display-arcs';
 import type { MapshaperDataset } from '../types/mapshaper-types';
+import type { ExportFormat, ExportOptions } from './source';
 
 export type TopologySourceData = string | { filename: string, content: Uint8Array };
+
+/** MIME type for each supported export format */
+const EXPORT_MIME: Record<ExportFormat, string> = {
+  geojson: 'application/geo+json',
+  topojson: 'application/json',
+  shapefile: 'application/zip',
+};
+
+/** Coerce mapshaper export content (string | Uint8Array | ArrayBuffer) to Uint8Array for zip packing. */
+function toUint8Array(content: string | Uint8Array | ArrayBuffer): Uint8Array {
+  if (typeof content === 'string') return new TextEncoder().encode(content);
+  if (content instanceof Uint8Array) return content;
+  return new Uint8Array(content);
+}
+
+/**
+ * Coerce mapshaper export content to a Blob-compatible part.
+ *
+ * Strings, ArrayBuffers, and Uint8Arrays are all valid `BlobPart` values at
+ * runtime, but TS strict mode rejects `Uint8Array<ArrayBufferLike>` as
+ * `BlobPart` (which expects `ArrayBuffer`). Since mapshaper always produces
+ * regular non-shared buffers, the cast is safe.
+ */
+function toBlobPart(content: string | Uint8Array | ArrayBuffer): BlobPart {
+  return content as BlobPart;
+}
 
 export interface TopologySourceOptions {
   data?: TopologySourceData;
@@ -285,6 +312,63 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     if (this._dataset?.arcs) {
       this._displayArcs = new DisplayArcs(this._dataset.arcs);
     }
+  }
+
+  /**
+   * Serialize the current dataset to a browser Blob via mapshaper's exporter.
+   *
+   * Multi-file shapefile output is packed into a single zip Blob using fflate
+   * so callers always receive one Blob per call.
+   */
+  public async export(options: ExportOptions): Promise<Blob> {
+    if (!this._dataset) {
+      throw new Error('TopologySource has no dataset to export');
+    }
+
+    // mapshaper's exporters materialize the simplified copy when an interval is
+    // set. emap uses simplification only for render LOD, so reset the interval
+    // for the duration of the export and restore it afterwards.
+    const arcs = this._dataset.arcs;
+    const savedInterval = arcs?.getRetainedInterval?.() ?? 0;
+    if (savedInterval && arcs?.setRetainedInterval) {
+      arcs.setRetainedInterval(0);
+    }
+
+    try {
+      const files = mapshaper.internal.exportFileContent(this._dataset, {
+        format: options.format,
+      });
+      return this._filesToBlob(files, options.format);
+    } finally {
+      if (savedInterval && arcs?.setRetainedInterval) {
+        arcs.setRetainedInterval(savedInterval);
+      }
+    }
+  }
+
+  /**
+   * Pack mapshaper's `[{filename, content}]` output into a single Blob.
+   * Single-file formats use the first entry directly; shapefile is zipped.
+   */
+  private _filesToBlob(
+    files: Array<{ filename: string; content: string | Uint8Array | ArrayBuffer }>,
+    format: ExportFormat,
+  ): Blob {
+    if (files.length === 0) {
+      throw new Error(`mapshaper produced no output for format=${format}`);
+    }
+
+    if (format === 'shapefile') {
+      const zipInput: Record<string, Uint8Array> = {};
+      for (const f of files) {
+        zipInput[f.filename] = toUint8Array(f.content);
+      }
+      const zipped = zipSync(zipInput);
+      return new Blob([toBlobPart(zipped)], { type: EXPORT_MIME.shapefile });
+    }
+
+    // GeoJSON / TopoJSON: single file, return directly
+    return new Blob([toBlobPart(files[0].content)], { type: EXPORT_MIME[format] });
   }
 
   getLayers(): any[] {

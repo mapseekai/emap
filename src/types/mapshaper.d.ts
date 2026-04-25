@@ -48,6 +48,12 @@ declare module 'mapshaper' {
     layerHasGeometry(layer: MapshaperLayer): boolean;
     getLayerBounds(layer: MapshaperLayer, arcs: ArcCollection | undefined): MapshaperBounds | null;
 
+    // Export — io/mapshaper-export.mjs
+    exportFileContent(
+      dataset: MapshaperDataset,
+      opts: { format: string;[k: string]: unknown },
+    ): Array<{ filename: string; content: string | Uint8Array | ArrayBuffer }>;
+
     // Simplification / LOD
     getAvgSegment(arcs: ArcCollection): number;
     simplifyArcsFast(arcs: ArcCollection, segLen: number): ArcCollection;
