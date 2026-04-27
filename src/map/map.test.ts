@@ -1415,3 +1415,114 @@ describe('Emap bufferLayer', () => {
     expect(map.canUndo()).toBe(true);
   });
 });
+
+describe('Emap applyExpression', () => {
+  let map: Emap;
+  let beforeDataset: any;
+  let afterDataset: any;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    beforeDataset = { layers: [{ name: 'cities', shapes: [], data: { getRecords: () => [] } }] };
+    afterDataset = { layers: [{ name: 'cities', shapes: [], data: { getRecords: () => [] } }] };
+    const source = {
+      id: 'src1',
+      type: 'topology',
+      getDataset: () => beforeDataset,
+      getLayers: () => beforeDataset.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    runParsedCommandsSpy = vi.fn((_cmds: any, _job: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDataset }] } });
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDataset));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('emits a quoted -each expression', async () => {
+    const ok = await map.applyExpression({
+      source: 'src1',
+      target: 'cities',
+      expression: 'this.density = this.pop / this.area',
+    });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+      '-target "cities" -each "this.density = this.pop / this.area"',
+    );
+  });
+
+  it('appends a quoted where= when supplied', async () => {
+    await map.applyExpression({
+      source: 'src1',
+      target: 'cities',
+      expression: 'this.flag = true',
+      where: 'this.pop > 100',
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+      '-target "cities" -each "this.flag = true" where="this.pop > 100"',
+    );
+  });
+
+  it('returns false on missing source / target', async () => {
+    expect(await map.applyExpression({ source: 'nope', target: 'cities', expression: 'x' })).toBe(false);
+    expect(await map.applyExpression({ source: 'src1', target: 'nope', expression: 'x' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on empty / whitespace-only expression', async () => {
+    expect(await map.applyExpression({ source: 'src1', target: 'cities', expression: '' })).toBe(false);
+    expect(await map.applyExpression({ source: 'src1', target: 'cities', expression: '   ' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('omits where= when blank / whitespace-only', async () => {
+    await map.applyExpression({
+      source: 'src1',
+      target: 'cities',
+      expression: 'this.x = 1',
+      where: '   ',
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "cities" -each "this.x = 1"');
+  });
+
+  it('pushes one history entry labelled "Update <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.applyExpression({
+      source: 'src1',
+      target: 'cities',
+      expression: 'this.foo = 1',
+    });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Update cities');
+  });
+
+  it('escapes embedded double quotes in expression', async () => {
+    await map.applyExpression({
+      source: 'src1',
+      target: 'cities',
+      expression: 'this.kind = "city"',
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+      '-target "cities" -each "this.kind = \\"city\\""',
+    );
+  });
+});

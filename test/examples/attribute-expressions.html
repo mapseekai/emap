@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap Example - Bulk attribute expressions</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header {
+      padding: 10px;
+      background: #2c3e50;
+      color: white;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+    #header select, #header input[type="text"] {
+      padding: 4px 8px;
+      font-size: 13px;
+      border: 1px solid #4a5d70;
+      border-radius: 3px;
+    }
+    #header input[type="text"] { width: 280px; font-family: monospace; }
+    #header button {
+      padding: 5px 12px;
+      background: #16a085;
+      color: white;
+      border: 0;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>File: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <label>Target: <select id="target"></select></label>
+    <label>Expression: <input id="expr" type="text" value="this.density = this.pop / this.area" /></label>
+    <label>where: <input id="where" type="text" placeholder="optional" /></label>
+    <button id="apply-btn" disabled>Apply</button>
+    <span id="status">Load a dataset</span>
+    <span class="hint">
+      Examples — <code>this.density = this.pop / this.area</code> &middot;
+      <code>this.name = this.name.toUpperCase()</code> &middot;
+      <code>this.STATE = this.CNTY_FIPS.substr(0, 2)</code>
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'expr-source';
+    const fileInput = document.getElementById('file-input');
+    const targetSel = document.getElementById('target');
+    const exprInput = document.getElementById('expr');
+    const whereInput = document.getElementById('where');
+    const applyBtn = document.getElementById('apply-btn');
+    const status = document.getElementById('status');
+
+    function populate(source) {
+      targetSel.innerHTML = '';
+      source.getLayers().forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        targetSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
+      });
+      applyBtn.disabled = source.getLayers().length === 0;
+    }
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `Loading ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          populate(source);
+          status.textContent = `Loaded ${file.name}. Edit the expression and click Apply.`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    applyBtn.addEventListener('click', async () => {
+      const target = targetSel.value;
+      const expression = exprInput.value;
+      const where = whereInput.value;
+      if (!target || !expression.trim()) return;
+      const opts = { source: SOURCE_ID, target, expression };
+      if (where.trim()) opts.where = where;
+      status.textContent = 'Applying expression...';
+      applyBtn.disabled = true;
+      try {
+        const ok = await map.applyExpression(opts);
+        status.textContent = ok
+          ? `Applied. Click a feature to see new attributes. Ctrl+Z to undo.`
+          : 'Apply failed (check expression).';
+      } catch (err) {
+        status.textContent = `Error: ${err?.message ?? err}`;
+        console.error(err);
+      } finally {
+        applyBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+
+</html>

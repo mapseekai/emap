@@ -119,6 +119,30 @@ export interface BufferOptions {
   capStyle?: 'flat' | 'round';
 }
 
+/**
+ * Options for {@link Emap.applyExpression} — bulk attribute updates via
+ * mapshaper's `-each` JS expression engine.
+ */
+export interface ApplyExpressionOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the layer to update. */
+  target: string;
+  /**
+   * JS expression evaluated per feature. Use `this.<field>` to read or write
+   * record attributes; mapshaper's standard feature context (`this.id`,
+   * `this.area`, `this.bounds`, etc.) is also available. Multiple
+   * comma-separated assignments are allowed: `this.a = 1, this.b = 2`.
+   */
+  expression: string;
+  /**
+   * Optional filter expression. Only records for which `where` evaluates to
+   * a truthy value have `expression` applied. Same JS context as
+   * `expression`. Mirrors mapshaper CLI's `-each EXPR where=...`.
+   */
+  where?: string;
+}
+
 export interface HighlightStyle {
   color?: string;
   width?: number;
@@ -1118,6 +1142,35 @@ export class Emap extends EventDispatcher {
     const capArg = opts.capStyle ? ` cap-style=${opts.capStyle}` : '';
     const cmd = `-target ${quoteMapshaperArg(opts.target)} -buffer ${radiusArg}${capArg}`;
     return this._runDatasetCommand(opts.source, cmd, `Buffer ${opts.target}`);
+  }
+
+  /**
+   * Run a mapshaper `-each` JS expression against a layer to update
+   * attributes in bulk. Use for derived fields (`this.density = this.pop /
+   * this.area`), normalization (`this.name = this.name.toUpperCase()`), or
+   * any other per-record mutation that the per-feature
+   * {@link setFeatureProperty} would be tedious for.
+   *
+   * The optional `where` filter mirrors mapshaper CLI's `-each EXPR
+   * where=...` — only records matching it are mutated.
+   *
+   * Returns `false` for unresolvable source / target or empty expression.
+   * Recorded as one undoable history entry; inherits dataset-replace
+   * semantics (history barrier, selection cleared) from `_runDatasetCommand`.
+   */
+  public async applyExpression(opts: ApplyExpressionOptions): Promise<boolean> {
+    if (!opts.expression || !opts.expression.trim()) return false;
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    const whereArg = opts.where && opts.where.trim()
+      ? ` where=${quoteMapshaperArg(opts.where)}`
+      : '';
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -each ${quoteMapshaperArg(opts.expression)}${whereArg}`;
+    return this._runDatasetCommand(opts.source, cmd, `Update ${opts.target}`);
   }
 
   /**
