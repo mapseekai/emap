@@ -2702,6 +2702,161 @@ describe('Emap polygonsLayer', () => {
   });
 });
 
+describe('Emap simplifyLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'roads', shapes: [], geometry_type: 'polyline' },
+        { name: 'parks', shapes: [], geometry_type: 'polygon' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'roads', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds the percentage form', async () => {
+    const ok = await map.simplifyLayer({ source: 'src1', percentage: 10 });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10%');
+  });
+
+  it('preserves decimal percentages', async () => {
+    await map.simplifyLayer({ source: 'src1', percentage: 12.5 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 12.5%');
+  });
+
+  it('builds the interval form', async () => {
+    await map.simplifyLayer({ source: 'src1', interval: 250 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify interval=250');
+  });
+
+  it('builds the resolution form', async () => {
+    await map.simplifyLayer({ source: 'src1', resolution: '1000x500' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify resolution=1000x500');
+  });
+
+  it('appends method dp / visvalingam / weighted', async () => {
+    await map.simplifyLayer({ source: 'src1', percentage: 10, method: 'dp' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% dp');
+    parseCommandsSpy.mockClear();
+    await map.simplifyLayer({ source: 'src1', percentage: 10, method: 'visvalingam' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% visvalingam');
+    parseCommandsSpy.mockClear();
+    await map.simplifyLayer({ source: 'src1', percentage: 10, method: 'weighted' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% weighted');
+  });
+
+  it('appends weighting=', async () => {
+    await map.simplifyLayer({ source: 'src1', percentage: 10, method: 'weighted', weighting: 0.5 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% weighted weighting=0.5');
+  });
+
+  it('appends every passthrough flag', async () => {
+    await map.simplifyLayer({
+      source: 'src1', percentage: 10,
+      planar: true, keepShapes: true, lockBox: true, noRepair: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-simplify 10% planar keep-shapes lock-box no-repair');
+  });
+
+  it('scopes to a target when supplied', async () => {
+    await map.simplifyLayer({ source: 'src1', target: 'roads', percentage: 10 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -simplify 10%');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.simplifyLayer({ source: 'nope', percentage: 10 })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.simplifyLayer({ source: 'src1', target: 'rivers', percentage: 10 })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when no threshold is supplied', async () => {
+    expect(await map.simplifyLayer({ source: 'src1' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when multiple thresholds are supplied', async () => {
+    expect(await map.simplifyLayer({
+      source: 'src1', percentage: 10, interval: 250,
+    })).toBe(false);
+    expect(await map.simplifyLayer({
+      source: 'src1', percentage: 10, resolution: '1000x500',
+    })).toBe(false);
+    expect(await map.simplifyLayer({
+      source: 'src1', interval: 250, resolution: '1000x500',
+    })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false for out-of-range percentage', async () => {
+    expect(await map.simplifyLayer({ source: 'src1', percentage: -1 })).toBe(false);
+    expect(await map.simplifyLayer({ source: 'src1', percentage: 101 })).toBe(false);
+    expect(await map.simplifyLayer({ source: 'src1', percentage: NaN })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false for non-positive interval', async () => {
+    expect(await map.simplifyLayer({ source: 'src1', interval: 0 })).toBe(false);
+    expect(await map.simplifyLayer({ source: 'src1', interval: -1 })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false for malformed resolution', async () => {
+    expect(await map.simplifyLayer({ source: 'src1', resolution: '1000' })).toBe(false);
+    expect(await map.simplifyLayer({ source: 'src1', resolution: '1000x' })).toBe(false);
+    expect(await map.simplifyLayer({ source: 'src1', resolution: 'abc' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history entry is labelled "Simplify <target>" when scoped', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.simplifyLayer({ source: 'src1', target: 'roads', percentage: 10 });
+    expect(listener.mock.calls[0][0].label).toBe('Simplify roads');
+  });
+
+  it('history entry is labelled "Simplify <source>" when dataset-wide', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.simplifyLayer({ source: 'src1', percentage: 10 });
+    expect(listener.mock.calls[0][0].label).toBe('Simplify src1');
+  });
+});
+
 describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
   let map: Emap;
   let exportDatasetsToPackSpy: ReturnType<typeof vi.fn>;

@@ -23,6 +23,8 @@ export type {
   PointsMode,
   LinesOptions,
   PolygonsOptions,
+  SimplifyOptions,
+  SimplifyMethod,
   ExportSnapshotOptions,
   LoadSnapshotOptions,
 } from './map/map';

@@ -215,6 +215,54 @@ export interface SnapOptions {
   precision?: number;
 }
 
+/** Simplification algorithm exposed by mapshaper's `-simplify`. */
+export type SimplifyMethod = 'dp' | 'visvalingam' | 'weighted';
+
+/**
+ * Options for {@link Emap.simplifyLayer}. Exactly one of `percentage`,
+ * `interval`, or `resolution` MUST be supplied — they correspond to
+ * mapshaper's three threshold modes and are mutually exclusive.
+ */
+export interface SimplifyOptions {
+  /** Source ID. Simplification operates on the source's shared arcs. */
+  source: string;
+  /**
+   * Optional layer name to scope the operation. When omitted, simplify
+   * applies to every layer in the source dataset (mapshaper CLI default).
+   */
+  target?: string;
+  /**
+   * Percentage of removable vertices to retain, e.g. `10` → `10%`. Must be
+   * within `[0, 100]`. Mutually exclusive with `interval` and `resolution`.
+   */
+  percentage?: number;
+  /**
+   * Output resolution as a positive distance in source-CRS units. Mutually
+   * exclusive with `percentage` and `resolution`.
+   */
+  interval?: number;
+  /**
+   * Output resolution as a grid string (e.g. `"1000x500"`). Mutually
+   * exclusive with `percentage` and `interval`.
+   */
+  resolution?: string;
+  /**
+   * Simplification algorithm. Default is `'weighted'` (weighted-Visvalingam),
+   * matching mapshaper's CLI default.
+   */
+  method?: SimplifyMethod;
+  /** Weighted-Visvalingam coefficient (mapshaper default 0.7). */
+  weighting?: number;
+  /** Treat coordinates as planar (degrees), not 3D spherical. */
+  planar?: boolean;
+  /** Keep small polygon features that would otherwise vanish. */
+  keepShapes?: boolean;
+  /** Pin vertices that lie on the dataset bounding box. */
+  lockBox?: boolean;
+  /** Skip the post-simplify topology repair pass. */
+  noRepair?: boolean;
+}
+
 /** Options for {@link Emap.mosaicLayer}. */
 export interface MosaicOptions {
   /** Source ID containing the target polygon layer. */
@@ -1889,6 +1937,69 @@ export class Emap extends EventDispatcher {
     }
     if (opts.fromRings) parts.push('from-rings');
     return this._runDatasetCommand(opts.source, parts.join(' '), `Polygons ${opts.target}`);
+  }
+
+  /**
+   * Simplify the geometry of polygon and polyline features via mapshaper's
+   * `-simplify`. Operates on the source's shared arcs (sets per-vertex `zz`
+   * thresholds + a `zlimit`); subsequent commands and exports honour the
+   * threshold automatically. Re-running with a different threshold replaces
+   * the previous one — the original vertex data is preserved on the arc
+   * collection.
+   *
+   * Exactly one of `percentage`, `interval`, or `resolution` MUST be
+   * supplied. `target` is optional; when omitted, the whole source dataset
+   * is simplified (mapshaper CLI default).
+   *
+   * Returns `false` for unresolvable source, unresolved target, missing /
+   * conflicting / out-of-range threshold, or malformed `resolution`.
+   */
+  public async simplifyLayer(opts: SimplifyOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (opts.target !== undefined) {
+      if (!findLayerByName(dataset.layers, opts.target)) return false;
+    }
+
+    // Exactly one threshold mode.
+    const thresholdsSet = [
+      opts.percentage !== undefined,
+      opts.interval !== undefined,
+      opts.resolution !== undefined,
+    ].filter(Boolean).length;
+    if (thresholdsSet !== 1) return false;
+
+    let thresholdToken: string;
+    if (opts.percentage !== undefined) {
+      const p = opts.percentage;
+      if (!Number.isFinite(p) || p < 0 || p > 100) return false;
+      thresholdToken = `${p}%`;
+    } else if (opts.interval !== undefined) {
+      const v = opts.interval;
+      if (!Number.isFinite(v) || v <= 0) return false;
+      thresholdToken = `interval=${v}`;
+    } else {
+      const r = opts.resolution!;
+      if (!/^\d+x\d+$/.test(r)) return false;
+      thresholdToken = `resolution=${r}`;
+    }
+
+    const parts: string[] = [];
+    if (opts.target) parts.push(`-target ${quoteMapshaperArg(opts.target)}`);
+    parts.push(`-simplify ${thresholdToken}`);
+    if (opts.method) parts.push(opts.method);
+    if (typeof opts.weighting === 'number' && Number.isFinite(opts.weighting)) {
+      parts.push(`weighting=${opts.weighting}`);
+    }
+    if (opts.planar) parts.push('planar');
+    if (opts.keepShapes) parts.push('keep-shapes');
+    if (opts.lockBox) parts.push('lock-box');
+    if (opts.noRepair) parts.push('no-repair');
+
+    const label = `Simplify ${opts.target ?? opts.source}`;
+    return this._runDatasetCommand(opts.source, parts.join(' '), label);
   }
 
   /**
