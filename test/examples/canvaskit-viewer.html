@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Emap Example - CanvasKit Viewer</title>
+  <title>Emap 示例 - CanvasKit 查看器</title>
   <script src="https://unpkg.com/canvaskit-wasm@0.40.0/bin/full/canvaskit.js"></script>
   <style>
     body {
@@ -50,11 +50,10 @@
     <strong>Emap CanvasKit</strong>
     <span class="renderer-badge">SKIA WASM</span>
     <input type="file" id="file-input" accept=".json,.geojson" />
-    <div class="info" id="status">Initializing CanvasKit...</div>
+    <div class="info" id="status">CanvasKit 初始化中...</div>
   </div>
   <div id="map"></div>
 
-  <!-- Import the dev bundle -->
   <script src="../../dist/emap-dev.js"></script>
   <script>
     const { Emap, TopologySource } = emap;
@@ -63,11 +62,11 @@
 
     let map = null;
 
-    // Initialize CanvasKit
+    // 初始化 CanvasKit (Skia WASM)
     CanvasKitInit({
       locateFile: (file) => `https://unpkg.com/canvaskit-wasm@0.40.0/bin/full/${file}`
     }).then((ck) => {
-      status.textContent = "CanvasKit Ready. Upload GeoJSON.";
+      status.textContent = "CanvasKit 已就绪,请上传 GeoJSON。";
 
       map = new Emap({
         container: 'map',
@@ -78,7 +77,7 @@
       setupFileInput();
     }).catch(err => {
       console.error(err);
-      status.textContent = "Failed to load CanvasKit.";
+      status.textContent = "CanvasKit 加载失败。";
     });
 
     function setupFileInput() {
@@ -86,7 +85,7 @@
         const file = e.target.files[0];
         if (!file || !map) return;
 
-        status.textContent = `Processing ${file.name}...`;
+        status.textContent = `处理 ${file.name} 中...`;
 
         try {
           const reader = new FileReader();
@@ -96,12 +95,12 @@
 
             source.on('data', () => {
               map.setExtent(source.getExtent());
-              status.textContent = `Viewing with CanvasKit: ${file.name}`;
+              status.textContent = `当前 (CanvasKit): ${file.name}`;
             });
 
             source.on('error', (e) => {
               console.error(e);
-              status.textContent = 'Error processing file';
+              status.textContent = '处理文件出错';
             });
 
             if (map.getSource("test-source")) {
@@ -118,7 +117,7 @@
           reader.readAsArrayBuffer(file);
         } catch (err) {
           console.error(err);
-          status.textContent = 'Error processing file';
+          status.textContent = '处理文件出错';
         }
       });
     }

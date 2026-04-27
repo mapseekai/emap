@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap - Vertex Editing</title>
+  <title>Emap 示例 - 顶点编辑</title>
   <style>
     * {
       margin: 0;
@@ -52,6 +52,7 @@
       font-size: 12px;
       font-family: monospace;
       color: #7cfc00;
+      /* 高于 emap 控件容器的 z-index (10) */
       z-index: 100;
       pointer-events: auto;
     }
@@ -72,26 +73,23 @@
 
 <body>
   <div id="header">
-    <strong>Emap</strong> Vertex Editing Demo
+    <strong>Emap</strong> 顶点编辑演示
     <input type="file" id="file-input" accept=".json,.geojson,.zip" />
-    <div class="info" id="status">Upload a GeoJSON file to start</div>
+    <div class="info" id="status">上传 GeoJSON 文件开始</div>
   </div>
   <div id="map">
     <div id="event-log">
-      <div style="color:#aaa; margin-bottom:6px;">vertex_moved events:</div>
+      <div style="color:#aaa; margin-bottom:6px;">vertex_moved 事件日志:</div>
     </div>
   </div>
 
-  <!-- Import default styles for controls -->
   <link rel="stylesheet" href="../../src/ui/controls.css" />
-  <!-- Import the dev bundle -->
   <script src="../../dist/emap-dev.js"></script>
   <script>
     const { Emap, TopologySource, EditToolbar } = emap;
 
     const map = new Emap({ container: "map" });
 
-    // Add UI Controls
     map.addControl(new emap.NavigationControl(), "top-left");
     map.addControl(new EditToolbar(), "top-left");
     map.addControl(new emap.BasemapControl(), "top-right");
@@ -100,7 +98,7 @@
       "bottom-right"
     );
 
-    // Listen for vertex_moved events
+    // 记录 vertex_moved 事件
     const logEl = document.getElementById("event-log");
     map.on("vertex_moved", (e) => {
       const entry = document.createElement("div");
@@ -114,14 +112,13 @@
       logEl.scrollTop = logEl.scrollHeight;
     });
 
-    // File loading
     const fileInput = document.getElementById("file-input");
     const status = document.getElementById("status");
 
     fileInput.addEventListener("change", async (ev) => {
       const file = ev.target.files[0];
       if (!file) return;
-      status.textContent = `Processing ${file.name}...`;
+      status.textContent = `处理 ${file.name} 中...`;
       try {
         const reader = new FileReader();
         reader.onload = async (event) => {
@@ -130,12 +127,12 @@
 
           source.on('data', () => {
             map.setExtent(source.getExtent());
-            status.textContent = `Viewing: ${file.name} — click ✏ to edit`;
+            status.textContent = `当前: ${file.name} —— 点击 ✏ 进入编辑模式`;
           });
 
           source.on('error', (e) => {
             console.error(e);
-            status.textContent = "Error processing file";
+            status.textContent = "处理文件出错";
           });
 
           if (map.getSource("test-source")) {
@@ -148,7 +145,7 @@
         reader.readAsArrayBuffer(file);
       } catch (err) {
         console.error(err);
-        status.textContent = "Error processing file";
+        status.textContent = "处理文件出错";
       }
     });
 

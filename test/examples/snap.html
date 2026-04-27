@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - Snap vertices</title>
+  <title>Emap 示例 - 顶点吸附 (Snap)</title>
   <style>
     body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
     #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
@@ -23,13 +23,13 @@
 
 <body>
   <div id="header">
-    <label>File: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    <label>Target: <select id="target"></select></label>
-    <label>Interval: <input id="interval" type="text" placeholder="default" /></label>
-    <label>Precision: <input id="precision" type="text" placeholder="optional" /></label>
-    <label><input id="endpoints" type="checkbox" /> endpoints only</label>
-    <button id="btn" disabled>Snap</button>
-    <span id="status">Load a dataset</span>
+    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <label>目标图层: <select id="target"></select></label>
+    <label>容差距离: <input id="interval" type="text" placeholder="默认" /></label>
+    <label>坐标精度: <input id="precision" type="text" placeholder="可选" /></label>
+    <label><input id="endpoints" type="checkbox" /> 仅吸附端点</label>
+    <button id="btn" disabled>吸附</button>
+    <span id="status">加载数据</span>
   </div>
   <div id="map" tabindex="0"></div>
 
@@ -62,7 +62,7 @@
     document.getElementById('file-input').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      status.textContent = `Loading ${file.name}...`;
+      status.textContent = `正在加载 ${file.name}...`;
       const reader = new FileReader();
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
@@ -70,7 +70,7 @@
         source.on('data', () => {
           map.setExtent(source.getExtent());
           populate(source);
-          status.textContent = `Loaded ${file.name}.`;
+          status.textContent = `已加载 ${file.name}。`;
         });
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
         source.setData({ filename: file.name, content });
@@ -88,11 +88,11 @@
       const precisionVal = precisionInput.value.trim();
       if (precisionVal && !isNaN(Number(precisionVal))) opts.precision = Number(precisionVal);
       if (endpointsChk.checked) opts.endpoints = true;
-      status.textContent = `Snapping ${target}...`;
+      status.textContent = `正在吸附 ${target}...`;
       btn.disabled = true;
       try {
         const ok = await map.snapLayer(opts);
-        status.textContent = ok ? `Snapped ${target}. Ctrl+Z to undo.` : 'Snap failed.';
+        status.textContent = ok ? `已吸附 ${target},Ctrl+Z 撤销。` : '吸附失败。';
       } finally {
         btn.disabled = false;
       }

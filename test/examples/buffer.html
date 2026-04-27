@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - Buffer</title>
+  <title>Emap 示例 - 缓冲区</title>
   <style>
     body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
     #header {
@@ -44,16 +44,16 @@
 
 <body>
   <div id="header">
-    <label>File: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    <label>Target: <select id="target"></select></label>
-    <label>Radius: <input id="radius" type="text" value="0.01" placeholder="number or expr"/></label>
-    <label>Cap: <select id="cap">
-      <option value="">round (default)</option>
-      <option value="round">round</option>
-      <option value="flat">flat</option>
+    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <label>目标图层: <select id="target"></select></label>
+    <label>半径: <input id="radius" type="text" value="0.01" placeholder="数字或表达式"/></label>
+    <label>端点样式: <select id="cap">
+      <option value="">圆形 (默认)</option>
+      <option value="round">圆形</option>
+      <option value="flat">平直</option>
     </select></label>
-    <button id="buffer-btn" disabled>Buffer</button>
-    <span id="status">Load a dataset</span>
+    <button id="buffer-btn" disabled>生成缓冲区</button>
+    <span id="status">加载数据</span>
   </div>
   <div id="map" tabindex="0"></div>
 
@@ -87,7 +87,7 @@
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      status.textContent = `Loading ${file.name}...`;
+      status.textContent = `正在加载 ${file.name}...`;
       const reader = new FileReader();
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
@@ -95,7 +95,7 @@
         source.on('data', () => {
           map.setExtent(source.getExtent());
           populate(source);
-          status.textContent = `Loaded ${file.name}. Pick target + radius, then Buffer.`;
+          status.textContent = `已加载 ${file.name}。选择目标图层与半径,再点击 "生成缓冲区"。`;
         });
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
         source.setData({ filename: file.name, content });
@@ -109,19 +109,19 @@
       if (!target) return;
       const raw = radiusInput.value.trim();
       if (!raw) return;
-      // Pass numeric strings as numbers, anything else as an expression.
+      // 纯数字按数字传,其他视为 mapshaper 表达式
       const radius = /^-?\d+(\.\d+)?$/.test(raw) ? Number(raw) : raw;
       const opts = { source: SOURCE_ID, target, radius };
       if (capSel.value) opts.capStyle = capSel.value;
-      status.textContent = `Buffering ${target} by ${raw}...`;
+      status.textContent = `正在对 ${target} 生成半径 ${raw} 的缓冲区...`;
       bufBtn.disabled = true;
       try {
         const ok = await map.bufferLayer(opts);
-        status.textContent = ok ? `Buffered ${target}. Ctrl+Z to undo.` : 'Buffer failed.';
+        status.textContent = ok ? `已生成 ${target} 的缓冲区,Ctrl+Z 撤销。` : '生成失败。';
         const src = map.getSource(SOURCE_ID);
         if (src) populate(src);
       } catch (err) {
-        status.textContent = `Error: ${err?.message ?? err}`;
+        status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
       } finally {
         bufBtn.disabled = false;

@@ -9,6 +9,18 @@ import type { ExportFormat, ExportOptions } from './source';
 
 export type TopologySourceData = string | { filename: string, content: Uint8Array };
 
+/**
+ * Input shapes accepted by {@link TopologySource.setData}:
+ * - URL string,
+ * - single `{filename, content}` object,
+ * - or an array of `{filename, content}` for multi-file imports (each file
+ *   becomes its own layer in a single dataset; matches mapshaper's
+ *   `-i FILE1 FILE2 ...` CLI behaviour).
+ */
+export type TopologySourceInput =
+  | TopologySourceData
+  | Array<{ filename: string, content: Uint8Array }>;
+
 /** MIME type for each supported export format */
 const EXPORT_MIME: Record<ExportFormat, string> = {
   geojson: 'application/geo+json',
@@ -36,7 +48,7 @@ function toBlobPart(content: string | Uint8Array | ArrayBuffer): BlobPart {
 }
 
 export interface TopologySourceOptions {
-  data?: TopologySourceData;
+  data?: TopologySourceInput;
 }
 
 export class TopologySource extends EventDispatcher implements ITopologySource {
@@ -45,7 +57,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   private _dataset: MapshaperDataset | undefined;
   private _displayArcs: DisplayArcs | null = null;
   private _options: TopologySourceOptions;
-  private _data: TopologySourceData | undefined;
+  private _data: TopologySourceInput | undefined;
 
   constructor(id: string, options?: TopologySourceOptions) {
     super();
@@ -58,7 +70,15 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     }
   }
 
-  setData(data: TopologySourceData): this {
+  /**
+   * Replace the source's data and trigger a re-import.
+   *
+   * Accepts a URL, a single `{filename, content}` object, or an array of
+   * `{filename, content}` for multi-file imports (each file becomes its own
+   * layer in one dataset — same behaviour as mapshaper's
+   * `-i FILE1 FILE2 ...` CLI invocation).
+   */
+  setData(data: TopologySourceInput): this {
     this._data = data;
     this._updateData();
     return this;
@@ -70,62 +90,87 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     this.fire('dataloading');
 
     try {
-      let input: { filename: string, content: Uint8Array };
+      // Normalize every input shape (URL / single file / array) to the same
+      // resolved structure: an inputFiles dictionary plus the list of primary
+      // file names that mapshaper's `-i` should reference.
+      const inputFiles: Record<string, Uint8Array | string> = {};
+      const primaryFiles: string[] = [];
 
-      if (typeof this._data === 'string') {
-        // Load from URL
-        const url = this._data;
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
-        }
-
-        const buf = await response.arrayBuffer();
-        const content = new Uint8Array(buf);
-
-        const urlPath = new URL(url).pathname;
-        let filename = urlPath.split('/').pop() || '';
-
-        if (!this._hasSupportedExtension(filename)) {
-          const contentType = response.headers.get('Content-Type') || '';
-          filename = this._filenameFromContentType(contentType, filename);
-        }
-
-        if (!filename) {
-          filename = 'data.json';
-        }
-
-        input = { filename, content };
-      } else {
-        input = this._data;
-      }
-
-      let inputFiles: Record<string, Uint8Array | string>;
-      let primaryFile = input.filename;
-
-      // Check if this is a zip file
-      if (this._isZipFile(input.filename)) {
-        inputFiles = this._extractZip(input.content);
-        // Find the primary file (.shp, .geojson, etc.)
-        primaryFile = this._findPrimaryFile(inputFiles);
-        if (!primaryFile) {
-          throw new Error('No importable file found in zip archive');
+      if (Array.isArray(this._data)) {
+        // Multi-file import: each entry becomes its own layer in one dataset
+        // (same behaviour as mapshaper CLI `-i FILE1 FILE2 ...`).
+        if (this._data.length === 0) return;
+        for (const entry of this._data) {
+          if (this._isZipFile(entry.filename)) {
+            const extracted = this._extractZip(entry.content);
+            const primary = this._findPrimaryFile(extracted);
+            if (!primary) {
+              throw new Error(`No importable file found in zip archive: ${entry.filename}`);
+            }
+            for (const [name, content] of Object.entries(extracted)) {
+              inputFiles[name] = content;
+            }
+            primaryFiles.push(primary);
+          } else {
+            inputFiles[entry.filename] = entry.content;
+            primaryFiles.push(entry.filename);
+          }
         }
       } else {
-        inputFiles = { [input.filename]: input.content };
+        let input: { filename: string, content: Uint8Array };
+        if (typeof this._data === 'string') {
+          // Load from URL
+          const url = this._data;
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
+          }
+
+          const buf = await response.arrayBuffer();
+          const content = new Uint8Array(buf);
+
+          const urlPath = new URL(url).pathname;
+          let filename = urlPath.split('/').pop() || '';
+
+          if (!this._hasSupportedExtension(filename)) {
+            const contentType = response.headers.get('Content-Type') || '';
+            filename = this._filenameFromContentType(contentType, filename);
+          }
+
+          if (!filename) {
+            filename = 'data.json';
+          }
+
+          input = { filename, content };
+        } else {
+          input = this._data;
+        }
+
+        if (this._isZipFile(input.filename)) {
+          const extracted = this._extractZip(input.content);
+          const primary = this._findPrimaryFile(extracted);
+          if (!primary) {
+            throw new Error('No importable file found in zip archive');
+          }
+          for (const [name, content] of Object.entries(extracted)) {
+            inputFiles[name] = content;
+          }
+          primaryFiles.push(primary);
+        } else {
+          inputFiles[input.filename] = input.content;
+          primaryFiles.push(input.filename);
+        }
       }
 
-      // Match mapshaper GUI's import path: bare `-i FILE`. mapshaper's
-      // importContent already runs cleanPathsAfterImport (deduplication +
-      // defective-path removal) and buildTopology (coincident-endpoint
+      // Match mapshaper GUI's import path: bare `-i FILE [FILE2 ...]`.
+      // mapshaper's importContent runs cleanPathsAfterImport (deduplication
+      // + defective-path removal) and buildTopology (coincident-endpoint
       // sharing required by topology-aware vertex editing), both cheap.
-      // We deliberately do NOT run `-clean` (intersection cuts, sliver
-      // removal, polygon repair) or `-simplify 100%` (Visvalingam-Whyatt
-      // threshold precomputation) here — both are O(N²) / O(N log N) and
-      // make interactive imports of moderate-sized files unusable. Users
-      // can call `Emap.cleanLayer()` and `source.simplifyArcs()` explicitly
-      // when they need those passes.
-      const cmd = `-i ${primaryFile}`;
+      // We deliberately do NOT run `-clean` or `-simplify 100%` here — both
+      // are O(N²) / O(N log N) and make interactive imports of moderate-
+      // sized files unusable. Callers run `Emap.cleanLayer()` /
+      // `source.simplifyArcs()` explicitly when they need those passes.
+      const cmd = `-i ${primaryFiles.map((f) => `"${f.replace(/"/g, '\\"')}"`).join(' ')}`;
       const commands = mapshaper.internal.parseCommands(cmd);
 
       // Inject input files into the import command

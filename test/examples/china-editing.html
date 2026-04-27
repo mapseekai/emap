@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap - China GeoJSON/TopoJSON Editing</title>
+  <title>Emap 示例 - 中国行政区划编辑</title>
   <style>
     * {
       margin: 0;
@@ -101,6 +101,7 @@
       font-size: 12px;
       font-family: monospace;
       color: #7cfc00;
+      /* 高于 emap 控件容器的 z-index (10) */
       z-index: 100;
       pointer-events: auto;
     }
@@ -170,10 +171,10 @@
   <div id="map">
     <div id="loading-overlay" class="hidden">
       <div class="spinner"></div>
-      <span id="loading-text">Loading...</span>
+      <span id="loading-text">加载中...</span>
     </div>
     <div id="event-log">
-      <div style="color:#aaa; margin-bottom:6px;">vertex_moved events:</div>
+      <div style="color:#aaa; margin-bottom:6px;">vertex_moved 事件日志:</div>
     </div>
   </div>
 
@@ -192,7 +193,7 @@
       "bottom-right"
     );
 
-    // vertex_moved event log
+    // vertex_moved 事件日志
     const logEl = document.getElementById("event-log");
     map.on("vertex_moved", (e) => {
       const entry = document.createElement("div");
@@ -206,7 +207,7 @@
       logEl.scrollTop = logEl.scrollHeight;
     });
 
-    // ---- Data sources ----
+    // ---- 数据源 ----
     const SOURCES = {
       topojson: {
         url: "https://geojson.cn/api/china/1.6.3/china.topo.json",

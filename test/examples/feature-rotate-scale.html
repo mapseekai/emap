@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - Rotate / Scale selected features</title>
+  <title>Emap 示例 - 旋转 / 缩放选中要素</title>
   <style>
     body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
     #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
@@ -16,15 +16,15 @@
 
 <body>
   <div id="header">
-    <label>File: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    <span id="status">Load a dataset</span>
+    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <span id="status">加载数据</span>
     <span class="hint">
-      Click features to select.
-      <kbd>←</kbd>/<kbd>→</kbd>/<kbd>↑</kbd>/<kbd>↓</kbd> nudge.
-      <kbd>[</kbd>/<kbd>]</kbd> rotate ±5°.
-      <kbd>+</kbd>/<kbd>-</kbd> scale 1.1× / 0.9×.
-      Hold <kbd>Shift</kbd> for finer steps.
-      <kbd>Ctrl+Z</kbd> to undo.
+      点击要素选中。
+      <kbd>←</kbd>/<kbd>→</kbd>/<kbd>↑</kbd>/<kbd>↓</kbd> 平移。
+      <kbd>[</kbd>/<kbd>]</kbd> 旋转 ±5°。
+      <kbd>+</kbd>/<kbd>-</kbd> 缩放 1.1× / 0.9×。
+      按住 <kbd>Shift</kbd> 微调步长。
+      <kbd>Ctrl+Z</kbd> 撤销。
     </span>
   </div>
   <div id="map" tabindex="0"></div>
@@ -50,14 +50,14 @@
     document.getElementById('file-input').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      status.textContent = `Loading ${file.name}...`;
+      status.textContent = `正在加载 ${file.name}...`;
       const reader = new FileReader();
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         source.on('data', () => {
           map.setExtent(source.getExtent());
-          status.textContent = `Loaded ${file.name}. Click to select, then transform.`;
+          status.textContent = `已加载 ${file.name}。点击要素选中,按键变换。`;
           document.getElementById('map').focus();
         });
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
@@ -86,7 +86,7 @@
       const angle = fine ? 1 : 5;
       const scaleStep = fine ? 1.02 : 1.1;
 
-      // Translate
+      // 平移
       let dx = 0, dy = 0;
       if (e.key === 'ArrowLeft') dx = -stride;
       else if (e.key === 'ArrowRight') dx = stride;
@@ -94,11 +94,11 @@
       else if (e.key === 'ArrowDown') dy = -stride;
       if (dx || dy) { e.preventDefault(); map.translateSelected(dx, dy); return; }
 
-      // Rotate
+      // 旋转
       if (e.key === '[') { e.preventDefault(); map.rotateSelected(-angle); return; }
       if (e.key === ']') { e.preventDefault(); map.rotateSelected(angle); return; }
 
-      // Scale (= and - on most keyboards; also support + via shift)
+      // 缩放 ( = 和 - 兼顾 Shift+= 即 + )
       if (e.key === '+' || e.key === '=') { e.preventDefault(); map.scaleSelected(scaleStep); return; }
       if (e.key === '-' || e.key === '_') { e.preventDefault(); map.scaleSelected(1 / scaleStep); return; }
     });

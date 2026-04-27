@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - Attribute Editing</title>
+  <title>Emap 示例 - 属性编辑</title>
   <style>
     body {
       margin: 0;
@@ -55,6 +55,8 @@
       padding: 12px;
       font-size: 12px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      /* 高于 emap 控件容器的 z-index (10),否则会被画布覆盖无法操作 */
+      z-index: 20;
     }
 
     #panel h3 {
@@ -105,29 +107,29 @@
 <body>
   <div id="header">
     <label>
-      File:
+      文件:
       <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
     </label>
-    <span id="status">Load a dataset, then click a feature to edit</span>
+    <span id="status">加载数据后，点击要素进行编辑</span>
   </div>
   <div id="map" tabindex="0">
     <div id="panel">
-      <h3>Attributes</h3>
-      <div id="props">(click a feature)</div>
+      <h3>属性</h3>
+      <div id="props">(点击地图上的要素)</div>
       <div class="schema" id="schema-panel" hidden>
-        <h3>Schema</h3>
+        <h3>字段</h3>
         <div class="row">
-          <input id="add-field" placeholder="new field" />
-          <button id="add-field-btn">Add</button>
+          <input id="add-field" placeholder="新字段名" />
+          <button id="add-field-btn">新增</button>
         </div>
         <div class="row">
-          <input id="rename-from" placeholder="from" />
-          <input id="rename-to" placeholder="to" />
-          <button id="rename-btn">Rename</button>
+          <input id="rename-from" placeholder="原名" />
+          <input id="rename-to" placeholder="新名" />
+          <button id="rename-btn">重命名</button>
         </div>
         <div class="row">
-          <input id="remove-field" placeholder="field" />
-          <button id="remove-btn">Remove</button>
+          <input id="remove-field" placeholder="字段名" />
+          <button id="remove-btn">删除</button>
         </div>
       </div>
     </div>
@@ -151,7 +153,7 @@
     const mapContainer = map.getCanvasContainer();
 
     let activeRef = null;
-    let activeTarget = null; // layer name of the most recent feature
+    let activeTarget = null; // 当前选中要素所在的图层名
 
     function renderProps(feature) {
       activeRef = { source: feature.source, layer: feature.layer, id: feature.id };
@@ -167,7 +169,7 @@
         const v = document.createElement('input');
         v.value = value == null ? '' : String(value);
         v.addEventListener('change', () => {
-          // Try to keep numeric values numeric
+          // 数字字符串保持数字类型
           let next = v.value;
           if (/^-?\d+(\.\d+)?$/.test(next)) next = Number(next);
           map.setFeatureProperty(activeRef, key, next === '' ? undefined : next);
@@ -188,21 +190,21 @@
     }
 
     map.on('historychange', () => {
-      // Re-render the panel against current values when undo / redo happens
+      // undo / redo 时面板按当前值重渲染
       refreshActiveDisplay();
     });
 
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      status.textContent = `Loading ${file.name}...`;
+      status.textContent = `正在加载 ${file.name}...`;
       const reader = new FileReader();
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         source.on('data', () => {
           map.setExtent(source.getExtent());
-          status.textContent = `Loaded: ${file.name}. Click a feature.`;
+          status.textContent = `已加载 ${file.name}。点击要素查看 / 编辑属性。`;
         });
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
         source.setData({ filename: file.name, content });
@@ -216,7 +218,7 @@
       const point = [e.clientX - rect.left, e.clientY - rect.top];
       const features = map.queryRenderedFeatures(point);
       if (!features.length) {
-        propsDiv.textContent = '(no feature hit)';
+        propsDiv.textContent = '(未命中要素)';
         return;
       }
       renderProps(features[0]);
@@ -226,7 +228,7 @@
       const field = document.getElementById('add-field').value.trim();
       if (!field || !activeTarget) return;
       const ok = map.addField({ source: SOURCE_ID, target: activeTarget, field });
-      status.textContent = ok ? `Added field: ${field}. Ctrl+Z to undo.` : 'Add failed.';
+      status.textContent = ok ? `已新增字段 "${field}",Ctrl+Z 撤销。` : '新增失败。';
       refreshActiveDisplay();
     });
 
@@ -234,7 +236,7 @@
       const field = document.getElementById('remove-field').value.trim();
       if (!field || !activeTarget) return;
       const ok = map.removeField({ source: SOURCE_ID, target: activeTarget, field });
-      status.textContent = ok ? `Removed field: ${field}. Ctrl+Z to undo.` : 'Remove failed.';
+      status.textContent = ok ? `已删除字段 "${field}",Ctrl+Z 撤销。` : '删除失败。';
       refreshActiveDisplay();
     });
 
@@ -243,7 +245,7 @@
       const to = document.getElementById('rename-to').value.trim();
       if (!from || !to || !activeTarget) return;
       const ok = map.renameField({ source: SOURCE_ID, target: activeTarget, from, to });
-      status.textContent = ok ? `Renamed ${from} → ${to}. Ctrl+Z to undo.` : 'Rename refused (collision).';
+      status.textContent = ok ? `已重命名 ${from} → ${to},Ctrl+Z 撤销。` : '重命名失败 (字段冲突)。';
       refreshActiveDisplay();
     });
   </script>
