@@ -26,6 +26,7 @@ const EXPORT_MIME: Record<ExportFormat, string> = {
   geojson: 'application/geo+json',
   topojson: 'application/json',
   shapefile: 'application/zip',
+  msx: 'application/octet-stream',
 };
 
 /** Coerce mapshaper export content (string | Uint8Array | ArrayBuffer) to Uint8Array for zip packing. */
@@ -204,7 +205,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   }
 
   private _hasSupportedExtension(filename: string): boolean {
-    return /\.(json|geojson|topojson|zip|shp|kml)$/i.test(filename);
+    return /\.(json|geojson|topojson|zip|shp|kml|msx)$/i.test(filename);
   }
 
   private _filenameFromContentType(contentType: string, fallbackName: string): string {
@@ -402,9 +403,13 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     }
 
     try {
-      const files = mapshaper.internal.exportFileContent(this._dataset, {
-        format: options.format,
-      });
+      // mapshaper's `.msx` snapshot format is special-cased: exportFileContent
+      // does not handle it, so we go through the Pack pipeline directly.
+      // `compact: true` matches mapshaper CLI defaults — bakes simplification
+      // thresholds into `zz` and gzip-compresses arc buffers for a small file.
+      const files = options.format === 'msx'
+        ? await mapshaper.internal.exportPackedDatasets([this._dataset], { compact: true })
+        : mapshaper.internal.exportFileContent(this._dataset, { format: options.format });
       return this._filesToBlob(files, options.format);
     } finally {
       if (savedInterval && arcs?.setRetainedInterval) {

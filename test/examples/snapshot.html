@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 快照 (.msx) 保存 / 恢复</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header input[type="file"] { font-size: 13px; }
+    #header input[type="text"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; width: 200px; }
+    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #header button.alt { background: #2980b9; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    .group { display: flex; gap: 6px; align-items: center; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <span class="group">
+      <label>加载数据 (任意支持的格式或 .msx 快照):
+        <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip,.msx" />
+      </label>
+    </span>
+    <span class="group">
+      <label>快照文件名: <input id="filename" type="text" value="snapshot.msx" /></label>
+      <button id="save-btn" disabled>保存快照 (.msx)</button>
+      <button id="reload-btn" class="alt" disabled>清空</button>
+    </span>
+    <span id="status">加载任意数据,或拖入一个之前导出的 .msx 文件以恢复完整会话状态。</span>
+    <span class="hint">
+      mapshaper 的 <code>.msx</code> 是 msgpack 二进制格式,完整保留拓扑、弧、简化阈值、图层元数据与 CRS。
+      其他格式 (GeoJSON / TopoJSON / Shapefile) 在保存时会丢失共享拓扑或简化信息;
+      <code>.msx</code> 是唯一无损的"会话存档"。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'snapshot-source';
+    const fileInput = document.getElementById('file-input');
+    const filenameInput = document.getElementById('filename');
+    const saveBtn = document.getElementById('save-btn');
+    const reloadBtn = document.getElementById('reload-btn');
+    const status = document.getElementById('status');
+
+    function loadFile(file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          const layers = source.getLayers();
+          const summary = layers
+            .map((l, i) => `${l?.name || `layer-${i}`}(${l?.geometry_type ?? '?'})`)
+            .join(', ');
+          status.textContent = file.name.endsWith('.msx')
+            ? `已从快照恢复: ${file.name}。包含 ${layers.length} 个图层: ${summary}`
+            : `已加载: ${file.name}。包含 ${layers.length} 个图层: ${summary}`;
+          saveBtn.disabled = false;
+          reloadBtn.disabled = false;
+        });
+        source.on('error', (e) => {
+          console.error(e);
+          status.textContent = `加载失败: ${e.error?.message ?? e}`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `正在加载 ${file.name}...`;
+      loadFile(file);
+      fileInput.value = '';
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      const source = map.getSource(SOURCE_ID);
+      if (!source) return;
+      const name = (filenameInput.value.trim() || 'snapshot.msx').replace(/\.+$/, '');
+      const filename = name.endsWith('.msx') ? name : `${name}.msx`;
+      status.textContent = `正在打包快照 ${filename}...`;
+      saveBtn.disabled = true;
+      try {
+        const blob = await source.export({ format: 'msx' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        status.textContent = `已下载快照 ${filename} (${(blob.size / 1024).toFixed(1)} KB)。`;
+      } catch (err) {
+        status.textContent = `导出失败: ${err?.message ?? err}`;
+        console.error(err);
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+
+    reloadBtn.addEventListener('click', () => {
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      saveBtn.disabled = true;
+      reloadBtn.disabled = true;
+      status.textContent = '已清空。';
+    });
+  </script>
+</body>
+
+</html>

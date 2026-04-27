@@ -60,6 +60,12 @@ declare module 'mapshaper' {
       opts: { format: string;[k: string]: unknown },
     ): Array<{ filename: string; content: string | Uint8Array | ArrayBuffer }>;
 
+    // Snapshot pack/unpack — io/mapshaper-pack.mjs / mapshaper-unpack.mjs
+    exportPackedDatasets(
+      datasets: MapshaperDataset[],
+      opts: { compact?: boolean; file?: string;[k: string]: unknown },
+    ): Promise<Array<{ filename: string; content: Uint8Array }>>;
+
     // Simplification / LOD
     getAvgSegment(arcs: ArcCollection): number;
     simplifyArcsFast(arcs: ArcCollection, segLen: number): ArcCollection;
