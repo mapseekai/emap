@@ -2400,3 +2400,125 @@ describe('Emap divideLayer', () => {
     expect(listener.mock.calls[0][0].label).toBe('Divide roads');
   });
 });
+
+describe('Emap pointsLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'parks', shapes: [], geometry_type: 'polygon' },
+        { name: 'roads', shapes: [], geometry_type: 'polyline' },
+        { name: 'cities', shapes: [], geometry_type: 'point' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'parks', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds centroid command for polygon target', async () => {
+    const ok = await map.pointsLayer({ source: 'src1', target: 'parks', type: 'centroid' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks" -points centroid');
+  });
+
+  it('builds inner command for polygon target', async () => {
+    await map.pointsLayer({ source: 'src1', target: 'parks', type: 'inner' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks" -points inner');
+  });
+
+  it('builds vertices command for polyline target', async () => {
+    await map.pointsLayer({ source: 'src1', target: 'roads', type: 'vertices' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -points vertices');
+  });
+
+  it('builds endpoints command for polygon target', async () => {
+    await map.pointsLayer({ source: 'src1', target: 'parks', type: 'endpoints' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks" -points endpoints');
+  });
+
+  it('builds midpoints command for polyline target', async () => {
+    await map.pointsLayer({ source: 'src1', target: 'roads', type: 'midpoints' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -points midpoints');
+  });
+
+  it('builds interpolated command with interval', async () => {
+    await map.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: 1000 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -points interpolated interval=1000');
+  });
+
+  it('appends quoted name and no-replace', async () => {
+    await map.pointsLayer({
+      source: 'src1', target: 'parks', type: 'centroid',
+      name: 'park labels', noReplace: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "parks" -points centroid name="park labels" no-replace');
+  });
+
+  it('rejects centroid on non-polygon target', async () => {
+    expect(await map.pointsLayer({ source: 'src1', target: 'roads', type: 'centroid' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects midpoints on non-polyline target', async () => {
+    expect(await map.pointsLayer({ source: 'src1', target: 'parks', type: 'midpoints' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects vertices on a point target', async () => {
+    expect(await map.pointsLayer({ source: 'src1', target: 'cities', type: 'vertices' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects interpolated without interval', async () => {
+    expect(await map.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated' })).toBe(false);
+    expect(await map.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: 0 })).toBe(false);
+    expect(await map.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: -5 })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.pointsLayer({ source: 'nope', target: 'parks', type: 'centroid' })).toBe(false);
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.pointsLayer({ source: 'src1', target: 'forests', type: 'centroid' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history entry is labelled "Points <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.pointsLayer({ source: 'src1', target: 'parks', type: 'centroid' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Points parks');
+  });
+});

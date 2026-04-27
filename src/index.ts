@@ -19,6 +19,8 @@ export type {
   MosaicOptions,
   UnionOptions,
   DivideOptions,
+  PointsOptions,
+  PointsMode,
 } from './map/map';
 export { FeatureQuery } from './map/feature-query';
 export { HighlightManager } from './map/highlight-manager';

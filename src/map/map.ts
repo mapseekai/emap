@@ -266,6 +266,41 @@ export interface DivideOptions {
   force?: boolean;
 }
 
+/**
+ * Modes for {@link Emap.pointsLayer}, mapping 1:1 to mapshaper's mutually
+ * exclusive `-points` flags.
+ */
+export type PointsMode =
+  | 'centroid'
+  | 'inner'
+  | 'vertices'
+  | 'endpoints'
+  | 'midpoints'
+  | 'interpolated';
+
+/** Options for {@link Emap.pointsLayer}. */
+export interface PointsOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the layer whose points will be extracted. */
+  target: string;
+  /**
+   * Extraction mode. Each mode constrains the input geometry: `centroid` /
+   * `inner` need polygons; `midpoints` / `interpolated` need polylines;
+   * `vertices` / `endpoints` accept either polygons or polylines.
+   */
+  type: PointsMode;
+  /**
+   * Sample interval in source-CRS units. Required (and must be positive) for
+   * `type: 'interpolated'`; ignored otherwise.
+   */
+  interval?: number;
+  /** Optional name for the output point layer. */
+  name?: string;
+  /** Keep the original layer alongside the new point layer (mapshaper's `no-replace`). */
+  noReplace?: boolean;
+}
+
 export interface HighlightStyle {
   color?: string;
   width?: number;
@@ -1546,6 +1581,63 @@ export class Emap extends EventDispatcher {
     }
     if (opts.force) parts.push('force');
     return this._runDatasetCommand(opts.source, parts.join(' '), `Divide ${opts.target}`);
+  }
+
+  /**
+   * Extract a point layer from a polygon or polyline target via mapshaper's
+   * `-points`. The `type` enum collapses mapshaper's mutually-exclusive
+   * `-points` flags into a single option:
+   *
+   * - `centroid` / `inner` — one point per polygon (target must be polygon)
+   * - `midpoints` / `interpolated` — sample along polylines (target must be polyline;
+   *   `interpolated` also requires a positive `interval`)
+   * - `vertices` / `endpoints` — extract path vertices (target must be polygon or polyline)
+   *
+   * Returns `false` for unresolvable source / target, mismatched geometry,
+   * or `interpolated` without a positive `interval`. Inherits dataset-replace
+   * semantics from `_runDatasetCommand`.
+   */
+  public async pointsLayer(opts: PointsOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    const layer = findLayerByName(dataset.layers, opts.target);
+    if (!layer) return false;
+
+    const geom = layer.geometry_type;
+    switch (opts.type) {
+      case 'centroid':
+      case 'inner':
+        if (geom !== 'polygon') return false;
+        break;
+      case 'midpoints':
+      case 'interpolated':
+        if (geom !== 'polyline') return false;
+        break;
+      case 'vertices':
+      case 'endpoints':
+        if (geom !== 'polygon' && geom !== 'polyline') return false;
+        break;
+      default:
+        return false;
+    }
+    if (opts.type === 'interpolated' && !(typeof opts.interval === 'number' && opts.interval > 0)) {
+      return false;
+    }
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-points ${opts.type}`,
+    ];
+    if (opts.type === 'interpolated') {
+      parts.push(`interval=${opts.interval}`);
+    }
+    if (opts.name && opts.name.trim()) {
+      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    if (opts.noReplace) parts.push('no-replace');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Points ${opts.target}`);
   }
 
   /**
