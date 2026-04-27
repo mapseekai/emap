@@ -1,43 +1,35 @@
 # emap
 
-A modern, decoupled rendering engine for geographic data, designed to seamlessly integrate with [Mapshaper](https://github.com/mbloch/mapshaper).
+A modern, topology-oriented geographic map rendering and editing engine built around [Mapshaper](https://github.com/mbloch/mapshaper) data structures and HTML5 Canvas.
 
-## Overview
+## Features
 
-`emap` is a high-performance interactive geographic map rendering engine supporting scalable topologies. It provides map rendering, geometric editing, and feature querying capabilities using standard HTML5 Canvas 2D or CanvasKit (Skia WASM) acceleration.
-
-### Key Features
-
-- **Topology-based Rendering**: Uses mapshaper datasets to draw and edit geographic boundaries efficiently.
-- **Multiple Source Formats**: Built-in support for online/local GeoJSON, TopoJSON, and ZIP Shapefiles with automatic feature extraction.
-- **Interactive Editing**: Support for dragging and hovering features, zooming with mouse-wheel, panning, and vertex topology editing directly on the map.
-- **Rendering Backends**:
-  - `CanvasPainter`: Standard HTML5 Canvas 2D API (Fast, default).
-  - `CanvasKitPainter`: CanvasKit / Skia WASM based rendering (Experimental).
-- **Projections**: Geographic coordinate projections and automatic coordinate transformations.
+- **Topology-based Rendering** — draws and edits geographic boundaries directly from Mapshaper datasets with high efficiency
+- **Multi-format Data Loading** — GeoJSON, TopoJSON, and ZIP Shapefiles loaded from URLs or local files
+- **Interactive Editing** — mouse-wheel zoom, drag-to-pan, hover highlighting, and topology-aware vertex dragging
+- **Dual Rendering Backends**
+  - `CanvasPainter` — HTML5 Canvas 2D, fast and default
+  - `CanvasKitPainter` — Skia WASM (experimental, better anti-aliasing)
+- **Geographic Projections** — CRS support (EPSG:4326, EPSG:3857) with automatic coordinate transformations
+- **Feature Querying** — spatial hit-testing and attribute inspection
+- **Built-in UI Controls** — navigation buttons, vertex edit toolbar, status bar, basemap toggle
 
 ## Installation
 
 ```bash
-npm install emap
-# or
 pnpm install emap
+# or
+npm install emap
 ```
 
 ## Basic Usage
-
-Include the generated bundle from `dist/emap.js` (or `dist/emap-dev.js` for development).
 
 ```html
 <!DOCTYPE html>
 <html>
   <head>
     <style>
-      #map {
-        width: 100vw;
-        height: 100vh;
-        margin: 0;
-      }
+      #map { width: 100vw; height: 100vh; margin: 0; }
     </style>
     <link rel="stylesheet" href="node_modules/emap/src/ui/controls.css" />
   </head>
@@ -49,15 +41,14 @@ Include the generated bundle from `dist/emap.js` (or `dist/emap-dev.js` for deve
 
       const map = new Emap({ container: "map" });
 
-      // Add built-in UI controls
       map.addControl(new NavigationControl(), "top-left");
       map.addControl(new EditToolbar(), "top-left");
 
       async function loadData() {
-        // Load GeoJSON, TopoJSON, or ZIP Shapefile from a URL
-        const url = "https://geojson.cn/api/china/1.6.3/china.topo.json";
-        const source = await TopologySource.fromUrl("china", url);
-
+        const source = await TopologySource.fromUrl(
+          "china",
+          "https://geojson.cn/api/china/1.6.3/china.topo.json"
+        );
         map.addSource("china", source);
         map.setExtent(source.getExtent());
       }
@@ -68,12 +59,62 @@ Include the generated bundle from `dist/emap.js` (or `dist/emap-dev.js` for deve
 </html>
 ```
 
+## API Overview
+
+### `Emap`
+
+The core map instance.
+
+```js
+const map = new Emap({ container: "map" });
+
+map.addSource(id, source);          // Register a TopologySource
+map.setExtent(bounds);              // Fit viewport to bounds
+map.addControl(control, position);  // Add a UI control
+map.queryRenderedFeatures(point);   // Hit-test at a pixel coordinate
+map.on("click", (e) => { ... });    // Listen to map events
+```
+
+### `TopologySource`
+
+Loads and manages geographic data.
+
+```js
+// From a URL (GeoJSON, TopoJSON, or ZIP Shapefile)
+const source = await TopologySource.fromUrl("id", url);
+
+source.getExtent();   // Returns bounding box
+source.getLayers();   // Returns available layers
+```
+
+### UI Controls
+
+| Control | Description |
+|---|---|
+| `NavigationControl` | Zoom in/out and reset buttons |
+| `EditToolbar` | Activates vertex editing mode |
+| `StatusControl` | Shows cursor coordinates and CRS |
+| `BasemapControl` | Toggles a MapLibre raster basemap |
+
+All controls implement `onAdd(map)` / `onRemove()` and can be positioned at `"top-left"`, `"top-right"`, `"bottom-left"`, or `"bottom-right"`.
+
 ## Architecture
 
-- **`Emap` (`src/map/map.ts`)**: The core map instance orchestrating the viewport, user interactions, controls, and rendering pipelines.
-- **`TopologySource` (`src/source/topology-source.ts`)**: Handles downloading, parsing, flattening, and simplifying Mapsaper datasets for optimized rendering.
-- **`Painter` (`src/renderer/painter.ts`)**: Base renderer interface implemented by `CanvasPainter` and `CanvasKitPainter`.
-- **`Viewport` & `Projection`**: Handles spatial logic, map transformation properties, zooming, and projection mapping.
+```
+src/
+├── map/map.ts              # Emap — orchestrates everything
+├── source/topology-source.ts  # Data loading and LOD management
+├── renderer/               # CanvasPainter, CanvasKitPainter
+├── geo/                    # Viewport, Projection, Transform, Bounds
+├── core/                   # EventDispatcher, drag/wheel interactions, tweening
+└── ui/                     # Control implementations
+```
+
+Key design choices:
+- All internal communication uses `EventDispatcher` (`on` / `fire`) — not raw DOM events
+- Coordinate math uses 2D affine transforms: `(x * mx + bx, y * my + by)`
+- Large datasets use Level of Detail (LOD) simplification via `display-arcs.ts`
+- `CanvasPainter` batches 25 paths per `stroke()` call for performance
 
 ## Development
 
@@ -81,13 +122,27 @@ Include the generated bundle from `dist/emap.js` (or `dist/emap-dev.js` for deve
 # Install dependencies
 pnpm install
 
-# Start development build (watch mode)
+# Watch mode (sourcemaps)
 npm run dev
 
-# Build for production
+# Single development build
+npm run dev-build
+
+# Production build (minified)
 npm run build
+
+# Run tests
+npm test
 ```
+
+Build outputs in `dist/`:
+- `emap-dev.js` — development bundle with sourcemaps
+- `emap.js` — production minified bundle
+- `emap.mjs` — ES module
+- `emap.d.ts` — TypeScript declarations
+
+Manual testing: open any `test/examples/*.html` in a browser after building.
 
 ## License
 
-MPL-2.0
+[MPL-2.0](LICENSE)
