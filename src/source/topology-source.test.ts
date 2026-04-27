@@ -166,6 +166,92 @@ describe('TopologySource.export', () => {
     const b = await source.export({ format: 'geojson' });
     expect(await a.text()).toBe(await b.text());
   });
+
+  it('routes msx through exportPackedDatasets (not exportFileContent)', async () => {
+    const exportFileContent = vi.fn();
+    const exportPackedDatasets = vi.fn(async () => [
+      { filename: 'mapshaper_snapshot.msx', content: new Uint8Array([0xff, 0xfe, 0xfd]) },
+    ]);
+    Reflect.set(mapshaper.internal as object, 'exportFileContent', exportFileContent);
+    const originalPack = Reflect.get(mapshaper.internal as object, 'exportPackedDatasets');
+    Reflect.set(mapshaper.internal as object, 'exportPackedDatasets', exportPackedDatasets);
+
+    try {
+      const source = new TopologySource('test');
+      setPrivate(source, '_dataset', FAKE_DATASET);
+      const blob = await source.export({ format: 'msx' });
+
+      expect(exportFileContent).not.toHaveBeenCalled();
+      expect(exportPackedDatasets).toHaveBeenCalledTimes(1);
+      const args = exportPackedDatasets.mock.calls[0] as unknown[];
+      expect(args[0]).toEqual([FAKE_DATASET]);
+      expect(args[1]).toMatchObject({ compact: true });
+      expect(blob.type).toBe('application/octet-stream');
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      expect(Array.from(buf)).toEqual([0xff, 0xfe, 0xfd]);
+    } finally {
+      Reflect.set(mapshaper.internal as object, 'exportPackedDatasets', originalPack);
+    }
+  });
+});
+
+describe('TopologySource snapshot round-trip (real mapshaper)', () => {
+  // Tiny single-feature polygon — survives the full Pack→Unpack pipeline.
+  const TINY_GEOJSON = JSON.stringify({
+    type: 'FeatureCollection',
+    features: [{
+      type: 'Feature',
+      properties: { name: 'box', score: 7 },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]],
+      },
+    }],
+  });
+
+  function importGeoJSON(filename: string, contentString: string): Promise<TopologySource> {
+    return new Promise((resolve, reject) => {
+      const source = new TopologySource('rt');
+      source.on('data', () => resolve(source));
+      source.on('error', (e: any) => reject(e?.error ?? e));
+      source.setData({ filename, content: new TextEncoder().encode(contentString) });
+    });
+  }
+
+  function summarize(source: TopologySource) {
+    const ds = source.getDataset()!;
+    return {
+      layerNames: ds.layers.map((l: any) => l.name),
+      geoms: ds.layers.map((l: any) => l.geometry_type),
+      shapeCounts: ds.layers.map((l: any) => l.shapes?.length ?? 0),
+      arcCount: ds.arcs ? (ds.arcs as any).size?.() ?? null : null,
+    };
+  }
+
+  it('round-trips layer names, geometry types, shape counts, and arc count via .msx', async () => {
+    const original = await importGeoJSON('box.geojson', TINY_GEOJSON);
+    const before = summarize(original);
+
+    const blob = await original.export({ format: 'msx' });
+    expect(blob.type).toBe('application/octet-stream');
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+
+    await new Promise<void>((resolve, reject) => {
+      const fresh = new TopologySource('rt2');
+      fresh.on('data', () => {
+        const after = summarize(fresh);
+        try {
+          expect(after.layerNames).toEqual(before.layerNames);
+          expect(after.geoms).toEqual(before.geoms);
+          expect(after.shapeCounts).toEqual(before.shapeCounts);
+          expect(after.arcCount).toEqual(before.arcCount);
+          resolve();
+        } catch (err) { reject(err); }
+      });
+      fresh.on('error', (e: any) => reject(e?.error ?? e));
+      fresh.setData({ filename: 'roundtrip.msx', content: bytes });
+    });
+  });
 });
 
 describe('TopologySource.setData multi-file', () => {

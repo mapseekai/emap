@@ -56,6 +56,9 @@ export class DragPanHandler extends EventDispatcher {
 
   private _onMouseDown(e: MouseEvent): void {
     if (!this._enabled) return;
+    // Reserve shift+drag for higher-level controls (e.g. box-select). Plain
+    // panning continues to fire on left/middle drag without modifiers.
+    if (e.shiftKey) return;
     this._isDragging = true;
     this._lastMousePos = [e.clientX, e.clientY];
     this.fire('panstart');

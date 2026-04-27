@@ -2131,3 +2131,2013 @@ describe('Emap rotateSelected / scaleSelected', () => {
     });
   });
 });
+
+describe('Emap mosaicLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = { layers: [{ name: 'parts', shapes: [] }] };
+    const afterDs = { layers: [{ name: 'parts', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('emits the bare -mosaic command', async () => {
+    const ok = await map.mosaicLayer({ source: 'src1', target: 'parts' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic');
+  });
+
+  it('appends snap-interval=', async () => {
+    await map.mosaicLayer({ source: 'src1', target: 'parts', snapInterval: 0.001 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic snap-interval=0.001');
+  });
+
+  it('appends no-snap and no-replace flags', async () => {
+    await map.mosaicLayer({ source: 'src1', target: 'parts', noSnap: true, noReplace: true });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic no-snap no-replace');
+  });
+
+  it('quotes name= when supplied', async () => {
+    await map.mosaicLayer({ source: 'src1', target: 'parts', name: 'flat zones' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic name="flat zones"');
+  });
+
+  it('returns false on missing source / target', async () => {
+    expect(await map.mosaicLayer({ source: 'nope', target: 'parts' })).toBe(false);
+    expect(await map.mosaicLayer({ source: 'src1', target: 'nope' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('pushes one history entry labelled "Mosaic <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.mosaicLayer({ source: 'src1', target: 'parts' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Mosaic parts');
+  });
+});
+
+describe('Emap unionLayers', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'parks', shapes: [], geometry_type: 'polygon' },
+        { name: 'soils', shapes: [], geometry_type: 'polygon' },
+        { name: 'roads', shapes: [], geometry_type: 'polyline' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'union', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('joins targets with commas inside a single quoted -target arg', async () => {
+    const ok = await map.unionLayers({ source: 'src1', targets: ['parks', 'soils'] });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union');
+  });
+
+  it('preserves target order for three or more layers', async () => {
+    await map.unionLayers({ source: 'src1', targets: ['soils', 'parks', 'roads'] });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "soils,parks,roads" -union');
+  });
+
+  it('appends fields=', async () => {
+    await map.unionLayers({
+      source: 'src1', targets: ['parks', 'soils'], fields: ['name', 'type'],
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union fields=name,type');
+  });
+
+  it('quotes name=', async () => {
+    await map.unionLayers({
+      source: 'src1', targets: ['parks', 'soils'], name: 'overlay output',
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union name="overlay output"');
+  });
+
+  it('appends no-replace', async () => {
+    await map.unionLayers({
+      source: 'src1', targets: ['parks', 'soils'], noReplace: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union no-replace');
+  });
+
+  it('returns false for fewer than two targets', async () => {
+    expect(await map.unionLayers({ source: 'src1', targets: ['parks'] })).toBe(false);
+    expect(await map.unionLayers({ source: 'src1', targets: [] })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when any target is unresolved', async () => {
+    expect(await map.unionLayers({
+      source: 'src1', targets: ['parks', 'missing'],
+    })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.unionLayers({ source: 'nope', targets: ['parks', 'soils'] })).toBe(false);
+  });
+
+  it('history entry is labelled "Union <comma-joined>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.unionLayers({ source: 'src1', targets: ['parks', 'soils'] });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Union parks,soils');
+  });
+});
+
+describe('Emap divideLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'roads', shapes: [], geometry_type: 'polyline' },
+        { name: 'tracts', shapes: [], geometry_type: 'polygon' },
+        { name: 'cities', shapes: [], geometry_type: 'point' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'roads', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds the minimal command shape', async () => {
+    const ok = await map.divideLayer({ source: 'src1', target: 'roads', divider: 'tracts' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -divide source="tracts"');
+  });
+
+  it('appends fields=', async () => {
+    await map.divideLayer({
+      source: 'src1', target: 'roads', divider: 'tracts',
+      fields: ['NAME', 'STATE'],
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -divide source="tracts" fields=NAME,STATE');
+  });
+
+  it('appends force', async () => {
+    await map.divideLayer({
+      source: 'src1', target: 'roads', divider: 'tracts', force: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -divide source="tracts" force');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.divideLayer({ source: 'nope', target: 'roads', divider: 'tracts' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.divideLayer({ source: 'src1', target: 'highways', divider: 'tracts' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when divider is unresolved', async () => {
+    expect(await map.divideLayer({ source: 'src1', target: 'roads', divider: 'counties' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is not a polyline', async () => {
+    expect(await map.divideLayer({ source: 'src1', target: 'tracts', divider: 'tracts' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when divider is not a polygon', async () => {
+    expect(await map.divideLayer({ source: 'src1', target: 'roads', divider: 'cities' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history entry is labelled "Divide <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.divideLayer({ source: 'src1', target: 'roads', divider: 'tracts' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Divide roads');
+  });
+});
+
+describe('Emap pointsLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'parks', shapes: [], geometry_type: 'polygon' },
+        { name: 'roads', shapes: [], geometry_type: 'polyline' },
+        { name: 'cities', shapes: [], geometry_type: 'point' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'parks', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds centroid command for polygon target', async () => {
+    const ok = await map.pointsLayer({ source: 'src1', target: 'parks', type: 'centroid' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks" -points centroid');
+  });
+
+  it('builds inner command for polygon target', async () => {
+    await map.pointsLayer({ source: 'src1', target: 'parks', type: 'inner' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks" -points inner');
+  });
+
+  it('builds vertices command for polyline target', async () => {
+    await map.pointsLayer({ source: 'src1', target: 'roads', type: 'vertices' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -points vertices');
+  });
+
+  it('builds endpoints command for polygon target', async () => {
+    await map.pointsLayer({ source: 'src1', target: 'parks', type: 'endpoints' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks" -points endpoints');
+  });
+
+  it('builds midpoints command for polyline target', async () => {
+    await map.pointsLayer({ source: 'src1', target: 'roads', type: 'midpoints' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -points midpoints');
+  });
+
+  it('builds interpolated command with interval', async () => {
+    await map.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: 1000 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -points interpolated interval=1000');
+  });
+
+  it('appends quoted name and no-replace', async () => {
+    await map.pointsLayer({
+      source: 'src1', target: 'parks', type: 'centroid',
+      name: 'park labels', noReplace: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "parks" -points centroid name="park labels" no-replace');
+  });
+
+  it('rejects centroid on non-polygon target', async () => {
+    expect(await map.pointsLayer({ source: 'src1', target: 'roads', type: 'centroid' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects midpoints on non-polyline target', async () => {
+    expect(await map.pointsLayer({ source: 'src1', target: 'parks', type: 'midpoints' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects vertices on a point target', async () => {
+    expect(await map.pointsLayer({ source: 'src1', target: 'cities', type: 'vertices' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects interpolated without interval', async () => {
+    expect(await map.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated' })).toBe(false);
+    expect(await map.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: 0 })).toBe(false);
+    expect(await map.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: -5 })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.pointsLayer({ source: 'nope', target: 'parks', type: 'centroid' })).toBe(false);
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.pointsLayer({ source: 'src1', target: 'forests', type: 'centroid' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history entry is labelled "Points <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.pointsLayer({ source: 'src1', target: 'parks', type: 'centroid' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Points parks');
+  });
+});
+
+describe('Emap linesLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'states', shapes: [], geometry_type: 'polygon' },
+        { name: 'roads', shapes: [], geometry_type: 'polyline' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'states', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds the minimal command shape', async () => {
+    const ok = await map.linesLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -lines');
+  });
+
+  it('emits comma-joined fields as a bare positional argument', async () => {
+    await map.linesLayer({
+      source: 'src1', target: 'states', fields: ['STATE', 'COUNTY'],
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -lines STATE,COUNTY');
+  });
+
+  it('appends quoted name', async () => {
+    await map.linesLayer({ source: 'src1', target: 'states', name: 'borders' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -lines name="borders"');
+  });
+
+  it('appends no-replace', async () => {
+    await map.linesLayer({ source: 'src1', target: 'states', noReplace: true });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -lines no-replace');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.linesLayer({ source: 'nope', target: 'states' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.linesLayer({ source: 'src1', target: 'counties' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is not a polygon', async () => {
+    expect(await map.linesLayer({ source: 'src1', target: 'roads' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history entry is labelled "Lines <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.linesLayer({ source: 'src1', target: 'states' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Lines states');
+  });
+});
+
+describe('Emap polygonsLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'edges', shapes: [], geometry_type: 'polyline' },
+        { name: 'parks', shapes: [], geometry_type: 'polygon' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'edges', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds the minimal command shape', async () => {
+    const ok = await map.polygonsLayer({ source: 'src1', target: 'edges' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons');
+  });
+
+  it('forwards gap-tolerance when positive', async () => {
+    await map.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: 0.001 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons gap-tolerance=0.001');
+  });
+
+  it('drops gap-tolerance when zero', async () => {
+    await map.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: 0 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons');
+  });
+
+  it('drops gap-tolerance when negative', async () => {
+    await map.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: -1 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons');
+  });
+
+  it('appends from-rings', async () => {
+    await map.polygonsLayer({ source: 'src1', target: 'edges', fromRings: true });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons from-rings');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.polygonsLayer({ source: 'nope', target: 'edges' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.polygonsLayer({ source: 'src1', target: 'rivers' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is not a polyline', async () => {
+    expect(await map.polygonsLayer({ source: 'src1', target: 'parks' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history entry is labelled "Polygons <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.polygonsLayer({ source: 'src1', target: 'edges' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Polygons edges');
+  });
+});
+
+describe('Emap simplifyLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'roads', shapes: [], geometry_type: 'polyline' },
+        { name: 'parks', shapes: [], geometry_type: 'polygon' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'roads', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds the percentage form', async () => {
+    const ok = await map.simplifyLayer({ source: 'src1', percentage: 10 });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10%');
+  });
+
+  it('preserves decimal percentages', async () => {
+    await map.simplifyLayer({ source: 'src1', percentage: 12.5 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 12.5%');
+  });
+
+  it('builds the interval form', async () => {
+    await map.simplifyLayer({ source: 'src1', interval: 250 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify interval=250');
+  });
+
+  it('builds the resolution form', async () => {
+    await map.simplifyLayer({ source: 'src1', resolution: '1000x500' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify resolution=1000x500');
+  });
+
+  it('appends method dp / visvalingam / weighted', async () => {
+    await map.simplifyLayer({ source: 'src1', percentage: 10, method: 'dp' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% dp');
+    parseCommandsSpy.mockClear();
+    await map.simplifyLayer({ source: 'src1', percentage: 10, method: 'visvalingam' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% visvalingam');
+    parseCommandsSpy.mockClear();
+    await map.simplifyLayer({ source: 'src1', percentage: 10, method: 'weighted' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% weighted');
+  });
+
+  it('appends weighting=', async () => {
+    await map.simplifyLayer({ source: 'src1', percentage: 10, method: 'weighted', weighting: 0.5 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% weighted weighting=0.5');
+  });
+
+  it('appends every passthrough flag', async () => {
+    await map.simplifyLayer({
+      source: 'src1', percentage: 10,
+      planar: true, keepShapes: true, lockBox: true, noRepair: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-simplify 10% planar keep-shapes lock-box no-repair');
+  });
+
+  it('scopes to a target when supplied', async () => {
+    await map.simplifyLayer({ source: 'src1', target: 'roads', percentage: 10 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -simplify 10%');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.simplifyLayer({ source: 'nope', percentage: 10 })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.simplifyLayer({ source: 'src1', target: 'rivers', percentage: 10 })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when no threshold is supplied', async () => {
+    expect(await map.simplifyLayer({ source: 'src1' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when multiple thresholds are supplied', async () => {
+    expect(await map.simplifyLayer({
+      source: 'src1', percentage: 10, interval: 250,
+    })).toBe(false);
+    expect(await map.simplifyLayer({
+      source: 'src1', percentage: 10, resolution: '1000x500',
+    })).toBe(false);
+    expect(await map.simplifyLayer({
+      source: 'src1', interval: 250, resolution: '1000x500',
+    })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false for out-of-range percentage', async () => {
+    expect(await map.simplifyLayer({ source: 'src1', percentage: -1 })).toBe(false);
+    expect(await map.simplifyLayer({ source: 'src1', percentage: 101 })).toBe(false);
+    expect(await map.simplifyLayer({ source: 'src1', percentage: NaN })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false for non-positive interval', async () => {
+    expect(await map.simplifyLayer({ source: 'src1', interval: 0 })).toBe(false);
+    expect(await map.simplifyLayer({ source: 'src1', interval: -1 })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false for malformed resolution', async () => {
+    expect(await map.simplifyLayer({ source: 'src1', resolution: '1000' })).toBe(false);
+    expect(await map.simplifyLayer({ source: 'src1', resolution: '1000x' })).toBe(false);
+    expect(await map.simplifyLayer({ source: 'src1', resolution: 'abc' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history entry is labelled "Simplify <target>" when scoped', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.simplifyLayer({ source: 'src1', target: 'roads', percentage: 10 });
+    expect(listener.mock.calls[0][0].label).toBe('Simplify roads');
+  });
+
+  it('history entry is labelled "Simplify <source>" when dataset-wide', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.simplifyLayer({ source: 'src1', percentage: 10 });
+    expect(listener.mock.calls[0][0].label).toBe('Simplify src1');
+  });
+});
+
+describe('Emap projectLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }],
+      info: { crs_string: '+proj=longlat +datum=WGS84' },
+    };
+    const afterDs = { layers: [{ name: 'states', shapes: [] }], info: { crs_string: '+proj=merc' } };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds the whole-source command (no target)', async () => {
+    const ok = await map.projectLayer({ source: 'src1', crs: 'EPSG:3857' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "EPSG:3857"');
+  });
+
+  it('builds the target-scoped command', async () => {
+    await map.projectLayer({ source: 'src1', target: 'states', crs: 'EPSG:3857' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -proj "EPSG:3857"');
+  });
+
+  it('quotes Proj.4 strings with spaces', async () => {
+    await map.projectLayer({ source: 'src1', crs: '+proj=utm +zone=10' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "+proj=utm +zone=10"');
+  });
+
+  it('appends quoted init=', async () => {
+    await map.projectLayer({ source: 'src1', crs: 'EPSG:3857', init: 'EPSG:4326' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "EPSG:3857" init="EPSG:4326"');
+  });
+
+  it('appends densify', async () => {
+    await map.projectLayer({ source: 'src1', crs: 'robinson', densify: true });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "robinson" densify');
+  });
+
+  it('combines all options', async () => {
+    await map.projectLayer({
+      source: 'src1', target: 'states',
+      crs: 'EPSG:3857', init: 'EPSG:4326', densify: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "states" -proj "EPSG:3857" init="EPSG:4326" densify');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.projectLayer({ source: 'nope', crs: 'EPSG:3857' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.projectLayer({ source: 'src1', target: 'missing', crs: 'EPSG:3857' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on empty / whitespace crs', async () => {
+    expect(await map.projectLayer({ source: 'src1', crs: '' })).toBe(false);
+    expect(await map.projectLayer({ source: 'src1', crs: '   ' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Project <target>" when scoped', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.projectLayer({ source: 'src1', target: 'states', crs: 'EPSG:3857' });
+    expect(listener.mock.calls[0][0].label).toBe('Project states');
+  });
+
+  it('history label is "Project <source>" when dataset-wide', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.projectLayer({ source: 'src1', crs: 'EPSG:3857' });
+    expect(listener.mock.calls[0][0].label).toBe('Project src1');
+  });
+});
+
+describe('Emap renameLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'old', shapes: [], geometry_type: 'polygon' },
+        { name: 'other', shapes: [], geometry_type: 'polyline' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'new', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds the minimal command shape', async () => {
+    const ok = await map.renameLayer({ source: 'src1', target: 'old', name: 'new' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "old" -rename-layers "new"');
+  });
+
+  it('quotes names with spaces', async () => {
+    await map.renameLayer({ source: 'src1', target: 'old', name: 'My Layer' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "old" -rename-layers "My Layer"');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.renameLayer({ source: 'nope', target: 'old', name: 'new' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.renameLayer({ source: 'src1', target: 'missing', name: 'new' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on empty / whitespace name', async () => {
+    expect(await map.renameLayer({ source: 'src1', target: 'old', name: '' })).toBe(false);
+    expect(await map.renameLayer({ source: 'src1', target: 'old', name: '   ' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on collision with another layer', async () => {
+    expect(await map.renameLayer({ source: 'src1', target: 'old', name: 'other' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('allows renaming to the same name (no collision against itself)', async () => {
+    const ok = await map.renameLayer({ source: 'src1', target: 'old', name: 'old' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "old" -rename-layers "old"');
+  });
+
+  it('history entry is labelled "Rename <from> → <to>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.renameLayer({ source: 'src1', target: 'old', name: 'new' });
+    expect(listener.mock.calls[0][0].label).toBe('Rename old → new');
+  });
+});
+
+describe('Emap mergeLayers', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'a', shapes: [], geometry_type: 'polygon' },
+        { name: 'b', shapes: [], geometry_type: 'polygon' },
+        { name: 'c', shapes: [], geometry_type: 'polygon' },
+        { name: 'roads', shapes: [], geometry_type: 'polyline' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'merged', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('joins targets with commas inside a single quoted -target arg', async () => {
+    const ok = await map.mergeLayers({ source: 'src1', targets: ['a', 'b'] });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers');
+  });
+
+  it('preserves target order for three or more layers', async () => {
+    await map.mergeLayers({ source: 'src1', targets: ['c', 'a', 'b'] });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "c,a,b" -merge-layers');
+  });
+
+  it('appends quoted name', async () => {
+    await map.mergeLayers({ source: 'src1', targets: ['a', 'b'], name: 'combined' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers name="combined"');
+  });
+
+  it('appends force', async () => {
+    await map.mergeLayers({ source: 'src1', targets: ['a', 'b'], force: true });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers force');
+  });
+
+  it('appends flatten', async () => {
+    await map.mergeLayers({ source: 'src1', targets: ['a', 'b'], flatten: true });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers flatten');
+  });
+
+  it('returns false for fewer than two targets', async () => {
+    expect(await map.mergeLayers({ source: 'src1', targets: ['a'] })).toBe(false);
+    expect(await map.mergeLayers({ source: 'src1', targets: [] })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when any target is unresolved', async () => {
+    expect(await map.mergeLayers({ source: 'src1', targets: ['a', 'missing'] })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects mixed-geometry targets without force', async () => {
+    expect(await map.mergeLayers({ source: 'src1', targets: ['a', 'roads'] })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('allows mixed-geometry targets with force=true', async () => {
+    const ok = await map.mergeLayers({ source: 'src1', targets: ['a', 'roads'], force: true });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,roads" -merge-layers force');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.mergeLayers({ source: 'nope', targets: ['a', 'b'] })).toBe(false);
+  });
+
+  it('history entry is labelled "Merge <comma-joined>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.mergeLayers({ source: 'src1', targets: ['a', 'b'] });
+    expect(listener.mock.calls[0][0].label).toBe('Merge a,b');
+  });
+});
+
+describe('Emap splitLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }],
+    };
+    const afterDs = { layers: [{ name: 'states-A', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds the field-name form', async () => {
+    const ok = await map.splitLayer({ source: 'src1', target: 'states', expression: 'REGION' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -split "REGION"');
+  });
+
+  it('forwards JS expressions verbatim, quoted', async () => {
+    await map.splitLayer({
+      source: 'src1', target: 'states',
+      expression: 'this.pop > 1000000 ? "big" : "small"',
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "states" -split "this.pop > 1000000 ? \\"big\\" : \\"small\\""');
+  });
+
+  it('appends no-replace', async () => {
+    await map.splitLayer({
+      source: 'src1', target: 'states', expression: 'REGION', noReplace: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -split "REGION" no-replace');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.splitLayer({ source: 'nope', target: 'states', expression: 'REGION' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.splitLayer({ source: 'src1', target: 'missing', expression: 'REGION' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on empty / whitespace expression', async () => {
+    expect(await map.splitLayer({ source: 'src1', target: 'states', expression: '' })).toBe(false);
+    expect(await map.splitLayer({ source: 'src1', target: 'states', expression: '   ' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history entry is labelled "Split <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.splitLayer({ source: 'src1', target: 'states', expression: 'REGION' });
+    expect(listener.mock.calls[0][0].label).toBe('Split states');
+  });
+});
+
+// =============================================================================
+// Data-engineering wrappers (shared scaffolding)
+// =============================================================================
+// Covers dropLayer / sortFeatures / uniqueFeatures / filterFields /
+// renameFields. All five have the same dataset-replace contract and beforeEach
+// shape, so a single helper builds the standard fixture.
+
+function setupDataEngineeringMap(): {
+  map: Emap;
+  parseCommandsSpy: ReturnType<typeof vi.fn>;
+  restore: () => void;
+} {
+  const map = createBareMap();
+  setPrivate(map, '_history', new EditHistory());
+  const beforeDs = {
+    layers: [
+      { name: 'states', shapes: [], geometry_type: 'polygon' },
+      { name: 'roads', shapes: [], geometry_type: 'polyline' },
+    ],
+  };
+  const afterDs = { layers: [{ name: 'states', shapes: [] }] };
+  const source = {
+    id: 'src1', type: 'topology',
+    getDataset: () => beforeDs,
+    getLayers: () => beforeDs.layers,
+    setDataset: vi.fn(),
+    refreshDisplayArcs: vi.fn(),
+  } as any;
+  (map as any)._sources.set('src1', source);
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+
+  const parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+  Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+  Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+  Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+  }));
+
+  return {
+    map,
+    parseCommandsSpy,
+    restore: () => {
+      Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+      Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+      Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+    },
+  };
+}
+
+describe('Emap dropLayer', () => {
+  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  beforeEach(() => { ctx = setupDataEngineeringMap(); });
+  afterEach(() => { ctx.restore(); });
+
+  it('builds the minimal command shape', async () => {
+    const ok = await ctx.map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -drop');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await ctx.map.dropLayer({ source: 'nope', target: 'states' })).toBe(false);
+    expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await ctx.map.dropLayer({ source: 'src1', target: 'missing' })).toBe(false);
+    expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Drop <target>"', async () => {
+    const listener = vi.fn();
+    ctx.map.on('historychange', listener);
+    await ctx.map.dropLayer({ source: 'src1', target: 'states' });
+    expect(listener.mock.calls[0][0].label).toBe('Drop states');
+  });
+});
+
+describe('Emap sortFeatures', () => {
+  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  beforeEach(() => { ctx = setupDataEngineeringMap(); });
+  afterEach(() => { ctx.restore(); });
+
+  it('builds the ascending command (default)', async () => {
+    const ok = await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: 'POP' });
+    expect(ok).toBe(true);
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -sort "POP"');
+  });
+
+  it('appends descending', async () => {
+    await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: 'POP', descending: true });
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -sort "POP" descending');
+  });
+
+  it('quotes JS expressions verbatim', async () => {
+    await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: 'this.pop * -1' });
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -sort "this.pop * -1"');
+  });
+
+  it('returns false on missing source / unresolved target / empty expression', async () => {
+    expect(await ctx.map.sortFeatures({ source: 'nope', target: 'states', expression: 'POP' })).toBe(false);
+    expect(await ctx.map.sortFeatures({ source: 'src1', target: 'missing', expression: 'POP' })).toBe(false);
+    expect(await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: '' })).toBe(false);
+    expect(await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: '   ' })).toBe(false);
+    expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Sort <target>"', async () => {
+    const listener = vi.fn();
+    ctx.map.on('historychange', listener);
+    await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: 'POP' });
+    expect(listener.mock.calls[0][0].label).toBe('Sort states');
+  });
+});
+
+describe('Emap uniqueFeatures', () => {
+  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  beforeEach(() => { ctx = setupDataEngineeringMap(); });
+  afterEach(() => { ctx.restore(); });
+
+  it('builds the minimal command shape', async () => {
+    const ok = await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE_FIPS' });
+    expect(ok).toBe(true);
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -uniq "STATE_FIPS"');
+  });
+
+  it('appends max-count', async () => {
+    await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE', maxCount: 3 });
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -uniq "STATE" max-count=3');
+  });
+
+  it('appends invert', async () => {
+    await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE', invert: true });
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -uniq "STATE" invert');
+  });
+
+  it('returns false on empty expression / non-positive maxCount', async () => {
+    expect(await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: '' })).toBe(false);
+    expect(await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'X', maxCount: 0 })).toBe(false);
+    expect(await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'X', maxCount: -1 })).toBe(false);
+    expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Uniq <target>"', async () => {
+    const listener = vi.fn();
+    ctx.map.on('historychange', listener);
+    await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE' });
+    expect(listener.mock.calls[0][0].label).toBe('Uniq states');
+  });
+});
+
+describe('Emap filterFields', () => {
+  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  beforeEach(() => { ctx = setupDataEngineeringMap(); });
+  afterEach(() => { ctx.restore(); });
+
+  it('joins fields with commas inside one quoted argument', async () => {
+    const ok = await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['fips', 'name'] });
+    expect(ok).toBe(true);
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -filter-fields "fips,name"');
+  });
+
+  it('appends invert', async () => {
+    await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['fips'], invert: true });
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -filter-fields "fips" invert');
+  });
+
+  it('returns false on empty / invalid fields', async () => {
+    expect(await ctx.map.filterFields({ source: 'src1', target: 'states', fields: [] })).toBe(false);
+    expect(await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['', 'b'] })).toBe(false);
+    expect(await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['a,b'] })).toBe(false);
+    expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Filter fields <target>"', async () => {
+    const listener = vi.fn();
+    ctx.map.on('historychange', listener);
+    await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['fips'] });
+    expect(listener.mock.calls[0][0].label).toBe('Filter fields states');
+  });
+});
+
+describe('Emap renameFields', () => {
+  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  beforeEach(() => { ctx = setupDataEngineeringMap(); });
+  afterEach(() => { ctx.restore(); });
+
+  it('serializes a single rename', async () => {
+    const ok = await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { OLD: 'NEW' } });
+    expect(ok).toBe(true);
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -rename-fields "OLD=NEW"');
+  });
+
+  it('serializes a multi-field rename in iteration order', async () => {
+    await ctx.map.renameFields({
+      source: 'src1', target: 'states',
+      mapping: { fips: 'STATE_FIPS', st: 'state' },
+    });
+    expect(ctx.parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "states" -rename-fields "fips=STATE_FIPS,st=state"');
+  });
+
+  it('returns false on empty mapping or invalid keys/values', async () => {
+    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: {} })).toBe(false);
+    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { '': 'b' } })).toBe(false);
+    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { a: '' } })).toBe(false);
+    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { 'a,b': 'c' } })).toBe(false);
+    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { 'a=b': 'c' } })).toBe(false);
+    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b,c' } })).toBe(false);
+    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b=c' } })).toBe(false);
+    expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Rename fields <target>"', async () => {
+    const listener = vi.fn();
+    ctx.map.on('historychange', listener);
+    await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b' } });
+    expect(listener.mock.calls[0][0].label).toBe('Rename fields states');
+  });
+});
+
+describe('Emap joinTable', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let lastCommands: any[] | null;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }],
+    };
+    const afterDs = { layers: [{ name: 'states', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    lastCommands = null;
+    parseCommandsSpy = vi.fn((cmd: string) => {
+      // Hold a ref so the test can inspect options.input that the runner
+      // mutates after parseCommands returns.
+      const arr = [{ name: 'parsed', options: { _cmd: cmd } as any }];
+      lastCommands = arr;
+      return arr;
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  function injectedInput(): unknown {
+    return lastCommands?.[0]?.options?.input;
+  }
+
+  it('CSV-based join — command shape + input cache', async () => {
+    const ok = await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { csv: 'fips,pop\n01,4M\n02,800K' },
+      keys: ['STATE_FIPS', 'fips'],
+    });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "states" -join ".emap-join.csv" keys="STATE_FIPS,fips"');
+    expect(injectedInput()).toEqual({ '.emap-join.csv': 'fips,pop\n01,4M\n02,800K' });
+  });
+
+  it('CSV bytes (Uint8Array) flow through unchanged', async () => {
+    const bytes = new TextEncoder().encode('a,b\n1,2');
+    await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { csv: bytes },
+      keys: ['k', 's'],
+    });
+    expect((injectedInput() as Record<string, unknown>)['.emap-join.csv']).toBe(bytes);
+  });
+
+  it('JSON string is injected as .emap-join.json', async () => {
+    await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { json: '[{"a":1}]' },
+      keys: ['k', 's'],
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "states" -join ".emap-join.json" keys="k,s"');
+    expect(injectedInput()).toEqual({ '.emap-join.json': '[{"a":1}]' });
+  });
+
+  it('JSON array is auto-stringified', async () => {
+    await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { json: [{ a: 1 }, { a: 2 }] },
+      keys: ['k', 's'],
+    });
+    expect((injectedInput() as Record<string, unknown>)['.emap-join.json'])
+      .toBe('[{"a":1},{"a":2}]');
+  });
+
+  it('JSON plain object is auto-stringified', async () => {
+    await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { json: { rows: [{ a: 1 }] } },
+      keys: ['k', 's'],
+    });
+    expect((injectedInput() as Record<string, unknown>)['.emap-join.json'])
+      .toBe('{"rows":[{"a":1}]}');
+  });
+
+  it('Layer-based join — no inputFiles cache', async () => {
+    await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { layer: 'pop_table' },
+      keys: ['STATE_FIPS', 'fips'],
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "states" -join "pop_table" keys="STATE_FIPS,fips"');
+    expect(injectedInput()).toBeUndefined();
+  });
+
+  it('forwards every optional passthrough', async () => {
+    await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { layer: 't' }, keys: ['k', 's'],
+      fields: ['pop', 'gdp'], prefix: 'p_',
+      where: 'this.year === 2024', calc: 'sum(pop)',
+      unjoined: true, unmatched: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+      '-target "states" -join "t" keys="k,s"'
+      + ' fields=pop,gdp'
+      + ' prefix="p_"'
+      + ' where="this.year === 2024"'
+      + ' calc="sum(pop)"'
+      + ' unjoined unmatched',
+    );
+  });
+
+  it('returns false on missing source', async () => {
+    expect(await map.joinTable({
+      source: 'nope', target: 'states',
+      data: { csv: 'a,b\n1,2' }, keys: ['k', 's'],
+    })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on unresolved target', async () => {
+    expect(await map.joinTable({
+      source: 'src1', target: 'missing',
+      data: { csv: 'a,b\n1,2' }, keys: ['k', 's'],
+    })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on malformed keys', async () => {
+    const base = { source: 'src1' as const, target: 'states' as const, data: { layer: 't' } as const };
+    expect(await map.joinTable({ ...base, keys: ['k'] as any })).toBe(false);
+    expect(await map.joinTable({ ...base, keys: ['', 's'] })).toBe(false);
+    expect(await map.joinTable({ ...base, keys: ['k', '   '] })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on invalid data shape', async () => {
+    expect(await map.joinTable({
+      source: 'src1', target: 'states',
+      data: {} as any, keys: ['k', 's'],
+    })).toBe(false);
+    expect(await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { layer: '' } as any, keys: ['k', 's'],
+    })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Join <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { layer: 't' }, keys: ['k', 's'],
+    });
+    expect(listener.mock.calls[0][0].label).toBe('Join states');
+  });
+});
+
+describe('Emap joinTable round-trip (real mapshaper)', () => {
+  it('real CSV join populates the joined columns', async () => {
+    const polygons = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', properties: { fips: 'AL' }, geometry: { type: 'Polygon', coordinates: [[[0,0],[1,0],[1,1],[0,1],[0,0]]] } },
+        { type: 'Feature', properties: { fips: 'AK' }, geometry: { type: 'Polygon', coordinates: [[[2,2],[3,2],[3,3],[2,3],[2,2]]] } },
+      ],
+    });
+
+    const { TopologySource } = await import('../source/topology-source');
+    const source = await new Promise<any>((resolve, reject) => {
+      const s = new TopologySource('rt');
+      s.on('data', () => resolve(s));
+      s.on('error', (e: any) => reject(e?.error ?? e));
+      s.setData({ filename: 'rt.geojson', content: new TextEncoder().encode(polygons) });
+    });
+
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+    map.addSource('rt', source);
+
+    const layerName = source.getDataset()!.layers[0].name;
+    const csv = 'fips,pop\nAL,1000\nAK,2000\n';
+    const ok = await map.joinTable({
+      source: 'rt', target: layerName,
+      data: { csv }, keys: ['fips', 'fips'],
+    });
+    expect(ok).toBe(true);
+
+    const ds = map.getSource('rt')!.getDataset()!;
+    const recs = ds.layers[0].data!.getRecords();
+    expect(recs.length).toBe(2);
+    // Each polygon should now carry a 'pop' field from the joined CSV.
+    const popById: Record<string, unknown> = {};
+    for (const r of recs) popById[(r as any).fips] = (r as any).pop;
+    // mapshaper coerces numeric-looking CSV columns to numbers by default
+    expect(popById['AL']).toBe(1000);
+    expect(popById['AK']).toBe(2000);
+  });
+});
+
+describe('Emap rebuildTopology (mocked mapshaper)', () => {
+  let map: Emap;
+  let copyDatasetSpy: ReturnType<typeof vi.fn>;
+  let addIntersectionCutsSpy: ReturnType<typeof vi.fn>;
+  let setDatasetSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalAddCuts = Reflect.get(mapshaper.internal as object, 'addIntersectionCuts');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+
+    setDatasetSpy = vi.fn() as ReturnType<typeof vi.fn>;
+    const ds = {
+      layers: [{ name: 'shapes', shapes: [], geometry_type: 'polygon' }],
+      arcs: { /* sentinel — presence is what matters */ },
+    };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => ds,
+      getLayers: () => ds.layers,
+      setDataset: setDatasetSpy,
+      refreshDisplayArcs: vi.fn(),
+      off: vi.fn(),
+      on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    // copyDataset returns a fresh object each call so the test can inspect
+    // which copy was passed to addIntersectionCuts vs which to DatasetReplace.
+    let copyId = 0;
+    copyDatasetSpy = vi.fn(() => ({ _copy: ++copyId, layers: ds.layers, arcs: ds.arcs })) as ReturnType<typeof vi.fn>;
+    addIntersectionCutsSpy = vi.fn() as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', copyDatasetSpy);
+    Reflect.set(mapshaper.internal as object, 'addIntersectionCuts', addIntersectionCutsSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'addIntersectionCuts', originalAddCuts);
+  });
+
+  it('calls addIntersectionCuts on a deep copy of the source dataset', async () => {
+    const ok = await map.rebuildTopology({ source: 'src1' });
+    expect(ok).toBe(true);
+    expect(copyDatasetSpy).toHaveBeenCalledTimes(2); // before snapshot + working copy
+    expect(addIntersectionCutsSpy).toHaveBeenCalledTimes(1);
+    const arg = addIntersectionCutsSpy.mock.calls[0][0] as any;
+    expect(arg._copy).toBeDefined();
+  });
+
+  it('forwards options as snake_case', async () => {
+    await map.rebuildTopology({
+      source: 'src1', snapInterval: 0.001, noSnap: false, rebuildTopology: true,
+    });
+    const opts = addIntersectionCutsSpy.mock.calls[0][1] as any;
+    expect(opts).toEqual({
+      snap_interval: 0.001,
+      no_snap: false,
+      rebuild_topology: true,
+    });
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.rebuildTopology({ source: 'nope' })).toBe(false);
+    expect(addIntersectionCutsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when source has no dataset', async () => {
+    const noDsSource = {
+      id: 's2', type: 'topology' as const,
+      getDataset: () => undefined,
+      setDataset: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('s2', noDsSource);
+    expect(await map.rebuildTopology({ source: 's2' })).toBe(false);
+    expect(addIntersectionCutsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns true (no-op) for arc-less point-only datasets', async () => {
+    const pointSource = {
+      id: 'pts', type: 'topology' as const,
+      getDataset: () => ({ layers: [{ name: 'p', geometry_type: 'point', shapes: [] }] }),
+      setDataset: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('pts', pointSource);
+    expect(await map.rebuildTopology({ source: 'pts' })).toBe(true);
+    expect(addIntersectionCutsSpy).not.toHaveBeenCalled();
+    expect(map.canUndo()).toBe(false);
+  });
+
+  it('swaps the dataset via setDataset on success', async () => {
+    await map.rebuildTopology({ source: 'src1' });
+    expect(setDatasetSpy).toHaveBeenCalledTimes(1);
+    const after = setDatasetSpy.mock.calls[0][0] as any;
+    expect(after._copy).toBeDefined();
+  });
+
+  it('pushes one DatasetReplaceCommand labelled "Rebuild topology"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.rebuildTopology({ source: 'src1' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Rebuild topology');
+    expect(map.canUndo()).toBe(true);
+  });
+
+  it('acts as a history barrier (clears prior history)', async () => {
+    const history = (map as any)._history as EditHistory;
+    history.push({ label: 'fake', do: vi.fn(), undo: vi.fn() } as any);
+    expect(map.canUndo()).toBe(true);
+    // After rebuild, prior 'fake' command is gone; only 'Rebuild topology' remains.
+    await map.rebuildTopology({ source: 'src1' });
+    const command = history.undo();
+    expect(command?.label).toBe('Rebuild topology');
+    expect(map.canUndo()).toBe(false);
+  });
+
+  it('clears the selection', async () => {
+    const selection = (map as any)._selection as Selection;
+    selection.apply([{ source: 'src1', layer: 'shapes', id: 1 }], 'add');
+    expect(selection.getAll().length).toBe(1);
+    await map.rebuildTopology({ source: 'src1' });
+    expect(selection.getAll().length).toBe(0);
+  });
+
+  it('on addIntersectionCuts throw: fires error event and returns false', async () => {
+    addIntersectionCutsSpy.mockImplementation(() => { throw new Error('boom'); });
+    const errors: any[] = [];
+    map.on('error', (e: any) => errors.push(e));
+    expect(await map.rebuildTopology({ source: 'src1' })).toBe(false);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].error.message).toBe('boom');
+    expect(setDatasetSpy).not.toHaveBeenCalled();
+    expect(map.canUndo()).toBe(false);
+  });
+});
+
+describe('Emap rebuildTopology round-trip (real mapshaper)', () => {
+  // Build a tiny in-memory dataset, run rebuildTopology, assert that the
+  // arc collection is intact and the call didn't crash. A full
+  // intersection-insertion check would require a more elaborate fixture
+  // with overlapping polygons; this guards the basic plumbing.
+
+  function buildSource(id: string, geojson: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      import('../source/topology-source').then(({ TopologySource }) => {
+        const source = new TopologySource(id);
+        source.on('data', () => resolve(source));
+        source.on('error', (e: any) => reject(e?.error ?? e));
+        source.setData({ filename: `${id}.geojson`, content: new TextEncoder().encode(geojson) });
+      });
+    });
+  }
+
+  it('runs without error on a simple polygon dataset and remains queryable', async () => {
+    const geojson = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', properties: { id: 1 }, geometry: { type: 'Polygon', coordinates: [[[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]] } },
+        { type: 'Feature', properties: { id: 2 }, geometry: { type: 'Polygon', coordinates: [[[1, 1], [3, 1], [3, 3], [1, 3], [1, 1]]] } },
+      ],
+    });
+    const source = await buildSource('rt', geojson);
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+    map.addSource('rt', source);
+
+    const ok = await map.rebuildTopology({ source: 'rt' });
+    expect(ok).toBe(true);
+    const ds = map.getSource('rt')?.getDataset();
+    expect(ds).toBeDefined();
+    expect(ds!.layers[0].shapes.length).toBe(2);
+    expect(ds!.arcs).toBeDefined();
+  });
+});
+
+describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
+  let map: Emap;
+  let exportDatasetsToPackSpy: ReturnType<typeof vi.fn>;
+  let packSpy: ReturnType<typeof vi.fn>;
+  let unpackSessionDataSpy: ReturnType<typeof vi.fn>;
+  let lastPacked: any;
+
+  const originalExport = Reflect.get(mapshaper.internal as object, 'exportDatasetsToPack');
+  const originalPack = Reflect.get(mapshaper.internal as object, 'pack');
+  const originalUnpack = Reflect.get(mapshaper.internal as object, 'unpackSessionData');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    // addSource consults _projection / _viewport when registering the first
+    // source (CRS auto-detect). createBareMap doesn't initialize these, so
+    // stub them here.
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+
+    exportDatasetsToPackSpy = vi.fn(async (datasets: any[], opts: any) => ({
+      version: 1,
+      created: '2026-04-27T00:00:00Z',
+      datasets: datasets.map((d) => ({ packed: true, layerCount: d.layers?.length ?? 0 })),
+      _opts: opts,
+    })) as ReturnType<typeof vi.fn>;
+    packSpy = vi.fn((obj: any) => {
+      lastPacked = obj;
+      return new Uint8Array([1, 2, 3, 4]);
+    }) as ReturnType<typeof vi.fn>;
+    unpackSessionDataSpy = vi.fn(async () => ({
+      version: 1,
+      datasets: [
+        { layers: [{ name: 'a-layer', geometry_type: 'polygon', shapes: [] }] },
+        { layers: [{ name: 'b-layer', geometry_type: 'polyline', shapes: [] }] },
+      ],
+      emap: { version: 1, sources: [{ id: 'a' }, { id: 'b' }] },
+    })) as ReturnType<typeof vi.fn>;
+
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack', exportDatasetsToPackSpy);
+    Reflect.set(mapshaper.internal as object, 'pack', packSpy);
+    Reflect.set(mapshaper.internal as object, 'unpackSessionData', unpackSessionDataSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack', originalExport);
+    Reflect.set(mapshaper.internal as object, 'pack', originalPack);
+    Reflect.set(mapshaper.internal as object, 'unpackSessionData', originalUnpack);
+  });
+
+  function makeSource(id: string, ds: any) {
+    return {
+      id, type: 'topology' as const,
+      getDataset: () => ds,
+      getLayers: () => ds?.layers ?? [],
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+      // EventDispatcher surface used by Emap.removeSource
+      off: vi.fn(),
+      on: vi.fn(),
+    } as any;
+  }
+
+  it('packs all topology sources in registration order', async () => {
+    const ds1 = { layers: [{ name: 'L1' }] };
+    const ds2 = { layers: [{ name: 'L2' }, { name: 'L3' }] };
+    (map as any)._sources.set('s1', makeSource('s1', ds1));
+    (map as any)._sources.set('s2', makeSource('s2', ds2));
+
+    const blob = await map.exportSnapshot();
+    expect(blob.type).toBe('application/octet-stream');
+
+    expect(exportDatasetsToPackSpy).toHaveBeenCalledTimes(1);
+    const args = exportDatasetsToPackSpy.mock.calls[0] as unknown[];
+    expect(args[0]).toEqual([ds1, ds2]);
+    expect(args[1]).toEqual({ compact: true });
+  });
+
+  it('injects emap.sources metadata in source order', async () => {
+    (map as any)._sources.set('first', makeSource('first', { layers: [] }));
+    (map as any)._sources.set('second', makeSource('second', { layers: [] }));
+    await map.exportSnapshot();
+
+    expect(lastPacked.emap).toEqual({
+      version: 1,
+      sources: [{ id: 'first' }, { id: 'second' }],
+    });
+  });
+
+  it('skips sources without a dataset', async () => {
+    (map as any)._sources.set('loaded', makeSource('loaded', { layers: [] }));
+    (map as any)._sources.set('pending', makeSource('pending', undefined));
+    await map.exportSnapshot();
+
+    const args = exportDatasetsToPackSpy.mock.calls[0] as unknown[];
+    expect((args[0] as unknown[])).toHaveLength(1);
+    expect(lastPacked.emap.sources).toEqual([{ id: 'loaded' }]);
+  });
+
+  it('honours compact=false', async () => {
+    (map as any)._sources.set('s', makeSource('s', { layers: [] }));
+    await map.exportSnapshot({ compact: false });
+    expect(exportDatasetsToPackSpy.mock.calls[0][1]).toEqual({ compact: false });
+  });
+
+  it('produces an empty-datasets snapshot for an empty map', async () => {
+    const blob = await map.exportSnapshot();
+    expect(blob.type).toBe('application/octet-stream');
+    const args = exportDatasetsToPackSpy.mock.calls[0] as unknown[];
+    expect(args[0]).toEqual([]);
+    expect(lastPacked.emap.sources).toEqual([]);
+  });
+
+  it('loadSnapshot restores source IDs from emap metadata', async () => {
+    const ids = await map.loadSnapshot(new Uint8Array([0]));
+    expect(ids).toEqual(['a', 'b']);
+    expect(map.getSource('a')).toBeDefined();
+    expect(map.getSource('b')).toBeDefined();
+    expect(unpackSessionDataSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('loadSnapshot accepts ArrayBuffer input', async () => {
+    const buf = new Uint8Array([1, 2, 3]).buffer;
+    const ids = await map.loadSnapshot(buf);
+    expect(ids).toEqual(['a', 'b']);
+  });
+
+  it('loadSnapshot accepts Blob input', async () => {
+    const blob = new Blob([new Uint8Array([1, 2, 3])]);
+    const ids = await map.loadSnapshot(blob);
+    expect(ids).toEqual(['a', 'b']);
+  });
+
+  it('loadSnapshot prepends idPrefix to stored IDs', async () => {
+    const ids = await map.loadSnapshot(new Uint8Array([0]), { idPrefix: 'restored-' });
+    expect(ids).toEqual(['restored-a', 'restored-b']);
+    expect(map.getSource('restored-a')).toBeDefined();
+  });
+
+  it('loadSnapshot falls back to defaultIds when emap metadata absent', async () => {
+    unpackSessionDataSpy.mockResolvedValue({
+      version: 1,
+      datasets: [{ layers: [] }, { layers: [] }],
+    });
+    const ids = await map.loadSnapshot(new Uint8Array([0]), { defaultIds: ['x', 'y'] });
+    expect(ids).toEqual(['x', 'y']);
+  });
+
+  it('loadSnapshot fallback uses snapshot-<i> when no metadata and no defaults', async () => {
+    unpackSessionDataSpy.mockResolvedValue({
+      version: 1,
+      datasets: [{ layers: [] }, { layers: [] }],
+    });
+    const ids = await map.loadSnapshot(new Uint8Array([0]));
+    expect(ids).toEqual(['snapshot-0', 'snapshot-1']);
+  });
+
+  it('loadSnapshot replaces existing sources by default', async () => {
+    const existing = makeSource('a', { layers: [] });
+    (map as any)._sources.set('a', existing);
+    const sourceListenersBeforeAdd = (map as any)._sourceListeners as Map<string, unknown>;
+    sourceListenersBeforeAdd.set('a', () => {}); // satisfy removeSource cleanup
+
+    const ids = await map.loadSnapshot(new Uint8Array([0]));
+    expect(ids).toEqual(['a', 'b']);
+    // The source registered at 'a' is the new one, not the original
+    expect(map.getSource('a')).not.toBe(existing);
+  });
+
+  it('loadSnapshot rejects with replace=false on ID collision', async () => {
+    const existing = makeSource('a', { layers: [] });
+    (map as any)._sources.set('a', existing);
+    await expect(
+      map.loadSnapshot(new Uint8Array([0]), { replace: false }),
+    ).rejects.toThrow(/already exists/);
+    // Map state untouched: 'a' is the original, 'b' was not added
+    expect(map.getSource('a')).toBe(existing);
+    expect(map.getSource('b')).toBeUndefined();
+  });
+
+  it('loadSnapshot clears edit history and selection', async () => {
+    const history = (map as any)._history as EditHistory;
+    history.push({
+      label: 'fake', execute: vi.fn(), undo: vi.fn(),
+    } as any);
+    expect(map.canUndo()).toBe(true);
+
+    const selection = (map as any)._selection as Selection;
+    selection.apply([{ source: 's', layer: 'l', id: 1 }], 'add');
+    expect(selection.getAll().length).toBeGreaterThan(0);
+
+    await map.loadSnapshot(new Uint8Array([0]));
+    expect(map.canUndo()).toBe(false);
+    expect(map.canRedo()).toBe(false);
+    expect(selection.getAll().length).toBe(0);
+  });
+
+  it('loadSnapshot rejects on invalid input type', async () => {
+    await expect(
+      map.loadSnapshot('not bytes' as unknown as Uint8Array),
+    ).rejects.toThrow(/Blob, Uint8Array, or ArrayBuffer/);
+  });
+});
+
+describe('Emap.exportSnapshot / loadSnapshot round-trip (real mapshaper)', () => {
+  // A two-source round trip: pack two real datasets via Emap.exportSnapshot,
+  // then re-load into a fresh map via loadSnapshot, and assert that source
+  // IDs and per-layer summaries survive.
+
+  function buildSourceFromGeoJSON(id: string, geojson: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      // Lazy-import the concrete TopologySource via the same path used in production code
+      import('../source/topology-source').then(({ TopologySource }) => {
+        const source = new TopologySource(id);
+        source.on('data', () => resolve(source));
+        source.on('error', (e: any) => reject(e?.error ?? e));
+        source.setData({ filename: `${id}.geojson`, content: new TextEncoder().encode(geojson) });
+      });
+    });
+  }
+
+  function summarize(map: Emap, id: string) {
+    const ds = map.getSource(id)?.getDataset();
+    if (!ds) return null;
+    return {
+      layerNames: ds.layers.map((l: any) => l.name),
+      geoms: ds.layers.map((l: any) => l.geometry_type),
+      shapeCounts: ds.layers.map((l: any) => l.shapes?.length ?? 0),
+    };
+  }
+
+  it('round-trips two sources with original IDs and layer summaries', async () => {
+    const polysGeojson = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature', properties: { name: 'sq' },
+        geometry: { type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]] },
+      }],
+    });
+    const linesGeojson = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature', properties: { road: 'main' },
+        geometry: { type: 'LineString', coordinates: [[0, 0], [1, 1]] },
+      }],
+    });
+
+    const sourceA = await buildSourceFromGeoJSON('alpha', polysGeojson);
+    const sourceB = await buildSourceFromGeoJSON('beta', linesGeojson);
+
+    function stubProjection(m: Emap) {
+      setPrivate(m, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+      setPrivate(m, '_viewport', { setCRS: vi.fn() });
+    }
+
+    const mapA = createBareMap();
+    setPrivate(mapA, '_history', new EditHistory());
+    stubProjection(mapA);
+    mapA.addSource('alpha', sourceA);
+    mapA.addSource('beta', sourceB);
+
+    const beforeA = summarize(mapA, 'alpha');
+    const beforeB = summarize(mapA, 'beta');
+
+    const blob = await mapA.exportSnapshot();
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+
+    const mapB = createBareMap();
+    setPrivate(mapB, '_history', new EditHistory());
+    stubProjection(mapB);
+    const restored = await mapB.loadSnapshot(bytes);
+    expect(restored).toEqual(['alpha', 'beta']);
+    expect(summarize(mapB, 'alpha')).toEqual(beforeA);
+    expect(summarize(mapB, 'beta')).toEqual(beforeB);
+  });
+});

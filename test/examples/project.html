@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 投影变换 (Project)</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header select, #header input[type="text"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; }
+    #header input[type="text"] { width: 200px; }
+    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    .group { display: flex; gap: 6px; align-items: center; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <span class="group">
+      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    </span>
+    <span class="group">
+      <label>作用域:
+        <select id="scope">
+          <option value="">整个数据源</option>
+        </select>
+      </label>
+    </span>
+    <span class="group">
+      <label>目标 CRS:
+        <select id="crs-preset">
+          <option value="">— 选预设或在右侧输入 —</option>
+          <option value="EPSG:3857">EPSG:3857 (Web Mercator)</option>
+          <option value="EPSG:4326">EPSG:4326 (WGS84 经纬度)</option>
+          <option value="webmercator">webmercator</option>
+          <option value="wgs84">wgs84</option>
+          <option value="robinson">robinson</option>
+          <option value="natural-earth">natural-earth</option>
+          <option value="winkel3">winkel3</option>
+          <option value="albersusa">albersusa</option>
+        </select>
+      </label>
+      <input id="crs-text" type="text" placeholder="自定义,例如 EPSG:32633 或 +proj=utm +zone=33" />
+    </span>
+    <span class="group">
+      <label>源 CRS (init=,可选): <input id="init" type="text" placeholder="例如 EPSG:4326" /></label>
+      <label><input id="densify" type="checkbox" /> densify</label>
+    </span>
+    <button id="btn" disabled>投影</button>
+    <span id="status">加载一个数据文件;选择目标 CRS 后投影</span>
+    <span class="hint">
+      mapshaper <code>-proj</code>。投影后 buffer / area / snap 等会基于目标单位。
+      投影完成后会自动重新拟合视图。Ctrl+Z 撤销。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'project-source';
+    const scopeSel = document.getElementById('scope');
+    const crsPreset = document.getElementById('crs-preset');
+    const crsText = document.getElementById('crs-text');
+    const initInput = document.getElementById('init');
+    const densifyInput = document.getElementById('densify');
+    const btn = document.getElementById('btn');
+    const status = document.getElementById('status');
+
+    function populate(source) {
+      scopeSel.innerHTML = '<option value="">整个数据源</option>';
+      source.getLayers().forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        scopeSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
+      });
+      btn.disabled = source.getLayers().length === 0;
+    }
+
+    crsPreset.addEventListener('change', () => {
+      if (crsPreset.value) crsText.value = crsPreset.value;
+    });
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `正在加载 ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          populate(source);
+          status.textContent = `已加载 ${file.name}。`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    btn.addEventListener('click', async () => {
+      const crs = (crsText.value || crsPreset.value).trim();
+      if (!crs) {
+        status.textContent = '请选择或输入目标 CRS。';
+        return;
+      }
+      const opts = { source: SOURCE_ID, crs };
+      if (scopeSel.value) opts.target = scopeSel.value;
+      const init = initInput.value.trim();
+      if (init) opts.init = init;
+      if (densifyInput.checked) opts.densify = true;
+
+      const label = scopeSel.value || '整个数据源';
+      status.textContent = `正在投影 ${label} → ${crs}...`;
+      btn.disabled = true;
+      try {
+        const ok = await map.projectLayer(opts);
+        if (ok) {
+          // Auto-fit: projected extent likely differs from input
+          const src = map.getSource(SOURCE_ID);
+          if (src) map.setExtent(src.getExtent());
+          status.textContent = `已投影 ${label} → ${crs}。Ctrl+Z 撤销。`;
+        } else {
+          status.textContent = '投影失败 (检查 CRS 字符串)。';
+        }
+        const src = map.getSource(SOURCE_ID);
+        if (src) populate(src);
+      } catch (err) {
+        status.textContent = `错误: ${err?.message ?? err}`;
+        console.error(err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 合并图层 (Merge Layers)</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header select, #header input[type="text"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; }
+    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    .file-group { display: flex; gap: 6px; align-items: center; }
+    .layer-list { display: flex; flex-wrap: wrap; gap: 4px; }
+    .layer-list label { padding: 3px 8px; background: #34495e; border-radius: 3px; cursor: pointer; user-select: none; }
+    .layer-list label.active { background: #16a085; }
+    .layer-list input { display: none; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <span class="file-group">
+      <label>文件 (可一次选多个或多次添加):
+        <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple />
+      </label>
+      <button id="clear-files-btn" type="button">清空</button>
+    </span>
+    <label>勾选 ≥ 2 个图层合并:</label>
+    <div class="layer-list" id="layer-list"></div>
+    <label>新图层名: <input id="name" type="text" placeholder="可选" /></label>
+    <label><input id="force" type="checkbox" /> force (允许跨几何/字段)</label>
+    <label><input id="flatten" type="checkbox" /> flatten (面合并去重)</label>
+    <button id="btn" disabled>合并</button>
+    <span id="status">上传两个或多个图层文件</span>
+    <span class="hint">
+      mapshaper <code>-merge-layers</code>。默认要求几何类型一致;<code>force</code> 跨类合并;
+      <code>flatten</code> 仅对面有效,按图层 ID 去重叠。Ctrl+Z 可撤销。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'merge-source';
+    const fileInput = document.getElementById('file-input');
+    const clearBtn = document.getElementById('clear-files-btn');
+    const layerList = document.getElementById('layer-list');
+    const nameInput = document.getElementById('name');
+    const forceInput = document.getElementById('force');
+    const flattenInput = document.getElementById('flatten');
+    const btn = document.getElementById('btn');
+    const status = document.getElementById('status');
+
+    /** filename -> Uint8Array (累计) */
+    const uploaded = new Map();
+
+    function readFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve(new Uint8Array(ev.target.result));
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    function refreshLayerList(source) {
+      layerList.innerHTML = '';
+      source.getLayers().forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        const id = `layer-${i}`;
+        const label = document.createElement('label');
+        label.htmlFor = id;
+        label.textContent = `${name} (${lyr?.geometry_type ?? '?'})`;
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.id = id;
+        input.dataset.layerName = name;
+        input.addEventListener('change', () => {
+          label.classList.toggle('active', input.checked);
+          updateButton();
+        });
+        label.appendChild(input);
+        layerList.appendChild(label);
+      });
+      updateButton();
+    }
+
+    function selectedTargets() {
+      return Array.from(layerList.querySelectorAll('input:checked')).map((el) => el.dataset.layerName);
+    }
+
+    function updateButton() {
+      btn.disabled = selectedTargets().length < 2;
+    }
+
+    async function reimportAll() {
+      if (uploaded.size === 0) {
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        layerList.innerHTML = '';
+        btn.disabled = true;
+        status.textContent = '已清空,等待上传文件';
+        return;
+      }
+      status.textContent = `加载 ${uploaded.size} 个文件中...`;
+      const entries = Array.from(uploaded, ([filename, content]) => ({ filename, content }));
+      const source = new TopologySource(SOURCE_ID);
+      source.on('data', () => {
+        map.setExtent(source.getExtent());
+        refreshLayerList(source);
+        status.textContent = `已加载 ${uploaded.size} 个文件。勾选 ≥ 2 个图层后点击 "合并"。`;
+      });
+      source.on('error', (e) => {
+        console.error(e);
+        status.textContent = `加载失败: ${e.error?.message ?? e}`;
+      });
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      source.setData(entries);
+      map.addSource(SOURCE_ID, source);
+    }
+
+    fileInput.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length === 0) return;
+      for (const f of files) {
+        try {
+          uploaded.set(f.name, await readFile(f));
+        } catch (err) {
+          console.error(`读取 ${f.name} 失败`, err);
+        }
+      }
+      fileInput.value = '';
+      await reimportAll();
+    });
+
+    clearBtn.addEventListener('click', async () => {
+      uploaded.clear();
+      await reimportAll();
+    });
+
+    btn.addEventListener('click', async () => {
+      const targets = selectedTargets();
+      if (targets.length < 2) return;
+      const opts = { source: SOURCE_ID, targets };
+      const nm = nameInput.value.trim();
+      if (nm) opts.name = nm;
+      if (forceInput.checked) opts.force = true;
+      if (flattenInput.checked) opts.flatten = true;
+      status.textContent = `正在合并 ${targets.length} 个图层...`;
+      btn.disabled = true;
+      try {
+        const ok = await map.mergeLayers(opts);
+        status.textContent = ok
+          ? `已合并 ${targets.join(' / ')},Ctrl+Z 撤销。`
+          : '合并失败 (跨几何类型时勾选 force,或检查图层名)。';
+        const src = map.getSource(SOURCE_ID);
+        if (src) refreshLayerList(src);
+      } catch (err) {
+        status.textContent = `错误: ${err?.message ?? err}`;
+        console.error(err);
+      } finally {
+        updateButton();
+      }
+    });
+  </script>
+</body>
+
+</html>

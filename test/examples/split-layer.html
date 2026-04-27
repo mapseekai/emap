@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 图层拆分 (Split)</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header select, #header input[type="text"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; }
+    #header input[type="text"] { width: 280px; }
+    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <label>目标图层: <select id="target"></select></label>
+    <label>分组字段 / 表达式: <input id="expression" type="text" placeholder="例如 STATE 或 this.pop > 1e6 ? 'big' : 'small'" /></label>
+    <label><input id="no-replace" type="checkbox" /> 保留原图层</label>
+    <button id="btn" disabled>拆分</button>
+    <span id="status">加载一个含目标图层的数据文件</span>
+    <span class="hint">
+      mapshaper <code>-split</code>。可用裸字段名(按值分组),也可用 JS 表达式(按返回值分组)。
+      新图层名取决于分组值。Ctrl+Z 可撤销。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'split-source';
+    const targetSel = document.getElementById('target');
+    const exprInput = document.getElementById('expression');
+    const noReplaceInput = document.getElementById('no-replace');
+    const btn = document.getElementById('btn');
+    const status = document.getElementById('status');
+
+    function populate(source) {
+      targetSel.innerHTML = '';
+      source.getLayers().forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        targetSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
+      });
+      btn.disabled = source.getLayers().length === 0;
+    }
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `正在加载 ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          populate(source);
+          status.textContent = `已加载 ${file.name}。`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    btn.addEventListener('click', async () => {
+      const target = targetSel.value;
+      const expression = exprInput.value.trim();
+      if (!target || !expression) return;
+      const opts = { source: SOURCE_ID, target, expression };
+      if (noReplaceInput.checked) opts.noReplace = true;
+      status.textContent = `正在按 "${expression}" 拆分 "${target}"...`;
+      btn.disabled = true;
+      try {
+        const ok = await map.splitLayer(opts);
+        status.textContent = ok ? `已按 "${expression}" 拆分 "${target}",Ctrl+Z 撤销。` : '拆分失败。';
+        const src = map.getSource(SOURCE_ID);
+        if (src) populate(src);
+      } catch (err) {
+        status.textContent = `错误: ${err?.message ?? err}`;
+        console.error(err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+
+</html>

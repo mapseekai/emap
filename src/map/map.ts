@@ -7,6 +7,7 @@ import { Painter } from '../renderer/painter';
 import { CanvasPainter } from '../renderer/canvas-painter';
 import { CanvasKitPainter } from '../renderer/canvaskit-painter';
 import { TopologySource } from '../source/source';
+import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
 import { MouseWheel } from '../core/interactions';
 import { DragPanHandler } from '../core/drag-pan-handler';
 import { FeatureQuery } from './feature-query';
@@ -212,6 +213,430 @@ export interface SnapOptions {
   endpoints?: boolean;
   /** Round all coordinates to a given decimal precision (e.g. 0.000001). */
   precision?: number;
+}
+
+/**
+ * Options for {@link Emap.rebuildTopology}. Forwarded into mapshaper's
+ * `addIntersectionCuts` (with snake_case key conversion).
+ */
+export interface RebuildTopologyOptions {
+  /** Source ID whose dataset will be rebuilt. */
+  source: string;
+  /**
+   * Coincident-vertex snap distance in source-CRS units. When omitted,
+   * mapshaper auto-detects based on the dataset bounds.
+   */
+  snapInterval?: number;
+  /**
+   * Skip the snap pre-pass entirely. Faster, but won't fix near-coincident
+   * vertices that should share an arc.
+   */
+  noSnap?: boolean;
+  /**
+   * Force a `buildTopology` rerun even when the cut-detection pass found
+   * no changes. Useful after pure translates that didn't intersect anything
+   * new but still need shared arcs re-derived against neighbours.
+   */
+  rebuildTopology?: boolean;
+}
+
+/** Options for {@link Emap.renameLayer}. */
+export interface RenameLayerOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) to rename. */
+  target: string;
+  /** New layer name. Trimmed; must be non-empty and not collide with another existing layer. */
+  name: string;
+}
+
+/** Options for {@link Emap.splitLayer}. */
+export interface SplitLayerOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) to partition. */
+  target: string;
+  /**
+   * Field name (e.g. `'STATE'`) or JS expression for grouping. mapshaper
+   * auto-detects: a bare field reference uses that field's value; otherwise
+   * the string is evaluated per feature as JS. Forwarded verbatim.
+   */
+  expression: string;
+  /** Keep the original layer alongside the new split outputs. */
+  noReplace?: boolean;
+}
+
+/** Options for {@link Emap.dropLayer}. */
+export interface DropLayerOptions {
+  /** Source ID containing the layer to delete. */
+  source: string;
+  /** Layer name (or id) to remove from the source dataset. */
+  target: string;
+}
+
+/** Options for {@link Emap.sortFeatures}. */
+export interface SortFeaturesOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) whose features will be sorted in place. */
+  target: string;
+  /**
+   * JS expression evaluated per feature to produce the sort key. Bare field
+   * names (`'POP'`) work because mapshaper exposes record fields as locals.
+   */
+  expression: string;
+  /** Sort descending. Default `false` (ascending). */
+  descending?: boolean;
+}
+
+/** Options for {@link Emap.uniqueFeatures}. */
+export interface UniqueFeaturesOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) to dedupe within. */
+  target: string;
+  /**
+   * JS expression evaluated per feature to produce the dedupe id. Forwarded
+   * verbatim (a bare field name like `'STATE_FIPS'` works). For full-record
+   * dedupe pass `'JSON.stringify(this.properties)'`.
+   */
+  expression: string;
+  /**
+   * Maximum features per id; default `1`. Must be a positive integer when
+   * supplied (`> 0`).
+   */
+  maxCount?: number;
+  /** Keep duplicates and drop unique features instead (mapshaper's `invert`). */
+  invert?: boolean;
+}
+
+/** Options for {@link Emap.filterFields}. */
+export interface FilterFieldsOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) whose attribute schema will be slimmed. */
+  target: string;
+  /**
+   * Field names to retain. Each entry must be a non-empty string with no
+   * `,` characters. Use `['*']` for "drop all" (mapshaper convention).
+   */
+  fields: string[];
+  /** Drop the listed fields and keep the rest (mapshaper's `invert` flag). */
+  invert?: boolean;
+}
+
+/** Source-data shape for {@link Emap.joinTable}. Discriminated union: */
+export type JoinTableData =
+  /** CSV content (string or bytes). Saved as `.emap-join.csv` in the runner cache. */
+  | { csv: string | Uint8Array; json?: never; layer?: never }
+  /** JSON content. Plain arrays/objects are auto-stringified before injection. */
+  | { json: string | Uint8Array | unknown[] | Record<string, unknown>; csv?: never; layer?: never }
+  /** Reference to another layer in the same source by name. */
+  | { layer: string; csv?: never; json?: never };
+
+/** Options for {@link Emap.joinTable}. */
+export interface JoinTableOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Target layer name (or id) to receive joined attributes. */
+  target: string;
+  /** Where to read the source records from. */
+  data: JoinTableData;
+  /**
+   * Join keys, `[targetKey, sourceKey]`. Both must be non-empty trimmed
+   * strings. Forwarded as `keys=<target>,<source>`.
+   */
+  keys: [string, string];
+  /** Fields to copy from the source. Defaults to all but the source key. */
+  fields?: string[];
+  /** Prefix for joined-in field names (e.g. `'p_'` → `p_pop`, `p_gdp`). */
+  prefix?: string;
+  /** JS expression to filter source records before join. */
+  where?: string;
+  /** JS expression for many-to-one aggregation. */
+  calc?: string;
+  /** Keep target records that didn't match any source record (mapshaper's `unjoined`). */
+  unjoined?: boolean;
+  /** Output unmatched source records as a separate layer (mapshaper's `unmatched`). */
+  unmatched?: boolean;
+}
+
+/** Options for {@link Emap.renameFields}. */
+export interface RenameFieldsOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) whose fields will be renamed. */
+  target: string;
+  /**
+   * Map of `oldName -> newName`. Both keys and values must be non-empty
+   * after trimming and contain neither `,` nor `=` (those would break
+   * the comma-and-equals serialization mapshaper expects).
+   */
+  mapping: Record<string, string>;
+}
+
+/** Options for {@link Emap.mergeLayers}. Requires `targets.length >= 2`. */
+export interface MergeLayersOptions {
+  /** Source ID containing every target layer. */
+  source: string;
+  /** Two or more layer names (or ids) to combine into one. */
+  targets: string[];
+  /** Optional name for the output layer. */
+  name?: string;
+  /**
+   * Allow merging layers with different geometry types or inconsistent data
+   * fields (mapshaper's `force` flag). Without this, mismatched-geometry
+   * targets are rejected up-front to avoid an opaque mid-pipeline error.
+   */
+  force?: boolean;
+  /**
+   * For polygon merges: rebuild as a flat mosaic with higher-id polygons
+   * winning overlaps (mapshaper's `flatten` flag). Ignored by mapshaper
+   * for non-polygon inputs.
+   */
+  flatten?: boolean;
+}
+
+/** Simplification algorithm exposed by mapshaper's `-simplify`. */
+export type SimplifyMethod = 'dp' | 'visvalingam' | 'weighted';
+
+/**
+ * Options for {@link Emap.simplifyLayer}. Exactly one of `percentage`,
+ * `interval`, or `resolution` MUST be supplied — they correspond to
+ * mapshaper's three threshold modes and are mutually exclusive.
+ */
+/**
+ * Options for {@link Emap.projectLayer}. Reprojection via mapshaper's `-proj`
+ * (Proj.4-backed). `crs` is the destination CRS string; mapshaper accepts
+ * EPSG codes (`'EPSG:3857'`), named aliases (`'webmercator'`, `'robinson'`),
+ * or full Proj.4 definitions (`'+proj=utm +zone=10'`).
+ */
+export interface ProjectOptions {
+  /** Source ID containing the layer(s) to reproject. */
+  source: string;
+  /** Destination CRS. Required, non-empty after trimming. */
+  crs: string;
+  /**
+   * Optional layer name to scope the operation. When omitted, the whole
+   * source dataset is reprojected (mapshaper CLI default).
+   */
+  target?: string;
+  /**
+   * Source CRS override. Useful when the dataset doesn't have a stored
+   * CRS or when the stored value is wrong. Same string formats as `crs`.
+   */
+  init?: string;
+  /**
+   * Add intermediate vertices along straight segments to approximate
+   * curves under the destination projection (mapshaper's `densify` flag).
+   * Recommended when projecting from EPSG:4326 to azimuthal or pseudo-
+   * cylindrical projections to avoid visible angular distortion of long
+   * geodesic segments.
+   */
+  densify?: boolean;
+}
+
+export interface SimplifyOptions {
+  /** Source ID. Simplification operates on the source's shared arcs. */
+  source: string;
+  /**
+   * Optional layer name to scope the operation. When omitted, simplify
+   * applies to every layer in the source dataset (mapshaper CLI default).
+   */
+  target?: string;
+  /**
+   * Percentage of removable vertices to retain, e.g. `10` → `10%`. Must be
+   * within `[0, 100]`. Mutually exclusive with `interval` and `resolution`.
+   */
+  percentage?: number;
+  /**
+   * Output resolution as a positive distance in source-CRS units. Mutually
+   * exclusive with `percentage` and `resolution`.
+   */
+  interval?: number;
+  /**
+   * Output resolution as a grid string (e.g. `"1000x500"`). Mutually
+   * exclusive with `percentage` and `interval`.
+   */
+  resolution?: string;
+  /**
+   * Simplification algorithm. Default is `'weighted'` (weighted-Visvalingam),
+   * matching mapshaper's CLI default.
+   */
+  method?: SimplifyMethod;
+  /** Weighted-Visvalingam coefficient (mapshaper default 0.7). */
+  weighting?: number;
+  /** Treat coordinates as planar (degrees), not 3D spherical. */
+  planar?: boolean;
+  /** Keep small polygon features that would otherwise vanish. */
+  keepShapes?: boolean;
+  /** Pin vertices that lie on the dataset bounding box. */
+  lockBox?: boolean;
+  /** Skip the post-simplify topology repair pass. */
+  noRepair?: boolean;
+}
+
+/** Options for {@link Emap.mosaicLayer}. */
+export interface MosaicOptions {
+  /** Source ID containing the target polygon layer. */
+  source: string;
+  /** Layer name (or id) of the polygon layer to flatten. */
+  target: string;
+  /** Snap distance for the topology-build pre-pass (mapshaper's `snap-interval=`). */
+  snapInterval?: number;
+  /** Skip the snap pre-pass entirely (mapshaper's `no-snap` flag). */
+  noSnap?: boolean;
+  /** Keep the original layer alongside the new mosaic (mapshaper's `no-replace`). */
+  noReplace?: boolean;
+  /** Optional name for the output layer. */
+  name?: string;
+}
+
+/** Options for {@link Emap.unionLayers}. Requires `targets.length >= 2`. */
+export interface UnionOptions {
+  /** Source ID containing every target layer. */
+  source: string;
+  /** Two or more polygon layer names to overlay. */
+  targets: string[];
+  /** Optional list of fields to retain in the output. */
+  fields?: string[];
+  /** Optional name for the output layer. */
+  name?: string;
+  /** Keep the original layers alongside the new union output. */
+  noReplace?: boolean;
+}
+
+/**
+ * Options for {@link Emap.divideLayer}. Splits a polyline `target` layer at
+ * the boundaries of a polygon `divider` layer (both in the same source) and
+ * copies the underlying polygon's attributes onto each resulting line
+ * segment.
+ */
+export interface DivideOptions {
+  /** Source ID containing both target and divider layers. */
+  source: string;
+  /** Polyline layer name (or id) to be cut by polygon boundaries. */
+  target: string;
+  /** Polygon layer name (or id) used as the divider. */
+  divider: string;
+  /**
+   * Polygon fields to copy onto each line segment. Defaults to all fields of
+   * the divider layer.
+   */
+  fields?: string[];
+  /** Replace existing same-named fields on the line records. */
+  force?: boolean;
+}
+
+/**
+ * Modes for {@link Emap.pointsLayer}, mapping 1:1 to mapshaper's mutually
+ * exclusive `-points` flags.
+ */
+export type PointsMode =
+  | 'centroid'
+  | 'inner'
+  | 'vertices'
+  | 'endpoints'
+  | 'midpoints'
+  | 'interpolated';
+
+/**
+ * Options for {@link Emap.linesLayer}. Converts a polygon `target` into a
+ * polyline layer made of its boundary arcs. With `fields`, the boundaries
+ * are emitted hierarchically by category (e.g. outer hull vs. inter-region
+ * boundaries vs. inter-subregion boundaries).
+ */
+export interface LinesOptions {
+  /** Source ID containing the polygon target. */
+  source: string;
+  /** Polygon layer name (or id) to extract boundaries from. */
+  target: string;
+  /**
+   * Optional category fields. Each polygon boundary inherits the value of
+   * the most-coarse field that differs across it; mapshaper emits the
+   * boundary at the topmost layer in the hierarchy.
+   */
+  fields?: string[];
+  /** Optional name for the new polyline layer. */
+  name?: string;
+  /** Keep the original polygon layer alongside the new polyline output. */
+  noReplace?: boolean;
+}
+
+/**
+ * Options for {@link Emap.polygonsLayer}. Inverse of {@link LinesOptions} —
+ * forms enclosed polygons from a polyline target.
+ */
+export interface PolygonsOptions {
+  /** Source ID containing the polyline target. */
+  source: string;
+  /** Polyline layer name (or id) to be polygonized. */
+  target: string;
+  /**
+   * Gap-snapping tolerance in source-CRS units. Forwarded only when
+   * positive; otherwise mapshaper picks its own default.
+   */
+  gapTolerance?: number;
+  /**
+   * If true, take the fast path that assumes the input is already a layer
+   * of closed paths (mapshaper's `from-rings` flag).
+   */
+  fromRings?: boolean;
+}
+
+/** Options for {@link Emap.pointsLayer}. */
+export interface PointsOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the layer whose points will be extracted. */
+  target: string;
+  /**
+   * Extraction mode. Each mode constrains the input geometry: `centroid` /
+   * `inner` need polygons; `midpoints` / `interpolated` need polylines;
+   * `vertices` / `endpoints` accept either polygons or polylines.
+   */
+  type: PointsMode;
+  /**
+   * Sample interval in source-CRS units. Required (and must be positive) for
+   * `type: 'interpolated'`; ignored otherwise.
+   */
+  interval?: number;
+  /** Optional name for the output point layer. */
+  name?: string;
+  /** Keep the original layer alongside the new point layer (mapshaper's `no-replace`). */
+  noReplace?: boolean;
+}
+
+/** Options for {@link Emap.exportSnapshot}. */
+export interface ExportSnapshotOptions {
+  /**
+   * Bake simplification thresholds and gzip-compress arc buffers
+   * (mapshaper's `compact` flag). Default `true` — matches mapshaper CLI's
+   * on-disk snapshot.
+   */
+  compact?: boolean;
+}
+
+/** Options for {@link Emap.loadSnapshot}. */
+export interface LoadSnapshotOptions {
+  /**
+   * Prepended to every restored source ID — useful when loading a snapshot
+   * alongside existing sources to namespace them apart. Applies to both
+   * IDs read from the snapshot's `emap` metadata and fallback IDs.
+   */
+  idPrefix?: string;
+  /**
+   * When a restored ID collides with an already-registered source:
+   * - `true` (default) — the existing source is removed first.
+   * - `false` — the promise rejects without registering anything new.
+   */
+  replace?: boolean;
+  /**
+   * Used when the snapshot has no `emap` metadata (e.g. a vanilla mapshaper
+   * `.msx` file). One ID per restored dataset, in order. If the array is
+   * shorter than the dataset count, the tail falls back to `snapshot-<i>`.
+   */
+  defaultIds?: string[];
 }
 
 export interface HighlightStyle {
@@ -475,6 +900,118 @@ export class Emap extends EventDispatcher {
 
   public getSource(id: string): TopologySource | undefined {
     return this._sources.get(id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Multi-source snapshot (.msx) — pack/unpack the whole map
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Pack every topology source on this map into one `.msx` snapshot Blob via
+   * mapshaper's session pack pipeline. Source IDs are preserved in a custom
+   * `emap.sources` field on the packed object so {@link loadSnapshot} can
+   * re-register sources under their original IDs.
+   *
+   * Sources that have no dataset yet (load not completed) are skipped.
+   *
+   * The output file is a valid mapshaper `.msx` — vanilla mapshaper will
+   * load it (just dropping the `emap` metadata).
+   */
+  public async exportSnapshot(opts: ExportSnapshotOptions = {}): Promise<Blob> {
+    const compact = opts.compact !== false;
+    const ids: string[] = [];
+    const datasets: any[] = [];
+    for (const [id, source] of this._sources) {
+      if (source.type !== 'topology') continue;
+      const ds = source.getDataset?.();
+      if (!ds) continue;
+      ids.push(id);
+      datasets.push(ds);
+    }
+
+    const obj = await mapshaper.internal.exportDatasetsToPack(datasets, { compact });
+    (obj as Record<string, unknown>).emap = {
+      version: 1,
+      sources: ids.map((id) => ({ id })),
+    };
+    const bytes = mapshaper.internal.pack(obj);
+    return new Blob([bytes as BlobPart], { type: 'application/octet-stream' });
+  }
+
+  /**
+   * Restore one or more topology sources from a `.msx` snapshot via
+   * mapshaper's session unpack pipeline. Returns the list of registered
+   * source IDs in registration order.
+   *
+   * ID resolution priority (per restored dataset, in order):
+   * 1. `opts.idPrefix` + ID from snapshot's `emap.sources[i].id` (if metadata present)
+   * 2. `opts.idPrefix` + `opts.defaultIds[i]` (if supplied)
+   * 3. `opts.idPrefix` + `snapshot-<i>` fallback
+   *
+   * On ID collision: `replace: true` (default) removes the existing source
+   * first; `replace: false` rejects without registering anything.
+   *
+   * Edit history and selection are cleared because feature IDs in the
+   * replayed history would point to features that no longer exist after
+   * dataset replacement. Same semantics as the dataset-replace family
+   * (clip, dissolve, mosaic, ...).
+   */
+  public async loadSnapshot(
+    input: Blob | Uint8Array | ArrayBuffer,
+    opts: LoadSnapshotOptions = {},
+  ): Promise<string[]> {
+    const replace = opts.replace !== false;
+    const prefix = opts.idPrefix ?? '';
+    const defaults = opts.defaultIds ?? [];
+
+    let bytes: Uint8Array;
+    if (input instanceof Uint8Array) {
+      bytes = input;
+    } else if (input instanceof ArrayBuffer) {
+      bytes = new Uint8Array(input);
+    } else if (typeof Blob !== 'undefined' && input instanceof Blob) {
+      bytes = new Uint8Array(await input.arrayBuffer());
+    } else {
+      throw new Error('loadSnapshot: input must be Blob, Uint8Array, or ArrayBuffer');
+    }
+
+    const obj = await mapshaper.internal.unpackSessionData(bytes);
+    const datasets = obj.datasets ?? [];
+    const meta = (obj as Record<string, unknown>).emap as
+      | { sources?: Array<{ id?: string }> }
+      | undefined;
+    const storedIds = meta?.sources?.map((s) => s?.id).filter((s): s is string => typeof s === 'string') ?? [];
+
+    const resolvedIds: string[] = datasets.map((_, i) => {
+      const stored = storedIds[i];
+      const fallback = defaults[i] ?? `snapshot-${i}`;
+      return prefix + (stored ?? fallback);
+    });
+
+    // Collision check before any side effects when replace=false
+    if (!replace) {
+      for (const id of resolvedIds) {
+        if (this._sources.has(id)) {
+          throw new Error(`loadSnapshot: source "${id}" already exists (pass { replace: true } to overwrite)`);
+        }
+      }
+    }
+
+    // History and selection no longer reference live features.
+    this._history.clear();
+    this._fireSelectionChange(this._selection.clear());
+    this.fire('historychange');
+
+    const registered: string[] = [];
+    for (let i = 0; i < datasets.length; i++) {
+      const id = resolvedIds[i];
+      if (replace && this._sources.has(id)) this.removeSource(id);
+      const src = new ConcreteTopologySource(id);
+      src.setDataset(datasets[i]);
+      this.addSource(id, src);
+      registered.push(id);
+    }
+    return registered;
   }
 
   // ---------------------------------------------------------------------------
@@ -1385,6 +1922,695 @@ export class Emap extends EventDispatcher {
   }
 
   /**
+   * Re-derive shared arcs and insert intersection cuts via mapshaper's
+   * `addIntersectionCuts` — the lightweight repair pass every overlay
+   * command runs as a pre-pass before clip / erase / dissolve / union.
+   *
+   * Use case: after `translateSelected` / `rotateSelected` / vertex moves
+   * change arc geometry, this pass re-detects overlaps that the in-place
+   * edits didn't update. Without it, exports bake topology bugs into
+   * output and shared-arc rendering can misrepresent neighbour boundaries.
+   *
+   * Lighter than {@link cleanLayer} (which also removes spikes / slivers
+   * and dissolves polygon overlaps).
+   *
+   * Acts as a history barrier — prior fine-grained edit commands close
+   * over the OLD `arcs` object and old arc indices, so undoing them after
+   * a rebuild would corrupt geometry. The rebuild itself is one undoable
+   * step that fully restores the pre-rebuild state.
+   *
+   * Returns `true` (no-op) for arc-less point-only datasets,
+   * `false` for unresolvable source or `addIntersectionCuts` errors.
+   */
+  public async rebuildTopology(opts: RebuildTopologyOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const original = source.getDataset();
+    if (!original) return false;
+    if (!original.arcs) return true; // point-only — nothing to rebuild
+
+    const before: MapshaperDataset = mapshaper.internal.copyDataset(original);
+    const after: MapshaperDataset = mapshaper.internal.copyDataset(original);
+
+    try {
+      mapshaper.internal.addIntersectionCuts(after, {
+        snap_interval: opts.snapInterval,
+        no_snap: opts.noSnap,
+        rebuild_topology: opts.rebuildTopology,
+      });
+    } catch (err) {
+      this.fire('error', { error: err });
+      return false;
+    }
+
+    source.setDataset(after);
+
+    this._history.clear();
+    this._history.push(new DatasetReplaceCommand({ source, before, after, label: 'Rebuild topology' }));
+    this._fireHistoryChange();
+
+    this._fireSelectionChange(this._selection.clear());
+
+    this._scheduleRender();
+    return true;
+  }
+
+  /**
+   * Flatten overlapping polygons in a single layer into a tile mosaic via
+   * mapshaper's `-mosaic`. Every overlap region becomes its own polygon;
+   * gaps are preserved.
+   *
+   * Returns `false` for unresolvable source / target. Inherits all
+   * dataset-replace semantics from `_runDatasetCommand`.
+   */
+  public async mosaicLayer(opts: MosaicOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-mosaic`,
+    ];
+    if (typeof opts.snapInterval === 'number') {
+      parts.push(`snap-interval=${opts.snapInterval}`);
+    }
+    if (opts.noSnap) {
+      parts.push('no-snap');
+    }
+    if (opts.noReplace) {
+      parts.push('no-replace');
+    }
+    if (opts.name && opts.name.trim()) {
+      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Mosaic ${opts.target}`);
+  }
+
+  /**
+   * Overlay two or more polygon layers from the same source via mapshaper's
+   * `-union`. Output is one flat mosaic where every intersection region is
+   * its own polygon, attributed by the union of input fields.
+   *
+   * Returns `false` for unresolvable source, fewer than two targets, or any
+   * unresolved target name. Inherits dataset-replace semantics from
+   * `_runDatasetCommand`.
+   *
+   * Note: mapshaper's `-target` for `-union` is a comma-separated layer
+   * list, not a single layer name; we join `targets` with commas inside one
+   * quoted argument.
+   */
+  public async unionLayers(opts: UnionOptions): Promise<boolean> {
+    if (!opts.targets || opts.targets.length < 2) return false;
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    // Every target must resolve — mapshaper would otherwise error opaquely.
+    for (const t of opts.targets) {
+      if (!findLayerByName(dataset.layers, t)) return false;
+    }
+
+    const targetList = opts.targets.join(',');
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(targetList)}`,
+      `-union`,
+    ];
+    if (opts.fields && opts.fields.length > 0) {
+      const safe = opts.fields.filter((f) => !f.includes(','));
+      if (safe.length > 0) parts.push(`fields=${safe.join(',')}`);
+    }
+    if (opts.name && opts.name.trim()) {
+      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    if (opts.noReplace) {
+      parts.push('no-replace');
+    }
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Union ${targetList}`);
+  }
+
+  /**
+   * Cut a polyline `target` layer at the boundaries of a polygon `divider`
+   * layer in the same source via mapshaper's `-divide`. Each resulting line
+   * segment inherits the underlying polygon's attributes (subset by `fields`
+   * when supplied).
+   *
+   * Returns `false` for unresolvable source, missing/wrong-geometry target,
+   * or missing/wrong-geometry divider. Inherits dataset-replace semantics
+   * from `_runDatasetCommand`.
+   *
+   * mapshaper's `-divide` can take its polygon source positionally, but we
+   * use the explicit `source=<name>` form for symmetry with `clipLayer` and
+   * `eraseLayer`.
+   */
+  public async divideLayer(opts: DivideOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    const targetLayer = findLayerByName(dataset.layers, opts.target);
+    if (!targetLayer || targetLayer.geometry_type !== 'polyline') return false;
+    const dividerLayer = findLayerByName(dataset.layers, opts.divider);
+    if (!dividerLayer || dividerLayer.geometry_type !== 'polygon') return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-divide source=${quoteMapshaperArg(opts.divider)}`,
+    ];
+    if (opts.fields && opts.fields.length > 0) {
+      const safe = opts.fields.filter((f) => !f.includes(','));
+      if (safe.length > 0) parts.push(`fields=${safe.join(',')}`);
+    }
+    if (opts.force) parts.push('force');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Divide ${opts.target}`);
+  }
+
+  /**
+   * Extract a point layer from a polygon or polyline target via mapshaper's
+   * `-points`. The `type` enum collapses mapshaper's mutually-exclusive
+   * `-points` flags into a single option:
+   *
+   * - `centroid` / `inner` — one point per polygon (target must be polygon)
+   * - `midpoints` / `interpolated` — sample along polylines (target must be polyline;
+   *   `interpolated` also requires a positive `interval`)
+   * - `vertices` / `endpoints` — extract path vertices (target must be polygon or polyline)
+   *
+   * Returns `false` for unresolvable source / target, mismatched geometry,
+   * or `interpolated` without a positive `interval`. Inherits dataset-replace
+   * semantics from `_runDatasetCommand`.
+   */
+  public async pointsLayer(opts: PointsOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    const layer = findLayerByName(dataset.layers, opts.target);
+    if (!layer) return false;
+
+    const geom = layer.geometry_type;
+    switch (opts.type) {
+      case 'centroid':
+      case 'inner':
+        if (geom !== 'polygon') return false;
+        break;
+      case 'midpoints':
+      case 'interpolated':
+        if (geom !== 'polyline') return false;
+        break;
+      case 'vertices':
+      case 'endpoints':
+        if (geom !== 'polygon' && geom !== 'polyline') return false;
+        break;
+      default:
+        return false;
+    }
+    if (opts.type === 'interpolated' && !(typeof opts.interval === 'number' && opts.interval > 0)) {
+      return false;
+    }
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-points ${opts.type}`,
+    ];
+    if (opts.type === 'interpolated') {
+      parts.push(`interval=${opts.interval}`);
+    }
+    if (opts.name && opts.name.trim()) {
+      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    if (opts.noReplace) parts.push('no-replace');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Points ${opts.target}`);
+  }
+
+  /**
+   * Convert a polygon target into a polyline layer of its boundary arcs via
+   * mapshaper's `-lines`. Optional `fields` produces a hierarchy of
+   * boundaries (outer hull at the top, intra-region boundaries below).
+   *
+   * Returns `false` for unresolvable source / target or non-polygon target.
+   * Inherits dataset-replace semantics from `_runDatasetCommand`.
+   *
+   * `fields` is mapshaper's positional `DEFAULT: true` arg, emitted as a
+   * bare comma-joined token (no `fields=` prefix) to match the CLI norm.
+   */
+  public async linesLayer(opts: LinesOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    const layer = findLayerByName(dataset.layers, opts.target);
+    if (!layer || layer.geometry_type !== 'polygon') return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      '-lines',
+    ];
+    if (opts.fields && opts.fields.length > 0) {
+      const safe = opts.fields.filter((f) => !f.includes(','));
+      if (safe.length > 0) parts[parts.length - 1] = `-lines ${safe.join(',')}`;
+    }
+    if (opts.name && opts.name.trim()) {
+      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    if (opts.noReplace) parts.push('no-replace');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Lines ${opts.target}`);
+  }
+
+  /**
+   * Convert a polyline target into a polygon layer via mapshaper's
+   * `-polygons`. Inverse of {@link linesLayer}. The default path snaps
+   * gaps and reconstructs faces; `fromRings` skips that step when the
+   * input is known to be a layer of closed paths.
+   *
+   * Returns `false` for unresolvable source / target or non-polyline
+   * target. Inherits dataset-replace semantics from `_runDatasetCommand`.
+   */
+  public async polygonsLayer(opts: PolygonsOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    const layer = findLayerByName(dataset.layers, opts.target);
+    if (!layer || layer.geometry_type !== 'polyline') return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      '-polygons',
+    ];
+    if (typeof opts.gapTolerance === 'number' && opts.gapTolerance > 0) {
+      parts.push(`gap-tolerance=${opts.gapTolerance}`);
+    }
+    if (opts.fromRings) parts.push('from-rings');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Polygons ${opts.target}`);
+  }
+
+  /**
+   * Simplify the geometry of polygon and polyline features via mapshaper's
+   * `-simplify`. Operates on the source's shared arcs (sets per-vertex `zz`
+   * thresholds + a `zlimit`); subsequent commands and exports honour the
+   * threshold automatically. Re-running with a different threshold replaces
+   * the previous one — the original vertex data is preserved on the arc
+   * collection.
+   *
+   * Exactly one of `percentage`, `interval`, or `resolution` MUST be
+   * supplied. `target` is optional; when omitted, the whole source dataset
+   * is simplified (mapshaper CLI default).
+   *
+   * Returns `false` for unresolvable source, unresolved target, missing /
+   * conflicting / out-of-range threshold, or malformed `resolution`.
+   */
+  public async simplifyLayer(opts: SimplifyOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (opts.target !== undefined) {
+      if (!findLayerByName(dataset.layers, opts.target)) return false;
+    }
+
+    // Exactly one threshold mode.
+    const thresholdsSet = [
+      opts.percentage !== undefined,
+      opts.interval !== undefined,
+      opts.resolution !== undefined,
+    ].filter(Boolean).length;
+    if (thresholdsSet !== 1) return false;
+
+    let thresholdToken: string;
+    if (opts.percentage !== undefined) {
+      const p = opts.percentage;
+      if (!Number.isFinite(p) || p < 0 || p > 100) return false;
+      thresholdToken = `${p}%`;
+    } else if (opts.interval !== undefined) {
+      const v = opts.interval;
+      if (!Number.isFinite(v) || v <= 0) return false;
+      thresholdToken = `interval=${v}`;
+    } else {
+      const r = opts.resolution!;
+      if (!/^\d+x\d+$/.test(r)) return false;
+      thresholdToken = `resolution=${r}`;
+    }
+
+    const parts: string[] = [];
+    if (opts.target) parts.push(`-target ${quoteMapshaperArg(opts.target)}`);
+    parts.push(`-simplify ${thresholdToken}`);
+    if (opts.method) parts.push(opts.method);
+    if (typeof opts.weighting === 'number' && Number.isFinite(opts.weighting)) {
+      parts.push(`weighting=${opts.weighting}`);
+    }
+    if (opts.planar) parts.push('planar');
+    if (opts.keepShapes) parts.push('keep-shapes');
+    if (opts.lockBox) parts.push('lock-box');
+    if (opts.noRepair) parts.push('no-repair');
+
+    const label = `Simplify ${opts.target ?? opts.source}`;
+    return this._runDatasetCommand(opts.source, parts.join(' '), label);
+  }
+
+  /**
+   * Reproject a source's coordinates via mapshaper's `-proj` (Proj.4).
+   * The destination `crs` accepts EPSG codes (`'EPSG:3857'`), aliases
+   * (`'webmercator'`, `'robinson'`, `'wgs84'`), or full Proj.4 strings.
+   * `target` is optional; when omitted, the whole source dataset is
+   * reprojected.
+   *
+   * Returns `false` for unresolvable source, unresolved target, or
+   * empty `crs`. Inherits dataset-replace semantics from `_runDatasetCommand`
+   * (history barrier, undoable).
+   *
+   * Note: the source's stored CRS metadata is updated by mapshaper inside
+   * the dataset, but emap does NOT auto-fit the viewport to the new
+   * projected extent. Call `setExtent(source.getExtent())` after
+   * `await projectLayer(...)` to recentre.
+   */
+  public async projectLayer(opts: ProjectOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (opts.target !== undefined) {
+      if (!findLayerByName(dataset.layers, opts.target)) return false;
+    }
+    const crs = (opts.crs ?? '').trim();
+    if (crs.length === 0) return false;
+
+    const parts: string[] = [];
+    if (opts.target) parts.push(`-target ${quoteMapshaperArg(opts.target)}`);
+    parts.push(`-proj ${quoteMapshaperArg(crs)}`);
+    if (opts.init && opts.init.trim()) {
+      parts.push(`init=${quoteMapshaperArg(opts.init)}`);
+    }
+    if (opts.densify) parts.push('densify');
+
+    const label = `Project ${opts.target ?? opts.source}`;
+    return this._runDatasetCommand(opts.source, parts.join(' '), label);
+  }
+
+  /**
+   * Rename one layer in a source dataset via mapshaper's `-rename-layers`.
+   * The new name is trimmed and validated for non-emptiness and absence of
+   * collision with any other existing layer in the same dataset.
+   *
+   * Returns `false` for unresolvable source / target, empty name, or
+   * collision with another layer.
+   */
+  public async renameLayer(opts: RenameLayerOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    const newName = (opts.name ?? '').trim();
+    if (newName.length === 0) return false;
+    // Allow renaming to the same name (no-op-ish), but reject if another
+    // layer in this dataset already owns it.
+    if (newName !== opts.target) {
+      const collision = dataset.layers.some(
+        (l: any) => (l?.name ?? '') === newName,
+      );
+      if (collision) return false;
+    }
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -rename-layers ${quoteMapshaperArg(newName)}`;
+    return this._runDatasetCommand(opts.source, cmd, `Rename ${opts.target} → ${newName}`);
+  }
+
+  /**
+   * Combine two or more layers in the same source into one via mapshaper's
+   * `-merge-layers`. Targets are joined with commas inside one quoted
+   * `-target` argument (matching mapshaper's CLI grammar for this command).
+   *
+   * Up-front geometry-type check: if targets disagree and the caller didn't
+   * pass `force: true`, returns `false` rather than letting mapshaper throw
+   * an opaque mid-pipeline error.
+   */
+  public async mergeLayers(opts: MergeLayersOptions): Promise<boolean> {
+    if (!opts.targets || opts.targets.length < 2) return false;
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+
+    const layers = opts.targets.map((t) => findLayerByName(dataset.layers, t));
+    if (layers.some((l) => !l)) return false;
+
+    if (!opts.force) {
+      const firstGeom = layers[0]?.geometry_type;
+      const allSame = layers.every((l) => l?.geometry_type === firstGeom);
+      if (!allSame) return false;
+    }
+
+    const targetList = opts.targets.join(',');
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(targetList)}`,
+      '-merge-layers',
+    ];
+    if (opts.name && opts.name.trim()) {
+      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    if (opts.force) parts.push('force');
+    if (opts.flatten) parts.push('flatten');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Merge ${targetList}`);
+  }
+
+  /**
+   * Partition a single layer into one output layer per distinct grouping
+   * value via mapshaper's `-split`. The `expression` argument may be a
+   * bare field name or a JS expression — mapshaper auto-detects.
+   *
+   * Returns `false` for unresolvable source / target or empty expression.
+   *
+   * v1 omits the `apart` flag (which produces independent datasets); the
+   * one-source-one-dataset model in emap doesn't expose those. Use
+   * `loadSnapshot` with `defaultIds` if you need that workflow.
+   */
+  public async splitLayer(opts: SplitLayerOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    const expr = (opts.expression ?? '').trim();
+    if (expr.length === 0) return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-split ${quoteMapshaperArg(expr)}`,
+    ];
+    if (opts.noReplace) parts.push('no-replace');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Split ${opts.target}`);
+  }
+
+  /**
+   * Delete a single layer from the source dataset via mapshaper's `-drop`.
+   * mapshaper's `-drop` is multi-modal (layer / geometry / holes / fields);
+   * v1 wraps only the "drop the entire layer" mode. Use {@link filterFields}
+   * for the field-drop case.
+   *
+   * Returns `false` for unresolvable source / target.
+   */
+  public async dropLayer(opts: DropLayerOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -drop`;
+    return this._runDatasetCommand(opts.source, cmd, `Drop ${opts.target}`);
+  }
+
+  /**
+   * Sort features within a layer by a JS expression via mapshaper's `-sort`.
+   * Bare field names work directly. Default order is ascending; pass
+   * `descending: true` for the reverse.
+   *
+   * Returns `false` for unresolvable source / target or empty expression.
+   */
+  public async sortFeatures(opts: SortFeaturesOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    const expr = (opts.expression ?? '').trim();
+    if (expr.length === 0) return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-sort ${quoteMapshaperArg(expr)}`,
+    ];
+    if (opts.descending) parts.push('descending');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Sort ${opts.target}`);
+  }
+
+  /**
+   * Drop duplicate features by an id expression via mapshaper's `-uniq`.
+   * Pass `'JSON.stringify(this.properties)'` for full-record dedupe.
+   *
+   * Returns `false` for unresolvable source / target, empty expression,
+   * or non-positive `maxCount`.
+   */
+  public async uniqueFeatures(opts: UniqueFeaturesOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    const expr = (opts.expression ?? '').trim();
+    if (expr.length === 0) return false;
+    if (opts.maxCount !== undefined && !(typeof opts.maxCount === 'number' && opts.maxCount > 0)) {
+      return false;
+    }
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-uniq ${quoteMapshaperArg(expr)}`,
+    ];
+    if (opts.maxCount !== undefined) parts.push(`max-count=${opts.maxCount}`);
+    if (opts.invert) parts.push('invert');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Uniq ${opts.target}`);
+  }
+
+  /**
+   * Retain only the listed attribute fields via mapshaper's `-filter-fields`.
+   * Pass `invert: true` to drop the listed fields and keep the rest.
+   *
+   * Returns `false` for unresolvable source / target, empty `fields[]`,
+   * or any field name that's empty or contains `,`.
+   */
+  public async filterFields(opts: FilterFieldsOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!Array.isArray(opts.fields) || opts.fields.length === 0) return false;
+    for (const f of opts.fields) {
+      if (typeof f !== 'string' || f.trim().length === 0) return false;
+      if (f.includes(',')) return false;
+    }
+
+    const list = opts.fields.join(',');
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-filter-fields ${quoteMapshaperArg(list)}`,
+    ];
+    if (opts.invert) parts.push('invert');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Filter fields ${opts.target}`);
+  }
+
+  /**
+   * Bulk-rename multiple attribute fields via mapshaper's `-rename-fields`.
+   * Mapping order is preserved (object iteration order). Both old and new
+   * names must be non-empty after trimming and free of `,` / `=`.
+   *
+   * Returns `false` for unresolvable source / target or any invalid
+   * key / value in `mapping`.
+   */
+  public async renameFields(opts: RenameFieldsOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!opts.mapping || typeof opts.mapping !== 'object') return false;
+    const entries = Object.entries(opts.mapping);
+    if (entries.length === 0) return false;
+    const pairs: string[] = [];
+    for (const [oldName, newName] of entries) {
+      const o = (oldName ?? '').trim();
+      const n = (newName ?? '').trim();
+      if (o.length === 0 || n.length === 0) return false;
+      if (o.includes(',') || o.includes('=') || n.includes(',') || n.includes('=')) return false;
+      pairs.push(`${o}=${n}`);
+    }
+    const list = pairs.join(',');
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -rename-fields ${quoteMapshaperArg(list)}`;
+    return this._runDatasetCommand(opts.source, cmd, `Rename fields ${opts.target}`);
+  }
+
+  /**
+   * Join attribute records from a CSV / JSON / another-layer source onto a
+   * target layer via mapshaper's `-join`. The canonical "thematic shapefile
+   * + CSV of measures → chloropleth" workflow.
+   *
+   * `data` is one of:
+   * - `{ csv: string | Uint8Array }` — CSV bytes injected into the runner's
+   *   input cache as `.emap-join.csv`.
+   * - `{ json: string | Uint8Array | unknown[] | object }` — JSON bytes
+   *   injected as `.emap-join.json`. Arrays/objects are stringified.
+   * - `{ layer: string }` — by-name reference to another layer in the same
+   *   source. No cache injection.
+   *
+   * Returns `false` for unresolvable source / target, malformed `keys`, or
+   * an invalid `data` shape.
+   */
+  public async joinTable(opts: JoinTableOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!Array.isArray(opts.keys) || opts.keys.length !== 2) return false;
+    const [targetKey, sourceKey] = opts.keys.map((k) => (typeof k === 'string' ? k.trim() : ''));
+    if (targetKey.length === 0 || sourceKey.length === 0) return false;
+
+    let joinSource: string;
+    let inputFiles: Record<string, Uint8Array | string> | undefined;
+    const data = opts.data as Record<string, unknown> | undefined;
+    if (!data || typeof data !== 'object') return false;
+
+    if ('layer' in data && typeof data.layer === 'string' && data.layer.trim().length > 0) {
+      joinSource = data.layer.trim();
+    } else if ('csv' in data && (typeof data.csv === 'string' || data.csv instanceof Uint8Array)) {
+      const filename = '.emap-join.csv';
+      joinSource = filename;
+      inputFiles = { [filename]: data.csv as string | Uint8Array };
+    } else if ('json' in data && data.json !== undefined) {
+      const filename = '.emap-join.json';
+      let payload: string | Uint8Array;
+      if (typeof data.json === 'string' || data.json instanceof Uint8Array) {
+        payload = data.json as string | Uint8Array;
+      } else {
+        payload = JSON.stringify(data.json);
+      }
+      joinSource = filename;
+      inputFiles = { [filename]: payload };
+    } else {
+      return false;
+    }
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-join ${quoteMapshaperArg(joinSource)}`,
+      `keys=${quoteMapshaperArg(`${targetKey},${sourceKey}`)}`,
+    ];
+    if (opts.fields && opts.fields.length > 0) {
+      const safe = opts.fields.filter((f) => typeof f === 'string' && !f.includes(','));
+      if (safe.length > 0) parts.push(`fields=${safe.join(',')}`);
+    }
+    if (opts.prefix && opts.prefix.length > 0) {
+      parts.push(`prefix=${quoteMapshaperArg(opts.prefix)}`);
+    }
+    if (opts.where && opts.where.trim().length > 0) {
+      parts.push(`where=${quoteMapshaperArg(opts.where)}`);
+    }
+    if (opts.calc && opts.calc.trim().length > 0) {
+      parts.push(`calc=${quoteMapshaperArg(opts.calc)}`);
+    }
+    if (opts.unjoined) parts.push('unjoined');
+    if (opts.unmatched) parts.push('unmatched');
+
+    return this._runDatasetCommand(
+      opts.source,
+      parts.join(' '),
+      `Join ${opts.target}`,
+      inputFiles,
+    );
+  }
+
+  /**
    * Combine the currently-selected features (when they all live in the same
    * source/layer) into a single feature, recorded as one undoable history
    * entry.
@@ -1867,6 +3093,7 @@ export class Emap extends EventDispatcher {
     sourceId: string,
     cmd: string,
     label: string,
+    inputFiles?: Record<string, Uint8Array | string>,
   ): Promise<boolean> {
     const source = this._sources.get(sourceId);
     if (!source) return false;
@@ -1880,7 +3107,7 @@ export class Emap extends EventDispatcher {
 
     let after: MapshaperDataset;
     try {
-      after = await runMapshaperCommandOnDataset(cmd, original);
+      after = await runMapshaperCommandOnDataset(cmd, original, inputFiles);
     } catch (err) {
       // Surface as a fire-and-forget error event; do not throw from a public
       // edit op so that one bad command doesn't tear down the calling page.
@@ -2007,11 +3234,20 @@ function buildMergeSelectedCommand(
 function runMapshaperCommandOnDataset(
   cmd: string,
   dataset: MapshaperDataset,
+  inputFiles?: Record<string, Uint8Array | string>,
 ): Promise<MapshaperDataset> {
   return new Promise((resolve, reject) => {
     const job = new mapshaper.internal.Job();
     job.catalog.addDataset(dataset);
     const commands = mapshaper.internal.parseCommands(cmd);
+    if (inputFiles) {
+      // mapshaper resolves filename references in command args via
+      // `cli.readFile(name, null, opts.input)`, so the cache must be present
+      // on every command's options. Cheap to set on all of them.
+      for (const c of commands) {
+        if (c.options) c.options.input = inputFiles;
+      }
+    }
     mapshaper.internal.runParsedCommands(commands, job, (err: any, finished) => {
       if (err) {
         reject(err);

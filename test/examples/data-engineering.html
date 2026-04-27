@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 数据工程批次 (drop / sort / uniq / filter-fields / rename-fields)</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header select, #header input[type="text"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; }
+    #header input[type="text"] { width: 200px; }
+    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #header button.danger { background: #c0392b; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    .group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; flex-basis: 100%; padding: 4px 0; border-top: 1px solid #4a5d70; }
+    .group-label { font-weight: bold; min-width: 110px; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <span class="group" style="border-top: 0;">
+      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+      <label>目标图层: <select id="target"></select></label>
+    </span>
+    <span class="group">
+      <span class="group-label">drop</span>
+      <button id="drop-btn" class="danger" disabled>删除图层</button>
+    </span>
+    <span class="group">
+      <span class="group-label">sort</span>
+      <label>表达式: <input id="sort-expr" type="text" placeholder="例如 POP 或 -this.area" /></label>
+      <label><input id="sort-desc" type="checkbox" /> descending</label>
+      <button id="sort-btn" disabled>排序</button>
+    </span>
+    <span class="group">
+      <span class="group-label">uniq</span>
+      <label>id 表达式: <input id="uniq-expr" type="text" placeholder="例如 STATE_FIPS" /></label>
+      <label>max-count: <input id="uniq-max" type="text" placeholder="可选,&gt; 0" style="width: 60px;" /></label>
+      <label><input id="uniq-invert" type="checkbox" /> invert</label>
+      <button id="uniq-btn" disabled>去重</button>
+    </span>
+    <span class="group">
+      <span class="group-label">filter-fields</span>
+      <label>保留字段: <input id="ff-fields" type="text" placeholder="逗号分隔,例如 fips,name" /></label>
+      <label><input id="ff-invert" type="checkbox" /> invert (改为删除)</label>
+      <button id="ff-btn" disabled>筛选字段</button>
+    </span>
+    <span class="group">
+      <span class="group-label">rename-fields</span>
+      <label>映射: <input id="rf-map" type="text" placeholder="逗号分隔 old=new,例如 fips=FIPS,st=STATE" /></label>
+      <button id="rf-btn" disabled>重命名字段</button>
+    </span>
+    <span id="status">加载数据后选目标图层,然后操作。所有操作可 Ctrl+Z 撤销。</span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'data-eng-source';
+    const targetSel = document.getElementById('target');
+    const status = document.getElementById('status');
+
+    const dropBtn = document.getElementById('drop-btn');
+    const sortBtn = document.getElementById('sort-btn');
+    const uniqBtn = document.getElementById('uniq-btn');
+    const ffBtn = document.getElementById('ff-btn');
+    const rfBtn = document.getElementById('rf-btn');
+    const allBtns = [dropBtn, sortBtn, uniqBtn, ffBtn, rfBtn];
+
+    function populate(source) {
+      targetSel.innerHTML = '';
+      source.getLayers().forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        targetSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
+      });
+      const enabled = source.getLayers().length > 0;
+      allBtns.forEach((b) => { b.disabled = !enabled; });
+    }
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `正在加载 ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          populate(source);
+          status.textContent = `已加载 ${file.name}。`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    function refreshAfterOp() {
+      const src = map.getSource(SOURCE_ID);
+      if (src) populate(src);
+    }
+
+    function wrap(btn, runner) {
+      btn.addEventListener('click', async () => {
+        const target = targetSel.value;
+        if (!target) return;
+        status.textContent = '执行中...';
+        allBtns.forEach((b) => { b.disabled = true; });
+        try {
+          const ok = await runner(target);
+          status.textContent = ok ? '完成。Ctrl+Z 撤销。' : '失败 (检查参数)。';
+        } catch (err) {
+          status.textContent = `错误: ${err?.message ?? err}`;
+          console.error(err);
+        } finally {
+          refreshAfterOp();
+        }
+      });
+    }
+
+    wrap(dropBtn, (target) => map.dropLayer({ source: SOURCE_ID, target }));
+
+    wrap(sortBtn, (target) => {
+      const expression = document.getElementById('sort-expr').value.trim();
+      if (!expression) return false;
+      const descending = document.getElementById('sort-desc').checked;
+      return map.sortFeatures({ source: SOURCE_ID, target, expression, descending });
+    });
+
+    wrap(uniqBtn, (target) => {
+      const expression = document.getElementById('uniq-expr').value.trim();
+      if (!expression) return false;
+      const opts = { source: SOURCE_ID, target, expression };
+      const maxRaw = document.getElementById('uniq-max').value.trim();
+      if (maxRaw) {
+        const n = Number(maxRaw);
+        if (!Number.isNaN(n) && n > 0) opts.maxCount = n;
+      }
+      if (document.getElementById('uniq-invert').checked) opts.invert = true;
+      return map.uniqueFeatures(opts);
+    });
+
+    wrap(ffBtn, (target) => {
+      const raw = document.getElementById('ff-fields').value.trim();
+      if (!raw) return false;
+      const fields = raw.split(',').map((s) => s.trim()).filter(Boolean);
+      const invert = document.getElementById('ff-invert').checked;
+      return map.filterFields({ source: SOURCE_ID, target, fields, invert });
+    });
+
+    wrap(rfBtn, (target) => {
+      const raw = document.getElementById('rf-map').value.trim();
+      if (!raw) return false;
+      const mapping = {};
+      for (const pair of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
+        const [k, v] = pair.split('=').map((s) => s.trim());
+        if (k && v) mapping[k] = v;
+      }
+      return map.renameFields({ source: SOURCE_ID, target, mapping });
+    });
+  </script>
+</body>
+
+</html>
