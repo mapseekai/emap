@@ -2303,3 +2303,100 @@ describe('Emap unionLayers', () => {
     expect(listener.mock.calls[0][0].label).toBe('Union parks,soils');
   });
 });
+
+describe('Emap divideLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'roads', shapes: [], geometry_type: 'polyline' },
+        { name: 'tracts', shapes: [], geometry_type: 'polygon' },
+        { name: 'cities', shapes: [], geometry_type: 'point' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'roads', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds the minimal command shape', async () => {
+    const ok = await map.divideLayer({ source: 'src1', target: 'roads', divider: 'tracts' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -divide source="tracts"');
+  });
+
+  it('appends fields=', async () => {
+    await map.divideLayer({
+      source: 'src1', target: 'roads', divider: 'tracts',
+      fields: ['NAME', 'STATE'],
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -divide source="tracts" fields=NAME,STATE');
+  });
+
+  it('appends force', async () => {
+    await map.divideLayer({
+      source: 'src1', target: 'roads', divider: 'tracts', force: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -divide source="tracts" force');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.divideLayer({ source: 'nope', target: 'roads', divider: 'tracts' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.divideLayer({ source: 'src1', target: 'highways', divider: 'tracts' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when divider is unresolved', async () => {
+    expect(await map.divideLayer({ source: 'src1', target: 'roads', divider: 'counties' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is not a polyline', async () => {
+    expect(await map.divideLayer({ source: 'src1', target: 'tracts', divider: 'tracts' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when divider is not a polygon', async () => {
+    expect(await map.divideLayer({ source: 'src1', target: 'roads', divider: 'cities' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history entry is labelled "Divide <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.divideLayer({ source: 'src1', target: 'roads', divider: 'tracts' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Divide roads');
+  });
+});

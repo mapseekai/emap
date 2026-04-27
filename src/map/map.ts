@@ -244,6 +244,28 @@ export interface UnionOptions {
   noReplace?: boolean;
 }
 
+/**
+ * Options for {@link Emap.divideLayer}. Splits a polyline `target` layer at
+ * the boundaries of a polygon `divider` layer (both in the same source) and
+ * copies the underlying polygon's attributes onto each resulting line
+ * segment.
+ */
+export interface DivideOptions {
+  /** Source ID containing both target and divider layers. */
+  source: string;
+  /** Polyline layer name (or id) to be cut by polygon boundaries. */
+  target: string;
+  /** Polygon layer name (or id) used as the divider. */
+  divider: string;
+  /**
+   * Polygon fields to copy onto each line segment. Defaults to all fields of
+   * the divider layer.
+   */
+  fields?: string[];
+  /** Replace existing same-named fields on the line records. */
+  force?: boolean;
+}
+
 export interface HighlightStyle {
   color?: string;
   width?: number;
@@ -1488,6 +1510,42 @@ export class Emap extends EventDispatcher {
       parts.push('no-replace');
     }
     return this._runDatasetCommand(opts.source, parts.join(' '), `Union ${targetList}`);
+  }
+
+  /**
+   * Cut a polyline `target` layer at the boundaries of a polygon `divider`
+   * layer in the same source via mapshaper's `-divide`. Each resulting line
+   * segment inherits the underlying polygon's attributes (subset by `fields`
+   * when supplied).
+   *
+   * Returns `false` for unresolvable source, missing/wrong-geometry target,
+   * or missing/wrong-geometry divider. Inherits dataset-replace semantics
+   * from `_runDatasetCommand`.
+   *
+   * mapshaper's `-divide` can take its polygon source positionally, but we
+   * use the explicit `source=<name>` form for symmetry with `clipLayer` and
+   * `eraseLayer`.
+   */
+  public async divideLayer(opts: DivideOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    const targetLayer = findLayerByName(dataset.layers, opts.target);
+    if (!targetLayer || targetLayer.geometry_type !== 'polyline') return false;
+    const dividerLayer = findLayerByName(dataset.layers, opts.divider);
+    if (!dividerLayer || dividerLayer.geometry_type !== 'polygon') return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-divide source=${quoteMapshaperArg(opts.divider)}`,
+    ];
+    if (opts.fields && opts.fields.length > 0) {
+      const safe = opts.fields.filter((f) => !f.includes(','));
+      if (safe.length > 0) parts.push(`fields=${safe.join(',')}`);
+    }
+    if (opts.force) parts.push('force');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Divide ${opts.target}`);
   }
 
   /**
