@@ -2007,7 +2007,19 @@ const MERGE_SELECTED_FIELD = '__emap_merge';
  *      'M', unselected rows get a unique value so they pass through.
  *   2. Run `-dissolve` on the discriminator with `copy-fields=` listing
  *      every original field so attributes survive.
- *   3. Drop the discriminator field.
+ *   3. Drop the discriminator field via `-filter-fields ... invert`.
+ *
+ * IMPORTANT: mapshaper's `-each` interprets BARE assignments
+ * (`foo = ...`) as writes to the record, but `this.foo = ...` writes to
+ * the synthetic feature proxy and is silently dropped (see
+ * `mapshaper-feature-expressions.mjs`). The discriminator is therefore
+ * assigned bare; reads of `this.id` / `this.<field>` still proxy through
+ * the feature object and work normally.
+ *
+ * Cleanup uses `-filter-fields __emap_merge invert` rather than
+ * `-each "delete __emap_merge"` because deleting from a `with(record)`
+ * scope by bare name doesn't remove the field from the DataTable schema
+ * — the field would still appear in subsequent `getFields()` calls.
  *
  * Returns the full command as a single string suitable for
  * `mapshaper.internal.parseCommands`.
@@ -2019,12 +2031,10 @@ function buildMergeSelectedCommand(
 ): string {
   // JSON.stringify produces a stable, parser-safe array literal.
   const idsJSON = JSON.stringify(selectedIds);
-  // The single quotes around the JS expression are mapshaper's preferred
-  // expression delimiter; the literal string values inside use double quotes
-  // so they don't collide.
+  // Single quotes wrap the JS expression; literal string values inside
+  // use double quotes so they don't collide with the outer delimiter.
   const tagExpr =
-    `'this.${MERGE_SELECTED_FIELD} = ${idsJSON}.indexOf(this.id) >= 0 ? "M" : "k_" + this.id'`;
-  const cleanupExpr = `'delete this.${MERGE_SELECTED_FIELD}'`;
+    `'${MERGE_SELECTED_FIELD} = ${idsJSON}.indexOf(this.id) >= 0 ? "M" : "k_" + this.id'`;
 
   // Build copy-fields= from the layer's data table when one exists.
   // Field names with commas are intentionally rejected (mapshaper's
@@ -2044,7 +2054,7 @@ function buildMergeSelectedCommand(
     `-target ${quoteMapshaperArg(layerName)}`,
     `-each ${tagExpr}`,
     `-dissolve ${quoteMapshaperArg(MERGE_SELECTED_FIELD)}${copyFieldsArg}`,
-    `-each ${cleanupExpr}`,
+    `-filter-fields ${MERGE_SELECTED_FIELD} invert`,
   ].join(' ');
 }
 
