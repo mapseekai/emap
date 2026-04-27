@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap Example - Filter features</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header select, #header input[type="text"] {
+      padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px;
+    }
+    #header input[type="text"] { width: 240px; font-family: monospace; }
+    #header button {
+      padding: 5px 12px; background: #c0392b; color: white; border: 0;
+      border-radius: 3px; cursor: pointer; font-size: 13px;
+    }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>File: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <label>Target: <select id="target"></select></label>
+    <label>Expression: <input id="expr" type="text" value="this.pop > 100" /></label>
+    <label><input id="invert" type="checkbox" /> invert</label>
+    <label><input id="remove-empty" type="checkbox" /> also remove empty</label>
+    <button id="btn" disabled>Filter</button>
+    <span id="status">Load a dataset</span>
+    <span class="hint">
+      Convention: features whose expression evaluates to FALSE are deleted. So
+      <code>this.pop &gt; 100</code> KEEPS populous features.
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'filter-source';
+    const targetSel = document.getElementById('target');
+    const exprInput = document.getElementById('expr');
+    const invertChk = document.getElementById('invert');
+    const removeEmptyChk = document.getElementById('remove-empty');
+    const btn = document.getElementById('btn');
+    const status = document.getElementById('status');
+
+    function populate(source) {
+      targetSel.innerHTML = '';
+      source.getLayers().forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        targetSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
+      });
+      btn.disabled = source.getLayers().length === 0;
+    }
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `Loading ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          populate(source);
+          status.textContent = `Loaded ${file.name}.`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    btn.addEventListener('click', async () => {
+      const target = targetSel.value;
+      const expr = exprInput.value.trim();
+      const opts = { source: SOURCE_ID, target };
+      if (expr) opts.expression = expr;
+      if (invertChk.checked) opts.invert = true;
+      if (removeEmptyChk.checked) opts.removeEmpty = true;
+      status.textContent = `Filtering ${target}...`;
+      btn.disabled = true;
+      try {
+        const ok = await map.filterFeatures(opts);
+        status.textContent = ok ? `Filtered ${target}. Ctrl+Z to undo.` : 'Filter failed (need expression or remove-empty).';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+
+</html>

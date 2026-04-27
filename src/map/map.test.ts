@@ -1671,3 +1671,97 @@ describe('Emap innerlinesLayer', () => {
     expect(listener.mock.calls[0][0].label).toBe('Innerlines states');
   });
 });
+
+describe('Emap filterFeatures', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = { layers: [{ name: 'cities', shapes: [] }] };
+    const afterDs = { layers: [{ name: 'cities', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('emits a quoted expression', async () => {
+    const ok = await map.filterFeatures({
+      source: 'src1', target: 'cities', expression: 'this.pop > 100',
+    });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+      '-target "cities" -filter "this.pop > 100"',
+    );
+  });
+
+  it('appends invert flag', async () => {
+    await map.filterFeatures({
+      source: 'src1', target: 'cities', expression: 'this.x', invert: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+      '-target "cities" -filter "this.x" invert',
+    );
+  });
+
+  it('appends remove-empty flag', async () => {
+    await map.filterFeatures({
+      source: 'src1', target: 'cities', expression: 'this.x', removeEmpty: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+      '-target "cities" -filter "this.x" remove-empty',
+    );
+  });
+
+  it('removeEmpty alone (no expression) emits bare -filter remove-empty', async () => {
+    await map.filterFeatures({
+      source: 'src1', target: 'cities', removeEmpty: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "cities" -filter remove-empty');
+  });
+
+  it('returns false when neither expression nor removeEmpty is set', async () => {
+    expect(await map.filterFeatures({ source: 'src1', target: 'cities' })).toBe(false);
+    expect(await map.filterFeatures({ source: 'src1', target: 'cities', expression: '   ' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on missing source / target', async () => {
+    expect(await map.filterFeatures({ source: 'nope', target: 'cities', expression: 'x' })).toBe(false);
+    expect(await map.filterFeatures({ source: 'src1', target: 'nope', expression: 'x' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('pushes one history entry labelled "Filter <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.filterFeatures({
+      source: 'src1', target: 'cities', expression: 'this.x',
+    });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Filter cities');
+  });
+});

@@ -14,6 +14,7 @@ export type {
   ApplyExpressionOptions,
   ExplodeOptions,
   InnerlinesOptions,
+  FilterOptions,
 } from './map/map';
 export { FeatureQuery } from './map/feature-query';
 export { HighlightManager } from './map/highlight-manager';

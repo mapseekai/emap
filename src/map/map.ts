@@ -173,6 +173,24 @@ export interface InnerlinesOptions {
   noReplace?: boolean;
 }
 
+/** Options for {@link Emap.filterFeatures}. */
+export interface FilterOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the layer to filter. */
+  target: string;
+  /**
+   * JS expression evaluated per feature. Records that evaluate to false are
+   * deleted (mapshaper convention). Same `this` context as
+   * {@link Emap.applyExpression}: `this.<field>`, `this.id`, etc.
+   */
+  expression?: string;
+  /** Flip the predicate (mapshaper's `invert` flag). */
+  invert?: boolean;
+  /** Also delete features with null geometry (mapshaper's `remove-empty`). */
+  removeEmpty?: boolean;
+}
+
 export interface HighlightStyle {
   color?: string;
   width?: number;
@@ -1253,6 +1271,44 @@ export class Emap extends EventDispatcher {
       parts.push('no-replace');
     }
     return this._runDatasetCommand(opts.source, parts.join(' '), `Innerlines ${opts.target}`);
+  }
+
+  /**
+   * Drop features from a layer using mapshaper's `-filter`.
+   *
+   * Convention follows mapshaper: features whose `expression` evaluates to
+   * FALSE are deleted (so `'this.pop > 100'` *keeps* populous features).
+   * `invert: true` flips the predicate. `removeEmpty: true` also drops
+   * features with null geometry.
+   *
+   * Returns `false` when neither `expression` nor `removeEmpty` is supplied
+   * (mapshaper would error otherwise). Companion to {@link applyExpression}:
+   * same JS context, opposite intent (mutate vs delete).
+   */
+  public async filterFeatures(opts: FilterOptions): Promise<boolean> {
+    const hasExpr = !!(opts.expression && opts.expression.trim());
+    if (!hasExpr && !opts.removeEmpty) return false;
+
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-filter`,
+    ];
+    if (hasExpr) {
+      parts.push(quoteMapshaperArg(opts.expression as string));
+    }
+    if (opts.invert) {
+      parts.push('invert');
+    }
+    if (opts.removeEmpty) {
+      parts.push('remove-empty');
+    }
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Filter ${opts.target}`);
   }
 
   /**
