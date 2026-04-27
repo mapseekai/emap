@@ -143,6 +143,14 @@ export interface ApplyExpressionOptions {
   where?: string;
 }
 
+/** Options for {@link Emap.explodeLayer}. */
+export interface ExplodeOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the layer whose multi-part features will be split. */
+  target: string;
+}
+
 export interface HighlightStyle {
   color?: string;
   width?: number;
@@ -1171,6 +1179,24 @@ export class Emap extends EventDispatcher {
       : '';
     const cmd = `-target ${quoteMapshaperArg(opts.target)} -each ${quoteMapshaperArg(opts.expression)}${whereArg}`;
     return this._runDatasetCommand(opts.source, cmd, `Update ${opts.target}`);
+  }
+
+  /**
+   * Divide multi-part features in the target layer into single-part features
+   * via mapshaper's `-explode`. Each part inherits the original record's
+   * attributes. Returns `false` for unresolvable source / target.
+   *
+   * Useful for unpacking multipolygon islands, multipart polylines, or
+   * multipoint clusters into separately-pickable features.
+   */
+  public async explodeLayer(opts: ExplodeOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -explode`;
+    return this._runDatasetCommand(opts.source, cmd, `Explode ${opts.target}`);
   }
 
   /**
