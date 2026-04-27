@@ -325,6 +325,33 @@ export interface FilterFieldsOptions {
   invert?: boolean;
 }
 
+/** Options for {@link Emap.checkGeometry}. Read-only topology validation. */
+export interface CheckGeometryOptions {
+  /** Source ID whose dataset will be inspected. */
+  source: string;
+  /**
+   * Optional layer name. Reserved for future per-layer scoping; v1 always
+   * scans the whole dataset's arcs regardless. The name is still validated
+   * up-front so a typo shows up immediately as a `null` return.
+   */
+  target?: string;
+  /**
+   * Override the auto-derived intersection-tolerance epsilon. Forwarded to
+   * `findSegmentIntersections.tolerance`. Source-CRS units.
+   */
+  tolerance?: number;
+}
+
+/** Result shape returned from {@link Emap.checkGeometry}. */
+export interface GeometryCheckReport {
+  /** `true` iff the report has zero issues across every category. */
+  ok: boolean;
+  /** Detected segment-intersection points. */
+  intersections: Array<{ x: number; y: number }>;
+  /** Convenience: `intersections.length`. */
+  intersectionCount: number;
+}
+
 /** Source-data shape for {@link Emap.joinTable}. Discriminated union: */
 export type JoinTableData =
   /** CSV content (string or bytes). Saved as `.emap-join.csv` in the runner cache. */
@@ -2528,6 +2555,43 @@ export class Emap extends EventDispatcher {
     const list = pairs.join(',');
     const cmd = `-target ${quoteMapshaperArg(opts.target)} -rename-fields ${quoteMapshaperArg(list)}`;
     return this._runDatasetCommand(opts.source, cmd, `Rename fields ${opts.target}`);
+  }
+
+  /**
+   * Read-only topology validation pass over a source's arcs via
+   * `mapshaper.internal.findSegmentIntersections`. Reports self-intersection
+   * count and a sample of intersection points; does NOT mutate the dataset
+   * or push to history.
+   *
+   * Returns `null` for unresolvable source, missing dataset, or unresolved
+   * `target`. For arc-less point-only datasets returns the empty/clean
+   * report (vacuously valid).
+   *
+   * Lighter than {@link cleanLayer} (heavy + destructive) and complementary
+   * to {@link rebuildTopology} (which fixes the issues this command finds).
+   */
+  public async checkGeometry(opts: CheckGeometryOptions): Promise<GeometryCheckReport | null> {
+    const source = this._sources.get(opts.source);
+    if (!source) return null;
+    const dataset = source.getDataset();
+    if (!dataset) return null;
+    if (opts.target !== undefined) {
+      if (!findLayerByName(dataset.layers, opts.target)) return null;
+    }
+    if (!dataset.arcs) {
+      return { ok: true, intersections: [], intersectionCount: 0 };
+    }
+
+    const internalOpts: { tolerance?: number } = {};
+    if (opts.tolerance !== undefined) internalOpts.tolerance = opts.tolerance;
+
+    const raw = mapshaper.internal.findSegmentIntersections(dataset.arcs, internalOpts);
+    const intersections = raw.map((r) => ({ x: r.x, y: r.y }));
+    return {
+      ok: intersections.length === 0,
+      intersections,
+      intersectionCount: intersections.length,
+    };
   }
 
   /**

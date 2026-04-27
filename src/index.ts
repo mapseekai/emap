@@ -37,6 +37,8 @@ export type {
   RenameFieldsOptions,
   JoinTableOptions,
   JoinTableData,
+  CheckGeometryOptions,
+  GeometryCheckReport,
   ExportSnapshotOptions,
   LoadSnapshotOptions,
 } from './map/map';

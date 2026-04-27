@@ -3683,6 +3683,174 @@ describe('Emap joinTable round-trip (real mapshaper)', () => {
   });
 });
 
+describe('Emap checkGeometry (mocked mapshaper)', () => {
+  let map: Emap;
+  let findSegmentIntersectionsSpy: ReturnType<typeof vi.fn>;
+
+  const originalFind = Reflect.get(mapshaper.internal as object, 'findSegmentIntersections');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const ds = {
+      layers: [{ name: 'shapes', shapes: [], geometry_type: 'polygon' }],
+      arcs: { _sentinel: 'arcs' },
+    };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => ds,
+      getLayers: () => ds.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    findSegmentIntersectionsSpy = vi.fn(() => []) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'findSegmentIntersections', findSegmentIntersectionsSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'findSegmentIntersections', originalFind);
+  });
+
+  it('returns the clean report when there are no intersections', async () => {
+    const report = await map.checkGeometry({ source: 'src1' });
+    expect(report).toEqual({ ok: true, intersections: [], intersectionCount: 0 });
+    expect(findSegmentIntersectionsSpy).toHaveBeenCalledTimes(1);
+    const args = findSegmentIntersectionsSpy.mock.calls[0] as unknown[];
+    expect((args[0] as any)._sentinel).toBe('arcs');
+  });
+
+  it('maps mapshaper intersection objects to {x,y}', async () => {
+    findSegmentIntersectionsSpy.mockReturnValue([
+      { x: 1, y: 2, _internal: 'a' },
+      { x: 3, y: 4, _internal: 'b' },
+    ]);
+    const report = await map.checkGeometry({ source: 'src1' });
+    expect(report).toEqual({
+      ok: false,
+      intersectionCount: 2,
+      intersections: [{ x: 1, y: 2 }, { x: 3, y: 4 }],
+    });
+  });
+
+  it('forwards tolerance to mapshaper', async () => {
+    await map.checkGeometry({ source: 'src1', tolerance: 0.001 });
+    expect(findSegmentIntersectionsSpy.mock.calls[0][1]).toEqual({ tolerance: 0.001 });
+  });
+
+  it('omits tolerance when not supplied', async () => {
+    await map.checkGeometry({ source: 'src1' });
+    expect(findSegmentIntersectionsSpy.mock.calls[0][1]).toEqual({});
+  });
+
+  it('returns null on missing source', async () => {
+    expect(await map.checkGeometry({ source: 'nope' })).toBeNull();
+    expect(findSegmentIntersectionsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns null on missing dataset', async () => {
+    const noDsSource = {
+      id: 's2', type: 'topology' as const,
+      getDataset: () => undefined,
+      setDataset: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('s2', noDsSource);
+    expect(await map.checkGeometry({ source: 's2' })).toBeNull();
+  });
+
+  it('returns null on unresolved target', async () => {
+    expect(await map.checkGeometry({ source: 'src1', target: 'missing' })).toBeNull();
+    expect(findSegmentIntersectionsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns the empty/clean report for arc-less datasets without invoking mapshaper', async () => {
+    const pointSource = {
+      id: 'pts', type: 'topology' as const,
+      getDataset: () => ({ layers: [{ name: 'p', geometry_type: 'point', shapes: [] }] }),
+      setDataset: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('pts', pointSource);
+    const report = await map.checkGeometry({ source: 'pts' });
+    expect(report).toEqual({ ok: true, intersections: [], intersectionCount: 0 });
+    expect(findSegmentIntersectionsSpy).not.toHaveBeenCalled();
+  });
+
+  it('does NOT push history on any branch', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.checkGeometry({ source: 'src1' });
+    findSegmentIntersectionsSpy.mockReturnValueOnce([{ x: 0, y: 0 }]);
+    await map.checkGeometry({ source: 'src1' });
+    await map.checkGeometry({ source: 'nope' });
+    expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('Emap checkGeometry round-trip (real mapshaper)', () => {
+  function buildSource(id: string, geojson: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      import('../source/topology-source').then(({ TopologySource }) => {
+        const source = new TopologySource(id);
+        source.on('data', () => resolve(source));
+        source.on('error', (e: any) => reject(e?.error ?? e));
+        source.setData({ filename: `${id}.geojson`, content: new TextEncoder().encode(geojson) });
+      });
+    });
+  }
+
+  it('reports zero intersections for a clean dataset', async () => {
+    const clean = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature', properties: {},
+        geometry: { type: 'Polygon', coordinates: [[[0,0],[2,0],[2,2],[0,2],[0,0]]] },
+      }],
+    });
+    const source = await buildSource('clean', clean);
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+    map.addSource('clean', source);
+
+    const report = await map.checkGeometry({ source: 'clean' });
+    expect(report).not.toBeNull();
+    expect(report!.ok).toBe(true);
+    expect(report!.intersectionCount).toBe(0);
+  });
+
+  it('reports a positive count for a pair of crossing polylines', async () => {
+    // Two LineStrings that visibly cross at (1,1). polylines aren't auto-
+    // normalized on import the way polygons sometimes are, so the arc
+    // collection still has the crossing segments when findSegmentIntersections
+    // runs.
+    const crossing = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[0,0],[2,2]] } },
+        { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[0,2],[2,0]] } },
+      ],
+    });
+    const source = await buildSource('crossing', crossing);
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+    map.addSource('crossing', source);
+
+    const report = await map.checkGeometry({ source: 'crossing' });
+    expect(report).not.toBeNull();
+    expect(report!.ok).toBe(false);
+    expect(report!.intersectionCount).toBeGreaterThan(0);
+    expect(report!.intersections[0]).toHaveProperty('x');
+    expect(report!.intersections[0]).toHaveProperty('y');
+  });
+});
+
 describe('Emap rebuildTopology (mocked mapshaper)', () => {
   let map: Emap;
   let copyDatasetSpy: ReturnType<typeof vi.fn>;
