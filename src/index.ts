@@ -10,6 +10,12 @@ export type {
   HighlightStyle,
   ClipEraseOptions,
   DissolveOptions,
+  BufferOptions,
+  ApplyExpressionOptions,
+  ExplodeOptions,
+  InnerlinesOptions,
+  FilterOptions,
+  SnapOptions,
 } from './map/map';
 export { FeatureQuery } from './map/feature-query';
 export { HighlightManager } from './map/highlight-manager';
@@ -52,6 +58,21 @@ export { VertexDeleteCommand } from './edit/commands/vertex-delete';
 export { FeatureCreateCommand } from './edit/commands/feature-create';
 export { FeatureDeleteCommand } from './edit/commands/feature-delete';
 export type { FeatureDeleteCommandOptions } from './edit/commands/feature-delete';
+export { FeatureTranslateCommand } from './edit/commands/feature-translate';
+export type {
+  FeatureTranslateCommandOptions,
+  TranslatedPointFeature,
+} from './edit/commands/feature-translate';
+export {
+  FeatureAffineCommand,
+  rotateMatrix,
+  scaleMatrix,
+  invertMatrix,
+} from './edit/commands/feature-affine';
+export type {
+  FeatureAffineCommandOptions,
+  AffineMatrix,
+} from './edit/commands/feature-affine';
 export { CompositeCommand } from './edit/commands/composite';
 export { DatasetReplaceCommand } from './edit/commands/dataset-replace';
 export type { DatasetReplaceCommandOptions } from './edit/commands/dataset-replace';

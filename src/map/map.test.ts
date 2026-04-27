@@ -1005,3 +1005,1024 @@ describe('Emap attribute editing', () => {
     });
   });
 });
+
+describe('Emap mergeSelected', () => {
+  let map: Emap;
+  let source: any;
+  let beforeDataset: any;
+  let afterDataset: any;
+  let copyDatasetSpy: ReturnType<typeof vi.fn>;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+
+    const layer = {
+      name: 'parcels',
+      geometry_type: 'polygon',
+      shapes: [['s0'], ['s1'], ['s2'], ['s3']],
+      data: {
+        getFields: () => ['name', 'area'],
+        getRecords: () => [
+          { name: 'A', area: 1 },
+          { name: 'B', area: 2 },
+          { name: 'C', area: 3 },
+          { name: 'D', area: 4 },
+        ],
+      },
+    };
+    const otherLayer = {
+      name: 'roads',
+      geometry_type: 'polyline',
+      shapes: [],
+    };
+    beforeDataset = { layers: [layer, otherLayer] };
+    afterDataset = { layers: [{ name: 'parcels', shapes: [['merged']] }, otherLayer] };
+
+    source = {
+      id: 'src1',
+      type: 'topology',
+      getDataset: () => beforeDataset,
+      getLayers: () => beforeDataset.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    };
+    (map as any)._sources.set('src1', source);
+
+    copyDatasetSpy = vi.fn(() => ({ ...beforeDataset, _isCopy: true })) as ReturnType<typeof vi.fn>;
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    runParsedCommandsSpy = vi.fn((_cmds: any, _job: any, cb: any) => {
+      cb(null, {
+        catalog: { getDefaultTargets: () => [{ dataset: afterDataset }] },
+      });
+    }) as ReturnType<typeof vi.fn>;
+
+    Reflect.set(mapshaper.internal as object, 'copyDataset', copyDatasetSpy);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('returns false on empty selection without firing', async () => {
+    const ok = await map.mergeSelected();
+    expect(ok).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on cross-layer selection', async () => {
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src1', layer: 'roads', id: 0 },
+    ], { mode: 'add' });
+    const ok = await map.mergeSelected();
+    expect(ok).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on cross-source selection', async () => {
+    (map as any)._sources.set('src2', { ...source, id: 'src2' });
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src2', layer: 'parcels', id: 0 },
+    ], { mode: 'add' });
+    const ok = await map.mergeSelected();
+    expect(ok).toBe(false);
+  });
+
+  it('builds the dissolve recipe with sorted ids and copy-fields=', async () => {
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 2 },
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src1', layer: 'parcels', id: 3 },
+    ], { mode: 'add' });
+    const ok = await map.mergeSelected();
+    expect(ok).toBe(true);
+    const cmd = parseCommandsSpy.mock.calls[0][0] as string;
+    expect(cmd).toContain('-target "parcels"');
+    expect(cmd).toContain('[0,2,3]'); // sorted ascending
+    expect(cmd).toContain('this.id');
+    expect(cmd).toContain('this.__emap_merge');
+    expect(cmd).toContain('-dissolve "__emap_merge"');
+    expect(cmd).toContain('copy-fields=name,area');
+    expect(cmd).toContain('delete this.__emap_merge');
+  });
+
+  it('omits copy-fields= when the layer has no data table', async () => {
+    beforeDataset.layers[0].data = undefined;
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src1', layer: 'parcels', id: 1 },
+    ], { mode: 'add' });
+    await map.mergeSelected();
+    const cmd = parseCommandsSpy.mock.calls[0][0] as string;
+    expect(cmd).not.toContain('copy-fields=');
+  });
+
+  it('pushes one history entry labelled "Merge N features" and clears selection', async () => {
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src1', layer: 'parcels', id: 1 },
+    ], { mode: 'add' });
+    const historyListener = vi.fn();
+    const selectionListener = vi.fn();
+    map.on('historychange', historyListener);
+    map.on('selectionchange', selectionListener);
+    await map.mergeSelected();
+    expect(historyListener).toHaveBeenCalledTimes(1);
+    expect(historyListener.mock.calls[0][0].label).toBe('Merge 2 features');
+    expect(map.getSelection()).toEqual([]);
+    expect(selectionListener).toHaveBeenCalled();
+  });
+
+  it('clears prior history (history barrier)', async () => {
+    map.pushCommand({ do: () => {}, undo: () => {} });
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+    await map.mergeSelected();
+    map.undo();
+    expect(map.canUndo()).toBe(false);
+  });
+
+  it('drops fields whose names contain a comma (mapshaper copy-fields= is comma-delimited)', async () => {
+    beforeDataset.layers[0].data = {
+      getFields: () => ['safe', 'has,comma'],
+      getRecords: () => [],
+    };
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src1', layer: 'parcels', id: 1 },
+    ], { mode: 'add' });
+    await map.mergeSelected();
+    const cmd = parseCommandsSpy.mock.calls[0][0] as string;
+    expect(cmd).toContain('copy-fields=safe');
+    expect(cmd).not.toContain('has,comma');
+  });
+});
+
+describe('Emap translateSelected', () => {
+  let map: Emap;
+  let polyLayer: any;
+  let pointLayer: any;
+  let arcs: any;
+  let xx: Float64Array;
+  let yy: Float64Array;
+  let updateArcBoundsSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+
+    // Two arcs of 2 vertices each at distinct locations
+    xx = new Float64Array([0, 1, 10, 11]);
+    yy = new Float64Array([0, 1, 10, 11]);
+    updateArcBoundsSpy = vi.fn();
+    arcs = {
+      getVertexData: () => ({
+        xx, yy,
+        nn: new Int32Array([2, 2]),
+        ii: new Int32Array([0, 2]),
+        zz: null,
+      }),
+      updateArcBounds: updateArcBoundsSpy,
+    };
+    polyLayer = {
+      name: 'parcels',
+      geometry_type: 'polygon',
+      // shape 0 references arc 0; shape 1 references arc 1
+      shapes: [[[0]], [[1]]],
+    };
+    pointLayer = {
+      name: 'cities',
+      geometry_type: 'point',
+      shapes: [[[100, 200]]],
+    };
+    const source = {
+      id: 'src1',
+      type: 'topology',
+      getLayers: () => [polyLayer, pointLayer],
+      getArcs: () => arcs,
+      refreshDisplayArcs: vi.fn(),
+    };
+    (map as any)._sources.set('src1', source);
+  });
+
+  it('returns false on empty selection', () => {
+    expect(map.translateSelected(10, 5)).toBe(false);
+  });
+
+  it('returns false on zero offset', () => {
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+    expect(map.translateSelected(0, 0)).toBe(false);
+    expect(map.canUndo()).toBe(false);
+  });
+
+  it('translates one polygon by collecting its arc id', () => {
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+    const ok = map.translateSelected(100, 200);
+    expect(ok).toBe(true);
+    // Arc 0's verts shifted by (100, 200); arc 1 untouched
+    expect(xx[0]).toBe(100); expect(xx[1]).toBe(101);
+    expect(xx[2]).toBe(10); expect(xx[3]).toBe(11);
+    expect(yy[0]).toBe(200); expect(yy[1]).toBe(201);
+    expect(updateArcBoundsSpy).toHaveBeenCalledWith(0);
+    expect(updateArcBoundsSpy).not.toHaveBeenCalledWith(1);
+  });
+
+  it('handles negative arc-ids in shapes (~ encoding)', () => {
+    polyLayer.shapes[0] = [[~0]]; // negative form of arc 0
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+    map.translateSelected(1, 1);
+    expect(xx[0]).toBe(1); expect(xx[1]).toBe(2);
+  });
+
+  it('deduplicates arc ids across multiple selected features', () => {
+    // Both shapes reference arc 0 (artificial setup)
+    polyLayer.shapes = [[[0]], [[0]]];
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src1', layer: 'parcels', id: 1 },
+    ], { mode: 'add' });
+    map.translateSelected(1, 0);
+    // Arc 0 should be moved exactly once (xx[0] = 1, not 2)
+    expect(xx[0]).toBe(1);
+    expect(updateArcBoundsSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('translates point shapes in place', () => {
+    map.select([{ source: 'src1', layer: 'cities', id: 0 }]);
+    map.translateSelected(5, -5);
+    expect(pointLayer.shapes[0]).toEqual([[105, 195]]);
+  });
+
+  it('selection survives translation and no selectionchange fires', () => {
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+    const listener = vi.fn();
+    map.on('selectionchange', listener);
+    map.translateSelected(1, 1);
+    expect(map.getSelection()).toHaveLength(1);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('fires exactly one historychange per call', () => {
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    map.translateSelected(1, 1);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('one undo reverses the entire translation', () => {
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src1', layer: 'cities', id: 0 },
+    ], { mode: 'add' });
+    const xxBefore = Array.from(xx);
+    const yyBefore = Array.from(yy);
+    const pointBefore = JSON.parse(JSON.stringify(pointLayer.shapes[0]));
+    map.translateSelected(7, 11);
+    map.undo();
+    expect(Array.from(xx)).toEqual(xxBefore);
+    expect(Array.from(yy)).toEqual(yyBefore);
+    expect(pointLayer.shapes[0]).toEqual(pointBefore);
+  });
+
+  it('multi-source selection wraps per-source commands in a CompositeCommand', () => {
+    // Add a second source with its own arcs
+    const xx2 = new Float64Array([50, 51]);
+    const yy2 = new Float64Array([60, 61]);
+    const arcs2 = {
+      getVertexData: () => ({
+        xx: xx2, yy: yy2,
+        nn: new Int32Array([2]), ii: new Int32Array([0]), zz: null,
+      }),
+      updateArcBounds: vi.fn(),
+    };
+    const layer2 = { name: 'parcels', geometry_type: 'polygon', shapes: [[[0]]] };
+    const src2 = {
+      id: 'src2', type: 'topology',
+      getLayers: () => [layer2],
+      getArcs: () => arcs2,
+      refreshDisplayArcs: vi.fn(),
+    };
+    (map as any)._sources.set('src2', src2);
+
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src2', layer: 'parcels', id: 0 },
+    ], { mode: 'add' });
+    map.translateSelected(1, 0);
+    // Both sources got translated
+    expect(xx[0]).toBe(1);
+    expect(xx2[0]).toBe(51);
+    // One undo restores both
+    map.undo();
+    expect(xx[0]).toBe(0);
+    expect(xx2[0]).toBe(50);
+  });
+
+  it('composes with vertex / draw / attribute commands (no history barrier)', () => {
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+    const fakeUndo = vi.fn();
+    map.pushCommand({ do: () => {}, undo: fakeUndo, label: 'fake' });
+    map.translateSelected(1, 1);
+    // Two undos, in reverse order: translate first, then fake
+    map.undo();
+    expect(xx[0]).toBe(0); // translate reversed
+    map.undo();
+    expect(fakeUndo).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Emap bufferLayer', () => {
+  let map: Emap;
+  let beforeDataset: any;
+  let afterDataset: any;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    beforeDataset = { layers: [{ name: 'roads', geometry_type: 'polyline', shapes: [] }] };
+    afterDataset = { layers: [{ name: 'roads', geometry_type: 'polygon', shapes: [['buf']] }] };
+    const source = {
+      id: 'src1',
+      type: 'topology',
+      getDataset: () => beforeDataset,
+      getLayers: () => beforeDataset.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    runParsedCommandsSpy = vi.fn((_cmds: any, _job: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDataset }] } });
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDataset));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('emits a numeric radius bare', async () => {
+    const ok = await map.bufferLayer({ source: 'src1', target: 'roads', radius: 5 });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -buffer 5');
+  });
+
+  it('quotes a string radius (mapshaper expression)', async () => {
+    await map.bufferLayer({ source: 'src1', target: 'roads', radius: 'pop / 1000' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -buffer "pop / 1000"');
+  });
+
+  it('appends cap-style= when capStyle is set', async () => {
+    await map.bufferLayer({ source: 'src1', target: 'roads', radius: 5, capStyle: 'flat' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -buffer 5 cap-style=flat');
+  });
+
+  it('returns false when source / target is missing', async () => {
+    expect(await map.bufferLayer({ source: 'nope', target: 'roads', radius: 5 })).toBe(false);
+    expect(await map.bufferLayer({ source: 'src1', target: 'nope', radius: 5 })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('pushes one history entry labelled "Buffer <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.bufferLayer({ source: 'src1', target: 'roads', radius: 5 });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Buffer roads');
+    expect(map.canUndo()).toBe(true);
+  });
+});
+
+describe('Emap applyExpression', () => {
+  let map: Emap;
+  let beforeDataset: any;
+  let afterDataset: any;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    beforeDataset = { layers: [{ name: 'cities', shapes: [], data: { getRecords: () => [] } }] };
+    afterDataset = { layers: [{ name: 'cities', shapes: [], data: { getRecords: () => [] } }] };
+    const source = {
+      id: 'src1',
+      type: 'topology',
+      getDataset: () => beforeDataset,
+      getLayers: () => beforeDataset.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    runParsedCommandsSpy = vi.fn((_cmds: any, _job: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDataset }] } });
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDataset));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('emits a quoted -each expression', async () => {
+    const ok = await map.applyExpression({
+      source: 'src1',
+      target: 'cities',
+      expression: 'this.density = this.pop / this.area',
+    });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+      '-target "cities" -each "this.density = this.pop / this.area"',
+    );
+  });
+
+  it('appends a quoted where= when supplied', async () => {
+    await map.applyExpression({
+      source: 'src1',
+      target: 'cities',
+      expression: 'this.flag = true',
+      where: 'this.pop > 100',
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+      '-target "cities" -each "this.flag = true" where="this.pop > 100"',
+    );
+  });
+
+  it('returns false on missing source / target', async () => {
+    expect(await map.applyExpression({ source: 'nope', target: 'cities', expression: 'x' })).toBe(false);
+    expect(await map.applyExpression({ source: 'src1', target: 'nope', expression: 'x' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on empty / whitespace-only expression', async () => {
+    expect(await map.applyExpression({ source: 'src1', target: 'cities', expression: '' })).toBe(false);
+    expect(await map.applyExpression({ source: 'src1', target: 'cities', expression: '   ' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('omits where= when blank / whitespace-only', async () => {
+    await map.applyExpression({
+      source: 'src1',
+      target: 'cities',
+      expression: 'this.x = 1',
+      where: '   ',
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "cities" -each "this.x = 1"');
+  });
+
+  it('pushes one history entry labelled "Update <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.applyExpression({
+      source: 'src1',
+      target: 'cities',
+      expression: 'this.foo = 1',
+    });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Update cities');
+  });
+
+  it('escapes embedded double quotes in expression', async () => {
+    await map.applyExpression({
+      source: 'src1',
+      target: 'cities',
+      expression: 'this.kind = "city"',
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+      '-target "cities" -each "this.kind = \\"city\\""',
+    );
+  });
+});
+
+describe('Emap explodeLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = { layers: [{ name: 'parts', shapes: [] }] };
+    const afterDs = { layers: [{ name: 'parts', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('emits the -explode command', async () => {
+    const ok = await map.explodeLayer({ source: 'src1', target: 'parts' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -explode');
+  });
+
+  it('returns false on missing source / target', async () => {
+    expect(await map.explodeLayer({ source: 'nope', target: 'parts' })).toBe(false);
+    expect(await map.explodeLayer({ source: 'src1', target: 'nope' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('pushes one history entry labelled "Explode <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.explodeLayer({ source: 'src1', target: 'parts' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Explode parts');
+  });
+});
+
+describe('Emap innerlinesLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = { layers: [{ name: 'states', shapes: [] }] };
+    const afterDs = { layers: [{ name: 'states', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('emits the minimal -innerlines command', async () => {
+    const ok = await map.innerlinesLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -innerlines');
+  });
+
+  it('appends a quoted where=', async () => {
+    await map.innerlinesLayer({
+      source: 'src1', target: 'states', where: 'A.STATE !== B.STATE',
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "states" -innerlines where="A.STATE !== B.STATE"');
+  });
+
+  it('appends a quoted name=', async () => {
+    await map.innerlinesLayer({
+      source: 'src1', target: 'states', name: 'borders',
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -innerlines name="borders"');
+  });
+
+  it('appends no-replace flag', async () => {
+    await map.innerlinesLayer({
+      source: 'src1', target: 'states', noReplace: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -innerlines no-replace');
+  });
+
+  it('combines all options in deterministic order', async () => {
+    await map.innerlinesLayer({
+      source: 'src1', target: 'states',
+      where: 'A.x !== B.x', name: 'b', noReplace: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "states" -innerlines where="A.x !== B.x" name="b" no-replace');
+  });
+
+  it('returns false on missing source / target', async () => {
+    expect(await map.innerlinesLayer({ source: 'nope', target: 'states' })).toBe(false);
+    expect(await map.innerlinesLayer({ source: 'src1', target: 'nope' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('pushes one history entry labelled "Innerlines <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.innerlinesLayer({ source: 'src1', target: 'states' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Innerlines states');
+  });
+});
+
+describe('Emap filterFeatures', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = { layers: [{ name: 'cities', shapes: [] }] };
+    const afterDs = { layers: [{ name: 'cities', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('emits a quoted expression', async () => {
+    const ok = await map.filterFeatures({
+      source: 'src1', target: 'cities', expression: 'this.pop > 100',
+    });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+      '-target "cities" -filter "this.pop > 100"',
+    );
+  });
+
+  it('appends invert flag', async () => {
+    await map.filterFeatures({
+      source: 'src1', target: 'cities', expression: 'this.x', invert: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+      '-target "cities" -filter "this.x" invert',
+    );
+  });
+
+  it('appends remove-empty flag', async () => {
+    await map.filterFeatures({
+      source: 'src1', target: 'cities', expression: 'this.x', removeEmpty: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+      '-target "cities" -filter "this.x" remove-empty',
+    );
+  });
+
+  it('removeEmpty alone (no expression) emits bare -filter remove-empty', async () => {
+    await map.filterFeatures({
+      source: 'src1', target: 'cities', removeEmpty: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "cities" -filter remove-empty');
+  });
+
+  it('returns false when neither expression nor removeEmpty is set', async () => {
+    expect(await map.filterFeatures({ source: 'src1', target: 'cities' })).toBe(false);
+    expect(await map.filterFeatures({ source: 'src1', target: 'cities', expression: '   ' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on missing source / target', async () => {
+    expect(await map.filterFeatures({ source: 'nope', target: 'cities', expression: 'x' })).toBe(false);
+    expect(await map.filterFeatures({ source: 'src1', target: 'nope', expression: 'x' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('pushes one history entry labelled "Filter <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.filterFeatures({
+      source: 'src1', target: 'cities', expression: 'this.x',
+    });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Filter cities');
+  });
+});
+
+describe('Emap snapLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = { layers: [{ name: 'roads', shapes: [] }] };
+    const afterDs = { layers: [{ name: 'roads', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('emits the bare -snap command (mapshaper default interval)', async () => {
+    const ok = await map.snapLayer({ source: 'src1', target: 'roads' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap');
+  });
+
+  it('appends a numeric interval positionally', async () => {
+    await map.snapLayer({ source: 'src1', target: 'roads', interval: 0.0001 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap 0.0001');
+  });
+
+  it('appends endpoints flag', async () => {
+    await map.snapLayer({ source: 'src1', target: 'roads', endpoints: true });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap endpoints');
+  });
+
+  it('appends precision=', async () => {
+    await map.snapLayer({ source: 'src1', target: 'roads', precision: 0.000001 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap precision=0.000001');
+  });
+
+  it('combines all options in deterministic order', async () => {
+    await map.snapLayer({
+      source: 'src1', target: 'roads',
+      interval: 0.001, endpoints: true, precision: 0.000001,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "roads" -snap 0.001 endpoints precision=0.000001');
+  });
+
+  it('returns false on missing source / target', async () => {
+    expect(await map.snapLayer({ source: 'nope', target: 'roads' })).toBe(false);
+    expect(await map.snapLayer({ source: 'src1', target: 'nope' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('pushes one history entry labelled "Snap <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.snapLayer({ source: 'src1', target: 'roads' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Snap roads');
+  });
+});
+
+describe('Emap rotateSelected / scaleSelected', () => {
+  let map: Emap;
+  let polyLayer: any;
+  let pointLayer: any;
+  let xx: Float64Array;
+  let yy: Float64Array;
+  let arcs: any;
+
+  function close(a: number, b: number, eps = 1e-9): boolean {
+    return Math.abs(a - b) < eps;
+  }
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    // arc 0: (0,0)-(2,0)-(2,2)-(0,2) bounding (0,0)-(2,2), centroid (1,1)
+    xx = new Float64Array([0, 2, 2, 0]);
+    yy = new Float64Array([0, 0, 2, 2]);
+    arcs = {
+      getVertexData: () => ({
+        xx, yy,
+        nn: new Int32Array([4]),
+        ii: new Int32Array([0]),
+        zz: null,
+      }),
+      updateArcBounds: vi.fn(),
+    };
+    polyLayer = {
+      name: 'parcels', geometry_type: 'polygon',
+      shapes: [[[0]]],
+    };
+    pointLayer = {
+      name: 'cities', geometry_type: 'point',
+      shapes: [[[10, 20]]],
+    };
+    const source = {
+      id: 'src1', type: 'topology',
+      getLayers: () => [polyLayer, pointLayer],
+      getArcs: () => arcs,
+      refreshDisplayArcs: vi.fn(),
+    };
+    (map as any)._sources.set('src1', source);
+  });
+
+  describe('rotateSelected', () => {
+    it('returns false on empty selection', () => {
+      expect(map.rotateSelected(45)).toBe(false);
+    });
+
+    it('returns false on zero angle', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      expect(map.rotateSelected(0)).toBe(false);
+      expect(map.canUndo()).toBe(false);
+    });
+
+    it('default origin is the bbox centroid (so rotating by 90 keeps the centre fixed)', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      // Centroid of (0,0)-(2,2) is (1,1). Rotate by 90 around (1,1):
+      // (0,0) -> (2,0); (2,0) -> (2,2); (2,2) -> (0,2); (0,2) -> (0,0)
+      map.rotateSelected(90);
+      expect(close(xx[0], 2)).toBe(true);
+      expect(close(yy[0], 0)).toBe(true);
+      expect(close(xx[1], 2)).toBe(true);
+      expect(close(yy[1], 2)).toBe(true);
+      expect(close(xx[2], 0)).toBe(true);
+      expect(close(yy[2], 2)).toBe(true);
+      expect(close(xx[3], 0)).toBe(true);
+      expect(close(yy[3], 0)).toBe(true);
+    });
+
+    it('custom origin is honoured', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      // Rotate by 90 around (0,0): (2,0) -> (0,2)
+      map.rotateSelected(90, [0, 0]);
+      expect(close(xx[1], 0)).toBe(true);
+      expect(close(yy[1], 2)).toBe(true);
+    });
+
+    it('undo restores positions exactly', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      const xxBefore = Array.from(xx);
+      const yyBefore = Array.from(yy);
+      map.rotateSelected(37, [3, -1]);
+      map.undo();
+      for (let i = 0; i < xxBefore.length; i++) {
+        expect(close(xx[i], xxBefore[i])).toBe(true);
+        expect(close(yy[i], yyBefore[i])).toBe(true);
+      }
+    });
+
+    it('selection survives, single historychange', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      const histListener = vi.fn();
+      const selListener = vi.fn();
+      map.on('historychange', histListener);
+      map.on('selectionchange', selListener);
+      map.rotateSelected(45);
+      expect(map.getSelection()).toHaveLength(1);
+      expect(histListener).toHaveBeenCalledTimes(1);
+      expect(selListener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('scaleSelected', () => {
+    it('returns false on empty selection', () => {
+      expect(map.scaleSelected(2)).toBe(false);
+    });
+
+    it('returns false on no-op scale (1) and (1, 1)', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      expect(map.scaleSelected(1)).toBe(false);
+      expect(map.scaleSelected(1, 1)).toBe(false);
+      expect(map.canUndo()).toBe(false);
+    });
+
+    it('uniform scale by 2 around bbox centroid', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      // Centroid (1,1). Scale 2x: (0,0) -> (-1,-1); (2,2) -> (3,3)
+      map.scaleSelected(2);
+      expect(close(xx[0], -1)).toBe(true);
+      expect(close(yy[0], -1)).toBe(true);
+      expect(close(xx[2], 3)).toBe(true);
+      expect(close(yy[2], 3)).toBe(true);
+    });
+
+    it('non-uniform scale', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      // Centroid (1,1). Scale (2, 0.5): (0,0) -> (-1, 0.5); (2,2) -> (3, 1.5)
+      map.scaleSelected(2, 0.5);
+      expect(close(xx[0], -1)).toBe(true);
+      expect(close(yy[0], 0.5)).toBe(true);
+      expect(close(xx[2], 3)).toBe(true);
+      expect(close(yy[2], 1.5)).toBe(true);
+    });
+
+    it('one undo reverses the scale', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      const xxBefore = Array.from(xx);
+      map.scaleSelected(3.7);
+      map.undo();
+      for (let i = 0; i < xxBefore.length; i++) {
+        expect(close(xx[i], xxBefore[i])).toBe(true);
+      }
+    });
+  });
+
+  describe('multi-source affine', () => {
+    it('wraps per-source commands in a CompositeCommand', () => {
+      // Add a second source with its own arcs
+      const xx2 = new Float64Array([10, 11]);
+      const yy2 = new Float64Array([20, 21]);
+      const arcs2 = {
+        getVertexData: () => ({
+          xx: xx2, yy: yy2,
+          nn: new Int32Array([2]), ii: new Int32Array([0]), zz: null,
+        }),
+        updateArcBounds: vi.fn(),
+      };
+      const layer2 = { name: 'parcels', geometry_type: 'polygon', shapes: [[[0]]] };
+      (map as any)._sources.set('src2', {
+        id: 'src2', type: 'topology',
+        getLayers: () => [layer2],
+        getArcs: () => arcs2,
+        refreshDisplayArcs: vi.fn(),
+      });
+
+      map.select([
+        { source: 'src1', layer: 'parcels', id: 0 },
+        { source: 'src2', layer: 'parcels', id: 0 },
+      ], { mode: 'add' });
+      map.scaleSelected(2);
+      // Both sources got scaled
+      // Verify by re-running undo: a single undo should reverse both
+      map.undo();
+      expect(close(xx[0], 0)).toBe(true);
+      expect(close(xx2[0], 10)).toBe(true);
+    });
+  });
+});

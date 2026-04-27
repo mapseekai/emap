@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap Example - Snap vertices</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header select, #header input[type="text"] {
+      padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px;
+    }
+    #header input[type="text"] { width: 110px; }
+    #header button {
+      padding: 5px 12px; background: #16a085; color: white; border: 0;
+      border-radius: 3px; cursor: pointer; font-size: 13px;
+    }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>File: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <label>Target: <select id="target"></select></label>
+    <label>Interval: <input id="interval" type="text" placeholder="default" /></label>
+    <label>Precision: <input id="precision" type="text" placeholder="optional" /></label>
+    <label><input id="endpoints" type="checkbox" /> endpoints only</label>
+    <button id="btn" disabled>Snap</button>
+    <span id="status">Load a dataset</span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'snap-source';
+    const targetSel = document.getElementById('target');
+    const intervalInput = document.getElementById('interval');
+    const precisionInput = document.getElementById('precision');
+    const endpointsChk = document.getElementById('endpoints');
+    const btn = document.getElementById('btn');
+    const status = document.getElementById('status');
+
+    function populate(source) {
+      targetSel.innerHTML = '';
+      source.getLayers().forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        targetSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
+      });
+      btn.disabled = source.getLayers().length === 0;
+    }
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `Loading ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          populate(source);
+          status.textContent = `Loaded ${file.name}.`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    btn.addEventListener('click', async () => {
+      const target = targetSel.value;
+      if (!target) return;
+      const opts = { source: SOURCE_ID, target };
+      const intervalVal = intervalInput.value.trim();
+      if (intervalVal && !isNaN(Number(intervalVal))) opts.interval = Number(intervalVal);
+      const precisionVal = precisionInput.value.trim();
+      if (precisionVal && !isNaN(Number(precisionVal))) opts.precision = Number(precisionVal);
+      if (endpointsChk.checked) opts.endpoints = true;
+      status.textContent = `Snapping ${target}...`;
+      btn.disabled = true;
+      try {
+        const ok = await map.snapLayer(opts);
+        status.textContent = ok ? `Snapped ${target}. Ctrl+Z to undo.` : 'Snap failed.';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+
+</html>

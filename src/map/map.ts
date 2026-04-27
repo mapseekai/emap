@@ -16,6 +16,13 @@ import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
 import type { EditCommand } from '../edit/edit-command';
 import { CompositeCommand } from '../edit/commands/composite';
 import { FeatureDeleteCommand } from '../edit/commands/feature-delete';
+import { FeatureTranslateCommand, TranslatedPointFeature } from '../edit/commands/feature-translate';
+import {
+  FeatureAffineCommand,
+  AffineMatrix,
+  rotateMatrix,
+  scaleMatrix,
+} from '../edit/commands/feature-affine';
 import { DatasetReplaceCommand } from '../edit/commands/dataset-replace';
 import { FeaturePropertyChangeCommand } from '../edit/commands/feature-property-change';
 import { FieldAddCommand } from '../edit/commands/field-add';
@@ -100,6 +107,111 @@ export interface DissolveOptions {
    * target layer is dissolved into a single feature.
    */
   field?: string;
+}
+
+/** Options for {@link Emap.bufferLayer}. */
+export interface BufferOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the layer to buffer. */
+  target: string;
+  /**
+   * Buffer radius in source-CRS units (e.g., degrees for EPSG:4326, metres
+   * for projected CRSes). Accepts either a constant `number` or a mapshaper
+   * expression string evaluated per record (e.g. `"pop / 1000"`).
+   */
+  radius: number | string;
+  /** Buffer cap style (mapshaper's `cap-style=` option). Default is `round`. */
+  capStyle?: 'flat' | 'round';
+}
+
+/**
+ * Options for {@link Emap.applyExpression} — bulk attribute updates via
+ * mapshaper's `-each` JS expression engine.
+ */
+export interface ApplyExpressionOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the layer to update. */
+  target: string;
+  /**
+   * JS expression evaluated per feature. Use `this.<field>` to read or write
+   * record attributes; mapshaper's standard feature context (`this.id`,
+   * `this.area`, `this.bounds`, etc.) is also available. Multiple
+   * comma-separated assignments are allowed: `this.a = 1, this.b = 2`.
+   */
+  expression: string;
+  /**
+   * Optional filter expression. Only records for which `where` evaluates to
+   * a truthy value have `expression` applied. Same JS context as
+   * `expression`. Mirrors mapshaper CLI's `-each EXPR where=...`.
+   */
+  where?: string;
+}
+
+/** Options for {@link Emap.explodeLayer}. */
+export interface ExplodeOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the layer whose multi-part features will be split. */
+  target: string;
+}
+
+/** Options for {@link Emap.innerlinesLayer}. */
+export interface InnerlinesOptions {
+  /** Source ID containing the polygon target layer. */
+  source: string;
+  /** Layer name (or id) of the polygon layer to extract shared edges from. */
+  target: string;
+  /**
+   * Optional polygon-boundary filter expression. Evaluated with `A` and `B`
+   * in scope — the two polygons on either side of each candidate boundary —
+   * so e.g. `A.STATE !== B.STATE` keeps only inter-state borders. Mirrors
+   * mapshaper's `-innerlines where=...`.
+   */
+  where?: string;
+  /** Optional name for the output polyline layer. */
+  name?: string;
+  /**
+   * If true, the original polygon layer is preserved alongside the new
+   * polyline layer (mapshaper's `no-replace` flag). Default replaces.
+   */
+  noReplace?: boolean;
+}
+
+/** Options for {@link Emap.filterFeatures}. */
+export interface FilterOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the layer to filter. */
+  target: string;
+  /**
+   * JS expression evaluated per feature. Records that evaluate to false are
+   * deleted (mapshaper convention). Same `this` context as
+   * {@link Emap.applyExpression}: `this.<field>`, `this.id`, etc.
+   */
+  expression?: string;
+  /** Flip the predicate (mapshaper's `invert` flag). */
+  invert?: boolean;
+  /** Also delete features with null geometry (mapshaper's `remove-empty`). */
+  removeEmpty?: boolean;
+}
+
+/** Options for {@link Emap.snapLayer}. */
+export interface SnapOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the layer to snap. */
+  target: string;
+  /**
+   * Snap distance in source-CRS units. When omitted, mapshaper picks a
+   * small default based on the dataset.
+   */
+  interval?: number;
+  /** Snap only line endpoints (mapshaper's `endpoints` flag). */
+  endpoints?: boolean;
+  /** Round all coordinates to a given decimal precision (e.g. 0.000001). */
+  precision?: number;
 }
 
 export interface HighlightStyle {
@@ -1076,6 +1188,185 @@ export class Emap extends EventDispatcher {
   }
 
   /**
+   * Generate buffer polygons for a layer using mapshaper's `-buffer` pipeline.
+   *
+   * `radius` is interpreted in source-CRS units: degrees for EPSG:4326,
+   * metres for typical projected CRSes. Accepts either a constant number or a
+   * mapshaper expression string evaluated per record (e.g. `"pop / 1000"`),
+   * matching mapshaper CLI syntax exactly.
+   *
+   * Returns `true` on success, `false` for unresolvable source/target.
+   * Recorded as a single undoable history entry; inherits dataset-replace
+   * semantics (history barrier, selection cleared) from `_runDatasetCommand`.
+   */
+  public async bufferLayer(opts: BufferOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    // Numbers go in bare; expression strings are quoted so the shell-style
+    // command parser keeps them intact.
+    const radiusArg =
+      typeof opts.radius === 'number' ? String(opts.radius) : quoteMapshaperArg(opts.radius);
+    const capArg = opts.capStyle ? ` cap-style=${opts.capStyle}` : '';
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -buffer ${radiusArg}${capArg}`;
+    return this._runDatasetCommand(opts.source, cmd, `Buffer ${opts.target}`);
+  }
+
+  /**
+   * Run a mapshaper `-each` JS expression against a layer to update
+   * attributes in bulk. Use for derived fields (`this.density = this.pop /
+   * this.area`), normalization (`this.name = this.name.toUpperCase()`), or
+   * any other per-record mutation that the per-feature
+   * {@link setFeatureProperty} would be tedious for.
+   *
+   * The optional `where` filter mirrors mapshaper CLI's `-each EXPR
+   * where=...` — only records matching it are mutated.
+   *
+   * Returns `false` for unresolvable source / target or empty expression.
+   * Recorded as one undoable history entry; inherits dataset-replace
+   * semantics (history barrier, selection cleared) from `_runDatasetCommand`.
+   */
+  public async applyExpression(opts: ApplyExpressionOptions): Promise<boolean> {
+    if (!opts.expression || !opts.expression.trim()) return false;
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    const whereArg = opts.where && opts.where.trim()
+      ? ` where=${quoteMapshaperArg(opts.where)}`
+      : '';
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -each ${quoteMapshaperArg(opts.expression)}${whereArg}`;
+    return this._runDatasetCommand(opts.source, cmd, `Update ${opts.target}`);
+  }
+
+  /**
+   * Divide multi-part features in the target layer into single-part features
+   * via mapshaper's `-explode`. Each part inherits the original record's
+   * attributes. Returns `false` for unresolvable source / target.
+   *
+   * Useful for unpacking multipolygon islands, multipart polylines, or
+   * multipoint clusters into separately-pickable features.
+   */
+  public async explodeLayer(opts: ExplodeOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -explode`;
+    return this._runDatasetCommand(opts.source, cmd, `Explode ${opts.target}`);
+  }
+
+  /**
+   * Convert a polygon layer to a polyline layer along shared polygon edges
+   * via mapshaper's `-innerlines`. Useful for cartographic styling: render
+   * internal administrative borders as a separately-stylable line layer
+   * while keeping the original polygons.
+   *
+   * Optional `where` (with `A` / `B` in scope) keeps only boundaries whose
+   * neighbouring polygons match the predicate; `name` controls the output
+   * layer name; `noReplace: true` keeps the input polygon layer alongside
+   * the new polyline layer.
+   */
+  public async innerlinesLayer(opts: InnerlinesOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-innerlines`,
+    ];
+    if (opts.where && opts.where.trim()) {
+      parts.push(`where=${quoteMapshaperArg(opts.where)}`);
+    }
+    if (opts.name && opts.name.trim()) {
+      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    if (opts.noReplace) {
+      parts.push('no-replace');
+    }
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Innerlines ${opts.target}`);
+  }
+
+  /**
+   * Drop features from a layer using mapshaper's `-filter`.
+   *
+   * Convention follows mapshaper: features whose `expression` evaluates to
+   * FALSE are deleted (so `'this.pop > 100'` *keeps* populous features).
+   * `invert: true` flips the predicate. `removeEmpty: true` also drops
+   * features with null geometry.
+   *
+   * Returns `false` when neither `expression` nor `removeEmpty` is supplied
+   * (mapshaper would error otherwise). Companion to {@link applyExpression}:
+   * same JS context, opposite intent (mutate vs delete).
+   */
+  public async filterFeatures(opts: FilterOptions): Promise<boolean> {
+    const hasExpr = !!(opts.expression && opts.expression.trim());
+    if (!hasExpr && !opts.removeEmpty) return false;
+
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-filter`,
+    ];
+    if (hasExpr) {
+      parts.push(quoteMapshaperArg(opts.expression as string));
+    }
+    if (opts.invert) {
+      parts.push('invert');
+    }
+    if (opts.removeEmpty) {
+      parts.push('remove-empty');
+    }
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Filter ${opts.target}`);
+  }
+
+  /**
+   * Snap nearby vertices together using mapshaper's `-snap`. Useful as a
+   * targeted fix for almost-but-not-quite-coincident vertices left over
+   * from reprojection, manual digitization, or merged sources.
+   *
+   * `interval` is the snap distance in source-CRS units; mapshaper picks a
+   * small default when omitted. `endpoints: true` restricts to line
+   * endpoints. `precision` rounds all coords to a given decimal precision.
+   */
+  public async snapLayer(opts: SnapOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-snap`,
+    ];
+    if (typeof opts.interval === 'number') {
+      parts.push(String(opts.interval));
+    }
+    if (opts.endpoints) {
+      parts.push('endpoints');
+    }
+    if (typeof opts.precision === 'number') {
+      parts.push(`precision=${opts.precision}`);
+    }
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Snap ${opts.target}`);
+  }
+
+  /**
    * Run mapshaper's `-clean` against a layer to repair topology issues
    * (intersection cuts, polygon overlaps, sliver removal). Heavy — O(N²) on
    * polygon counts in the worst case — so it is opt-in instead of running on
@@ -1091,6 +1382,322 @@ export class Emap extends EventDispatcher {
     if (!findLayerByName(dataset.layers, opts.target)) return false;
     const cmd = `-target ${quoteMapshaperArg(opts.target)} -clean`;
     return this._runDatasetCommand(opts.source, cmd, `Clean ${opts.target}`);
+  }
+
+  /**
+   * Combine the currently-selected features (when they all live in the same
+   * source/layer) into a single feature, recorded as one undoable history
+   * entry.
+   *
+   * Implements the standard mapshaper recipe: tag selected features with a
+   * temp discriminator field, run `-dissolve` on it, then drop the temp
+   * field. Attribute fields are preserved via `copy-fields=` so unselected
+   * single-feature groups keep their values and the merged group inherits
+   * the FIRST selected feature's values (mapshaper's documented
+   * data-aggregation behaviour).
+   *
+   * Returns `false` (and runs no command) for an empty selection or when
+   * the selection spans more than one source/layer.
+   */
+  public async mergeSelected(): Promise<boolean> {
+    const refs = this._selection.getAll();
+    if (refs.length === 0) return false;
+
+    // Reject cross-source / cross-layer selections — mapshaper's dissolve
+    // operates on a single layer at a time.
+    const sourceId = refs[0].source;
+    const layerId = refs[0].layer;
+    for (const r of refs) {
+      if (r.source !== sourceId || r.layer !== layerId) return false;
+    }
+
+    const layer = this._resolveLayer(sourceId, layerId);
+    if (!layer) return false;
+
+    // Sort selected ids ascending so the embedded JSON literal is
+    // deterministic (helpful for tests + diffs).
+    const ids = refs.map((r) => r.id).slice().sort((a, b) => a - b);
+
+    const cmd = buildMergeSelectedCommand(layerId, ids, layer);
+    const label = `Merge ${refs.length} feature${refs.length > 1 ? 's' : ''}`;
+    return this._runDatasetCommand(sourceId, cmd, label);
+  }
+
+  /**
+   * Translate every selected feature by `(dx, dy)` in source-data coordinates.
+   * Returns `false` for an empty selection or zero offset.
+   *
+   * Lightweight in-place mutation — does not replace the dataset, does not
+   * clear the selection, composes freely with other commands in one undo
+   * timeline. For multi-source selections, one `FeatureTranslateCommand` is
+   * built per source and they are wrapped in a single `CompositeCommand` so
+   * one undo reverses the whole nudge.
+   *
+   * Known limitation: arcs shared with unselected features will be translated
+   * along with the selection, distorting the unselected neighbours. Safe for
+   * isolated features and contiguous polygon subsets; documented in the spec.
+   */
+  public translateSelected(dx: number, dy: number): boolean {
+    if (dx === 0 && dy === 0) return false;
+    const refs = this._selection.getAll();
+    if (refs.length === 0) return false;
+
+    // Group selection by source, collecting unique abs-arc-ids (for path
+    // features) and (layer, featureId) pairs (for point features).
+    const bySource = new globalThis.Map<
+      string,
+      {
+        arcIdSet: Set<number>;
+        pointFeatures: TranslatedPointFeature[];
+      }
+    >();
+
+    for (const ref of refs) {
+      const layer = this._resolveLayer(ref.source, ref.layer);
+      if (!layer?.shapes) continue;
+      const shape = layer.shapes[ref.id];
+      if (!shape) continue;
+
+      let bucket = bySource.get(ref.source);
+      if (!bucket) {
+        bucket = { arcIdSet: new Set<number>(), pointFeatures: [] };
+        bySource.set(ref.source, bucket);
+      }
+
+      if (layer.geometry_type === 'point') {
+        bucket.pointFeatures.push({ layer, featureId: ref.id });
+      } else {
+        // Path feature: shape is a list of parts, each part is a list of
+        // signed arc ids. Negative ids encode reversed direction; abs them.
+        for (const part of shape) {
+          if (!Array.isArray(part)) continue;
+          for (const rawArcId of part) {
+            if (typeof rawArcId !== 'number') continue;
+            bucket.arcIdSet.add(rawArcId >= 0 ? rawArcId : ~rawArcId);
+          }
+        }
+      }
+    }
+
+    if (bySource.size === 0) return false;
+
+    const children: EditCommand[] = [];
+    for (const [sourceId, bucket] of bySource) {
+      const source = this._sources.get(sourceId);
+      if (!source) continue;
+      if (bucket.arcIdSet.size === 0 && bucket.pointFeatures.length === 0) continue;
+
+      const cmd = new FeatureTranslateCommand({
+        source,
+        arcs: source.getArcs(),
+        dx,
+        dy,
+        arcIds: Array.from(bucket.arcIdSet),
+        pointFeatures: bucket.pointFeatures,
+      });
+      cmd.do();
+      children.push(cmd);
+    }
+
+    if (children.length === 0) return false;
+
+    const pushed: EditCommand =
+      children.length === 1
+        ? children[0]
+        : new CompositeCommand(children, `Translate ${refs.length} features`);
+    this._history.push(pushed);
+    this._fireHistoryChange();
+    this._scheduleRender();
+    return true;
+  }
+
+  /**
+   * Rotate every selected feature around `origin` by `angleDegrees`.
+   * Default `origin` is the bbox centroid of the affected vertices.
+   *
+   * Lightweight in-place transform on the same path as `translateSelected`:
+   * not a history barrier, selection survives, multi-source selections wrap
+   * in a `CompositeCommand`. Returns `false` for empty selection or zero
+   * angle.
+   */
+  public rotateSelected(angleDegrees: number, origin?: [number, number]): boolean {
+    if (angleDegrees === 0) return false;
+    const angleRad = (angleDegrees * Math.PI) / 180;
+    return this._applyAffineToSelection(
+      (ox, oy) => rotateMatrix(angleRad, ox, oy),
+      origin,
+      (n) => `Rotate ${n} feature${n === 1 ? '' : 's'}`,
+    );
+  }
+
+  /**
+   * Scale every selected feature by `(sx, sy)` around `origin`.
+   * `sy` defaults to `sx` (uniform scale). Default `origin` is the bbox
+   * centroid of the affected vertices. Returns `false` for empty selection
+   * or no-op scale (`sx === 1 && sy === 1`).
+   */
+  public scaleSelected(sx: number, sy?: number, origin?: [number, number]): boolean {
+    const sX = sx;
+    const sY = sy ?? sx;
+    if (sX === 1 && sY === 1) return false;
+    return this._applyAffineToSelection(
+      (ox, oy) => scaleMatrix(sX, sY, ox, oy),
+      origin,
+      (n) => `Scale ${n} feature${n === 1 ? '' : 's'}`,
+    );
+  }
+
+  /**
+   * Shared scaffolding for rotate / scale: walks the current selection,
+   * groups by source, computes the bbox centroid (when no origin supplied),
+   * builds one `FeatureAffineCommand` per source, and pushes either the
+   * single command or a `CompositeCommand` wrapping all sources.
+   */
+  private _applyAffineToSelection(
+    matrixForOrigin: (ox: number, oy: number) => AffineMatrix,
+    origin: [number, number] | undefined,
+    labelFor: (totalFeatures: number) => string,
+  ): boolean {
+    const refs = this._selection.getAll();
+    if (refs.length === 0) return false;
+
+    const bySource = new globalThis.Map<
+      string,
+      {
+        arcIdSet: Set<number>;
+        pointFeatures: TranslatedPointFeature[];
+      }
+    >();
+
+    for (const ref of refs) {
+      const layer = this._resolveLayer(ref.source, ref.layer);
+      if (!layer?.shapes) continue;
+      const shape = layer.shapes[ref.id];
+      if (!shape) continue;
+
+      let bucket = bySource.get(ref.source);
+      if (!bucket) {
+        bucket = { arcIdSet: new Set<number>(), pointFeatures: [] };
+        bySource.set(ref.source, bucket);
+      }
+
+      if (layer.geometry_type === 'point') {
+        bucket.pointFeatures.push({ layer, featureId: ref.id });
+      } else {
+        for (const part of shape) {
+          if (!Array.isArray(part)) continue;
+          for (const rawArcId of part) {
+            if (typeof rawArcId !== 'number') continue;
+            bucket.arcIdSet.add(rawArcId >= 0 ? rawArcId : ~rawArcId);
+          }
+        }
+      }
+    }
+
+    if (bySource.size === 0) return false;
+
+    // Default origin = bbox centroid of every vertex the transform will
+    // touch. Picked once and reused across all per-source commands so
+    // multi-source selections rotate / scale around a single shared pivot.
+    let ox: number;
+    let oy: number;
+    if (origin) {
+      ox = origin[0];
+      oy = origin[1];
+    } else {
+      const centroid = this._computeSelectionCentroid(bySource);
+      if (!centroid) return false;
+      [ox, oy] = centroid;
+    }
+
+    if (!Number.isFinite(ox) || !Number.isFinite(oy)) return false;
+
+    const matrix = matrixForOrigin(ox, oy);
+
+    const children: EditCommand[] = [];
+    for (const [sourceId, bucket] of bySource) {
+      const source = this._sources.get(sourceId);
+      if (!source) continue;
+      if (bucket.arcIdSet.size === 0 && bucket.pointFeatures.length === 0) continue;
+
+      const cmd = new FeatureAffineCommand({
+        source,
+        arcs: source.getArcs(),
+        matrix,
+        arcIds: Array.from(bucket.arcIdSet),
+        pointFeatures: bucket.pointFeatures,
+      });
+      cmd.do();
+      children.push(cmd);
+    }
+
+    if (children.length === 0) return false;
+
+    const pushed: EditCommand =
+      children.length === 1
+        ? children[0]
+        : new CompositeCommand(children, labelFor(refs.length));
+    this._history.push(pushed);
+    this._fireHistoryChange();
+    this._scheduleRender();
+    return true;
+  }
+
+  /**
+   * Compute the bbox centroid of every vertex the bySource buckets reference
+   * (across path-feature arcs and point-feature shapes). Returns `null` when
+   * no vertex was found (e.g., empty arcs).
+   */
+  private _computeSelectionCentroid(
+    bySource: globalThis.Map<string, { arcIdSet: Set<number>; pointFeatures: TranslatedPointFeature[] }>,
+  ): [number, number] | null {
+    let xmin = Infinity, ymin = Infinity;
+    let xmax = -Infinity, ymax = -Infinity;
+    let any = false;
+
+    for (const [sourceId, bucket] of bySource) {
+      const source = this._sources.get(sourceId);
+      if (!source) continue;
+
+      // Path features: walk the affected arcs' xx/yy slices.
+      const arcs = source.getArcs();
+      const data = arcs?.getVertexData?.();
+      if (data && bucket.arcIdSet.size > 0) {
+        const { xx, yy, ii, nn } = data;
+        for (const arcId of bucket.arcIdSet) {
+          const start = ii[arcId];
+          const len = nn[arcId];
+          for (let i = start; i < start + len; i++) {
+            const x = xx[i];
+            const y = yy[i];
+            if (x < xmin) xmin = x;
+            if (x > xmax) xmax = x;
+            if (y < ymin) ymin = y;
+            if (y > ymax) ymax = y;
+            any = true;
+          }
+        }
+      }
+
+      // Point features: walk each shape's coords.
+      for (const pf of bucket.pointFeatures) {
+        const shape = pf.layer.shapes?.[pf.featureId] as number[][] | undefined;
+        if (!shape) continue;
+        for (const coord of shape) {
+          if (!coord || coord.length < 2) continue;
+          const x = coord[0];
+          const y = coord[1];
+          if (x < xmin) xmin = x;
+          if (x > xmax) xmax = x;
+          if (y < ymin) ymin = y;
+          if (y > ymax) ymax = y;
+          any = true;
+        }
+      }
+    }
+
+    if (!any) return null;
+    return [(xmin + xmax) / 2, (ymin + ymax) / 2];
   }
 
   // ---------------------------------------------------------------------------
@@ -1329,6 +1936,57 @@ function findLayerByName(layers: MapshaperLayer[], nameOrId: string): MapshaperL
  */
 function quoteMapshaperArg(value: string): string {
   return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+/** Internal field name used by `mergeSelected`'s discriminator pass. */
+const MERGE_SELECTED_FIELD = '__emap_merge';
+
+/**
+ * Build the mapshaper command string that implements `mergeSelected` for
+ * one (target layer, selected ids) pair. Recipe:
+ *   1. Tag every record with a discriminator field — selected rows get
+ *      'M', unselected rows get a unique value so they pass through.
+ *   2. Run `-dissolve` on the discriminator with `copy-fields=` listing
+ *      every original field so attributes survive.
+ *   3. Drop the discriminator field.
+ *
+ * Returns the full command as a single string suitable for
+ * `mapshaper.internal.parseCommands`.
+ */
+function buildMergeSelectedCommand(
+  layerName: string,
+  selectedIds: number[],
+  layer: MapshaperLayer,
+): string {
+  // JSON.stringify produces a stable, parser-safe array literal.
+  const idsJSON = JSON.stringify(selectedIds);
+  // The single quotes around the JS expression are mapshaper's preferred
+  // expression delimiter; the literal string values inside use double quotes
+  // so they don't collide.
+  const tagExpr =
+    `'this.${MERGE_SELECTED_FIELD} = ${idsJSON}.indexOf(this.id) >= 0 ? "M" : "k_" + this.id'`;
+  const cleanupExpr = `'delete this.${MERGE_SELECTED_FIELD}'`;
+
+  // Build copy-fields= from the layer's data table when one exists.
+  // Field names with commas are intentionally rejected (mapshaper's
+  // copy-fields= is comma-delimited and does not quote individual entries).
+  let copyFieldsArg = '';
+  const fields = layer.data?.getFields?.();
+  if (fields && fields.length > 0) {
+    const safeFields = fields.filter(
+      (f) => f !== MERGE_SELECTED_FIELD && !f.includes(','),
+    );
+    if (safeFields.length > 0) {
+      copyFieldsArg = ` copy-fields=${safeFields.join(',')}`;
+    }
+  }
+
+  return [
+    `-target ${quoteMapshaperArg(layerName)}`,
+    `-each ${tagExpr}`,
+    `-dissolve ${quoteMapshaperArg(MERGE_SELECTED_FIELD)}${copyFieldsArg}`,
+    `-each ${cleanupExpr}`,
+  ].join(' ');
 }
 
 /**
