@@ -296,6 +296,37 @@ export type SimplifyMethod = 'dp' | 'visvalingam' | 'weighted';
  * `interval`, or `resolution` MUST be supplied — they correspond to
  * mapshaper's three threshold modes and are mutually exclusive.
  */
+/**
+ * Options for {@link Emap.projectLayer}. Reprojection via mapshaper's `-proj`
+ * (Proj.4-backed). `crs` is the destination CRS string; mapshaper accepts
+ * EPSG codes (`'EPSG:3857'`), named aliases (`'webmercator'`, `'robinson'`),
+ * or full Proj.4 definitions (`'+proj=utm +zone=10'`).
+ */
+export interface ProjectOptions {
+  /** Source ID containing the layer(s) to reproject. */
+  source: string;
+  /** Destination CRS. Required, non-empty after trimming. */
+  crs: string;
+  /**
+   * Optional layer name to scope the operation. When omitted, the whole
+   * source dataset is reprojected (mapshaper CLI default).
+   */
+  target?: string;
+  /**
+   * Source CRS override. Useful when the dataset doesn't have a stored
+   * CRS or when the stored value is wrong. Same string formats as `crs`.
+   */
+  init?: string;
+  /**
+   * Add intermediate vertices along straight segments to approximate
+   * curves under the destination projection (mapshaper's `densify` flag).
+   * Recommended when projecting from EPSG:4326 to azimuthal or pseudo-
+   * cylindrical projections to avoid visible angular distortion of long
+   * geodesic segments.
+   */
+  densify?: boolean;
+}
+
 export interface SimplifyOptions {
   /** Source ID. Simplification operates on the source's shared arcs. */
   source: string;
@@ -2126,6 +2157,45 @@ export class Emap extends EventDispatcher {
     if (opts.noRepair) parts.push('no-repair');
 
     const label = `Simplify ${opts.target ?? opts.source}`;
+    return this._runDatasetCommand(opts.source, parts.join(' '), label);
+  }
+
+  /**
+   * Reproject a source's coordinates via mapshaper's `-proj` (Proj.4).
+   * The destination `crs` accepts EPSG codes (`'EPSG:3857'`), aliases
+   * (`'webmercator'`, `'robinson'`, `'wgs84'`), or full Proj.4 strings.
+   * `target` is optional; when omitted, the whole source dataset is
+   * reprojected.
+   *
+   * Returns `false` for unresolvable source, unresolved target, or
+   * empty `crs`. Inherits dataset-replace semantics from `_runDatasetCommand`
+   * (history barrier, undoable).
+   *
+   * Note: the source's stored CRS metadata is updated by mapshaper inside
+   * the dataset, but emap does NOT auto-fit the viewport to the new
+   * projected extent. Call `setExtent(source.getExtent())` after
+   * `await projectLayer(...)` to recentre.
+   */
+  public async projectLayer(opts: ProjectOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (opts.target !== undefined) {
+      if (!findLayerByName(dataset.layers, opts.target)) return false;
+    }
+    const crs = (opts.crs ?? '').trim();
+    if (crs.length === 0) return false;
+
+    const parts: string[] = [];
+    if (opts.target) parts.push(`-target ${quoteMapshaperArg(opts.target)}`);
+    parts.push(`-proj ${quoteMapshaperArg(crs)}`);
+    if (opts.init && opts.init.trim()) {
+      parts.push(`init=${quoteMapshaperArg(opts.init)}`);
+    }
+    if (opts.densify) parts.push('densify');
+
+    const label = `Project ${opts.target ?? opts.source}`;
     return this._runDatasetCommand(opts.source, parts.join(' '), label);
   }
 

@@ -2857,6 +2857,111 @@ describe('Emap simplifyLayer', () => {
   });
 });
 
+describe('Emap projectLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }],
+      info: { crs_string: '+proj=longlat +datum=WGS84' },
+    };
+    const afterDs = { layers: [{ name: 'states', shapes: [] }], info: { crs_string: '+proj=merc' } };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds the whole-source command (no target)', async () => {
+    const ok = await map.projectLayer({ source: 'src1', crs: 'EPSG:3857' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "EPSG:3857"');
+  });
+
+  it('builds the target-scoped command', async () => {
+    await map.projectLayer({ source: 'src1', target: 'states', crs: 'EPSG:3857' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -proj "EPSG:3857"');
+  });
+
+  it('quotes Proj.4 strings with spaces', async () => {
+    await map.projectLayer({ source: 'src1', crs: '+proj=utm +zone=10' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "+proj=utm +zone=10"');
+  });
+
+  it('appends quoted init=', async () => {
+    await map.projectLayer({ source: 'src1', crs: 'EPSG:3857', init: 'EPSG:4326' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "EPSG:3857" init="EPSG:4326"');
+  });
+
+  it('appends densify', async () => {
+    await map.projectLayer({ source: 'src1', crs: 'robinson', densify: true });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "robinson" densify');
+  });
+
+  it('combines all options', async () => {
+    await map.projectLayer({
+      source: 'src1', target: 'states',
+      crs: 'EPSG:3857', init: 'EPSG:4326', densify: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "states" -proj "EPSG:3857" init="EPSG:4326" densify');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.projectLayer({ source: 'nope', crs: 'EPSG:3857' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.projectLayer({ source: 'src1', target: 'missing', crs: 'EPSG:3857' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on empty / whitespace crs', async () => {
+    expect(await map.projectLayer({ source: 'src1', crs: '' })).toBe(false);
+    expect(await map.projectLayer({ source: 'src1', crs: '   ' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Project <target>" when scoped', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.projectLayer({ source: 'src1', target: 'states', crs: 'EPSG:3857' });
+    expect(listener.mock.calls[0][0].label).toBe('Project states');
+  });
+
+  it('history label is "Project <source>" when dataset-wide', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.projectLayer({ source: 'src1', crs: 'EPSG:3857' });
+    expect(listener.mock.calls[0][0].label).toBe('Project src1');
+  });
+});
+
 describe('Emap renameLayer', () => {
   let map: Emap;
   let parseCommandsSpy: ReturnType<typeof vi.fn>;
