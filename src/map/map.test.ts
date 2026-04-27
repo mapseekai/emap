@@ -1846,3 +1846,183 @@ describe('Emap snapLayer', () => {
     expect(listener.mock.calls[0][0].label).toBe('Snap roads');
   });
 });
+
+describe('Emap rotateSelected / scaleSelected', () => {
+  let map: Emap;
+  let polyLayer: any;
+  let pointLayer: any;
+  let xx: Float64Array;
+  let yy: Float64Array;
+  let arcs: any;
+
+  function close(a: number, b: number, eps = 1e-9): boolean {
+    return Math.abs(a - b) < eps;
+  }
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    // arc 0: (0,0)-(2,0)-(2,2)-(0,2) bounding (0,0)-(2,2), centroid (1,1)
+    xx = new Float64Array([0, 2, 2, 0]);
+    yy = new Float64Array([0, 0, 2, 2]);
+    arcs = {
+      getVertexData: () => ({
+        xx, yy,
+        nn: new Int32Array([4]),
+        ii: new Int32Array([0]),
+        zz: null,
+      }),
+      updateArcBounds: vi.fn(),
+    };
+    polyLayer = {
+      name: 'parcels', geometry_type: 'polygon',
+      shapes: [[[0]]],
+    };
+    pointLayer = {
+      name: 'cities', geometry_type: 'point',
+      shapes: [[[10, 20]]],
+    };
+    const source = {
+      id: 'src1', type: 'topology',
+      getLayers: () => [polyLayer, pointLayer],
+      getArcs: () => arcs,
+      refreshDisplayArcs: vi.fn(),
+    };
+    (map as any)._sources.set('src1', source);
+  });
+
+  describe('rotateSelected', () => {
+    it('returns false on empty selection', () => {
+      expect(map.rotateSelected(45)).toBe(false);
+    });
+
+    it('returns false on zero angle', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      expect(map.rotateSelected(0)).toBe(false);
+      expect(map.canUndo()).toBe(false);
+    });
+
+    it('default origin is the bbox centroid (so rotating by 90 keeps the centre fixed)', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      // Centroid of (0,0)-(2,2) is (1,1). Rotate by 90 around (1,1):
+      // (0,0) -> (2,0); (2,0) -> (2,2); (2,2) -> (0,2); (0,2) -> (0,0)
+      map.rotateSelected(90);
+      expect(close(xx[0], 2)).toBe(true);
+      expect(close(yy[0], 0)).toBe(true);
+      expect(close(xx[1], 2)).toBe(true);
+      expect(close(yy[1], 2)).toBe(true);
+      expect(close(xx[2], 0)).toBe(true);
+      expect(close(yy[2], 2)).toBe(true);
+      expect(close(xx[3], 0)).toBe(true);
+      expect(close(yy[3], 0)).toBe(true);
+    });
+
+    it('custom origin is honoured', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      // Rotate by 90 around (0,0): (2,0) -> (0,2)
+      map.rotateSelected(90, [0, 0]);
+      expect(close(xx[1], 0)).toBe(true);
+      expect(close(yy[1], 2)).toBe(true);
+    });
+
+    it('undo restores positions exactly', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      const xxBefore = Array.from(xx);
+      const yyBefore = Array.from(yy);
+      map.rotateSelected(37, [3, -1]);
+      map.undo();
+      for (let i = 0; i < xxBefore.length; i++) {
+        expect(close(xx[i], xxBefore[i])).toBe(true);
+        expect(close(yy[i], yyBefore[i])).toBe(true);
+      }
+    });
+
+    it('selection survives, single historychange', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      const histListener = vi.fn();
+      const selListener = vi.fn();
+      map.on('historychange', histListener);
+      map.on('selectionchange', selListener);
+      map.rotateSelected(45);
+      expect(map.getSelection()).toHaveLength(1);
+      expect(histListener).toHaveBeenCalledTimes(1);
+      expect(selListener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('scaleSelected', () => {
+    it('returns false on empty selection', () => {
+      expect(map.scaleSelected(2)).toBe(false);
+    });
+
+    it('returns false on no-op scale (1) and (1, 1)', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      expect(map.scaleSelected(1)).toBe(false);
+      expect(map.scaleSelected(1, 1)).toBe(false);
+      expect(map.canUndo()).toBe(false);
+    });
+
+    it('uniform scale by 2 around bbox centroid', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      // Centroid (1,1). Scale 2x: (0,0) -> (-1,-1); (2,2) -> (3,3)
+      map.scaleSelected(2);
+      expect(close(xx[0], -1)).toBe(true);
+      expect(close(yy[0], -1)).toBe(true);
+      expect(close(xx[2], 3)).toBe(true);
+      expect(close(yy[2], 3)).toBe(true);
+    });
+
+    it('non-uniform scale', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      // Centroid (1,1). Scale (2, 0.5): (0,0) -> (-1, 0.5); (2,2) -> (3, 1.5)
+      map.scaleSelected(2, 0.5);
+      expect(close(xx[0], -1)).toBe(true);
+      expect(close(yy[0], 0.5)).toBe(true);
+      expect(close(xx[2], 3)).toBe(true);
+      expect(close(yy[2], 1.5)).toBe(true);
+    });
+
+    it('one undo reverses the scale', () => {
+      map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+      const xxBefore = Array.from(xx);
+      map.scaleSelected(3.7);
+      map.undo();
+      for (let i = 0; i < xxBefore.length; i++) {
+        expect(close(xx[i], xxBefore[i])).toBe(true);
+      }
+    });
+  });
+
+  describe('multi-source affine', () => {
+    it('wraps per-source commands in a CompositeCommand', () => {
+      // Add a second source with its own arcs
+      const xx2 = new Float64Array([10, 11]);
+      const yy2 = new Float64Array([20, 21]);
+      const arcs2 = {
+        getVertexData: () => ({
+          xx: xx2, yy: yy2,
+          nn: new Int32Array([2]), ii: new Int32Array([0]), zz: null,
+        }),
+        updateArcBounds: vi.fn(),
+      };
+      const layer2 = { name: 'parcels', geometry_type: 'polygon', shapes: [[[0]]] };
+      (map as any)._sources.set('src2', {
+        id: 'src2', type: 'topology',
+        getLayers: () => [layer2],
+        getArcs: () => arcs2,
+        refreshDisplayArcs: vi.fn(),
+      });
+
+      map.select([
+        { source: 'src1', layer: 'parcels', id: 0 },
+        { source: 'src2', layer: 'parcels', id: 0 },
+      ], { mode: 'add' });
+      map.scaleSelected(2);
+      // Both sources got scaled
+      // Verify by re-running undo: a single undo should reverse both
+      map.undo();
+      expect(close(xx[0], 0)).toBe(true);
+      expect(close(xx2[0], 10)).toBe(true);
+    });
+  });
+});

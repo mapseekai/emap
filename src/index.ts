@@ -63,6 +63,16 @@ export type {
   FeatureTranslateCommandOptions,
   TranslatedPointFeature,
 } from './edit/commands/feature-translate';
+export {
+  FeatureAffineCommand,
+  rotateMatrix,
+  scaleMatrix,
+  invertMatrix,
+} from './edit/commands/feature-affine';
+export type {
+  FeatureAffineCommandOptions,
+  AffineMatrix,
+} from './edit/commands/feature-affine';
 export { CompositeCommand } from './edit/commands/composite';
 export { DatasetReplaceCommand } from './edit/commands/dataset-replace';
 export type { DatasetReplaceCommandOptions } from './edit/commands/dataset-replace';

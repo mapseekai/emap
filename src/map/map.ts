@@ -17,6 +17,12 @@ import type { EditCommand } from '../edit/edit-command';
 import { CompositeCommand } from '../edit/commands/composite';
 import { FeatureDeleteCommand } from '../edit/commands/feature-delete';
 import { FeatureTranslateCommand, TranslatedPointFeature } from '../edit/commands/feature-translate';
+import {
+  FeatureAffineCommand,
+  AffineMatrix,
+  rotateMatrix,
+  scaleMatrix,
+} from '../edit/commands/feature-affine';
 import { DatasetReplaceCommand } from '../edit/commands/dataset-replace';
 import { FeaturePropertyChangeCommand } from '../edit/commands/feature-property-change';
 import { FieldAddCommand } from '../edit/commands/field-add';
@@ -1503,6 +1509,195 @@ export class Emap extends EventDispatcher {
     this._fireHistoryChange();
     this._scheduleRender();
     return true;
+  }
+
+  /**
+   * Rotate every selected feature around `origin` by `angleDegrees`.
+   * Default `origin` is the bbox centroid of the affected vertices.
+   *
+   * Lightweight in-place transform on the same path as `translateSelected`:
+   * not a history barrier, selection survives, multi-source selections wrap
+   * in a `CompositeCommand`. Returns `false` for empty selection or zero
+   * angle.
+   */
+  public rotateSelected(angleDegrees: number, origin?: [number, number]): boolean {
+    if (angleDegrees === 0) return false;
+    const angleRad = (angleDegrees * Math.PI) / 180;
+    return this._applyAffineToSelection(
+      (ox, oy) => rotateMatrix(angleRad, ox, oy),
+      origin,
+      (n) => `Rotate ${n} feature${n === 1 ? '' : 's'}`,
+    );
+  }
+
+  /**
+   * Scale every selected feature by `(sx, sy)` around `origin`.
+   * `sy` defaults to `sx` (uniform scale). Default `origin` is the bbox
+   * centroid of the affected vertices. Returns `false` for empty selection
+   * or no-op scale (`sx === 1 && sy === 1`).
+   */
+  public scaleSelected(sx: number, sy?: number, origin?: [number, number]): boolean {
+    const sX = sx;
+    const sY = sy ?? sx;
+    if (sX === 1 && sY === 1) return false;
+    return this._applyAffineToSelection(
+      (ox, oy) => scaleMatrix(sX, sY, ox, oy),
+      origin,
+      (n) => `Scale ${n} feature${n === 1 ? '' : 's'}`,
+    );
+  }
+
+  /**
+   * Shared scaffolding for rotate / scale: walks the current selection,
+   * groups by source, computes the bbox centroid (when no origin supplied),
+   * builds one `FeatureAffineCommand` per source, and pushes either the
+   * single command or a `CompositeCommand` wrapping all sources.
+   */
+  private _applyAffineToSelection(
+    matrixForOrigin: (ox: number, oy: number) => AffineMatrix,
+    origin: [number, number] | undefined,
+    labelFor: (totalFeatures: number) => string,
+  ): boolean {
+    const refs = this._selection.getAll();
+    if (refs.length === 0) return false;
+
+    const bySource = new globalThis.Map<
+      string,
+      {
+        arcIdSet: Set<number>;
+        pointFeatures: TranslatedPointFeature[];
+      }
+    >();
+
+    for (const ref of refs) {
+      const layer = this._resolveLayer(ref.source, ref.layer);
+      if (!layer?.shapes) continue;
+      const shape = layer.shapes[ref.id];
+      if (!shape) continue;
+
+      let bucket = bySource.get(ref.source);
+      if (!bucket) {
+        bucket = { arcIdSet: new Set<number>(), pointFeatures: [] };
+        bySource.set(ref.source, bucket);
+      }
+
+      if (layer.geometry_type === 'point') {
+        bucket.pointFeatures.push({ layer, featureId: ref.id });
+      } else {
+        for (const part of shape) {
+          if (!Array.isArray(part)) continue;
+          for (const rawArcId of part) {
+            if (typeof rawArcId !== 'number') continue;
+            bucket.arcIdSet.add(rawArcId >= 0 ? rawArcId : ~rawArcId);
+          }
+        }
+      }
+    }
+
+    if (bySource.size === 0) return false;
+
+    // Default origin = bbox centroid of every vertex the transform will
+    // touch. Picked once and reused across all per-source commands so
+    // multi-source selections rotate / scale around a single shared pivot.
+    let ox: number;
+    let oy: number;
+    if (origin) {
+      ox = origin[0];
+      oy = origin[1];
+    } else {
+      const centroid = this._computeSelectionCentroid(bySource);
+      if (!centroid) return false;
+      [ox, oy] = centroid;
+    }
+
+    if (!Number.isFinite(ox) || !Number.isFinite(oy)) return false;
+
+    const matrix = matrixForOrigin(ox, oy);
+
+    const children: EditCommand[] = [];
+    for (const [sourceId, bucket] of bySource) {
+      const source = this._sources.get(sourceId);
+      if (!source) continue;
+      if (bucket.arcIdSet.size === 0 && bucket.pointFeatures.length === 0) continue;
+
+      const cmd = new FeatureAffineCommand({
+        source,
+        arcs: source.getArcs(),
+        matrix,
+        arcIds: Array.from(bucket.arcIdSet),
+        pointFeatures: bucket.pointFeatures,
+      });
+      cmd.do();
+      children.push(cmd);
+    }
+
+    if (children.length === 0) return false;
+
+    const pushed: EditCommand =
+      children.length === 1
+        ? children[0]
+        : new CompositeCommand(children, labelFor(refs.length));
+    this._history.push(pushed);
+    this._fireHistoryChange();
+    this._scheduleRender();
+    return true;
+  }
+
+  /**
+   * Compute the bbox centroid of every vertex the bySource buckets reference
+   * (across path-feature arcs and point-feature shapes). Returns `null` when
+   * no vertex was found (e.g., empty arcs).
+   */
+  private _computeSelectionCentroid(
+    bySource: globalThis.Map<string, { arcIdSet: Set<number>; pointFeatures: TranslatedPointFeature[] }>,
+  ): [number, number] | null {
+    let xmin = Infinity, ymin = Infinity;
+    let xmax = -Infinity, ymax = -Infinity;
+    let any = false;
+
+    for (const [sourceId, bucket] of bySource) {
+      const source = this._sources.get(sourceId);
+      if (!source) continue;
+
+      // Path features: walk the affected arcs' xx/yy slices.
+      const arcs = source.getArcs();
+      const data = arcs?.getVertexData?.();
+      if (data && bucket.arcIdSet.size > 0) {
+        const { xx, yy, ii, nn } = data;
+        for (const arcId of bucket.arcIdSet) {
+          const start = ii[arcId];
+          const len = nn[arcId];
+          for (let i = start; i < start + len; i++) {
+            const x = xx[i];
+            const y = yy[i];
+            if (x < xmin) xmin = x;
+            if (x > xmax) xmax = x;
+            if (y < ymin) ymin = y;
+            if (y > ymax) ymax = y;
+            any = true;
+          }
+        }
+      }
+
+      // Point features: walk each shape's coords.
+      for (const pf of bucket.pointFeatures) {
+        const shape = pf.layer.shapes?.[pf.featureId] as number[][] | undefined;
+        if (!shape) continue;
+        for (const coord of shape) {
+          if (!coord || coord.length < 2) continue;
+          const x = coord[0];
+          const y = coord[1];
+          if (x < xmin) xmin = x;
+          if (x > xmax) xmax = x;
+          if (y < ymin) ymin = y;
+          if (y > ymax) ymax = y;
+          any = true;
+        }
+      }
+    }
+
+    if (!any) return null;
+    return [(xmin + xmax) / 2, (ymin + ymax) / 2];
   }
 
   // ---------------------------------------------------------------------------
