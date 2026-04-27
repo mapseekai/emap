@@ -214,6 +214,22 @@ export interface SnapOptions {
   precision?: number;
 }
 
+/** Options for {@link Emap.mosaicLayer}. */
+export interface MosaicOptions {
+  /** Source ID containing the target polygon layer. */
+  source: string;
+  /** Layer name (or id) of the polygon layer to flatten. */
+  target: string;
+  /** Snap distance for the topology-build pre-pass (mapshaper's `snap-interval=`). */
+  snapInterval?: number;
+  /** Skip the snap pre-pass entirely (mapshaper's `no-snap` flag). */
+  noSnap?: boolean;
+  /** Keep the original layer alongside the new mosaic (mapshaper's `no-replace`). */
+  noReplace?: boolean;
+  /** Optional name for the output layer. */
+  name?: string;
+}
+
 export interface HighlightStyle {
   color?: string;
   width?: number;
@@ -1382,6 +1398,40 @@ export class Emap extends EventDispatcher {
     if (!findLayerByName(dataset.layers, opts.target)) return false;
     const cmd = `-target ${quoteMapshaperArg(opts.target)} -clean`;
     return this._runDatasetCommand(opts.source, cmd, `Clean ${opts.target}`);
+  }
+
+  /**
+   * Flatten overlapping polygons in a single layer into a tile mosaic via
+   * mapshaper's `-mosaic`. Every overlap region becomes its own polygon;
+   * gaps are preserved.
+   *
+   * Returns `false` for unresolvable source / target. Inherits all
+   * dataset-replace semantics from `_runDatasetCommand`.
+   */
+  public async mosaicLayer(opts: MosaicOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-mosaic`,
+    ];
+    if (typeof opts.snapInterval === 'number') {
+      parts.push(`snap-interval=${opts.snapInterval}`);
+    }
+    if (opts.noSnap) {
+      parts.push('no-snap');
+    }
+    if (opts.noReplace) {
+      parts.push('no-replace');
+    }
+    if (opts.name && opts.name.trim()) {
+      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Mosaic ${opts.target}`);
   }
 
   /**

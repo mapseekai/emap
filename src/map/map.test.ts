@@ -2131,3 +2131,75 @@ describe('Emap rotateSelected / scaleSelected', () => {
     });
   });
 });
+
+describe('Emap mosaicLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = { layers: [{ name: 'parts', shapes: [] }] };
+    const afterDs = { layers: [{ name: 'parts', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('emits the bare -mosaic command', async () => {
+    const ok = await map.mosaicLayer({ source: 'src1', target: 'parts' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic');
+  });
+
+  it('appends snap-interval=', async () => {
+    await map.mosaicLayer({ source: 'src1', target: 'parts', snapInterval: 0.001 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic snap-interval=0.001');
+  });
+
+  it('appends no-snap and no-replace flags', async () => {
+    await map.mosaicLayer({ source: 'src1', target: 'parts', noSnap: true, noReplace: true });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic no-snap no-replace');
+  });
+
+  it('quotes name= when supplied', async () => {
+    await map.mosaicLayer({ source: 'src1', target: 'parts', name: 'flat zones' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic name="flat zones"');
+  });
+
+  it('returns false on missing source / target', async () => {
+    expect(await map.mosaicLayer({ source: 'nope', target: 'parts' })).toBe(false);
+    expect(await map.mosaicLayer({ source: 'src1', target: 'nope' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('pushes one history entry labelled "Mosaic <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.mosaicLayer({ source: 'src1', target: 'parts' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Mosaic parts');
+  });
+});
