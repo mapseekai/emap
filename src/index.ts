@@ -21,6 +21,7 @@ export type {
   DivideOptions,
   PointsOptions,
   PointsMode,
+  LinesOptions,
 } from './map/map';
 export { FeatureQuery } from './map/feature-query';
 export { HighlightManager } from './map/highlight-manager';

@@ -278,6 +278,29 @@ export type PointsMode =
   | 'midpoints'
   | 'interpolated';
 
+/**
+ * Options for {@link Emap.linesLayer}. Converts a polygon `target` into a
+ * polyline layer made of its boundary arcs. With `fields`, the boundaries
+ * are emitted hierarchically by category (e.g. outer hull vs. inter-region
+ * boundaries vs. inter-subregion boundaries).
+ */
+export interface LinesOptions {
+  /** Source ID containing the polygon target. */
+  source: string;
+  /** Polygon layer name (or id) to extract boundaries from. */
+  target: string;
+  /**
+   * Optional category fields. Each polygon boundary inherits the value of
+   * the most-coarse field that differs across it; mapshaper emits the
+   * boundary at the topmost layer in the hierarchy.
+   */
+  fields?: string[];
+  /** Optional name for the new polyline layer. */
+  name?: string;
+  /** Keep the original polygon layer alongside the new polyline output. */
+  noReplace?: boolean;
+}
+
 /** Options for {@link Emap.pointsLayer}. */
 export interface PointsOptions {
   /** Source ID containing the target layer. */
@@ -1638,6 +1661,40 @@ export class Emap extends EventDispatcher {
     }
     if (opts.noReplace) parts.push('no-replace');
     return this._runDatasetCommand(opts.source, parts.join(' '), `Points ${opts.target}`);
+  }
+
+  /**
+   * Convert a polygon target into a polyline layer of its boundary arcs via
+   * mapshaper's `-lines`. Optional `fields` produces a hierarchy of
+   * boundaries (outer hull at the top, intra-region boundaries below).
+   *
+   * Returns `false` for unresolvable source / target or non-polygon target.
+   * Inherits dataset-replace semantics from `_runDatasetCommand`.
+   *
+   * `fields` is mapshaper's positional `DEFAULT: true` arg, emitted as a
+   * bare comma-joined token (no `fields=` prefix) to match the CLI norm.
+   */
+  public async linesLayer(opts: LinesOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    const layer = findLayerByName(dataset.layers, opts.target);
+    if (!layer || layer.geometry_type !== 'polygon') return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      '-lines',
+    ];
+    if (opts.fields && opts.fields.length > 0) {
+      const safe = opts.fields.filter((f) => !f.includes(','));
+      if (safe.length > 0) parts[parts.length - 1] = `-lines ${safe.join(',')}`;
+    }
+    if (opts.name && opts.name.trim()) {
+      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    if (opts.noReplace) parts.push('no-replace');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Lines ${opts.target}`);
   }
 
   /**
