@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - Undo / Redo</title>
+  <title>Emap 示例 - 撤销 / 重做</title>
   <style>
     body {
       margin: 0;
@@ -42,11 +42,11 @@
 <body>
   <div id="header">
     <label>
-      Open file:
+      文件:
       <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
     </label>
-    <span class="hint">Vertex / draw modes are stacked on the left. Ctrl/Cmd+Z undo, Ctrl+Shift+Z (or Ctrl+Y) redo.</span>
-    <span id="status">Load a file to begin</span>
+    <span class="hint">左侧叠放顶点编辑 / 绘制工具。Ctrl/Cmd+Z 撤销,Ctrl+Shift+Z (或 Ctrl+Y) 重做。</span>
+    <span id="status">加载文件以开始</span>
     <span id="last-action" style="margin-left:auto;opacity:0.85"></span>
   </div>
   <div id="map" tabindex="0"></div>
@@ -68,14 +68,13 @@
     map.addControl(new NavigationControl(), 'top-left');
     map.addControl(new HistoryControl(), 'top-left');
 
-    // Bind keyboard shortcuts on the map container so users can hit Ctrl+Z
-    // without first clicking a button.
+    // 在地图容器上绑定快捷键,无需先点击按钮就能 Ctrl+Z
     map.bindHistoryShortcuts();
     document.getElementById('map').focus();
 
     map.on('historychange', (e) => {
       document.getElementById('last-action').textContent =
-        e.label ? `last action: ${e.label}` : '';
+        e.label ? `最近操作: ${e.label}` : '';
     });
 
     const fileInput = document.getElementById('file-input');
@@ -86,14 +85,14 @@
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      status.textContent = `Loading ${file.name}...`;
+      status.textContent = `正在加载 ${file.name}...`;
       const reader = new FileReader();
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         source.on('data', () => {
           map.setExtent(source.getExtent());
-          status.textContent = 'Try: pan, draw, drag a vertex, right-click a vertex to delete. Then Ctrl+Z.';
+          status.textContent = '试试: 平移 / 绘制 / 拖动顶点 / 右键顶点删除,然后 Ctrl+Z 撤销。';
           map.clearHistory();
           if (editToolbar) map.removeControl(editToolbar);
           editToolbar = new EditToolbar({

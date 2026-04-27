@@ -167,3 +167,88 @@ describe('TopologySource.export', () => {
     expect(await a.text()).toBe(await b.text());
   });
 });
+
+describe('TopologySource.setData multi-file', () => {
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    parseCommandsSpy = vi.fn((_cmd: string) => [
+      { name: 'i', options: {} },
+    ]);
+    runParsedCommandsSpy = vi.fn((commands: any[], _job: any, cb: any) => {
+      cb(null, {
+        catalog: {
+          getDefaultTargets: () => [{
+            // Echo back the inputFiles so the test can assert on them
+            dataset: { layers: [], info: { _injected: commands[0]?.options?.input } },
+          }],
+        },
+      });
+    });
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('emits one -i command listing every primary file when given an array', async () => {
+    const source = new TopologySource('test');
+    source.setData([
+      { filename: 'a.geojson', content: new Uint8Array([1]) },
+      { filename: 'b.geojson', content: new Uint8Array([2]) },
+    ]);
+    // setData is async via _updateData; wait one microtask cycle
+    await new Promise((r) => setTimeout(r, 0));
+    expect(parseCommandsSpy).toHaveBeenCalled();
+    const cmd = parseCommandsSpy.mock.calls[0][0] as string;
+    expect(cmd).toBe('-i "a.geojson" "b.geojson"');
+  });
+
+  it('passes every file to mapshaper as inputFiles', async () => {
+    const source = new TopologySource('test');
+    const errs: unknown[] = [];
+    source.on('error', (e: unknown) => errs.push(e));
+    source.setData([
+      { filename: 'a.geojson', content: new Uint8Array([1, 2, 3]) },
+      { filename: 'b.geojson', content: new Uint8Array([4, 5]) },
+    ]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(errs).toEqual([]);
+    const passedCommands = runParsedCommandsSpy.mock.calls[0][0] as any[];
+    const inputFiles = passedCommands[0].options.input;
+    expect(inputFiles['a.geojson']).toEqual(new Uint8Array([1, 2, 3]));
+    expect(inputFiles['b.geojson']).toEqual(new Uint8Array([4, 5]));
+  });
+
+  it('still works for a single-file (non-array) input', async () => {
+    const source = new TopologySource('test');
+    source.setData({ filename: 'single.geojson', content: new Uint8Array([7]) });
+    await new Promise((r) => setTimeout(r, 0));
+    const cmd = parseCommandsSpy.mock.calls[0][0] as string;
+    expect(cmd).toBe('-i "single.geojson"');
+  });
+
+  it('quotes filenames containing embedded double quotes', async () => {
+    const source = new TopologySource('test');
+    source.setData([
+      { filename: 'we"ird.geojson', content: new Uint8Array([1]) },
+    ]);
+    await new Promise((r) => setTimeout(r, 0));
+    const cmd = parseCommandsSpy.mock.calls[0][0] as string;
+    expect(cmd).toBe('-i "we\\"ird.geojson"');
+  });
+
+  it('empty array is a no-op (no command runs)', async () => {
+    const source = new TopologySource('test');
+    source.setData([]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+});

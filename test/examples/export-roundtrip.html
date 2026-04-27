@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - Export Round-trip</title>
+  <title>Emap 示例 - 导出往返</title>
   <style>
     body {
       margin: 0;
@@ -59,19 +59,19 @@
 <body>
   <div id="header">
     <label>
-      Open file:
+      文件:
       <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
     </label>
     <label>
-      Format:
+      导出格式:
       <select id="format">
         <option value="geojson">GeoJSON</option>
         <option value="topojson">TopoJSON</option>
         <option value="shapefile">Shapefile (.zip)</option>
       </select>
     </label>
-    <button id="export-btn" disabled>Export &amp; Download</button>
-    <span id="status">Load a file to begin</span>
+    <button id="export-btn" disabled>导出并下载</button>
+    <span id="status">加载文件以开始</span>
   </div>
   <div id="map">
   </div>
@@ -97,7 +97,7 @@
       const file = e.target.files[0];
       if (!file) return;
 
-      status.textContent = `Processing ${file.name}...`;
+      status.textContent = `处理 ${file.name} 中...`;
       exportBtn.disabled = true;
 
       const reader = new FileReader();
@@ -107,12 +107,12 @@
 
         source.on('data', () => {
           map.setExtent(source.getExtent());
-          status.textContent = `Loaded: ${file.name}. Optionally draw features, then export.`;
+          status.textContent = `已加载 ${file.name}。可绘制要素后再导出。`;
           exportBtn.disabled = false;
         });
         source.on('error', (err) => {
           console.error(err);
-          status.textContent = 'Error processing file';
+          status.textContent = '处理文件出错';
         });
 
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
@@ -121,7 +121,7 @@
         map.addSource(SOURCE_ID, source);
 
         if (drawToolbar) map.removeControl(drawToolbar);
-        // Wire a draw control so users can demonstrate "edit then export"
+        // 提供绘制控件,演示 "编辑后导出" 的流程
         drawToolbar = new EditToolbar({
           controls: [
             new DrawFeatureControl({ source: SOURCE_ID, type: 'polyline' }),
@@ -136,7 +136,7 @@
     exportBtn.addEventListener('click', async () => {
       if (!activeSource) return;
       const format = formatSelect.value;
-      status.textContent = `Exporting as ${format}...`;
+      status.textContent = `正在导出为 ${format}...`;
       exportBtn.disabled = true;
 
       try {
@@ -152,13 +152,13 @@
         document.body.appendChild(a);
         a.click();
         a.remove();
-        // Release the blob URL after the download has dispatched
+        // 下载触发后释放 blob URL
         setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-        status.textContent = `Exported ${blob.size} bytes as ${a.download}`;
+        status.textContent = `已导出 ${blob.size} 字节,文件名: ${a.download}`;
       } catch (err) {
         console.error(err);
-        status.textContent = `Export failed: ${err.message || err}`;
+        status.textContent = `导出失败: ${err.message || err}`;
       } finally {
         exportBtn.disabled = false;
       }

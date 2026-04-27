@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - Clip / Erase</title>
+  <title>Emap 示例 - 裁剪 / 擦除 (Clip / Erase)</title>
   <style>
     body {
       margin: 0;
@@ -53,20 +53,29 @@
       position: relative;
       outline: none;
     }
+
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    .file-group { display: flex; gap: 6px; align-items: center; }
   </style>
 </head>
 
 <body>
   <div id="header">
-    <label>
-      File:
-      <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
-    </label>
-    <label>Target: <select id="target"></select></label>
-    <label>Mask: <select id="mask"></select></label>
-    <button id="clip-btn" disabled>Clip</button>
-    <button id="erase-btn" class="danger" disabled>Erase</button>
-    <span id="status">Load a file with at least two layers (one polygon mask + one target)</span>
+    <span class="file-group">
+      <label>文件 (可一次选多个或多次添加):
+        <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple />
+      </label>
+      <button id="clear-files-btn" type="button">清空</button>
+    </span>
+    <label>目标图层 (将被裁剪): <select id="target"></select></label>
+    <label>裁切图层 (作为蒙版): <select id="mask"></select></label>
+    <button id="clip-btn" disabled>裁剪 (Clip)</button>
+    <button id="erase-btn" class="danger" disabled>擦除 (Erase)</button>
+    <span id="status">同时上传至少两个图层 (一个目标 + 一个多边形蒙版),或上传一个含多图层的文件</span>
+    <span class="hint">
+      可以分别上传两个 GeoJSON 文件 —— emap 会把它们合并为同一数据源的多个图层,从而满足 mapshaper
+      <code>-clip / -erase</code> 同源图层的限制。
+    </span>
   </div>
   <div id="map" tabindex="0"></div>
 
@@ -81,13 +90,25 @@
     map.bindHistoryShortcuts();
 
     const SOURCE_ID = 'cliperase-source';
-
     const fileInput = document.getElementById('file-input');
     const targetSel = document.getElementById('target');
     const maskSel = document.getElementById('mask');
     const clipBtn = document.getElementById('clip-btn');
     const eraseBtn = document.getElementById('erase-btn');
+    const clearBtn = document.getElementById('clear-files-btn');
     const status = document.getElementById('status');
+
+    /** 累计的所有上传文件 (filename -> Uint8Array)。多次添加合并。 */
+    const uploaded = new Map();
+
+    function readFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve(new Uint8Array(ev.target.result));
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+    }
 
     function populateLayerOptions(source) {
       const layers = source.getLayers();
@@ -97,11 +118,9 @@
       mask.innerHTML = '';
       layers.forEach((lyr, i) => {
         const name = lyr?.name || lyr?.id || `layer-${i}`;
-        const opt1 = new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name);
-        target.appendChild(opt1);
+        target.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
         if (lyr?.geometry_type === 'polygon') {
-          const opt2 = new Option(name, name);
-          mask.appendChild(opt2);
+          mask.appendChild(new Option(name, name));
         }
       });
       const enable = layers.length >= 2 && mask.options.length >= 1;
@@ -109,24 +128,54 @@
       eraseBtn.disabled = !enable;
     }
 
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      status.textContent = `Loading ${file.name}...`;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const content = new Uint8Array(ev.target.result);
-        const source = new TopologySource(SOURCE_ID);
-        source.on('data', () => {
-          map.setExtent(source.getExtent());
-          populateLayerOptions(source);
-          status.textContent = `Loaded: ${file.name}. Pick target + mask, then Clip or Erase.`;
-        });
+    async function reimportAll() {
+      if (uploaded.size === 0) {
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        source.setData({ filename: file.name, content });
-        map.addSource(SOURCE_ID, source);
-      };
-      reader.readAsArrayBuffer(file);
+        targetSel.innerHTML = '';
+        maskSel.innerHTML = '';
+        clipBtn.disabled = true;
+        eraseBtn.disabled = true;
+        status.textContent = '已清空,等待上传文件';
+        return;
+      }
+      status.textContent = `加载 ${uploaded.size} 个文件中...`;
+      const entries = Array.from(uploaded, ([filename, content]) => ({ filename, content }));
+      const source = new TopologySource(SOURCE_ID);
+      source.on('data', () => {
+        map.setExtent(source.getExtent());
+        populateLayerOptions(source);
+        const names = entries.map((e) => e.filename).join(', ');
+        status.textContent = `已加载: ${names}。选择目标图层与蒙版,点击裁剪或擦除。`;
+      });
+      source.on('error', (e) => {
+        console.error(e);
+        status.textContent = `加载失败: ${e.error?.message ?? e}`;
+      });
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      // 数组形式 → 调用扩展后的 setData,内部走 mapshaper `-i FILE1 FILE2 ...` 多文件导入
+      source.setData(entries);
+      map.addSource(SOURCE_ID, source);
+    }
+
+    fileInput.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length === 0) return;
+      for (const f of files) {
+        try {
+          const content = await readFile(f);
+          uploaded.set(f.name, content);
+        } catch (err) {
+          console.error(`读取 ${f.name} 失败`, err);
+        }
+      }
+      // 让用户可以再次选择同一文件
+      fileInput.value = '';
+      await reimportAll();
+    });
+
+    clearBtn.addEventListener('click', async () => {
+      uploaded.clear();
+      await reimportAll();
     });
 
     async function runOp(op) {
@@ -134,10 +183,10 @@
       const mask = maskSel.value;
       if (!target || !mask) return;
       if (target === mask) {
-        status.textContent = 'Target and mask must be different layers.';
+        status.textContent = '目标和蒙版必须是不同的图层。';
         return;
       }
-      status.textContent = `Running ${op}...`;
+      status.textContent = `正在对 "${target}" 执行 ${op === 'clip' ? '裁剪' : '擦除'}...`;
       clipBtn.disabled = true;
       eraseBtn.disabled = true;
       try {
@@ -145,13 +194,12 @@
           ? await map.clipLayer({ source: SOURCE_ID, target, mask })
           : await map.eraseLayer({ source: SOURCE_ID, target, mask });
         status.textContent = ok
-          ? `${op} on '${target}' done. Ctrl+Z to undo.`
-          : `${op} failed (check layer names).`;
-        // Refresh selectors against the post-op dataset
+          ? `${op === 'clip' ? '裁剪' : '擦除'} "${target}" 完成,Ctrl+Z 撤销。`
+          : `${op === 'clip' ? '裁剪' : '擦除'} 失败 (请检查图层名称)。`;
         const src = map.getSource(SOURCE_ID);
         if (src) populateLayerOptions(src);
       } catch (err) {
-        status.textContent = `Error: ${err?.message ?? err}`;
+        status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
       } finally {
         clipBtn.disabled = false;
