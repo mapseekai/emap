@@ -103,6 +103,22 @@ export interface DissolveOptions {
   field?: string;
 }
 
+/** Options for {@link Emap.bufferLayer}. */
+export interface BufferOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the layer to buffer. */
+  target: string;
+  /**
+   * Buffer radius in source-CRS units (e.g., degrees for EPSG:4326, metres
+   * for projected CRSes). Accepts either a constant `number` or a mapshaper
+   * expression string evaluated per record (e.g. `"pop / 1000"`).
+   */
+  radius: number | string;
+  /** Buffer cap style (mapshaper's `cap-style=` option). Default is `round`. */
+  capStyle?: 'flat' | 'round';
+}
+
 export interface HighlightStyle {
   color?: string;
   width?: number;
@@ -1074,6 +1090,34 @@ export class Emap extends EventDispatcher {
     const fieldArg = opts.field ? ` ${quoteMapshaperArg(opts.field)}` : '';
     const cmd = `-target ${quoteMapshaperArg(opts.target)} -dissolve${fieldArg}`;
     return this._runDatasetCommand(opts.source, cmd, `Dissolve ${opts.target}`);
+  }
+
+  /**
+   * Generate buffer polygons for a layer using mapshaper's `-buffer` pipeline.
+   *
+   * `radius` is interpreted in source-CRS units: degrees for EPSG:4326,
+   * metres for typical projected CRSes. Accepts either a constant number or a
+   * mapshaper expression string evaluated per record (e.g. `"pop / 1000"`),
+   * matching mapshaper CLI syntax exactly.
+   *
+   * Returns `true` on success, `false` for unresolvable source/target.
+   * Recorded as a single undoable history entry; inherits dataset-replace
+   * semantics (history barrier, selection cleared) from `_runDatasetCommand`.
+   */
+  public async bufferLayer(opts: BufferOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    // Numbers go in bare; expression strings are quoted so the shell-style
+    // command parser keeps them intact.
+    const radiusArg =
+      typeof opts.radius === 'number' ? String(opts.radius) : quoteMapshaperArg(opts.radius);
+    const capArg = opts.capStyle ? ` cap-style=${opts.capStyle}` : '';
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -buffer ${radiusArg}${capArg}`;
+    return this._runDatasetCommand(opts.source, cmd, `Buffer ${opts.target}`);
   }
 
   /**

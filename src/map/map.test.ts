@@ -1342,3 +1342,76 @@ describe('Emap translateSelected', () => {
     expect(fakeUndo).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Emap bufferLayer', () => {
+  let map: Emap;
+  let beforeDataset: any;
+  let afterDataset: any;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    beforeDataset = { layers: [{ name: 'roads', geometry_type: 'polyline', shapes: [] }] };
+    afterDataset = { layers: [{ name: 'roads', geometry_type: 'polygon', shapes: [['buf']] }] };
+    const source = {
+      id: 'src1',
+      type: 'topology',
+      getDataset: () => beforeDataset,
+      getLayers: () => beforeDataset.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    runParsedCommandsSpy = vi.fn((_cmds: any, _job: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDataset }] } });
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDataset));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('emits a numeric radius bare', async () => {
+    const ok = await map.bufferLayer({ source: 'src1', target: 'roads', radius: 5 });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -buffer 5');
+  });
+
+  it('quotes a string radius (mapshaper expression)', async () => {
+    await map.bufferLayer({ source: 'src1', target: 'roads', radius: 'pop / 1000' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -buffer "pop / 1000"');
+  });
+
+  it('appends cap-style= when capStyle is set', async () => {
+    await map.bufferLayer({ source: 'src1', target: 'roads', radius: 5, capStyle: 'flat' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -buffer 5 cap-style=flat');
+  });
+
+  it('returns false when source / target is missing', async () => {
+    expect(await map.bufferLayer({ source: 'nope', target: 'roads', radius: 5 })).toBe(false);
+    expect(await map.bufferLayer({ source: 'src1', target: 'nope', radius: 5 })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('pushes one history entry labelled "Buffer <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.bufferLayer({ source: 'src1', target: 'roads', radius: 5 });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Buffer roads');
+    expect(map.canUndo()).toBe(true);
+  });
+});
