@@ -7,6 +7,7 @@ import { Painter } from '../renderer/painter';
 import { CanvasPainter } from '../renderer/canvas-painter';
 import { CanvasKitPainter } from '../renderer/canvaskit-painter';
 import { TopologySource } from '../source/source';
+import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
 import { MouseWheel } from '../core/interactions';
 import { DragPanHandler } from '../core/drag-pan-handler';
 import { FeatureQuery } from './feature-query';
@@ -345,6 +346,38 @@ export interface PointsOptions {
   noReplace?: boolean;
 }
 
+/** Options for {@link Emap.exportSnapshot}. */
+export interface ExportSnapshotOptions {
+  /**
+   * Bake simplification thresholds and gzip-compress arc buffers
+   * (mapshaper's `compact` flag). Default `true` — matches mapshaper CLI's
+   * on-disk snapshot.
+   */
+  compact?: boolean;
+}
+
+/** Options for {@link Emap.loadSnapshot}. */
+export interface LoadSnapshotOptions {
+  /**
+   * Prepended to every restored source ID — useful when loading a snapshot
+   * alongside existing sources to namespace them apart. Applies to both
+   * IDs read from the snapshot's `emap` metadata and fallback IDs.
+   */
+  idPrefix?: string;
+  /**
+   * When a restored ID collides with an already-registered source:
+   * - `true` (default) — the existing source is removed first.
+   * - `false` — the promise rejects without registering anything new.
+   */
+  replace?: boolean;
+  /**
+   * Used when the snapshot has no `emap` metadata (e.g. a vanilla mapshaper
+   * `.msx` file). One ID per restored dataset, in order. If the array is
+   * shorter than the dataset count, the tail falls back to `snapshot-<i>`.
+   */
+  defaultIds?: string[];
+}
+
 export interface HighlightStyle {
   color?: string;
   width?: number;
@@ -606,6 +639,118 @@ export class Emap extends EventDispatcher {
 
   public getSource(id: string): TopologySource | undefined {
     return this._sources.get(id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Multi-source snapshot (.msx) — pack/unpack the whole map
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Pack every topology source on this map into one `.msx` snapshot Blob via
+   * mapshaper's session pack pipeline. Source IDs are preserved in a custom
+   * `emap.sources` field on the packed object so {@link loadSnapshot} can
+   * re-register sources under their original IDs.
+   *
+   * Sources that have no dataset yet (load not completed) are skipped.
+   *
+   * The output file is a valid mapshaper `.msx` — vanilla mapshaper will
+   * load it (just dropping the `emap` metadata).
+   */
+  public async exportSnapshot(opts: ExportSnapshotOptions = {}): Promise<Blob> {
+    const compact = opts.compact !== false;
+    const ids: string[] = [];
+    const datasets: any[] = [];
+    for (const [id, source] of this._sources) {
+      if (source.type !== 'topology') continue;
+      const ds = source.getDataset?.();
+      if (!ds) continue;
+      ids.push(id);
+      datasets.push(ds);
+    }
+
+    const obj = await mapshaper.internal.exportDatasetsToPack(datasets, { compact });
+    (obj as Record<string, unknown>).emap = {
+      version: 1,
+      sources: ids.map((id) => ({ id })),
+    };
+    const bytes = mapshaper.internal.pack(obj);
+    return new Blob([bytes as BlobPart], { type: 'application/octet-stream' });
+  }
+
+  /**
+   * Restore one or more topology sources from a `.msx` snapshot via
+   * mapshaper's session unpack pipeline. Returns the list of registered
+   * source IDs in registration order.
+   *
+   * ID resolution priority (per restored dataset, in order):
+   * 1. `opts.idPrefix` + ID from snapshot's `emap.sources[i].id` (if metadata present)
+   * 2. `opts.idPrefix` + `opts.defaultIds[i]` (if supplied)
+   * 3. `opts.idPrefix` + `snapshot-<i>` fallback
+   *
+   * On ID collision: `replace: true` (default) removes the existing source
+   * first; `replace: false` rejects without registering anything.
+   *
+   * Edit history and selection are cleared because feature IDs in the
+   * replayed history would point to features that no longer exist after
+   * dataset replacement. Same semantics as the dataset-replace family
+   * (clip, dissolve, mosaic, ...).
+   */
+  public async loadSnapshot(
+    input: Blob | Uint8Array | ArrayBuffer,
+    opts: LoadSnapshotOptions = {},
+  ): Promise<string[]> {
+    const replace = opts.replace !== false;
+    const prefix = opts.idPrefix ?? '';
+    const defaults = opts.defaultIds ?? [];
+
+    let bytes: Uint8Array;
+    if (input instanceof Uint8Array) {
+      bytes = input;
+    } else if (input instanceof ArrayBuffer) {
+      bytes = new Uint8Array(input);
+    } else if (typeof Blob !== 'undefined' && input instanceof Blob) {
+      bytes = new Uint8Array(await input.arrayBuffer());
+    } else {
+      throw new Error('loadSnapshot: input must be Blob, Uint8Array, or ArrayBuffer');
+    }
+
+    const obj = await mapshaper.internal.unpackSessionData(bytes);
+    const datasets = obj.datasets ?? [];
+    const meta = (obj as Record<string, unknown>).emap as
+      | { sources?: Array<{ id?: string }> }
+      | undefined;
+    const storedIds = meta?.sources?.map((s) => s?.id).filter((s): s is string => typeof s === 'string') ?? [];
+
+    const resolvedIds: string[] = datasets.map((_, i) => {
+      const stored = storedIds[i];
+      const fallback = defaults[i] ?? `snapshot-${i}`;
+      return prefix + (stored ?? fallback);
+    });
+
+    // Collision check before any side effects when replace=false
+    if (!replace) {
+      for (const id of resolvedIds) {
+        if (this._sources.has(id)) {
+          throw new Error(`loadSnapshot: source "${id}" already exists (pass { replace: true } to overwrite)`);
+        }
+      }
+    }
+
+    // History and selection no longer reference live features.
+    this._history.clear();
+    this._fireSelectionChange(this._selection.clear());
+    this.fire('historychange');
+
+    const registered: string[] = [];
+    for (let i = 0; i < datasets.length; i++) {
+      const id = resolvedIds[i];
+      if (replace && this._sources.has(id)) this.removeSource(id);
+      const src = new ConcreteTopologySource(id);
+      src.setDataset(datasets[i]);
+      this.addSource(id, src);
+      registered.push(id);
+    }
+    return registered;
   }
 
   // ---------------------------------------------------------------------------

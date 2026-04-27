@@ -2701,3 +2701,280 @@ describe('Emap polygonsLayer', () => {
     expect(listener.mock.calls[0][0].label).toBe('Polygons edges');
   });
 });
+
+describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
+  let map: Emap;
+  let exportDatasetsToPackSpy: ReturnType<typeof vi.fn>;
+  let packSpy: ReturnType<typeof vi.fn>;
+  let unpackSessionDataSpy: ReturnType<typeof vi.fn>;
+  let lastPacked: any;
+
+  const originalExport = Reflect.get(mapshaper.internal as object, 'exportDatasetsToPack');
+  const originalPack = Reflect.get(mapshaper.internal as object, 'pack');
+  const originalUnpack = Reflect.get(mapshaper.internal as object, 'unpackSessionData');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    // addSource consults _projection / _viewport when registering the first
+    // source (CRS auto-detect). createBareMap doesn't initialize these, so
+    // stub them here.
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+
+    exportDatasetsToPackSpy = vi.fn(async (datasets: any[], opts: any) => ({
+      version: 1,
+      created: '2026-04-27T00:00:00Z',
+      datasets: datasets.map((d) => ({ packed: true, layerCount: d.layers?.length ?? 0 })),
+      _opts: opts,
+    })) as ReturnType<typeof vi.fn>;
+    packSpy = vi.fn((obj: any) => {
+      lastPacked = obj;
+      return new Uint8Array([1, 2, 3, 4]);
+    }) as ReturnType<typeof vi.fn>;
+    unpackSessionDataSpy = vi.fn(async () => ({
+      version: 1,
+      datasets: [
+        { layers: [{ name: 'a-layer', geometry_type: 'polygon', shapes: [] }] },
+        { layers: [{ name: 'b-layer', geometry_type: 'polyline', shapes: [] }] },
+      ],
+      emap: { version: 1, sources: [{ id: 'a' }, { id: 'b' }] },
+    })) as ReturnType<typeof vi.fn>;
+
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack', exportDatasetsToPackSpy);
+    Reflect.set(mapshaper.internal as object, 'pack', packSpy);
+    Reflect.set(mapshaper.internal as object, 'unpackSessionData', unpackSessionDataSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack', originalExport);
+    Reflect.set(mapshaper.internal as object, 'pack', originalPack);
+    Reflect.set(mapshaper.internal as object, 'unpackSessionData', originalUnpack);
+  });
+
+  function makeSource(id: string, ds: any) {
+    return {
+      id, type: 'topology' as const,
+      getDataset: () => ds,
+      getLayers: () => ds?.layers ?? [],
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+      // EventDispatcher surface used by Emap.removeSource
+      off: vi.fn(),
+      on: vi.fn(),
+    } as any;
+  }
+
+  it('packs all topology sources in registration order', async () => {
+    const ds1 = { layers: [{ name: 'L1' }] };
+    const ds2 = { layers: [{ name: 'L2' }, { name: 'L3' }] };
+    (map as any)._sources.set('s1', makeSource('s1', ds1));
+    (map as any)._sources.set('s2', makeSource('s2', ds2));
+
+    const blob = await map.exportSnapshot();
+    expect(blob.type).toBe('application/octet-stream');
+
+    expect(exportDatasetsToPackSpy).toHaveBeenCalledTimes(1);
+    const args = exportDatasetsToPackSpy.mock.calls[0] as unknown[];
+    expect(args[0]).toEqual([ds1, ds2]);
+    expect(args[1]).toEqual({ compact: true });
+  });
+
+  it('injects emap.sources metadata in source order', async () => {
+    (map as any)._sources.set('first', makeSource('first', { layers: [] }));
+    (map as any)._sources.set('second', makeSource('second', { layers: [] }));
+    await map.exportSnapshot();
+
+    expect(lastPacked.emap).toEqual({
+      version: 1,
+      sources: [{ id: 'first' }, { id: 'second' }],
+    });
+  });
+
+  it('skips sources without a dataset', async () => {
+    (map as any)._sources.set('loaded', makeSource('loaded', { layers: [] }));
+    (map as any)._sources.set('pending', makeSource('pending', undefined));
+    await map.exportSnapshot();
+
+    const args = exportDatasetsToPackSpy.mock.calls[0] as unknown[];
+    expect((args[0] as unknown[])).toHaveLength(1);
+    expect(lastPacked.emap.sources).toEqual([{ id: 'loaded' }]);
+  });
+
+  it('honours compact=false', async () => {
+    (map as any)._sources.set('s', makeSource('s', { layers: [] }));
+    await map.exportSnapshot({ compact: false });
+    expect(exportDatasetsToPackSpy.mock.calls[0][1]).toEqual({ compact: false });
+  });
+
+  it('produces an empty-datasets snapshot for an empty map', async () => {
+    const blob = await map.exportSnapshot();
+    expect(blob.type).toBe('application/octet-stream');
+    const args = exportDatasetsToPackSpy.mock.calls[0] as unknown[];
+    expect(args[0]).toEqual([]);
+    expect(lastPacked.emap.sources).toEqual([]);
+  });
+
+  it('loadSnapshot restores source IDs from emap metadata', async () => {
+    const ids = await map.loadSnapshot(new Uint8Array([0]));
+    expect(ids).toEqual(['a', 'b']);
+    expect(map.getSource('a')).toBeDefined();
+    expect(map.getSource('b')).toBeDefined();
+    expect(unpackSessionDataSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('loadSnapshot accepts ArrayBuffer input', async () => {
+    const buf = new Uint8Array([1, 2, 3]).buffer;
+    const ids = await map.loadSnapshot(buf);
+    expect(ids).toEqual(['a', 'b']);
+  });
+
+  it('loadSnapshot accepts Blob input', async () => {
+    const blob = new Blob([new Uint8Array([1, 2, 3])]);
+    const ids = await map.loadSnapshot(blob);
+    expect(ids).toEqual(['a', 'b']);
+  });
+
+  it('loadSnapshot prepends idPrefix to stored IDs', async () => {
+    const ids = await map.loadSnapshot(new Uint8Array([0]), { idPrefix: 'restored-' });
+    expect(ids).toEqual(['restored-a', 'restored-b']);
+    expect(map.getSource('restored-a')).toBeDefined();
+  });
+
+  it('loadSnapshot falls back to defaultIds when emap metadata absent', async () => {
+    unpackSessionDataSpy.mockResolvedValue({
+      version: 1,
+      datasets: [{ layers: [] }, { layers: [] }],
+    });
+    const ids = await map.loadSnapshot(new Uint8Array([0]), { defaultIds: ['x', 'y'] });
+    expect(ids).toEqual(['x', 'y']);
+  });
+
+  it('loadSnapshot fallback uses snapshot-<i> when no metadata and no defaults', async () => {
+    unpackSessionDataSpy.mockResolvedValue({
+      version: 1,
+      datasets: [{ layers: [] }, { layers: [] }],
+    });
+    const ids = await map.loadSnapshot(new Uint8Array([0]));
+    expect(ids).toEqual(['snapshot-0', 'snapshot-1']);
+  });
+
+  it('loadSnapshot replaces existing sources by default', async () => {
+    const existing = makeSource('a', { layers: [] });
+    (map as any)._sources.set('a', existing);
+    const sourceListenersBeforeAdd = (map as any)._sourceListeners as Map<string, unknown>;
+    sourceListenersBeforeAdd.set('a', () => {}); // satisfy removeSource cleanup
+
+    const ids = await map.loadSnapshot(new Uint8Array([0]));
+    expect(ids).toEqual(['a', 'b']);
+    // The source registered at 'a' is the new one, not the original
+    expect(map.getSource('a')).not.toBe(existing);
+  });
+
+  it('loadSnapshot rejects with replace=false on ID collision', async () => {
+    const existing = makeSource('a', { layers: [] });
+    (map as any)._sources.set('a', existing);
+    await expect(
+      map.loadSnapshot(new Uint8Array([0]), { replace: false }),
+    ).rejects.toThrow(/already exists/);
+    // Map state untouched: 'a' is the original, 'b' was not added
+    expect(map.getSource('a')).toBe(existing);
+    expect(map.getSource('b')).toBeUndefined();
+  });
+
+  it('loadSnapshot clears edit history and selection', async () => {
+    const history = (map as any)._history as EditHistory;
+    history.push({
+      label: 'fake', execute: vi.fn(), undo: vi.fn(),
+    } as any);
+    expect(map.canUndo()).toBe(true);
+
+    const selection = (map as any)._selection as Selection;
+    selection.apply([{ source: 's', layer: 'l', id: 1 }], 'add');
+    expect(selection.getAll().length).toBeGreaterThan(0);
+
+    await map.loadSnapshot(new Uint8Array([0]));
+    expect(map.canUndo()).toBe(false);
+    expect(map.canRedo()).toBe(false);
+    expect(selection.getAll().length).toBe(0);
+  });
+
+  it('loadSnapshot rejects on invalid input type', async () => {
+    await expect(
+      map.loadSnapshot('not bytes' as unknown as Uint8Array),
+    ).rejects.toThrow(/Blob, Uint8Array, or ArrayBuffer/);
+  });
+});
+
+describe('Emap.exportSnapshot / loadSnapshot round-trip (real mapshaper)', () => {
+  // A two-source round trip: pack two real datasets via Emap.exportSnapshot,
+  // then re-load into a fresh map via loadSnapshot, and assert that source
+  // IDs and per-layer summaries survive.
+
+  function buildSourceFromGeoJSON(id: string, geojson: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      // Lazy-import the concrete TopologySource via the same path used in production code
+      import('../source/topology-source').then(({ TopologySource }) => {
+        const source = new TopologySource(id);
+        source.on('data', () => resolve(source));
+        source.on('error', (e: any) => reject(e?.error ?? e));
+        source.setData({ filename: `${id}.geojson`, content: new TextEncoder().encode(geojson) });
+      });
+    });
+  }
+
+  function summarize(map: Emap, id: string) {
+    const ds = map.getSource(id)?.getDataset();
+    if (!ds) return null;
+    return {
+      layerNames: ds.layers.map((l: any) => l.name),
+      geoms: ds.layers.map((l: any) => l.geometry_type),
+      shapeCounts: ds.layers.map((l: any) => l.shapes?.length ?? 0),
+    };
+  }
+
+  it('round-trips two sources with original IDs and layer summaries', async () => {
+    const polysGeojson = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature', properties: { name: 'sq' },
+        geometry: { type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]] },
+      }],
+    });
+    const linesGeojson = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature', properties: { road: 'main' },
+        geometry: { type: 'LineString', coordinates: [[0, 0], [1, 1]] },
+      }],
+    });
+
+    const sourceA = await buildSourceFromGeoJSON('alpha', polysGeojson);
+    const sourceB = await buildSourceFromGeoJSON('beta', linesGeojson);
+
+    function stubProjection(m: Emap) {
+      setPrivate(m, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+      setPrivate(m, '_viewport', { setCRS: vi.fn() });
+    }
+
+    const mapA = createBareMap();
+    setPrivate(mapA, '_history', new EditHistory());
+    stubProjection(mapA);
+    mapA.addSource('alpha', sourceA);
+    mapA.addSource('beta', sourceB);
+
+    const beforeA = summarize(mapA, 'alpha');
+    const beforeB = summarize(mapA, 'beta');
+
+    const blob = await mapA.exportSnapshot();
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+
+    const mapB = createBareMap();
+    setPrivate(mapB, '_history', new EditHistory());
+    stubProjection(mapB);
+    const restored = await mapB.loadSnapshot(bytes);
+    expect(restored).toEqual(['alpha', 'beta']);
+    expect(summarize(mapB, 'alpha')).toEqual(beforeA);
+    expect(summarize(mapB, 'beta')).toEqual(beforeB);
+  });
+});

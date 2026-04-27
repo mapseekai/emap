@@ -66,6 +66,26 @@ declare module 'mapshaper' {
       opts: { compact?: boolean; file?: string;[k: string]: unknown },
     ): Promise<Array<{ filename: string; content: Uint8Array }>>;
 
+    /** Build the unpacked session object. Use {@link pack} to serialize, or
+     *  inject extra fields (e.g. emap source IDs) before serializing. */
+    exportDatasetsToPack(
+      datasets: MapshaperDataset[],
+      opts: { compact?: boolean;[k: string]: unknown },
+    ): Promise<{ version: number; created: string; datasets: unknown[];[k: string]: unknown }>;
+
+    /** Serialize an arbitrary value to msgpack bytes. */
+    pack(obj: unknown): Uint8Array;
+
+    /** Restore a session object from msgpack bytes. Datasets are rebuilt into
+     *  proper Mapshaper Dataset instances; non-standard fields (e.g. emap)
+     *  are preserved on the returned object. */
+    unpackSessionData(buf: Uint8Array): Promise<{
+      version?: number;
+      created?: string;
+      datasets: MapshaperDataset[];
+      [k: string]: unknown;
+    }>;
+
     // Simplification / LOD
     getAvgSegment(arcs: ArcCollection): number;
     simplifyArcsFast(arcs: ArcCollection, segLen: number): ArcCollection;

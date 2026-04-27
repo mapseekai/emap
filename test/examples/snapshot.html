@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap 示例 - 快照 (.msx) 保存 / 恢复</title>
+  <title>Emap 示例 - 多源快照 (.msx) 保存 / 恢复</title>
   <style>
     body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
     #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
@@ -13,29 +13,39 @@
     #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
     #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
     #header button.alt { background: #2980b9; }
+    #header button.danger { background: #c0392b; }
     #map { flex: 1; background: #ffffff; position: relative; outline: none; }
     .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
     .group { display: flex; gap: 6px; align-items: center; }
+    .source-list { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; }
+    .source-list span { background: #34495e; padding: 3px 8px; border-radius: 3px; font-size: 12px; }
+    .source-list span.empty { opacity: 0.5; }
   </style>
 </head>
 
 <body>
   <div id="header">
     <span class="group">
-      <label>加载数据 (任意支持的格式或 .msx 快照):
-        <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip,.msx" />
+      <label>添加数据源 (每个文件 = 一个新源):
+        <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple />
       </label>
     </span>
     <span class="group">
-      <label>快照文件名: <input id="filename" type="text" value="snapshot.msx" /></label>
-      <button id="save-btn" disabled>保存快照 (.msx)</button>
-      <button id="reload-btn" class="alt" disabled>清空</button>
+      <label>恢复快照 (.msx,可包含多源):
+        <input id="snapshot-input" type="file" accept=".msx" />
+      </label>
     </span>
-    <span id="status">加载任意数据,或拖入一个之前导出的 .msx 文件以恢复完整会话状态。</span>
+    <span class="group">
+      <label>快照文件名: <input id="filename" type="text" value="workspace.msx" /></label>
+      <button id="save-btn" disabled>保存全部源 (.msx)</button>
+      <button id="clear-btn" class="danger" disabled>清空</button>
+    </span>
+    <span id="status">添加多个数据源,然后保存为单个 .msx 文件;之后可整体恢复。</span>
+    <div class="source-list" id="source-list"><span class="empty">(尚无数据源)</span></div>
     <span class="hint">
-      mapshaper 的 <code>.msx</code> 是 msgpack 二进制格式,完整保留拓扑、弧、简化阈值、图层元数据与 CRS。
-      其他格式 (GeoJSON / TopoJSON / Shapefile) 在保存时会丢失共享拓扑或简化信息;
-      <code>.msx</code> 是唯一无损的"会话存档"。
+      <code>Emap.exportSnapshot()</code> 把所有 topology 源打成一个 .msx,带上源 ID。
+      <code>Emap.loadSnapshot(blob)</code> 反向恢复,返回新源的 ID 列表。
+      历史与选择会被清空(因为旧的 feature ID 已不再有效)。
     </span>
   </div>
   <div id="map" tabindex="0"></div>
@@ -49,67 +59,131 @@
     map.addControl(new HistoryControl(), 'top-left');
     map.bindHistoryShortcuts();
 
-    const SOURCE_ID = 'snapshot-source';
     const fileInput = document.getElementById('file-input');
+    const snapshotInput = document.getElementById('snapshot-input');
     const filenameInput = document.getElementById('filename');
     const saveBtn = document.getElementById('save-btn');
-    const reloadBtn = document.getElementById('reload-btn');
+    const clearBtn = document.getElementById('clear-btn');
     const status = document.getElementById('status');
+    const sourceList = document.getElementById('source-list');
 
-    function loadFile(file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const content = new Uint8Array(ev.target.result);
-        const source = new TopologySource(SOURCE_ID);
-        source.on('data', () => {
-          map.setExtent(source.getExtent());
-          const layers = source.getLayers();
-          const summary = layers
-            .map((l, i) => `${l?.name || `layer-${i}`}(${l?.geometry_type ?? '?'})`)
-            .join(', ');
-          status.textContent = file.name.endsWith('.msx')
-            ? `已从快照恢复: ${file.name}。包含 ${layers.length} 个图层: ${summary}`
-            : `已加载: ${file.name}。包含 ${layers.length} 个图层: ${summary}`;
-          saveBtn.disabled = false;
-          reloadBtn.disabled = false;
-        });
-        source.on('error', (e) => {
-          console.error(e);
-          status.textContent = `加载失败: ${e.error?.message ?? e}`;
-        });
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        source.setData({ filename: file.name, content });
-        map.addSource(SOURCE_ID, source);
-      };
-      reader.readAsArrayBuffer(file);
+    /** Tracks every source ID we've registered so the UI can list them. */
+    const sourceIds = new Set();
+
+    function refreshSourceList() {
+      sourceList.innerHTML = '';
+      if (sourceIds.size === 0) {
+        const e = document.createElement('span');
+        e.className = 'empty';
+        e.textContent = '(尚无数据源)';
+        sourceList.appendChild(e);
+      } else {
+        for (const id of sourceIds) {
+          const src = map.getSource(id);
+          const layers = src?.getLayers?.() ?? [];
+          const span = document.createElement('span');
+          span.textContent = `${id} · ${layers.length} 图层`;
+          sourceList.appendChild(span);
+        }
+      }
+      saveBtn.disabled = sourceIds.size === 0;
+      clearBtn.disabled = sourceIds.size === 0;
     }
 
-    fileInput.addEventListener('change', (e) => {
+    function uniqueSourceId(base) {
+      let id = base;
+      let n = 1;
+      while (map.getSource(id)) {
+        id = `${base}-${n++}`;
+      }
+      return id;
+    }
+
+    function fitFirstSource() {
+      const first = sourceIds.values().next().value;
+      if (!first) return;
+      const src = map.getSource(first);
+      if (src?.getExtent) map.setExtent(src.getExtent());
+    }
+
+    function readFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve(new Uint8Array(ev.target.result));
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    fileInput.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length === 0) return;
+      for (const file of files) {
+        try {
+          const content = await readFile(file);
+          const baseId = file.name.replace(/\.[^.]+$/, '') || 'source';
+          const id = uniqueSourceId(baseId);
+          status.textContent = `加载 ${file.name} 为源 "${id}"...`;
+          await new Promise((resolve, reject) => {
+            const source = new TopologySource(id);
+            source.on('data', () => {
+              sourceIds.add(id);
+              refreshSourceList();
+              fitFirstSource();
+              resolve();
+            });
+            source.on('error', (ev) => reject(ev.error || ev));
+            source.setData({ filename: file.name, content });
+            map.addSource(id, source);
+          });
+        } catch (err) {
+          console.error(err);
+          status.textContent = `加载 ${file.name} 失败: ${err?.message ?? err}`;
+        }
+      }
+      fileInput.value = '';
+      status.textContent = `当前 ${sourceIds.size} 个源,可保存为快照。`;
+    });
+
+    snapshotInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      status.textContent = `正在加载 ${file.name}...`;
-      loadFile(file);
-      fileInput.value = '';
+      status.textContent = `正在恢复快照 ${file.name}...`;
+      try {
+        // Replace existing sources with snapshot contents
+        for (const id of Array.from(sourceIds)) {
+          map.removeSource(id);
+          sourceIds.delete(id);
+        }
+        const bytes = await readFile(file);
+        const restored = await map.loadSnapshot(bytes);
+        restored.forEach((id) => sourceIds.add(id));
+        refreshSourceList();
+        fitFirstSource();
+        status.textContent = `已恢复 ${restored.length} 个源: ${restored.join(', ')}`;
+      } catch (err) {
+        console.error(err);
+        status.textContent = `恢复失败: ${err?.message ?? err}`;
+      }
+      snapshotInput.value = '';
     });
 
     saveBtn.addEventListener('click', async () => {
-      const source = map.getSource(SOURCE_ID);
-      if (!source) return;
-      const name = (filenameInput.value.trim() || 'snapshot.msx').replace(/\.+$/, '');
+      if (sourceIds.size === 0) return;
+      const name = (filenameInput.value.trim() || 'workspace.msx').replace(/\.+$/, '');
       const filename = name.endsWith('.msx') ? name : `${name}.msx`;
-      status.textContent = `正在打包快照 ${filename}...`;
+      status.textContent = `正在打包 ${sourceIds.size} 个源到 ${filename}...`;
       saveBtn.disabled = true;
       try {
-        const blob = await source.export({ format: 'msx' });
+        const blob = await map.exportSnapshot();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
+        a.href = url; a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        status.textContent = `已下载快照 ${filename} (${(blob.size / 1024).toFixed(1)} KB)。`;
+        status.textContent = `已下载 ${filename} (${(blob.size / 1024).toFixed(1)} KB,${sourceIds.size} 个源)。`;
       } catch (err) {
         status.textContent = `导出失败: ${err?.message ?? err}`;
         console.error(err);
@@ -118,12 +192,16 @@
       }
     });
 
-    reloadBtn.addEventListener('click', () => {
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      saveBtn.disabled = true;
-      reloadBtn.disabled = true;
-      status.textContent = '已清空。';
+    clearBtn.addEventListener('click', () => {
+      for (const id of Array.from(sourceIds)) {
+        map.removeSource(id);
+      }
+      sourceIds.clear();
+      refreshSourceList();
+      status.textContent = '已清空全部源。';
     });
+
+    refreshSourceList();
   </script>
 </body>
 
