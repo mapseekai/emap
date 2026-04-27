@@ -2944,6 +2944,109 @@ describe('Emap renameLayer', () => {
   });
 });
 
+describe('Emap mergeLayers', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'a', shapes: [], geometry_type: 'polygon' },
+        { name: 'b', shapes: [], geometry_type: 'polygon' },
+        { name: 'c', shapes: [], geometry_type: 'polygon' },
+        { name: 'roads', shapes: [], geometry_type: 'polyline' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'merged', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('joins targets with commas inside a single quoted -target arg', async () => {
+    const ok = await map.mergeLayers({ source: 'src1', targets: ['a', 'b'] });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers');
+  });
+
+  it('preserves target order for three or more layers', async () => {
+    await map.mergeLayers({ source: 'src1', targets: ['c', 'a', 'b'] });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "c,a,b" -merge-layers');
+  });
+
+  it('appends quoted name', async () => {
+    await map.mergeLayers({ source: 'src1', targets: ['a', 'b'], name: 'combined' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers name="combined"');
+  });
+
+  it('appends force', async () => {
+    await map.mergeLayers({ source: 'src1', targets: ['a', 'b'], force: true });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers force');
+  });
+
+  it('appends flatten', async () => {
+    await map.mergeLayers({ source: 'src1', targets: ['a', 'b'], flatten: true });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers flatten');
+  });
+
+  it('returns false for fewer than two targets', async () => {
+    expect(await map.mergeLayers({ source: 'src1', targets: ['a'] })).toBe(false);
+    expect(await map.mergeLayers({ source: 'src1', targets: [] })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when any target is unresolved', async () => {
+    expect(await map.mergeLayers({ source: 'src1', targets: ['a', 'missing'] })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects mixed-geometry targets without force', async () => {
+    expect(await map.mergeLayers({ source: 'src1', targets: ['a', 'roads'] })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('allows mixed-geometry targets with force=true', async () => {
+    const ok = await map.mergeLayers({ source: 'src1', targets: ['a', 'roads'], force: true });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,roads" -merge-layers force');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.mergeLayers({ source: 'nope', targets: ['a', 'b'] })).toBe(false);
+  });
+
+  it('history entry is labelled "Merge <comma-joined>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.mergeLayers({ source: 'src1', targets: ['a', 'b'] });
+    expect(listener.mock.calls[0][0].label).toBe('Merge a,b');
+  });
+});
+
 describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
   let map: Emap;
   let exportDatasetsToPackSpy: ReturnType<typeof vi.fn>;

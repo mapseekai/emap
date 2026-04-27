@@ -225,6 +225,28 @@ export interface RenameLayerOptions {
   name: string;
 }
 
+/** Options for {@link Emap.mergeLayers}. Requires `targets.length >= 2`. */
+export interface MergeLayersOptions {
+  /** Source ID containing every target layer. */
+  source: string;
+  /** Two or more layer names (or ids) to combine into one. */
+  targets: string[];
+  /** Optional name for the output layer. */
+  name?: string;
+  /**
+   * Allow merging layers with different geometry types or inconsistent data
+   * fields (mapshaper's `force` flag). Without this, mismatched-geometry
+   * targets are rejected up-front to avoid an opaque mid-pipeline error.
+   */
+  force?: boolean;
+  /**
+   * For polygon merges: rebuild as a flat mosaic with higher-id polygons
+   * winning overlaps (mapshaper's `flatten` flag). Ignored by mapshaper
+   * for non-polygon inputs.
+   */
+  flatten?: boolean;
+}
+
 /** Simplification algorithm exposed by mapshaper's `-simplify`. */
 export type SimplifyMethod = 'dp' | 'visvalingam' | 'weighted';
 
@@ -2038,6 +2060,44 @@ export class Emap extends EventDispatcher {
     }
     const cmd = `-target ${quoteMapshaperArg(opts.target)} -rename-layers ${quoteMapshaperArg(newName)}`;
     return this._runDatasetCommand(opts.source, cmd, `Rename ${opts.target} → ${newName}`);
+  }
+
+  /**
+   * Combine two or more layers in the same source into one via mapshaper's
+   * `-merge-layers`. Targets are joined with commas inside one quoted
+   * `-target` argument (matching mapshaper's CLI grammar for this command).
+   *
+   * Up-front geometry-type check: if targets disagree and the caller didn't
+   * pass `force: true`, returns `false` rather than letting mapshaper throw
+   * an opaque mid-pipeline error.
+   */
+  public async mergeLayers(opts: MergeLayersOptions): Promise<boolean> {
+    if (!opts.targets || opts.targets.length < 2) return false;
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+
+    const layers = opts.targets.map((t) => findLayerByName(dataset.layers, t));
+    if (layers.some((l) => !l)) return false;
+
+    if (!opts.force) {
+      const firstGeom = layers[0]?.geometry_type;
+      const allSame = layers.every((l) => l?.geometry_type === firstGeom);
+      if (!allSame) return false;
+    }
+
+    const targetList = opts.targets.join(',');
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(targetList)}`,
+      '-merge-layers',
+    ];
+    if (opts.name && opts.name.trim()) {
+      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    if (opts.force) parts.push('force');
+    if (opts.flatten) parts.push('flatten');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Merge ${targetList}`);
   }
 
   /**

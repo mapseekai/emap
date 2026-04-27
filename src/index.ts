@@ -26,6 +26,7 @@ export type {
   SimplifyOptions,
   SimplifyMethod,
   RenameLayerOptions,
+  MergeLayersOptions,
   ExportSnapshotOptions,
   LoadSnapshotOptions,
 } from './map/map';
