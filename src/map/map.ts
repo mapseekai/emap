@@ -151,6 +151,28 @@ export interface ExplodeOptions {
   target: string;
 }
 
+/** Options for {@link Emap.innerlinesLayer}. */
+export interface InnerlinesOptions {
+  /** Source ID containing the polygon target layer. */
+  source: string;
+  /** Layer name (or id) of the polygon layer to extract shared edges from. */
+  target: string;
+  /**
+   * Optional polygon-boundary filter expression. Evaluated with `A` and `B`
+   * in scope — the two polygons on either side of each candidate boundary —
+   * so e.g. `A.STATE !== B.STATE` keeps only inter-state borders. Mirrors
+   * mapshaper's `-innerlines where=...`.
+   */
+  where?: string;
+  /** Optional name for the output polyline layer. */
+  name?: string;
+  /**
+   * If true, the original polygon layer is preserved alongside the new
+   * polyline layer (mapshaper's `no-replace` flag). Default replaces.
+   */
+  noReplace?: boolean;
+}
+
 export interface HighlightStyle {
   color?: string;
   width?: number;
@@ -1197,6 +1219,40 @@ export class Emap extends EventDispatcher {
     if (!findLayerByName(dataset.layers, opts.target)) return false;
     const cmd = `-target ${quoteMapshaperArg(opts.target)} -explode`;
     return this._runDatasetCommand(opts.source, cmd, `Explode ${opts.target}`);
+  }
+
+  /**
+   * Convert a polygon layer to a polyline layer along shared polygon edges
+   * via mapshaper's `-innerlines`. Useful for cartographic styling: render
+   * internal administrative borders as a separately-stylable line layer
+   * while keeping the original polygons.
+   *
+   * Optional `where` (with `A` / `B` in scope) keeps only boundaries whose
+   * neighbouring polygons match the predicate; `name` controls the output
+   * layer name; `noReplace: true` keeps the input polygon layer alongside
+   * the new polyline layer.
+   */
+  public async innerlinesLayer(opts: InnerlinesOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-innerlines`,
+    ];
+    if (opts.where && opts.where.trim()) {
+      parts.push(`where=${quoteMapshaperArg(opts.where)}`);
+    }
+    if (opts.name && opts.name.trim()) {
+      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    if (opts.noReplace) {
+      parts.push('no-replace');
+    }
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Innerlines ${opts.target}`);
   }
 
   /**
