@@ -325,6 +325,42 @@ export interface FilterFieldsOptions {
   invert?: boolean;
 }
 
+/** Source-data shape for {@link Emap.joinTable}. Discriminated union: */
+export type JoinTableData =
+  /** CSV content (string or bytes). Saved as `.emap-join.csv` in the runner cache. */
+  | { csv: string | Uint8Array; json?: never; layer?: never }
+  /** JSON content. Plain arrays/objects are auto-stringified before injection. */
+  | { json: string | Uint8Array | unknown[] | Record<string, unknown>; csv?: never; layer?: never }
+  /** Reference to another layer in the same source by name. */
+  | { layer: string; csv?: never; json?: never };
+
+/** Options for {@link Emap.joinTable}. */
+export interface JoinTableOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Target layer name (or id) to receive joined attributes. */
+  target: string;
+  /** Where to read the source records from. */
+  data: JoinTableData;
+  /**
+   * Join keys, `[targetKey, sourceKey]`. Both must be non-empty trimmed
+   * strings. Forwarded as `keys=<target>,<source>`.
+   */
+  keys: [string, string];
+  /** Fields to copy from the source. Defaults to all but the source key. */
+  fields?: string[];
+  /** Prefix for joined-in field names (e.g. `'p_'` → `p_pop`, `p_gdp`). */
+  prefix?: string;
+  /** JS expression to filter source records before join. */
+  where?: string;
+  /** JS expression for many-to-one aggregation. */
+  calc?: string;
+  /** Keep target records that didn't match any source record (mapshaper's `unjoined`). */
+  unjoined?: boolean;
+  /** Output unmatched source records as a separate layer (mapshaper's `unmatched`). */
+  unmatched?: boolean;
+}
+
 /** Options for {@link Emap.renameFields}. */
 export interface RenameFieldsOptions {
   /** Source ID containing the target layer. */
@@ -2495,6 +2531,86 @@ export class Emap extends EventDispatcher {
   }
 
   /**
+   * Join attribute records from a CSV / JSON / another-layer source onto a
+   * target layer via mapshaper's `-join`. The canonical "thematic shapefile
+   * + CSV of measures → chloropleth" workflow.
+   *
+   * `data` is one of:
+   * - `{ csv: string | Uint8Array }` — CSV bytes injected into the runner's
+   *   input cache as `.emap-join.csv`.
+   * - `{ json: string | Uint8Array | unknown[] | object }` — JSON bytes
+   *   injected as `.emap-join.json`. Arrays/objects are stringified.
+   * - `{ layer: string }` — by-name reference to another layer in the same
+   *   source. No cache injection.
+   *
+   * Returns `false` for unresolvable source / target, malformed `keys`, or
+   * an invalid `data` shape.
+   */
+  public async joinTable(opts: JoinTableOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!Array.isArray(opts.keys) || opts.keys.length !== 2) return false;
+    const [targetKey, sourceKey] = opts.keys.map((k) => (typeof k === 'string' ? k.trim() : ''));
+    if (targetKey.length === 0 || sourceKey.length === 0) return false;
+
+    let joinSource: string;
+    let inputFiles: Record<string, Uint8Array | string> | undefined;
+    const data = opts.data as Record<string, unknown> | undefined;
+    if (!data || typeof data !== 'object') return false;
+
+    if ('layer' in data && typeof data.layer === 'string' && data.layer.trim().length > 0) {
+      joinSource = data.layer.trim();
+    } else if ('csv' in data && (typeof data.csv === 'string' || data.csv instanceof Uint8Array)) {
+      const filename = '.emap-join.csv';
+      joinSource = filename;
+      inputFiles = { [filename]: data.csv as string | Uint8Array };
+    } else if ('json' in data && data.json !== undefined) {
+      const filename = '.emap-join.json';
+      let payload: string | Uint8Array;
+      if (typeof data.json === 'string' || data.json instanceof Uint8Array) {
+        payload = data.json as string | Uint8Array;
+      } else {
+        payload = JSON.stringify(data.json);
+      }
+      joinSource = filename;
+      inputFiles = { [filename]: payload };
+    } else {
+      return false;
+    }
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-join ${quoteMapshaperArg(joinSource)}`,
+      `keys=${quoteMapshaperArg(`${targetKey},${sourceKey}`)}`,
+    ];
+    if (opts.fields && opts.fields.length > 0) {
+      const safe = opts.fields.filter((f) => typeof f === 'string' && !f.includes(','));
+      if (safe.length > 0) parts.push(`fields=${safe.join(',')}`);
+    }
+    if (opts.prefix && opts.prefix.length > 0) {
+      parts.push(`prefix=${quoteMapshaperArg(opts.prefix)}`);
+    }
+    if (opts.where && opts.where.trim().length > 0) {
+      parts.push(`where=${quoteMapshaperArg(opts.where)}`);
+    }
+    if (opts.calc && opts.calc.trim().length > 0) {
+      parts.push(`calc=${quoteMapshaperArg(opts.calc)}`);
+    }
+    if (opts.unjoined) parts.push('unjoined');
+    if (opts.unmatched) parts.push('unmatched');
+
+    return this._runDatasetCommand(
+      opts.source,
+      parts.join(' '),
+      `Join ${opts.target}`,
+      inputFiles,
+    );
+  }
+
+  /**
    * Combine the currently-selected features (when they all live in the same
    * source/layer) into a single feature, recorded as one undoable history
    * entry.
@@ -2977,6 +3093,7 @@ export class Emap extends EventDispatcher {
     sourceId: string,
     cmd: string,
     label: string,
+    inputFiles?: Record<string, Uint8Array | string>,
   ): Promise<boolean> {
     const source = this._sources.get(sourceId);
     if (!source) return false;
@@ -2990,7 +3107,7 @@ export class Emap extends EventDispatcher {
 
     let after: MapshaperDataset;
     try {
-      after = await runMapshaperCommandOnDataset(cmd, original);
+      after = await runMapshaperCommandOnDataset(cmd, original, inputFiles);
     } catch (err) {
       // Surface as a fire-and-forget error event; do not throw from a public
       // edit op so that one bad command doesn't tear down the calling page.
@@ -3117,11 +3234,20 @@ function buildMergeSelectedCommand(
 function runMapshaperCommandOnDataset(
   cmd: string,
   dataset: MapshaperDataset,
+  inputFiles?: Record<string, Uint8Array | string>,
 ): Promise<MapshaperDataset> {
   return new Promise((resolve, reject) => {
     const job = new mapshaper.internal.Job();
     job.catalog.addDataset(dataset);
     const commands = mapshaper.internal.parseCommands(cmd);
+    if (inputFiles) {
+      // mapshaper resolves filename references in command args via
+      // `cli.readFile(name, null, opts.input)`, so the cache must be present
+      // on every command's options. Cheap to set on all of them.
+      for (const c of commands) {
+        if (c.options) c.options.input = inputFiles;
+      }
+    }
     mapshaper.internal.runParsedCommands(commands, job, (err: any, finished) => {
       if (err) {
         reject(err);

@@ -3460,6 +3460,229 @@ describe('Emap renameFields', () => {
   });
 });
 
+describe('Emap joinTable', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let lastCommands: any[] | null;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }],
+    };
+    const afterDs = { layers: [{ name: 'states', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    lastCommands = null;
+    parseCommandsSpy = vi.fn((cmd: string) => {
+      // Hold a ref so the test can inspect options.input that the runner
+      // mutates after parseCommands returns.
+      const arr = [{ name: 'parsed', options: { _cmd: cmd } as any }];
+      lastCommands = arr;
+      return arr;
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  function injectedInput(): unknown {
+    return lastCommands?.[0]?.options?.input;
+  }
+
+  it('CSV-based join — command shape + input cache', async () => {
+    const ok = await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { csv: 'fips,pop\n01,4M\n02,800K' },
+      keys: ['STATE_FIPS', 'fips'],
+    });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "states" -join ".emap-join.csv" keys="STATE_FIPS,fips"');
+    expect(injectedInput()).toEqual({ '.emap-join.csv': 'fips,pop\n01,4M\n02,800K' });
+  });
+
+  it('CSV bytes (Uint8Array) flow through unchanged', async () => {
+    const bytes = new TextEncoder().encode('a,b\n1,2');
+    await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { csv: bytes },
+      keys: ['k', 's'],
+    });
+    expect((injectedInput() as Record<string, unknown>)['.emap-join.csv']).toBe(bytes);
+  });
+
+  it('JSON string is injected as .emap-join.json', async () => {
+    await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { json: '[{"a":1}]' },
+      keys: ['k', 's'],
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "states" -join ".emap-join.json" keys="k,s"');
+    expect(injectedInput()).toEqual({ '.emap-join.json': '[{"a":1}]' });
+  });
+
+  it('JSON array is auto-stringified', async () => {
+    await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { json: [{ a: 1 }, { a: 2 }] },
+      keys: ['k', 's'],
+    });
+    expect((injectedInput() as Record<string, unknown>)['.emap-join.json'])
+      .toBe('[{"a":1},{"a":2}]');
+  });
+
+  it('JSON plain object is auto-stringified', async () => {
+    await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { json: { rows: [{ a: 1 }] } },
+      keys: ['k', 's'],
+    });
+    expect((injectedInput() as Record<string, unknown>)['.emap-join.json'])
+      .toBe('{"rows":[{"a":1}]}');
+  });
+
+  it('Layer-based join — no inputFiles cache', async () => {
+    await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { layer: 'pop_table' },
+      keys: ['STATE_FIPS', 'fips'],
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "states" -join "pop_table" keys="STATE_FIPS,fips"');
+    expect(injectedInput()).toBeUndefined();
+  });
+
+  it('forwards every optional passthrough', async () => {
+    await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { layer: 't' }, keys: ['k', 's'],
+      fields: ['pop', 'gdp'], prefix: 'p_',
+      where: 'this.year === 2024', calc: 'sum(pop)',
+      unjoined: true, unmatched: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+      '-target "states" -join "t" keys="k,s"'
+      + ' fields=pop,gdp'
+      + ' prefix="p_"'
+      + ' where="this.year === 2024"'
+      + ' calc="sum(pop)"'
+      + ' unjoined unmatched',
+    );
+  });
+
+  it('returns false on missing source', async () => {
+    expect(await map.joinTable({
+      source: 'nope', target: 'states',
+      data: { csv: 'a,b\n1,2' }, keys: ['k', 's'],
+    })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on unresolved target', async () => {
+    expect(await map.joinTable({
+      source: 'src1', target: 'missing',
+      data: { csv: 'a,b\n1,2' }, keys: ['k', 's'],
+    })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on malformed keys', async () => {
+    const base = { source: 'src1' as const, target: 'states' as const, data: { layer: 't' } as const };
+    expect(await map.joinTable({ ...base, keys: ['k'] as any })).toBe(false);
+    expect(await map.joinTable({ ...base, keys: ['', 's'] })).toBe(false);
+    expect(await map.joinTable({ ...base, keys: ['k', '   '] })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on invalid data shape', async () => {
+    expect(await map.joinTable({
+      source: 'src1', target: 'states',
+      data: {} as any, keys: ['k', 's'],
+    })).toBe(false);
+    expect(await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { layer: '' } as any, keys: ['k', 's'],
+    })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Join <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { layer: 't' }, keys: ['k', 's'],
+    });
+    expect(listener.mock.calls[0][0].label).toBe('Join states');
+  });
+});
+
+describe('Emap joinTable round-trip (real mapshaper)', () => {
+  it('real CSV join populates the joined columns', async () => {
+    const polygons = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', properties: { fips: 'AL' }, geometry: { type: 'Polygon', coordinates: [[[0,0],[1,0],[1,1],[0,1],[0,0]]] } },
+        { type: 'Feature', properties: { fips: 'AK' }, geometry: { type: 'Polygon', coordinates: [[[2,2],[3,2],[3,3],[2,3],[2,2]]] } },
+      ],
+    });
+
+    const { TopologySource } = await import('../source/topology-source');
+    const source = await new Promise<any>((resolve, reject) => {
+      const s = new TopologySource('rt');
+      s.on('data', () => resolve(s));
+      s.on('error', (e: any) => reject(e?.error ?? e));
+      s.setData({ filename: 'rt.geojson', content: new TextEncoder().encode(polygons) });
+    });
+
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+    map.addSource('rt', source);
+
+    const layerName = source.getDataset()!.layers[0].name;
+    const csv = 'fips,pop\nAL,1000\nAK,2000\n';
+    const ok = await map.joinTable({
+      source: 'rt', target: layerName,
+      data: { csv }, keys: ['fips', 'fips'],
+    });
+    expect(ok).toBe(true);
+
+    const ds = map.getSource('rt')!.getDataset()!;
+    const recs = ds.layers[0].data!.getRecords();
+    expect(recs.length).toBe(2);
+    // Each polygon should now carry a 'pop' field from the joined CSV.
+    const popById: Record<string, unknown> = {};
+    for (const r of recs) popById[(r as any).fips] = (r as any).pop;
+    // mapshaper coerces numeric-looking CSV columns to numbers by default
+    expect(popById['AL']).toBe(1000);
+    expect(popById['AK']).toBe(2000);
+  });
+});
+
 describe('Emap rebuildTopology (mocked mapshaper)', () => {
   let map: Emap;
   let copyDatasetSpy: ReturnType<typeof vi.fn>;

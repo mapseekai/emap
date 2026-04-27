@@ -35,6 +35,8 @@ export type {
   UniqueFeaturesOptions,
   FilterFieldsOptions,
   RenameFieldsOptions,
+  JoinTableOptions,
+  JoinTableData,
   ExportSnapshotOptions,
   LoadSnapshotOptions,
 } from './map/map';
