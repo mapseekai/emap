@@ -2203,3 +2203,103 @@ describe('Emap mosaicLayer', () => {
     expect(listener.mock.calls[0][0].label).toBe('Mosaic parts');
   });
 });
+
+describe('Emap unionLayers', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'parks', shapes: [], geometry_type: 'polygon' },
+        { name: 'soils', shapes: [], geometry_type: 'polygon' },
+        { name: 'roads', shapes: [], geometry_type: 'polyline' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'union', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('joins targets with commas inside a single quoted -target arg', async () => {
+    const ok = await map.unionLayers({ source: 'src1', targets: ['parks', 'soils'] });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union');
+  });
+
+  it('preserves target order for three or more layers', async () => {
+    await map.unionLayers({ source: 'src1', targets: ['soils', 'parks', 'roads'] });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "soils,parks,roads" -union');
+  });
+
+  it('appends fields=', async () => {
+    await map.unionLayers({
+      source: 'src1', targets: ['parks', 'soils'], fields: ['name', 'type'],
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union fields=name,type');
+  });
+
+  it('quotes name=', async () => {
+    await map.unionLayers({
+      source: 'src1', targets: ['parks', 'soils'], name: 'overlay output',
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union name="overlay output"');
+  });
+
+  it('appends no-replace', async () => {
+    await map.unionLayers({
+      source: 'src1', targets: ['parks', 'soils'], noReplace: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union no-replace');
+  });
+
+  it('returns false for fewer than two targets', async () => {
+    expect(await map.unionLayers({ source: 'src1', targets: ['parks'] })).toBe(false);
+    expect(await map.unionLayers({ source: 'src1', targets: [] })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when any target is unresolved', async () => {
+    expect(await map.unionLayers({
+      source: 'src1', targets: ['parks', 'missing'],
+    })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.unionLayers({ source: 'nope', targets: ['parks', 'soils'] })).toBe(false);
+  });
+
+  it('history entry is labelled "Union <comma-joined>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.unionLayers({ source: 'src1', targets: ['parks', 'soils'] });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Union parks,soils');
+  });
+});

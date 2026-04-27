@@ -17,6 +17,7 @@ export type {
   FilterOptions,
   SnapOptions,
   MosaicOptions,
+  UnionOptions,
 } from './map/map';
 export { FeatureQuery } from './map/feature-query';
 export { HighlightManager } from './map/highlight-manager';

@@ -230,6 +230,20 @@ export interface MosaicOptions {
   name?: string;
 }
 
+/** Options for {@link Emap.unionLayers}. Requires `targets.length >= 2`. */
+export interface UnionOptions {
+  /** Source ID containing every target layer. */
+  source: string;
+  /** Two or more polygon layer names to overlay. */
+  targets: string[];
+  /** Optional list of fields to retain in the output. */
+  fields?: string[];
+  /** Optional name for the output layer. */
+  name?: string;
+  /** Keep the original layers alongside the new union output. */
+  noReplace?: boolean;
+}
+
 export interface HighlightStyle {
   color?: string;
   width?: number;
@@ -1432,6 +1446,48 @@ export class Emap extends EventDispatcher {
       parts.push(`name=${quoteMapshaperArg(opts.name)}`);
     }
     return this._runDatasetCommand(opts.source, parts.join(' '), `Mosaic ${opts.target}`);
+  }
+
+  /**
+   * Overlay two or more polygon layers from the same source via mapshaper's
+   * `-union`. Output is one flat mosaic where every intersection region is
+   * its own polygon, attributed by the union of input fields.
+   *
+   * Returns `false` for unresolvable source, fewer than two targets, or any
+   * unresolved target name. Inherits dataset-replace semantics from
+   * `_runDatasetCommand`.
+   *
+   * Note: mapshaper's `-target` for `-union` is a comma-separated layer
+   * list, not a single layer name; we join `targets` with commas inside one
+   * quoted argument.
+   */
+  public async unionLayers(opts: UnionOptions): Promise<boolean> {
+    if (!opts.targets || opts.targets.length < 2) return false;
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    // Every target must resolve — mapshaper would otherwise error opaquely.
+    for (const t of opts.targets) {
+      if (!findLayerByName(dataset.layers, t)) return false;
+    }
+
+    const targetList = opts.targets.join(',');
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(targetList)}`,
+      `-union`,
+    ];
+    if (opts.fields && opts.fields.length > 0) {
+      const safe = opts.fields.filter((f) => !f.includes(','));
+      if (safe.length > 0) parts.push(`fields=${safe.join(',')}`);
+    }
+    if (opts.name && opts.name.trim()) {
+      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    if (opts.noReplace) {
+      parts.push('no-replace');
+    }
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Union ${targetList}`);
   }
 
   /**
