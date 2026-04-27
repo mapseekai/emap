@@ -65,6 +65,7 @@ export * from './ui/vertex-edit-control';
 export * from './ui/edit-toolbar';
 export * from './ui/draw-feature-control';
 export * from './ui/history-control';
+export * from './ui/box-select-control';
 export type { EditCommand } from './edit/edit-command';
 export { EditHistory } from './edit/edit-history';
 export type { HistoryStateSnapshot, EditHistoryOptions } from './edit/edit-history';

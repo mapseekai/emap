@@ -131,3 +131,9 @@
 .emap-draw-active {
   cursor: crosshair;
 }
+
+/* Box Select rubber-band rectangle. Defaults are inlined by BoxSelectControl
+   for option override; this rule lets users restyle via CSS too. */
+.emap-box-select {
+  z-index: 5;
+}
