@@ -54,6 +54,22 @@ declare module 'mapshaper' {
      */
     copyDataset(dataset: MapshaperDataset): MapshaperDataset;
 
+    /**
+     * Detect line intersections, insert vertex cuts at every crossing, and
+     * re-run `buildTopology` if anything changed. Mutates the dataset in
+     * place and returns the resulting node collection. Used as a pre-pass
+     * by every overlay command (`-clip` / `-erase` / `-dissolve` / etc.).
+     */
+    addIntersectionCuts(
+      dataset: MapshaperDataset,
+      opts?: {
+        snap_interval?: number;
+        no_snap?: boolean;
+        rebuild_topology?: boolean;
+        [k: string]: unknown;
+      },
+    ): unknown;
+
     // Export — io/mapshaper-export.mjs
     exportFileContent(
       dataset: MapshaperDataset,

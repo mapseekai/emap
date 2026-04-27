@@ -3131,6 +3131,188 @@ describe('Emap splitLayer', () => {
   });
 });
 
+describe('Emap rebuildTopology (mocked mapshaper)', () => {
+  let map: Emap;
+  let copyDatasetSpy: ReturnType<typeof vi.fn>;
+  let addIntersectionCutsSpy: ReturnType<typeof vi.fn>;
+  let setDatasetSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalAddCuts = Reflect.get(mapshaper.internal as object, 'addIntersectionCuts');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+
+    setDatasetSpy = vi.fn() as ReturnType<typeof vi.fn>;
+    const ds = {
+      layers: [{ name: 'shapes', shapes: [], geometry_type: 'polygon' }],
+      arcs: { /* sentinel — presence is what matters */ },
+    };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => ds,
+      getLayers: () => ds.layers,
+      setDataset: setDatasetSpy,
+      refreshDisplayArcs: vi.fn(),
+      off: vi.fn(),
+      on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    // copyDataset returns a fresh object each call so the test can inspect
+    // which copy was passed to addIntersectionCuts vs which to DatasetReplace.
+    let copyId = 0;
+    copyDatasetSpy = vi.fn(() => ({ _copy: ++copyId, layers: ds.layers, arcs: ds.arcs })) as ReturnType<typeof vi.fn>;
+    addIntersectionCutsSpy = vi.fn() as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', copyDatasetSpy);
+    Reflect.set(mapshaper.internal as object, 'addIntersectionCuts', addIntersectionCutsSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'addIntersectionCuts', originalAddCuts);
+  });
+
+  it('calls addIntersectionCuts on a deep copy of the source dataset', async () => {
+    const ok = await map.rebuildTopology({ source: 'src1' });
+    expect(ok).toBe(true);
+    expect(copyDatasetSpy).toHaveBeenCalledTimes(2); // before snapshot + working copy
+    expect(addIntersectionCutsSpy).toHaveBeenCalledTimes(1);
+    const arg = addIntersectionCutsSpy.mock.calls[0][0] as any;
+    expect(arg._copy).toBeDefined();
+  });
+
+  it('forwards options as snake_case', async () => {
+    await map.rebuildTopology({
+      source: 'src1', snapInterval: 0.001, noSnap: false, rebuildTopology: true,
+    });
+    const opts = addIntersectionCutsSpy.mock.calls[0][1] as any;
+    expect(opts).toEqual({
+      snap_interval: 0.001,
+      no_snap: false,
+      rebuild_topology: true,
+    });
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.rebuildTopology({ source: 'nope' })).toBe(false);
+    expect(addIntersectionCutsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when source has no dataset', async () => {
+    const noDsSource = {
+      id: 's2', type: 'topology' as const,
+      getDataset: () => undefined,
+      setDataset: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('s2', noDsSource);
+    expect(await map.rebuildTopology({ source: 's2' })).toBe(false);
+    expect(addIntersectionCutsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns true (no-op) for arc-less point-only datasets', async () => {
+    const pointSource = {
+      id: 'pts', type: 'topology' as const,
+      getDataset: () => ({ layers: [{ name: 'p', geometry_type: 'point', shapes: [] }] }),
+      setDataset: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('pts', pointSource);
+    expect(await map.rebuildTopology({ source: 'pts' })).toBe(true);
+    expect(addIntersectionCutsSpy).not.toHaveBeenCalled();
+    expect(map.canUndo()).toBe(false);
+  });
+
+  it('swaps the dataset via setDataset on success', async () => {
+    await map.rebuildTopology({ source: 'src1' });
+    expect(setDatasetSpy).toHaveBeenCalledTimes(1);
+    const after = setDatasetSpy.mock.calls[0][0] as any;
+    expect(after._copy).toBeDefined();
+  });
+
+  it('pushes one DatasetReplaceCommand labelled "Rebuild topology"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.rebuildTopology({ source: 'src1' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Rebuild topology');
+    expect(map.canUndo()).toBe(true);
+  });
+
+  it('acts as a history barrier (clears prior history)', async () => {
+    const history = (map as any)._history as EditHistory;
+    history.push({ label: 'fake', do: vi.fn(), undo: vi.fn() } as any);
+    expect(map.canUndo()).toBe(true);
+    // After rebuild, prior 'fake' command is gone; only 'Rebuild topology' remains.
+    await map.rebuildTopology({ source: 'src1' });
+    const command = history.undo();
+    expect(command?.label).toBe('Rebuild topology');
+    expect(map.canUndo()).toBe(false);
+  });
+
+  it('clears the selection', async () => {
+    const selection = (map as any)._selection as Selection;
+    selection.apply([{ source: 'src1', layer: 'shapes', id: 1 }], 'add');
+    expect(selection.getAll().length).toBe(1);
+    await map.rebuildTopology({ source: 'src1' });
+    expect(selection.getAll().length).toBe(0);
+  });
+
+  it('on addIntersectionCuts throw: fires error event and returns false', async () => {
+    addIntersectionCutsSpy.mockImplementation(() => { throw new Error('boom'); });
+    const errors: any[] = [];
+    map.on('error', (e: any) => errors.push(e));
+    expect(await map.rebuildTopology({ source: 'src1' })).toBe(false);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].error.message).toBe('boom');
+    expect(setDatasetSpy).not.toHaveBeenCalled();
+    expect(map.canUndo()).toBe(false);
+  });
+});
+
+describe('Emap rebuildTopology round-trip (real mapshaper)', () => {
+  // Build a tiny in-memory dataset, run rebuildTopology, assert that the
+  // arc collection is intact and the call didn't crash. A full
+  // intersection-insertion check would require a more elaborate fixture
+  // with overlapping polygons; this guards the basic plumbing.
+
+  function buildSource(id: string, geojson: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      import('../source/topology-source').then(({ TopologySource }) => {
+        const source = new TopologySource(id);
+        source.on('data', () => resolve(source));
+        source.on('error', (e: any) => reject(e?.error ?? e));
+        source.setData({ filename: `${id}.geojson`, content: new TextEncoder().encode(geojson) });
+      });
+    });
+  }
+
+  it('runs without error on a simple polygon dataset and remains queryable', async () => {
+    const geojson = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', properties: { id: 1 }, geometry: { type: 'Polygon', coordinates: [[[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]] } },
+        { type: 'Feature', properties: { id: 2 }, geometry: { type: 'Polygon', coordinates: [[[1, 1], [3, 1], [3, 3], [1, 3], [1, 1]]] } },
+      ],
+    });
+    const source = await buildSource('rt', geojson);
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+    map.addSource('rt', source);
+
+    const ok = await map.rebuildTopology({ source: 'rt' });
+    expect(ok).toBe(true);
+    const ds = map.getSource('rt')?.getDataset();
+    expect(ds).toBeDefined();
+    expect(ds!.layers[0].shapes.length).toBe(2);
+    expect(ds!.arcs).toBeDefined();
+  });
+});
+
 describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
   let map: Emap;
   let exportDatasetsToPackSpy: ReturnType<typeof vi.fn>;

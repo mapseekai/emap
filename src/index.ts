@@ -25,6 +25,7 @@ export type {
   PolygonsOptions,
   SimplifyOptions,
   SimplifyMethod,
+  RebuildTopologyOptions,
   RenameLayerOptions,
   MergeLayersOptions,
   SplitLayerOptions,

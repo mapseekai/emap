@@ -215,6 +215,31 @@ export interface SnapOptions {
   precision?: number;
 }
 
+/**
+ * Options for {@link Emap.rebuildTopology}. Forwarded into mapshaper's
+ * `addIntersectionCuts` (with snake_case key conversion).
+ */
+export interface RebuildTopologyOptions {
+  /** Source ID whose dataset will be rebuilt. */
+  source: string;
+  /**
+   * Coincident-vertex snap distance in source-CRS units. When omitted,
+   * mapshaper auto-detects based on the dataset bounds.
+   */
+  snapInterval?: number;
+  /**
+   * Skip the snap pre-pass entirely. Faster, but won't fix near-coincident
+   * vertices that should share an arc.
+   */
+  noSnap?: boolean;
+  /**
+   * Force a `buildTopology` rerun even when the cut-detection pass found
+   * no changes. Useful after pure translates that didn't intersect anything
+   * new but still need shared arcs re-derived against neighbours.
+   */
+  rebuildTopology?: boolean;
+}
+
 /** Options for {@link Emap.renameLayer}. */
 export interface RenameLayerOptions {
   /** Source ID containing the target layer. */
@@ -1754,6 +1779,60 @@ export class Emap extends EventDispatcher {
     if (!findLayerByName(dataset.layers, opts.target)) return false;
     const cmd = `-target ${quoteMapshaperArg(opts.target)} -clean`;
     return this._runDatasetCommand(opts.source, cmd, `Clean ${opts.target}`);
+  }
+
+  /**
+   * Re-derive shared arcs and insert intersection cuts via mapshaper's
+   * `addIntersectionCuts` — the lightweight repair pass every overlay
+   * command runs as a pre-pass before clip / erase / dissolve / union.
+   *
+   * Use case: after `translateSelected` / `rotateSelected` / vertex moves
+   * change arc geometry, this pass re-detects overlaps that the in-place
+   * edits didn't update. Without it, exports bake topology bugs into
+   * output and shared-arc rendering can misrepresent neighbour boundaries.
+   *
+   * Lighter than {@link cleanLayer} (which also removes spikes / slivers
+   * and dissolves polygon overlaps).
+   *
+   * Acts as a history barrier — prior fine-grained edit commands close
+   * over the OLD `arcs` object and old arc indices, so undoing them after
+   * a rebuild would corrupt geometry. The rebuild itself is one undoable
+   * step that fully restores the pre-rebuild state.
+   *
+   * Returns `true` (no-op) for arc-less point-only datasets,
+   * `false` for unresolvable source or `addIntersectionCuts` errors.
+   */
+  public async rebuildTopology(opts: RebuildTopologyOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const original = source.getDataset();
+    if (!original) return false;
+    if (!original.arcs) return true; // point-only — nothing to rebuild
+
+    const before: MapshaperDataset = mapshaper.internal.copyDataset(original);
+    const after: MapshaperDataset = mapshaper.internal.copyDataset(original);
+
+    try {
+      mapshaper.internal.addIntersectionCuts(after, {
+        snap_interval: opts.snapInterval,
+        no_snap: opts.noSnap,
+        rebuild_topology: opts.rebuildTopology,
+      });
+    } catch (err) {
+      this.fire('error', { error: err });
+      return false;
+    }
+
+    source.setDataset(after);
+
+    this._history.clear();
+    this._history.push(new DatasetReplaceCommand({ source, before, after, label: 'Rebuild topology' }));
+    this._fireHistoryChange();
+
+    this._fireSelectionChange(this._selection.clear());
+
+    this._scheduleRender();
+    return true;
   }
 
   /**
