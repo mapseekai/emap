@@ -1005,3 +1005,166 @@ describe('Emap attribute editing', () => {
     });
   });
 });
+
+describe('Emap mergeSelected', () => {
+  let map: Emap;
+  let source: any;
+  let beforeDataset: any;
+  let afterDataset: any;
+  let copyDatasetSpy: ReturnType<typeof vi.fn>;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+
+    const layer = {
+      name: 'parcels',
+      geometry_type: 'polygon',
+      shapes: [['s0'], ['s1'], ['s2'], ['s3']],
+      data: {
+        getFields: () => ['name', 'area'],
+        getRecords: () => [
+          { name: 'A', area: 1 },
+          { name: 'B', area: 2 },
+          { name: 'C', area: 3 },
+          { name: 'D', area: 4 },
+        ],
+      },
+    };
+    const otherLayer = {
+      name: 'roads',
+      geometry_type: 'polyline',
+      shapes: [],
+    };
+    beforeDataset = { layers: [layer, otherLayer] };
+    afterDataset = { layers: [{ name: 'parcels', shapes: [['merged']] }, otherLayer] };
+
+    source = {
+      id: 'src1',
+      type: 'topology',
+      getDataset: () => beforeDataset,
+      getLayers: () => beforeDataset.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    };
+    (map as any)._sources.set('src1', source);
+
+    copyDatasetSpy = vi.fn(() => ({ ...beforeDataset, _isCopy: true })) as ReturnType<typeof vi.fn>;
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    runParsedCommandsSpy = vi.fn((_cmds: any, _job: any, cb: any) => {
+      cb(null, {
+        catalog: { getDefaultTargets: () => [{ dataset: afterDataset }] },
+      });
+    }) as ReturnType<typeof vi.fn>;
+
+    Reflect.set(mapshaper.internal as object, 'copyDataset', copyDatasetSpy);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('returns false on empty selection without firing', async () => {
+    const ok = await map.mergeSelected();
+    expect(ok).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on cross-layer selection', async () => {
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src1', layer: 'roads', id: 0 },
+    ], { mode: 'add' });
+    const ok = await map.mergeSelected();
+    expect(ok).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on cross-source selection', async () => {
+    (map as any)._sources.set('src2', { ...source, id: 'src2' });
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src2', layer: 'parcels', id: 0 },
+    ], { mode: 'add' });
+    const ok = await map.mergeSelected();
+    expect(ok).toBe(false);
+  });
+
+  it('builds the dissolve recipe with sorted ids and copy-fields=', async () => {
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 2 },
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src1', layer: 'parcels', id: 3 },
+    ], { mode: 'add' });
+    const ok = await map.mergeSelected();
+    expect(ok).toBe(true);
+    const cmd = parseCommandsSpy.mock.calls[0][0] as string;
+    expect(cmd).toContain('-target "parcels"');
+    expect(cmd).toContain('[0,2,3]'); // sorted ascending
+    expect(cmd).toContain('this.id');
+    expect(cmd).toContain('this.__emap_merge');
+    expect(cmd).toContain('-dissolve "__emap_merge"');
+    expect(cmd).toContain('copy-fields=name,area');
+    expect(cmd).toContain('delete this.__emap_merge');
+  });
+
+  it('omits copy-fields= when the layer has no data table', async () => {
+    beforeDataset.layers[0].data = undefined;
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src1', layer: 'parcels', id: 1 },
+    ], { mode: 'add' });
+    await map.mergeSelected();
+    const cmd = parseCommandsSpy.mock.calls[0][0] as string;
+    expect(cmd).not.toContain('copy-fields=');
+  });
+
+  it('pushes one history entry labelled "Merge N features" and clears selection', async () => {
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src1', layer: 'parcels', id: 1 },
+    ], { mode: 'add' });
+    const historyListener = vi.fn();
+    const selectionListener = vi.fn();
+    map.on('historychange', historyListener);
+    map.on('selectionchange', selectionListener);
+    await map.mergeSelected();
+    expect(historyListener).toHaveBeenCalledTimes(1);
+    expect(historyListener.mock.calls[0][0].label).toBe('Merge 2 features');
+    expect(map.getSelection()).toEqual([]);
+    expect(selectionListener).toHaveBeenCalled();
+  });
+
+  it('clears prior history (history barrier)', async () => {
+    map.pushCommand({ do: () => {}, undo: () => {} });
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+    await map.mergeSelected();
+    map.undo();
+    expect(map.canUndo()).toBe(false);
+  });
+
+  it('drops fields whose names contain a comma (mapshaper copy-fields= is comma-delimited)', async () => {
+    beforeDataset.layers[0].data = {
+      getFields: () => ['safe', 'has,comma'],
+      getRecords: () => [],
+    };
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src1', layer: 'parcels', id: 1 },
+    ], { mode: 'add' });
+    await map.mergeSelected();
+    const cmd = parseCommandsSpy.mock.calls[0][0] as string;
+    expect(cmd).toContain('copy-fields=safe');
+    expect(cmd).not.toContain('has,comma');
+  });
+});

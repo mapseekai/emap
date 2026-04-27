@@ -1093,6 +1093,45 @@ export class Emap extends EventDispatcher {
     return this._runDatasetCommand(opts.source, cmd, `Clean ${opts.target}`);
   }
 
+  /**
+   * Combine the currently-selected features (when they all live in the same
+   * source/layer) into a single feature, recorded as one undoable history
+   * entry.
+   *
+   * Implements the standard mapshaper recipe: tag selected features with a
+   * temp discriminator field, run `-dissolve` on it, then drop the temp
+   * field. Attribute fields are preserved via `copy-fields=` so unselected
+   * single-feature groups keep their values and the merged group inherits
+   * the FIRST selected feature's values (mapshaper's documented
+   * data-aggregation behaviour).
+   *
+   * Returns `false` (and runs no command) for an empty selection or when
+   * the selection spans more than one source/layer.
+   */
+  public async mergeSelected(): Promise<boolean> {
+    const refs = this._selection.getAll();
+    if (refs.length === 0) return false;
+
+    // Reject cross-source / cross-layer selections — mapshaper's dissolve
+    // operates on a single layer at a time.
+    const sourceId = refs[0].source;
+    const layerId = refs[0].layer;
+    for (const r of refs) {
+      if (r.source !== sourceId || r.layer !== layerId) return false;
+    }
+
+    const layer = this._resolveLayer(sourceId, layerId);
+    if (!layer) return false;
+
+    // Sort selected ids ascending so the embedded JSON literal is
+    // deterministic (helpful for tests + diffs).
+    const ids = refs.map((r) => r.id).slice().sort((a, b) => a - b);
+
+    const cmd = buildMergeSelectedCommand(layerId, ids, layer);
+    const label = `Merge ${refs.length} feature${refs.length > 1 ? 's' : ''}`;
+    return this._runDatasetCommand(sourceId, cmd, label);
+  }
+
   // ---------------------------------------------------------------------------
   // Attribute / data-table editing
   // ---------------------------------------------------------------------------
@@ -1329,6 +1368,57 @@ function findLayerByName(layers: MapshaperLayer[], nameOrId: string): MapshaperL
  */
 function quoteMapshaperArg(value: string): string {
   return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+/** Internal field name used by `mergeSelected`'s discriminator pass. */
+const MERGE_SELECTED_FIELD = '__emap_merge';
+
+/**
+ * Build the mapshaper command string that implements `mergeSelected` for
+ * one (target layer, selected ids) pair. Recipe:
+ *   1. Tag every record with a discriminator field — selected rows get
+ *      'M', unselected rows get a unique value so they pass through.
+ *   2. Run `-dissolve` on the discriminator with `copy-fields=` listing
+ *      every original field so attributes survive.
+ *   3. Drop the discriminator field.
+ *
+ * Returns the full command as a single string suitable for
+ * `mapshaper.internal.parseCommands`.
+ */
+function buildMergeSelectedCommand(
+  layerName: string,
+  selectedIds: number[],
+  layer: MapshaperLayer,
+): string {
+  // JSON.stringify produces a stable, parser-safe array literal.
+  const idsJSON = JSON.stringify(selectedIds);
+  // The single quotes around the JS expression are mapshaper's preferred
+  // expression delimiter; the literal string values inside use double quotes
+  // so they don't collide.
+  const tagExpr =
+    `'this.${MERGE_SELECTED_FIELD} = ${idsJSON}.indexOf(this.id) >= 0 ? "M" : "k_" + this.id'`;
+  const cleanupExpr = `'delete this.${MERGE_SELECTED_FIELD}'`;
+
+  // Build copy-fields= from the layer's data table when one exists.
+  // Field names with commas are intentionally rejected (mapshaper's
+  // copy-fields= is comma-delimited and does not quote individual entries).
+  let copyFieldsArg = '';
+  const fields = layer.data?.getFields?.();
+  if (fields && fields.length > 0) {
+    const safeFields = fields.filter(
+      (f) => f !== MERGE_SELECTED_FIELD && !f.includes(','),
+    );
+    if (safeFields.length > 0) {
+      copyFieldsArg = ` copy-fields=${safeFields.join(',')}`;
+    }
+  }
+
+  return [
+    `-target ${quoteMapshaperArg(layerName)}`,
+    `-each ${tagExpr}`,
+    `-dissolve ${quoteMapshaperArg(MERGE_SELECTED_FIELD)}${copyFieldsArg}`,
+    `-each ${cleanupExpr}`,
+  ].join(' ');
 }
 
 /**
