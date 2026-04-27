@@ -70,6 +70,16 @@ declare module 'mapshaper' {
       },
     ): unknown;
 
+    /**
+     * Read-only segment-intersection scan over an ArcCollection. Each
+     * returned object carries `.x` / `.y` coordinates of an intersection
+     * point (additional fields exist but aren't part of our public surface).
+     */
+    findSegmentIntersections(
+      arcs: ArcCollection,
+      opts?: { tolerance?: number; stripes?: number;[k: string]: unknown },
+    ): Array<{ x: number; y: number;[k: string]: unknown }>;
+
     // Export — io/mapshaper-export.mjs
     exportFileContent(
       dataset: MapshaperDataset,
