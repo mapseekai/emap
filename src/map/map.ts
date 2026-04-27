@@ -301,6 +301,27 @@ export interface LinesOptions {
   noReplace?: boolean;
 }
 
+/**
+ * Options for {@link Emap.polygonsLayer}. Inverse of {@link LinesOptions} —
+ * forms enclosed polygons from a polyline target.
+ */
+export interface PolygonsOptions {
+  /** Source ID containing the polyline target. */
+  source: string;
+  /** Polyline layer name (or id) to be polygonized. */
+  target: string;
+  /**
+   * Gap-snapping tolerance in source-CRS units. Forwarded only when
+   * positive; otherwise mapshaper picks its own default.
+   */
+  gapTolerance?: number;
+  /**
+   * If true, take the fast path that assumes the input is already a layer
+   * of closed paths (mapshaper's `from-rings` flag).
+   */
+  fromRings?: boolean;
+}
+
 /** Options for {@link Emap.pointsLayer}. */
 export interface PointsOptions {
   /** Source ID containing the target layer. */
@@ -1695,6 +1716,34 @@ export class Emap extends EventDispatcher {
     }
     if (opts.noReplace) parts.push('no-replace');
     return this._runDatasetCommand(opts.source, parts.join(' '), `Lines ${opts.target}`);
+  }
+
+  /**
+   * Convert a polyline target into a polygon layer via mapshaper's
+   * `-polygons`. Inverse of {@link linesLayer}. The default path snaps
+   * gaps and reconstructs faces; `fromRings` skips that step when the
+   * input is known to be a layer of closed paths.
+   *
+   * Returns `false` for unresolvable source / target or non-polyline
+   * target. Inherits dataset-replace semantics from `_runDatasetCommand`.
+   */
+  public async polygonsLayer(opts: PolygonsOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    const layer = findLayerByName(dataset.layers, opts.target);
+    if (!layer || layer.geometry_type !== 'polyline') return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      '-polygons',
+    ];
+    if (typeof opts.gapTolerance === 'number' && opts.gapTolerance > 0) {
+      parts.push(`gap-tolerance=${opts.gapTolerance}`);
+    }
+    if (opts.fromRings) parts.push('from-rings');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Polygons ${opts.target}`);
   }
 
   /**

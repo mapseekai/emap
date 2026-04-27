@@ -22,6 +22,7 @@ export type {
   PointsOptions,
   PointsMode,
   LinesOptions,
+  PolygonsOptions,
 } from './map/map';
 export { FeatureQuery } from './map/feature-query';
 export { HighlightManager } from './map/highlight-manager';

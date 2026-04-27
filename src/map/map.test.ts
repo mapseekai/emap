@@ -2610,3 +2610,94 @@ describe('Emap linesLayer', () => {
     expect(listener.mock.calls[0][0].label).toBe('Lines states');
   });
 });
+
+describe('Emap polygonsLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'edges', shapes: [], geometry_type: 'polyline' },
+        { name: 'parks', shapes: [], geometry_type: 'polygon' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'edges', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds the minimal command shape', async () => {
+    const ok = await map.polygonsLayer({ source: 'src1', target: 'edges' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons');
+  });
+
+  it('forwards gap-tolerance when positive', async () => {
+    await map.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: 0.001 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons gap-tolerance=0.001');
+  });
+
+  it('drops gap-tolerance when zero', async () => {
+    await map.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: 0 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons');
+  });
+
+  it('drops gap-tolerance when negative', async () => {
+    await map.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: -1 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons');
+  });
+
+  it('appends from-rings', async () => {
+    await map.polygonsLayer({ source: 'src1', target: 'edges', fromRings: true });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons from-rings');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.polygonsLayer({ source: 'nope', target: 'edges' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.polygonsLayer({ source: 'src1', target: 'rivers' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is not a polyline', async () => {
+    expect(await map.polygonsLayer({ source: 'src1', target: 'parks' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history entry is labelled "Polygons <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.polygonsLayer({ source: 'src1', target: 'edges' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Polygons edges');
+  });
+});
