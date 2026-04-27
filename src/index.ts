@@ -52,6 +52,11 @@ export { VertexDeleteCommand } from './edit/commands/vertex-delete';
 export { FeatureCreateCommand } from './edit/commands/feature-create';
 export { FeatureDeleteCommand } from './edit/commands/feature-delete';
 export type { FeatureDeleteCommandOptions } from './edit/commands/feature-delete';
+export { FeatureTranslateCommand } from './edit/commands/feature-translate';
+export type {
+  FeatureTranslateCommandOptions,
+  TranslatedPointFeature,
+} from './edit/commands/feature-translate';
 export { CompositeCommand } from './edit/commands/composite';
 export { DatasetReplaceCommand } from './edit/commands/dataset-replace';
 export type { DatasetReplaceCommandOptions } from './edit/commands/dataset-replace';

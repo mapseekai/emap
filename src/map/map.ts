@@ -16,6 +16,7 @@ import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
 import type { EditCommand } from '../edit/edit-command';
 import { CompositeCommand } from '../edit/commands/composite';
 import { FeatureDeleteCommand } from '../edit/commands/feature-delete';
+import { FeatureTranslateCommand, TranslatedPointFeature } from '../edit/commands/feature-translate';
 import { DatasetReplaceCommand } from '../edit/commands/dataset-replace';
 import { FeaturePropertyChangeCommand } from '../edit/commands/feature-property-change';
 import { FieldAddCommand } from '../edit/commands/field-add';
@@ -1130,6 +1131,94 @@ export class Emap extends EventDispatcher {
     const cmd = buildMergeSelectedCommand(layerId, ids, layer);
     const label = `Merge ${refs.length} feature${refs.length > 1 ? 's' : ''}`;
     return this._runDatasetCommand(sourceId, cmd, label);
+  }
+
+  /**
+   * Translate every selected feature by `(dx, dy)` in source-data coordinates.
+   * Returns `false` for an empty selection or zero offset.
+   *
+   * Lightweight in-place mutation — does not replace the dataset, does not
+   * clear the selection, composes freely with other commands in one undo
+   * timeline. For multi-source selections, one `FeatureTranslateCommand` is
+   * built per source and they are wrapped in a single `CompositeCommand` so
+   * one undo reverses the whole nudge.
+   *
+   * Known limitation: arcs shared with unselected features will be translated
+   * along with the selection, distorting the unselected neighbours. Safe for
+   * isolated features and contiguous polygon subsets; documented in the spec.
+   */
+  public translateSelected(dx: number, dy: number): boolean {
+    if (dx === 0 && dy === 0) return false;
+    const refs = this._selection.getAll();
+    if (refs.length === 0) return false;
+
+    // Group selection by source, collecting unique abs-arc-ids (for path
+    // features) and (layer, featureId) pairs (for point features).
+    const bySource = new globalThis.Map<
+      string,
+      {
+        arcIdSet: Set<number>;
+        pointFeatures: TranslatedPointFeature[];
+      }
+    >();
+
+    for (const ref of refs) {
+      const layer = this._resolveLayer(ref.source, ref.layer);
+      if (!layer?.shapes) continue;
+      const shape = layer.shapes[ref.id];
+      if (!shape) continue;
+
+      let bucket = bySource.get(ref.source);
+      if (!bucket) {
+        bucket = { arcIdSet: new Set<number>(), pointFeatures: [] };
+        bySource.set(ref.source, bucket);
+      }
+
+      if (layer.geometry_type === 'point') {
+        bucket.pointFeatures.push({ layer, featureId: ref.id });
+      } else {
+        // Path feature: shape is a list of parts, each part is a list of
+        // signed arc ids. Negative ids encode reversed direction; abs them.
+        for (const part of shape) {
+          if (!Array.isArray(part)) continue;
+          for (const rawArcId of part) {
+            if (typeof rawArcId !== 'number') continue;
+            bucket.arcIdSet.add(rawArcId >= 0 ? rawArcId : ~rawArcId);
+          }
+        }
+      }
+    }
+
+    if (bySource.size === 0) return false;
+
+    const children: EditCommand[] = [];
+    for (const [sourceId, bucket] of bySource) {
+      const source = this._sources.get(sourceId);
+      if (!source) continue;
+      if (bucket.arcIdSet.size === 0 && bucket.pointFeatures.length === 0) continue;
+
+      const cmd = new FeatureTranslateCommand({
+        source,
+        arcs: source.getArcs(),
+        dx,
+        dy,
+        arcIds: Array.from(bucket.arcIdSet),
+        pointFeatures: bucket.pointFeatures,
+      });
+      cmd.do();
+      children.push(cmd);
+    }
+
+    if (children.length === 0) return false;
+
+    const pushed: EditCommand =
+      children.length === 1
+        ? children[0]
+        : new CompositeCommand(children, `Translate ${refs.length} features`);
+    this._history.push(pushed);
+    this._fireHistoryChange();
+    this._scheduleRender();
+    return true;
   }
 
   // ---------------------------------------------------------------------------

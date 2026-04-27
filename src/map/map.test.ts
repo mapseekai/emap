@@ -1168,3 +1168,177 @@ describe('Emap mergeSelected', () => {
     expect(cmd).not.toContain('has,comma');
   });
 });
+
+describe('Emap translateSelected', () => {
+  let map: Emap;
+  let polyLayer: any;
+  let pointLayer: any;
+  let arcs: any;
+  let xx: Float64Array;
+  let yy: Float64Array;
+  let updateArcBoundsSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+
+    // Two arcs of 2 vertices each at distinct locations
+    xx = new Float64Array([0, 1, 10, 11]);
+    yy = new Float64Array([0, 1, 10, 11]);
+    updateArcBoundsSpy = vi.fn();
+    arcs = {
+      getVertexData: () => ({
+        xx, yy,
+        nn: new Int32Array([2, 2]),
+        ii: new Int32Array([0, 2]),
+        zz: null,
+      }),
+      updateArcBounds: updateArcBoundsSpy,
+    };
+    polyLayer = {
+      name: 'parcels',
+      geometry_type: 'polygon',
+      // shape 0 references arc 0; shape 1 references arc 1
+      shapes: [[[0]], [[1]]],
+    };
+    pointLayer = {
+      name: 'cities',
+      geometry_type: 'point',
+      shapes: [[[100, 200]]],
+    };
+    const source = {
+      id: 'src1',
+      type: 'topology',
+      getLayers: () => [polyLayer, pointLayer],
+      getArcs: () => arcs,
+      refreshDisplayArcs: vi.fn(),
+    };
+    (map as any)._sources.set('src1', source);
+  });
+
+  it('returns false on empty selection', () => {
+    expect(map.translateSelected(10, 5)).toBe(false);
+  });
+
+  it('returns false on zero offset', () => {
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+    expect(map.translateSelected(0, 0)).toBe(false);
+    expect(map.canUndo()).toBe(false);
+  });
+
+  it('translates one polygon by collecting its arc id', () => {
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+    const ok = map.translateSelected(100, 200);
+    expect(ok).toBe(true);
+    // Arc 0's verts shifted by (100, 200); arc 1 untouched
+    expect(xx[0]).toBe(100); expect(xx[1]).toBe(101);
+    expect(xx[2]).toBe(10); expect(xx[3]).toBe(11);
+    expect(yy[0]).toBe(200); expect(yy[1]).toBe(201);
+    expect(updateArcBoundsSpy).toHaveBeenCalledWith(0);
+    expect(updateArcBoundsSpy).not.toHaveBeenCalledWith(1);
+  });
+
+  it('handles negative arc-ids in shapes (~ encoding)', () => {
+    polyLayer.shapes[0] = [[~0]]; // negative form of arc 0
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+    map.translateSelected(1, 1);
+    expect(xx[0]).toBe(1); expect(xx[1]).toBe(2);
+  });
+
+  it('deduplicates arc ids across multiple selected features', () => {
+    // Both shapes reference arc 0 (artificial setup)
+    polyLayer.shapes = [[[0]], [[0]]];
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src1', layer: 'parcels', id: 1 },
+    ], { mode: 'add' });
+    map.translateSelected(1, 0);
+    // Arc 0 should be moved exactly once (xx[0] = 1, not 2)
+    expect(xx[0]).toBe(1);
+    expect(updateArcBoundsSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('translates point shapes in place', () => {
+    map.select([{ source: 'src1', layer: 'cities', id: 0 }]);
+    map.translateSelected(5, -5);
+    expect(pointLayer.shapes[0]).toEqual([[105, 195]]);
+  });
+
+  it('selection survives translation and no selectionchange fires', () => {
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+    const listener = vi.fn();
+    map.on('selectionchange', listener);
+    map.translateSelected(1, 1);
+    expect(map.getSelection()).toHaveLength(1);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('fires exactly one historychange per call', () => {
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    map.translateSelected(1, 1);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('one undo reverses the entire translation', () => {
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src1', layer: 'cities', id: 0 },
+    ], { mode: 'add' });
+    const xxBefore = Array.from(xx);
+    const yyBefore = Array.from(yy);
+    const pointBefore = JSON.parse(JSON.stringify(pointLayer.shapes[0]));
+    map.translateSelected(7, 11);
+    map.undo();
+    expect(Array.from(xx)).toEqual(xxBefore);
+    expect(Array.from(yy)).toEqual(yyBefore);
+    expect(pointLayer.shapes[0]).toEqual(pointBefore);
+  });
+
+  it('multi-source selection wraps per-source commands in a CompositeCommand', () => {
+    // Add a second source with its own arcs
+    const xx2 = new Float64Array([50, 51]);
+    const yy2 = new Float64Array([60, 61]);
+    const arcs2 = {
+      getVertexData: () => ({
+        xx: xx2, yy: yy2,
+        nn: new Int32Array([2]), ii: new Int32Array([0]), zz: null,
+      }),
+      updateArcBounds: vi.fn(),
+    };
+    const layer2 = { name: 'parcels', geometry_type: 'polygon', shapes: [[[0]]] };
+    const src2 = {
+      id: 'src2', type: 'topology',
+      getLayers: () => [layer2],
+      getArcs: () => arcs2,
+      refreshDisplayArcs: vi.fn(),
+    };
+    (map as any)._sources.set('src2', src2);
+
+    map.select([
+      { source: 'src1', layer: 'parcels', id: 0 },
+      { source: 'src2', layer: 'parcels', id: 0 },
+    ], { mode: 'add' });
+    map.translateSelected(1, 0);
+    // Both sources got translated
+    expect(xx[0]).toBe(1);
+    expect(xx2[0]).toBe(51);
+    // One undo restores both
+    map.undo();
+    expect(xx[0]).toBe(0);
+    expect(xx2[0]).toBe(50);
+  });
+
+  it('composes with vertex / draw / attribute commands (no history barrier)', () => {
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+    const fakeUndo = vi.fn();
+    map.pushCommand({ do: () => {}, undo: fakeUndo, label: 'fake' });
+    map.translateSelected(1, 1);
+    // Two undos, in reverse order: translate first, then fake
+    map.undo();
+    expect(xx[0]).toBe(0); // translate reversed
+    map.undo();
+    expect(fakeUndo).toHaveBeenCalledTimes(1);
+  });
+});
