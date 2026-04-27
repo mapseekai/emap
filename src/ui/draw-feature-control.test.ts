@@ -37,6 +37,7 @@ function createMockMap(sources?: Record<string, unknown>) {
     on: vi.fn(),
     off: vi.fn(),
     getSource: vi.fn((id: string) => sourceMap.get(id)),
+    pushCommand: vi.fn(),
   };
 }
 

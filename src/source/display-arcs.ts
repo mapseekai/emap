@@ -37,12 +37,12 @@ export class DisplayArcs {
       this._filteredArcs = arcs.setRetainedInterval?.(filterZ)?.getFilteredCopy?.() ?? null;
       arcs.setRetainedInterval?.(currInterval); // Reset to original state
       if (this._filteredArcs) {
-        this._filteredSegLen = (mapshaper as any).internal.getAvgSegment(this._filteredArcs);
+        this._filteredSegLen = mapshaper.internal.getAvgSegment(this._filteredArcs);
       }
     } else {
       // Fallback: use fast simplification if no Z values available
-      this._filteredSegLen = (mapshaper as any).internal.getAvgSegment(arcs) * 4;
-      this._filteredArcs = (mapshaper as any).internal.simplifyArcsFast(arcs, this._filteredSegLen);
+      this._filteredSegLen = mapshaper.internal.getAvgSegment(arcs) * 4;
+      this._filteredArcs = mapshaper.internal.simplifyArcsFast(arcs, this._filteredSegLen);
     }
   }
 

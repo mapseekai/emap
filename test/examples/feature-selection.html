@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap Example - Feature Selection</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    #header {
+      padding: 10px;
+      background: #2c3e50;
+      color: white;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+
+    #header button {
+      padding: 4px 10px;
+      background: #c0392b;
+      color: white;
+      border: 0;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    #header button:disabled {
+      background: #7f8c8d;
+      cursor: not-allowed;
+    }
+
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+    }
+
+    #panel {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 280px;
+      max-height: 60vh;
+      overflow: auto;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    #panel h3 {
+      margin: 0 0 6px 0;
+      font-size: 13px;
+    }
+
+    #panel pre {
+      margin: 0;
+      max-height: 200px;
+      overflow: auto;
+    }
+
+    .hint {
+      opacity: 0.85;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>
+      Open file:
+      <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+    </label>
+    <span class="hint">click = replace · shift+click = add · ctrl/cmd+click = toggle</span>
+    <button id="clear-btn" disabled>Clear selection</button>
+    <button id="delete-btn" disabled>Delete selected (logs)</button>
+    <span id="status">Load a file to begin</span>
+  </div>
+  <div id="map">
+    <div id="panel">
+      <h3>Selection</h3>
+      <pre id="info">(none)</pre>
+    </div>
+  </div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    // Lets users Ctrl+Z to bring deleted features back
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const fileInput = document.getElementById('file-input');
+    const clearBtn = document.getElementById('clear-btn');
+    const deleteBtn = document.getElementById('delete-btn');
+    const status = document.getElementById('status');
+    const info = document.getElementById('info');
+    const mapContainer = map.getCanvasContainer();
+
+    let activeSource = null;
+    const SOURCE_ID = 'select-source';
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `Loading ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          status.textContent = `Loaded: ${file.name}`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        activeSource = source;
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    // Reflect selection changes in the side panel and the highlight overlay.
+    map.on('selectionchange', (ev) => {
+      const refs = ev.selected;
+      info.textContent = refs.length
+        ? `${refs.length} feature(s)\n` + JSON.stringify(refs, null, 2)
+        : '(none)';
+
+      if (refs.length === 0) {
+        map.clearHighlightedFeatures();
+      } else {
+        map.setHighlightedFeatures(refs, { color: '#1e88e5', width: 3 });
+      }
+
+      clearBtn.disabled = refs.length === 0;
+      deleteBtn.disabled = refs.length === 0;
+
+      // Console output makes the diff payload visible
+      console.log('selectionchange', { added: ev.added, removed: ev.removed });
+    });
+
+    mapContainer.addEventListener('click', (e) => {
+      if (!activeSource) return;
+      const rect = mapContainer.getBoundingClientRect();
+      const point = [e.clientX - rect.left, e.clientY - rect.top];
+      const features = map.queryRenderedFeatures(point);
+      if (!features.length) {
+        if (!e.shiftKey && !e.ctrlKey && !e.metaKey) map.clearSelection();
+        return;
+      }
+      const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
+      map.select(features, { mode });
+    });
+
+    clearBtn.addEventListener('click', () => map.clearSelection());
+
+    deleteBtn.addEventListener('click', () => {
+      const count = map.getSelection().length;
+      const ok = map.deleteSelected();
+      if (ok) {
+        status.textContent = `Deleted ${count} feature(s). Ctrl+Z to undo.`;
+      }
+    });
+  </script>
+</body>
+
+</html>

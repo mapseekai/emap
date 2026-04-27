@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap Example - Translate selected features</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    #header {
+      padding: 10px;
+      background: #2c3e50;
+      color: white;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+      outline: none;
+    }
+
+    .hint {
+      opacity: 0.85;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>
+      File:
+      <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+    </label>
+    <span class="hint">Click features to select. Arrow keys to nudge by 1; Shift+Arrow nudges by 10. Ctrl+Z to undo.</span>
+    <span id="status">Load a dataset</span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'translate-source';
+    const fileInput = document.getElementById('file-input');
+    const status = document.getElementById('status');
+    const mapContainer = map.getCanvasContainer();
+
+    map.on('selectionchange', (e) => {
+      if (e.selected.length === 0) {
+        map.clearHighlightedFeatures();
+      } else {
+        map.setHighlightedFeatures(e.selected, { color: '#1e88e5', width: 3 });
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `Loading ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          status.textContent = `Loaded ${file.name}. Click to select. Arrow keys to nudge.`;
+          // Focus the map so arrow keys go to it
+          document.getElementById('map').focus();
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    mapContainer.addEventListener('click', (e) => {
+      const rect = mapContainer.getBoundingClientRect();
+      const point = [e.clientX - rect.left, e.clientY - rect.top];
+      const features = map.queryRenderedFeatures(point);
+      if (!features.length) {
+        if (!e.shiftKey && !e.ctrlKey && !e.metaKey) map.clearSelection();
+        return;
+      }
+      const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
+      map.select(features, { mode });
+      // Ensure subsequent keystrokes go to the map
+      document.getElementById('map').focus();
+    });
+
+    document.getElementById('map').addEventListener('keydown', (e) => {
+      const stride = e.shiftKey ? 10 : 1;
+      let dx = 0, dy = 0;
+      if (e.key === 'ArrowLeft') dx = -stride;
+      else if (e.key === 'ArrowRight') dx = stride;
+      else if (e.key === 'ArrowUp') dy = stride; // up in source coords
+      else if (e.key === 'ArrowDown') dy = -stride;
+      else return;
+      e.preventDefault();
+      const ok = map.translateSelected(dx, dy);
+      if (ok) {
+        status.textContent = `Nudged by (${dx}, ${dy}). Ctrl+Z to undo.`;
+      }
+    });
+  </script>
+</body>
+
+</html>

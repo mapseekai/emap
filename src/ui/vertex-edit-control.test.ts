@@ -8,6 +8,7 @@ type MockMap = {
   setEditVertexState: (state: unknown) => void;
   render: () => void;
   fire: (type: string, payload: unknown) => void;
+  getSource?: (id: string) => { refreshDisplayArcs?: () => void } | undefined;
 };
 
 function setPrivate(target: object, key: string, value: unknown): void {
@@ -76,6 +77,7 @@ describe('VertexEditControl', () => {
     const transformPoints = vi.fn();
     const fireSpy = vi.fn();
     const renderSpy = vi.fn();
+    const refreshDisplayArcs = vi.fn();
 
     const mapMock: MockMap = {
       getCanvasContainer: () => ({
@@ -84,7 +86,8 @@ describe('VertexEditControl', () => {
       unproject: () => [123.45, 67.89],
       setEditVertexState: vi.fn(),
       render: renderSpy,
-      fire: fireSpy
+      fire: fireSpy,
+      getSource: vi.fn(() => ({ refreshDisplayArcs }))
     };
 
     setPrivate(control, '_map', mapMock);
@@ -106,6 +109,7 @@ describe('VertexEditControl', () => {
     callPrivate(control, '_onMouseUp', { clientX: 1, clientY: 2 } as unknown as MouseEvent);
 
     expect(transformPoints).toHaveBeenCalledTimes(1);
+    expect(refreshDisplayArcs).toHaveBeenCalledTimes(1);
     expect(fireSpy).toHaveBeenCalledWith(
       'vertex_moved',
       expect.objectContaining({

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap Example - Rotate / Scale selected features</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    kbd { background: #1d2733; padding: 1px 6px; border-radius: 3px; font-family: monospace; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>File: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <span id="status">Load a dataset</span>
+    <span class="hint">
+      Click features to select.
+      <kbd>←</kbd>/<kbd>→</kbd>/<kbd>↑</kbd>/<kbd>↓</kbd> nudge.
+      <kbd>[</kbd>/<kbd>]</kbd> rotate ±5°.
+      <kbd>+</kbd>/<kbd>-</kbd> scale 1.1× / 0.9×.
+      Hold <kbd>Shift</kbd> for finer steps.
+      <kbd>Ctrl+Z</kbd> to undo.
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'rotscale-source';
+    const status = document.getElementById('status');
+    const mapContainer = map.getCanvasContainer();
+
+    map.on('selectionchange', (e) => {
+      if (e.selected.length === 0) map.clearHighlightedFeatures();
+      else map.setHighlightedFeatures(e.selected, { color: '#1e88e5', width: 3 });
+    });
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `Loading ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          status.textContent = `Loaded ${file.name}. Click to select, then transform.`;
+          document.getElementById('map').focus();
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    mapContainer.addEventListener('click', (e) => {
+      const rect = mapContainer.getBoundingClientRect();
+      const point = [e.clientX - rect.left, e.clientY - rect.top];
+      const features = map.queryRenderedFeatures(point);
+      if (!features.length) {
+        if (!e.shiftKey && !e.ctrlKey && !e.metaKey) map.clearSelection();
+        return;
+      }
+      const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
+      map.select(features, { mode });
+      document.getElementById('map').focus();
+    });
+
+    document.getElementById('map').addEventListener('keydown', (e) => {
+      const fine = e.shiftKey;
+      const stride = fine ? 1 : 10;
+      const angle = fine ? 1 : 5;
+      const scaleStep = fine ? 1.02 : 1.1;
+
+      // Translate
+      let dx = 0, dy = 0;
+      if (e.key === 'ArrowLeft') dx = -stride;
+      else if (e.key === 'ArrowRight') dx = stride;
+      else if (e.key === 'ArrowUp') dy = stride;
+      else if (e.key === 'ArrowDown') dy = -stride;
+      if (dx || dy) { e.preventDefault(); map.translateSelected(dx, dy); return; }
+
+      // Rotate
+      if (e.key === '[') { e.preventDefault(); map.rotateSelected(-angle); return; }
+      if (e.key === ']') { e.preventDefault(); map.rotateSelected(angle); return; }
+
+      // Scale (= and - on most keyboards; also support + via shift)
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); map.scaleSelected(scaleStep); return; }
+      if (e.key === '-' || e.key === '_') { e.preventDefault(); map.scaleSelected(1 / scaleStep); return; }
+    });
+  </script>
+</body>
+
+</html>

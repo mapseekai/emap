@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap Example - Merge selected polygons</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    #header {
+      padding: 10px;
+      background: #2c3e50;
+      color: white;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+
+    #header button {
+      padding: 5px 12px;
+      background: #16a085;
+      color: white;
+      border: 0;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    #header button:disabled {
+      background: #7f8c8d;
+      cursor: not-allowed;
+    }
+
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+      outline: none;
+    }
+
+    .hint {
+      opacity: 0.85;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>
+      File:
+      <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+    </label>
+    <span class="hint">Click + Shift-click polygons to build a selection, then merge.</span>
+    <button id="merge-btn" disabled>Merge selected</button>
+    <button id="clear-btn" disabled>Clear selection</button>
+    <span id="status">Load a polygon dataset</span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'merge-source';
+    const fileInput = document.getElementById('file-input');
+    const mergeBtn = document.getElementById('merge-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const status = document.getElementById('status');
+    const mapContainer = map.getCanvasContainer();
+
+    map.on('selectionchange', (e) => {
+      const n = e.selected.length;
+      mergeBtn.disabled = n < 2; // merging 1 feature is a no-op
+      clearBtn.disabled = n === 0;
+      // Reflect selection visually
+      if (n === 0) map.clearHighlightedFeatures();
+      else map.setHighlightedFeatures(e.selected, { color: '#1e88e5', width: 3 });
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `Loading ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          status.textContent = `Loaded ${file.name}. Click polygons to select; Shift-click to add.`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    mapContainer.addEventListener('click', (e) => {
+      const rect = mapContainer.getBoundingClientRect();
+      const point = [e.clientX - rect.left, e.clientY - rect.top];
+      const features = map.queryRenderedFeatures(point);
+      if (!features.length) {
+        if (!e.shiftKey && !e.ctrlKey && !e.metaKey) map.clearSelection();
+        return;
+      }
+      const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
+      map.select(features, { mode });
+    });
+
+    mergeBtn.addEventListener('click', async () => {
+      const n = map.getSelection().length;
+      status.textContent = `Merging ${n} features...`;
+      mergeBtn.disabled = true;
+      try {
+        const ok = await map.mergeSelected();
+        status.textContent = ok
+          ? `Merged ${n} features. Ctrl+Z to undo.`
+          : 'Merge failed (cross-layer? cross-source?).';
+      } catch (err) {
+        status.textContent = `Error: ${err?.message ?? err}`;
+        console.error(err);
+      } finally {
+        mergeBtn.disabled = false;
+      }
+    });
+
+    clearBtn.addEventListener('click', () => map.clearSelection());
+  </script>
+</body>
+
+</html>

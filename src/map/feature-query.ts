@@ -143,7 +143,7 @@ export class FeatureQuery {
   }
 
   private _sortByDistance(x: number, y: number, cands: HitCandidate[], arcs: ArcCollection): void {
-    const geom = (mapshaper as any).geom;
+    const geom = mapshaper.geom;
     for (const cand of cands) {
       cand.info = geom.getPointToShapeInfo(x, y, cand.shape, arcs);
       cand.dist = cand.info!.distance;
@@ -172,7 +172,7 @@ export class FeatureQuery {
   }
 
   private _pointTest(layer: MapshaperLayer, x: number, y: number): number[] {
-    const geom = (mapshaper as any).geom;
+    const geom = mapshaper.geom;
     const toPx = Math.abs(this._getTransform().mx || 1);
     let bestId = -1;
     let bestDist = Infinity;
@@ -216,7 +216,7 @@ export class FeatureQuery {
   }
 
   private _polygonTest(layer: MapshaperLayer, arcs: ArcCollection, x: number, y: number): number[] {
-    const geom = (mapshaper as any).geom;
+    const geom = mapshaper.geom;
     const maxDist = this._getZoomAdjustedHitBuffer(10, 1);
     const cands = this._findHitCandidates(layer, arcs, x, y, maxDist);
     let hits: HitCandidate[] = [];

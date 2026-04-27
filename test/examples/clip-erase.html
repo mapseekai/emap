@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap Example - Clip / Erase</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    #header {
+      padding: 10px;
+      background: #2c3e50;
+      color: white;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+
+    #header select {
+      padding: 3px 6px;
+      font-size: 13px;
+    }
+
+    #header button {
+      padding: 5px 12px;
+      background: #16a085;
+      color: white;
+      border: 0;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    #header button:disabled {
+      background: #7f8c8d;
+      cursor: not-allowed;
+    }
+
+    #header button.danger { background: #c0392b; }
+
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+      outline: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>
+      File:
+      <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+    </label>
+    <label>Target: <select id="target"></select></label>
+    <label>Mask: <select id="mask"></select></label>
+    <button id="clip-btn" disabled>Clip</button>
+    <button id="erase-btn" class="danger" disabled>Erase</button>
+    <span id="status">Load a file with at least two layers (one polygon mask + one target)</span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'cliperase-source';
+
+    const fileInput = document.getElementById('file-input');
+    const targetSel = document.getElementById('target');
+    const maskSel = document.getElementById('mask');
+    const clipBtn = document.getElementById('clip-btn');
+    const eraseBtn = document.getElementById('erase-btn');
+    const status = document.getElementById('status');
+
+    function populateLayerOptions(source) {
+      const layers = source.getLayers();
+      const target = document.getElementById('target');
+      const mask = document.getElementById('mask');
+      target.innerHTML = '';
+      mask.innerHTML = '';
+      layers.forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        const opt1 = new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name);
+        target.appendChild(opt1);
+        if (lyr?.geometry_type === 'polygon') {
+          const opt2 = new Option(name, name);
+          mask.appendChild(opt2);
+        }
+      });
+      const enable = layers.length >= 2 && mask.options.length >= 1;
+      clipBtn.disabled = !enable;
+      eraseBtn.disabled = !enable;
+    }
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `Loading ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          populateLayerOptions(source);
+          status.textContent = `Loaded: ${file.name}. Pick target + mask, then Clip or Erase.`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    async function runOp(op) {
+      const target = targetSel.value;
+      const mask = maskSel.value;
+      if (!target || !mask) return;
+      if (target === mask) {
+        status.textContent = 'Target and mask must be different layers.';
+        return;
+      }
+      status.textContent = `Running ${op}...`;
+      clipBtn.disabled = true;
+      eraseBtn.disabled = true;
+      try {
+        const ok = op === 'clip'
+          ? await map.clipLayer({ source: SOURCE_ID, target, mask })
+          : await map.eraseLayer({ source: SOURCE_ID, target, mask });
+        status.textContent = ok
+          ? `${op} on '${target}' done. Ctrl+Z to undo.`
+          : `${op} failed (check layer names).`;
+        // Refresh selectors against the post-op dataset
+        const src = map.getSource(SOURCE_ID);
+        if (src) populateLayerOptions(src);
+      } catch (err) {
+        status.textContent = `Error: ${err?.message ?? err}`;
+        console.error(err);
+      } finally {
+        clipBtn.disabled = false;
+        eraseBtn.disabled = false;
+      }
+    }
+
+    clipBtn.addEventListener('click', () => runOp('clip'));
+    eraseBtn.addEventListener('click', () => runOp('erase'));
+  </script>
+</body>
+
+</html>

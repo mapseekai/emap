@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap Example - Dissolve</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    #header {
+      padding: 10px;
+      background: #2c3e50;
+      color: white;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+
+    #header select,
+    #header input[type=file] {
+      padding: 3px 6px;
+      font-size: 13px;
+    }
+
+    #header button {
+      padding: 5px 12px;
+      background: #16a085;
+      color: white;
+      border: 0;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    #header button:disabled {
+      background: #7f8c8d;
+      cursor: not-allowed;
+    }
+
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+      outline: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>
+      File:
+      <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+    </label>
+    <label>Target: <select id="target"></select></label>
+    <label>Field (optional): <select id="field"><option value="">— merge all —</option></select></label>
+    <button id="dissolve-btn" disabled>Dissolve</button>
+    <span id="status">Load a polygon dataset</span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'dissolve-source';
+
+    const fileInput = document.getElementById('file-input');
+    const targetSel = document.getElementById('target');
+    const fieldSel = document.getElementById('field');
+    const dissolveBtn = document.getElementById('dissolve-btn');
+    const status = document.getElementById('status');
+
+    function populate(source) {
+      targetSel.innerHTML = '';
+      const layers = source.getLayers();
+      layers.forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        const opt = new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name);
+        targetSel.appendChild(opt);
+      });
+      refreshFieldOptions(source);
+      dissolveBtn.disabled = layers.length === 0;
+    }
+
+    function refreshFieldOptions(source) {
+      fieldSel.innerHTML = '<option value="">— merge all —</option>';
+      const target = targetSel.value;
+      if (!target) return;
+      const layers = source.getLayers();
+      const layer = layers.find((l, i) => (l?.name || l?.id || `layer-${i}`) === target);
+      const records = layer?.data?.getRecords?.();
+      if (!records?.length) return;
+      const sample = records[0];
+      Object.keys(sample || {}).forEach((field) => {
+        fieldSel.appendChild(new Option(field, field));
+      });
+    }
+
+    targetSel.addEventListener('change', () => {
+      const src = map.getSource(SOURCE_ID);
+      if (src) refreshFieldOptions(src);
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `Loading ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          populate(source);
+          status.textContent = `Loaded ${file.name}. Pick target, optional field, then Dissolve.`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    dissolveBtn.addEventListener('click', async () => {
+      const target = targetSel.value;
+      if (!target) return;
+      const field = fieldSel.value || undefined;
+      status.textContent = field ? `Dissolving ${target} by ${field}...` : `Dissolving all of ${target}...`;
+      dissolveBtn.disabled = true;
+      try {
+        const ok = await map.dissolveLayer({ source: SOURCE_ID, target, field });
+        status.textContent = ok
+          ? `Dissolved ${target}${field ? ` by ${field}` : ''}. Ctrl+Z to undo.`
+          : 'Dissolve failed (check layer name).';
+        const src = map.getSource(SOURCE_ID);
+        if (src) populate(src);
+      } catch (err) {
+        status.textContent = `Error: ${err?.message ?? err}`;
+        console.error(err);
+      } finally {
+        dissolveBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+
+</html>

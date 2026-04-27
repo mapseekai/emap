@@ -2,14 +2,38 @@ import mapshaper from 'mapshaper';
 import { EventDispatcher } from '../core/events';
 import { TopologySource as ITopologySource } from './source';
 import { Bounds } from '../geo/bounds';
-import { unzipSync, strFromU8 } from 'fflate';
+import { unzipSync, strFromU8, zipSync } from 'fflate';
 import { DisplayArcs } from './display-arcs';
 import type { MapshaperDataset } from '../types/mapshaper-types';
-
-/** File size threshold for skipping -clean during import (5MB) */
-const LARGE_FILE_THRESHOLD_BYTES = 5 * 1024 * 1024;
+import type { ExportFormat, ExportOptions } from './source';
 
 export type TopologySourceData = string | { filename: string, content: Uint8Array };
+
+/** MIME type for each supported export format */
+const EXPORT_MIME: Record<ExportFormat, string> = {
+  geojson: 'application/geo+json',
+  topojson: 'application/json',
+  shapefile: 'application/zip',
+};
+
+/** Coerce mapshaper export content (string | Uint8Array | ArrayBuffer) to Uint8Array for zip packing. */
+function toUint8Array(content: string | Uint8Array | ArrayBuffer): Uint8Array {
+  if (typeof content === 'string') return new TextEncoder().encode(content);
+  if (content instanceof Uint8Array) return content;
+  return new Uint8Array(content);
+}
+
+/**
+ * Coerce mapshaper export content to a Blob-compatible part.
+ *
+ * Strings, ArrayBuffers, and Uint8Arrays are all valid `BlobPart` values at
+ * runtime, but TS strict mode rejects `Uint8Array<ArrayBufferLike>` as
+ * `BlobPart` (which expects `ArrayBuffer`). Since mapshaper always produces
+ * regular non-shared buffers, the cast is safe.
+ */
+function toBlobPart(content: string | Uint8Array | ArrayBuffer): BlobPart {
+  return content as BlobPart;
+}
 
 export interface TopologySourceOptions {
   data?: TopologySourceData;
@@ -91,11 +115,17 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         inputFiles = { [input.filename]: input.content };
       }
 
-      // For large files, skip -clean to speed up import. 
-      // Always run -simplify 100% to generate thresholds for dynamic rendering.
-      const isLarge = input.content.length > LARGE_FILE_THRESHOLD_BYTES;
-      const cleanFlag = isLarge ? '' : '-clean';
-      const cmd = `-i ${primaryFile} ${cleanFlag} -simplify 100%`;
+      // Match mapshaper GUI's import path: bare `-i FILE`. mapshaper's
+      // importContent already runs cleanPathsAfterImport (deduplication +
+      // defective-path removal) and buildTopology (coincident-endpoint
+      // sharing required by topology-aware vertex editing), both cheap.
+      // We deliberately do NOT run `-clean` (intersection cuts, sliver
+      // removal, polygon repair) or `-simplify 100%` (Visvalingam-Whyatt
+      // threshold precomputation) here — both are O(N²) / O(N log N) and
+      // make interactive imports of moderate-sized files unusable. Users
+      // can call `Emap.cleanLayer()` and `source.simplifyArcs()` explicitly
+      // when they need those passes.
+      const cmd = `-i ${primaryFile}`;
       const commands = mapshaper.internal.parseCommands(cmd);
 
       // Inject input files into the import command
@@ -219,13 +249,20 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   public async reproject(targetCrs: string): Promise<void> {
     if (!this._dataset) return;
 
-    // Use mapshaper's -proj command
-    // Add -clean BEFORE projection to ensure topology is valid and simplify state is consistent.
-    // Also use -clean AFTER could be an option but before is critical for 'flatten' error.
-    // Reset any dynamic simplification state before running mapshaper commands.
-    // Mapshaper's -proj internally calls flatten(), which crashes if an interval is set but thresholds are missing.
+    // Reset dynamic simplification before running -proj. Mapshaper's -proj
+    // internally calls arcs.flatten(), which errors if an interval is set but
+    // simplification thresholds are missing.
     if (this._dataset?.arcs?.setRetainedInterval) {
       this._dataset.arcs.setRetainedInterval(0);
+    }
+
+    // Drop stale CRS identifiers BEFORE projection. Mapshaper's -proj only
+    // updates dataset.info.crs; it leaves crs_string / prj / wkt1 untouched, so
+    // without this reset getCRS() would keep returning the source CRS.
+    if (this._dataset.info) {
+      delete this._dataset.info.crs_string;
+      delete this._dataset.info.prj;
+      delete this._dataset.info.wkt1;
     }
 
     const cmd = `-proj ${targetCrs}`;
@@ -238,21 +275,20 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       const commands = mapshaper.internal.parseCommands(cmd);
 
       mapshaper.internal.runParsedCommands(commands, job, (err: any, finishedJob: any) => {
-        if (err) reject(err);
-        else {
-          const targets = finishedJob.catalog.getDefaultTargets();
-          if (targets.length > 0) {
-            this._dataset = targets[0].dataset;
-            // Re-initialize DisplayArcs with new arcs after reprojection
-            if (this._dataset?.arcs) {
-              this._displayArcs = new DisplayArcs(this._dataset.arcs);
-            }
-            resolve();
-          } else {
-            // Reprojection might act in-place or return new dataset
-            resolve();
-          }
+        if (err) {
+          reject(err);
+          return;
         }
+        const targets = finishedJob.catalog.getDefaultTargets();
+        if (targets.length > 0) {
+          this._dataset = targets[0].dataset;
+        }
+        // Re-initialize DisplayArcs (including LOD threshold detection) against
+        // the post-projection arcs — coordinates and z-values may have changed.
+        if (this._dataset?.arcs) {
+          this._displayArcs = new DisplayArcs(this._dataset.arcs);
+        }
+        resolve();
       });
     });
   }
@@ -283,6 +319,78 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     if (this._dataset?.arcs) {
       this._displayArcs = new DisplayArcs(this._dataset.arcs);
     }
+  }
+
+  /**
+   * Swap the active dataset. Used by dataset-replace commands (clip / erase /
+   * dissolve / …) and by reproject. Rebuilds the LOD copy and notifies
+   * listeners with the `data` event.
+   */
+  public setDataset(dataset: MapshaperDataset): void {
+    this._dataset = dataset;
+    if (dataset.arcs) {
+      this._displayArcs = new DisplayArcs(dataset.arcs);
+    } else {
+      this._displayArcs = null;
+    }
+    this.fire('data');
+  }
+
+  /**
+   * Serialize the current dataset to a browser Blob via mapshaper's exporter.
+   *
+   * Multi-file shapefile output is packed into a single zip Blob using fflate
+   * so callers always receive one Blob per call.
+   */
+  public async export(options: ExportOptions): Promise<Blob> {
+    if (!this._dataset) {
+      throw new Error('TopologySource has no dataset to export');
+    }
+
+    // mapshaper's exporters materialize the simplified copy when an interval is
+    // set. emap uses simplification only for render LOD, so reset the interval
+    // for the duration of the export and restore it afterwards.
+    const arcs = this._dataset.arcs;
+    const savedInterval = arcs?.getRetainedInterval?.() ?? 0;
+    if (savedInterval && arcs?.setRetainedInterval) {
+      arcs.setRetainedInterval(0);
+    }
+
+    try {
+      const files = mapshaper.internal.exportFileContent(this._dataset, {
+        format: options.format,
+      });
+      return this._filesToBlob(files, options.format);
+    } finally {
+      if (savedInterval && arcs?.setRetainedInterval) {
+        arcs.setRetainedInterval(savedInterval);
+      }
+    }
+  }
+
+  /**
+   * Pack mapshaper's `[{filename, content}]` output into a single Blob.
+   * Single-file formats use the first entry directly; shapefile is zipped.
+   */
+  private _filesToBlob(
+    files: Array<{ filename: string; content: string | Uint8Array | ArrayBuffer }>,
+    format: ExportFormat,
+  ): Blob {
+    if (files.length === 0) {
+      throw new Error(`mapshaper produced no output for format=${format}`);
+    }
+
+    if (format === 'shapefile') {
+      const zipInput: Record<string, Uint8Array> = {};
+      for (const f of files) {
+        zipInput[f.filename] = toUint8Array(f.content);
+      }
+      const zipped = zipSync(zipInput);
+      return new Blob([toBlobPart(zipped)], { type: EXPORT_MIME.shapefile });
+    }
+
+    // GeoJSON / TopoJSON: single file, return directly
+    return new Blob([toBlobPart(files[0].content)], { type: EXPORT_MIME[format] });
   }
 
   getLayers(): any[] {
