@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - Feature Selection</title>
+  <title>Emap 示例 - 要素选择</title>
   <style>
     body {
       margin: 0;
@@ -59,6 +59,8 @@
       padding: 10px;
       font-size: 12px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      /* 高于 emap 控件容器的 z-index (10),否则会被画布覆盖无法操作 */
+      z-index: 20;
     }
 
     #panel h3 {
@@ -82,18 +84,18 @@
 <body>
   <div id="header">
     <label>
-      Open file:
+      文件:
       <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
     </label>
-    <span class="hint">click = replace · shift+click = add · ctrl/cmd+click = toggle</span>
-    <button id="clear-btn" disabled>Clear selection</button>
-    <button id="delete-btn" disabled>Delete selected (logs)</button>
-    <span id="status">Load a file to begin</span>
+    <span class="hint">单击 = 替换 · Shift+单击 = 加入 · Ctrl/Cmd+单击 = 切换</span>
+    <button id="clear-btn" disabled>清空选择</button>
+    <button id="delete-btn" disabled>删除选中</button>
+    <span id="status">加载文件以开始</span>
   </div>
   <div id="map">
     <div id="panel">
-      <h3>Selection</h3>
-      <pre id="info">(none)</pre>
+      <h3>当前选中</h3>
+      <pre id="info">(无)</pre>
     </div>
   </div>
 
@@ -104,7 +106,7 @@
 
     const map = new Emap({ container: 'map' });
     map.addControl(new NavigationControl(), 'top-left');
-    // Lets users Ctrl+Z to bring deleted features back
+    // 通过 Ctrl+Z 恢复被删除的要素
     map.addControl(new HistoryControl(), 'top-left');
     map.bindHistoryShortcuts();
 
@@ -121,14 +123,14 @@
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      status.textContent = `Loading ${file.name}...`;
+      status.textContent = `正在加载 ${file.name}...`;
       const reader = new FileReader();
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         source.on('data', () => {
           map.setExtent(source.getExtent());
-          status.textContent = `Loaded: ${file.name}`;
+          status.textContent = `已加载 ${file.name}`;
         });
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
         activeSource = source;
@@ -138,12 +140,12 @@
       reader.readAsArrayBuffer(file);
     });
 
-    // Reflect selection changes in the side panel and the highlight overlay.
+    // 选择变化时同步面板和高亮图层
     map.on('selectionchange', (ev) => {
       const refs = ev.selected;
       info.textContent = refs.length
-        ? `${refs.length} feature(s)\n` + JSON.stringify(refs, null, 2)
-        : '(none)';
+        ? `${refs.length} 个要素\n` + JSON.stringify(refs, null, 2)
+        : '(无)';
 
       if (refs.length === 0) {
         map.clearHighlightedFeatures();
@@ -154,7 +156,7 @@
       clearBtn.disabled = refs.length === 0;
       deleteBtn.disabled = refs.length === 0;
 
-      // Console output makes the diff payload visible
+      // 控制台显示 added / removed 增量
       console.log('selectionchange', { added: ev.added, removed: ev.removed });
     });
 
@@ -177,7 +179,7 @@
       const count = map.getSelection().length;
       const ok = map.deleteSelected();
       if (ok) {
-        status.textContent = `Deleted ${count} feature(s). Ctrl+Z to undo.`;
+        status.textContent = `已删除 ${count} 个要素,Ctrl+Z 撤销。`;
       }
     });
   </script>

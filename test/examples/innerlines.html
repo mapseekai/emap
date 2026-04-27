@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - Innerlines</title>
+  <title>Emap 示例 - 共享边线 (Innerlines)</title>
   <style>
     body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
     #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
@@ -32,15 +32,14 @@
 
 <body>
   <div id="header">
-    <label>File: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    <label>Target: <select id="target"></select></label>
-    <label>where (A & B): <input id="where" type="text" placeholder="optional" /></label>
-    <label><input id="no-replace" type="checkbox" /> keep original</label>
-    <button id="btn" disabled>Innerlines</button>
-    <span id="status">Load a polygon dataset</span>
+    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <label>目标图层: <select id="target"></select></label>
+    <label>过滤条件 (A & B): <input id="where" type="text" placeholder="可选,JS 表达式" /></label>
+    <label><input id="no-replace" type="checkbox" /> 保留原图层</label>
+    <button id="btn" disabled>抽取共享边</button>
+    <span id="status">加载多边形数据</span>
     <span class="hint">
-      Examples — leave where blank for all internal borders, or
-      <code>A.STATE !== B.STATE</code> to keep only inter-state borders.
+      示例 —— 留空抽取所有内部边线;<code>A.STATE !== B.STATE</code> 仅保留跨州边线。
     </span>
   </div>
   <div id="map" tabindex="0"></div>
@@ -73,7 +72,7 @@
     document.getElementById('file-input').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      status.textContent = `Loading ${file.name}...`;
+      status.textContent = `正在加载 ${file.name}...`;
       const reader = new FileReader();
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
@@ -81,7 +80,7 @@
         source.on('data', () => {
           map.setExtent(source.getExtent());
           populate(source);
-          status.textContent = `Loaded ${file.name}.`;
+          status.textContent = `已加载 ${file.name}。`;
         });
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
         source.setData({ filename: file.name, content });
@@ -96,11 +95,11 @@
       const opts = { source: SOURCE_ID, target };
       if (whereInput.value.trim()) opts.where = whereInput.value;
       if (noReplace.checked) opts.noReplace = true;
-      status.textContent = `Extracting innerlines from ${target}...`;
+      status.textContent = `正在从 ${target} 抽取共享边...`;
       btn.disabled = true;
       try {
         const ok = await map.innerlinesLayer(opts);
-        status.textContent = ok ? `Innerlines from ${target}. Ctrl+Z to undo.` : 'Failed.';
+        status.textContent = ok ? `已抽取 ${target} 的共享边线,Ctrl+Z 撤销。` : '抽取失败。';
         const src = map.getSource(SOURCE_ID);
         if (src) populate(src);
       } finally {

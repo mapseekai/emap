@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - GeoJSON Viewer</title>
+  <title>Emap 示例 - GeoJSON 查看器</title>
   <style>
     body {
       margin: 0;
@@ -38,25 +38,21 @@
 
 <body>
   <div id="header">
-    <strong>Emap Example</strong>
+    <strong>Emap 示例</strong>
     <input type="file" id="file-input" accept=".json,.geojson,.zip" />
-    <div class="info" id="status">Upload a GeoJSON file to start</div>
+    <div class="info" id="status">上传 GeoJSON 文件开始</div>
   </div>
   <div id="map"></div>
 
-  <!-- Import default styles for controls -->
   <link rel="stylesheet" href="../../src/ui/controls.css" />
-  <!-- Import the dev bundle by default -->
   <script src="../../dist/emap-dev.js"></script>
   <script>
-    // Use the global 'emap' object exposed by the IIFE bundle
     const { Emap, TopologySource } = emap;
 
     const map = new Emap({
       container: "map",
     });
 
-    // Add UI Controls
     map.addControl(new emap.NavigationControl(), "top-left");
     map.addControl(new emap.BasemapControl(), "top-right");
     map.addControl(
@@ -74,7 +70,7 @@
       const file = e.target.files[0];
       if (!file) return;
 
-      status.textContent = `Processing ${file.name}...`;
+      status.textContent = `处理 ${file.name} 中...`;
 
       try {
         const reader = new FileReader();
@@ -84,12 +80,12 @@
 
           source.on('data', () => {
             map.setExtent(source.getExtent());
-            status.textContent = `Viewing: ${file.name}`;
+            status.textContent = `当前: ${file.name}`;
           });
 
           source.on('error', (e) => {
             console.error(e);
-            status.textContent = "Error processing file";
+            status.textContent = "处理文件出错";
           });
 
           if (map.getSource("test-source")) {
@@ -106,7 +102,7 @@
         reader.readAsArrayBuffer(file);
       } catch (err) {
         console.error(err);
-        status.textContent = "Error processing file";
+        status.textContent = "处理文件出错";
       }
     });
 

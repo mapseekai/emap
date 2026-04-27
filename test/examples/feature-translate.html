@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - Translate selected features</title>
+  <title>Emap 示例 - 平移选中要素</title>
   <style>
     body {
       margin: 0;
@@ -42,11 +42,11 @@
 <body>
   <div id="header">
     <label>
-      File:
+      文件:
       <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
     </label>
-    <span class="hint">Click features to select. Arrow keys to nudge by 1; Shift+Arrow nudges by 10. Ctrl+Z to undo.</span>
-    <span id="status">Load a dataset</span>
+    <span class="hint">点击要素选中,方向键步进 1 个单位,Shift+方向键步进 10。Ctrl+Z 撤销。</span>
+    <span id="status">加载数据</span>
   </div>
   <div id="map" tabindex="0"></div>
 
@@ -76,15 +76,15 @@
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      status.textContent = `Loading ${file.name}...`;
+      status.textContent = `正在加载 ${file.name}...`;
       const reader = new FileReader();
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         source.on('data', () => {
           map.setExtent(source.getExtent());
-          status.textContent = `Loaded ${file.name}. Click to select. Arrow keys to nudge.`;
-          // Focus the map so arrow keys go to it
+          status.textContent = `已加载 ${file.name}。点击要素选中,方向键平移。`;
+          // 聚焦 map 容器,让方向键事件被它接收
           document.getElementById('map').focus();
         });
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
@@ -104,7 +104,6 @@
       }
       const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
       map.select(features, { mode });
-      // Ensure subsequent keystrokes go to the map
       document.getElementById('map').focus();
     });
 
@@ -113,13 +112,13 @@
       let dx = 0, dy = 0;
       if (e.key === 'ArrowLeft') dx = -stride;
       else if (e.key === 'ArrowRight') dx = stride;
-      else if (e.key === 'ArrowUp') dy = stride; // up in source coords
+      else if (e.key === 'ArrowUp') dy = stride; // 源数据坐标系向上为 +y
       else if (e.key === 'ArrowDown') dy = -stride;
       else return;
       e.preventDefault();
       const ok = map.translateSelected(dx, dy);
       if (ok) {
-        status.textContent = `Nudged by (${dx}, ${dy}). Ctrl+Z to undo.`;
+        status.textContent = `已平移 (${dx}, ${dy}),Ctrl+Z 撤销。`;
       }
     });
   </script>

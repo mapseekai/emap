@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - Dissolve</title>
+  <title>Emap 示例 - 融合 (Dissolve)</title>
   <style>
     body {
       margin: 0;
@@ -58,13 +58,13 @@
 <body>
   <div id="header">
     <label>
-      File:
+      文件:
       <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
     </label>
-    <label>Target: <select id="target"></select></label>
-    <label>Field (optional): <select id="field"><option value="">— merge all —</option></select></label>
-    <button id="dissolve-btn" disabled>Dissolve</button>
-    <span id="status">Load a polygon dataset</span>
+    <label>目标图层: <select id="target"></select></label>
+    <label>字段 (可选): <select id="field"><option value="">— 整层合并 —</option></select></label>
+    <button id="dissolve-btn" disabled>融合</button>
+    <span id="status">加载多边形数据</span>
   </div>
   <div id="map" tabindex="0"></div>
 
@@ -99,7 +99,7 @@
     }
 
     function refreshFieldOptions(source) {
-      fieldSel.innerHTML = '<option value="">— merge all —</option>';
+      fieldSel.innerHTML = '<option value="">— 整层合并 —</option>';
       const target = targetSel.value;
       if (!target) return;
       const layers = source.getLayers();
@@ -120,7 +120,7 @@
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      status.textContent = `Loading ${file.name}...`;
+      status.textContent = `正在加载 ${file.name}...`;
       const reader = new FileReader();
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
@@ -128,7 +128,7 @@
         source.on('data', () => {
           map.setExtent(source.getExtent());
           populate(source);
-          status.textContent = `Loaded ${file.name}. Pick target, optional field, then Dissolve.`;
+          status.textContent = `已加载 ${file.name}。选择目标图层与字段后点击 "融合"。`;
         });
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
         source.setData({ filename: file.name, content });
@@ -141,17 +141,17 @@
       const target = targetSel.value;
       if (!target) return;
       const field = fieldSel.value || undefined;
-      status.textContent = field ? `Dissolving ${target} by ${field}...` : `Dissolving all of ${target}...`;
+      status.textContent = field ? `正在按 ${field} 融合 ${target}...` : `正在整层融合 ${target}...`;
       dissolveBtn.disabled = true;
       try {
         const ok = await map.dissolveLayer({ source: SOURCE_ID, target, field });
         status.textContent = ok
-          ? `Dissolved ${target}${field ? ` by ${field}` : ''}. Ctrl+Z to undo.`
-          : 'Dissolve failed (check layer name).';
+          ? `已完成 ${target}${field ? ` 按 ${field}` : ''} 的融合,Ctrl+Z 撤销。`
+          : '融合失败 (请检查图层名称)。';
         const src = map.getSource(SOURCE_ID);
         if (src) populate(src);
       } catch (err) {
-        status.textContent = `Error: ${err?.message ?? err}`;
+        status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
       } finally {
         dissolveBtn.disabled = false;

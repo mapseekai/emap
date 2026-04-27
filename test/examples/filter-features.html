@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - Filter features</title>
+  <title>Emap 示例 - 要素过滤 (Filter)</title>
   <style>
     body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
     #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
@@ -24,16 +24,16 @@
 
 <body>
   <div id="header">
-    <label>File: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    <label>Target: <select id="target"></select></label>
-    <label>Expression: <input id="expr" type="text" value="this.pop > 100" /></label>
-    <label><input id="invert" type="checkbox" /> invert</label>
-    <label><input id="remove-empty" type="checkbox" /> also remove empty</label>
-    <button id="btn" disabled>Filter</button>
-    <span id="status">Load a dataset</span>
+    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <label>目标图层: <select id="target"></select></label>
+    <label>表达式: <input id="expr" type="text" value="this.pop > 100" /></label>
+    <label><input id="invert" type="checkbox" /> 反向</label>
+    <label><input id="remove-empty" type="checkbox" /> 同时移除空几何</label>
+    <button id="btn" disabled>过滤</button>
+    <span id="status">加载数据</span>
     <span class="hint">
-      Convention: features whose expression evaluates to FALSE are deleted. So
-      <code>this.pop &gt; 100</code> KEEPS populous features.
+      约定: 表达式判定为 FALSE 的要素将被删除,因此
+      <code>this.pop &gt; 100</code> 会 <em>保留</em> 人口大于 100 的要素。
     </span>
   </div>
   <div id="map" tabindex="0"></div>
@@ -67,7 +67,7 @@
     document.getElementById('file-input').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      status.textContent = `Loading ${file.name}...`;
+      status.textContent = `正在加载 ${file.name}...`;
       const reader = new FileReader();
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
@@ -75,7 +75,7 @@
         source.on('data', () => {
           map.setExtent(source.getExtent());
           populate(source);
-          status.textContent = `Loaded ${file.name}.`;
+          status.textContent = `已加载 ${file.name}。`;
         });
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
         source.setData({ filename: file.name, content });
@@ -91,11 +91,11 @@
       if (expr) opts.expression = expr;
       if (invertChk.checked) opts.invert = true;
       if (removeEmptyChk.checked) opts.removeEmpty = true;
-      status.textContent = `Filtering ${target}...`;
+      status.textContent = `正在过滤 ${target}...`;
       btn.disabled = true;
       try {
         const ok = await map.filterFeatures(opts);
-        status.textContent = ok ? `Filtered ${target}. Ctrl+Z to undo.` : 'Filter failed (need expression or remove-empty).';
+        status.textContent = ok ? `已过滤 ${target},Ctrl+Z 撤销。` : '过滤失败 (需要表达式或勾选 "同时移除空几何")。';
       } finally {
         btn.disabled = false;
       }

@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - Merge selected polygons</title>
+  <title>Emap 示例 - 合并选中要素</title>
   <style>
     body {
       margin: 0;
@@ -57,13 +57,13 @@
 <body>
   <div id="header">
     <label>
-      File:
+      文件:
       <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
     </label>
-    <span class="hint">Click + Shift-click polygons to build a selection, then merge.</span>
-    <button id="merge-btn" disabled>Merge selected</button>
-    <button id="clear-btn" disabled>Clear selection</button>
-    <span id="status">Load a polygon dataset</span>
+    <span class="hint">单击 + Shift+单击 选中多个多边形,然后合并。</span>
+    <button id="merge-btn" disabled>合并选中</button>
+    <button id="clear-btn" disabled>清空选择</button>
+    <span id="status">加载多边形数据</span>
   </div>
   <div id="map" tabindex="0"></div>
 
@@ -86,9 +86,9 @@
 
     map.on('selectionchange', (e) => {
       const n = e.selected.length;
-      mergeBtn.disabled = n < 2; // merging 1 feature is a no-op
+      mergeBtn.disabled = n < 2; // 合并单个要素无意义
       clearBtn.disabled = n === 0;
-      // Reflect selection visually
+      // 同步高亮
       if (n === 0) map.clearHighlightedFeatures();
       else map.setHighlightedFeatures(e.selected, { color: '#1e88e5', width: 3 });
     });
@@ -96,14 +96,14 @@
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      status.textContent = `Loading ${file.name}...`;
+      status.textContent = `正在加载 ${file.name}...`;
       const reader = new FileReader();
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         source.on('data', () => {
           map.setExtent(source.getExtent());
-          status.textContent = `Loaded ${file.name}. Click polygons to select; Shift-click to add.`;
+          status.textContent = `已加载 ${file.name}。单击选中要素,Shift+单击 加入。`;
         });
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
         source.setData({ filename: file.name, content });
@@ -126,15 +126,15 @@
 
     mergeBtn.addEventListener('click', async () => {
       const n = map.getSelection().length;
-      status.textContent = `Merging ${n} features...`;
+      status.textContent = `正在合并 ${n} 个要素...`;
       mergeBtn.disabled = true;
       try {
         const ok = await map.mergeSelected();
         status.textContent = ok
-          ? `Merged ${n} features. Ctrl+Z to undo.`
-          : 'Merge failed (cross-layer? cross-source?).';
+          ? `已合并 ${n} 个要素,Ctrl+Z 撤销。`
+          : '合并失败 (跨图层或跨数据源?)。';
       } catch (err) {
-        status.textContent = `Error: ${err?.message ?? err}`;
+        status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);
       } finally {
         mergeBtn.disabled = false;

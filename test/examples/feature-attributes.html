@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emap Example - Feature Attributes</title>
+  <title>Emap 示例 - 要素属性查询</title>
   <style>
     body {
       margin: 0;
@@ -21,6 +21,8 @@
       display: flex;
       gap: 12px;
       align-items: center;
+      flex-wrap: wrap;
+      font-size: 13px;
     }
 
     #map {
@@ -42,6 +44,8 @@
       padding: 10px;
       font-size: 12px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      /* 高于 emap 控件容器的 z-index (10),否则会被画布覆盖无法操作 */
+      z-index: 20;
     }
 
     #panel h3 {
@@ -65,35 +69,32 @@
 
 <body>
   <div id="header">
-    <strong>Emap Example</strong>
+    <strong>Emap 示例</strong>
     <input type="file" id="file-input" accept=".json,.geojson,.zip" />
-    <label for="layer-select">Layer:</label>
+    <label for="layer-select">图层:</label>
     <select id="layer-select">
-      <option value="">All</option>
+      <option value="">全部</option>
     </select>
-    <label for="hl-color">Color:</label>
+    <label for="hl-color">颜色:</label>
     <input type="color" id="hl-color" value="#ff7a00" />
-    <label for="hl-width">Width:</label>
+    <label for="hl-width">线宽:</label>
     <input type="number" id="hl-width" min="0.5" step="0.1" value="2.5" />
-    <label for="hl-radius">Radius:</label>
+    <label for="hl-radius">点半径:</label>
     <input type="number" id="hl-radius" min="1" step="1" value="6" />
-    <label for="hl-fill">Fill:</label>
+    <label for="hl-fill">填充:</label>
     <input type="checkbox" id="hl-fill" checked />
-    <div class="info" id="status">Upload a GeoJSON file to start</div>
+    <div class="info" id="status">上传 GeoJSON 文件开始</div>
   </div>
   <div id="map">
     <div id="panel">
-      <h3>Feature Attributes</h3>
-      <pre id="attributes">(click a feature)</pre>
+      <h3>要素属性</h3>
+      <pre id="attributes">(点击地图上的要素)</pre>
     </div>
   </div>
 
-  <!-- Import default styles for controls -->
   <link rel="stylesheet" href="../../src/ui/controls.css" />
-  <!-- Import the dev bundle by default -->
   <script src="../../dist/emap-dev.js"></script>
   <script>
-    // Use the global 'emap' object exposed by the IIFE bundle
     const { Emap, TopologySource } = emap;
 
     const map = new Emap({
@@ -123,7 +124,7 @@
     let activeSource = null;
 
     function populateLayers(source) {
-      layerSelect.innerHTML = '<option value="">All</option>';
+      layerSelect.innerHTML = '<option value="">全部</option>';
       const layers = source.getLayers();
       layers.forEach((layer, idx) => {
         const name = layer?.name || layer?.id || `layer-${idx}`;
@@ -138,8 +139,8 @@
       const file = e.target.files[0];
       if (!file) return;
 
-      status.textContent = `Processing ${file.name}...`;
-      attributes.textContent = "(click a feature)";
+      status.textContent = `处理 ${file.name} 中...`;
+      attributes.textContent = "(点击地图上的要素)";
       map.clearHighlightedFeatures();
 
       try {
@@ -151,12 +152,12 @@
           source.on('data', () => {
             map.setExtent(source.getExtent());
             populateLayers(source);
-            status.textContent = `Viewing: ${file.name}`;
+            status.textContent = `当前: ${file.name}`;
           });
 
           source.on('error', (e) => {
             console.error(e);
-            status.textContent = "Error processing file";
+            status.textContent = "处理文件出错";
           });
 
           if (map.getSource("test-source")) {
@@ -174,7 +175,7 @@
         reader.readAsArrayBuffer(file);
       } catch (err) {
         console.error(err);
-        status.textContent = "Error processing file";
+        status.textContent = "处理文件出错";
       }
     });
 
@@ -186,7 +187,7 @@
       const features = map.queryRenderedFeatures(point, { layers });
 
       if (!features.length) {
-        attributes.textContent = "(no feature hit)";
+        attributes.textContent = "(未命中要素)";
         map.clearHighlightedFeatures();
         return;
       }
@@ -198,7 +199,7 @@
         fill: !!hlFill.checked,
       });
       attributes.textContent =
-        `Hit ${features.length} feature(s)\n\n` +
+        `命中 ${features.length} 个要素\n\n` +
         JSON.stringify(features[0].properties, null, 2);
     });
 
