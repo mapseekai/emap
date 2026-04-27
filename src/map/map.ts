@@ -225,6 +225,22 @@ export interface RenameLayerOptions {
   name: string;
 }
 
+/** Options for {@link Emap.splitLayer}. */
+export interface SplitLayerOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) to partition. */
+  target: string;
+  /**
+   * Field name (e.g. `'STATE'`) or JS expression for grouping. mapshaper
+   * auto-detects: a bare field reference uses that field's value; otherwise
+   * the string is evaluated per feature as JS. Forwarded verbatim.
+   */
+  expression: string;
+  /** Keep the original layer alongside the new split outputs. */
+  noReplace?: boolean;
+}
+
 /** Options for {@link Emap.mergeLayers}. Requires `targets.length >= 2`. */
 export interface MergeLayersOptions {
   /** Source ID containing every target layer. */
@@ -2098,6 +2114,34 @@ export class Emap extends EventDispatcher {
     if (opts.force) parts.push('force');
     if (opts.flatten) parts.push('flatten');
     return this._runDatasetCommand(opts.source, parts.join(' '), `Merge ${targetList}`);
+  }
+
+  /**
+   * Partition a single layer into one output layer per distinct grouping
+   * value via mapshaper's `-split`. The `expression` argument may be a
+   * bare field name or a JS expression — mapshaper auto-detects.
+   *
+   * Returns `false` for unresolvable source / target or empty expression.
+   *
+   * v1 omits the `apart` flag (which produces independent datasets); the
+   * one-source-one-dataset model in emap doesn't expose those. Use
+   * `loadSnapshot` with `defaultIds` if you need that workflow.
+   */
+  public async splitLayer(opts: SplitLayerOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    const expr = (opts.expression ?? '').trim();
+    if (expr.length === 0) return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-split ${quoteMapshaperArg(expr)}`,
+    ];
+    if (opts.noReplace) parts.push('no-replace');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Split ${opts.target}`);
   }
 
   /**

@@ -3047,6 +3047,90 @@ describe('Emap mergeLayers', () => {
   });
 });
 
+describe('Emap splitLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }],
+    };
+    const afterDs = { layers: [{ name: 'states-A', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds the field-name form', async () => {
+    const ok = await map.splitLayer({ source: 'src1', target: 'states', expression: 'REGION' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -split "REGION"');
+  });
+
+  it('forwards JS expressions verbatim, quoted', async () => {
+    await map.splitLayer({
+      source: 'src1', target: 'states',
+      expression: 'this.pop > 1000000 ? "big" : "small"',
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "states" -split "this.pop > 1000000 ? \\"big\\" : \\"small\\""');
+  });
+
+  it('appends no-replace', async () => {
+    await map.splitLayer({
+      source: 'src1', target: 'states', expression: 'REGION', noReplace: true,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -split "REGION" no-replace');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.splitLayer({ source: 'nope', target: 'states', expression: 'REGION' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.splitLayer({ source: 'src1', target: 'missing', expression: 'REGION' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on empty / whitespace expression', async () => {
+    expect(await map.splitLayer({ source: 'src1', target: 'states', expression: '' })).toBe(false);
+    expect(await map.splitLayer({ source: 'src1', target: 'states', expression: '   ' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history entry is labelled "Split <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.splitLayer({ source: 'src1', target: 'states', expression: 'REGION' });
+    expect(listener.mock.calls[0][0].label).toBe('Split states');
+  });
+});
+
 describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
   let map: Emap;
   let exportDatasetsToPackSpy: ReturnType<typeof vi.fn>;
