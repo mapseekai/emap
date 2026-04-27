@@ -30,6 +30,11 @@ export type {
   RenameLayerOptions,
   MergeLayersOptions,
   SplitLayerOptions,
+  DropLayerOptions,
+  SortFeaturesOptions,
+  UniqueFeaturesOptions,
+  FilterFieldsOptions,
+  RenameFieldsOptions,
   ExportSnapshotOptions,
   LoadSnapshotOptions,
 } from './map/map';

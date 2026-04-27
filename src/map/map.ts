@@ -266,6 +266,79 @@ export interface SplitLayerOptions {
   noReplace?: boolean;
 }
 
+/** Options for {@link Emap.dropLayer}. */
+export interface DropLayerOptions {
+  /** Source ID containing the layer to delete. */
+  source: string;
+  /** Layer name (or id) to remove from the source dataset. */
+  target: string;
+}
+
+/** Options for {@link Emap.sortFeatures}. */
+export interface SortFeaturesOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) whose features will be sorted in place. */
+  target: string;
+  /**
+   * JS expression evaluated per feature to produce the sort key. Bare field
+   * names (`'POP'`) work because mapshaper exposes record fields as locals.
+   */
+  expression: string;
+  /** Sort descending. Default `false` (ascending). */
+  descending?: boolean;
+}
+
+/** Options for {@link Emap.uniqueFeatures}. */
+export interface UniqueFeaturesOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) to dedupe within. */
+  target: string;
+  /**
+   * JS expression evaluated per feature to produce the dedupe id. Forwarded
+   * verbatim (a bare field name like `'STATE_FIPS'` works). For full-record
+   * dedupe pass `'JSON.stringify(this.properties)'`.
+   */
+  expression: string;
+  /**
+   * Maximum features per id; default `1`. Must be a positive integer when
+   * supplied (`> 0`).
+   */
+  maxCount?: number;
+  /** Keep duplicates and drop unique features instead (mapshaper's `invert`). */
+  invert?: boolean;
+}
+
+/** Options for {@link Emap.filterFields}. */
+export interface FilterFieldsOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) whose attribute schema will be slimmed. */
+  target: string;
+  /**
+   * Field names to retain. Each entry must be a non-empty string with no
+   * `,` characters. Use `['*']` for "drop all" (mapshaper convention).
+   */
+  fields: string[];
+  /** Drop the listed fields and keep the rest (mapshaper's `invert` flag). */
+  invert?: boolean;
+}
+
+/** Options for {@link Emap.renameFields}. */
+export interface RenameFieldsOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) whose fields will be renamed. */
+  target: string;
+  /**
+   * Map of `oldName -> newName`. Both keys and values must be non-empty
+   * after trimming and contain neither `,` nor `=` (those would break
+   * the comma-and-equals serialization mapshaper expects).
+   */
+  mapping: Record<string, string>;
+}
+
 /** Options for {@link Emap.mergeLayers}. Requires `targets.length >= 2`. */
 export interface MergeLayersOptions {
   /** Source ID containing every target layer. */
@@ -2291,6 +2364,134 @@ export class Emap extends EventDispatcher {
     ];
     if (opts.noReplace) parts.push('no-replace');
     return this._runDatasetCommand(opts.source, parts.join(' '), `Split ${opts.target}`);
+  }
+
+  /**
+   * Delete a single layer from the source dataset via mapshaper's `-drop`.
+   * mapshaper's `-drop` is multi-modal (layer / geometry / holes / fields);
+   * v1 wraps only the "drop the entire layer" mode. Use {@link filterFields}
+   * for the field-drop case.
+   *
+   * Returns `false` for unresolvable source / target.
+   */
+  public async dropLayer(opts: DropLayerOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -drop`;
+    return this._runDatasetCommand(opts.source, cmd, `Drop ${opts.target}`);
+  }
+
+  /**
+   * Sort features within a layer by a JS expression via mapshaper's `-sort`.
+   * Bare field names work directly. Default order is ascending; pass
+   * `descending: true` for the reverse.
+   *
+   * Returns `false` for unresolvable source / target or empty expression.
+   */
+  public async sortFeatures(opts: SortFeaturesOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    const expr = (opts.expression ?? '').trim();
+    if (expr.length === 0) return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-sort ${quoteMapshaperArg(expr)}`,
+    ];
+    if (opts.descending) parts.push('descending');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Sort ${opts.target}`);
+  }
+
+  /**
+   * Drop duplicate features by an id expression via mapshaper's `-uniq`.
+   * Pass `'JSON.stringify(this.properties)'` for full-record dedupe.
+   *
+   * Returns `false` for unresolvable source / target, empty expression,
+   * or non-positive `maxCount`.
+   */
+  public async uniqueFeatures(opts: UniqueFeaturesOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    const expr = (opts.expression ?? '').trim();
+    if (expr.length === 0) return false;
+    if (opts.maxCount !== undefined && !(typeof opts.maxCount === 'number' && opts.maxCount > 0)) {
+      return false;
+    }
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-uniq ${quoteMapshaperArg(expr)}`,
+    ];
+    if (opts.maxCount !== undefined) parts.push(`max-count=${opts.maxCount}`);
+    if (opts.invert) parts.push('invert');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Uniq ${opts.target}`);
+  }
+
+  /**
+   * Retain only the listed attribute fields via mapshaper's `-filter-fields`.
+   * Pass `invert: true` to drop the listed fields and keep the rest.
+   *
+   * Returns `false` for unresolvable source / target, empty `fields[]`,
+   * or any field name that's empty or contains `,`.
+   */
+  public async filterFields(opts: FilterFieldsOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!Array.isArray(opts.fields) || opts.fields.length === 0) return false;
+    for (const f of opts.fields) {
+      if (typeof f !== 'string' || f.trim().length === 0) return false;
+      if (f.includes(',')) return false;
+    }
+
+    const list = opts.fields.join(',');
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-filter-fields ${quoteMapshaperArg(list)}`,
+    ];
+    if (opts.invert) parts.push('invert');
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Filter fields ${opts.target}`);
+  }
+
+  /**
+   * Bulk-rename multiple attribute fields via mapshaper's `-rename-fields`.
+   * Mapping order is preserved (object iteration order). Both old and new
+   * names must be non-empty after trimming and free of `,` / `=`.
+   *
+   * Returns `false` for unresolvable source / target or any invalid
+   * key / value in `mapping`.
+   */
+  public async renameFields(opts: RenameFieldsOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!opts.mapping || typeof opts.mapping !== 'object') return false;
+    const entries = Object.entries(opts.mapping);
+    if (entries.length === 0) return false;
+    const pairs: string[] = [];
+    for (const [oldName, newName] of entries) {
+      const o = (oldName ?? '').trim();
+      const n = (newName ?? '').trim();
+      if (o.length === 0 || n.length === 0) return false;
+      if (o.includes(',') || o.includes('=') || n.includes(',') || n.includes('=')) return false;
+      pairs.push(`${o}=${n}`);
+    }
+    const list = pairs.join(',');
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -rename-fields ${quoteMapshaperArg(list)}`;
+    return this._runDatasetCommand(opts.source, cmd, `Rename fields ${opts.target}`);
   }
 
   /**

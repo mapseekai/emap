@@ -3236,6 +3236,230 @@ describe('Emap splitLayer', () => {
   });
 });
 
+// =============================================================================
+// Data-engineering wrappers (shared scaffolding)
+// =============================================================================
+// Covers dropLayer / sortFeatures / uniqueFeatures / filterFields /
+// renameFields. All five have the same dataset-replace contract and beforeEach
+// shape, so a single helper builds the standard fixture.
+
+function setupDataEngineeringMap(): {
+  map: Emap;
+  parseCommandsSpy: ReturnType<typeof vi.fn>;
+  restore: () => void;
+} {
+  const map = createBareMap();
+  setPrivate(map, '_history', new EditHistory());
+  const beforeDs = {
+    layers: [
+      { name: 'states', shapes: [], geometry_type: 'polygon' },
+      { name: 'roads', shapes: [], geometry_type: 'polyline' },
+    ],
+  };
+  const afterDs = { layers: [{ name: 'states', shapes: [] }] };
+  const source = {
+    id: 'src1', type: 'topology',
+    getDataset: () => beforeDs,
+    getLayers: () => beforeDs.layers,
+    setDataset: vi.fn(),
+    refreshDisplayArcs: vi.fn(),
+  } as any;
+  (map as any)._sources.set('src1', source);
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+
+  const parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+  Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+  Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+  Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+  }));
+
+  return {
+    map,
+    parseCommandsSpy,
+    restore: () => {
+      Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+      Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+      Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+    },
+  };
+}
+
+describe('Emap dropLayer', () => {
+  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  beforeEach(() => { ctx = setupDataEngineeringMap(); });
+  afterEach(() => { ctx.restore(); });
+
+  it('builds the minimal command shape', async () => {
+    const ok = await ctx.map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -drop');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await ctx.map.dropLayer({ source: 'nope', target: 'states' })).toBe(false);
+    expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await ctx.map.dropLayer({ source: 'src1', target: 'missing' })).toBe(false);
+    expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Drop <target>"', async () => {
+    const listener = vi.fn();
+    ctx.map.on('historychange', listener);
+    await ctx.map.dropLayer({ source: 'src1', target: 'states' });
+    expect(listener.mock.calls[0][0].label).toBe('Drop states');
+  });
+});
+
+describe('Emap sortFeatures', () => {
+  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  beforeEach(() => { ctx = setupDataEngineeringMap(); });
+  afterEach(() => { ctx.restore(); });
+
+  it('builds the ascending command (default)', async () => {
+    const ok = await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: 'POP' });
+    expect(ok).toBe(true);
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -sort "POP"');
+  });
+
+  it('appends descending', async () => {
+    await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: 'POP', descending: true });
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -sort "POP" descending');
+  });
+
+  it('quotes JS expressions verbatim', async () => {
+    await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: 'this.pop * -1' });
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -sort "this.pop * -1"');
+  });
+
+  it('returns false on missing source / unresolved target / empty expression', async () => {
+    expect(await ctx.map.sortFeatures({ source: 'nope', target: 'states', expression: 'POP' })).toBe(false);
+    expect(await ctx.map.sortFeatures({ source: 'src1', target: 'missing', expression: 'POP' })).toBe(false);
+    expect(await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: '' })).toBe(false);
+    expect(await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: '   ' })).toBe(false);
+    expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Sort <target>"', async () => {
+    const listener = vi.fn();
+    ctx.map.on('historychange', listener);
+    await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: 'POP' });
+    expect(listener.mock.calls[0][0].label).toBe('Sort states');
+  });
+});
+
+describe('Emap uniqueFeatures', () => {
+  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  beforeEach(() => { ctx = setupDataEngineeringMap(); });
+  afterEach(() => { ctx.restore(); });
+
+  it('builds the minimal command shape', async () => {
+    const ok = await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE_FIPS' });
+    expect(ok).toBe(true);
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -uniq "STATE_FIPS"');
+  });
+
+  it('appends max-count', async () => {
+    await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE', maxCount: 3 });
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -uniq "STATE" max-count=3');
+  });
+
+  it('appends invert', async () => {
+    await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE', invert: true });
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -uniq "STATE" invert');
+  });
+
+  it('returns false on empty expression / non-positive maxCount', async () => {
+    expect(await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: '' })).toBe(false);
+    expect(await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'X', maxCount: 0 })).toBe(false);
+    expect(await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'X', maxCount: -1 })).toBe(false);
+    expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Uniq <target>"', async () => {
+    const listener = vi.fn();
+    ctx.map.on('historychange', listener);
+    await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE' });
+    expect(listener.mock.calls[0][0].label).toBe('Uniq states');
+  });
+});
+
+describe('Emap filterFields', () => {
+  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  beforeEach(() => { ctx = setupDataEngineeringMap(); });
+  afterEach(() => { ctx.restore(); });
+
+  it('joins fields with commas inside one quoted argument', async () => {
+    const ok = await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['fips', 'name'] });
+    expect(ok).toBe(true);
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -filter-fields "fips,name"');
+  });
+
+  it('appends invert', async () => {
+    await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['fips'], invert: true });
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -filter-fields "fips" invert');
+  });
+
+  it('returns false on empty / invalid fields', async () => {
+    expect(await ctx.map.filterFields({ source: 'src1', target: 'states', fields: [] })).toBe(false);
+    expect(await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['', 'b'] })).toBe(false);
+    expect(await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['a,b'] })).toBe(false);
+    expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Filter fields <target>"', async () => {
+    const listener = vi.fn();
+    ctx.map.on('historychange', listener);
+    await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['fips'] });
+    expect(listener.mock.calls[0][0].label).toBe('Filter fields states');
+  });
+});
+
+describe('Emap renameFields', () => {
+  let ctx: ReturnType<typeof setupDataEngineeringMap>;
+  beforeEach(() => { ctx = setupDataEngineeringMap(); });
+  afterEach(() => { ctx.restore(); });
+
+  it('serializes a single rename', async () => {
+    const ok = await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { OLD: 'NEW' } });
+    expect(ok).toBe(true);
+    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -rename-fields "OLD=NEW"');
+  });
+
+  it('serializes a multi-field rename in iteration order', async () => {
+    await ctx.map.renameFields({
+      source: 'src1', target: 'states',
+      mapping: { fips: 'STATE_FIPS', st: 'state' },
+    });
+    expect(ctx.parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "states" -rename-fields "fips=STATE_FIPS,st=state"');
+  });
+
+  it('returns false on empty mapping or invalid keys/values', async () => {
+    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: {} })).toBe(false);
+    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { '': 'b' } })).toBe(false);
+    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { a: '' } })).toBe(false);
+    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { 'a,b': 'c' } })).toBe(false);
+    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { 'a=b': 'c' } })).toBe(false);
+    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b,c' } })).toBe(false);
+    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b=c' } })).toBe(false);
+    expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Rename fields <target>"', async () => {
+    const listener = vi.fn();
+    ctx.map.on('historychange', listener);
+    await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b' } });
+    expect(listener.mock.calls[0][0].label).toBe('Rename fields states');
+  });
+});
+
 describe('Emap rebuildTopology (mocked mapshaper)', () => {
   let map: Emap;
   let copyDatasetSpy: ReturnType<typeof vi.fn>;
