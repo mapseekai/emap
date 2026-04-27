@@ -1765,3 +1765,84 @@ describe('Emap filterFeatures', () => {
     expect(listener.mock.calls[0][0].label).toBe('Filter cities');
   });
 });
+
+describe('Emap snapLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = { layers: [{ name: 'roads', shapes: [] }] };
+    const afterDs = { layers: [{ name: 'roads', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('emits the bare -snap command (mapshaper default interval)', async () => {
+    const ok = await map.snapLayer({ source: 'src1', target: 'roads' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap');
+  });
+
+  it('appends a numeric interval positionally', async () => {
+    await map.snapLayer({ source: 'src1', target: 'roads', interval: 0.0001 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap 0.0001');
+  });
+
+  it('appends endpoints flag', async () => {
+    await map.snapLayer({ source: 'src1', target: 'roads', endpoints: true });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap endpoints');
+  });
+
+  it('appends precision=', async () => {
+    await map.snapLayer({ source: 'src1', target: 'roads', precision: 0.000001 });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap precision=0.000001');
+  });
+
+  it('combines all options in deterministic order', async () => {
+    await map.snapLayer({
+      source: 'src1', target: 'roads',
+      interval: 0.001, endpoints: true, precision: 0.000001,
+    });
+    expect(parseCommandsSpy.mock.calls[0][0])
+      .toBe('-target "roads" -snap 0.001 endpoints precision=0.000001');
+  });
+
+  it('returns false on missing source / target', async () => {
+    expect(await map.snapLayer({ source: 'nope', target: 'roads' })).toBe(false);
+    expect(await map.snapLayer({ source: 'src1', target: 'nope' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('pushes one history entry labelled "Snap <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.snapLayer({ source: 'src1', target: 'roads' });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].label).toBe('Snap roads');
+  });
+});

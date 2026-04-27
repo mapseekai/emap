@@ -191,6 +191,23 @@ export interface FilterOptions {
   removeEmpty?: boolean;
 }
 
+/** Options for {@link Emap.snapLayer}. */
+export interface SnapOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the layer to snap. */
+  target: string;
+  /**
+   * Snap distance in source-CRS units. When omitted, mapshaper picks a
+   * small default based on the dataset.
+   */
+  interval?: number;
+  /** Snap only line endpoints (mapshaper's `endpoints` flag). */
+  endpoints?: boolean;
+  /** Round all coordinates to a given decimal precision (e.g. 0.000001). */
+  precision?: number;
+}
+
 export interface HighlightStyle {
   color?: string;
   width?: number;
@@ -1309,6 +1326,38 @@ export class Emap extends EventDispatcher {
       parts.push('remove-empty');
     }
     return this._runDatasetCommand(opts.source, parts.join(' '), `Filter ${opts.target}`);
+  }
+
+  /**
+   * Snap nearby vertices together using mapshaper's `-snap`. Useful as a
+   * targeted fix for almost-but-not-quite-coincident vertices left over
+   * from reprojection, manual digitization, or merged sources.
+   *
+   * `interval` is the snap distance in source-CRS units; mapshaper picks a
+   * small default when omitted. `endpoints: true` restricts to line
+   * endpoints. `precision` rounds all coords to a given decimal precision.
+   */
+  public async snapLayer(opts: SnapOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-snap`,
+    ];
+    if (typeof opts.interval === 'number') {
+      parts.push(String(opts.interval));
+    }
+    if (opts.endpoints) {
+      parts.push('endpoints');
+    }
+    if (typeof opts.precision === 'number') {
+      parts.push(`precision=${opts.precision}`);
+    }
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Snap ${opts.target}`);
   }
 
   /**
