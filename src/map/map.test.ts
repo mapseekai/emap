@@ -1112,10 +1112,16 @@ describe('Emap mergeSelected', () => {
     expect(cmd).toContain('-target "parcels"');
     expect(cmd).toContain('[0,2,3]'); // sorted ascending
     expect(cmd).toContain('this.id');
-    expect(cmd).toContain('this.__emap_merge');
+    // discriminator is assigned BARE (not via this.foo) so mapshaper
+    // writes through to the record / DataTable schema
+    expect(cmd).toContain('__emap_merge =');
+    expect(cmd).not.toContain('this.__emap_merge');
     expect(cmd).toContain('-dissolve "__emap_merge"');
     expect(cmd).toContain('copy-fields=name,area');
-    expect(cmd).toContain('delete this.__emap_merge');
+    // cleanup uses -filter-fields invert (not -each delete) so the field
+    // is dropped from the schema, not just from individual records
+    expect(cmd).toContain('-filter-fields __emap_merge invert');
+    expect(cmd).not.toContain('delete this.__emap_merge');
   });
 
   it('omits copy-fields= when the layer has no data table', async () => {
@@ -1166,6 +1172,105 @@ describe('Emap mergeSelected', () => {
     const cmd = parseCommandsSpy.mock.calls[0][0] as string;
     expect(cmd).toContain('copy-fields=safe');
     expect(cmd).not.toContain('has,comma');
+  });
+});
+
+// End-to-end mergeSelected against the real mapshaper pipeline. Catches
+// expression-context regressions like the early `this.__emap_merge = ...`
+// bug where bare assignment vs this-assignment matters: mapshaper's
+// -each writes through bare names but silently drops `this.foo = ...`.
+describe('Emap mergeSelected end-to-end', () => {
+  // Lightweight fixture: 4 polygons in a row, single source / single layer.
+  const FAKE_GEOJSON = JSON.stringify({
+    type: 'FeatureCollection',
+    features: [
+      { type: 'Feature', properties: { name: 'A', area: 1 }, geometry: { type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]] } },
+      { type: 'Feature', properties: { name: 'B', area: 2 }, geometry: { type: 'Polygon', coordinates: [[[1, 0], [2, 0], [2, 1], [1, 1], [1, 0]]] } },
+      { type: 'Feature', properties: { name: 'C', area: 3 }, geometry: { type: 'Polygon', coordinates: [[[2, 0], [3, 0], [3, 1], [2, 1], [2, 0]]] } },
+      { type: 'Feature', properties: { name: 'D', area: 4 }, geometry: { type: 'Polygon', coordinates: [[[3, 0], [4, 0], [4, 1], [3, 1], [3, 0]]] } },
+    ],
+  });
+
+  function importFixture(): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const job = new mapshaper.internal.Job();
+      const cmds = mapshaper.internal.parseCommands('-i poly.json');
+      cmds[0].options.input = { 'poly.json': FAKE_GEOJSON };
+      mapshaper.internal.runParsedCommands(cmds, job, (err: any) => {
+        if (err) return reject(err);
+        resolve(job.catalog.getDefaultTargets()[0].dataset);
+      });
+    });
+  }
+
+  it('actually merges 2 of 4 features through the real mapshaper pipeline', async () => {
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+
+    const initialDataset = await importFixture();
+    let currentDataset = initialDataset;
+    const source = {
+      id: 'src1',
+      type: 'topology',
+      getDataset: () => currentDataset,
+      getLayers: () => currentDataset.layers,
+      getArcs: () => currentDataset.arcs,
+      setDataset: (ds: any) => { currentDataset = ds; },
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    // Select features 0 (A) and 2 (C); merge should yield 3 records: AC + B + D
+    const layerName = initialDataset.layers[0].name;
+    map.select([
+      { source: 'src1', layer: layerName, id: 0 },
+      { source: 'src1', layer: layerName, id: 2 },
+    ], { mode: 'add' });
+
+    const ok = await map.mergeSelected();
+    expect(ok).toBe(true);
+
+    const records = currentDataset.layers[0].data!.getRecords();
+    expect(records).toHaveLength(3);
+
+    // Discriminator field must be removed from the schema after cleanup
+    expect(currentDataset.layers[0].data!.getFields()).not.toContain('__emap_merge');
+    expect(currentDataset.layers[0].data!.getFields().sort()).toEqual(['area', 'name']);
+
+    // Selected (A + C) merged into one feature; mapshaper's copy-fields
+    // semantics retain the FIRST selected record's attrs (= A)
+    const names = records.map((r: any) => r.name).sort();
+    expect(names).toEqual(['A', 'B', 'D']);
+  });
+
+  it('produces no error event when merging single-layer polygon data', async () => {
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+
+    let currentDataset = await importFixture();
+    const source = {
+      id: 'src1',
+      type: 'topology',
+      getDataset: () => currentDataset,
+      getLayers: () => currentDataset.layers,
+      getArcs: () => currentDataset.arcs,
+      setDataset: (ds: any) => { currentDataset = ds; },
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    const errs: unknown[] = [];
+    map.on('error', (e: any) => errs.push(e));
+
+    const layerName = currentDataset.layers[0].name;
+    map.select([
+      { source: 'src1', layer: layerName, id: 0 },
+      { source: 'src1', layer: layerName, id: 1 },
+    ], { mode: 'add' });
+
+    const ok = await map.mergeSelected();
+    expect(ok).toBe(true);
+    expect(errs).toEqual([]);
   });
 });
 

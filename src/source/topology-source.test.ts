@@ -178,7 +178,7 @@ describe('TopologySource.setData multi-file', () => {
   beforeEach(() => {
     parseCommandsSpy = vi.fn((_cmd: string) => [
       { name: 'i', options: {} },
-    ]);
+    ]) as ReturnType<typeof vi.fn>;
     runParsedCommandsSpy = vi.fn((commands: any[], _job: any, cb: any) => {
       cb(null, {
         catalog: {
@@ -188,7 +188,7 @@ describe('TopologySource.setData multi-file', () => {
           }],
         },
       });
-    });
+    }) as ReturnType<typeof vi.fn>;
     Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
     Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
