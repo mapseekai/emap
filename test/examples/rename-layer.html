@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 图层重命名 (Rename Layer)</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header select, #header input[type="text"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; }
+    #header input[type="text"] { width: 180px; }
+    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <label>原图层名: <select id="target"></select></label>
+    <label>新图层名: <input id="name" type="text" placeholder="新名称" /></label>
+    <button id="btn" disabled>重命名</button>
+    <span id="status">加载一个含至少一个图层的数据文件</span>
+    <span class="hint">
+      mapshaper <code>-rename-layers</code>。新名不能与已有图层重名。Ctrl+Z 可撤销。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'rename-source';
+    const targetSel = document.getElementById('target');
+    const nameInput = document.getElementById('name');
+    const btn = document.getElementById('btn');
+    const status = document.getElementById('status');
+
+    function populate(source) {
+      targetSel.innerHTML = '';
+      source.getLayers().forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        targetSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
+      });
+      btn.disabled = source.getLayers().length === 0;
+    }
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `正在加载 ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          populate(source);
+          status.textContent = `已加载 ${file.name}。`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    btn.addEventListener('click', async () => {
+      const target = targetSel.value;
+      const name = nameInput.value.trim();
+      if (!target || !name) return;
+      status.textContent = `正在把 "${target}" 重命名为 "${name}"...`;
+      btn.disabled = true;
+      try {
+        const ok = await map.renameLayer({ source: SOURCE_ID, target, name });
+        status.textContent = ok
+          ? `已重命名 ${target} → ${name},Ctrl+Z 撤销。`
+          : '重命名失败 (可能与已有图层重名)。';
+        const src = map.getSource(SOURCE_ID);
+        if (src) populate(src);
+      } catch (err) {
+        status.textContent = `错误: ${err?.message ?? err}`;
+        console.error(err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+
+</html>

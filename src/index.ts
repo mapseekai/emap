@@ -25,6 +25,7 @@ export type {
   PolygonsOptions,
   SimplifyOptions,
   SimplifyMethod,
+  RenameLayerOptions,
   ExportSnapshotOptions,
   LoadSnapshotOptions,
 } from './map/map';

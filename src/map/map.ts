@@ -215,6 +215,16 @@ export interface SnapOptions {
   precision?: number;
 }
 
+/** Options for {@link Emap.renameLayer}. */
+export interface RenameLayerOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) to rename. */
+  target: string;
+  /** New layer name. Trimmed; must be non-empty and not collide with another existing layer. */
+  name: string;
+}
+
 /** Simplification algorithm exposed by mapshaper's `-simplify`. */
 export type SimplifyMethod = 'dp' | 'visvalingam' | 'weighted';
 
@@ -2000,6 +2010,34 @@ export class Emap extends EventDispatcher {
 
     const label = `Simplify ${opts.target ?? opts.source}`;
     return this._runDatasetCommand(opts.source, parts.join(' '), label);
+  }
+
+  /**
+   * Rename one layer in a source dataset via mapshaper's `-rename-layers`.
+   * The new name is trimmed and validated for non-emptiness and absence of
+   * collision with any other existing layer in the same dataset.
+   *
+   * Returns `false` for unresolvable source / target, empty name, or
+   * collision with another layer.
+   */
+  public async renameLayer(opts: RenameLayerOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const dataset = source.getDataset();
+    if (!dataset) return false;
+    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    const newName = (opts.name ?? '').trim();
+    if (newName.length === 0) return false;
+    // Allow renaming to the same name (no-op-ish), but reject if another
+    // layer in this dataset already owns it.
+    if (newName !== opts.target) {
+      const collision = dataset.layers.some(
+        (l: any) => (l?.name ?? '') === newName,
+      );
+      if (collision) return false;
+    }
+    const cmd = `-target ${quoteMapshaperArg(opts.target)} -rename-layers ${quoteMapshaperArg(newName)}`;
+    return this._runDatasetCommand(opts.source, cmd, `Rename ${opts.target} → ${newName}`);
   }
 
   /**

@@ -2857,6 +2857,93 @@ describe('Emap simplifyLayer', () => {
   });
 });
 
+describe('Emap renameLayer', () => {
+  let map: Emap;
+  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const beforeDs = {
+      layers: [
+        { name: 'old', shapes: [], geometry_type: 'polygon' },
+        { name: 'other', shapes: [], geometry_type: 'polyline' },
+      ],
+    };
+    const afterDs = { layers: [{ name: 'new', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology',
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('builds the minimal command shape', async () => {
+    const ok = await map.renameLayer({ source: 'src1', target: 'old', name: 'new' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "old" -rename-layers "new"');
+  });
+
+  it('quotes names with spaces', async () => {
+    await map.renameLayer({ source: 'src1', target: 'old', name: 'My Layer' });
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "old" -rename-layers "My Layer"');
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.renameLayer({ source: 'nope', target: 'old', name: 'new' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.renameLayer({ source: 'src1', target: 'missing', name: 'new' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on empty / whitespace name', async () => {
+    expect(await map.renameLayer({ source: 'src1', target: 'old', name: '' })).toBe(false);
+    expect(await map.renameLayer({ source: 'src1', target: 'old', name: '   ' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false on collision with another layer', async () => {
+    expect(await map.renameLayer({ source: 'src1', target: 'old', name: 'other' })).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('allows renaming to the same name (no collision against itself)', async () => {
+    const ok = await map.renameLayer({ source: 'src1', target: 'old', name: 'old' });
+    expect(ok).toBe(true);
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "old" -rename-layers "old"');
+  });
+
+  it('history entry is labelled "Rename <from> → <to>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.renameLayer({ source: 'src1', target: 'old', name: 'new' });
+    expect(listener.mock.calls[0][0].label).toBe('Rename old → new');
+  });
+});
+
 describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
   let map: Emap;
   let exportDatasetsToPackSpy: ReturnType<typeof vi.fn>;
