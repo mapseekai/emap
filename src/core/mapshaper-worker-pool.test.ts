@@ -249,18 +249,74 @@ describe('MapshaperWorkerPool', () => {
     await expect(promise).rejects.toThrow(/destroyed/);
   });
 
-  it('throws when no Worker constructor is available', () => {
-    const pool = new MapshaperWorkerPool({
-      workerUrl: 'x.js',
-      WorkerCtor: undefined as unknown as typeof Worker,
-    });
-    // Stub global Worker too.
+  it('returns a rejecting promise when no Worker constructor is available', async () => {
     const originalWorker = (globalThis as any).Worker;
     delete (globalThis as any).Worker;
     try {
-      expect(() => pool.run('-clip', {})).toThrow(/Worker constructor not available/);
+      const pool = new MapshaperWorkerPool({
+        workerUrl: 'x.js',
+        WorkerCtor: undefined as unknown as typeof Worker,
+      });
+      // Should NOT throw synchronously — pool.run is documented to return
+      // a Promise, so spawn failure must surface as rejection too.
+      let result: Promise<any> | undefined;
+      expect(() => { result = pool.run('-clip', {}); }).not.toThrow();
+      await expect(result!).rejects.toThrow(/Worker constructor not available/);
     } finally {
       (globalThis as any).Worker = originalWorker;
     }
+  });
+
+  it('runWithId still allocates a unique id even when spawn fails', async () => {
+    const originalWorker = (globalThis as any).Worker;
+    delete (globalThis as any).Worker;
+    try {
+      const pool = new MapshaperWorkerPool({
+        workerUrl: 'x.js',
+        WorkerCtor: undefined as unknown as typeof Worker,
+      });
+      const a = pool.runWithId('-clip', {});
+      const b = pool.runWithId('-clip', {});
+      expect(a.id).not.toBe(b.id);
+      // Both still reject — the id is for caller-side correlation only.
+      await expect(a.promise).rejects.toThrow();
+      await expect(b.promise).rejects.toThrow();
+    } finally {
+      (globalThis as any).Worker = originalWorker;
+    }
+  });
+
+  it('runWithId after destroy uses a fresh id, not -1', async () => {
+    const pool = makePool();
+    pool.destroy();
+    const a = pool.runWithId('-clip', {});
+    const b = pool.runWithId('-clip', {});
+    expect(a.id).toBeGreaterThan(0);
+    expect(b.id).toBeGreaterThan(0);
+    expect(a.id).not.toBe(b.id);
+    await expect(a.promise).rejects.toThrow(/destroyed/);
+    await expect(b.promise).rejects.toThrow(/destroyed/);
+  });
+
+  it('discards late messages from a terminated worker (epoch guard)', async () => {
+    const pool = makePool();
+    const a = pool.run('-clip', {}).catch((e) => e);
+    const oldWorker = MockWorker.instances[0];
+    const oldMsg = oldWorker.posted[0];
+    pool.cancelAll();
+    // Now spawn a fresh worker by issuing a new request.
+    const b = pool.run('-dissolve', {});
+    const newWorker = MockWorker.instances[1];
+    expect(newWorker).toBeDefined();
+    // Late message from the OLD worker — its id might collide with `b`'s id.
+    // The pool must drop it (epoch mismatch).
+    oldWorker.respond({ id: oldMsg.id, type: 'ok', packed: 'late-poison' });
+    // `a` already rejected via cancelAll; `b` should still be pending.
+    const aErr = await a;
+    expect((aErr as Error).message).toMatch(/cancelled/);
+    // Resolve b legitimately via the new worker.
+    const bMsg = newWorker.posted[0];
+    newWorker.respond({ id: bMsg.id, type: 'ok', packed: 'fresh-ok' });
+    await expect(b).resolves.toBe('fresh-ok');
   });
 });

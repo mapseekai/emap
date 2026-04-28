@@ -84,6 +84,7 @@ The `Emap` instance SHALL fire `workerjobstart` and `workerjobend` events around
 #### Scenario: End event fires after worker rejects
 - **WHEN** a worker run rejects
 - **THEN** `workerjobend` is fired with `{ id, ok: false, durationMs, errorMessage }`
+- **AND** the `error` event ALSO fires (carrying the same underlying error) per the existing `_runDatasetCommand` contract — UI code that subscribes to both should expect both fires for one failure
 
 #### Scenario: Main-thread runs do NOT fire these events
 - **WHEN** `useWorker: false` (or `'auto'` below threshold) and a dataset-replace op runs

@@ -3251,13 +3251,18 @@ export class Emap extends EventDispatcher {
       // Should never reach here — caller checks _workerPool. Defensive.
       throw new Error('_runViaWorker: worker pool not available');
     }
-    const packed = await mapshaper.internal.exportDatasetsToPack([dataset], { compact: false });
+    // Fire workerjobstart BEFORE the synchronous pack work so a UI spinner
+    // appears immediately. Pack on a 1M-vertex dataset takes ~500ms; firing
+    // the event after pack delays UI feedback by exactly that amount.
+    // Use the pool's id reservation so start/end events stay correlated.
+    const id = this._workerPool.reserveId();
     const datasetVertexCount = dataset.arcs?.getPointCount?.() ?? 0;
-    const { id, promise } = this._workerPool.runWithId(cmd, packed, inputFiles);
     const startedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     this.fire('workerjobstart', { id, cmd, label, datasetVertexCount });
 
     try {
+      const packed = await mapshaper.internal.exportDatasetsToPack([dataset], { compact: false });
+      const promise = this._workerPool.dispatchWithId(id, cmd, packed, inputFiles);
       const resultPacked = await promise;
       const restored = await mapshaper.internal.restoreSessionData(resultPacked);
       if (!restored.datasets || restored.datasets.length === 0) {

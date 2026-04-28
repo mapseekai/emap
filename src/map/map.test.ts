@@ -4360,6 +4360,9 @@ describe('Emap useWorker routing', () => {
         id: nextWorkerId++,
         promise: runSpy(cmd, packed, files),
       }),
+      reserveId: () => nextWorkerId++,
+      dispatchWithId: (_id: number, cmd: string, packed: any, files?: any) =>
+        runSpy(cmd, packed, files),
       cancelAll: vi.fn(),
       destroy: vi.fn(),
     });
@@ -4496,6 +4499,9 @@ describe('Emap useWorker: \'auto\' thresholding', () => {
         id: nextId++,
         promise: runSpy(cmd, packed, files),
       }),
+      reserveId: () => nextId++,
+      dispatchWithId: (_id: number, cmd: string, packed: any, files?: any) =>
+        runSpy(cmd, packed, files),
       cancelAll: vi.fn(),
       destroy: vi.fn(),
     });
@@ -4602,6 +4608,9 @@ describe('Emap workerjobstart / workerjobend events', () => {
         id: nextId++,
         promise: runSpy(cmd, packed, files),
       }),
+      reserveId: () => nextId++,
+      dispatchWithId: (_id: number, cmd: string, packed: any, files?: any) =>
+        runSpy(cmd, packed, files),
       cancelAll: vi.fn(),
       destroy: vi.fn(),
     });

@@ -29,6 +29,16 @@ interface RunRequest {
 async function handleRun(req: RunRequest): Promise<void> {
   try {
     const { id, cmd, packed, inputFiles } = req;
+
+    // Parse first — fail fast on malformed commands without paying the cost
+    // of restoring a potentially-large dataset.
+    const commands = mapshaper.internal.parseCommands(cmd);
+    if (inputFiles) {
+      for (const c of commands) {
+        if (c.options) c.options.input = inputFiles;
+      }
+    }
+
     const restored = await mapshaper.internal.restoreSessionData(packed);
     const datasets = restored.datasets;
     if (!datasets || datasets.length === 0) {
@@ -39,13 +49,6 @@ async function handleRun(req: RunRequest): Promise<void> {
     // catalog with the first restored dataset (matches main-thread runner).
     const job = new mapshaper.internal.Job();
     job.catalog.addDataset(datasets[0]);
-
-    const commands = mapshaper.internal.parseCommands(cmd);
-    if (inputFiles) {
-      for (const c of commands) {
-        if (c.options) c.options.input = inputFiles;
-      }
-    }
 
     const finished: any = await new Promise((resolve, reject) => {
       mapshaper.internal.runParsedCommands(commands, job, (err: any, fin: any) => {
@@ -69,9 +72,19 @@ async function handleRun(req: RunRequest): Promise<void> {
   }
 }
 
+// Serialize handleRun invocations. mapshaper has module-level state
+// (parser tables, internal caches) that isn't reentrant-safe inside one
+// worker; concurrent async handleRun calls would interleave arbitrary
+// awaits and could corrupt that state. Browser workers process messages
+// one at a time, but our async function returns a promise immediately —
+// without this queue, the next message starts before the current finishes
+// awaiting. The .catch() prevents one failure from permanently stalling
+// the queue (handleRun already swallows its own errors via try/catch +
+// posting an error message, so this is belt-and-suspenders).
+let queue: Promise<void> = Promise.resolve();
 self.onmessage = (e: MessageEvent) => {
   const data = e.data as RunRequest;
   if (data && data.type === 'run') {
-    void handleRun(data);
+    queue = queue.then(() => handleRun(data)).catch(() => undefined);
   }
 };
