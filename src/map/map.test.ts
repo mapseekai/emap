@@ -4716,3 +4716,242 @@ describe('Emap.cancelWorkerJobs', () => {
     expect(() => map.cancelWorkerJobs()).not.toThrow();
   });
 });
+
+// ===========================================================================
+// Audit-fix regressions
+// ===========================================================================
+// Concentrated regression tests for the comma-injection / numeric-validation /
+// option-interaction issues surfaced in the mapshaper-grammar audit. Each
+// block exercises ONE specific guard so a future relaxation triggers a
+// pinpoint failure.
+
+describe('audit-fix: reject comma-bearing names that would silently split', () => {
+  // Shared lightweight fixture — every wrapper short-circuits to `false`
+  // BEFORE touching mapshaper, so we don't need a real catalog. We DO need
+  // a source whose dataset.layers contains the comma-bearing name (because
+  // findLayerByName runs before our validator). For the same reason we
+  // include a normal sibling layer.
+  function makeMapWithLayers(layerNames: string[]): { map: Emap; parseSpy: ReturnType<typeof vi.fn> } {
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const layers = layerNames.map((name) => ({ name, geometry_type: 'polygon', shapes: [] }));
+    const ds = { layers };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => ds,
+      getLayers: () => layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+    const parseSpy = vi.fn(() => [{ name: 'parsed', options: {} as any }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
+    }));
+    return { map, parseSpy };
+  }
+
+  it('unionLayers rejects a target containing a comma', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['a,b', 'c']);
+    expect(await map.unionLayers({ source: 'src1', targets: ['a,b', 'c'] })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('mergeLayers rejects a target containing a comma', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['a,b', 'c']);
+    expect(await map.mergeLayers({ source: 'src1', targets: ['a,b', 'c'] })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('dissolveLayer rejects a field containing a comma', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['states']);
+    expect(await map.dissolveLayer({ source: 'src1', target: 'states', field: 'STATE,FIPS' })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('renameLayer rejects a new name containing a comma', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['old']);
+    expect(await map.renameLayer({ source: 'src1', target: 'old', name: 'a,b' })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('joinTable rejects a key containing a comma (target side)', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['states']);
+    expect(await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { layer: 't' },
+      keys: ['STATE,FIPS', 'fips'],
+    })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('joinTable rejects a key containing a comma (source side)', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['states']);
+    expect(await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { layer: 't' },
+      keys: ['fips', 'fips,extra'],
+    })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('audit-fix: bufferLayer rejects non-positive / non-finite radius', () => {
+  function makeMapWithLayers(layerNames: string[]): { map: Emap; parseSpy: ReturnType<typeof vi.fn> } {
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const layers = layerNames.map((name) => ({ name, geometry_type: 'polygon', shapes: [] }));
+    const ds = { layers };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => ds,
+      getLayers: () => layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+    const parseSpy = vi.fn(() => [{ name: 'parsed', options: {} as any }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
+    }));
+    return { map, parseSpy };
+  }
+
+  it('rejects radius: 0', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['parks']);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: 0 })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects negative radius', async () => {
+    const { map } = makeMapWithLayers(['parks']);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: -1 })).toBe(false);
+  });
+
+  it('rejects NaN / Infinity radius', async () => {
+    const { map } = makeMapWithLayers(['parks']);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: NaN })).toBe(false);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: Infinity })).toBe(false);
+  });
+
+  it('rejects empty / whitespace expression-string radius', async () => {
+    const { map } = makeMapWithLayers(['parks']);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: '' })).toBe(false);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: '   ' })).toBe(false);
+  });
+
+  it('still accepts a positive number', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['parks']);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: 100 })).toBe(true);
+    expect(parseSpy).toHaveBeenCalled();
+  });
+
+  it('still accepts an expression-string radius', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['parks']);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: 'this.pop / 1000' })).toBe(true);
+    expect(parseSpy).toHaveBeenCalled();
+  });
+});
+
+describe('audit-fix: simplifyLayer rejects weighting with non-weighted method', () => {
+  function makeMapWithLayers(): { map: Emap; parseSpy: ReturnType<typeof vi.fn> } {
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const ds = { layers: [{ name: 'states', geometry_type: 'polygon', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => ds,
+      getLayers: () => ds.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+    const parseSpy = vi.fn(() => [{ name: 'parsed', options: {} as any }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
+    }));
+    return { map, parseSpy };
+  }
+
+  it('rejects method:dp + weighting', async () => {
+    const { map, parseSpy } = makeMapWithLayers();
+    expect(await map.simplifyLayer({
+      source: 'src1', percentage: 10, method: 'dp', weighting: 0.5,
+    })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects method:visvalingam + weighting', async () => {
+    const { map } = makeMapWithLayers();
+    expect(await map.simplifyLayer({
+      source: 'src1', percentage: 10, method: 'visvalingam', weighting: 0.5,
+    })).toBe(false);
+  });
+
+  it('accepts method:weighted + weighting', async () => {
+    const { map } = makeMapWithLayers();
+    expect(await map.simplifyLayer({
+      source: 'src1', percentage: 10, method: 'weighted', weighting: 0.5,
+    })).toBe(true);
+  });
+
+  it('accepts weighting without explicit method (defaults to weighted)', async () => {
+    const { map } = makeMapWithLayers();
+    expect(await map.simplifyLayer({
+      source: 'src1', percentage: 10, weighting: 0.5,
+    })).toBe(true);
+  });
+});
+
+describe('audit-fix: linesLayer fields token has a single canonical form', () => {
+  function makeMapWithLayers(): { map: Emap; parseSpy: ReturnType<typeof vi.fn> } {
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const ds = { layers: [{ name: 'states', geometry_type: 'polygon', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => ds,
+      getLayers: () => ds.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+    const parseSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } as any }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
+    }));
+    return { map, parseSpy };
+  }
+
+  it('emits "-lines" with no fields', async () => {
+    const { map, parseSpy } = makeMapWithLayers();
+    await map.linesLayer({ source: 'src1', target: 'states' });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines');
+  });
+
+  it('emits "-lines a,b" with fields', async () => {
+    const { map, parseSpy } = makeMapWithLayers();
+    await map.linesLayer({ source: 'src1', target: 'states', fields: ['STATE', 'COUNTY'] });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines STATE,COUNTY');
+  });
+
+  it('strips comma-bearing field names but keeps the rest', async () => {
+    const { map, parseSpy } = makeMapWithLayers();
+    await map.linesLayer({ source: 'src1', target: 'states', fields: ['ok', 'bad,name', 'ok2'] });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines ok,ok2');
+  });
+
+  it('falls back to bare "-lines" when every field is invalid', async () => {
+    const { map, parseSpy } = makeMapWithLayers();
+    await map.linesLayer({ source: 'src1', target: 'states', fields: ['bad,name'] });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines');
+  });
+});

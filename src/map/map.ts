@@ -1835,6 +1835,13 @@ export class Emap extends EventDispatcher {
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
 
+    // mapshaper's -dissolve DEFAULT option is `fields` (comma-list, type
+    // strings). A field name containing `,` would silently group by N
+    // imaginary fields; reject up-front instead.
+    if (opts.field !== undefined && (typeof opts.field !== 'string' || opts.field.includes(','))) {
+      return false;
+    }
+
     const fieldArg = opts.field ? ` ${quoteMapshaperArg(opts.field)}` : '';
     const cmd = `-target ${quoteMapshaperArg(opts.target)} -dissolve${fieldArg}`;
     return this._runDatasetCommand(opts.source, cmd, `Dissolve ${opts.target}`);
@@ -1858,6 +1865,16 @@ export class Emap extends EventDispatcher {
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    // Validate numeric radius up-front: 0 silently produces empty buffers,
+    // negative values throw inside mapshaper. Expression-string radii are
+    // forwarded as-is — mapshaper evaluates per-feature and there's no
+    // sound way to validate them without parsing JS.
+    if (typeof opts.radius === 'number') {
+      if (!Number.isFinite(opts.radius) || opts.radius <= 0) return false;
+    } else if (typeof opts.radius !== 'string' || opts.radius.trim().length === 0) {
+      return false;
+    }
 
     // Numbers go in bare; expression strings are quoted so the shell-style
     // command parser keeps them intact.
@@ -2144,8 +2161,11 @@ export class Emap extends EventDispatcher {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    // Every target must resolve — mapshaper would otherwise error opaquely.
+    // Every target must resolve and be `,`-free — mapshaper joins the list
+    // with commas and would otherwise silently split a comma-bearing name
+    // into multiple bogus targets.
     for (const t of opts.targets) {
+      if (typeof t !== 'string' || t.includes(',')) return false;
       if (!findLayerByName(dataset.layers, t)) return false;
     }
 
@@ -2279,14 +2299,18 @@ export class Emap extends EventDispatcher {
     const layer = findLayerByName(dataset.layers, opts.target);
     if (!layer || layer.geometry_type !== 'polygon') return false;
 
+    // mapshaper's `-lines` DEFAULT positional is the comma-joined fields
+    // list. Build the `-lines [fields-csv]` token in one place rather than
+    // pushing a placeholder and rewriting it.
+    const safeFields = opts.fields?.filter((f) => typeof f === 'string' && !f.includes(','));
+    const linesToken = safeFields && safeFields.length > 0
+      ? `-lines ${safeFields.join(',')}`
+      : '-lines';
+
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
-      '-lines',
+      linesToken,
     ];
-    if (opts.fields && opts.fields.length > 0) {
-      const safe = opts.fields.filter((f) => !f.includes(','));
-      if (safe.length > 0) parts[parts.length - 1] = `-lines ${safe.join(',')}`;
-    }
     if (opts.name && opts.name.trim()) {
       parts.push(`name=${quoteMapshaperArg(opts.name)}`);
     }
@@ -2369,6 +2393,14 @@ export class Emap extends EventDispatcher {
       thresholdToken = `resolution=${r}`;
     }
 
+    // `weighting` only makes sense for weighted-Visvalingam. mapshaper
+    // silently ignores `weighting` when method is `dp` or `visvalingam`,
+    // which leaves the caller wondering why their tuning had no effect.
+    // Reject up-front. (Method `undefined` is fine — defaults to weighted.)
+    if (opts.weighting !== undefined && opts.method !== undefined && opts.method !== 'weighted') {
+      return false;
+    }
+
     const parts: string[] = [];
     if (opts.target) parts.push(`-target ${quoteMapshaperArg(opts.target)}`);
     parts.push(`-simplify ${thresholdToken}`);
@@ -2440,6 +2472,9 @@ export class Emap extends EventDispatcher {
     if (!findLayerByName(dataset.layers, opts.target)) return false;
     const newName = (opts.name ?? '').trim();
     if (newName.length === 0) return false;
+    // mapshaper's -rename-layers DEFAULT is `names` (comma-list). A name
+    // containing `,` would silently split into N rename pairs.
+    if (newName.includes(',')) return false;
     // Allow renaming to the same name (no-op-ish), but reject if another
     // layer in this dataset already owns it.
     if (newName !== opts.target) {
@@ -2467,6 +2502,11 @@ export class Emap extends EventDispatcher {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
+
+    // Targets are joined with commas inside the `-target` arg; reject names
+    // that themselves contain `,` so we don't silently split into bogus
+    // targets.
+    if (opts.targets.some((t) => typeof t !== 'string' || t.includes(','))) return false;
 
     const layers = opts.targets.map((t) => findLayerByName(dataset.layers, t));
     if (layers.some((l) => !l)) return false;
@@ -2708,6 +2748,9 @@ export class Emap extends EventDispatcher {
     if (!Array.isArray(opts.keys) || opts.keys.length !== 2) return false;
     const [targetKey, sourceKey] = opts.keys.map((k) => (typeof k === 'string' ? k.trim() : ''));
     if (targetKey.length === 0 || sourceKey.length === 0) return false;
+    // mapshaper serializes `keys=` as `target,source`; a key containing `,`
+    // would split into 3+ keys and trip mapshaper's length validator.
+    if (targetKey.includes(',') || sourceKey.includes(',')) return false;
 
     let joinSource: string;
     let inputFiles: Record<string, Uint8Array | string> | undefined;
