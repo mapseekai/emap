@@ -80,6 +80,18 @@ declare module 'mapshaper' {
       opts?: { tolerance?: number; stripes?: number;[k: string]: unknown },
     ): Array<{ x: number; y: number;[k: string]: unknown }>;
 
+    /**
+     * Build a single multi-point feature whose `shapes[0]` is the array
+     * of intersection point coords, filtered to intersections whose
+     * arcs are referenced by the supplied layer's shapes. Used to
+     * materialize `findSegmentIntersections` output as a real point layer.
+     */
+    getIntersectionLayer(
+      intersections: ReadonlyArray<{ x: number; y: number;[k: string]: unknown }>,
+      lyr: MapshaperLayer,
+      arcs: ArcCollection,
+    ): { geometry_type: 'point'; shapes: number[][][] };
+
     // Export — io/mapshaper-export.mjs
     exportFileContent(
       dataset: MapshaperDataset,

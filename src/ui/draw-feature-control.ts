@@ -1,5 +1,5 @@
 import { Control } from './control';
-import { Emap } from '../map/map';
+import { Emap, SnapKind } from '../map/map';
 import { getLayerId } from '../source/layer-utils';
 import { FeatureCreateCommand } from '../edit/commands/feature-create';
 import type { MapshaperLayer, ArcCollection } from '../types/mapshaper-types';
@@ -15,6 +15,20 @@ export interface DrawFeatureControlOptions {
   type: DrawGeometryType;
   /** Pixel threshold for vertex snapping (default: 10) */
   snapThreshold?: number;
+  /**
+   * Sources to snap against. Defaults to `[options.source]` so the existing
+   * single-source behaviour is preserved when omitted. Pass `['a', 'b']` to
+   * also snap onto another source (e.g. drawing in source A while tracing
+   * along reference data in source B).
+   */
+  snapSources?: string[];
+  /** Enable vertex snap (default `true`). */
+  snapToVertex?: boolean;
+  /**
+   * Enable edge snap — perpendicular projection onto an arc segment
+   * (default `true`). Disable to restrict snap to existing vertices only.
+   */
+  snapToEdge?: boolean;
   /** CSS color for the drawing line (default: '#0078ff') */
   drawColor?: string;
   /** Button icon HTML (default: geometry-specific icon) */
@@ -50,6 +64,7 @@ export class DrawFeatureControl implements Control {
   private _vertices: [number, number][] = [];
   private _cursorCoord: [number, number] | null = null;
   private _snapCoord: [number, number] | null = null;
+  private _snapKind: SnapKind = null;
   private _snapThreshold: number;
 
   // Bound handlers
@@ -153,6 +168,7 @@ export class DrawFeatureControl implements Control {
     this._vertices = [];
     this._cursorCoord = null;
     this._snapCoord = null;
+    this._snapKind = null;
   }
 
   private _onMapMove(): void {
@@ -171,8 +187,10 @@ export class DrawFeatureControl implements Control {
     const dataCoord = this._map.unproject(px, py);
     this._cursorCoord = [dataCoord[0], dataCoord[1]];
 
-    // Snap detection
-    this._snapCoord = this._findSnapTarget(px, py);
+    // Snap detection — yields a coordinate AND its kind ('vertex' | 'edge')
+    const snap = this._findSnapTarget(px, py);
+    this._snapCoord = snap?.coord ?? null;
+    this._snapKind = snap?.kind ?? null;
 
     if (this._vertices.length > 0 || this._snapCoord) {
       this._updateDrawState();
@@ -238,43 +256,78 @@ export class DrawFeatureControl implements Control {
   // Snap detection
   // ---------------------------------------------------------------------------
 
-  private _findSnapTarget(px: number, py: number): [number, number] | null {
+  private _findSnapTarget(
+    px: number,
+    py: number,
+  ): { coord: [number, number]; kind: SnapKind } | null {
     if (!this._map) return null;
+    const map = this._map;
+    const sources = this._options.snapSources ?? [this._options.source];
+    const snapToVertex = this._options.snapToVertex !== false; // default true
+    const snapToEdge = this._options.snapToEdge !== false;     // default true
 
-    const source = this._map.getSource(this._options.source);
-    if (!source) return null;
-
-    const arcs = source.getArcs() as ArcCollection | undefined;
-    if (!arcs?.getVertexData) return null;
-
-    const vd = arcs.getVertexData();
-    if (!vd) return null;
-
-    const xx = vd.xx;
-    const yy = vd.yy;
+    // Tracked best across every candidate kind. Vertex wins ties because
+    // strict-`<` keeps the earlier match — vertex loop runs before edge.
     let bestDist = this._snapThreshold;
     let bestCoord: [number, number] | null = null;
+    let bestKind: SnapKind = null;
 
-    for (let i = 0; i < xx.length; i++) {
-      const projected = this._map.project(xx[i], yy[i]);
-      const dist = Math.hypot(projected[0] - px, projected[1] - py);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestCoord = [xx[i], yy[i]];
+    for (const sourceId of sources) {
+      const src = map.getSource(sourceId);
+      if (!src) continue;
+      const arcs = src.getArcs() as ArcCollection | undefined;
+      if (!arcs?.getVertexData) continue;
+      const vd = arcs.getVertexData();
+      if (!vd) continue;
+      const xx = vd.xx;
+      const yy = vd.yy;
+
+      if (snapToVertex) {
+        for (let i = 0; i < xx.length; i++) {
+          const projected = map.project(xx[i], yy[i]);
+          const dist = Math.hypot(projected[0] - px, projected[1] - py);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestCoord = [xx[i], yy[i]];
+            bestKind = 'vertex';
+          }
+        }
+      }
+
+      if (snapToEdge && arcs.forEachSegment) {
+        // Walk every arc segment. forEachSegment yields adjacent vertex
+        // index pairs (i, j) within an arc — never crosses arc boundaries,
+        // so we don't accidentally treat unrelated arcs as connected.
+        arcs.forEachSegment((i: number, j: number, arcXx: Float64Array, arcYy: Float64Array) => {
+          const a = map.project(arcXx[i], arcYy[i]);
+          const b = map.project(arcXx[j], arcYy[j]);
+          const r = projectPointOnSegment([px, py], a, b);
+          if (r.dist < bestDist) {
+            bestDist = r.dist;
+            // Convert pixel-space closest point back to map coords.
+            bestCoord = map.unproject(r.point[0], r.point[1]);
+            bestKind = 'edge';
+          }
+        });
       }
     }
 
-    // Also snap to already-placed vertices in current drawing
-    for (const v of this._vertices) {
-      const projected = this._map.project(v[0], v[1]);
-      const dist = Math.hypot(projected[0] - px, projected[1] - py);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestCoord = [v[0], v[1]];
+    // Snap to already-placed vertices in the in-progress drawing. Always
+    // treated as 'vertex' regardless of the snapToEdge setting.
+    if (snapToVertex) {
+      for (const v of this._vertices) {
+        const projected = map.project(v[0], v[1]);
+        const dist = Math.hypot(projected[0] - px, projected[1] - py);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestCoord = [v[0], v[1]];
+          bestKind = 'vertex';
+        }
       }
     }
 
-    return bestCoord;
+    if (!bestCoord) return null;
+    return { coord: bestCoord, kind: bestKind };
   }
 
   // ---------------------------------------------------------------------------
@@ -434,8 +487,46 @@ export class DrawFeatureControl implements Control {
       vertices: [...this._vertices],
       cursorCoord: this._snapCoord || this._cursorCoord,
       snapCoord: this._snapCoord,
+      snapKind: this._snapKind,
       geometryType: this._options.type,
       drawColor: this._options.drawColor || '#0078ff',
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Module-private geometry helper, exported for unit tests.
+// ---------------------------------------------------------------------------
+
+/**
+ * Closest point on segment `[a, b]` to point `p`, all in 2-D pixel space.
+ * Parameter `t = ((p-a)·(b-a)) / |b-a|²` is clamped to `[0, 1]` so the
+ * returned point is always on the segment (not its infinite line). For a
+ * zero-length segment, returns endpoint `a` and `dist(p, a)`.
+ */
+export function projectPointOnSegment(
+  p: [number, number],
+  a: [number, number],
+  b: [number, number],
+): { point: [number, number]; dist: number } {
+  const ax = a[0], ay = a[1];
+  const bx = b[0], by = b[1];
+  const px = p[0], py = p[1];
+  const abx = bx - ax;
+  const aby = by - ay;
+  const ab2 = abx * abx + aby * aby;
+  if (ab2 === 0) {
+    // Degenerate segment — both endpoints collapse to a single point.
+    const dx = px - ax;
+    const dy = py - ay;
+    return { point: [ax, ay], dist: Math.hypot(dx, dy) };
+  }
+  const apx = px - ax;
+  const apy = py - ay;
+  let t = (apx * abx + apy * aby) / ab2;
+  if (t < 0) t = 0;
+  else if (t > 1) t = 1;
+  const cx = ax + t * abx;
+  const cy = ay + t * aby;
+  return { point: [cx, cy], dist: Math.hypot(px - cx, py - cy) };
 }
