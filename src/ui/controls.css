@@ -137,3 +137,9 @@
 .emap-box-select {
   z-index: 5;
 }
+
+/* Lasso Select free-form polygon overlay. Same z-index as BoxSelect — they
+   are mutually exclusive (only one is enabled at a time). */
+.emap-lasso-select {
+  z-index: 5;
+}
