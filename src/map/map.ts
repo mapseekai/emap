@@ -135,9 +135,13 @@ export interface ClipEraseOptions {
 }
 
 /**
- * Options for {@link Emap.dissolveLayer}. With no `field`, mapshaper merges
- * every feature in the target layer into one. With a `field`, features
- * sharing that field's value are merged.
+ * Options for {@link Emap.dissolveLayer}. With no `field` / `fields`,
+ * mapshaper merges every feature in the target layer into one. With a
+ * grouping key, features sharing that key's value are merged together.
+ *
+ * `field` is shorthand for the single-field case; `fields` is the
+ * multi-field array form. They are mutually exclusive — supplying both
+ * is a configuration error and the call returns `false`.
  */
 export interface DissolveOptions {
   /** Source ID containing the target layer. */
@@ -145,10 +149,47 @@ export interface DissolveOptions {
   /** Layer name (or id) of the layer to dissolve. */
   target: string;
   /**
-   * Optional attribute field to group features by. When omitted, the entire
-   * target layer is dissolved into a single feature.
+   * Optional single attribute field to group features by. Convenience
+   * shorthand for `fields: [field]`. Mutually exclusive with `fields`.
    */
   field?: string;
+  /**
+   * Multi-field group-by. Comma-bearing entries are filtered out (same
+   * pattern as `filterFields`). An empty array is treated as if unset.
+   */
+  fields?: string[];
+  /**
+   * Fields whose numeric values should be summed across each dissolved
+   * group (mapshaper's `sum-fields=` option). Comma-bearing entries are
+   * filtered out.
+   */
+  sumFields?: string[];
+  /**
+   * Fields whose values should be carried through the dissolve unchanged
+   * (mapshaper's `copy-fields=` option). The first feature in each group
+   * provides the value. Comma-bearing entries are filtered out.
+   */
+  copyFields?: string[];
+  /**
+   * Custom JS aggregation expression evaluated per dissolve group
+   * (mapshaper's `calc=` option). Has access to the standard mapshaper
+   * aggregation context. Forwarded verbatim, quoted.
+   */
+  calc?: string;
+  /**
+   * Pre-filter expression — only records where `where` evaluates truthy
+   * are included in the dissolve (mapshaper's `where=` option).
+   */
+  where?: string;
+  /**
+   * Make multipart features instead of dissolving polygon boundaries
+   * (mapshaper's `multipart` flag).
+   */
+  multipart?: boolean;
+  /** Optional name for the output layer (mapshaper's `name=` option). */
+  name?: string;
+  /** Keep the original layer alongside the new dissolved output. */
+  noReplace?: boolean;
 }
 
 /** Options for {@link Emap.bufferLayer}. */
@@ -254,6 +295,13 @@ export interface SnapOptions {
   endpoints?: boolean;
   /** Round all coordinates to a given decimal precision (e.g. 0.000001). */
   precision?: number;
+  /**
+   * Run a post-snap intersection-cut pass to repair geometry artefacts
+   * introduced by rounding / snapping (mapshaper's `fix-geometry` flag).
+   * Recommended when `precision` or `interval` aggressively collapse
+   * vertices.
+   */
+  fixGeometry?: boolean;
 }
 
 /**
@@ -545,6 +593,62 @@ export interface SimplifyOptions {
 }
 
 /** Options for {@link Emap.mosaicLayer}. */
+/**
+ * Options for {@link Emap.cleanLayer}. Heavy topology-repair pass — O(N²) on
+ * polygon counts in the worst case — so opt in via explicit invocation. Every
+ * field is optional; omitting them lets mapshaper apply its built-in defaults.
+ */
+export interface CleanOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the polygon layer to clean. */
+  target: string;
+  /**
+   * Maximum area (in source-CRS units²) of gaps to fill in. Gaps larger
+   * than this are kept as holes. Maps to mapshaper's `gap-fill-area=N`.
+   */
+  gapFillArea?: number;
+  /**
+   * Sliver-detection sensitivity, typically `0..1`. Lower keeps more
+   * features; higher removes more. Maps to `sliver-control=N`.
+   */
+  sliverControl?: number;
+  /** Coincident-vertex snap distance for the topology-build pre-pass. */
+  snapInterval?: number;
+  /** Skip the snap pre-pass entirely (mapshaper's `no-snap` flag). */
+  noSnap?: boolean;
+  /**
+   * Allow output polygons to overlap (disables gap fill).
+   * Maps to mapshaper's `allow-overlaps` flag.
+   */
+  allowOverlaps?: boolean;
+  /**
+   * Tie-breaking rule when overlapping polygons are merged: which input
+   * record's attributes win. Maps to `overlap-rule=...`.
+   */
+  overlapRule?: 'min-id' | 'max-id' | 'min-area' | 'max-area';
+  /**
+   * Keep features with null geometry instead of removing them.
+   * Maps to mapshaper's `allow-empty` flag.
+   */
+  allowEmpty?: boolean;
+  /**
+   * Fix CW/CCW winding-order errors in polygon rings.
+   * Maps to mapshaper's `rewind` flag.
+   */
+  rewind?: boolean;
+  /**
+   * Only delete unused arcs, don't repair gaps / overlaps.
+   * Maps to mapshaper's `only-arcs` flag.
+   */
+  onlyArcs?: boolean;
+  /**
+   * Skip the arc-dissolve sub-step.
+   * Maps to mapshaper's `no-arc-dissolve` flag.
+   */
+  noArcDissolve?: boolean;
+}
+
 export interface MosaicOptions {
   /** Source ID containing the target polygon layer. */
   source: string;
@@ -558,6 +662,14 @@ export interface MosaicOptions {
   noReplace?: boolean;
   /** Optional name for the output layer. */
   name?: string;
+  /**
+   * JS expression evaluated per output mosaic feature to compute aggregate
+   * attribute values (mapshaper's `calc=` option). The expression has access
+   * to the standard mapshaper aggregation context — `sum()`, `min()`,
+   * `max()`, `count()`, etc. — over the records that contributed to the
+   * mosaic feature. Forwarded verbatim, quoted.
+   */
+  calc?: string;
 }
 
 /** Options for {@link Emap.unionLayers}. Requires `targets.length >= 2`. */
@@ -1835,6 +1947,11 @@ export class Emap extends EventDispatcher {
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
 
+    // `field` (single) and `fields` (multi) are mutually exclusive — both
+    // set is a configuration error.
+    const hasFields = Array.isArray(opts.fields) && opts.fields.length > 0;
+    if (opts.field !== undefined && hasFields) return false;
+
     // mapshaper's -dissolve DEFAULT option is `fields` (comma-list, type
     // strings). A field name containing `,` would silently group by N
     // imaginary fields; reject up-front instead.
@@ -1842,9 +1959,48 @@ export class Emap extends EventDispatcher {
       return false;
     }
 
-    const fieldArg = opts.field ? ` ${quoteMapshaperArg(opts.field)}` : '';
-    const cmd = `-target ${quoteMapshaperArg(opts.target)} -dissolve${fieldArg}`;
-    return this._runDatasetCommand(opts.source, cmd, `Dissolve ${opts.target}`);
+    // Build the positional group-by token (single-field convenience or
+    // multi-field array). When neither is set, dissolve collapses every
+    // feature into one (mapshaper's default for -dissolve with no key).
+    let groupToken = '';
+    if (opts.field) {
+      groupToken = ` ${quoteMapshaperArg(opts.field)}`;
+    } else if (hasFields) {
+      const safeFields = opts.fields!.filter((f) => typeof f === 'string' && !f.includes(','));
+      if (safeFields.length > 0) {
+        groupToken = ` ${quoteMapshaperArg(safeFields.join(','))}`;
+      }
+    }
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-dissolve${groupToken}`,
+    ];
+
+    const safeFieldList = (list?: string[]) =>
+      Array.isArray(list)
+        ? list.filter((f) => typeof f === 'string' && !f.includes(','))
+        : [];
+
+    const sumFields = safeFieldList(opts.sumFields);
+    if (sumFields.length > 0) parts.push(`sum-fields=${sumFields.join(',')}`);
+
+    const copyFields = safeFieldList(opts.copyFields);
+    if (copyFields.length > 0) parts.push(`copy-fields=${copyFields.join(',')}`);
+
+    if (opts.calc && opts.calc.trim()) {
+      parts.push(`calc=${quoteMapshaperArg(opts.calc)}`);
+    }
+    if (opts.where && opts.where.trim()) {
+      parts.push(`where=${quoteMapshaperArg(opts.where)}`);
+    }
+    if (opts.multipart) parts.push('multipart');
+    if (opts.name && opts.name.trim()) {
+      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    if (opts.noReplace) parts.push('no-replace');
+
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Dissolve ${opts.target}`);
   }
 
   /**
@@ -2033,6 +2189,9 @@ export class Emap extends EventDispatcher {
     if (typeof opts.precision === 'number') {
       parts.push(`precision=${opts.precision}`);
     }
+    if (opts.fixGeometry) {
+      parts.push('fix-geometry');
+    }
     return this._runDatasetCommand(opts.source, parts.join(' '), `Snap ${opts.target}`);
   }
 
@@ -2043,15 +2202,46 @@ export class Emap extends EventDispatcher {
    * every import. Returns `Promise<boolean>`; failure modes match the other
    * dataset-replace ops (false on unresolvable source/target, error event on
    * mapshaper failure).
+   *
+   * All tuning options are optional; omitting them lets mapshaper apply its
+   * default cleanup heuristics. See {@link CleanOptions} for the surface.
    */
-  public async cleanLayer(opts: { source: string; target: string }): Promise<boolean> {
+  public async cleanLayer(opts: CleanOptions): Promise<boolean> {
     const source = this._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
-    const cmd = `-target ${quoteMapshaperArg(opts.target)} -clean`;
-    return this._runDatasetCommand(opts.source, cmd, `Clean ${opts.target}`);
+
+    // Numeric tuning options reject NaN / negative — mapshaper would either
+    // error opaquely or silently produce surprising results.
+    const validNumOrUnset = (n?: number) =>
+      n === undefined || (typeof n === 'number' && Number.isFinite(n) && n >= 0);
+    if (!validNumOrUnset(opts.gapFillArea)) return false;
+    if (!validNumOrUnset(opts.sliverControl)) return false;
+    if (!validNumOrUnset(opts.snapInterval)) return false;
+
+    if (opts.overlapRule !== undefined) {
+      const allowed = ['min-id', 'max-id', 'min-area', 'max-area'];
+      if (!allowed.includes(opts.overlapRule)) return false;
+    }
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-clean`,
+    ];
+    if (opts.gapFillArea !== undefined) parts.push(`gap-fill-area=${opts.gapFillArea}`);
+    if (opts.sliverControl !== undefined) parts.push(`sliver-control=${opts.sliverControl}`);
+    if (opts.snapInterval !== undefined) parts.push(`snap-interval=${opts.snapInterval}`);
+    if (opts.noSnap) parts.push('no-snap');
+    if (opts.allowOverlaps) parts.push('allow-overlaps');
+    if (opts.overlapRule !== undefined) parts.push(`overlap-rule=${opts.overlapRule}`);
+    if (opts.allowEmpty) parts.push('allow-empty');
+    if (opts.rewind) parts.push('rewind');
+    if (opts.onlyArcs) parts.push('only-arcs');
+    if (opts.noArcDissolve) parts.push('no-arc-dissolve');
+
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Clean ${opts.target}`);
   }
 
   /**
@@ -2138,6 +2328,9 @@ export class Emap extends EventDispatcher {
     }
     if (opts.name && opts.name.trim()) {
       parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    if (opts.calc && opts.calc.trim()) {
+      parts.push(`calc=${quoteMapshaperArg(opts.calc)}`);
     }
     return this._runDatasetCommand(opts.source, parts.join(' '), `Mosaic ${opts.target}`);
   }

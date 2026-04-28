@@ -10,6 +10,7 @@ export type {
   HighlightStyle,
   ClipEraseOptions,
   DissolveOptions,
+  CleanOptions,
   BufferOptions,
   ApplyExpressionOptions,
   ExplodeOptions,

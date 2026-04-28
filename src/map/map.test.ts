@@ -4955,3 +4955,252 @@ describe('audit-fix: linesLayer fields token has a single canonical form', () =>
     expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines');
   });
 });
+
+// ===========================================================================
+// Wrapper option completion (add-wrapper-options-completion)
+// ===========================================================================
+// Tests every newly-exposed option on cleanLayer / dissolveLayer /
+// mosaicLayer / snapLayer. Each test asserts the produced command string
+// shape so that any future divergence shows up as a pinpoint failure.
+
+function makeMapWithLayer(layerName: string, geometry_type = 'polygon'): {
+  map: Emap; parseSpy: ReturnType<typeof vi.fn>;
+} {
+  const map = createBareMap();
+  setPrivate(map, '_history', new EditHistory());
+  const layers = [{ name: layerName, geometry_type, shapes: [] }];
+  const ds = { layers };
+  const source = {
+    id: 'src1', type: 'topology' as const,
+    getDataset: () => ds,
+    getLayers: () => layers,
+    setDataset: vi.fn(),
+    refreshDisplayArcs: vi.fn(),
+  } as any;
+  (map as any)._sources.set('src1', source);
+  const parseSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } as any }]) as ReturnType<typeof vi.fn>;
+  Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
+  Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
+  Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
+  }));
+  return { map, parseSpy };
+}
+
+describe('mosaicLayer: calc option', () => {
+  it('emits calc=<quoted> when supplied', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.mosaicLayer({ source: 'src1', target: 'parks', calc: 'sum(area)' });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -mosaic calc="sum(area)"');
+  });
+
+  it('omits calc= when not supplied', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.mosaicLayer({ source: 'src1', target: 'parks' });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -mosaic');
+  });
+
+  it('omits calc= when whitespace-only', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.mosaicLayer({ source: 'src1', target: 'parks', calc: '   ' });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -mosaic');
+  });
+});
+
+describe('snapLayer: fixGeometry option', () => {
+  it('emits fix-geometry flag when truthy', async () => {
+    const { map, parseSpy } = makeMapWithLayer('roads', 'polyline');
+    await map.snapLayer({ source: 'src1', target: 'roads', interval: 0.001, fixGeometry: true });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "roads" -snap 0.001 fix-geometry');
+  });
+
+  it('omits fix-geometry when falsy', async () => {
+    const { map, parseSpy } = makeMapWithLayer('roads', 'polyline');
+    await map.snapLayer({ source: 'src1', target: 'roads', interval: 0.001 });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "roads" -snap 0.001');
+  });
+});
+
+describe('dissolveLayer: expanded options', () => {
+  it('multi-field group-by via fields[]', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      fields: ['STATE', 'REGION'],
+    });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "counties" -dissolve "STATE,REGION"');
+  });
+
+  it('field and fields are mutually exclusive', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    expect(await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      field: 'STATE', fields: ['REGION'],
+    })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('comma-bearing fields[] entries are filtered out', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      fields: ['ok', 'bad,name', 'ok2'],
+    });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "counties" -dissolve "ok,ok2"');
+  });
+
+  it('empty fields[] is treated as no group-by', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({ source: 'src1', target: 'counties', fields: [] });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "counties" -dissolve');
+  });
+
+  it('sumFields emits sum-fields=', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      field: 'STATE',
+      sumFields: ['POP', 'GDP'],
+    });
+    expect(parseSpy.mock.calls[0][0])
+      .toBe('-target "counties" -dissolve "STATE" sum-fields=POP,GDP');
+  });
+
+  it('copyFields emits copy-fields=', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      field: 'STATE',
+      copyFields: ['NAME', 'CAPITAL'],
+    });
+    expect(parseSpy.mock.calls[0][0])
+      .toBe('-target "counties" -dissolve "STATE" copy-fields=NAME,CAPITAL');
+  });
+
+  it('calc / where forwarded as quoted JS expressions', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      field: 'STATE',
+      calc: 'mean(POP)',
+      where: 'this.YEAR === 2024',
+    });
+    expect(parseSpy.mock.calls[0][0]).toBe(
+      '-target "counties" -dissolve "STATE" calc="mean(POP)" where="this.YEAR === 2024"',
+    );
+  });
+
+  it('multipart / name / noReplace flags', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      multipart: true, name: 'states-out', noReplace: true,
+    });
+    expect(parseSpy.mock.calls[0][0])
+      .toBe('-target "counties" -dissolve multipart name="states-out" no-replace');
+  });
+
+  it('comma-bearing entries in sumFields/copyFields are filtered', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      field: 'STATE',
+      sumFields: ['POP', 'bad,one'],
+      copyFields: ['NAME', 'also,bad'],
+    });
+    expect(parseSpy.mock.calls[0][0])
+      .toBe('-target "counties" -dissolve "STATE" sum-fields=POP copy-fields=NAME');
+  });
+
+  it('full minimal call still works (regression)', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({ source: 'src1', target: 'counties' });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "counties" -dissolve');
+  });
+});
+
+describe('cleanLayer: expanded options', () => {
+  it('emits gap-fill-area=', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: 100 });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean gap-fill-area=100');
+  });
+
+  it('emits sliver-control=', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.cleanLayer({ source: 'src1', target: 'parks', sliverControl: 0.5 });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean sliver-control=0.5');
+  });
+
+  it('emits snap-interval=', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.cleanLayer({ source: 'src1', target: 'parks', snapInterval: 0.001 });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean snap-interval=0.001');
+  });
+
+  it('emits boolean flags', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.cleanLayer({
+      source: 'src1', target: 'parks',
+      noSnap: true, allowOverlaps: true, allowEmpty: true,
+      rewind: true, onlyArcs: true, noArcDissolve: true,
+    });
+    expect(parseSpy.mock.calls[0][0]).toBe(
+      '-target "parks" -clean no-snap allow-overlaps allow-empty rewind only-arcs no-arc-dissolve',
+    );
+  });
+
+  it('emits overlap-rule=', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.cleanLayer({ source: 'src1', target: 'parks', overlapRule: 'min-id' });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean overlap-rule=min-id');
+  });
+
+  it('rejects invalid overlapRule', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    expect(await map.cleanLayer({
+      source: 'src1', target: 'parks',
+      overlapRule: 'bogus' as any,
+    })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects negative numeric tuning options', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    expect(await map.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: -1 })).toBe(false);
+    expect(await map.cleanLayer({ source: 'src1', target: 'parks', sliverControl: -0.5 })).toBe(false);
+    expect(await map.cleanLayer({ source: 'src1', target: 'parks', snapInterval: -10 })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects NaN numeric tuning options', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    expect(await map.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: NaN })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('full minimal call still works (regression)', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.cleanLayer({ source: 'src1', target: 'parks' });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean');
+  });
+
+  it('all-options-combined produces the canonical token order', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.cleanLayer({
+      source: 'src1', target: 'parks',
+      gapFillArea: 100, sliverControl: 0.5, snapInterval: 0.001,
+      noSnap: true, allowOverlaps: true, overlapRule: 'max-area',
+      allowEmpty: true, rewind: true, onlyArcs: true, noArcDissolve: true,
+    });
+    // Documents the canonical ordering produced by the wrapper. Future
+    // reordering would require updating this string and would be visible
+    // in review.
+    expect(parseSpy.mock.calls[0][0]).toBe(
+      '-target "parks" -clean'
+      + ' gap-fill-area=100 sliver-control=0.5 snap-interval=0.001'
+      + ' no-snap allow-overlaps overlap-rule=max-area'
+      + ' allow-empty rewind only-arcs no-arc-dissolve',
+    );
+  });
+});
