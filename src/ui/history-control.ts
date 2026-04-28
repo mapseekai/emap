@@ -81,7 +81,10 @@ export class HistoryControl implements Control {
     btn.type = 'button';
     btn.title = title;
     btn.disabled = true;
-    btn.innerHTML = `<span class="emap-ctrl-icon">${label}</span>`;
+    const icon = document.createElement('span');
+    icon.className = 'emap-ctrl-icon';
+    icon.textContent = label;
+    btn.appendChild(icon);
     btn.addEventListener('click', onClick);
     this._container?.appendChild(btn);
     return btn;

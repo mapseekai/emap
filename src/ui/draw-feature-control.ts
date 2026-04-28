@@ -31,8 +31,13 @@ export interface DrawFeatureControlOptions {
   snapToEdge?: boolean;
   /** CSS color for the drawing line (default: '#0078ff') */
   drawColor?: string;
-  /** Button icon HTML (default: geometry-specific icon) */
-  icon?: string;
+  /**
+   * Button icon. A `string` is rendered as text via `textContent` (safe;
+   * covers unicode glyphs like the defaults below). Pass a `Node` to render
+   * a pre-built DOM element such as an `<svg>` — caller is responsible for
+   * its own escaping.
+   */
+  icon?: string | Node;
 }
 
 const DEFAULT_ICONS: Record<DrawGeometryType, string> = {
@@ -93,7 +98,15 @@ export class DrawFeatureControl implements Control {
     this._btn.className = 'emap-ctrl-draw';
     this._btn.type = 'button';
     this._btn.title = DEFAULT_TITLES[this._options.type];
-    this._btn.innerHTML = `<span class="emap-ctrl-icon">${this._options.icon || DEFAULT_ICONS[this._options.type]}</span>`;
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'emap-ctrl-icon';
+    const icon = this._options.icon ?? DEFAULT_ICONS[this._options.type];
+    if (typeof icon === 'string') {
+      iconSpan.textContent = icon;
+    } else {
+      iconSpan.appendChild(icon);
+    }
+    this._btn.replaceChildren(iconSpan);
     this._btn.addEventListener('click', () => this._toggle());
     this._container.appendChild(this._btn);
 
