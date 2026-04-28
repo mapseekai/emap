@@ -5204,3 +5204,43 @@ describe('cleanLayer: expanded options', () => {
     );
   });
 });
+
+describe('Emap.prebuildSpatialIndex / clearSpatialIndex', () => {
+  function makeMapWithStubFQ(): {
+    map: Emap;
+    prebuild: ReturnType<typeof vi.fn>;
+    clear: ReturnType<typeof vi.fn>;
+  } {
+    const map = createBareMap();
+    const prebuild = vi.fn();
+    const clear = vi.fn();
+    setPrivate(map, '_featureQuery', { prebuild, clear, query: vi.fn() });
+    return { map, prebuild, clear };
+  }
+
+  it('prebuildSpatialIndex(sourceId) delegates to FeatureQuery.prebuild', () => {
+    const { map, prebuild } = makeMapWithStubFQ();
+    map.prebuildSpatialIndex('s1');
+    expect(prebuild).toHaveBeenCalledTimes(1);
+    expect(prebuild).toHaveBeenCalledWith('s1');
+  });
+
+  it('prebuildSpatialIndex() with no arg passes undefined for "all sources"', () => {
+    const { map, prebuild } = makeMapWithStubFQ();
+    map.prebuildSpatialIndex();
+    expect(prebuild).toHaveBeenCalledWith(undefined);
+  });
+
+  it('clearSpatialIndex(sourceId) delegates to FeatureQuery.clear', () => {
+    const { map, clear } = makeMapWithStubFQ();
+    map.clearSpatialIndex('s1');
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(clear).toHaveBeenCalledWith('s1');
+  });
+
+  it('clearSpatialIndex() with no arg passes undefined for "all sources"', () => {
+    const { map, clear } = makeMapWithStubFQ();
+    map.clearSpatialIndex();
+    expect(clear).toHaveBeenCalledWith(undefined);
+  });
+});

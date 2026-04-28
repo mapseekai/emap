@@ -1641,6 +1641,38 @@ export class Emap extends EventDispatcher {
     return this._featureQuery.query(geometryOrOptions, options, visibleKeys);
   }
 
+  /**
+   * Eagerly build the per-layer Flatbush spatial index for one source (or
+   * every registered source when `sourceId` is omitted). Useful for paying
+   * the build cost in idle time before the user's first hit-test.
+   *
+   * Idempotent — already-cached layer indexes are skipped. No-op for
+   * sources without a dataset.
+   *
+   * Subsequent `queryRenderedFeatures` calls automatically use whatever's
+   * cached, regardless of whether `prebuildSpatialIndex` was called.
+   */
+  public prebuildSpatialIndex(sourceId?: string): void {
+    this._featureQuery.prebuild(sourceId);
+  }
+
+  /**
+   * Drop cached per-layer spatial indexes for one source (or all sources
+   * when `sourceId` is omitted).
+   *
+   * Required after in-place geometry edits (`translateSelected`,
+   * `rotateSelected`, vertex commands) that mutate arc coordinates without
+   * changing shape or arc counts — the cache key wouldn't notice and
+   * subsequent queries would return prefilter-stale results.
+   *
+   * Dataset-replace ops (clip / dissolve / etc.) automatically invalidate
+   * via shape-count or arc-count change; this method is only needed for
+   * in-place edits.
+   */
+  public clearSpatialIndex(sourceId?: string): void {
+    this._featureQuery.clear(sourceId);
+  }
+
   public setHighlightedFeatures(
     features: Array<RenderedFeatureAttributes | HighlightFeatureRef>,
     style?: HighlightStyle,
