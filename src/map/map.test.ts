@@ -4349,8 +4349,23 @@ describe('Emap useWorker routing', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
+    // Mock pool needs both run() and runWithId(); _runViaWorker uses
+    // runWithId. The runSpy is shared so the test can introspect calls
+    // and override behaviour via mockImplementationOnce.
+    let nextWorkerId = 1;
     runSpy = vi.fn(async () => ({ datasets: [{ kind: 'packed-result' }] }));
-    setPrivate(map, '_workerPool', { run: runSpy, destroy: vi.fn() });
+    setPrivate(map, '_workerPool', {
+      run: (cmd: string, packed: any, files?: any) => runSpy(cmd, packed, files),
+      runWithId: (cmd: string, packed: any, files?: any) => ({
+        id: nextWorkerId++,
+        promise: runSpy(cmd, packed, files),
+      }),
+      cancelAll: vi.fn(),
+      destroy: vi.fn(),
+    });
+    // Routing decision needs `_workerMode === true` (or 'auto' over
+    // threshold). Existing tests pre-date this and were implicit.
+    setPrivate(map, '_workerMode', true);
 
     exportSpy = vi.fn(async () => ({ datasets: [{ kind: 'packed-original' }] })) as ReturnType<typeof vi.fn>;
     restoreSpy = vi.fn(async () => ({ datasets: [afterDs] })) as ReturnType<typeof vi.fn>;
@@ -4428,5 +4443,267 @@ describe('Emap useWorker routing', () => {
     setPrivate(map, '_dragPan', { destroy: vi.fn() });
     map.remove();
     expect(destroySpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Emap useWorker auto-thresholding
+// ---------------------------------------------------------------------------
+
+describe('Emap useWorker: \'auto\' thresholding', () => {
+  // Builds an Emap configured with `useWorker: 'auto'` and an injected pool
+  // mock; flips the source dataset's vertex count to control which branch
+  // _runDatasetCommand chooses.
+  let map: Emap;
+  let runSpy: ReturnType<typeof vi.fn>;
+  let beforeDs: any;
+  const originalExport = Reflect.get(mapshaper.internal as object, 'exportDatasetsToPack');
+  const originalRestore = Reflect.get(mapshaper.internal as object, 'restoreSessionData');
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+
+  function setVertexCount(n: number): void {
+    beforeDs.arcs = { getPointCount: () => n };
+  }
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+
+    beforeDs = {
+      layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }],
+      arcs: { getPointCount: () => 0 },
+    };
+    const afterDs = { layers: [{ name: 'out', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    let nextId = 1;
+    runSpy = vi.fn(async () => ({ datasets: [{ kind: 'packed-result' }] }));
+    setPrivate(map, '_workerPool', {
+      run: (cmd: string, packed: any, files?: any) => runSpy(cmd, packed, files),
+      runWithId: (cmd: string, packed: any, files?: any) => ({
+        id: nextId++,
+        promise: runSpy(cmd, packed, files),
+      }),
+      cancelAll: vi.fn(),
+      destroy: vi.fn(),
+    });
+    setPrivate(map, '_workerMode', 'auto');
+    setPrivate(map, '_workerThreshold', 1000);
+
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack',
+      vi.fn(async () => ({ datasets: [{ kind: 'packed-original' }] })));
+    Reflect.set(mapshaper.internal as object, 'restoreSessionData',
+      vi.fn(async () => ({ datasets: [afterDs] })));
+    // Main-thread path also stubbed in case the auto branch routes there.
+    Reflect.set(mapshaper.internal as object, 'parseCommands',
+      vi.fn(() => [{ name: 'parsed', options: { _cmd: '' } as any }]));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands',
+      vi.fn((_c: any, _j: any, cb: any) => cb(null, {
+        catalog: { getDefaultTargets: () => [{ dataset: afterDs }] },
+      })));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack', originalExport);
+    Reflect.set(mapshaper.internal as object, 'restoreSessionData', originalRestore);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('routes to main thread when vertex count is below threshold', async () => {
+    setVertexCount(500); // threshold is 1000
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(runSpy).not.toHaveBeenCalled();
+  });
+
+  it('routes to worker when vertex count is at threshold', async () => {
+    setVertexCount(1000);
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(runSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes to worker when vertex count is above threshold', async () => {
+    setVertexCount(50_000);
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(runSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes arc-less datasets (point-only) to main thread', async () => {
+    beforeDs.arcs = undefined;
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(runSpy).not.toHaveBeenCalled();
+  });
+
+  it('honours custom workerThreshold', async () => {
+    setPrivate(map, '_workerThreshold', 100);
+    setVertexCount(150);
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(runSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Emap workerjobstart / workerjobend events
+// ---------------------------------------------------------------------------
+
+describe('Emap workerjobstart / workerjobend events', () => {
+  let map: Emap;
+  let runSpy: ReturnType<typeof vi.fn>;
+  const originalExport = Reflect.get(mapshaper.internal as object, 'exportDatasetsToPack');
+  const originalRestore = Reflect.get(mapshaper.internal as object, 'restoreSessionData');
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+    const beforeDs = {
+      layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }],
+      arcs: { getPointCount: () => 12345 },
+    };
+    const afterDs = { layers: [{ name: 'out', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    let nextId = 100;
+    runSpy = vi.fn(async () => ({ datasets: [{ kind: 'packed-result' }] }));
+    setPrivate(map, '_workerPool', {
+      run: (cmd: string, packed: any, files?: any) => runSpy(cmd, packed, files),
+      runWithId: (cmd: string, packed: any, files?: any) => ({
+        id: nextId++,
+        promise: runSpy(cmd, packed, files),
+      }),
+      cancelAll: vi.fn(),
+      destroy: vi.fn(),
+    });
+    setPrivate(map, '_workerMode', true);
+
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack',
+      vi.fn(async () => ({ datasets: [{ kind: 'packed-original' }] })));
+    Reflect.set(mapshaper.internal as object, 'restoreSessionData',
+      vi.fn(async () => ({ datasets: [afterDs] })));
+    Reflect.set(mapshaper.internal as object, 'parseCommands',
+      vi.fn(() => [{ name: 'parsed', options: { _cmd: '' } as any }]));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands',
+      vi.fn((_c: any, _j: any, cb: any) => cb(null, {
+        catalog: { getDefaultTargets: () => [{ dataset: afterDs }] },
+      })));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack', originalExport);
+    Reflect.set(mapshaper.internal as object, 'restoreSessionData', originalRestore);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('fires workerjobstart before pool.run + workerjobend after on success', async () => {
+    const events: Array<{ type: string; payload: any }> = [];
+    map.on('workerjobstart', (e: any) => events.push({ type: 'start', payload: e }));
+    map.on('workerjobend', (e: any) => events.push({ type: 'end', payload: e }));
+
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(events.length).toBe(2);
+    expect(events[0].type).toBe('start');
+    expect(events[0].payload.cmd).toMatch(/-drop/);
+    expect(events[0].payload.label).toBe('Drop states');
+    expect(events[0].payload.datasetVertexCount).toBe(12345);
+    expect(typeof events[0].payload.id).toBe('number');
+
+    expect(events[1].type).toBe('end');
+    expect(events[1].payload.id).toBe(events[0].payload.id);
+    expect(events[1].payload.ok).toBe(true);
+    expect(typeof events[1].payload.durationMs).toBe('number');
+  });
+
+  it('fires workerjobend with ok:false + errorMessage on rejection', async () => {
+    runSpy.mockImplementationOnce(() => Promise.reject(new Error('worker boom')));
+    const events: any[] = [];
+    map.on('workerjobend', (e: any) => events.push(e));
+
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(false);
+    expect(events.length).toBe(1);
+    expect(events[0].ok).toBe(false);
+    expect(events[0].errorMessage).toBe('worker boom');
+  });
+
+  it('does NOT fire events when running on the main thread', async () => {
+    setPrivate(map, '_workerMode', false);
+    const events: any[] = [];
+    map.on('workerjobstart', (e: any) => events.push(e));
+    map.on('workerjobend', (e: any) => events.push(e));
+
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(events.length).toBe(0);
+    expect(runSpy).not.toHaveBeenCalled();
+  });
+
+  it('correlates concurrent in-flight events by distinct ids', async () => {
+    const events: Array<{ type: string; payload: any }> = [];
+    map.on('workerjobstart', (e: any) => events.push({ type: 'start', payload: e }));
+    map.on('workerjobend', (e: any) => events.push({ type: 'end', payload: e }));
+
+    const a = map.dropLayer({ source: 'src1', target: 'states' });
+    const b = map.dropLayer({ source: 'src1', target: 'states' });
+    await Promise.all([a, b]);
+
+    const startIds = events.filter((e) => e.type === 'start').map((e) => e.payload.id);
+    const endIds = events.filter((e) => e.type === 'end').map((e) => e.payload.id);
+    expect(new Set(startIds).size).toBe(2);
+    expect(new Set(endIds)).toEqual(new Set(startIds));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Emap.cancelWorkerJobs
+// ---------------------------------------------------------------------------
+
+describe('Emap.cancelWorkerJobs', () => {
+  it('delegates to the worker pool\'s cancelAll', () => {
+    const map = createBareMap();
+    const cancelAllSpy = vi.fn();
+    setPrivate(map, '_workerPool', { cancelAll: cancelAllSpy });
+    map.cancelWorkerJobs();
+    expect(cancelAllSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('is a safe no-op when no pool exists', () => {
+    const map = createBareMap();
+    setPrivate(map, '_workerPool', null);
+    expect(() => map.cancelWorkerJobs()).not.toThrow();
   });
 });

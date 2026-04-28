@@ -54,30 +54,46 @@ export interface MapOptions {
    */
   canvasKit?: CanvasKit;
   /**
-   * When `true`, dataset-replace operations (clip, dissolve, union,
-   * mosaic, simplify, project, ...) run inside a Web Worker so the main
-   * thread stays interactive during heavy work. Default `false`.
+   * Routing for dataset-replace operations (clip, dissolve, union,
+   * mosaic, simplify, project, ...).
+   *
+   * - `false` (default) — every op runs synchronously on the main thread.
+   * - `true` — every op routes through a Web Worker, freeing the main
+   *   thread during heavy work. Adds ~50-100ms pack/unpack overhead per
+   *   op so it's a slowdown for tiny datasets.
+   * - `'auto'` — route through the worker only when the source dataset's
+   *   arc vertex count is at least {@link workerThreshold}. Best of both
+   *   worlds for mixed-size workloads.
    *
    * Selection-level operations (translateSelected, rotateSelected,
    * vertex commands) always run on the main thread regardless of this
    * flag — their per-vertex cost is far below the worker round-trip
    * overhead.
    */
-  useWorker?: boolean;
+  useWorker?: boolean | 'auto';
+  /**
+   * Vertex-count threshold for `useWorker: 'auto'`. Datasets whose
+   * `arcs.getPointCount()` is at least this large route through the
+   * worker; smaller datasets stay on the main thread. Default `50000`.
+   * Ignored when `useWorker` is a boolean.
+   */
+  workerThreshold?: number;
   /**
    * URL of the worker bundle (`emap-worker.js`). Resolved against
    * `document.baseURI` when relative. Only consulted when `useWorker`
-   * is `true`. Defaults to `'emap-worker.js'` (sibling of the page).
+   * is truthy. Defaults to `'emap-worker.js'` (sibling of the page).
    */
   workerUrl?: string;
   /**
    * Pre-constructed worker pool. Only consulted when `useWorker` is
-   * `true`; takes precedence over `workerUrl`. Used by tests to inject
+   * truthy; takes precedence over `workerUrl`. Used by tests to inject
    * a mock pool, and by power users who want to share one pool across
    * multiple `Emap` instances.
    */
   workerPool?: MapshaperWorkerPool;
 }
+
+const DEFAULT_WORKER_THRESHOLD = 50_000;
 
 export interface QueryRenderedFeaturesOptions {
   layers?: string[];
@@ -770,9 +786,15 @@ export class Emap extends EventDispatcher {
   private _editVertexState: EditVertexState | null = null;
   private _editDrawState: EditDrawState | null = null;
 
-  // Worker pool — lazily constructed when `useWorker: true` was passed.
+  // Worker pool — lazily constructed when `useWorker !== false` was passed.
   // null when the option is off (or until the first dataset-replace runs).
   private _workerPool: MapshaperWorkerPool | null = null;
+  // Resolved `useWorker` mode: false (off), true (always), or 'auto'
+  // (per-call decision based on dataset vertex count).
+  private _workerMode: boolean | 'auto' = false;
+  // Vertex-count threshold for the 'auto' mode. Defaults to
+  // `DEFAULT_WORKER_THRESHOLD` (50_000).
+  private _workerThreshold: number = DEFAULT_WORKER_THRESHOLD;
 
   constructor(options: MapOptions) {
     super();
@@ -828,7 +850,11 @@ export class Emap extends EventDispatcher {
 
     // Set up the worker pool eagerly when requested. Construction is cheap;
     // the underlying Worker is lazy-spawned on first run().
-    if (options.useWorker || options.workerPool) {
+    this._workerMode = options.useWorker ?? false;
+    if (typeof options.workerThreshold === 'number' && options.workerThreshold >= 0) {
+      this._workerThreshold = options.workerThreshold;
+    }
+    if (this._workerMode !== false || options.workerPool) {
       if (options.workerPool) {
         this._workerPool = options.workerPool;
       } else {
@@ -837,6 +863,19 @@ export class Emap extends EventDispatcher {
         });
       }
     }
+  }
+
+  /**
+   * Hard-cancel any in-flight worker jobs. Safe to call when no worker
+   * pool exists (no-op). The pool stays usable — subsequent dataset-replace
+   * ops re-spawn a fresh worker.
+   *
+   * mapshaper isn't interruptible mid-command, so this is the only sound
+   * abandonment path: terminate the worker, lose any other queued jobs as
+   * collateral, and let the next op start over.
+   */
+  public cancelWorkerJobs(): void {
+    this._workerPool?.cancelAll();
   }
 
 
@@ -3194,6 +3233,51 @@ export class Emap extends EventDispatcher {
    * selection, and fires `historychange` once. Future ops (`dissolve`,
    * `buffer`, ...) reuse this helper.
    */
+
+  /**
+   * Worker-thread variant of {@link runMapshaperCommandOnDataset}: packs
+   * the dataset via `exportDatasetsToPack({ compact: false })`, dispatches
+   * to the pool, restores the result. Fires `workerjobstart` /
+   * `workerjobend` events around the pool round-trip so UI code can show
+   * a spinner without per-call wiring.
+   */
+  private async _runViaWorker(
+    dataset: MapshaperDataset,
+    cmd: string,
+    label: string,
+    inputFiles?: Record<string, Uint8Array | string>,
+  ): Promise<MapshaperDataset> {
+    if (!this._workerPool) {
+      // Should never reach here — caller checks _workerPool. Defensive.
+      throw new Error('_runViaWorker: worker pool not available');
+    }
+    const packed = await mapshaper.internal.exportDatasetsToPack([dataset], { compact: false });
+    const datasetVertexCount = dataset.arcs?.getPointCount?.() ?? 0;
+    const { id, promise } = this._workerPool.runWithId(cmd, packed, inputFiles);
+    const startedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    this.fire('workerjobstart', { id, cmd, label, datasetVertexCount });
+
+    try {
+      const resultPacked = await promise;
+      const restored = await mapshaper.internal.restoreSessionData(resultPacked);
+      if (!restored.datasets || restored.datasets.length === 0) {
+        throw new Error('worker: no dataset in response');
+      }
+      const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+      this.fire('workerjobend', { id, ok: true, durationMs });
+      return restored.datasets[0];
+    } catch (err: any) {
+      const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+      this.fire('workerjobend', {
+        id,
+        ok: false,
+        durationMs,
+        errorMessage: err?.message ?? String(err),
+      });
+      throw err;
+    }
+  }
+
   private async _runDatasetCommand(
     sourceId: string,
     cmd: string,
@@ -3210,19 +3294,24 @@ export class Emap extends EventDispatcher {
     // restore on undo.
     const before: MapshaperDataset = mapshaper.internal.copyDataset(original);
 
+    // Decide worker vs main-thread.
+    // - false      → main-thread always
+    // - true       → worker always (when pool exists)
+    // - 'auto'     → worker when arc vertex count meets workerThreshold
+    let useWorker = false;
+    if (this._workerPool) {
+      if (this._workerMode === true) {
+        useWorker = true;
+      } else if (this._workerMode === 'auto') {
+        const vertexCount = original.arcs?.getPointCount?.() ?? 0;
+        useWorker = vertexCount >= this._workerThreshold;
+      }
+    }
+
     let after: MapshaperDataset;
     try {
-      if (this._workerPool) {
-        // Off-thread path: pack → worker → unpack. `compact: false` skips the
-        // gzip step (we don't need on-disk size, just structured-clone over
-        // postMessage). Selection-level ops never reach this code path.
-        const packed = await mapshaper.internal.exportDatasetsToPack([original], { compact: false });
-        const resultPacked = await this._workerPool.run(cmd, packed, inputFiles);
-        const restored = await mapshaper.internal.restoreSessionData(resultPacked);
-        if (!restored.datasets || restored.datasets.length === 0) {
-          throw new Error('worker: no dataset in response');
-        }
-        after = restored.datasets[0];
+      if (useWorker) {
+        after = await this._runViaWorker(original, cmd, label, inputFiles);
       } else {
         after = await runMapshaperCommandOnDataset(cmd, original, inputFiles);
       }

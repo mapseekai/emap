@@ -193,6 +193,62 @@ describe('MapshaperWorkerPool', () => {
     await pending;
   });
 
+  it('cancelAll() terminates the worker and rejects pending requests', async () => {
+    const pool = makePool();
+    const a = pool.run('-clip', { datasets: [] }).catch((e) => e);
+    const b = pool.run('-dissolve', { datasets: [] }).catch((e) => e);
+    pool.cancelAll();
+    expect(MockWorker.instances[0].terminateCalled).toBe(true);
+    const errA = await a;
+    const errB = await b;
+    expect((errA as Error).message).toMatch(/cancelled/);
+    expect((errB as Error).message).toMatch(/cancelled/);
+  });
+
+  it('cancelAll() on an unspawned pool is a no-op', () => {
+    const pool = makePool();
+    expect(() => pool.cancelAll()).not.toThrow();
+    expect(pool.isWorkerSpawned()).toBe(false);
+  });
+
+  it('run() after cancelAll() spawns a fresh worker', () => {
+    const pool = makePool();
+    void pool.run('-clip', { datasets: [] }).catch(() => undefined);
+    pool.cancelAll();
+    void pool.run('-dissolve', { datasets: [] });
+    expect(MockWorker.instances).toHaveLength(2);
+    // First was terminated, second should not be.
+    expect(MockWorker.instances[0].terminateCalled).toBe(true);
+    expect(MockWorker.instances[1].terminateCalled).toBe(false);
+  });
+
+  it('cancelAll() does not destroy the pool — subsequent run() works', async () => {
+    const pool = makePool();
+    void pool.run('-clip', { datasets: [] }).catch(() => undefined);
+    pool.cancelAll();
+    const result = pool.run('-dissolve', { datasets: [] });
+    const msg = MockWorker.instances[1].posted[0];
+    MockWorker.instances[1].respond({ id: msg.id, type: 'ok', packed: 'after-cancel' });
+    await expect(result).resolves.toBe('after-cancel');
+  });
+
+  it('runWithId returns the correlation id synchronously', () => {
+    const pool = makePool();
+    const { id, promise } = pool.runWithId('-clip', { datasets: [] });
+    promise.catch(() => undefined); // swallow when the test ends
+    expect(typeof id).toBe('number');
+    expect(id).toBeGreaterThan(0);
+    const msg = MockWorker.instances[0].posted[0];
+    expect(msg.id).toBe(id);
+  });
+
+  it('runWithId after destroy returns a rejecting promise', async () => {
+    const pool = makePool();
+    pool.destroy();
+    const { promise } = pool.runWithId('-clip', { datasets: [] });
+    await expect(promise).rejects.toThrow(/destroyed/);
+  });
+
   it('throws when no Worker constructor is available', () => {
     const pool = new MapshaperWorkerPool({
       workerUrl: 'x.js',

@@ -71,17 +71,31 @@ export class MapshaperWorkerPool {
     packed: any,
     inputFiles?: Record<string, Uint8Array | string>,
   ): Promise<any> {
+    return this.runWithId(cmd, packed, inputFiles).promise;
+  }
+
+  /**
+   * Same as {@link run}, but also surfaces the correlation id synchronously
+   * so the caller can fire an event referencing the id BEFORE the promise
+   * resolves. Used by Emap's `workerjobstart` / `workerjobend` events.
+   */
+  runWithId(
+    cmd: string,
+    packed: any,
+    inputFiles?: Record<string, Uint8Array | string>,
+  ): { id: number; promise: Promise<any> } {
     if (this._destroyed) {
-      return Promise.reject(new Error('MapshaperWorkerPool: destroyed'));
+      return { id: -1, promise: Promise.reject(new Error('MapshaperWorkerPool: destroyed')) };
     }
     const worker = this._ensureWorker();
     const id = this._nextId++;
-    return new Promise((resolve, reject) => {
+    const promise = new Promise<any>((resolve, reject) => {
       this._pending.set(id, { resolve, reject });
       const msg: RunMessage = { id, type: 'run', cmd, packed };
       if (inputFiles) msg.inputFiles = inputFiles;
       worker.postMessage(msg);
     });
+    return { id, promise };
   }
 
   /**
@@ -91,13 +105,23 @@ export class MapshaperWorkerPool {
   destroy(): void {
     if (this._destroyed) return;
     this._destroyed = true;
-    if (this._worker) {
-      this._worker.terminate();
-      this._worker = null;
-    }
-    const err = new Error('MapshaperWorkerPool: destroyed');
-    for (const { reject } of this._pending.values()) reject(err);
-    this._pending.clear();
+    this._terminate(new Error('MapshaperWorkerPool: destroyed'));
+  }
+
+  /**
+   * Hard-kill the underlying worker (if spawned) and reject every pending
+   * request as `'cancelled'`. Unlike {@link destroy}, the pool stays usable —
+   * the next {@link run} call spawns a fresh worker.
+   *
+   * mapshaper isn't interruptible mid-command, so this is the only sound
+   * way to abandon a job that's already running: terminate the whole
+   * worker, lose any other queued jobs as collateral, and start over. A
+   * future iteration could add per-request cancellation tokens; v1 keeps
+   * this honest by exposing only the all-or-nothing semantics.
+   */
+  cancelAll(): void {
+    if (this._destroyed) return;
+    this._terminate(new Error('MapshaperWorkerPool: cancelled'));
   }
 
   /** True iff the worker has been spawned at least once. Test/diagnostics aid. */
@@ -106,6 +130,16 @@ export class MapshaperWorkerPool {
   }
 
   // ---------------------------------------------------------------------------
+
+  /** Internal: terminate the worker (if any) and reject all pending. */
+  private _terminate(reason: Error): void {
+    if (this._worker) {
+      this._worker.terminate();
+      this._worker = null;
+    }
+    for (const { reject } of this._pending.values()) reject(reason);
+    this._pending.clear();
+  }
 
   private _ensureWorker(): Worker {
     if (this._worker) return this._worker;
