@@ -4309,3 +4309,124 @@ describe('Emap.exportSnapshot / loadSnapshot round-trip (real mapshaper)', () =>
     expect(summarize(mapB, 'beta')).toEqual(beforeB);
   });
 });
+
+describe('Emap useWorker routing', () => {
+  // Verifies that when a worker pool is wired in, _runDatasetCommand:
+  //   - packs the original dataset via mapshaper.internal.exportDatasetsToPack
+  //   - calls workerPool.run with the packed payload + cmd + inputFiles
+  //   - unpacks the response via mapshaper.internal.restoreSessionData
+  //   - applies via setDataset and pushes a DatasetReplaceCommand
+  //
+  // We don't spawn a real worker — `workerPool` is a stub that records
+  // the call and returns a packed payload of our choosing.
+
+  let map: Emap;
+  let runSpy: ReturnType<typeof vi.fn>;
+  let exportSpy: ReturnType<typeof vi.fn>;
+  let restoreSpy: ReturnType<typeof vi.fn>;
+  let setDatasetSpy: ReturnType<typeof vi.fn>;
+
+  const originalExport = Reflect.get(mapshaper.internal as object, 'exportDatasetsToPack');
+  const originalRestore = Reflect.get(mapshaper.internal as object, 'restoreSessionData');
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+
+    setDatasetSpy = vi.fn();
+    const beforeDs = { layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }] };
+    const afterDs = { layers: [{ name: 'states-out', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: setDatasetSpy,
+      refreshDisplayArcs: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    runSpy = vi.fn(async () => ({ datasets: [{ kind: 'packed-result' }] }));
+    setPrivate(map, '_workerPool', { run: runSpy, destroy: vi.fn() });
+
+    exportSpy = vi.fn(async () => ({ datasets: [{ kind: 'packed-original' }] })) as ReturnType<typeof vi.fn>;
+    restoreSpy = vi.fn(async () => ({ datasets: [afterDs] })) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack', exportSpy);
+    Reflect.set(mapshaper.internal as object, 'restoreSessionData', restoreSpy);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack', originalExport);
+    Reflect.set(mapshaper.internal as object, 'restoreSessionData', originalRestore);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+  });
+
+  it('routes _runDatasetCommand through workerPool.run with packed payload', async () => {
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+
+    expect(exportSpy).toHaveBeenCalledTimes(1);
+    expect(exportSpy.mock.calls[0][1]).toEqual({ compact: false });
+
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    const [cmd, packed] = runSpy.mock.calls[0] as unknown[];
+    expect(typeof cmd).toBe('string');
+    expect(cmd).toMatch(/-drop/);
+    expect(packed).toEqual({ datasets: [{ kind: 'packed-original' }] });
+
+    expect(restoreSpy).toHaveBeenCalledTimes(1);
+    expect(restoreSpy.mock.calls[0][0]).toEqual({ datasets: [{ kind: 'packed-result' }] });
+
+    // The setDataset call gets the unpacked result, not the packed payload.
+    expect(setDatasetSpy).toHaveBeenCalledTimes(1);
+    expect(setDatasetSpy.mock.calls[0][0]).toEqual({ layers: [{ name: 'states-out', shapes: [] }] });
+  });
+
+  it('forwards inputFiles to workerPool.run when present (joinTable path)', async () => {
+    const ok = await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { csv: 'a,b\n1,2' }, keys: ['k', 's'],
+    });
+    expect(ok).toBe(true);
+    const args = runSpy.mock.calls[0] as unknown[];
+    expect(args[2]).toEqual({ '.emap-join.csv': 'a,b\n1,2' });
+  });
+
+  it('worker rejection fires error event + returns false', async () => {
+    runSpy.mockImplementationOnce(() => Promise.reject(new Error('worker boom')));
+    const errors: any[] = [];
+    map.on('error', (e: any) => errors.push(e));
+
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(false);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].error.message).toBe('worker boom');
+    expect(setDatasetSpy).not.toHaveBeenCalled();
+  });
+
+  it('throws when worker response has no datasets', async () => {
+    runSpy.mockImplementationOnce(async () => ({ datasets: [] }));
+    restoreSpy.mockImplementationOnce(async () => ({ datasets: [] }));
+    const errors: any[] = [];
+    map.on('error', (e: any) => errors.push(e));
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(false);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].error.message).toMatch(/no dataset in response/);
+  });
+
+  it('Emap.remove() destroys the worker pool', () => {
+    const destroySpy = vi.fn();
+    setPrivate(map, '_workerPool', { run: runSpy, destroy: destroySpy });
+    // remove() also tries to manipulate _container/_canvasContainer; stub.
+    setPrivate(map, '_container', { removeChild: vi.fn() });
+    setPrivate(map, '_canvasContainer', {});
+    setPrivate(map, '_dragPan', { destroy: vi.fn() });
+    map.remove();
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+  });
+});

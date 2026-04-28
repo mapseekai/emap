@@ -58,6 +58,8 @@ export type {
 export { resolveStrokeStyle, resolvePointStyle } from './map/layer';
 export * from './core/events';
 export { DragPanHandler } from './core/drag-pan-handler';
+export { MapshaperWorkerPool } from './core/mapshaper-worker-pool';
+export type { MapshaperWorkerPoolOptions } from './core/mapshaper-worker-pool';
 export * from './source/topology-source';
 export type { ExportFormat, ExportOptions } from './source/source';
 export * from './renderer/canvas-painter';

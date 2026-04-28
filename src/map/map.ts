@@ -10,6 +10,7 @@ import { TopologySource } from '../source/source';
 import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
 import { MouseWheel } from '../core/interactions';
 import { DragPanHandler } from '../core/drag-pan-handler';
+import { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import { FeatureQuery } from './feature-query';
 import { HighlightManager } from './highlight-manager';
 import { Selection, SelectMode, SelectionDiff } from './selection';
@@ -52,6 +53,30 @@ export interface MapOptions {
    * @experimental This feature is experimental and may have performance issues with large datasets.
    */
   canvasKit?: CanvasKit;
+  /**
+   * When `true`, dataset-replace operations (clip, dissolve, union,
+   * mosaic, simplify, project, ...) run inside a Web Worker so the main
+   * thread stays interactive during heavy work. Default `false`.
+   *
+   * Selection-level operations (translateSelected, rotateSelected,
+   * vertex commands) always run on the main thread regardless of this
+   * flag — their per-vertex cost is far below the worker round-trip
+   * overhead.
+   */
+  useWorker?: boolean;
+  /**
+   * URL of the worker bundle (`emap-worker.js`). Resolved against
+   * `document.baseURI` when relative. Only consulted when `useWorker`
+   * is `true`. Defaults to `'emap-worker.js'` (sibling of the page).
+   */
+  workerUrl?: string;
+  /**
+   * Pre-constructed worker pool. Only consulted when `useWorker` is
+   * `true`; takes precedence over `workerUrl`. Used by tests to inject
+   * a mock pool, and by power users who want to share one pool across
+   * multiple `Emap` instances.
+   */
+  workerPool?: MapshaperWorkerPool;
 }
 
 export interface QueryRenderedFeaturesOptions {
@@ -745,6 +770,10 @@ export class Emap extends EventDispatcher {
   private _editVertexState: EditVertexState | null = null;
   private _editDrawState: EditDrawState | null = null;
 
+  // Worker pool — lazily constructed when `useWorker: true` was passed.
+  // null when the option is off (or until the first dataset-replace runs).
+  private _workerPool: MapshaperWorkerPool | null = null;
+
   constructor(options: MapOptions) {
     super();
 
@@ -796,6 +825,18 @@ export class Emap extends EventDispatcher {
     this.on('move', () => this._scheduleRender());
     this.on('resize', () => this._scheduleRender());
     this.on('reset', () => this.reset());
+
+    // Set up the worker pool eagerly when requested. Construction is cheap;
+    // the underlying Worker is lazy-spawned on first run().
+    if (options.useWorker || options.workerPool) {
+      if (options.workerPool) {
+        this._workerPool = options.workerPool;
+      } else {
+        this._workerPool = new MapshaperWorkerPool({
+          workerUrl: options.workerUrl ?? 'emap-worker.js',
+        });
+      }
+    }
   }
 
 
@@ -3171,7 +3212,20 @@ export class Emap extends EventDispatcher {
 
     let after: MapshaperDataset;
     try {
-      after = await runMapshaperCommandOnDataset(cmd, original, inputFiles);
+      if (this._workerPool) {
+        // Off-thread path: pack → worker → unpack. `compact: false` skips the
+        // gzip step (we don't need on-disk size, just structured-clone over
+        // postMessage). Selection-level ops never reach this code path.
+        const packed = await mapshaper.internal.exportDatasetsToPack([original], { compact: false });
+        const resultPacked = await this._workerPool.run(cmd, packed, inputFiles);
+        const restored = await mapshaper.internal.restoreSessionData(resultPacked);
+        if (!restored.datasets || restored.datasets.length === 0) {
+          throw new Error('worker: no dataset in response');
+        }
+        after = restored.datasets[0];
+      } else {
+        after = await runMapshaperCommandOnDataset(cmd, original, inputFiles);
+      }
     } catch (err) {
       // Surface as a fire-and-forget error event; do not throw from a public
       // edit op so that one bad command doesn't tear down the calling page.
@@ -3199,6 +3253,10 @@ export class Emap extends EventDispatcher {
 
   public remove(): void {
     this._dragPan.destroy();
+    if (this._workerPool) {
+      this._workerPool.destroy();
+      this._workerPool = null;
+    }
     if (this._container && this._canvasContainer) {
       this._container.removeChild(this._canvasContainer);
     }

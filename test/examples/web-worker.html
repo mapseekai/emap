@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - Web Worker 卸载重命令</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header button { padding: 6px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #header button.alt { background: #2980b9; }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #header label { display: flex; align-items: center; gap: 4px; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    .group { display: flex; gap: 6px; align-items: center; }
+    /* The "freeze indicator" — a CSS animation that tells you visually
+       whether the main thread is responsive. Pauses → blocked. */
+    #freeze-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+      background: #e74c3c;
+      animation: pulse 1s infinite linear;
+    }
+    @keyframes pulse {
+      0%   { transform: scale(0.6); opacity: 0.4; }
+      50%  { transform: scale(1.0); opacity: 1.0; }
+      100% { transform: scale(0.6); opacity: 0.4; }
+    }
+    #stats { background: #34495e; padding: 4px 10px; border-radius: 3px; font-family: monospace; font-size: 12px; min-width: 240px; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <span class="group">
+      <span id="freeze-dot" title="主线程心跳:有动画 = 主线程响应中,卡住 = 阻塞"></span>
+      <span>主线程心跳</span>
+    </span>
+    <span class="group">
+      <label><input id="use-worker" type="checkbox" /> 使用 Worker</label>
+      <button id="rebuild-btn" class="alt" disabled>(重建 emap)</button>
+    </span>
+    <span class="group">
+      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    </span>
+    <span class="group">
+      <button id="dissolve-btn" disabled>Dissolve 全部</button>
+      <button id="simplify-btn" disabled>Simplify 5%</button>
+      <button id="union-btn" disabled>Union 全部多边形层</button>
+      <button id="clean-btn" disabled>Clean</button>
+    </span>
+    <span id="stats">layers: -, arcs: -, vertices: -</span>
+    <span class="hint">
+      勾选 <code>使用 Worker</code> 后点 (重建 emap) 应用。然后用大型多边形数据(美国县/中国边界)运行 Dissolve / Union。
+      不带 Worker 时左边的红点会卡住几秒;开 Worker 后红点持续闪烁。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+
+    const SOURCE_ID = 'worker-demo-source';
+    let map = null;
+    let lastFile = null;
+    let lastFileBytes = null;
+
+    const useWorkerInput = document.getElementById('use-worker');
+    const rebuildBtn = document.getElementById('rebuild-btn');
+    const dissolveBtn = document.getElementById('dissolve-btn');
+    const simplifyBtn = document.getElementById('simplify-btn');
+    const unionBtn = document.getElementById('union-btn');
+    const cleanBtn = document.getElementById('clean-btn');
+    const stats = document.getElementById('stats');
+    const allOpsBtns = [dissolveBtn, simplifyBtn, unionBtn, cleanBtn];
+
+    function buildMap(useWorker) {
+      if (map) {
+        try { map.remove(); } catch (_) {}
+      }
+      map = new Emap({
+        container: 'map',
+        useWorker,
+        // The worker bundle lives next to emap-dev.js — both are in /dist/.
+        workerUrl: '../../dist/emap-worker.js',
+      });
+      map.addControl(new NavigationControl(), 'top-left');
+      map.addControl(new HistoryControl(), 'top-left');
+      map.bindHistoryShortcuts();
+      map.on('error', (e) => {
+        console.error('emap error:', e);
+        alert('错误: ' + (e?.error?.message ?? e));
+      });
+      console.log(`Emap rebuilt (useWorker = ${useWorker})`);
+    }
+
+    function refreshStats() {
+      const src = map?.getSource(SOURCE_ID);
+      const ds = src?.getDataset();
+      if (!ds) {
+        stats.textContent = 'layers: -, arcs: -, vertices: -';
+        return;
+      }
+      const arcCount = ds.arcs?.size?.() ?? 0;
+      const vertCount = ds.arcs?.getPointCount?.() ?? 0;
+      stats.textContent = `layers: ${ds.layers.length}, arcs: ${arcCount}, vertices: ${vertCount}`;
+    }
+
+    function reloadCurrentFile() {
+      if (!lastFile || !lastFileBytes) {
+        for (const b of allOpsBtns) b.disabled = true;
+        refreshStats();
+        return;
+      }
+      const source = new TopologySource(SOURCE_ID);
+      source.on('data', () => {
+        map.setExtent(source.getExtent());
+        for (const b of allOpsBtns) b.disabled = false;
+        refreshStats();
+      });
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      source.setData({ filename: lastFile.name, content: lastFileBytes });
+      map.addSource(SOURCE_ID, source);
+    }
+
+    buildMap(false);
+    rebuildBtn.disabled = true;
+    useWorkerInput.addEventListener('change', () => {
+      rebuildBtn.disabled = false;
+    });
+    rebuildBtn.addEventListener('click', () => {
+      buildMap(useWorkerInput.checked);
+      rebuildBtn.disabled = true;
+      reloadCurrentFile();
+    });
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        lastFile = file;
+        lastFileBytes = new Uint8Array(ev.target.result);
+        reloadCurrentFile();
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    function pickPolygonLayer() {
+      const ds = map.getSource(SOURCE_ID)?.getDataset();
+      return ds?.layers?.find((l) => l.geometry_type === 'polygon')?.name;
+    }
+
+    function pickAllPolygonLayers() {
+      const ds = map.getSource(SOURCE_ID)?.getDataset();
+      return ds?.layers?.filter((l) => l.geometry_type === 'polygon').map((l) => l.name) ?? [];
+    }
+
+    dissolveBtn.addEventListener('click', async () => {
+      const t = pickPolygonLayer();
+      if (!t) { alert('未找到多边形图层'); return; }
+      const t0 = performance.now();
+      const ok = await map.dissolveLayer({ source: SOURCE_ID, target: t });
+      console.log(`Dissolve: ${(performance.now() - t0).toFixed(0)}ms, ok=${ok}`);
+      refreshStats();
+    });
+
+    simplifyBtn.addEventListener('click', async () => {
+      const t = pickPolygonLayer();
+      const t0 = performance.now();
+      const ok = await map.simplifyLayer({ source: SOURCE_ID, target: t, percentage: 5 });
+      console.log(`Simplify: ${(performance.now() - t0).toFixed(0)}ms, ok=${ok}`);
+      refreshStats();
+    });
+
+    unionBtn.addEventListener('click', async () => {
+      const ts = pickAllPolygonLayers();
+      if (ts.length < 2) { alert('需要至少 2 个多边形图层'); return; }
+      const t0 = performance.now();
+      const ok = await map.unionLayers({ source: SOURCE_ID, targets: ts });
+      console.log(`Union: ${(performance.now() - t0).toFixed(0)}ms, ok=${ok}`);
+      refreshStats();
+    });
+
+    cleanBtn.addEventListener('click', async () => {
+      const t = pickPolygonLayer();
+      const t0 = performance.now();
+      const ok = await map.cleanLayer({ source: SOURCE_ID, target: t });
+      console.log(`Clean: ${(performance.now() - t0).toFixed(0)}ms, ok=${ok}`);
+      refreshStats();
+    });
+  </script>
+</body>
+
+</html>
