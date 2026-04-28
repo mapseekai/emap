@@ -38,10 +38,17 @@ export class MouseWheel extends EventDispatcher {
   private _mouseX: number = 0;
   private _mouseY: number = 0;
 
+  private _wheelHandler = (e: WheelEvent) => this._handleWheel(e);
+
   constructor(private _element: HTMLElement) {
     super();
     this._timer.on('tick', (e: any) => this._onTick(e));
-    this._element.addEventListener('wheel', (e) => this._handleWheel(e), { passive: false });
+    this._element.addEventListener('wheel', this._wheelHandler, { passive: false });
+  }
+
+  destroy(): void {
+    this._element.removeEventListener('wheel', this._wheelHandler);
+    this._timer.stop();
   }
 
   private _updateSustainInterval(eventRate: number) {

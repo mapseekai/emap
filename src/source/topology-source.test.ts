@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mapshaper from 'mapshaper';
-import { unzipSync, strFromU8 } from 'fflate';
+import { unzipSync, strFromU8, zipSync } from 'fflate';
 import { TopologySource } from './topology-source';
 
 function setPrivate(target: object, key: string, value: unknown): void {
@@ -331,10 +331,139 @@ describe('TopologySource.setData multi-file', () => {
     expect(cmd).toBe('-i "we\\"ird.geojson"');
   });
 
-  it('empty array is a no-op (no command runs)', async () => {
+  it('empty array fires error and runs no command', async () => {
     const source = new TopologySource('test');
+    const errs: any[] = [];
+    source.on('error', (e: any) => errs.push(e));
     source.setData([]);
     await new Promise((r) => setTimeout(r, 0));
     expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(errs).toHaveLength(1);
+    expect(String(errs[0].error)).toMatch(/empty array/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bounded ZIP extraction
+// ---------------------------------------------------------------------------
+
+describe('TopologySource._extractZip — resource limits', () => {
+  function callExtract(source: TopologySource, data: Uint8Array): Record<string, Uint8Array | string> {
+    return Reflect.get(source, '_extractZip').call(source, data);
+  }
+
+  it('accepts a normal multi-file shapefile zip with default limits', () => {
+    const buf = zipSync({
+      'a.shp': new Uint8Array([1, 2, 3]),
+      'a.dbf': new Uint8Array([4, 5]),
+      'a.prj': new TextEncoder().encode('GEOGCS[]'),
+    });
+    const source = new TopologySource('t');
+    const out = callExtract(source, buf);
+    expect(Object.keys(out).sort()).toEqual(['a.dbf', 'a.prj', 'a.shp']);
+  });
+
+  it('throws when entry count exceeds maxEntries', () => {
+    const entries: Record<string, Uint8Array> = {};
+    for (let i = 0; i < 12; i++) entries[`f${i}.shp`] = new Uint8Array([i]);
+    const buf = zipSync(entries);
+    const source = new TopologySource('t', { zipLimits: { maxEntries: 5 } });
+    expect(() => callExtract(source, buf)).toThrow(/maxEntries/);
+  });
+
+  it('throws when uncompressed total exceeds maxBytes', () => {
+    const buf = zipSync({ 'big.shp': new Uint8Array(2048) });
+    const source = new TopologySource('t', { zipLimits: { maxBytes: 1024 } });
+    expect(() => callExtract(source, buf)).toThrow(/maxBytes/);
+  });
+
+  it('throws when compression ratio exceeds maxRatio', () => {
+    // 100 KB of zeros compresses to a few hundred bytes — easily >100x ratio
+    const buf = zipSync({ 'zeros.shp': new Uint8Array(100 * 1024) });
+    const source = new TopologySource('t', { zipLimits: { maxRatio: 5 } });
+    expect(() => callExtract(source, buf)).toThrow(/maxRatio/);
+  });
+
+  it('user-supplied higher limits permit previously-rejected payloads', () => {
+    const entries: Record<string, Uint8Array> = {};
+    for (let i = 0; i < 12; i++) entries[`f${i}.shp`] = new Uint8Array([i]);
+    const buf = zipSync(entries);
+    const source = new TopologySource('t', {
+      zipLimits: { maxEntries: 100, maxRatio: 1000 },
+    });
+    const out = callExtract(source, buf);
+    expect(Object.keys(out)).toHaveLength(12);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// setData race versioning
+// ---------------------------------------------------------------------------
+
+describe('TopologySource.setData — race versioning', () => {
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('superseded setData chain swallows its own data event', async () => {
+    // Async runParsedCommands so the first call's resolution lands AFTER the
+    // second setData supersedes it.
+    let firstResolve: ((dataset: any) => void) | null = null;
+    Reflect.set(mapshaper.internal as object, 'parseCommands', vi.fn(() => [{ name: 'i', options: {} }]));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_cmds: any[], _job: any, cb: any) => {
+      // First call: defer; second call: resolve immediately with a marker.
+      if (!firstResolve) {
+        firstResolve = (dataset: any) => cb(null, {
+          catalog: { getDefaultTargets: () => [{ dataset }] },
+        });
+      } else {
+        cb(null, {
+          catalog: { getDefaultTargets: () => [{ dataset: { layers: [], info: { winner: 'B' } } }] },
+        });
+      }
+    }));
+
+    const source = new TopologySource('t');
+    const events: string[] = [];
+    source.on('data', () => events.push(`data:${source.getDataset()?.info?.winner ?? '?'}`));
+    source.on('error', () => events.push('error'));
+
+    source.setData({ filename: 'a.geojson', content: new Uint8Array([1]) });
+    source.setData({ filename: 'b.geojson', content: new Uint8Array([2]) });
+
+    // Let the second chain resolve.
+    await new Promise((r) => setTimeout(r, 0));
+    // Now resolve the first (stale) chain — it must NOT fire data.
+    firstResolve?.({ layers: [], info: { winner: 'A' } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(events).toEqual(['data:B']);
+    expect(source.getDataset()?.info?.winner).toBe('B');
+  });
+
+  it('aborts the previous URL fetch when superseded', () => {
+    const signals: AbortSignal[] = [];
+    const fetchSpy = vi.fn((_url: string, opts: any) => {
+      signals.push(opts.signal);
+      // Never resolve — we only care about whether the signal aborts.
+      return new Promise(() => {});
+    });
+    const originalFetch = (globalThis as any).fetch;
+    (globalThis as any).fetch = fetchSpy;
+    try {
+      const source = new TopologySource('t');
+      source.setData('http://example.com/a.json');
+      source.setData('http://example.com/b.json');
+
+      expect(signals).toHaveLength(2);
+      expect(signals[0].aborted).toBe(true);
+      expect(signals[1].aborted).toBe(false);
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+    }
   });
 });

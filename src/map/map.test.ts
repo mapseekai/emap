@@ -4463,6 +4463,7 @@ describe('Emap useWorker routing', () => {
     setPrivate(map, '_container', { removeChild: vi.fn() });
     setPrivate(map, '_canvasContainer', {});
     setPrivate(map, '_dragPan', { destroy: vi.fn() });
+    setPrivate(map, '_mouseWheel', { destroy: vi.fn() });
     map.remove();
     expect(destroySpy).toHaveBeenCalledTimes(1);
   });

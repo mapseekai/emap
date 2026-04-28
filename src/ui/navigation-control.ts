@@ -49,7 +49,10 @@ export class NavigationControl implements Control {
     btn.className = `emap-ctrl-${id}`;
     btn.type = 'button';
     btn.title = title;
-    btn.innerHTML = `<span class="emap-ctrl-icon">${label}</span>`;
+    const icon = document.createElement('span');
+    icon.className = 'emap-ctrl-icon';
+    icon.textContent = label;
+    btn.appendChild(icon);
     btn.addEventListener('click', onClick);
     this._container?.appendChild(btn);
   }

@@ -211,6 +211,13 @@ export interface BufferOptions {
 /**
  * Options for {@link Emap.applyExpression} — bulk attribute updates via
  * mapshaper's `-each` JS expression engine.
+ *
+ * SECURITY: `expression` and `where` are evaluated as JavaScript by
+ * mapshaper (it builds a `Function` per record). Pass only trusted,
+ * authoring-time strings — never untrusted end-user input. The same
+ * applies to `where` on {@link InnerlinesOptions}, `expression` on
+ * {@link FilterOptions}, and any `calc=` / `where=` arg forwarded to a
+ * mapshaper command.
  */
 export interface ApplyExpressionOptions {
   /** Source ID containing the target layer. */
@@ -3733,6 +3740,9 @@ export class Emap extends EventDispatcher {
 
   public remove(): void {
     this._dragPan.destroy();
+    this._mouseWheel.destroy();
+    this._historyShortcutUnbind?.();
+    this._historyShortcutUnbind = null;
     if (this._workerPool) {
       this._workerPool.destroy();
       this._workerPool = null;
