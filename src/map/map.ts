@@ -17,7 +17,7 @@ import { Selection, SelectMode, SelectionDiff } from './selection';
 import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
 import type { EditCommand } from '../edit/edit-command';
 import { CompositeCommand } from '../edit/commands/composite';
-import { FeatureDeleteCommand } from '../edit/commands/feature-delete';
+import { BulkFeatureDeleteCommand, type BulkFeatureDeleteCommandOptions } from '../edit/commands/feature-delete';
 import { FeatureTranslateCommand, TranslatedPointFeature } from '../edit/commands/feature-translate';
 import {
   FeatureAffineCommand,
@@ -1797,7 +1797,10 @@ export class Emap extends EventDispatcher {
     const refs = this._selection.getAll();
     if (refs.length === 0) return false;
 
-    // Group ids by (sourceId, layerId) so we can sort within each layer
+    // Group ids by (sourceId, layerId) so each (source, layer) pair runs as
+    // ONE BulkFeatureDeleteCommand — splicing K features individually on a
+    // layer with N shapes is O(K·N), the bulk command compacts in a single
+    // O(N) pass.
     const grouped: globalThis.Map<string, globalThis.Map<string, number[]>> = new globalThis.Map();
     for (const ref of refs) {
       let bySource = grouped.get(ref.source);
@@ -1811,13 +1814,13 @@ export class Emap extends EventDispatcher {
     }
 
     const children: EditCommand[] = [];
+    let totalDeleted = 0;
 
     for (const [sourceId, byLayer] of grouped) {
       const source = this._sources.get(sourceId);
       if (!source) continue;
       const layers = source.getLayers();
       for (const [layerId, ids] of byLayer) {
-        // Resolve the actual layer object by matching layerId to getLayerId(layer, idx)
         let target: MapshaperLayer | null = null;
         for (let i = 0; i < layers.length; i++) {
           if (getLayerId(layers[i], i) === layerId) {
@@ -1827,31 +1830,35 @@ export class Emap extends EventDispatcher {
         }
         if (!target?.shapes) continue;
 
-        // Sort descending so each splice does not invalidate later ids
-        const sortedIds = [...ids].sort((a, b) => b - a);
-        for (const featureId of sortedIds) {
+        const records = target.data?.getRecords?.();
+        const snapshots: BulkFeatureDeleteCommandOptions['snapshots'] = [];
+        // De-dup ids — selection theoretically guarantees this but
+        // defensive: a duplicate would corrupt the bulk command's
+        // del-set / undo path.
+        const seen = new Set<number>();
+        for (const featureId of ids) {
+          if (seen.has(featureId)) continue;
+          seen.add(featureId);
           const shape = target.shapes[featureId];
           if (shape === undefined) continue;
-          const records = target.data?.getRecords?.();
           const record = records ? records[featureId] : null;
-          // Build the command, then execute it now (the caller-already-did-the-work
-          // contract). The command captures pre-delete snapshots in opts.
-          const cmd = new FeatureDeleteCommand({
-            layer: target,
-            featureId,
-            shape,
-            record: record ?? null,
-            source,
-          });
-          cmd.do();
-          children.push(cmd);
+          snapshots.push({ id: featureId, shape, record: record ?? null });
         }
+        if (snapshots.length === 0) continue;
+
+        const bulk = new BulkFeatureDeleteCommand({ layer: target, snapshots });
+        bulk.do();
+        children.push(bulk);
+        totalDeleted += snapshots.length;
       }
     }
 
     if (children.length === 0) return false;
 
-    const composite = new CompositeCommand(children, `Delete ${children.length} feature${children.length > 1 ? 's' : ''}`);
+    const composite = new CompositeCommand(
+      children,
+      `Delete ${totalDeleted} feature${totalDeleted > 1 ? 's' : ''}`,
+    );
     this._history.push(composite);
     this._fireHistoryChange();
 
