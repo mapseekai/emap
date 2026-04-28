@@ -12,6 +12,9 @@ const mainOutput = isProduction ? 'dist/emap.js' : 'dist/emap-dev.js';
 // Worker file is always called emap-worker.js so consumers don't have to
 // branch by build mode. Minified in prod, sourcemapped in dev.
 const workerOutput = 'dist/emap-worker.js';
+// Vendor bundle filename is fixed too — referenced by URL from the worker
+// banner and by users' page <script> tags.
+const vendorOutput = 'dist/mapshaper-vendor.js';
 
 function commonPlugins() {
   return [
@@ -41,25 +44,52 @@ function commonPlugins() {
 }
 
 export default [
-  // Main IIFE bundle exposing the `emap` global.
+  // Vendor IIFE — bundles mapshaper + the shim, registers
+  // `globalThis.mapshaper` as a side effect of loading. Both the main and
+  // worker bundles below treat `mapshaper` as an external global, so this
+  // file MUST load before they execute (page <script> order, or worker
+  // importScripts in the worker output's banner).
+  {
+    input: 'src/vendor/mapshaper-vendor.ts',
+    output: {
+      file: vendorOutput,
+      format: 'iife',
+      sourcemap: true,
+    },
+    plugins: commonPlugins(),
+  },
+  // Main IIFE bundle exposing the `emap` global. Mapshaper is `external`
+  // — the bundle expects `globalThis.mapshaper` set by the vendor file.
   {
     input: 'src/index.ts',
+    external: ['mapshaper'],
     output: {
       file: mainOutput,
       format: 'iife',
       name: 'emap',
       sourcemap: true,
+      globals: {
+        mapshaper: 'mapshaper',
+      },
     },
     plugins: commonPlugins(),
   },
-  // Worker bundle. No global name needed — the worker bundle's IIFE only
-  // wires up self.onmessage; consumers never reference its exports.
+  // Worker bundle. Same external/global treatment, plus a banner that
+  // pulls the vendor file in via importScripts at boot — workers don't
+  // share the page's <script> globals, so the worker has to re-load
+  // mapshaper-vendor.js itself. Relative URL: vendor file is expected to
+  // live in the same directory as the worker bundle.
   {
     input: 'src/worker/mapshaper-worker.ts',
+    external: ['mapshaper'],
     output: {
       file: workerOutput,
       format: 'iife',
       sourcemap: true,
+      banner: "importScripts('mapshaper-vendor.js');",
+      globals: {
+        mapshaper: 'mapshaper',
+      },
     },
     plugins: commonPlugins(),
   },
