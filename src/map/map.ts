@@ -741,10 +741,19 @@ export interface EditVertexState {
   neighborShapes?: EditVertexShape[];
 }
 
+/** Kind of snap target the draw cursor is locked onto. */
+export type SnapKind = 'vertex' | 'edge' | null;
+
 export interface EditDrawState {
   vertices: [number, number][];
   cursorCoord: [number, number] | null;
   snapCoord: [number, number] | null;
+  /**
+   * What kind of geometry the current snap is locked to. Renderers may use
+   * this to draw a different glyph for vertex vs edge snap. `null` when
+   * there is no snap target (`snapCoord === null`).
+   */
+  snapKind: SnapKind;
   geometryType: DrawGeometryType;
   drawColor: string;
 }
