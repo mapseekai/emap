@@ -10,6 +10,7 @@ import { TopologySource } from '../source/source';
 import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
 import { MouseWheel } from '../core/interactions';
 import { DragPanHandler } from '../core/drag-pan-handler';
+import { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import { FeatureQuery } from './feature-query';
 import { HighlightManager } from './highlight-manager';
 import { Selection, SelectMode, SelectionDiff } from './selection';
@@ -52,7 +53,47 @@ export interface MapOptions {
    * @experimental This feature is experimental and may have performance issues with large datasets.
    */
   canvasKit?: CanvasKit;
+  /**
+   * Routing for dataset-replace operations (clip, dissolve, union,
+   * mosaic, simplify, project, ...).
+   *
+   * - `false` (default) — every op runs synchronously on the main thread.
+   * - `true` — every op routes through a Web Worker, freeing the main
+   *   thread during heavy work. Adds ~50-100ms pack/unpack overhead per
+   *   op so it's a slowdown for tiny datasets.
+   * - `'auto'` — route through the worker only when the source dataset's
+   *   arc vertex count is at least {@link workerThreshold}. Best of both
+   *   worlds for mixed-size workloads.
+   *
+   * Selection-level operations (translateSelected, rotateSelected,
+   * vertex commands) always run on the main thread regardless of this
+   * flag — their per-vertex cost is far below the worker round-trip
+   * overhead.
+   */
+  useWorker?: boolean | 'auto';
+  /**
+   * Vertex-count threshold for `useWorker: 'auto'`. Datasets whose
+   * `arcs.getPointCount()` is at least this large route through the
+   * worker; smaller datasets stay on the main thread. Default `50000`.
+   * Ignored when `useWorker` is a boolean.
+   */
+  workerThreshold?: number;
+  /**
+   * URL of the worker bundle (`emap-worker.js`). Resolved against
+   * `document.baseURI` when relative. Only consulted when `useWorker`
+   * is truthy. Defaults to `'emap-worker.js'` (sibling of the page).
+   */
+  workerUrl?: string;
+  /**
+   * Pre-constructed worker pool. Only consulted when `useWorker` is
+   * truthy; takes precedence over `workerUrl`. Used by tests to inject
+   * a mock pool, and by power users who want to share one pool across
+   * multiple `Emap` instances.
+   */
+  workerPool?: MapshaperWorkerPool;
 }
+
+const DEFAULT_WORKER_THRESHOLD = 50_000;
 
 export interface QueryRenderedFeaturesOptions {
   layers?: string[];
@@ -745,6 +786,16 @@ export class Emap extends EventDispatcher {
   private _editVertexState: EditVertexState | null = null;
   private _editDrawState: EditDrawState | null = null;
 
+  // Worker pool — lazily constructed when `useWorker !== false` was passed.
+  // null when the option is off (or until the first dataset-replace runs).
+  private _workerPool: MapshaperWorkerPool | null = null;
+  // Resolved `useWorker` mode: false (off), true (always), or 'auto'
+  // (per-call decision based on dataset vertex count).
+  private _workerMode: boolean | 'auto' = false;
+  // Vertex-count threshold for the 'auto' mode. Defaults to
+  // `DEFAULT_WORKER_THRESHOLD` (50_000).
+  private _workerThreshold: number = DEFAULT_WORKER_THRESHOLD;
+
   constructor(options: MapOptions) {
     super();
 
@@ -796,6 +847,35 @@ export class Emap extends EventDispatcher {
     this.on('move', () => this._scheduleRender());
     this.on('resize', () => this._scheduleRender());
     this.on('reset', () => this.reset());
+
+    // Set up the worker pool eagerly when requested. Construction is cheap;
+    // the underlying Worker is lazy-spawned on first run().
+    this._workerMode = options.useWorker ?? false;
+    if (typeof options.workerThreshold === 'number' && options.workerThreshold >= 0) {
+      this._workerThreshold = options.workerThreshold;
+    }
+    if (this._workerMode !== false || options.workerPool) {
+      if (options.workerPool) {
+        this._workerPool = options.workerPool;
+      } else {
+        this._workerPool = new MapshaperWorkerPool({
+          workerUrl: options.workerUrl ?? 'emap-worker.js',
+        });
+      }
+    }
+  }
+
+  /**
+   * Hard-cancel any in-flight worker jobs. Safe to call when no worker
+   * pool exists (no-op). The pool stays usable — subsequent dataset-replace
+   * ops re-spawn a fresh worker.
+   *
+   * mapshaper isn't interruptible mid-command, so this is the only sound
+   * abandonment path: terminate the worker, lose any other queued jobs as
+   * collateral, and let the next op start over.
+   */
+  public cancelWorkerJobs(): void {
+    this._workerPool?.cancelAll();
   }
 
 
@@ -3153,6 +3233,56 @@ export class Emap extends EventDispatcher {
    * selection, and fires `historychange` once. Future ops (`dissolve`,
    * `buffer`, ...) reuse this helper.
    */
+
+  /**
+   * Worker-thread variant of {@link runMapshaperCommandOnDataset}: packs
+   * the dataset via `exportDatasetsToPack({ compact: false })`, dispatches
+   * to the pool, restores the result. Fires `workerjobstart` /
+   * `workerjobend` events around the pool round-trip so UI code can show
+   * a spinner without per-call wiring.
+   */
+  private async _runViaWorker(
+    dataset: MapshaperDataset,
+    cmd: string,
+    label: string,
+    inputFiles?: Record<string, Uint8Array | string>,
+  ): Promise<MapshaperDataset> {
+    if (!this._workerPool) {
+      // Should never reach here — caller checks _workerPool. Defensive.
+      throw new Error('_runViaWorker: worker pool not available');
+    }
+    // Fire workerjobstart BEFORE the synchronous pack work so a UI spinner
+    // appears immediately. Pack on a 1M-vertex dataset takes ~500ms; firing
+    // the event after pack delays UI feedback by exactly that amount.
+    // Use the pool's id reservation so start/end events stay correlated.
+    const id = this._workerPool.reserveId();
+    const datasetVertexCount = dataset.arcs?.getPointCount?.() ?? 0;
+    const startedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    this.fire('workerjobstart', { id, cmd, label, datasetVertexCount });
+
+    try {
+      const packed = await mapshaper.internal.exportDatasetsToPack([dataset], { compact: false });
+      const promise = this._workerPool.dispatchWithId(id, cmd, packed, inputFiles);
+      const resultPacked = await promise;
+      const restored = await mapshaper.internal.restoreSessionData(resultPacked);
+      if (!restored.datasets || restored.datasets.length === 0) {
+        throw new Error('worker: no dataset in response');
+      }
+      const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+      this.fire('workerjobend', { id, ok: true, durationMs });
+      return restored.datasets[0];
+    } catch (err: any) {
+      const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+      this.fire('workerjobend', {
+        id,
+        ok: false,
+        durationMs,
+        errorMessage: err?.message ?? String(err),
+      });
+      throw err;
+    }
+  }
+
   private async _runDatasetCommand(
     sourceId: string,
     cmd: string,
@@ -3169,9 +3299,27 @@ export class Emap extends EventDispatcher {
     // restore on undo.
     const before: MapshaperDataset = mapshaper.internal.copyDataset(original);
 
+    // Decide worker vs main-thread.
+    // - false      → main-thread always
+    // - true       → worker always (when pool exists)
+    // - 'auto'     → worker when arc vertex count meets workerThreshold
+    let useWorker = false;
+    if (this._workerPool) {
+      if (this._workerMode === true) {
+        useWorker = true;
+      } else if (this._workerMode === 'auto') {
+        const vertexCount = original.arcs?.getPointCount?.() ?? 0;
+        useWorker = vertexCount >= this._workerThreshold;
+      }
+    }
+
     let after: MapshaperDataset;
     try {
-      after = await runMapshaperCommandOnDataset(cmd, original, inputFiles);
+      if (useWorker) {
+        after = await this._runViaWorker(original, cmd, label, inputFiles);
+      } else {
+        after = await runMapshaperCommandOnDataset(cmd, original, inputFiles);
+      }
     } catch (err) {
       // Surface as a fire-and-forget error event; do not throw from a public
       // edit op so that one bad command doesn't tear down the calling page.
@@ -3199,6 +3347,10 @@ export class Emap extends EventDispatcher {
 
   public remove(): void {
     this._dragPan.destroy();
+    if (this._workerPool) {
+      this._workerPool.destroy();
+      this._workerPool = null;
+    }
     if (this._container && this._canvasContainer) {
       this._container.removeChild(this._canvasContainer);
     }

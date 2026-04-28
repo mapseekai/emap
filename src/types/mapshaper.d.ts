@@ -112,6 +112,17 @@ declare module 'mapshaper' {
       [k: string]: unknown;
     }>;
 
+    /** Reconstruct Dataset instances from an already-unpacked session object
+     *  (the plain-object output of {@link exportDatasetsToPack}). Used by
+     *  the Web Worker round-trip — skips the msgpack step. */
+    restoreSessionData(obj: {
+      datasets: unknown[];
+      [k: string]: unknown;
+    }): Promise<{
+      datasets: MapshaperDataset[];
+      [k: string]: unknown;
+    }>;
+
     // Simplification / LOD
     getAvgSegment(arcs: ArcCollection): number;
     simplifyArcsFast(arcs: ArcCollection, segLen: number): ArcCollection;

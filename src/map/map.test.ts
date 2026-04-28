@@ -4309,3 +4309,410 @@ describe('Emap.exportSnapshot / loadSnapshot round-trip (real mapshaper)', () =>
     expect(summarize(mapB, 'beta')).toEqual(beforeB);
   });
 });
+
+describe('Emap useWorker routing', () => {
+  // Verifies that when a worker pool is wired in, _runDatasetCommand:
+  //   - packs the original dataset via mapshaper.internal.exportDatasetsToPack
+  //   - calls workerPool.run with the packed payload + cmd + inputFiles
+  //   - unpacks the response via mapshaper.internal.restoreSessionData
+  //   - applies via setDataset and pushes a DatasetReplaceCommand
+  //
+  // We don't spawn a real worker — `workerPool` is a stub that records
+  // the call and returns a packed payload of our choosing.
+
+  let map: Emap;
+  let runSpy: ReturnType<typeof vi.fn>;
+  let exportSpy: ReturnType<typeof vi.fn>;
+  let restoreSpy: ReturnType<typeof vi.fn>;
+  let setDatasetSpy: ReturnType<typeof vi.fn>;
+
+  const originalExport = Reflect.get(mapshaper.internal as object, 'exportDatasetsToPack');
+  const originalRestore = Reflect.get(mapshaper.internal as object, 'restoreSessionData');
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+
+    setDatasetSpy = vi.fn();
+    const beforeDs = { layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }] };
+    const afterDs = { layers: [{ name: 'states-out', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: setDatasetSpy,
+      refreshDisplayArcs: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    // Mock pool needs both run() and runWithId(); _runViaWorker uses
+    // runWithId. The runSpy is shared so the test can introspect calls
+    // and override behaviour via mockImplementationOnce.
+    let nextWorkerId = 1;
+    runSpy = vi.fn(async () => ({ datasets: [{ kind: 'packed-result' }] }));
+    setPrivate(map, '_workerPool', {
+      run: (cmd: string, packed: any, files?: any) => runSpy(cmd, packed, files),
+      runWithId: (cmd: string, packed: any, files?: any) => ({
+        id: nextWorkerId++,
+        promise: runSpy(cmd, packed, files),
+      }),
+      reserveId: () => nextWorkerId++,
+      dispatchWithId: (_id: number, cmd: string, packed: any, files?: any) =>
+        runSpy(cmd, packed, files),
+      cancelAll: vi.fn(),
+      destroy: vi.fn(),
+    });
+    // Routing decision needs `_workerMode === true` (or 'auto' over
+    // threshold). Existing tests pre-date this and were implicit.
+    setPrivate(map, '_workerMode', true);
+
+    exportSpy = vi.fn(async () => ({ datasets: [{ kind: 'packed-original' }] })) as ReturnType<typeof vi.fn>;
+    restoreSpy = vi.fn(async () => ({ datasets: [afterDs] })) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack', exportSpy);
+    Reflect.set(mapshaper.internal as object, 'restoreSessionData', restoreSpy);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack', originalExport);
+    Reflect.set(mapshaper.internal as object, 'restoreSessionData', originalRestore);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+  });
+
+  it('routes _runDatasetCommand through workerPool.run with packed payload', async () => {
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+
+    expect(exportSpy).toHaveBeenCalledTimes(1);
+    expect(exportSpy.mock.calls[0][1]).toEqual({ compact: false });
+
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    const [cmd, packed] = runSpy.mock.calls[0] as unknown[];
+    expect(typeof cmd).toBe('string');
+    expect(cmd).toMatch(/-drop/);
+    expect(packed).toEqual({ datasets: [{ kind: 'packed-original' }] });
+
+    expect(restoreSpy).toHaveBeenCalledTimes(1);
+    expect(restoreSpy.mock.calls[0][0]).toEqual({ datasets: [{ kind: 'packed-result' }] });
+
+    // The setDataset call gets the unpacked result, not the packed payload.
+    expect(setDatasetSpy).toHaveBeenCalledTimes(1);
+    expect(setDatasetSpy.mock.calls[0][0]).toEqual({ layers: [{ name: 'states-out', shapes: [] }] });
+  });
+
+  it('forwards inputFiles to workerPool.run when present (joinTable path)', async () => {
+    const ok = await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { csv: 'a,b\n1,2' }, keys: ['k', 's'],
+    });
+    expect(ok).toBe(true);
+    const args = runSpy.mock.calls[0] as unknown[];
+    expect(args[2]).toEqual({ '.emap-join.csv': 'a,b\n1,2' });
+  });
+
+  it('worker rejection fires error event + returns false', async () => {
+    runSpy.mockImplementationOnce(() => Promise.reject(new Error('worker boom')));
+    const errors: any[] = [];
+    map.on('error', (e: any) => errors.push(e));
+
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(false);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].error.message).toBe('worker boom');
+    expect(setDatasetSpy).not.toHaveBeenCalled();
+  });
+
+  it('throws when worker response has no datasets', async () => {
+    runSpy.mockImplementationOnce(async () => ({ datasets: [] }));
+    restoreSpy.mockImplementationOnce(async () => ({ datasets: [] }));
+    const errors: any[] = [];
+    map.on('error', (e: any) => errors.push(e));
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(false);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].error.message).toMatch(/no dataset in response/);
+  });
+
+  it('Emap.remove() destroys the worker pool', () => {
+    const destroySpy = vi.fn();
+    setPrivate(map, '_workerPool', { run: runSpy, destroy: destroySpy });
+    // remove() also tries to manipulate _container/_canvasContainer; stub.
+    setPrivate(map, '_container', { removeChild: vi.fn() });
+    setPrivate(map, '_canvasContainer', {});
+    setPrivate(map, '_dragPan', { destroy: vi.fn() });
+    map.remove();
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Emap useWorker auto-thresholding
+// ---------------------------------------------------------------------------
+
+describe('Emap useWorker: \'auto\' thresholding', () => {
+  // Builds an Emap configured with `useWorker: 'auto'` and an injected pool
+  // mock; flips the source dataset's vertex count to control which branch
+  // _runDatasetCommand chooses.
+  let map: Emap;
+  let runSpy: ReturnType<typeof vi.fn>;
+  let beforeDs: any;
+  const originalExport = Reflect.get(mapshaper.internal as object, 'exportDatasetsToPack');
+  const originalRestore = Reflect.get(mapshaper.internal as object, 'restoreSessionData');
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+
+  function setVertexCount(n: number): void {
+    beforeDs.arcs = { getPointCount: () => n };
+  }
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+
+    beforeDs = {
+      layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }],
+      arcs: { getPointCount: () => 0 },
+    };
+    const afterDs = { layers: [{ name: 'out', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    let nextId = 1;
+    runSpy = vi.fn(async () => ({ datasets: [{ kind: 'packed-result' }] }));
+    setPrivate(map, '_workerPool', {
+      run: (cmd: string, packed: any, files?: any) => runSpy(cmd, packed, files),
+      runWithId: (cmd: string, packed: any, files?: any) => ({
+        id: nextId++,
+        promise: runSpy(cmd, packed, files),
+      }),
+      reserveId: () => nextId++,
+      dispatchWithId: (_id: number, cmd: string, packed: any, files?: any) =>
+        runSpy(cmd, packed, files),
+      cancelAll: vi.fn(),
+      destroy: vi.fn(),
+    });
+    setPrivate(map, '_workerMode', 'auto');
+    setPrivate(map, '_workerThreshold', 1000);
+
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack',
+      vi.fn(async () => ({ datasets: [{ kind: 'packed-original' }] })));
+    Reflect.set(mapshaper.internal as object, 'restoreSessionData',
+      vi.fn(async () => ({ datasets: [afterDs] })));
+    // Main-thread path also stubbed in case the auto branch routes there.
+    Reflect.set(mapshaper.internal as object, 'parseCommands',
+      vi.fn(() => [{ name: 'parsed', options: { _cmd: '' } as any }]));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands',
+      vi.fn((_c: any, _j: any, cb: any) => cb(null, {
+        catalog: { getDefaultTargets: () => [{ dataset: afterDs }] },
+      })));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack', originalExport);
+    Reflect.set(mapshaper.internal as object, 'restoreSessionData', originalRestore);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('routes to main thread when vertex count is below threshold', async () => {
+    setVertexCount(500); // threshold is 1000
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(runSpy).not.toHaveBeenCalled();
+  });
+
+  it('routes to worker when vertex count is at threshold', async () => {
+    setVertexCount(1000);
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(runSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes to worker when vertex count is above threshold', async () => {
+    setVertexCount(50_000);
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(runSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes arc-less datasets (point-only) to main thread', async () => {
+    beforeDs.arcs = undefined;
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(runSpy).not.toHaveBeenCalled();
+  });
+
+  it('honours custom workerThreshold', async () => {
+    setPrivate(map, '_workerThreshold', 100);
+    setVertexCount(150);
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(runSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Emap workerjobstart / workerjobend events
+// ---------------------------------------------------------------------------
+
+describe('Emap workerjobstart / workerjobend events', () => {
+  let map: Emap;
+  let runSpy: ReturnType<typeof vi.fn>;
+  const originalExport = Reflect.get(mapshaper.internal as object, 'exportDatasetsToPack');
+  const originalRestore = Reflect.get(mapshaper.internal as object, 'restoreSessionData');
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+    const beforeDs = {
+      layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }],
+      arcs: { getPointCount: () => 12345 },
+    };
+    const afterDs = { layers: [{ name: 'out', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    let nextId = 100;
+    runSpy = vi.fn(async () => ({ datasets: [{ kind: 'packed-result' }] }));
+    setPrivate(map, '_workerPool', {
+      run: (cmd: string, packed: any, files?: any) => runSpy(cmd, packed, files),
+      runWithId: (cmd: string, packed: any, files?: any) => ({
+        id: nextId++,
+        promise: runSpy(cmd, packed, files),
+      }),
+      reserveId: () => nextId++,
+      dispatchWithId: (_id: number, cmd: string, packed: any, files?: any) =>
+        runSpy(cmd, packed, files),
+      cancelAll: vi.fn(),
+      destroy: vi.fn(),
+    });
+    setPrivate(map, '_workerMode', true);
+
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack',
+      vi.fn(async () => ({ datasets: [{ kind: 'packed-original' }] })));
+    Reflect.set(mapshaper.internal as object, 'restoreSessionData',
+      vi.fn(async () => ({ datasets: [afterDs] })));
+    Reflect.set(mapshaper.internal as object, 'parseCommands',
+      vi.fn(() => [{ name: 'parsed', options: { _cmd: '' } as any }]));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands',
+      vi.fn((_c: any, _j: any, cb: any) => cb(null, {
+        catalog: { getDefaultTargets: () => [{ dataset: afterDs }] },
+      })));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'exportDatasetsToPack', originalExport);
+    Reflect.set(mapshaper.internal as object, 'restoreSessionData', originalRestore);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('fires workerjobstart before pool.run + workerjobend after on success', async () => {
+    const events: Array<{ type: string; payload: any }> = [];
+    map.on('workerjobstart', (e: any) => events.push({ type: 'start', payload: e }));
+    map.on('workerjobend', (e: any) => events.push({ type: 'end', payload: e }));
+
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(events.length).toBe(2);
+    expect(events[0].type).toBe('start');
+    expect(events[0].payload.cmd).toMatch(/-drop/);
+    expect(events[0].payload.label).toBe('Drop states');
+    expect(events[0].payload.datasetVertexCount).toBe(12345);
+    expect(typeof events[0].payload.id).toBe('number');
+
+    expect(events[1].type).toBe('end');
+    expect(events[1].payload.id).toBe(events[0].payload.id);
+    expect(events[1].payload.ok).toBe(true);
+    expect(typeof events[1].payload.durationMs).toBe('number');
+  });
+
+  it('fires workerjobend with ok:false + errorMessage on rejection', async () => {
+    runSpy.mockImplementationOnce(() => Promise.reject(new Error('worker boom')));
+    const events: any[] = [];
+    map.on('workerjobend', (e: any) => events.push(e));
+
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(false);
+    expect(events.length).toBe(1);
+    expect(events[0].ok).toBe(false);
+    expect(events[0].errorMessage).toBe('worker boom');
+  });
+
+  it('does NOT fire events when running on the main thread', async () => {
+    setPrivate(map, '_workerMode', false);
+    const events: any[] = [];
+    map.on('workerjobstart', (e: any) => events.push(e));
+    map.on('workerjobend', (e: any) => events.push(e));
+
+    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    expect(ok).toBe(true);
+    expect(events.length).toBe(0);
+    expect(runSpy).not.toHaveBeenCalled();
+  });
+
+  it('correlates concurrent in-flight events by distinct ids', async () => {
+    const events: Array<{ type: string; payload: any }> = [];
+    map.on('workerjobstart', (e: any) => events.push({ type: 'start', payload: e }));
+    map.on('workerjobend', (e: any) => events.push({ type: 'end', payload: e }));
+
+    const a = map.dropLayer({ source: 'src1', target: 'states' });
+    const b = map.dropLayer({ source: 'src1', target: 'states' });
+    await Promise.all([a, b]);
+
+    const startIds = events.filter((e) => e.type === 'start').map((e) => e.payload.id);
+    const endIds = events.filter((e) => e.type === 'end').map((e) => e.payload.id);
+    expect(new Set(startIds).size).toBe(2);
+    expect(new Set(endIds)).toEqual(new Set(startIds));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Emap.cancelWorkerJobs
+// ---------------------------------------------------------------------------
+
+describe('Emap.cancelWorkerJobs', () => {
+  it('delegates to the worker pool\'s cancelAll', () => {
+    const map = createBareMap();
+    const cancelAllSpy = vi.fn();
+    setPrivate(map, '_workerPool', { cancelAll: cancelAllSpy });
+    map.cancelWorkerJobs();
+    expect(cancelAllSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('is a safe no-op when no pool exists', () => {
+    const map = createBareMap();
+    setPrivate(map, '_workerPool', null);
+    expect(() => map.cancelWorkerJobs()).not.toThrow();
+  });
+});
