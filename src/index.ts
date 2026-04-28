@@ -40,6 +40,7 @@ export type {
   JoinTableData,
   CheckGeometryOptions,
   GeometryCheckReport,
+  IntersectionPointsLayerOptions,
   ExportSnapshotOptions,
   LoadSnapshotOptions,
 } from './map/map';

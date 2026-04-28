@@ -6,6 +6,25 @@ import type { LayerSpecification } from './layer';
 import { Selection } from './selection';
 import { EditHistory } from '../edit/edit-history';
 
+// Snapshot the real mapshaper.internal entry points at module-load time,
+// BEFORE any test has had a chance to mock them. Some test blocks below
+// stomp these without restoring, so tests that need the real pipeline
+// (notably the round-trip tests against real mapshaper) restore from
+// here.
+const MAPSHAPER_REAL = {
+  parseCommands: Reflect.get(mapshaper.internal as object, 'parseCommands'),
+  runParsedCommands: Reflect.get(mapshaper.internal as object, 'runParsedCommands'),
+  copyDataset: Reflect.get(mapshaper.internal as object, 'copyDataset'),
+  findSegmentIntersections: Reflect.get(mapshaper.internal as object, 'findSegmentIntersections'),
+  getIntersectionLayer: Reflect.get(mapshaper.internal as object, 'getIntersectionLayer'),
+};
+
+function restoreRealMapshaper(): void {
+  for (const [k, v] of Object.entries(MAPSHAPER_REAL)) {
+    Reflect.set(mapshaper.internal as object, k, v);
+  }
+}
+
 function setPrivate(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
 }
@@ -5242,5 +5261,189 @@ describe('Emap.prebuildSpatialIndex / clearSpatialIndex', () => {
     const { map, clear } = makeMapWithStubFQ();
     map.clearSpatialIndex();
     expect(clear).toHaveBeenCalledWith(undefined);
+  });
+});
+
+// ===========================================================================
+// Emap.intersectionPointsLayer
+// ===========================================================================
+
+describe('Emap.intersectionPointsLayer (mocked mapshaper)', () => {
+  let map: Emap;
+  let setDatasetSpy: ReturnType<typeof vi.fn>;
+  let findSpy: ReturnType<typeof vi.fn>;
+  let getLayerSpy: ReturnType<typeof vi.fn>;
+  let beforeDs: any;
+
+  const originalCopy = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalFind = Reflect.get(mapshaper.internal as object, 'findSegmentIntersections');
+  const originalGetLayer = Reflect.get(mapshaper.internal as object, 'getIntersectionLayer');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+
+    beforeDs = {
+      layers: [{ name: 'edges', shapes: [], geometry_type: 'polyline' }],
+      arcs: { _sentinel: 'arcs' },
+    };
+    setDatasetSpy = vi.fn();
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: setDatasetSpy,
+      refreshDisplayArcs: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn((ds: any) => ({
+      ...ds,
+      layers: ds.layers.map((l: any) => ({ ...l })),
+    })));
+    findSpy = vi.fn(() => [{ x: 1, y: 2 }, { x: 3, y: 4 }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'findSegmentIntersections', findSpy);
+    getLayerSpy = vi.fn(() => ({
+      geometry_type: 'point',
+      shapes: [[[1, 2], [3, 4]]],
+    })) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'getIntersectionLayer', getLayerSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopy);
+    Reflect.set(mapshaper.internal as object, 'findSegmentIntersections', originalFind);
+    Reflect.set(mapshaper.internal as object, 'getIntersectionLayer', originalGetLayer);
+  });
+
+  it('adds a new point layer named "<target>-intersections" by default', async () => {
+    const ok = await map.intersectionPointsLayer({ source: 'src1', target: 'edges' });
+    expect(ok).toBe(true);
+    expect(setDatasetSpy).toHaveBeenCalledTimes(1);
+    const after = setDatasetSpy.mock.calls[0][0] as any;
+    expect(after.layers).toHaveLength(2);
+    expect(after.layers[1].name).toBe('edges-intersections');
+    expect(after.layers[1].geometry_type).toBe('point');
+  });
+
+  it('honours custom name', async () => {
+    await map.intersectionPointsLayer({ source: 'src1', target: 'edges', name: 'crossings' });
+    const after = setDatasetSpy.mock.calls[0][0] as any;
+    expect(after.layers[1].name).toBe('crossings');
+  });
+
+  it('forwards tolerance to findSegmentIntersections', async () => {
+    await map.intersectionPointsLayer({
+      source: 'src1', target: 'edges', tolerance: 0.001,
+    });
+    expect(findSpy.mock.calls[0][1]).toEqual({ tolerance: 0.001 });
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.intersectionPointsLayer({ source: 'nope', target: 'edges' })).toBe(false);
+    expect(findSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.intersectionPointsLayer({ source: 'src1', target: 'missing' })).toBe(false);
+    expect(findSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is a point layer (no segments)', async () => {
+    beforeDs.layers[0].geometry_type = 'point';
+    expect(await map.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
+    expect(findSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when name collides with an existing layer', async () => {
+    beforeDs.layers.push({ name: 'crossings', shapes: [], geometry_type: 'point' });
+    expect(await map.intersectionPointsLayer({
+      source: 'src1', target: 'edges', name: 'crossings',
+    })).toBe(false);
+    expect(findSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when arcs is missing (point-only dataset)', async () => {
+    beforeDs.arcs = undefined;
+    expect(await map.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
+    expect(findSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-positive / non-finite tolerance', async () => {
+    expect(await map.intersectionPointsLayer({
+      source: 'src1', target: 'edges', tolerance: 0,
+    })).toBe(false);
+    expect(await map.intersectionPointsLayer({
+      source: 'src1', target: 'edges', tolerance: -1,
+    })).toBe(false);
+    expect(await map.intersectionPointsLayer({
+      source: 'src1', target: 'edges', tolerance: NaN,
+    })).toBe(false);
+    expect(findSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Intersection points <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.intersectionPointsLayer({ source: 'src1', target: 'edges' });
+    expect(listener.mock.calls[0][0].label).toBe('Intersection points edges');
+  });
+
+  it('on internal throw fires error and returns false', async () => {
+    findSpy.mockImplementation(() => { throw new Error('boom'); });
+    const errors: any[] = [];
+    map.on('error', (e: any) => errors.push(e));
+    expect(await map.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].error.message).toBe('boom');
+    expect(setDatasetSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('Emap.intersectionPointsLayer round-trip (real mapshaper)', () => {
+  // Earlier test blocks in this file stomp mapshaper.internal mocks
+  // without restoring. By the time we get here, setData()'s `-i FILE`
+  // pipeline would hit those stale mocks instead of real mapshaper.
+  // Restore from the module-load-time snapshot.
+  beforeEach(() => {
+    restoreRealMapshaper();
+  });
+
+  it('produces a non-empty point layer for a crossing-polylines dataset', async () => {
+    const crossing = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[0,0],[2,2]] } },
+        { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[0,2],[2,0]] } },
+      ],
+    });
+
+    const { TopologySource } = await import('../source/topology-source');
+    const source = await new Promise<any>((resolve, reject) => {
+      const s = new TopologySource('rt');
+      s.on('data', () => resolve(s));
+      s.on('error', (e: any) => reject(e?.error ?? e));
+      s.setData({ filename: 'crossing.geojson', content: new TextEncoder().encode(crossing) });
+    });
+
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+    map.addSource('rt', source);
+
+    const layerName = source.getDataset()!.layers[0].name;
+    const ok = await map.intersectionPointsLayer({
+      source: 'rt', target: layerName,
+    });
+    expect(ok).toBe(true);
+
+    const ds = map.getSource('rt')!.getDataset()!;
+    expect(ds.layers.length).toBe(2);
+    const ptLayer = ds.layers.find((l: any) => l.name === `${layerName}-intersections`);
+    expect(ptLayer).toBeDefined();
+    expect(ptLayer!.geometry_type).toBe('point');
+    expect(ptLayer!.shapes[0].length).toBeGreaterThan(0);
   });
 });

@@ -441,6 +441,30 @@ export interface GeometryCheckReport {
   intersectionCount: number;
 }
 
+/**
+ * Options for {@link Emap.intersectionPointsLayer}. Materializes the
+ * self-intersection points of a polygon or polyline target as a new
+ * point layer in the same source's dataset.
+ */
+export interface IntersectionPointsLayerOptions {
+  /** Source ID containing the target. */
+  source: string;
+  /** Polygon or polyline layer name (or id) whose self-intersections will be extracted. */
+  target: string;
+  /**
+   * Optional name for the new point layer. Defaults to
+   * `${target}-intersections`. Must not collide with an existing layer
+   * in the same dataset.
+   */
+  name?: string;
+  /**
+   * Override the auto-derived intersection-tolerance epsilon. Forwarded
+   * to `findSegmentIntersections.tolerance`. Source-CRS units. Must be
+   * a positive finite number when supplied.
+   */
+  tolerance?: number;
+}
+
 /** Source-data shape for {@link Emap.joinTable}. Discriminated union: */
 export type JoinTableData =
   /** CSV content (string or bytes). Saved as `.emap-join.csv` in the runner cache. */
@@ -2946,6 +2970,91 @@ export class Emap extends EventDispatcher {
       intersections,
       intersectionCount: intersections.length,
     };
+  }
+
+  /**
+   * Materialize the self-intersection points of a polygon or polyline
+   * target as a new point layer in the same source's dataset.
+   *
+   * Counterpart to {@link checkGeometry} — `checkGeometry` returns a
+   * read-only report, while this op produces a renderable, selectable,
+   * editable layer. Useful when the user wants to label or operate on
+   * the intersection locations.
+   *
+   * mapshaper's CLI `-points intersections` flag is registered but its
+   * implementation is a debug-only timing benchmark; this method
+   * bypasses the CLI and uses `findSegmentIntersections` +
+   * `getIntersectionLayer` directly, which DO produce the right output.
+   *
+   * Returns `false` for any of: missing source / dataset, unresolved
+   * target, target geometry not polygon/polyline, name collision with
+   * an existing layer, non-positive `tolerance`. On internal error
+   * (mapshaper threw), fires `error` event and returns `false`.
+   *
+   * The resulting layer is one multi-point feature (mapshaper's
+   * `getIntersectionLayer` returns `shapes: [points]`). Pipe through
+   * `explodeLayer` if one feature per intersection is needed.
+   */
+  public async intersectionPointsLayer(opts: IntersectionPointsLayerOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const original = source.getDataset();
+    if (!original) return false;
+    const targetLayer = findLayerByName(original.layers, opts.target);
+    if (!targetLayer) return false;
+    if (targetLayer.geometry_type !== 'polygon' && targetLayer.geometry_type !== 'polyline') {
+      return false;
+    }
+    if (!original.arcs) return false;
+
+    const newName = (opts.name && opts.name.trim()) || `${opts.target}-intersections`;
+    if (original.layers.some((l: any) => l?.name === newName)) return false;
+    if (opts.tolerance !== undefined) {
+      if (typeof opts.tolerance !== 'number' || !Number.isFinite(opts.tolerance) || opts.tolerance <= 0) {
+        return false;
+      }
+    }
+
+    const internalOpts: { tolerance?: number } = {};
+    if (opts.tolerance !== undefined) internalOpts.tolerance = opts.tolerance;
+
+    // Custom dataset-replace path. Snapshot for undo, do work on a deep
+    // copy, swap. Mirrors `_runDatasetCommand` but skips parseCommands
+    // because mapshaper's CLI `-points intersections` is broken upstream
+    // — we go directly to the internal primitives.
+    const before: MapshaperDataset = mapshaper.internal.copyDataset(original);
+    const after: MapshaperDataset = mapshaper.internal.copyDataset(original);
+
+    let pointLyr: any;
+    try {
+      const intersections = mapshaper.internal.findSegmentIntersections(after.arcs!, internalOpts);
+      // Find the cloned target inside the working copy by name.
+      const workingTarget = findLayerByName(after.layers, opts.target);
+      if (!workingTarget) {
+        // Should never happen — target was in original, copyDataset preserves names.
+        throw new Error('intersectionPointsLayer: target lost in copyDataset');
+      }
+      pointLyr = mapshaper.internal.getIntersectionLayer(intersections, workingTarget, after.arcs!);
+      pointLyr.name = newName;
+      after.layers.push(pointLyr);
+    } catch (err) {
+      this.fire('error', { error: err });
+      return false;
+    }
+
+    source.setDataset(after);
+
+    // Same history-barrier convention as every other dataset-replace op.
+    this._history.clear();
+    this._history.push(new DatasetReplaceCommand({
+      source, before, after,
+      label: `Intersection points ${opts.target}`,
+    }));
+    this._fireHistoryChange();
+
+    this._fireSelectionChange(this._selection.clear());
+    this._scheduleRender();
+    return true;
   }
 
   /**
