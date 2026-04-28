@@ -16,6 +16,31 @@ export type {
   InnerlinesOptions,
   FilterOptions,
   SnapOptions,
+  MosaicOptions,
+  UnionOptions,
+  DivideOptions,
+  PointsOptions,
+  PointsMode,
+  LinesOptions,
+  PolygonsOptions,
+  SimplifyOptions,
+  SimplifyMethod,
+  ProjectOptions,
+  RebuildTopologyOptions,
+  RenameLayerOptions,
+  MergeLayersOptions,
+  SplitLayerOptions,
+  DropLayerOptions,
+  SortFeaturesOptions,
+  UniqueFeaturesOptions,
+  FilterFieldsOptions,
+  RenameFieldsOptions,
+  JoinTableOptions,
+  JoinTableData,
+  CheckGeometryOptions,
+  GeometryCheckReport,
+  ExportSnapshotOptions,
+  LoadSnapshotOptions,
 } from './map/map';
 export { FeatureQuery } from './map/feature-query';
 export { HighlightManager } from './map/highlight-manager';
@@ -33,6 +58,8 @@ export type {
 export { resolveStrokeStyle, resolvePointStyle } from './map/layer';
 export * from './core/events';
 export { DragPanHandler } from './core/drag-pan-handler';
+export { MapshaperWorkerPool } from './core/mapshaper-worker-pool';
+export type { MapshaperWorkerPoolOptions } from './core/mapshaper-worker-pool';
 export * from './source/topology-source';
 export type { ExportFormat, ExportOptions } from './source/source';
 export * from './renderer/canvas-painter';
@@ -49,6 +76,7 @@ export * from './ui/vertex-edit-control';
 export * from './ui/edit-toolbar';
 export * from './ui/draw-feature-control';
 export * from './ui/history-control';
+export * from './ui/box-select-control';
 export type { EditCommand } from './edit/edit-command';
 export { EditHistory } from './edit/edit-history';
 export type { HistoryStateSnapshot, EditHistoryOptions } from './edit/edit-history';

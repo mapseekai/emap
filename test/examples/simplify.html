@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 几何简化 (Simplify)</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header select, #header input[type="text"], #header input[type="number"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; }
+    #header input[type="text"], #header input[type="number"] { width: 110px; }
+    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    .group { display: flex; gap: 6px; align-items: center; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <span class="group">
+      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    </span>
+    <span class="group">
+      <label>作用域:
+        <select id="scope">
+          <option value="">整个数据源 (推荐)</option>
+        </select>
+      </label>
+    </span>
+    <span class="group">
+      <label>阈值方式:
+        <select id="threshold-mode">
+          <option value="percentage">percentage (百分比)</option>
+          <option value="interval">interval (距离)</option>
+          <option value="resolution">resolution (网格)</option>
+        </select>
+      </label>
+      <label>值: <input id="threshold-value" type="text" value="10" /></label>
+    </span>
+    <span class="group">
+      <label>方法:
+        <select id="method">
+          <option value="">weighted (默认,加权 Visvalingam)</option>
+          <option value="weighted">weighted (显式)</option>
+          <option value="visvalingam">visvalingam</option>
+          <option value="dp">dp (Douglas-Peucker)</option>
+        </select>
+      </label>
+    </span>
+    <span class="group">
+      <label><input id="planar" type="checkbox" /> planar</label>
+      <label><input id="keep-shapes" type="checkbox" checked /> keep-shapes</label>
+      <label><input id="lock-box" type="checkbox" /> lock-box</label>
+      <label><input id="no-repair" type="checkbox" /> no-repair</label>
+    </span>
+    <button id="btn" disabled>简化</button>
+    <span id="status">加载一个含面或线的数据文件</span>
+    <span class="hint">
+      mapshaper <code>-simplify</code> 会在弧上设置每顶点阈值 (<code>zz</code>),后续渲染、命令、导出都会自动遵循。
+      重新执行不同阈值会替换上一次的设置。Ctrl+Z 可撤销。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'simplify-source';
+    const scopeSel = document.getElementById('scope');
+    const thresholdModeSel = document.getElementById('threshold-mode');
+    const thresholdValue = document.getElementById('threshold-value');
+    const methodSel = document.getElementById('method');
+    const planarInput = document.getElementById('planar');
+    const keepShapesInput = document.getElementById('keep-shapes');
+    const lockBoxInput = document.getElementById('lock-box');
+    const noRepairInput = document.getElementById('no-repair');
+    const btn = document.getElementById('btn');
+    const status = document.getElementById('status');
+
+    function populate(source) {
+      // Reset to "all source" plus per-layer scopes
+      scopeSel.innerHTML = '<option value="">整个数据源 (推荐)</option>';
+      source.getLayers().forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        const geom = lyr?.geometry_type ?? '?';
+        if (geom === 'polygon' || geom === 'polyline') {
+          scopeSel.appendChild(new Option(`${name} (${geom})`, name));
+        }
+      });
+      btn.disabled = source.getLayers().length === 0;
+    }
+
+    function placeholderForMode() {
+      const mode = thresholdModeSel.value;
+      if (mode === 'percentage') return '0..100, 例如 10';
+      if (mode === 'interval') return '> 0, 单位: 源 CRS';
+      if (mode === 'resolution') return '例如 1000x500';
+      return '';
+    }
+
+    thresholdModeSel.addEventListener('change', () => {
+      thresholdValue.placeholder = placeholderForMode();
+    });
+    thresholdValue.placeholder = placeholderForMode();
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `正在加载 ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          populate(source);
+          status.textContent = `已加载 ${file.name}。`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    btn.addEventListener('click', async () => {
+      const opts = { source: SOURCE_ID };
+      const scope = scopeSel.value;
+      if (scope) opts.target = scope;
+
+      const mode = thresholdModeSel.value;
+      const raw = thresholdValue.value.trim();
+      if (mode === 'percentage') {
+        const n = Number(raw);
+        if (Number.isNaN(n)) { status.textContent = 'percentage 必须是数字。'; return; }
+        opts.percentage = n;
+      } else if (mode === 'interval') {
+        const n = Number(raw);
+        if (Number.isNaN(n)) { status.textContent = 'interval 必须是数字。'; return; }
+        opts.interval = n;
+      } else {
+        opts.resolution = raw;
+      }
+
+      const method = methodSel.value;
+      if (method) opts.method = method;
+      if (planarInput.checked) opts.planar = true;
+      if (keepShapesInput.checked) opts.keepShapes = true;
+      if (lockBoxInput.checked) opts.lockBox = true;
+      if (noRepairInput.checked) opts.noRepair = true;
+
+      const label = scope || '整个数据源';
+      status.textContent = `正在简化 ${label}...`;
+      btn.disabled = true;
+      try {
+        const ok = await map.simplifyLayer(opts);
+        status.textContent = ok
+          ? `已简化 ${label} (${mode}=${raw})。Ctrl+Z 撤销。`
+          : '简化失败 (检查阈值是否合法)。';
+        const src = map.getSource(SOURCE_ID);
+        if (src) populate(src);
+      } catch (err) {
+        status.textContent = `错误: ${err?.message ?? err}`;
+        console.error(err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+
+</html>

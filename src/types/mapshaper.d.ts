@@ -54,11 +54,74 @@ declare module 'mapshaper' {
      */
     copyDataset(dataset: MapshaperDataset): MapshaperDataset;
 
+    /**
+     * Detect line intersections, insert vertex cuts at every crossing, and
+     * re-run `buildTopology` if anything changed. Mutates the dataset in
+     * place and returns the resulting node collection. Used as a pre-pass
+     * by every overlay command (`-clip` / `-erase` / `-dissolve` / etc.).
+     */
+    addIntersectionCuts(
+      dataset: MapshaperDataset,
+      opts?: {
+        snap_interval?: number;
+        no_snap?: boolean;
+        rebuild_topology?: boolean;
+        [k: string]: unknown;
+      },
+    ): unknown;
+
+    /**
+     * Read-only segment-intersection scan over an ArcCollection. Each
+     * returned object carries `.x` / `.y` coordinates of an intersection
+     * point (additional fields exist but aren't part of our public surface).
+     */
+    findSegmentIntersections(
+      arcs: ArcCollection,
+      opts?: { tolerance?: number; stripes?: number;[k: string]: unknown },
+    ): Array<{ x: number; y: number;[k: string]: unknown }>;
+
     // Export — io/mapshaper-export.mjs
     exportFileContent(
       dataset: MapshaperDataset,
       opts: { format: string;[k: string]: unknown },
     ): Array<{ filename: string; content: string | Uint8Array | ArrayBuffer }>;
+
+    // Snapshot pack/unpack — io/mapshaper-pack.mjs / mapshaper-unpack.mjs
+    exportPackedDatasets(
+      datasets: MapshaperDataset[],
+      opts: { compact?: boolean; file?: string;[k: string]: unknown },
+    ): Promise<Array<{ filename: string; content: Uint8Array }>>;
+
+    /** Build the unpacked session object. Use {@link pack} to serialize, or
+     *  inject extra fields (e.g. emap source IDs) before serializing. */
+    exportDatasetsToPack(
+      datasets: MapshaperDataset[],
+      opts: { compact?: boolean;[k: string]: unknown },
+    ): Promise<{ version: number; created: string; datasets: unknown[];[k: string]: unknown }>;
+
+    /** Serialize an arbitrary value to msgpack bytes. */
+    pack(obj: unknown): Uint8Array;
+
+    /** Restore a session object from msgpack bytes. Datasets are rebuilt into
+     *  proper Mapshaper Dataset instances; non-standard fields (e.g. emap)
+     *  are preserved on the returned object. */
+    unpackSessionData(buf: Uint8Array): Promise<{
+      version?: number;
+      created?: string;
+      datasets: MapshaperDataset[];
+      [k: string]: unknown;
+    }>;
+
+    /** Reconstruct Dataset instances from an already-unpacked session object
+     *  (the plain-object output of {@link exportDatasetsToPack}). Used by
+     *  the Web Worker round-trip — skips the msgpack step. */
+    restoreSessionData(obj: {
+      datasets: unknown[];
+      [k: string]: unknown;
+    }): Promise<{
+      datasets: MapshaperDataset[];
+      [k: string]: unknown;
+    }>;
 
     // Simplification / LOD
     getAvgSegment(arcs: ArcCollection): number;

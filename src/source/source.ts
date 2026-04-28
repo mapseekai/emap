@@ -10,7 +10,7 @@ export interface Source extends EventDispatcher {
 }
 
 /** File formats emap can serialize a dataset to. Mirrors the import format set. */
-export type ExportFormat = 'geojson' | 'topojson' | 'shapefile';
+export type ExportFormat = 'geojson' | 'topojson' | 'shapefile' | 'msx';
 
 /** Options for {@link TopologySource.export}. */
 export interface ExportOptions {

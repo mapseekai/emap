@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 折线被多边形切分 (Divide)</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header select, #header input[type="text"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; }
+    #header input[type="text"] { width: 180px; }
+    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    .file-group { display: flex; gap: 6px; align-items: center; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <span class="file-group">
+      <label>文件 (可一次选多个或多次添加):
+        <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple />
+      </label>
+      <button id="clear-files-btn" type="button">清空</button>
+    </span>
+    <label>折线图层 (将被切分): <select id="target"></select></label>
+    <label>多边形图层 (作为切分器): <select id="divider"></select></label>
+    <label>保留字段: <input id="fields" type="text" placeholder="可选,例如 NAME,STATE" /></label>
+    <label><input id="force" type="checkbox" /> 覆盖同名字段</label>
+    <button id="btn" disabled>按多边形切分折线</button>
+    <span id="status">同时上传一个折线图层和一个多边形图层</span>
+    <span class="hint">
+      mapshaper <code>-divide</code> 在多边形边界处切断折线,并把所在多边形的属性拷贝到每段折线。
+      可以分多次上传两个 GeoJSON 文件 —— emap 会合并到同一数据源。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'divide-source';
+    const fileInput = document.getElementById('file-input');
+    const clearBtn = document.getElementById('clear-files-btn');
+    const targetSel = document.getElementById('target');
+    const dividerSel = document.getElementById('divider');
+    const fieldsInput = document.getElementById('fields');
+    const forceInput = document.getElementById('force');
+    const btn = document.getElementById('btn');
+    const status = document.getElementById('status');
+
+    /** filename -> Uint8Array (累计上传) */
+    const uploaded = new Map();
+
+    function readFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve(new Uint8Array(ev.target.result));
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    function populateLayerOptions(source) {
+      targetSel.innerHTML = '';
+      dividerSel.innerHTML = '';
+      const layers = source.getLayers();
+      layers.forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        if (lyr?.geometry_type === 'polyline') {
+          targetSel.appendChild(new Option(name, name));
+        } else if (lyr?.geometry_type === 'polygon') {
+          dividerSel.appendChild(new Option(name, name));
+        }
+      });
+      btn.disabled = !(targetSel.options.length > 0 && dividerSel.options.length > 0);
+    }
+
+    async function reimportAll() {
+      if (uploaded.size === 0) {
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        targetSel.innerHTML = '';
+        dividerSel.innerHTML = '';
+        btn.disabled = true;
+        status.textContent = '已清空,等待上传文件';
+        return;
+      }
+      status.textContent = `加载 ${uploaded.size} 个文件中...`;
+      const entries = Array.from(uploaded, ([filename, content]) => ({ filename, content }));
+      const source = new TopologySource(SOURCE_ID);
+      source.on('data', () => {
+        map.setExtent(source.getExtent());
+        populateLayerOptions(source);
+        status.textContent = `已加载 ${uploaded.size} 个文件。选择折线和多边形图层后点击 "按多边形切分折线"。`;
+      });
+      source.on('error', (e) => {
+        console.error(e);
+        status.textContent = `加载失败: ${e.error?.message ?? e}`;
+      });
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      source.setData(entries);
+      map.addSource(SOURCE_ID, source);
+    }
+
+    fileInput.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length === 0) return;
+      for (const f of files) {
+        try {
+          uploaded.set(f.name, await readFile(f));
+        } catch (err) {
+          console.error(`读取 ${f.name} 失败`, err);
+        }
+      }
+      fileInput.value = '';
+      await reimportAll();
+    });
+
+    clearBtn.addEventListener('click', async () => {
+      uploaded.clear();
+      await reimportAll();
+    });
+
+    btn.addEventListener('click', async () => {
+      const target = targetSel.value;
+      const divider = dividerSel.value;
+      if (!target || !divider) return;
+      const opts = { source: SOURCE_ID, target, divider };
+      const f = fieldsInput.value.trim();
+      if (f) opts.fields = f.split(',').map((s) => s.trim()).filter(Boolean);
+      if (forceInput.checked) opts.force = true;
+      status.textContent = `正在用 "${divider}" 切分 "${target}"...`;
+      btn.disabled = true;
+      try {
+        const ok = await map.divideLayer(opts);
+        status.textContent = ok ? `"${target}" 已按 "${divider}" 切分,Ctrl+Z 撤销。` : '切分失败 (检查图层类型与名称)。';
+        const src = map.getSource(SOURCE_ID);
+        if (src) populateLayerOptions(src);
+      } catch (err) {
+        status.textContent = `错误: ${err?.message ?? err}`;
+        console.error(err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 几何检查 (Check Geometry)</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header input[type="text"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; width: 110px; }
+    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #header button.alt { background: #2980b9; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    .group { display: flex; gap: 6px; align-items: center; }
+    #report { background: #34495e; padding: 4px 10px; border-radius: 3px; font-family: monospace; font-size: 12px; min-width: 280px; }
+    .ok { color: #2ecc71; }
+    .bad { color: #e74c3c; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <span class="group">
+      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    </span>
+    <span class="group">
+      <label>tolerance (可选): <input id="tolerance" type="text" placeholder="自动" /></label>
+      <button id="check-btn" disabled>检查几何</button>
+      <button id="rebuild-btn" class="alt" disabled>重建拓扑</button>
+    </span>
+    <span id="report">尚未检查</span>
+    <span id="status" class="hint">加载数据后点击检查;有交点时可一键重建拓扑</span>
+    <span class="hint">
+      <code>checkGeometry</code> 是只读的 —— 不修改数据,不入历史。检测到自交后通常下一步是 <code>rebuildTopology</code> 或 <code>cleanLayer</code>。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'check-geom-source';
+    const tolInput = document.getElementById('tolerance');
+    const checkBtn = document.getElementById('check-btn');
+    const rebuildBtn = document.getElementById('rebuild-btn');
+    const report = document.getElementById('report');
+    const status = document.getElementById('status');
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `正在加载 ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          checkBtn.disabled = false;
+          rebuildBtn.disabled = false;
+          status.textContent = `已加载 ${file.name}。点击检查几何。`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    checkBtn.addEventListener('click', async () => {
+      const opts = { source: SOURCE_ID };
+      const tol = tolInput.value.trim();
+      if (tol && !Number.isNaN(Number(tol))) opts.tolerance = Number(tol);
+      status.textContent = '检查中...';
+      checkBtn.disabled = true;
+      try {
+        const r = await map.checkGeometry(opts);
+        if (!r) {
+          report.innerHTML = '<span class="bad">无法检查 (检查源/图层)</span>';
+          status.textContent = '检查失败。';
+        } else if (r.ok) {
+          report.innerHTML = '<span class="ok">✓ 拓扑干净 — 0 个相交</span>';
+          status.textContent = '检查完成,数据无问题。';
+        } else {
+          const sample = r.intersections.slice(0, 5)
+            .map((p) => `(${p.x.toFixed(3)}, ${p.y.toFixed(3)})`).join(', ');
+          report.innerHTML = `<span class="bad">✗ 发现 ${r.intersectionCount} 个相交</span> — 前 5 个: ${sample}${r.intersectionCount > 5 ? '...' : ''}`;
+          status.textContent = '检查到自相交 —— 点击 "重建拓扑" 修复。';
+        }
+      } catch (err) {
+        status.textContent = `错误: ${err?.message ?? err}`;
+        console.error(err);
+      } finally {
+        checkBtn.disabled = false;
+      }
+    });
+
+    rebuildBtn.addEventListener('click', async () => {
+      status.textContent = '正在重建拓扑...';
+      rebuildBtn.disabled = true;
+      try {
+        const ok = await map.rebuildTopology({ source: SOURCE_ID });
+        status.textContent = ok ? '已重建。再次检查几何确认结果。' : '重建失败。';
+      } catch (err) {
+        status.textContent = `错误: ${err?.message ?? err}`;
+        console.error(err);
+      } finally {
+        rebuildBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+
+</html>

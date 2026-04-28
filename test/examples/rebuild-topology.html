@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 重建拓扑 (Rebuild Topology)</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header input[type="text"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; width: 120px; }
+    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #header button.alt { background: #2980b9; }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    .group { display: flex; gap: 6px; align-items: center; }
+    #stats { background: #34495e; padding: 4px 8px; border-radius: 3px; font-family: monospace; font-size: 12px; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <span class="group">
+      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    </span>
+    <span class="group">
+      <label>平移 dx: <input id="dx" type="text" value="0.5" /></label>
+      <label>dy: <input id="dy" type="text" value="0.5" /></label>
+      <button id="translate-btn" class="alt" disabled>平移所选</button>
+    </span>
+    <span class="group">
+      <label>snap-interval (可选): <input id="snap" type="text" placeholder="自动" /></label>
+      <label><input id="no-snap" type="checkbox" /> no-snap</label>
+      <label><input id="rebuild-flag" type="checkbox" /> rebuild_topology</label>
+      <button id="rebuild-btn" disabled>重建拓扑</button>
+    </span>
+    <span id="stats">arcs: -, vertices: -</span>
+    <span id="status">加载一个含面/线的数据文件,点击要素选中,平移 → 拓扑可能错乱 → 重建拓扑修复</span>
+    <span class="hint">
+      <code>Emap.rebuildTopology</code> 调用 mapshaper 内部 <code>addIntersectionCuts</code> —— 重新检测共享弧、
+      在交点处插入顶点、清理退化形状。比 <code>cleanLayer</code> 轻量(后者还会消除毛刺/小面)。
+      作为历史屏障(此前细粒度撤销会被清空,但重建本身可撤销一次)。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'rebuild-source';
+    const dxInput = document.getElementById('dx');
+    const dyInput = document.getElementById('dy');
+    const translateBtn = document.getElementById('translate-btn');
+    const snapInput = document.getElementById('snap');
+    const noSnapInput = document.getElementById('no-snap');
+    const rebuildFlagInput = document.getElementById('rebuild-flag');
+    const rebuildBtn = document.getElementById('rebuild-btn');
+    const stats = document.getElementById('stats');
+    const status = document.getElementById('status');
+
+    function refreshStats() {
+      const src = map.getSource(SOURCE_ID);
+      const ds = src?.getDataset();
+      if (!ds) {
+        stats.textContent = 'arcs: -, vertices: -';
+        return;
+      }
+      const arcCount = ds.arcs?.size?.() ?? 0;
+      const vertexCount = ds.arcs?.getPointCount?.() ?? 0;
+      const layerCount = ds.layers?.length ?? 0;
+      stats.textContent = `layers: ${layerCount}, arcs: ${arcCount}, vertices: ${vertexCount}`;
+    }
+
+    function refreshButtons() {
+      const ds = map.getSource(SOURCE_ID)?.getDataset();
+      const hasArcs = !!ds?.arcs;
+      rebuildBtn.disabled = !hasArcs;
+    }
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `正在加载 ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          refreshStats();
+          refreshButtons();
+          translateBtn.disabled = false;
+          status.textContent = `已加载 ${file.name}。点击要素选中,然后 "平移所选" 或直接 "重建拓扑"。`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    map.on('click', (e) => {
+      // Tap to toggle selection at the click position
+      const features = map.queryRenderedFeatures(e.point, { radius: 6 });
+      if (!features?.length) return;
+      const f = features[0];
+      map.select([{ source: f.source, layer: f.layer, id: f.id }], 'toggle');
+      status.textContent = `已选: ${map.getSelection().length} 个要素`;
+    });
+
+    translateBtn.addEventListener('click', () => {
+      const dx = Number(dxInput.value);
+      const dy = Number(dyInput.value);
+      if (Number.isNaN(dx) || Number.isNaN(dy)) {
+        status.textContent = 'dx / dy 必须是数字。';
+        return;
+      }
+      if (map.getSelection().length === 0) {
+        status.textContent = '请先点击要素选中。';
+        return;
+      }
+      const ok = map.translateSelected(dx, dy);
+      refreshStats();
+      status.textContent = ok
+        ? `已平移所选 (Δ ${dx}, ${dy})。可能产生新的交叉,点击 "重建拓扑" 修复。`
+        : '平移失败。';
+    });
+
+    rebuildBtn.addEventListener('click', async () => {
+      const opts = { source: SOURCE_ID };
+      const sn = snapInput.value.trim();
+      if (sn && !Number.isNaN(Number(sn))) opts.snapInterval = Number(sn);
+      if (noSnapInput.checked) opts.noSnap = true;
+      if (rebuildFlagInput.checked) opts.rebuildTopology = true;
+      const before = stats.textContent;
+      status.textContent = '正在重建拓扑...';
+      rebuildBtn.disabled = true;
+      try {
+        const ok = await map.rebuildTopology(opts);
+        refreshStats();
+        const after = stats.textContent;
+        status.textContent = ok
+          ? `已重建。${before} → ${after}。Ctrl+Z 撤销。`
+          : '重建失败。';
+      } catch (err) {
+        status.textContent = `错误: ${err?.message ?? err}`;
+        console.error(err);
+      } finally {
+        rebuildBtn.disabled = false;
+        refreshButtons();
+      }
+    });
+
+    refreshStats();
+  </script>
+</body>
+
+</html>
