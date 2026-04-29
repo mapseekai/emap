@@ -1213,6 +1213,17 @@ export class Emap extends EventDispatcher {
       container.style.flexDirection = 'column';
       container.style.gap = '8px';
 
+      // Stop UI-control events from bubbling onto the canvas. Without this,
+      // clicking a control button (Undo, Navigation, …) also fires the
+      // canvas's `click` handler — which examples wire to feature
+      // selection — and starts the drag-pan on `mousedown`. `pointer-events:
+      // none` on the container itself prevents hit-testing on empty space
+      // around buttons, but events on the buttons themselves still bubble.
+      const swallow = (e: Event) => e.stopPropagation();
+      for (const type of ['click', 'mousedown', 'mouseup', 'dblclick', 'contextmenu', 'wheel']) {
+        container.addEventListener(type, swallow);
+      }
+
       el.appendChild(container);
       this._controlContainers.set(pos, container);
     }
