@@ -48,8 +48,30 @@ function toBlobPart(content: string | Uint8Array | ArrayBuffer): BlobPart {
   return content as BlobPart;
 }
 
+/**
+ * Resource ceilings applied by {@link TopologySource} when extracting a ZIP
+ * payload. Defaults are intentionally generous so legitimate shapefile zips
+ * keep working unchanged. Apps that load adversarial / public-internet zips
+ * should lower them.
+ */
+export interface ZipExtractionLimits {
+  /** Max summed uncompressed size of all kept entries, in bytes. Default 200 MB. */
+  maxBytes?: number;
+  /** Max entry count fflate may yield. Default 5000. */
+  maxEntries?: number;
+  /** Max `uncompressedTotal / compressedInput` ratio. Default 100. */
+  maxRatio?: number;
+}
+
+const DEFAULT_ZIP_LIMITS: Required<ZipExtractionLimits> = {
+  maxBytes: 200 * 1024 * 1024,
+  maxEntries: 5000,
+  maxRatio: 100,
+};
+
 export interface TopologySourceOptions {
   data?: TopologySourceInput;
+  zipLimits?: ZipExtractionLimits;
 }
 
 export class TopologySource extends EventDispatcher implements ITopologySource {
@@ -59,6 +81,8 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   private _displayArcs: DisplayArcs | null = null;
   private _options: TopologySourceOptions;
   private _data: TopologySourceInput | undefined;
+  private _loadVersion: number = 0;
+  private _abortController: AbortController | null = null;
 
   constructor(id: string, options?: TopologySourceOptions) {
     super();
@@ -78,8 +102,15 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * `{filename, content}` for multi-file imports (each file becomes its own
    * layer in one dataset — same behaviour as mapshaper's
    * `-i FILE1 FILE2 ...` CLI invocation).
+   *
+   * Last-write-wins: rapid back-to-back calls supersede each other. Only the
+   * latest call's outcome fires `data` / `error`; in-flight URL fetches from
+   * superseded calls are aborted.
    */
   setData(data: TopologySourceInput): this {
+    this._loadVersion++;
+    this._abortController?.abort();
+    this._abortController = null;
     this._data = data;
     this._updateData();
     return this;
@@ -87,6 +118,10 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
   private async _updateData(): Promise<void> {
     if (!this._data) return;
+
+    const version = this._loadVersion;
+    const controller = new AbortController();
+    this._abortController = controller;
 
     this.fire('dataloading');
 
@@ -100,7 +135,9 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       if (Array.isArray(this._data)) {
         // Multi-file import: each entry becomes its own layer in one dataset
         // (same behaviour as mapshaper CLI `-i FILE1 FILE2 ...`).
-        if (this._data.length === 0) return;
+        if (this._data.length === 0) {
+          throw new Error('setData received an empty array; nothing to import');
+        }
         for (const entry of this._data) {
           if (this._isZipFile(entry.filename)) {
             const extracted = this._extractZip(entry.content);
@@ -122,7 +159,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         if (typeof this._data === 'string') {
           // Load from URL
           const url = this._data;
-          const response = await fetch(url);
+          const response = await fetch(url, { signal: controller.signal });
           if (!response.ok) {
             throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
           }
@@ -179,7 +216,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         commands[0].options.input = inputFiles;
       }
 
-      this._dataset = await new Promise((resolve, reject) => {
+      const dataset: MapshaperDataset = await new Promise((resolve, reject) => {
         mapshaper.internal.runParsedCommands(commands, new mapshaper.internal.Job(), (err: any, job: any) => {
           if (err) reject(err);
           else {
@@ -193,6 +230,11 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         });
       });
 
+      // Stale guard: another setData superseded this run while it was awaiting.
+      // Drop the result silently — the live chain owns the next data/error.
+      if (version !== this._loadVersion) return;
+
+      this._dataset = dataset;
       // Initialize LOD wrapper for large datasets
       if (this._dataset?.arcs) {
         this._displayArcs = new DisplayArcs(this._dataset.arcs);
@@ -200,6 +242,10 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
       this.fire('data');
     } catch (err: any) {
+      // Stale chain (either superseded by a newer setData, or its fetch was
+      // aborted by us). Either way, the new chain owns the next event.
+      if (version !== this._loadVersion) return;
+      if (err?.name === 'AbortError') return;
       this.fire('error', { error: err });
     }
   }
@@ -452,11 +498,30 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   }
 
   private _extractZip(data: Uint8Array): Record<string, Uint8Array | string> {
+    const limits = { ...DEFAULT_ZIP_LIMITS, ...this._options.zipLimits };
     const unzipped = unzipSync(data);
-    const result: Record<string, Uint8Array | string> = {};
 
-    for (const [path, content] of Object.entries(unzipped)) {
-      // Skip __MACOSX and dot files
+    const entryNames = Object.keys(unzipped);
+    if (entryNames.length > limits.maxEntries) {
+      throw new Error(
+        `ZIP extraction limit exceeded: ${entryNames.length} entries > maxEntries ${limits.maxEntries}`,
+      );
+    }
+
+    const result: Record<string, Uint8Array | string> = {};
+    let uncompressedTotal = 0;
+
+    for (const path of entryNames) {
+      const content = unzipped[path];
+      uncompressedTotal += content.byteLength;
+      if (uncompressedTotal > limits.maxBytes) {
+        throw new Error(
+          `ZIP extraction limit exceeded: uncompressed total ${uncompressedTotal} > maxBytes ${limits.maxBytes}`,
+        );
+      }
+
+      // Skip __MACOSX and dot files (still counted toward the byte/entry totals
+      // — a malicious zip can't hide bytes behind those prefixes).
       if (/^__MACOSX/.test(path) || path.split('/').pop()?.startsWith('.')) {
         continue;
       }
@@ -468,6 +533,15 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         result[filename] = strFromU8(content);
       } else {
         result[filename] = content;
+      }
+    }
+
+    if (data.byteLength > 0) {
+      const ratio = uncompressedTotal / data.byteLength;
+      if (ratio > limits.maxRatio) {
+        throw new Error(
+          `ZIP extraction limit exceeded: ratio ${ratio.toFixed(1)} > maxRatio ${limits.maxRatio}`,
+        );
       }
     }
 

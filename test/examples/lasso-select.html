@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 拉框 / 套索 选择切换 (Box + Lasso)</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #header button.danger { background: #c0392b; }
+    #header button.alt { background: #2980b9; }
+    #header button.active { background: #16a085 !important; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.7); }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    .group { display: flex; gap: 6px; align-items: center; }
+    #selected-list { background: #34495e; padding: 4px 8px; border-radius: 3px; font-family: monospace; font-size: 12px; max-height: 60px; overflow-y: auto; min-width: 200px; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <span class="group">
+      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    </span>
+    <span class="group">
+      <span>选择工具:</span>
+      <button id="tool-box" class="active">矩形</button>
+      <button id="tool-lasso">套索</button>
+    </span>
+    <span class="group">
+      <button id="clear-btn" class="danger" disabled>清空选择</button>
+      <button id="delete-btn" class="danger" disabled>删除选中</button>
+    </span>
+    <span id="status">加载数据后,按住 Shift 拖拽空白处框选</span>
+    <div id="selected-list">已选: 0</div>
+    <span class="hint">
+      Shift+拖拽 → replace; Shift+Ctrl(Cmd)+拖拽 → add; Shift+Alt+拖拽 → toggle。
+      <br />
+      切换工具按钮控制本次拖拽走 BoxSelect 还是 LassoSelect — 实现上是 enable() / disable() 配对调用,
+      DragPanHandler 已内置 shift-skip,与平移不冲突。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/mapshaper-vendor.js"></script>
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl, BoxSelectControl, LassoSelectControl } = emap;
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    // Both controls installed at once. Switching is via enable() / disable().
+    const boxSelect = new BoxSelectControl();
+    const lassoSelect = new LassoSelectControl();
+    map.addControl(boxSelect);
+    map.addControl(lassoSelect);
+    lassoSelect.disable();  // Start with rect active.
+
+    const SOURCE_ID = 'lasso-demo-source';
+    const status = document.getElementById('status');
+    const selectedList = document.getElementById('selected-list');
+    const clearBtn = document.getElementById('clear-btn');
+    const deleteBtn = document.getElementById('delete-btn');
+    const toolBoxBtn = document.getElementById('tool-box');
+    const toolLassoBtn = document.getElementById('tool-lasso');
+
+    function refreshSelected() {
+      const sel = map.getSelection();
+      selectedList.textContent = `已选: ${sel.length}` + (sel.length > 0
+        ? ' — ' + sel.slice(0, 8).map((r) => `${r.layer}#${r.id}`).join(', ') + (sel.length > 8 ? ' …' : '')
+        : '');
+      clearBtn.disabled = sel.length === 0;
+      deleteBtn.disabled = sel.length === 0;
+    }
+
+    map.on('selectionchange', refreshSelected);
+
+    function pickTool(name) {
+      if (name === 'box') {
+        boxSelect.enable();
+        lassoSelect.disable();
+        toolBoxBtn.classList.add('active');
+        toolLassoBtn.classList.remove('active');
+        status.textContent = '矩形选择 — Shift+拖拽画矩形';
+      } else {
+        boxSelect.disable();
+        lassoSelect.enable();
+        toolBoxBtn.classList.remove('active');
+        toolLassoBtn.classList.add('active');
+        status.textContent = '套索选择 — Shift+拖拽画自由曲线';
+      }
+    }
+
+    toolBoxBtn.addEventListener('click', () => pickTool('box'));
+    toolLassoBtn.addEventListener('click', () => pickTool('lasso'));
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `正在加载 ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', () => {
+          map.setExtent(source.getExtent());
+          status.textContent = `已加载 ${file.name}。Shift+拖拽框选/套索。`;
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+
+        // Default outline styling so selections are visible.
+        const lyrs = source.getLayers?.() ?? [];
+        lyrs.forEach((lyr, i) => {
+          const id = `${lyr?.name || `layer-${i}`}-default`;
+          if (map.getLayer(id)) return;
+          if (lyr?.geometry_type === 'polygon' || lyr?.geometry_type === 'polyline') {
+            map.addLayer({ id, type: 'line', source: SOURCE_ID, sourceLayer: lyr.name, paint: { 'line-color': '#888', 'line-width': 1 } });
+          } else if (lyr?.geometry_type === 'point') {
+            map.addLayer({ id, type: 'circle', source: SOURCE_ID, sourceLayer: lyr.name, paint: { 'circle-color': '#888', 'circle-radius': 3 } });
+          }
+        });
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    clearBtn.addEventListener('click', () => map.clearSelection());
+    deleteBtn.addEventListener('click', () => {
+      const ok = map.deleteSelected();
+      status.textContent = ok ? '已删除选中要素 (Ctrl+Z 撤销)。' : '删除失败。';
+    });
+
+    refreshSelected();
+  </script>
+</body>
+
+</html>

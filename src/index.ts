@@ -10,6 +10,7 @@ export type {
   HighlightStyle,
   ClipEraseOptions,
   DissolveOptions,
+  CleanOptions,
   BufferOptions,
   ApplyExpressionOptions,
   ExplodeOptions,
@@ -39,6 +40,7 @@ export type {
   JoinTableData,
   CheckGeometryOptions,
   GeometryCheckReport,
+  IntersectionPointsLayerOptions,
   ExportSnapshotOptions,
   LoadSnapshotOptions,
 } from './map/map';
@@ -77,6 +79,7 @@ export * from './ui/edit-toolbar';
 export * from './ui/draw-feature-control';
 export * from './ui/history-control';
 export * from './ui/box-select-control';
+export * from './ui/lasso-select-control';
 export type { EditCommand } from './edit/edit-command';
 export { EditHistory } from './edit/edit-history';
 export type { HistoryStateSnapshot, EditHistoryOptions } from './edit/edit-history';
@@ -84,8 +87,11 @@ export { VertexMoveCommand } from './edit/commands/vertex-move';
 export { VertexInsertCommand } from './edit/commands/vertex-insert';
 export { VertexDeleteCommand } from './edit/commands/vertex-delete';
 export { FeatureCreateCommand } from './edit/commands/feature-create';
-export { FeatureDeleteCommand } from './edit/commands/feature-delete';
-export type { FeatureDeleteCommandOptions } from './edit/commands/feature-delete';
+export { FeatureDeleteCommand, BulkFeatureDeleteCommand } from './edit/commands/feature-delete';
+export type {
+  FeatureDeleteCommandOptions,
+  BulkFeatureDeleteCommandOptions,
+} from './edit/commands/feature-delete';
 export { FeatureTranslateCommand } from './edit/commands/feature-translate';
 export type {
   FeatureTranslateCommandOptions,

@@ -1,4 +1,5 @@
 import mapshaper from 'mapshaper';
+import Flatbush from 'flatbush';
 import { AffineTransform } from '../geo/transform';
 import { TopologySource } from '../source/source';
 import { getLayerId } from '../source/layer-utils';
@@ -10,6 +11,9 @@ const POINT_BULLSEYE_DIST = 2;
 
 /** Default pixel threshold for point hit-testing */
 const POINT_HIT_THRESHOLD = 25;
+
+/** Sentinel returned by `_getOrBuildIndex` for layers with no shapes. */
+type IndexedLayer = { index: Flatbush; shapeCount: number } | null;
 
 interface HitCandidate {
   shape: number[][];
@@ -28,6 +32,18 @@ export class FeatureQuery {
   private _getSize: () => { width: number; height: number };
   private _getInitialMX: () => number;
 
+  // Per-(source, layer) Flatbush spatial index cache. Keyed by
+  // `${sourceId}|${layerIndex}|${shapes.length}|${arcs.size()}` so any
+  // dataset-replace op (which always changes shape and / or arc counts)
+  // implicitly invalidates. In-place geometry edits like translateSelected
+  // do NOT change the counts and therefore don't auto-invalidate — callers
+  // must call `clear(sourceId)` after such edits if they want fresh
+  // results. The map of (sourceId, layerIndex) → null entries marks
+  // layers that have been seen as empty so the no-shape fallback path
+  // also short-circuits.
+  private _indexCache: globalThis.Map<string, IndexedLayer> =
+    new globalThis.Map();
+
   constructor(
     sources: globalThis.Map<string, TopologySource>,
     getTransform: () => AffineTransform,
@@ -38,6 +54,135 @@ export class FeatureQuery {
     this._getTransform = getTransform;
     this._getSize = getSize;
     this._getInitialMX = getInitialMX;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Spatial index — public surface
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Eagerly build spatial indexes for every layer of one source (or all
+   * sources when omitted). Idempotent — already-cached entries are
+   * skipped. Used by `Emap.prebuildSpatialIndex` to pay the build cost
+   * in idle time before the first user query.
+   */
+  prebuild(sourceId?: string): void {
+    if (sourceId !== undefined) {
+      const source = this._sources.get(sourceId);
+      if (source) this._prebuildSource(sourceId, source);
+      return;
+    }
+    for (const [id, source] of this._sources) {
+      this._prebuildSource(id, source);
+    }
+  }
+
+  /**
+   * Drop cached spatial indexes for one source (or all). Necessary after
+   * in-place geometry edits (translateSelected, vertex commands) that
+   * mutate arc coordinates without changing shape / arc counts — without
+   * this call, the cache key wouldn't notice and queries would return
+   * prefilter-stale results.
+   */
+  clear(sourceId?: string): void {
+    if (sourceId === undefined) {
+      this._indexCache.clear();
+      return;
+    }
+    const prefix = `${sourceId}|`;
+    const stale: string[] = [];
+    for (const key of this._indexCache.keys()) {
+      if (key.startsWith(prefix)) stale.push(key);
+    }
+    for (const key of stale) this._indexCache.delete(key);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Spatial index — internals
+  // ---------------------------------------------------------------------------
+
+  private _prebuildSource(sourceId: string, source: TopologySource): void {
+    if (source.type !== 'topology') return;
+    const layers = source.getLayers();
+    const arcs = source.getArcs();
+    for (let i = 0; i < layers.length; i++) {
+      this._getOrBuildIndex(sourceId, i, layers[i] as MapshaperLayer, arcs);
+    }
+  }
+
+  /**
+   * Lazily build a Flatbush index for one layer, cached by
+   * (sourceId, layerIndex, shapeCount, arcCount). Returns `null` for
+   * shape-less layers — caller falls back to the no-index loop.
+   *
+   * Per-shape bbox: point layers union of their coords; path layers
+   * union of `arcs.getSimpleShapeBbox()` over each part. Same precision
+   * as the existing inline test, just memoized.
+   */
+  private _getOrBuildIndex(
+    sourceId: string,
+    layerIndex: number,
+    layer: MapshaperLayer,
+    arcs: ArcCollection | undefined,
+  ): IndexedLayer {
+    const shapes = layer?.shapes;
+    if (!shapes || shapes.length === 0) return null;
+    const arcsSize = arcs?.size?.() ?? 0;
+    const key = `${sourceId}|${layerIndex}|${shapes.length}|${arcsSize}`;
+    const cached = this._indexCache.get(key);
+    if (cached !== undefined) return cached;
+
+    // Pre-emptively drop stale entries for this (sourceId, layerIndex)
+    // pair. Cheap — at most one entry per (source, layer).
+    const stalePrefix = `${sourceId}|${layerIndex}|`;
+    const stale: string[] = [];
+    for (const k of this._indexCache.keys()) {
+      if (k !== key && k.startsWith(stalePrefix)) stale.push(k);
+    }
+    for (const k of stale) this._indexCache.delete(k);
+
+    const isPoint = layer.geometry_type === 'point';
+    const index = new Flatbush(shapes.length);
+    const partBox: number[] = [];
+
+    for (let id = 0; id < shapes.length; id++) {
+      const shp = shapes[id];
+      if (!shp) {
+        // Null shape: still must add an entry so flatbush ids stay aligned
+        // with shape ids. Degenerate bbox at the origin won't match real
+        // queries.
+        index.add(0, 0, 0, 0);
+        continue;
+      }
+      let xmin = Infinity, ymin = Infinity, xmax = -Infinity, ymax = -Infinity;
+      if (isPoint) {
+        const points = Array.isArray(shp[0]) ? (shp as unknown as number[][]) : [shp as unknown as number[]];
+        for (const p of points) {
+          if (!p || p.length < 2) continue;
+          if (p[0] < xmin) xmin = p[0];
+          if (p[0] > xmax) xmax = p[0];
+          if (p[1] < ymin) ymin = p[1];
+          if (p[1] > ymax) ymax = p[1];
+        }
+      } else if (arcs?.getSimpleShapeBbox) {
+        for (let i = 0; i < shp.length; i++) {
+          arcs.getSimpleShapeBbox(shp[i] as number[], partBox);
+          if (partBox[0] < xmin) xmin = partBox[0];
+          if (partBox[1] < ymin) ymin = partBox[1];
+          if (partBox[2] > xmax) xmax = partBox[2];
+          if (partBox[3] > ymax) ymax = partBox[3];
+        }
+      }
+      if (xmin === Infinity) {
+        index.add(0, 0, 0, 0);
+        continue;
+      }
+      index.add(xmin, ymin, xmax, ymax);
+    }
+    index.finish();
+    const entry: IndexedLayer = { index, shapeCount: shapes.length };
+    this._indexCache.set(key, entry);
+    return entry;
   }
 
   query(
@@ -106,6 +251,8 @@ export class FeatureQuery {
   // ---------------------------------------------------------------------------
 
   private _findHitCandidates(
+    sourceId: string,
+    layerIndex: number,
     layer: MapshaperLayer,
     arcs: ArcCollection,
     x: number,
@@ -118,11 +265,21 @@ export class FeatureQuery {
     const shapes = layer.shapes;
     if (!shapes) return cands;
 
-    for (let shpId = 0; shpId < shapes.length; shpId++) {
+    // Spatial index prefilter — only iterate shapes whose stored bbox
+    // overlaps `[x ± dist, y ± dist]`. The per-part inner test below is
+    // unchanged so precision stays identical.
+    const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, arcs);
+    const candidateIds = indexed
+      ? indexed.index.search(x - dist, y - dist, x + dist, y + dist)
+      : null;
+    const idCount = candidateIds !== null ? candidateIds.length : shapes.length;
+
+    for (let i = 0; i < idCount; i++) {
+      const shpId = candidateIds !== null ? candidateIds[i] : i;
       const shp = shapes[shpId];
       if (!shp) continue;
-      for (let i = 0; i < shp.length; i++) {
-        arcs.getSimpleShapeBbox!(shp[i], bbox);
+      for (let j = 0; j < shp.length; j++) {
+        arcs.getSimpleShapeBbox!(shp[j], bbox);
         if (
           x + dist < bbox[0] ||
           x - dist > bbox[2] ||
@@ -136,7 +293,7 @@ export class FeatureQuery {
           cand = index[shpId] = { shape: [], id: shpId, dist: 0 };
           cands.push(cand);
         }
-        cand.shape.push(shp[i]);
+        cand.shape.push(shp[j]);
       }
     }
     return cands;
@@ -171,7 +328,13 @@ export class FeatureQuery {
     return hits;
   }
 
-  private _pointTest(layer: MapshaperLayer, x: number, y: number): number[] {
+  private _pointTest(
+    sourceId: string,
+    layerIndex: number,
+    layer: MapshaperLayer,
+    x: number,
+    y: number,
+  ): number[] {
     const geom = mapshaper.geom;
     const toPx = Math.abs(this._getTransform().mx || 1);
     let bestId = -1;
@@ -180,7 +343,18 @@ export class FeatureQuery {
     const shapes = layer.shapes;
     if (!shapes) return [];
 
-    for (let id = 0; id < shapes.length; id++) {
+    // Spatial index prefilter — query bbox = `[x ± hitThresholdInData,
+    // y ± hitThresholdInData]`. Since we're working in data-space here,
+    // convert the pixel threshold to data units via `1 / toPx`.
+    const dataThresh = hitThreshold / (toPx || 1);
+    const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, undefined);
+    const candidateIds = indexed
+      ? indexed.index.search(x - dataThresh, y - dataThresh, x + dataThresh, y + dataThresh)
+      : null;
+    const idCount = candidateIds !== null ? candidateIds.length : shapes.length;
+
+    for (let i = 0; i < idCount; i++) {
+      const id = candidateIds !== null ? candidateIds[i] : i;
       const shp = shapes[id];
       if (!shp) continue;
       for (const p of shp) {
@@ -200,6 +374,8 @@ export class FeatureQuery {
   }
 
   private _polylineTest(
+    sourceId: string,
+    layerIndex: number,
     layer: MapshaperLayer,
     arcs: ArcCollection,
     x: number,
@@ -209,16 +385,23 @@ export class FeatureQuery {
     const maxDist = this._getZoomAdjustedHitBuffer(15, 2);
     const bufPix = bufArg >= 0 ? bufArg : 0.05;
     const bufDist = this._getZoomAdjustedHitBuffer(bufPix, 0);
-    let cands = this._findHitCandidates(layer, arcs, x, y, maxDist);
+    let cands = this._findHitCandidates(sourceId, layerIndex, layer, arcs, x, y, maxDist);
     this._sortByDistance(x, y, cands, arcs);
     cands = this._pickNearestCandidates(cands, bufDist, maxDist);
     return cands.length ? [cands[0].id] : [];
   }
 
-  private _polygonTest(layer: MapshaperLayer, arcs: ArcCollection, x: number, y: number): number[] {
+  private _polygonTest(
+    sourceId: string,
+    layerIndex: number,
+    layer: MapshaperLayer,
+    arcs: ArcCollection,
+    x: number,
+    y: number,
+  ): number[] {
     const geom = mapshaper.geom;
     const maxDist = this._getZoomAdjustedHitBuffer(10, 1);
-    const cands = this._findHitCandidates(layer, arcs, x, y, maxDist);
+    const cands = this._findHitCandidates(sourceId, layerIndex, layer, arcs, x, y, maxDist);
     let hits: HitCandidate[] = [];
     for (const cand of cands) {
       if (geom.testPointInPolygon(x, y, cand.shape, arcs)) {
@@ -234,9 +417,16 @@ export class FeatureQuery {
     return hits.length ? [hits[0].id] : [];
   }
 
-  private _polygonVertexTest(layer: MapshaperLayer, arcs: ArcCollection, x: number, y: number): number[] {
-    const a = this._polygonTest(layer, arcs, x, y);
-    const b = this._polylineTest(layer, arcs, x, y, 5);
+  private _polygonVertexTest(
+    sourceId: string,
+    layerIndex: number,
+    layer: MapshaperLayer,
+    arcs: ArcCollection,
+    x: number,
+    y: number,
+  ): number[] {
+    const a = this._polygonTest(sourceId, layerIndex, layer, arcs, x, y);
+    const b = this._polylineTest(sourceId, layerIndex, layer, arcs, x, y, 5);
     return a.length ? a : b;
   }
 
@@ -272,11 +462,11 @@ export class FeatureQuery {
         const geometryType = layer.geometry_type;
         let ids: number[] = [];
         if (geometryType === 'point') {
-          ids = this._pointTest(layer, mx, my);
+          ids = this._pointTest(sourceId, layerIndex, layer, mx, my);
         } else if (geometryType === 'polyline' && arcs) {
-          ids = this._polylineTest(layer, arcs, mx, my, -1);
+          ids = this._polylineTest(sourceId, layerIndex, layer, arcs, mx, my, -1);
         } else if (geometryType === 'polygon' && arcs) {
-          ids = this._polygonVertexTest(layer, arcs, mx, my);
+          ids = this._polygonVertexTest(sourceId, layerIndex, layer, arcs, mx, my);
         }
         if (ids.length === 0) continue;
 
@@ -337,7 +527,17 @@ export class FeatureQuery {
         const table = layer.data;
         const bboxTmp: number[] = [];
 
-        for (let id = 0; id < layer.shapes.length; id++) {
+        // Spatial index prefilter — `index.search` returns only shape ids
+        // whose stored bbox overlaps the query bbox. Falls back to a full
+        // scan for shape-less / un-indexed layers.
+        const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, arcs);
+        const candidateIds = indexed
+          ? indexed.index.search(xmin, ymin, xmax, ymax)
+          : null;
+        const idCount = candidateIds !== null ? candidateIds.length : layer.shapes.length;
+
+        for (let i = 0; i < idCount; i++) {
+          const id = candidateIds !== null ? candidateIds[i] : i;
           const shp = layer.shapes[id];
           if (!shp) continue;
           let hit = false;

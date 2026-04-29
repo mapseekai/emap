@@ -384,14 +384,19 @@ export class CanvasPainter implements Painter {
       ctx.fill();
     }
 
-    // Draw snap indicator (larger ring)
+    // Draw snap indicator. Edge snap uses a square (GIS convention for
+    // "snap to segment"), vertex snap uses a circle. Same colour, same size.
     if (state.snapCoord) {
       const sp = proj(state.snapCoord);
       const snapRadius = 7 * pr;
       ctx.strokeStyle = '#ff4444';
       ctx.lineWidth = 2 * pr;
       ctx.beginPath();
-      ctx.arc(sp[0], sp[1], snapRadius, 0, Math.PI * 2);
+      if (state.snapKind === 'edge') {
+        ctx.rect(sp[0] - snapRadius, sp[1] - snapRadius, snapRadius * 2, snapRadius * 2);
+      } else {
+        ctx.arc(sp[0], sp[1], snapRadius, 0, Math.PI * 2);
+      }
       ctx.stroke();
     }
   }

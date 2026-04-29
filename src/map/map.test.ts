@@ -6,6 +6,25 @@ import type { LayerSpecification } from './layer';
 import { Selection } from './selection';
 import { EditHistory } from '../edit/edit-history';
 
+// Snapshot the real mapshaper.internal entry points at module-load time,
+// BEFORE any test has had a chance to mock them. Some test blocks below
+// stomp these without restoring, so tests that need the real pipeline
+// (notably the round-trip tests against real mapshaper) restore from
+// here.
+const MAPSHAPER_REAL = {
+  parseCommands: Reflect.get(mapshaper.internal as object, 'parseCommands'),
+  runParsedCommands: Reflect.get(mapshaper.internal as object, 'runParsedCommands'),
+  copyDataset: Reflect.get(mapshaper.internal as object, 'copyDataset'),
+  findSegmentIntersections: Reflect.get(mapshaper.internal as object, 'findSegmentIntersections'),
+  getIntersectionLayer: Reflect.get(mapshaper.internal as object, 'getIntersectionLayer'),
+};
+
+function restoreRealMapshaper(): void {
+  for (const [k, v] of Object.entries(MAPSHAPER_REAL)) {
+    Reflect.set(mapshaper.internal as object, k, v);
+  }
+}
+
 function setPrivate(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
 }
@@ -4444,6 +4463,7 @@ describe('Emap useWorker routing', () => {
     setPrivate(map, '_container', { removeChild: vi.fn() });
     setPrivate(map, '_canvasContainer', {});
     setPrivate(map, '_dragPan', { destroy: vi.fn() });
+    setPrivate(map, '_mouseWheel', { destroy: vi.fn() });
     map.remove();
     expect(destroySpy).toHaveBeenCalledTimes(1);
   });
@@ -4714,5 +4734,717 @@ describe('Emap.cancelWorkerJobs', () => {
     const map = createBareMap();
     setPrivate(map, '_workerPool', null);
     expect(() => map.cancelWorkerJobs()).not.toThrow();
+  });
+});
+
+// ===========================================================================
+// Audit-fix regressions
+// ===========================================================================
+// Concentrated regression tests for the comma-injection / numeric-validation /
+// option-interaction issues surfaced in the mapshaper-grammar audit. Each
+// block exercises ONE specific guard so a future relaxation triggers a
+// pinpoint failure.
+
+describe('audit-fix: reject comma-bearing names that would silently split', () => {
+  // Shared lightweight fixture — every wrapper short-circuits to `false`
+  // BEFORE touching mapshaper, so we don't need a real catalog. We DO need
+  // a source whose dataset.layers contains the comma-bearing name (because
+  // findLayerByName runs before our validator). For the same reason we
+  // include a normal sibling layer.
+  function makeMapWithLayers(layerNames: string[]): { map: Emap; parseSpy: ReturnType<typeof vi.fn> } {
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const layers = layerNames.map((name) => ({ name, geometry_type: 'polygon', shapes: [] }));
+    const ds = { layers };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => ds,
+      getLayers: () => layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+    const parseSpy = vi.fn(() => [{ name: 'parsed', options: {} as any }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
+    }));
+    return { map, parseSpy };
+  }
+
+  it('unionLayers rejects a target containing a comma', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['a,b', 'c']);
+    expect(await map.unionLayers({ source: 'src1', targets: ['a,b', 'c'] })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('mergeLayers rejects a target containing a comma', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['a,b', 'c']);
+    expect(await map.mergeLayers({ source: 'src1', targets: ['a,b', 'c'] })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('dissolveLayer rejects a field containing a comma', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['states']);
+    expect(await map.dissolveLayer({ source: 'src1', target: 'states', field: 'STATE,FIPS' })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('renameLayer rejects a new name containing a comma', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['old']);
+    expect(await map.renameLayer({ source: 'src1', target: 'old', name: 'a,b' })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('joinTable rejects a key containing a comma (target side)', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['states']);
+    expect(await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { layer: 't' },
+      keys: ['STATE,FIPS', 'fips'],
+    })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('joinTable rejects a key containing a comma (source side)', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['states']);
+    expect(await map.joinTable({
+      source: 'src1', target: 'states',
+      data: { layer: 't' },
+      keys: ['fips', 'fips,extra'],
+    })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('audit-fix: bufferLayer rejects non-positive / non-finite radius', () => {
+  function makeMapWithLayers(layerNames: string[]): { map: Emap; parseSpy: ReturnType<typeof vi.fn> } {
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const layers = layerNames.map((name) => ({ name, geometry_type: 'polygon', shapes: [] }));
+    const ds = { layers };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => ds,
+      getLayers: () => layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+    const parseSpy = vi.fn(() => [{ name: 'parsed', options: {} as any }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
+    }));
+    return { map, parseSpy };
+  }
+
+  it('rejects radius: 0', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['parks']);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: 0 })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects negative radius', async () => {
+    const { map } = makeMapWithLayers(['parks']);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: -1 })).toBe(false);
+  });
+
+  it('rejects NaN / Infinity radius', async () => {
+    const { map } = makeMapWithLayers(['parks']);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: NaN })).toBe(false);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: Infinity })).toBe(false);
+  });
+
+  it('rejects empty / whitespace expression-string radius', async () => {
+    const { map } = makeMapWithLayers(['parks']);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: '' })).toBe(false);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: '   ' })).toBe(false);
+  });
+
+  it('still accepts a positive number', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['parks']);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: 100 })).toBe(true);
+    expect(parseSpy).toHaveBeenCalled();
+  });
+
+  it('still accepts an expression-string radius', async () => {
+    const { map, parseSpy } = makeMapWithLayers(['parks']);
+    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: 'this.pop / 1000' })).toBe(true);
+    expect(parseSpy).toHaveBeenCalled();
+  });
+});
+
+describe('audit-fix: simplifyLayer rejects weighting with non-weighted method', () => {
+  function makeMapWithLayers(): { map: Emap; parseSpy: ReturnType<typeof vi.fn> } {
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const ds = { layers: [{ name: 'states', geometry_type: 'polygon', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => ds,
+      getLayers: () => ds.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+    const parseSpy = vi.fn(() => [{ name: 'parsed', options: {} as any }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
+    }));
+    return { map, parseSpy };
+  }
+
+  it('rejects method:dp + weighting', async () => {
+    const { map, parseSpy } = makeMapWithLayers();
+    expect(await map.simplifyLayer({
+      source: 'src1', percentage: 10, method: 'dp', weighting: 0.5,
+    })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects method:visvalingam + weighting', async () => {
+    const { map } = makeMapWithLayers();
+    expect(await map.simplifyLayer({
+      source: 'src1', percentage: 10, method: 'visvalingam', weighting: 0.5,
+    })).toBe(false);
+  });
+
+  it('accepts method:weighted + weighting', async () => {
+    const { map } = makeMapWithLayers();
+    expect(await map.simplifyLayer({
+      source: 'src1', percentage: 10, method: 'weighted', weighting: 0.5,
+    })).toBe(true);
+  });
+
+  it('accepts weighting without explicit method (defaults to weighted)', async () => {
+    const { map } = makeMapWithLayers();
+    expect(await map.simplifyLayer({
+      source: 'src1', percentage: 10, weighting: 0.5,
+    })).toBe(true);
+  });
+});
+
+describe('audit-fix: linesLayer fields token has a single canonical form', () => {
+  function makeMapWithLayers(): { map: Emap; parseSpy: ReturnType<typeof vi.fn> } {
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const ds = { layers: [{ name: 'states', geometry_type: 'polygon', shapes: [] }] };
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => ds,
+      getLayers: () => ds.layers,
+      setDataset: vi.fn(),
+      refreshDisplayArcs: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+    const parseSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } as any }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
+    }));
+    return { map, parseSpy };
+  }
+
+  it('emits "-lines" with no fields', async () => {
+    const { map, parseSpy } = makeMapWithLayers();
+    await map.linesLayer({ source: 'src1', target: 'states' });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines');
+  });
+
+  it('emits "-lines a,b" with fields', async () => {
+    const { map, parseSpy } = makeMapWithLayers();
+    await map.linesLayer({ source: 'src1', target: 'states', fields: ['STATE', 'COUNTY'] });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines STATE,COUNTY');
+  });
+
+  it('strips comma-bearing field names but keeps the rest', async () => {
+    const { map, parseSpy } = makeMapWithLayers();
+    await map.linesLayer({ source: 'src1', target: 'states', fields: ['ok', 'bad,name', 'ok2'] });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines ok,ok2');
+  });
+
+  it('falls back to bare "-lines" when every field is invalid', async () => {
+    const { map, parseSpy } = makeMapWithLayers();
+    await map.linesLayer({ source: 'src1', target: 'states', fields: ['bad,name'] });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines');
+  });
+});
+
+// ===========================================================================
+// Wrapper option completion (add-wrapper-options-completion)
+// ===========================================================================
+// Tests every newly-exposed option on cleanLayer / dissolveLayer /
+// mosaicLayer / snapLayer. Each test asserts the produced command string
+// shape so that any future divergence shows up as a pinpoint failure.
+
+function makeMapWithLayer(layerName: string, geometry_type = 'polygon'): {
+  map: Emap; parseSpy: ReturnType<typeof vi.fn>;
+} {
+  const map = createBareMap();
+  setPrivate(map, '_history', new EditHistory());
+  const layers = [{ name: layerName, geometry_type, shapes: [] }];
+  const ds = { layers };
+  const source = {
+    id: 'src1', type: 'topology' as const,
+    getDataset: () => ds,
+    getLayers: () => layers,
+    setDataset: vi.fn(),
+    refreshDisplayArcs: vi.fn(),
+  } as any;
+  (map as any)._sources.set('src1', source);
+  const parseSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } as any }]) as ReturnType<typeof vi.fn>;
+  Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
+  Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
+  Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
+  }));
+  return { map, parseSpy };
+}
+
+describe('mosaicLayer: calc option', () => {
+  it('emits calc=<quoted> when supplied', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.mosaicLayer({ source: 'src1', target: 'parks', calc: 'sum(area)' });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -mosaic calc="sum(area)"');
+  });
+
+  it('omits calc= when not supplied', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.mosaicLayer({ source: 'src1', target: 'parks' });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -mosaic');
+  });
+
+  it('omits calc= when whitespace-only', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.mosaicLayer({ source: 'src1', target: 'parks', calc: '   ' });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -mosaic');
+  });
+});
+
+describe('snapLayer: fixGeometry option', () => {
+  it('emits fix-geometry flag when truthy', async () => {
+    const { map, parseSpy } = makeMapWithLayer('roads', 'polyline');
+    await map.snapLayer({ source: 'src1', target: 'roads', interval: 0.001, fixGeometry: true });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "roads" -snap 0.001 fix-geometry');
+  });
+
+  it('omits fix-geometry when falsy', async () => {
+    const { map, parseSpy } = makeMapWithLayer('roads', 'polyline');
+    await map.snapLayer({ source: 'src1', target: 'roads', interval: 0.001 });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "roads" -snap 0.001');
+  });
+});
+
+describe('dissolveLayer: expanded options', () => {
+  it('multi-field group-by via fields[]', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      fields: ['STATE', 'REGION'],
+    });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "counties" -dissolve "STATE,REGION"');
+  });
+
+  it('field and fields are mutually exclusive', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    expect(await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      field: 'STATE', fields: ['REGION'],
+    })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('comma-bearing fields[] entries are filtered out', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      fields: ['ok', 'bad,name', 'ok2'],
+    });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "counties" -dissolve "ok,ok2"');
+  });
+
+  it('empty fields[] is treated as no group-by', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({ source: 'src1', target: 'counties', fields: [] });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "counties" -dissolve');
+  });
+
+  it('sumFields emits sum-fields=', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      field: 'STATE',
+      sumFields: ['POP', 'GDP'],
+    });
+    expect(parseSpy.mock.calls[0][0])
+      .toBe('-target "counties" -dissolve "STATE" sum-fields=POP,GDP');
+  });
+
+  it('copyFields emits copy-fields=', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      field: 'STATE',
+      copyFields: ['NAME', 'CAPITAL'],
+    });
+    expect(parseSpy.mock.calls[0][0])
+      .toBe('-target "counties" -dissolve "STATE" copy-fields=NAME,CAPITAL');
+  });
+
+  it('calc / where forwarded as quoted JS expressions', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      field: 'STATE',
+      calc: 'mean(POP)',
+      where: 'this.YEAR === 2024',
+    });
+    expect(parseSpy.mock.calls[0][0]).toBe(
+      '-target "counties" -dissolve "STATE" calc="mean(POP)" where="this.YEAR === 2024"',
+    );
+  });
+
+  it('multipart / name / noReplace flags', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      multipart: true, name: 'states-out', noReplace: true,
+    });
+    expect(parseSpy.mock.calls[0][0])
+      .toBe('-target "counties" -dissolve multipart name="states-out" no-replace');
+  });
+
+  it('comma-bearing entries in sumFields/copyFields are filtered', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({
+      source: 'src1', target: 'counties',
+      field: 'STATE',
+      sumFields: ['POP', 'bad,one'],
+      copyFields: ['NAME', 'also,bad'],
+    });
+    expect(parseSpy.mock.calls[0][0])
+      .toBe('-target "counties" -dissolve "STATE" sum-fields=POP copy-fields=NAME');
+  });
+
+  it('full minimal call still works (regression)', async () => {
+    const { map, parseSpy } = makeMapWithLayer('counties');
+    await map.dissolveLayer({ source: 'src1', target: 'counties' });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "counties" -dissolve');
+  });
+});
+
+describe('cleanLayer: expanded options', () => {
+  it('emits gap-fill-area=', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: 100 });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean gap-fill-area=100');
+  });
+
+  it('emits sliver-control=', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.cleanLayer({ source: 'src1', target: 'parks', sliverControl: 0.5 });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean sliver-control=0.5');
+  });
+
+  it('emits snap-interval=', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.cleanLayer({ source: 'src1', target: 'parks', snapInterval: 0.001 });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean snap-interval=0.001');
+  });
+
+  it('emits boolean flags', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.cleanLayer({
+      source: 'src1', target: 'parks',
+      noSnap: true, allowOverlaps: true, allowEmpty: true,
+      rewind: true, onlyArcs: true, noArcDissolve: true,
+    });
+    expect(parseSpy.mock.calls[0][0]).toBe(
+      '-target "parks" -clean no-snap allow-overlaps allow-empty rewind only-arcs no-arc-dissolve',
+    );
+  });
+
+  it('emits overlap-rule=', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.cleanLayer({ source: 'src1', target: 'parks', overlapRule: 'min-id' });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean overlap-rule=min-id');
+  });
+
+  it('rejects invalid overlapRule', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    expect(await map.cleanLayer({
+      source: 'src1', target: 'parks',
+      overlapRule: 'bogus' as any,
+    })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects negative numeric tuning options', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    expect(await map.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: -1 })).toBe(false);
+    expect(await map.cleanLayer({ source: 'src1', target: 'parks', sliverControl: -0.5 })).toBe(false);
+    expect(await map.cleanLayer({ source: 'src1', target: 'parks', snapInterval: -10 })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects NaN numeric tuning options', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    expect(await map.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: NaN })).toBe(false);
+    expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it('full minimal call still works (regression)', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.cleanLayer({ source: 'src1', target: 'parks' });
+    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean');
+  });
+
+  it('all-options-combined produces the canonical token order', async () => {
+    const { map, parseSpy } = makeMapWithLayer('parks');
+    await map.cleanLayer({
+      source: 'src1', target: 'parks',
+      gapFillArea: 100, sliverControl: 0.5, snapInterval: 0.001,
+      noSnap: true, allowOverlaps: true, overlapRule: 'max-area',
+      allowEmpty: true, rewind: true, onlyArcs: true, noArcDissolve: true,
+    });
+    // Documents the canonical ordering produced by the wrapper. Future
+    // reordering would require updating this string and would be visible
+    // in review.
+    expect(parseSpy.mock.calls[0][0]).toBe(
+      '-target "parks" -clean'
+      + ' gap-fill-area=100 sliver-control=0.5 snap-interval=0.001'
+      + ' no-snap allow-overlaps overlap-rule=max-area'
+      + ' allow-empty rewind only-arcs no-arc-dissolve',
+    );
+  });
+});
+
+describe('Emap.prebuildSpatialIndex / clearSpatialIndex', () => {
+  function makeMapWithStubFQ(): {
+    map: Emap;
+    prebuild: ReturnType<typeof vi.fn>;
+    clear: ReturnType<typeof vi.fn>;
+  } {
+    const map = createBareMap();
+    const prebuild = vi.fn();
+    const clear = vi.fn();
+    setPrivate(map, '_featureQuery', { prebuild, clear, query: vi.fn() });
+    return { map, prebuild, clear };
+  }
+
+  it('prebuildSpatialIndex(sourceId) delegates to FeatureQuery.prebuild', () => {
+    const { map, prebuild } = makeMapWithStubFQ();
+    map.prebuildSpatialIndex('s1');
+    expect(prebuild).toHaveBeenCalledTimes(1);
+    expect(prebuild).toHaveBeenCalledWith('s1');
+  });
+
+  it('prebuildSpatialIndex() with no arg passes undefined for "all sources"', () => {
+    const { map, prebuild } = makeMapWithStubFQ();
+    map.prebuildSpatialIndex();
+    expect(prebuild).toHaveBeenCalledWith(undefined);
+  });
+
+  it('clearSpatialIndex(sourceId) delegates to FeatureQuery.clear', () => {
+    const { map, clear } = makeMapWithStubFQ();
+    map.clearSpatialIndex('s1');
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(clear).toHaveBeenCalledWith('s1');
+  });
+
+  it('clearSpatialIndex() with no arg passes undefined for "all sources"', () => {
+    const { map, clear } = makeMapWithStubFQ();
+    map.clearSpatialIndex();
+    expect(clear).toHaveBeenCalledWith(undefined);
+  });
+});
+
+// ===========================================================================
+// Emap.intersectionPointsLayer
+// ===========================================================================
+
+describe('Emap.intersectionPointsLayer (mocked mapshaper)', () => {
+  let map: Emap;
+  let setDatasetSpy: ReturnType<typeof vi.fn>;
+  let findSpy: ReturnType<typeof vi.fn>;
+  let getLayerSpy: ReturnType<typeof vi.fn>;
+  let beforeDs: any;
+
+  const originalCopy = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalFind = Reflect.get(mapshaper.internal as object, 'findSegmentIntersections');
+  const originalGetLayer = Reflect.get(mapshaper.internal as object, 'getIntersectionLayer');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+
+    beforeDs = {
+      layers: [{ name: 'edges', shapes: [], geometry_type: 'polyline' }],
+      arcs: { _sentinel: 'arcs' },
+    };
+    setDatasetSpy = vi.fn();
+    const source = {
+      id: 'src1', type: 'topology' as const,
+      getDataset: () => beforeDs,
+      getLayers: () => beforeDs.layers,
+      setDataset: setDatasetSpy,
+      refreshDisplayArcs: vi.fn(),
+      off: vi.fn(), on: vi.fn(),
+    } as any;
+    (map as any)._sources.set('src1', source);
+
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn((ds: any) => ({
+      ...ds,
+      layers: ds.layers.map((l: any) => ({ ...l })),
+    })));
+    findSpy = vi.fn(() => [{ x: 1, y: 2 }, { x: 3, y: 4 }]) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'findSegmentIntersections', findSpy);
+    getLayerSpy = vi.fn(() => ({
+      geometry_type: 'point',
+      shapes: [[[1, 2], [3, 4]]],
+    })) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'getIntersectionLayer', getLayerSpy);
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopy);
+    Reflect.set(mapshaper.internal as object, 'findSegmentIntersections', originalFind);
+    Reflect.set(mapshaper.internal as object, 'getIntersectionLayer', originalGetLayer);
+  });
+
+  it('adds a new point layer named "<target>-intersections" by default', async () => {
+    const ok = await map.intersectionPointsLayer({ source: 'src1', target: 'edges' });
+    expect(ok).toBe(true);
+    expect(setDatasetSpy).toHaveBeenCalledTimes(1);
+    const after = setDatasetSpy.mock.calls[0][0] as any;
+    expect(after.layers).toHaveLength(2);
+    expect(after.layers[1].name).toBe('edges-intersections');
+    expect(after.layers[1].geometry_type).toBe('point');
+  });
+
+  it('honours custom name', async () => {
+    await map.intersectionPointsLayer({ source: 'src1', target: 'edges', name: 'crossings' });
+    const after = setDatasetSpy.mock.calls[0][0] as any;
+    expect(after.layers[1].name).toBe('crossings');
+  });
+
+  it('forwards tolerance to findSegmentIntersections', async () => {
+    await map.intersectionPointsLayer({
+      source: 'src1', target: 'edges', tolerance: 0.001,
+    });
+    expect(findSpy.mock.calls[0][1]).toEqual({ tolerance: 0.001 });
+  });
+
+  it('returns false when source is missing', async () => {
+    expect(await map.intersectionPointsLayer({ source: 'nope', target: 'edges' })).toBe(false);
+    expect(findSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is unresolved', async () => {
+    expect(await map.intersectionPointsLayer({ source: 'src1', target: 'missing' })).toBe(false);
+    expect(findSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when target is a point layer (no segments)', async () => {
+    beforeDs.layers[0].geometry_type = 'point';
+    expect(await map.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
+    expect(findSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when name collides with an existing layer', async () => {
+    beforeDs.layers.push({ name: 'crossings', shapes: [], geometry_type: 'point' });
+    expect(await map.intersectionPointsLayer({
+      source: 'src1', target: 'edges', name: 'crossings',
+    })).toBe(false);
+    expect(findSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when arcs is missing (point-only dataset)', async () => {
+    beforeDs.arcs = undefined;
+    expect(await map.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
+    expect(findSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-positive / non-finite tolerance', async () => {
+    expect(await map.intersectionPointsLayer({
+      source: 'src1', target: 'edges', tolerance: 0,
+    })).toBe(false);
+    expect(await map.intersectionPointsLayer({
+      source: 'src1', target: 'edges', tolerance: -1,
+    })).toBe(false);
+    expect(await map.intersectionPointsLayer({
+      source: 'src1', target: 'edges', tolerance: NaN,
+    })).toBe(false);
+    expect(findSpy).not.toHaveBeenCalled();
+  });
+
+  it('history label is "Intersection points <target>"', async () => {
+    const listener = vi.fn();
+    map.on('historychange', listener);
+    await map.intersectionPointsLayer({ source: 'src1', target: 'edges' });
+    expect(listener.mock.calls[0][0].label).toBe('Intersection points edges');
+  });
+
+  it('on internal throw fires error and returns false', async () => {
+    findSpy.mockImplementation(() => { throw new Error('boom'); });
+    const errors: any[] = [];
+    map.on('error', (e: any) => errors.push(e));
+    expect(await map.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].error.message).toBe('boom');
+    expect(setDatasetSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('Emap.intersectionPointsLayer round-trip (real mapshaper)', () => {
+  // Earlier test blocks in this file stomp mapshaper.internal mocks
+  // without restoring. By the time we get here, setData()'s `-i FILE`
+  // pipeline would hit those stale mocks instead of real mapshaper.
+  // Restore from the module-load-time snapshot.
+  beforeEach(() => {
+    restoreRealMapshaper();
+  });
+
+  it('produces a non-empty point layer for a crossing-polylines dataset', async () => {
+    const crossing = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[0,0],[2,2]] } },
+        { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[0,2],[2,0]] } },
+      ],
+    });
+
+    const { TopologySource } = await import('../source/topology-source');
+    const source = await new Promise<any>((resolve, reject) => {
+      const s = new TopologySource('rt');
+      s.on('data', () => resolve(s));
+      s.on('error', (e: any) => reject(e?.error ?? e));
+      s.setData({ filename: 'crossing.geojson', content: new TextEncoder().encode(crossing) });
+    });
+
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    setPrivate(map, '_projection', { crs: 'EPSG:4326', setCRS: vi.fn() });
+    setPrivate(map, '_viewport', { setCRS: vi.fn() });
+    map.addSource('rt', source);
+
+    const layerName = source.getDataset()!.layers[0].name;
+    const ok = await map.intersectionPointsLayer({
+      source: 'rt', target: layerName,
+    });
+    expect(ok).toBe(true);
+
+    const ds = map.getSource('rt')!.getDataset()!;
+    expect(ds.layers.length).toBe(2);
+    const ptLayer = ds.layers.find((l: any) => l.name === `${layerName}-intersections`);
+    expect(ptLayer).toBeDefined();
+    expect(ptLayer!.geometry_type).toBe('point');
+    expect(ptLayer!.shapes[0].length).toBeGreaterThan(0);
   });
 });

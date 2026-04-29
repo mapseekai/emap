@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { DrawFeatureControl } from './draw-feature-control';
+import { DrawFeatureControl, projectPointOnSegment } from './draw-feature-control';
 import type { DrawFeatureControlOptions } from './draw-feature-control';
 
 function setPrivate(target: object, key: string, value: unknown): void {
@@ -177,10 +177,13 @@ describe('DrawFeatureControl', () => {
       setPrivate(control, '_map', map);
 
       // Cursor at (105, 105) — within 15px of (100, 100)
-      const snap = callPrivate(control, '_findSnapTarget', 105, 105) as [number, number] | null;
+      const snap = callPrivate(control, '_findSnapTarget', 105, 105) as
+        | { coord: [number, number]; kind: 'vertex' | 'edge' | null }
+        | null;
       expect(snap).not.toBeNull();
-      expect(snap![0]).toBe(100);
-      expect(snap![1]).toBe(100);
+      expect(snap!.coord[0]).toBe(100);
+      expect(snap!.coord[1]).toBe(100);
+      expect(snap!.kind).toBe('vertex');
     });
 
     it('returns null when cursor is outside threshold', () => {
@@ -202,6 +205,184 @@ describe('DrawFeatureControl', () => {
 
       const snap = callPrivate(control, '_findSnapTarget', 120, 120) as [number, number] | null;
       expect(snap).toBeNull();
+    });
+
+    // -----------------------------------------------------------------------
+    // Edge snap — perpendicular projection onto segments
+    // -----------------------------------------------------------------------
+
+    function makeSourceWithSegment(
+      from: [number, number],
+      to: [number, number],
+    ): any {
+      const xx = new Float64Array([from[0], to[0]]);
+      const yy = new Float64Array([from[1], to[1]]);
+      return {
+        id: 'seg',
+        type: 'topology' as const,
+        on: vi.fn(), off: vi.fn(), fire: vi.fn(),
+        getArcs: vi.fn(() => ({
+          getVertexData: () => ({ xx, yy, nn: new Int32Array([2]), ii: new Int32Array([0]), zz: null, bb: new Float64Array([from[0], from[1], to[0], to[1]]) }),
+          // One segment — call the callback once with vertex indices 0,1.
+          forEachSegment: (cb: (i: number, j: number, xx2: Float64Array, yy2: Float64Array) => void) => {
+            cb(0, 1, xx, yy);
+          },
+          size: () => 1,
+        })),
+        getLayers: vi.fn(() => []),
+        getDataset: vi.fn(() => ({ layers: [] })),
+      };
+    }
+
+    it('edge snap: cursor near segment midpoint snaps to segment with kind="edge"', () => {
+      // Segment from (0,0) to (100, 0). Cursor at (50, 3) — perpendicular
+      // distance 3, projection at (50, 0) which is on the segment.
+      const map = createMockMap({ src1: makeSourceWithSegment([0, 0], [100, 0]) });
+      map.project.mockImplementation((x: number, y: number) => [x, y]);
+      const control = new DrawFeatureControl({
+        source: 'src1', type: 'polyline', snapThreshold: 10,
+      });
+      setPrivate(control, '_map', map);
+      const snap = callPrivate(control, '_findSnapTarget', 50, 3) as
+        | { coord: [number, number]; kind: 'vertex' | 'edge' | null }
+        | null;
+      expect(snap).not.toBeNull();
+      expect(snap!.kind).toBe('edge');
+      expect(snap!.coord[0]).toBe(50);
+      expect(snap!.coord[1]).toBe(0);
+    });
+
+    it('edge snap: cursor past segment endpoint does NOT snap to segment', () => {
+      // Segment (0,0)-(100,0). Cursor at (150, 3) — projection past t=1.
+      // Threshold 5 means even endpoint at (100,0) isn't reachable.
+      const map = createMockMap({ src1: makeSourceWithSegment([0, 0], [100, 0]) });
+      map.project.mockImplementation((x: number, y: number) => [x, y]);
+      const control = new DrawFeatureControl({
+        source: 'src1', type: 'polyline', snapThreshold: 5,
+      });
+      setPrivate(control, '_map', map);
+      const snap = callPrivate(control, '_findSnapTarget', 150, 3);
+      expect(snap).toBeNull();
+    });
+
+    it('vertex preferred over edge at equal distance', () => {
+      // Same segment (0,0)-(100,0); cursor exactly on vertex (0,0).
+      // Vertex distance is 0; edge distance is also 0 at t=0. Vertex
+      // should win the tie because the vertex loop runs first and uses
+      // strict `<` for replacement.
+      const map = createMockMap({ src1: makeSourceWithSegment([0, 0], [100, 0]) });
+      map.project.mockImplementation((x: number, y: number) => [x, y]);
+      const control = new DrawFeatureControl({
+        source: 'src1', type: 'polyline', snapThreshold: 10,
+      });
+      setPrivate(control, '_map', map);
+      const snap = callPrivate(control, '_findSnapTarget', 0, 0) as
+        | { coord: [number, number]; kind: 'vertex' | 'edge' | null }
+        | null;
+      expect(snap).not.toBeNull();
+      expect(snap!.kind).toBe('vertex');
+      expect(snap!.coord).toEqual([0, 0]);
+    });
+
+    it('snapToEdge: false disables edge snap (vertex still works)', () => {
+      // Cursor near midpoint with edge disabled — should fall through to
+      // null because vertices at (0,0) and (100,0) are both far from (50,3).
+      const map = createMockMap({ src1: makeSourceWithSegment([0, 0], [100, 0]) });
+      map.project.mockImplementation((x: number, y: number) => [x, y]);
+      const control = new DrawFeatureControl({
+        source: 'src1', type: 'polyline', snapThreshold: 10,
+        snapToEdge: false,
+      });
+      setPrivate(control, '_map', map);
+      const snap = callPrivate(control, '_findSnapTarget', 50, 3);
+      expect(snap).toBeNull();
+    });
+
+    it('snapToVertex: false disables vertex snap (edge still works)', () => {
+      // Cursor near vertex (0,0) but with vertex disabled. Edge snap should
+      // still find t=0 on the segment (degenerate case but valid).
+      const map = createMockMap({ src1: makeSourceWithSegment([0, 0], [100, 0]) });
+      map.project.mockImplementation((x: number, y: number) => [x, y]);
+      const control = new DrawFeatureControl({
+        source: 'src1', type: 'polyline', snapThreshold: 10,
+        snapToVertex: false,
+      });
+      setPrivate(control, '_map', map);
+      const snap = callPrivate(control, '_findSnapTarget', 1, 1) as
+        | { coord: [number, number]; kind: 'vertex' | 'edge' | null }
+        | null;
+      expect(snap).not.toBeNull();
+      expect(snap!.kind).toBe('edge');
+    });
+
+    it('snapSources iterates multiple sources', () => {
+      // src1 has a segment far away; src2 has a segment near the cursor.
+      const map = createMockMap({
+        src1: makeSourceWithSegment([1000, 1000], [1100, 1000]),
+        src2: makeSourceWithSegment([0, 0], [100, 0]),
+      });
+      map.project.mockImplementation((x: number, y: number) => [x, y]);
+      const control = new DrawFeatureControl({
+        source: 'src1', type: 'polyline', snapThreshold: 10,
+        snapSources: ['src1', 'src2'],
+      });
+      setPrivate(control, '_map', map);
+      const snap = callPrivate(control, '_findSnapTarget', 50, 3) as
+        | { coord: [number, number]; kind: 'vertex' | 'edge' | null }
+        | null;
+      expect(snap).not.toBeNull();
+      expect(snap!.coord).toEqual([50, 0]); // src2's segment
+    });
+
+    it('snapSources with unknown source IDs is a silent skip', () => {
+      const map = createMockMap({
+        src1: makeSourceWithSegment([0, 0], [100, 0]),
+      });
+      map.project.mockImplementation((x: number, y: number) => [x, y]);
+      const control = new DrawFeatureControl({
+        source: 'src1', type: 'polyline', snapThreshold: 10,
+        snapSources: ['src1', 'nonexistent', 'also-missing'],
+      });
+      setPrivate(control, '_map', map);
+      // Should still find src1's segment without throwing.
+      const snap = callPrivate(control, '_findSnapTarget', 50, 3) as any;
+      expect(snap).not.toBeNull();
+      expect(snap.kind).toBe('edge');
+    });
+  });
+
+  describe('projectPointOnSegment', () => {
+    it('perpendicular projection inside segment', () => {
+      const r = projectPointOnSegment([5, 3], [0, 0], [10, 0]);
+      expect(r.point).toEqual([5, 0]);
+      expect(r.dist).toBe(3);
+    });
+
+    it('cursor before segment start clamps to start endpoint', () => {
+      const r = projectPointOnSegment([-5, 4], [0, 0], [10, 0]);
+      expect(r.point).toEqual([0, 0]);
+      expect(r.dist).toBe(Math.hypot(-5, 4));
+    });
+
+    it('cursor past segment end clamps to end endpoint', () => {
+      const r = projectPointOnSegment([15, 4], [0, 0], [10, 0]);
+      expect(r.point).toEqual([10, 0]);
+      expect(r.dist).toBe(Math.hypot(5, 4));
+    });
+
+    it('zero-length segment returns the endpoint with distance to it', () => {
+      const r = projectPointOnSegment([3, 4], [0, 0], [0, 0]);
+      expect(r.point).toEqual([0, 0]);
+      expect(r.dist).toBe(5);
+    });
+
+    it('diagonal segment: perpendicular projection works', () => {
+      // Segment from (0,0) to (10,10). Cursor at (5, 0) — projection lies
+      // on segment at (2.5, 2.5) with perpendicular distance √(2.5² + 2.5²).
+      const r = projectPointOnSegment([5, 0], [0, 0], [10, 10]);
+      expect(r.point[0]).toBeCloseTo(2.5);
+      expect(r.point[1]).toBeCloseTo(2.5);
+      expect(r.dist).toBeCloseTo(Math.hypot(2.5, 2.5));
     });
   });
 

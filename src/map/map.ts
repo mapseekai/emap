@@ -17,7 +17,7 @@ import { Selection, SelectMode, SelectionDiff } from './selection';
 import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
 import type { EditCommand } from '../edit/edit-command';
 import { CompositeCommand } from '../edit/commands/composite';
-import { FeatureDeleteCommand } from '../edit/commands/feature-delete';
+import { BulkFeatureDeleteCommand, type BulkFeatureDeleteCommandOptions } from '../edit/commands/feature-delete';
 import { FeatureTranslateCommand, TranslatedPointFeature } from '../edit/commands/feature-translate';
 import {
   FeatureAffineCommand,
@@ -135,9 +135,13 @@ export interface ClipEraseOptions {
 }
 
 /**
- * Options for {@link Emap.dissolveLayer}. With no `field`, mapshaper merges
- * every feature in the target layer into one. With a `field`, features
- * sharing that field's value are merged.
+ * Options for {@link Emap.dissolveLayer}. With no `field` / `fields`,
+ * mapshaper merges every feature in the target layer into one. With a
+ * grouping key, features sharing that key's value are merged together.
+ *
+ * `field` is shorthand for the single-field case; `fields` is the
+ * multi-field array form. They are mutually exclusive — supplying both
+ * is a configuration error and the call returns `false`.
  */
 export interface DissolveOptions {
   /** Source ID containing the target layer. */
@@ -145,10 +149,47 @@ export interface DissolveOptions {
   /** Layer name (or id) of the layer to dissolve. */
   target: string;
   /**
-   * Optional attribute field to group features by. When omitted, the entire
-   * target layer is dissolved into a single feature.
+   * Optional single attribute field to group features by. Convenience
+   * shorthand for `fields: [field]`. Mutually exclusive with `fields`.
    */
   field?: string;
+  /**
+   * Multi-field group-by. Comma-bearing entries are filtered out (same
+   * pattern as `filterFields`). An empty array is treated as if unset.
+   */
+  fields?: string[];
+  /**
+   * Fields whose numeric values should be summed across each dissolved
+   * group (mapshaper's `sum-fields=` option). Comma-bearing entries are
+   * filtered out.
+   */
+  sumFields?: string[];
+  /**
+   * Fields whose values should be carried through the dissolve unchanged
+   * (mapshaper's `copy-fields=` option). The first feature in each group
+   * provides the value. Comma-bearing entries are filtered out.
+   */
+  copyFields?: string[];
+  /**
+   * Custom JS aggregation expression evaluated per dissolve group
+   * (mapshaper's `calc=` option). Has access to the standard mapshaper
+   * aggregation context. Forwarded verbatim, quoted.
+   */
+  calc?: string;
+  /**
+   * Pre-filter expression — only records where `where` evaluates truthy
+   * are included in the dissolve (mapshaper's `where=` option).
+   */
+  where?: string;
+  /**
+   * Make multipart features instead of dissolving polygon boundaries
+   * (mapshaper's `multipart` flag).
+   */
+  multipart?: boolean;
+  /** Optional name for the output layer (mapshaper's `name=` option). */
+  name?: string;
+  /** Keep the original layer alongside the new dissolved output. */
+  noReplace?: boolean;
 }
 
 /** Options for {@link Emap.bufferLayer}. */
@@ -170,6 +211,13 @@ export interface BufferOptions {
 /**
  * Options for {@link Emap.applyExpression} — bulk attribute updates via
  * mapshaper's `-each` JS expression engine.
+ *
+ * SECURITY: `expression` and `where` are evaluated as JavaScript by
+ * mapshaper (it builds a `Function` per record). Pass only trusted,
+ * authoring-time strings — never untrusted end-user input. The same
+ * applies to `where` on {@link InnerlinesOptions}, `expression` on
+ * {@link FilterOptions}, and any `calc=` / `where=` arg forwarded to a
+ * mapshaper command.
  */
 export interface ApplyExpressionOptions {
   /** Source ID containing the target layer. */
@@ -254,6 +302,13 @@ export interface SnapOptions {
   endpoints?: boolean;
   /** Round all coordinates to a given decimal precision (e.g. 0.000001). */
   precision?: number;
+  /**
+   * Run a post-snap intersection-cut pass to repair geometry artefacts
+   * introduced by rounding / snapping (mapshaper's `fix-geometry` flag).
+   * Recommended when `precision` or `interval` aggressively collapse
+   * vertices.
+   */
+  fixGeometry?: boolean;
 }
 
 /**
@@ -391,6 +446,30 @@ export interface GeometryCheckReport {
   intersections: Array<{ x: number; y: number }>;
   /** Convenience: `intersections.length`. */
   intersectionCount: number;
+}
+
+/**
+ * Options for {@link Emap.intersectionPointsLayer}. Materializes the
+ * self-intersection points of a polygon or polyline target as a new
+ * point layer in the same source's dataset.
+ */
+export interface IntersectionPointsLayerOptions {
+  /** Source ID containing the target. */
+  source: string;
+  /** Polygon or polyline layer name (or id) whose self-intersections will be extracted. */
+  target: string;
+  /**
+   * Optional name for the new point layer. Defaults to
+   * `${target}-intersections`. Must not collide with an existing layer
+   * in the same dataset.
+   */
+  name?: string;
+  /**
+   * Override the auto-derived intersection-tolerance epsilon. Forwarded
+   * to `findSegmentIntersections.tolerance`. Source-CRS units. Must be
+   * a positive finite number when supplied.
+   */
+  tolerance?: number;
 }
 
 /** Source-data shape for {@link Emap.joinTable}. Discriminated union: */
@@ -545,6 +624,62 @@ export interface SimplifyOptions {
 }
 
 /** Options for {@link Emap.mosaicLayer}. */
+/**
+ * Options for {@link Emap.cleanLayer}. Heavy topology-repair pass — O(N²) on
+ * polygon counts in the worst case — so opt in via explicit invocation. Every
+ * field is optional; omitting them lets mapshaper apply its built-in defaults.
+ */
+export interface CleanOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the polygon layer to clean. */
+  target: string;
+  /**
+   * Maximum area (in source-CRS units²) of gaps to fill in. Gaps larger
+   * than this are kept as holes. Maps to mapshaper's `gap-fill-area=N`.
+   */
+  gapFillArea?: number;
+  /**
+   * Sliver-detection sensitivity, typically `0..1`. Lower keeps more
+   * features; higher removes more. Maps to `sliver-control=N`.
+   */
+  sliverControl?: number;
+  /** Coincident-vertex snap distance for the topology-build pre-pass. */
+  snapInterval?: number;
+  /** Skip the snap pre-pass entirely (mapshaper's `no-snap` flag). */
+  noSnap?: boolean;
+  /**
+   * Allow output polygons to overlap (disables gap fill).
+   * Maps to mapshaper's `allow-overlaps` flag.
+   */
+  allowOverlaps?: boolean;
+  /**
+   * Tie-breaking rule when overlapping polygons are merged: which input
+   * record's attributes win. Maps to `overlap-rule=...`.
+   */
+  overlapRule?: 'min-id' | 'max-id' | 'min-area' | 'max-area';
+  /**
+   * Keep features with null geometry instead of removing them.
+   * Maps to mapshaper's `allow-empty` flag.
+   */
+  allowEmpty?: boolean;
+  /**
+   * Fix CW/CCW winding-order errors in polygon rings.
+   * Maps to mapshaper's `rewind` flag.
+   */
+  rewind?: boolean;
+  /**
+   * Only delete unused arcs, don't repair gaps / overlaps.
+   * Maps to mapshaper's `only-arcs` flag.
+   */
+  onlyArcs?: boolean;
+  /**
+   * Skip the arc-dissolve sub-step.
+   * Maps to mapshaper's `no-arc-dissolve` flag.
+   */
+  noArcDissolve?: boolean;
+}
+
 export interface MosaicOptions {
   /** Source ID containing the target polygon layer. */
   source: string;
@@ -558,6 +693,14 @@ export interface MosaicOptions {
   noReplace?: boolean;
   /** Optional name for the output layer. */
   name?: string;
+  /**
+   * JS expression evaluated per output mosaic feature to compute aggregate
+   * attribute values (mapshaper's `calc=` option). The expression has access
+   * to the standard mapshaper aggregation context — `sum()`, `min()`,
+   * `max()`, `count()`, etc. — over the records that contributed to the
+   * mosaic feature. Forwarded verbatim, quoted.
+   */
+  calc?: string;
 }
 
 /** Options for {@link Emap.unionLayers}. Requires `targets.length >= 2`. */
@@ -741,10 +884,19 @@ export interface EditVertexState {
   neighborShapes?: EditVertexShape[];
 }
 
+/** Kind of snap target the draw cursor is locked onto. */
+export type SnapKind = 'vertex' | 'edge' | null;
+
 export interface EditDrawState {
   vertices: [number, number][];
   cursorCoord: [number, number] | null;
   snapCoord: [number, number] | null;
+  /**
+   * What kind of geometry the current snap is locked to. Renderers may use
+   * this to draw a different glyph for vertex vs edge snap. `null` when
+   * there is no snap target (`snapCoord === null`).
+   */
+  snapKind: SnapKind;
   geometryType: DrawGeometryType;
   drawColor: string;
 }
@@ -1579,6 +1731,38 @@ export class Emap extends EventDispatcher {
     return this._featureQuery.query(geometryOrOptions, options, visibleKeys);
   }
 
+  /**
+   * Eagerly build the per-layer Flatbush spatial index for one source (or
+   * every registered source when `sourceId` is omitted). Useful for paying
+   * the build cost in idle time before the user's first hit-test.
+   *
+   * Idempotent — already-cached layer indexes are skipped. No-op for
+   * sources without a dataset.
+   *
+   * Subsequent `queryRenderedFeatures` calls automatically use whatever's
+   * cached, regardless of whether `prebuildSpatialIndex` was called.
+   */
+  public prebuildSpatialIndex(sourceId?: string): void {
+    this._featureQuery.prebuild(sourceId);
+  }
+
+  /**
+   * Drop cached per-layer spatial indexes for one source (or all sources
+   * when `sourceId` is omitted).
+   *
+   * Required after in-place geometry edits (`translateSelected`,
+   * `rotateSelected`, vertex commands) that mutate arc coordinates without
+   * changing shape or arc counts — the cache key wouldn't notice and
+   * subsequent queries would return prefilter-stale results.
+   *
+   * Dataset-replace ops (clip / dissolve / etc.) automatically invalidate
+   * via shape-count or arc-count change; this method is only needed for
+   * in-place edits.
+   */
+  public clearSpatialIndex(sourceId?: string): void {
+    this._featureQuery.clear(sourceId);
+  }
+
   public setHighlightedFeatures(
     features: Array<RenderedFeatureAttributes | HighlightFeatureRef>,
     style?: HighlightStyle,
@@ -1672,7 +1856,10 @@ export class Emap extends EventDispatcher {
     const refs = this._selection.getAll();
     if (refs.length === 0) return false;
 
-    // Group ids by (sourceId, layerId) so we can sort within each layer
+    // Group ids by (sourceId, layerId) so each (source, layer) pair runs as
+    // ONE BulkFeatureDeleteCommand — splicing K features individually on a
+    // layer with N shapes is O(K·N), the bulk command compacts in a single
+    // O(N) pass.
     const grouped: globalThis.Map<string, globalThis.Map<string, number[]>> = new globalThis.Map();
     for (const ref of refs) {
       let bySource = grouped.get(ref.source);
@@ -1686,13 +1873,13 @@ export class Emap extends EventDispatcher {
     }
 
     const children: EditCommand[] = [];
+    let totalDeleted = 0;
 
     for (const [sourceId, byLayer] of grouped) {
       const source = this._sources.get(sourceId);
       if (!source) continue;
       const layers = source.getLayers();
       for (const [layerId, ids] of byLayer) {
-        // Resolve the actual layer object by matching layerId to getLayerId(layer, idx)
         let target: MapshaperLayer | null = null;
         for (let i = 0; i < layers.length; i++) {
           if (getLayerId(layers[i], i) === layerId) {
@@ -1702,31 +1889,35 @@ export class Emap extends EventDispatcher {
         }
         if (!target?.shapes) continue;
 
-        // Sort descending so each splice does not invalidate later ids
-        const sortedIds = [...ids].sort((a, b) => b - a);
-        for (const featureId of sortedIds) {
+        const records = target.data?.getRecords?.();
+        const snapshots: BulkFeatureDeleteCommandOptions['snapshots'] = [];
+        // De-dup ids — selection theoretically guarantees this but
+        // defensive: a duplicate would corrupt the bulk command's
+        // del-set / undo path.
+        const seen = new Set<number>();
+        for (const featureId of ids) {
+          if (seen.has(featureId)) continue;
+          seen.add(featureId);
           const shape = target.shapes[featureId];
           if (shape === undefined) continue;
-          const records = target.data?.getRecords?.();
           const record = records ? records[featureId] : null;
-          // Build the command, then execute it now (the caller-already-did-the-work
-          // contract). The command captures pre-delete snapshots in opts.
-          const cmd = new FeatureDeleteCommand({
-            layer: target,
-            featureId,
-            shape,
-            record: record ?? null,
-            source,
-          });
-          cmd.do();
-          children.push(cmd);
+          snapshots.push({ id: featureId, shape, record: record ?? null });
         }
+        if (snapshots.length === 0) continue;
+
+        const bulk = new BulkFeatureDeleteCommand({ layer: target, snapshots });
+        bulk.do();
+        children.push(bulk);
+        totalDeleted += snapshots.length;
       }
     }
 
     if (children.length === 0) return false;
 
-    const composite = new CompositeCommand(children, `Delete ${children.length} feature${children.length > 1 ? 's' : ''}`);
+    const composite = new CompositeCommand(
+      children,
+      `Delete ${totalDeleted} feature${totalDeleted > 1 ? 's' : ''}`,
+    );
     this._history.push(composite);
     this._fireHistoryChange();
 
@@ -1885,9 +2076,60 @@ export class Emap extends EventDispatcher {
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
 
-    const fieldArg = opts.field ? ` ${quoteMapshaperArg(opts.field)}` : '';
-    const cmd = `-target ${quoteMapshaperArg(opts.target)} -dissolve${fieldArg}`;
-    return this._runDatasetCommand(opts.source, cmd, `Dissolve ${opts.target}`);
+    // `field` (single) and `fields` (multi) are mutually exclusive — both
+    // set is a configuration error.
+    const hasFields = Array.isArray(opts.fields) && opts.fields.length > 0;
+    if (opts.field !== undefined && hasFields) return false;
+
+    // mapshaper's -dissolve DEFAULT option is `fields` (comma-list, type
+    // strings). A field name containing `,` would silently group by N
+    // imaginary fields; reject up-front instead.
+    if (opts.field !== undefined && (typeof opts.field !== 'string' || opts.field.includes(','))) {
+      return false;
+    }
+
+    // Build the positional group-by token (single-field convenience or
+    // multi-field array). When neither is set, dissolve collapses every
+    // feature into one (mapshaper's default for -dissolve with no key).
+    let groupToken = '';
+    if (opts.field) {
+      groupToken = ` ${quoteMapshaperArg(opts.field)}`;
+    } else if (hasFields) {
+      const safeFields = opts.fields!.filter((f) => typeof f === 'string' && !f.includes(','));
+      if (safeFields.length > 0) {
+        groupToken = ` ${quoteMapshaperArg(safeFields.join(','))}`;
+      }
+    }
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-dissolve${groupToken}`,
+    ];
+
+    const safeFieldList = (list?: string[]) =>
+      Array.isArray(list)
+        ? list.filter((f) => typeof f === 'string' && !f.includes(','))
+        : [];
+
+    const sumFields = safeFieldList(opts.sumFields);
+    if (sumFields.length > 0) parts.push(`sum-fields=${sumFields.join(',')}`);
+
+    const copyFields = safeFieldList(opts.copyFields);
+    if (copyFields.length > 0) parts.push(`copy-fields=${copyFields.join(',')}`);
+
+    if (opts.calc && opts.calc.trim()) {
+      parts.push(`calc=${quoteMapshaperArg(opts.calc)}`);
+    }
+    if (opts.where && opts.where.trim()) {
+      parts.push(`where=${quoteMapshaperArg(opts.where)}`);
+    }
+    if (opts.multipart) parts.push('multipart');
+    if (opts.name && opts.name.trim()) {
+      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+    }
+    if (opts.noReplace) parts.push('no-replace');
+
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Dissolve ${opts.target}`);
   }
 
   /**
@@ -1908,6 +2150,16 @@ export class Emap extends EventDispatcher {
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
+
+    // Validate numeric radius up-front: 0 silently produces empty buffers,
+    // negative values throw inside mapshaper. Expression-string radii are
+    // forwarded as-is — mapshaper evaluates per-feature and there's no
+    // sound way to validate them without parsing JS.
+    if (typeof opts.radius === 'number') {
+      if (!Number.isFinite(opts.radius) || opts.radius <= 0) return false;
+    } else if (typeof opts.radius !== 'string' || opts.radius.trim().length === 0) {
+      return false;
+    }
 
     // Numbers go in bare; expression strings are quoted so the shell-style
     // command parser keeps them intact.
@@ -2066,6 +2318,9 @@ export class Emap extends EventDispatcher {
     if (typeof opts.precision === 'number') {
       parts.push(`precision=${opts.precision}`);
     }
+    if (opts.fixGeometry) {
+      parts.push('fix-geometry');
+    }
     return this._runDatasetCommand(opts.source, parts.join(' '), `Snap ${opts.target}`);
   }
 
@@ -2076,15 +2331,46 @@ export class Emap extends EventDispatcher {
    * every import. Returns `Promise<boolean>`; failure modes match the other
    * dataset-replace ops (false on unresolvable source/target, error event on
    * mapshaper failure).
+   *
+   * All tuning options are optional; omitting them lets mapshaper apply its
+   * default cleanup heuristics. See {@link CleanOptions} for the surface.
    */
-  public async cleanLayer(opts: { source: string; target: string }): Promise<boolean> {
+  public async cleanLayer(opts: CleanOptions): Promise<boolean> {
     const source = this._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
-    const cmd = `-target ${quoteMapshaperArg(opts.target)} -clean`;
-    return this._runDatasetCommand(opts.source, cmd, `Clean ${opts.target}`);
+
+    // Numeric tuning options reject NaN / negative — mapshaper would either
+    // error opaquely or silently produce surprising results.
+    const validNumOrUnset = (n?: number) =>
+      n === undefined || (typeof n === 'number' && Number.isFinite(n) && n >= 0);
+    if (!validNumOrUnset(opts.gapFillArea)) return false;
+    if (!validNumOrUnset(opts.sliverControl)) return false;
+    if (!validNumOrUnset(opts.snapInterval)) return false;
+
+    if (opts.overlapRule !== undefined) {
+      const allowed = ['min-id', 'max-id', 'min-area', 'max-area'];
+      if (!allowed.includes(opts.overlapRule)) return false;
+    }
+
+    const parts: string[] = [
+      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-clean`,
+    ];
+    if (opts.gapFillArea !== undefined) parts.push(`gap-fill-area=${opts.gapFillArea}`);
+    if (opts.sliverControl !== undefined) parts.push(`sliver-control=${opts.sliverControl}`);
+    if (opts.snapInterval !== undefined) parts.push(`snap-interval=${opts.snapInterval}`);
+    if (opts.noSnap) parts.push('no-snap');
+    if (opts.allowOverlaps) parts.push('allow-overlaps');
+    if (opts.overlapRule !== undefined) parts.push(`overlap-rule=${opts.overlapRule}`);
+    if (opts.allowEmpty) parts.push('allow-empty');
+    if (opts.rewind) parts.push('rewind');
+    if (opts.onlyArcs) parts.push('only-arcs');
+    if (opts.noArcDissolve) parts.push('no-arc-dissolve');
+
+    return this._runDatasetCommand(opts.source, parts.join(' '), `Clean ${opts.target}`);
   }
 
   /**
@@ -2172,6 +2458,9 @@ export class Emap extends EventDispatcher {
     if (opts.name && opts.name.trim()) {
       parts.push(`name=${quoteMapshaperArg(opts.name)}`);
     }
+    if (opts.calc && opts.calc.trim()) {
+      parts.push(`calc=${quoteMapshaperArg(opts.calc)}`);
+    }
     return this._runDatasetCommand(opts.source, parts.join(' '), `Mosaic ${opts.target}`);
   }
 
@@ -2194,8 +2483,11 @@ export class Emap extends EventDispatcher {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    // Every target must resolve — mapshaper would otherwise error opaquely.
+    // Every target must resolve and be `,`-free — mapshaper joins the list
+    // with commas and would otherwise silently split a comma-bearing name
+    // into multiple bogus targets.
     for (const t of opts.targets) {
+      if (typeof t !== 'string' || t.includes(',')) return false;
       if (!findLayerByName(dataset.layers, t)) return false;
     }
 
@@ -2329,14 +2621,18 @@ export class Emap extends EventDispatcher {
     const layer = findLayerByName(dataset.layers, opts.target);
     if (!layer || layer.geometry_type !== 'polygon') return false;
 
+    // mapshaper's `-lines` DEFAULT positional is the comma-joined fields
+    // list. Build the `-lines [fields-csv]` token in one place rather than
+    // pushing a placeholder and rewriting it.
+    const safeFields = opts.fields?.filter((f) => typeof f === 'string' && !f.includes(','));
+    const linesToken = safeFields && safeFields.length > 0
+      ? `-lines ${safeFields.join(',')}`
+      : '-lines';
+
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
-      '-lines',
+      linesToken,
     ];
-    if (opts.fields && opts.fields.length > 0) {
-      const safe = opts.fields.filter((f) => !f.includes(','));
-      if (safe.length > 0) parts[parts.length - 1] = `-lines ${safe.join(',')}`;
-    }
     if (opts.name && opts.name.trim()) {
       parts.push(`name=${quoteMapshaperArg(opts.name)}`);
     }
@@ -2419,6 +2715,14 @@ export class Emap extends EventDispatcher {
       thresholdToken = `resolution=${r}`;
     }
 
+    // `weighting` only makes sense for weighted-Visvalingam. mapshaper
+    // silently ignores `weighting` when method is `dp` or `visvalingam`,
+    // which leaves the caller wondering why their tuning had no effect.
+    // Reject up-front. (Method `undefined` is fine — defaults to weighted.)
+    if (opts.weighting !== undefined && opts.method !== undefined && opts.method !== 'weighted') {
+      return false;
+    }
+
     const parts: string[] = [];
     if (opts.target) parts.push(`-target ${quoteMapshaperArg(opts.target)}`);
     parts.push(`-simplify ${thresholdToken}`);
@@ -2490,6 +2794,9 @@ export class Emap extends EventDispatcher {
     if (!findLayerByName(dataset.layers, opts.target)) return false;
     const newName = (opts.name ?? '').trim();
     if (newName.length === 0) return false;
+    // mapshaper's -rename-layers DEFAULT is `names` (comma-list). A name
+    // containing `,` would silently split into N rename pairs.
+    if (newName.includes(',')) return false;
     // Allow renaming to the same name (no-op-ish), but reject if another
     // layer in this dataset already owns it.
     if (newName !== opts.target) {
@@ -2517,6 +2824,11 @@ export class Emap extends EventDispatcher {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
+
+    // Targets are joined with commas inside the `-target` arg; reject names
+    // that themselves contain `,` so we don't silently split into bogus
+    // targets.
+    if (opts.targets.some((t) => typeof t !== 'string' || t.includes(','))) return false;
 
     const layers = opts.targets.map((t) => findLayerByName(dataset.layers, t));
     if (layers.some((l) => !l)) return false;
@@ -2734,6 +3046,91 @@ export class Emap extends EventDispatcher {
   }
 
   /**
+   * Materialize the self-intersection points of a polygon or polyline
+   * target as a new point layer in the same source's dataset.
+   *
+   * Counterpart to {@link checkGeometry} — `checkGeometry` returns a
+   * read-only report, while this op produces a renderable, selectable,
+   * editable layer. Useful when the user wants to label or operate on
+   * the intersection locations.
+   *
+   * mapshaper's CLI `-points intersections` flag is registered but its
+   * implementation is a debug-only timing benchmark; this method
+   * bypasses the CLI and uses `findSegmentIntersections` +
+   * `getIntersectionLayer` directly, which DO produce the right output.
+   *
+   * Returns `false` for any of: missing source / dataset, unresolved
+   * target, target geometry not polygon/polyline, name collision with
+   * an existing layer, non-positive `tolerance`. On internal error
+   * (mapshaper threw), fires `error` event and returns `false`.
+   *
+   * The resulting layer is one multi-point feature (mapshaper's
+   * `getIntersectionLayer` returns `shapes: [points]`). Pipe through
+   * `explodeLayer` if one feature per intersection is needed.
+   */
+  public async intersectionPointsLayer(opts: IntersectionPointsLayerOptions): Promise<boolean> {
+    const source = this._sources.get(opts.source);
+    if (!source) return false;
+    const original = source.getDataset();
+    if (!original) return false;
+    const targetLayer = findLayerByName(original.layers, opts.target);
+    if (!targetLayer) return false;
+    if (targetLayer.geometry_type !== 'polygon' && targetLayer.geometry_type !== 'polyline') {
+      return false;
+    }
+    if (!original.arcs) return false;
+
+    const newName = (opts.name && opts.name.trim()) || `${opts.target}-intersections`;
+    if (original.layers.some((l: any) => l?.name === newName)) return false;
+    if (opts.tolerance !== undefined) {
+      if (typeof opts.tolerance !== 'number' || !Number.isFinite(opts.tolerance) || opts.tolerance <= 0) {
+        return false;
+      }
+    }
+
+    const internalOpts: { tolerance?: number } = {};
+    if (opts.tolerance !== undefined) internalOpts.tolerance = opts.tolerance;
+
+    // Custom dataset-replace path. Snapshot for undo, do work on a deep
+    // copy, swap. Mirrors `_runDatasetCommand` but skips parseCommands
+    // because mapshaper's CLI `-points intersections` is broken upstream
+    // — we go directly to the internal primitives.
+    const before: MapshaperDataset = mapshaper.internal.copyDataset(original);
+    const after: MapshaperDataset = mapshaper.internal.copyDataset(original);
+
+    let pointLyr: any;
+    try {
+      const intersections = mapshaper.internal.findSegmentIntersections(after.arcs!, internalOpts);
+      // Find the cloned target inside the working copy by name.
+      const workingTarget = findLayerByName(after.layers, opts.target);
+      if (!workingTarget) {
+        // Should never happen — target was in original, copyDataset preserves names.
+        throw new Error('intersectionPointsLayer: target lost in copyDataset');
+      }
+      pointLyr = mapshaper.internal.getIntersectionLayer(intersections, workingTarget, after.arcs!);
+      pointLyr.name = newName;
+      after.layers.push(pointLyr);
+    } catch (err) {
+      this.fire('error', { error: err });
+      return false;
+    }
+
+    source.setDataset(after);
+
+    // Same history-barrier convention as every other dataset-replace op.
+    this._history.clear();
+    this._history.push(new DatasetReplaceCommand({
+      source, before, after,
+      label: `Intersection points ${opts.target}`,
+    }));
+    this._fireHistoryChange();
+
+    this._fireSelectionChange(this._selection.clear());
+    this._scheduleRender();
+    return true;
+  }
+
+  /**
    * Join attribute records from a CSV / JSON / another-layer source onto a
    * target layer via mapshaper's `-join`. The canonical "thematic shapefile
    * + CSV of measures → chloropleth" workflow.
@@ -2758,6 +3155,9 @@ export class Emap extends EventDispatcher {
     if (!Array.isArray(opts.keys) || opts.keys.length !== 2) return false;
     const [targetKey, sourceKey] = opts.keys.map((k) => (typeof k === 'string' ? k.trim() : ''));
     if (targetKey.length === 0 || sourceKey.length === 0) return false;
+    // mapshaper serializes `keys=` as `target,source`; a key containing `,`
+    // would split into 3+ keys and trip mapshaper's length validator.
+    if (targetKey.includes(',') || sourceKey.includes(',')) return false;
 
     let joinSource: string;
     let inputFiles: Record<string, Uint8Array | string> | undefined;
@@ -3406,6 +3806,9 @@ export class Emap extends EventDispatcher {
 
   public remove(): void {
     this._dragPan.destroy();
+    this._mouseWheel.destroy();
+    this._historyShortcutUnbind?.();
+    this._historyShortcutUnbind = null;
     if (this._workerPool) {
       this._workerPool.destroy();
       this._workerPool = null;
