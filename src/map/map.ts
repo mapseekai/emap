@@ -887,6 +887,13 @@ export interface EditVertexState {
   shapes: EditVertexShape[];
   arcs: EditVertexArcs;
   hoverVertex: [number, number] | null;
+  /**
+   * Whether `hoverVertex` is an actual vertex on an arc (`'vertex'`) or
+   * the interpolated midpoint of an edge (`'interpolated'`, drag to insert
+   * a new vertex). Renderers draw a circle for `'vertex'` and a square for
+   * `'interpolated'`, mirroring the convention used in DrawFeatureControl.
+   */
+  hoverType?: 'vertex' | 'interpolated' | null;
   /** CSS color string for polygon fill in vertex edit mode. Null = no fill. */
   polygonFill?: string | null;
   geometryType?: string;
@@ -1720,6 +1727,7 @@ export class Emap extends EventDispatcher {
           dotColor: '#333',
           dotRadius: 3,
           hoverVertex: this._editVertexState.hoverVertex,
+          hoverType: this._editVertexState.hoverType ?? 'vertex',
           hoverColor: '#cc6acc',
           hoverRadius: 6,
         },

@@ -205,11 +205,22 @@ export class CanvasPainter implements Painter {
     });
     ctx.fill();
 
-    // Draw hover highlight vertex
+    // Draw hover highlight: circle for actual vertex, square for interpolated
+    // edge-midpoint (drag-to-insert affordance) — same convention as
+    // DrawFeatureControl's snap indicator (vertex=⭕, edge=⬜).
     if (hoverPx) {
       ctx.fillStyle = hoverColor;
       ctx.beginPath();
-      ctx.arc(hoverPx[0], hoverPx[1], hoverRadius, 0, Math.PI * 2);
+      if (style.hoverType === 'interpolated') {
+        ctx.rect(
+          hoverPx[0] - hoverRadius,
+          hoverPx[1] - hoverRadius,
+          hoverRadius * 2,
+          hoverRadius * 2,
+        );
+      } else {
+        ctx.arc(hoverPx[0], hoverPx[1], hoverRadius, 0, Math.PI * 2);
+      }
       ctx.fill();
     }
   }
