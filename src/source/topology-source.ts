@@ -275,7 +275,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         this._displayArcs = new DisplayArcs(this._dataset.arcs);
       }
 
-      this.fire('data');
+      this.fire('data', { reason: 'load' });
     } catch (err: any) {
       // Stale chain (either superseded by a newer setData, or its fetch was
       // aborted by us). Either way, the new chain owns the next event.
@@ -460,7 +460,9 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     } else {
       this._displayArcs = null;
     }
-    this.fire('data');
+    // `replace` distinguishes edit-driven dataset swaps from initial `load` —
+    // listeners that auto-fit the viewport should only react to `load`.
+    this.fire('data', { reason: 'replace' });
   }
 
   /**

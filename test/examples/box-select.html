@@ -78,8 +78,8 @@
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        source.on('data', () => {
-          map.setExtent(source.getExtent());
+        source.on('data', ({ reason }) => {
+          if (reason === 'load') map.setExtent(source.getExtent());
           status.textContent = `已加载 ${file.name}。Shift+拖拽框选。`;
         });
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);

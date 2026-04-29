@@ -1527,7 +1527,7 @@ export class Emap extends EventDispatcher {
     }
 
     this.fire('crschange');
-    this.fire('data');
+    this.fire('data', { reason: 'reproject' });
   }
 
   public getCenter(): [number, number] {
@@ -1956,11 +1956,31 @@ export class Emap extends EventDispatcher {
     this._history.push(composite);
     this._fireHistoryChange();
 
+    // Invalidate caches keyed off `layer.shapes` for every touched source —
+    // the line-layer arc-flag cache and the per-layer Flatbush index both
+    // hold references to shapes that no longer exist.
+    this._invalidateShapeCachesForSources(grouped.keys());
+
     // Clear the selection — the refs no longer exist.
     this._fireSelectionChange(this._selection.clear());
     this._scheduleRender();
 
     return true;
+  }
+
+  /**
+   * Drop derived caches (line-layer arc flags + spatial index) for the given
+   * sources. Call after any edit that mutates `layer.shapes` so subsequent
+   * frames and `queryRenderedFeatures` calls don't reference stale features.
+   */
+  private _invalidateShapeCachesForSources(sourceIds: Iterable<string>): void {
+    for (const sourceId of sourceIds) {
+      const prefix = `${sourceId}:`;
+      for (const key of this._layerArcFlagsCache.keys()) {
+        if (key.startsWith(prefix)) this._layerArcFlagsCache.delete(key);
+      }
+      this._featureQuery?.clear(sourceId);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1988,6 +2008,11 @@ export class Emap extends EventDispatcher {
     const cmd = this._history.undo();
     if (!cmd) return false;
     this._fireHistoryChange();
+    // Any command that touched `layer.shapes` (delete/create/...) will have
+    // moved feature ids around; invalidate every shape-derived cache rather
+    // than threading per-command source ids through the history.
+    this._layerArcFlagsCache.clear();
+    for (const id of this._sources.keys()) this._featureQuery?.clear(id);
     this._scheduleRender();
     return true;
   }
@@ -2000,6 +2025,8 @@ export class Emap extends EventDispatcher {
     const cmd = this._history.redo();
     if (!cmd) return false;
     this._fireHistoryChange();
+    this._layerArcFlagsCache.clear();
+    for (const id of this._sources.keys()) this._featureQuery?.clear(id);
     this._scheduleRender();
     return true;
   }

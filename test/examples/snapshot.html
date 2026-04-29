@@ -127,7 +127,7 @@
           status.textContent = `加载 ${file.name} 为源 "${id}"...`;
           await new Promise((resolve, reject) => {
             const source = new TopologySource(id);
-            source.on('data', () => {
+            source.on('data', ({ reason }) => {
               sourceIds.add(id);
               refreshSourceList();
               fitFirstSource();

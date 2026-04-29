@@ -258,8 +258,8 @@
 
         const source = new TopologySource(sourceId, { data: info.url });
 
-        source.on('data', () => {
-          map.setExtent(source.getExtent());
+        source.on('data', ({ reason }) => {
+          if (reason === 'load') map.setExtent(source.getExtent());
           status.textContent = `${info.label} 已加载 — 点击 ✏ 编辑顶点`;
           hideLoading();
           setButtonsDisabled(false);

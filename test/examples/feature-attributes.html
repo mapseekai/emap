@@ -150,8 +150,8 @@
           const content = new Uint8Array(event.target.result);
           const source = new TopologySource("test-source");
 
-          source.on('data', () => {
-            map.setExtent(source.getExtent());
+          source.on('data', ({ reason }) => {
+            if (reason === 'load') map.setExtent(source.getExtent());
             populateLayers(source);
             status.textContent = `当前: ${file.name}`;
           });

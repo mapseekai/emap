@@ -142,8 +142,8 @@
       status.textContent = `加载 ${uploaded.size} 个文件中...`;
       const entries = Array.from(uploaded, ([filename, content]) => ({ filename, content }));
       const source = new TopologySource(SOURCE_ID);
-      source.on('data', () => {
-        map.setExtent(source.getExtent());
+      source.on('data', ({ reason }) => {
+        if (reason === 'load') map.setExtent(source.getExtent());
         populateLayerOptions(source);
         const names = entries.map((e) => e.filename).join(', ');
         status.textContent = `已加载: ${names}。选择目标图层与蒙版,点击裁剪或擦除。`;
