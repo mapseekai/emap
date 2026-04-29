@@ -8,6 +8,7 @@ export type {
   ExpressionEvaluationPolicy,
   FeatureRef,
   FeatureTranslateSession,
+  FeatureAffineSession,
   HighlightFeatureRef,
   HighlightStyle,
   ClipEraseOptions,
@@ -104,6 +105,8 @@ export {
   rotateMatrix,
   scaleMatrix,
   invertMatrix,
+  composeMatrix,
+  IDENTITY_MATRIX,
 } from './edit/commands/feature-affine';
 export type {
   FeatureAffineCommandOptions,

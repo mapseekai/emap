@@ -24,6 +24,9 @@ import {
   AffineMatrix,
   rotateMatrix,
   scaleMatrix,
+  composeMatrix,
+  invertMatrix,
+  IDENTITY_MATRIX,
 } from '../edit/commands/feature-affine';
 import { DatasetReplaceCommand } from '../edit/commands/dataset-replace';
 import { FeaturePropertyChangeCommand } from '../edit/commands/feature-property-change';
@@ -138,6 +141,35 @@ export interface FeatureTranslateSession {
   cancel(): void;
   /** Total `(dx, dy)` applied since the session began. */
   getAccumulated(): [number, number];
+}
+
+/**
+ * Live affine-transform handle (rotate / scale / mixed) returned by
+ * {@link Emap.beginAffineSession}. Same idea as
+ * {@link FeatureTranslateSession}: every `applyDelta(matrix)` mutates
+ * geometry in place, only `commit()` writes a single history entry built
+ * from the cumulative composed matrix.
+ */
+export interface FeatureAffineSession {
+  /**
+   * Pivot picked at session start (selection bbox centroid by default).
+   * Callers should build their delta matrices around this point so all
+   * frames share a single fixed origin — composing rotations/scales then
+   * stays equivalent to a single cumulative transform.
+   */
+  readonly origin: [number, number];
+  /** Apply a delta matrix to the current geometry. Composes onto the cumulative. */
+  applyDelta(matrix: AffineMatrix): void;
+  /**
+   * Push ONE cumulative `FeatureAffineCommand` (or `CompositeCommand`)
+   * to history and close. Returns `false` when the cumulative is identity
+   * (nothing to record). `label` overrides the auto-generated label.
+   */
+  commit(label?: string): boolean;
+  /** Roll geometry back to the pre-session state and close. No history entry. */
+  cancel(): void;
+  /** Cumulative composed matrix (a · prev) since the session began. */
+  getCumulative(): AffineMatrix;
 }
 
 export interface FeatureRef {
@@ -3579,6 +3611,165 @@ export class Emap extends EventDispatcher {
         this._scheduleRender();
       },
       getAccumulated: (): [number, number] => [accumDx, accumDy],
+    };
+  }
+
+  /**
+   * Begin a rotate / scale / arbitrary-affine "drag session" against the
+   * current selection. Same one-history-entry-per-drag semantics as
+   * {@link beginTranslateSession}, but the per-frame delta is an arbitrary
+   * affine matrix (typically `rotateMatrix(theta, ox, oy)` or
+   * `scaleMatrix(sx, sy, ox, oy)` with the session's `origin`).
+   *
+   * The pivot is captured at session start: pass `origin` explicitly or let
+   * it default to the selection bbox centroid. Subsequent matrices should
+   * use the same pivot; otherwise the cumulative composed matrix on commit
+   * won't match the visually applied sequence.
+   */
+  public beginAffineSession(origin?: [number, number]): FeatureAffineSession | null {
+    type Bucket = {
+      sourceId: string;
+      source: TopologySource;
+      arcIds: number[];
+      pointFeatures: TranslatedPointFeature[];
+    };
+
+    const refs = this._selection.getAll();
+    if (refs.length === 0) return null;
+
+    const bySource = new globalThis.Map<string, Bucket>();
+    const arcSeen = new globalThis.Map<string, Set<number>>();
+    for (const ref of refs) {
+      const layer = this._resolveLayer(ref.source, ref.layer);
+      if (!layer?.shapes) continue;
+      const shape = layer.shapes[ref.id];
+      if (!shape) continue;
+      const source = this._sources.get(ref.source);
+      if (!source) continue;
+
+      let bucket = bySource.get(ref.source);
+      if (!bucket) {
+        bucket = { sourceId: ref.source, source, arcIds: [], pointFeatures: [] };
+        bySource.set(ref.source, bucket);
+        arcSeen.set(ref.source, new Set<number>());
+      }
+      const seen = arcSeen.get(ref.source)!;
+
+      if (layer.geometry_type === 'point') {
+        bucket.pointFeatures.push({ layer, featureId: ref.id });
+      } else {
+        for (const part of shape) {
+          if (!Array.isArray(part)) continue;
+          for (const rawArcId of part) {
+            if (typeof rawArcId !== 'number') continue;
+            const abs = rawArcId >= 0 ? rawArcId : ~rawArcId;
+            if (!seen.has(abs)) {
+              seen.add(abs);
+              bucket.arcIds.push(abs);
+            }
+          }
+        }
+      }
+    }
+
+    if (bySource.size === 0) return null;
+
+    // Pivot. Same default as `_applyAffineToSelection`: bbox centroid of
+    // every vertex the transform will touch.
+    let ox: number;
+    let oy: number;
+    if (origin) {
+      [ox, oy] = origin;
+    } else {
+      const buckets = new globalThis.Map<
+        string,
+        { arcIdSet: Set<number>; pointFeatures: TranslatedPointFeature[] }
+      >();
+      for (const b of bySource.values()) {
+        buckets.set(b.sourceId, {
+          arcIdSet: new Set(b.arcIds),
+          pointFeatures: b.pointFeatures,
+        });
+      }
+      const centroid = this._computeSelectionCentroid(buckets);
+      if (!centroid) return null;
+      [ox, oy] = centroid;
+    }
+    if (!Number.isFinite(ox) || !Number.isFinite(oy)) return null;
+    const pivot: [number, number] = [ox, oy];
+
+    const buckets = Array.from(bySource.values());
+    let cumulative: AffineMatrix = { ...IDENTITY_MATRIX };
+    let closed = false;
+
+    const isIdentity = (m: AffineMatrix): boolean =>
+      m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1 && m.tx === 0 && m.ty === 0;
+
+    const applyMatrix = (matrix: AffineMatrix) => {
+      for (const b of buckets) {
+        if (b.arcIds.length === 0 && b.pointFeatures.length === 0) continue;
+        new FeatureAffineCommand({
+          source: b.source,
+          arcs: b.source.getArcs(),
+          matrix,
+          arcIds: b.arcIds,
+          pointFeatures: b.pointFeatures,
+        }).do();
+      }
+    };
+
+    return {
+      origin: pivot,
+      applyDelta: (matrix: AffineMatrix) => {
+        if (closed) return;
+        if (isIdentity(matrix)) return;
+        applyMatrix(matrix);
+        // Cumulative is "delta · cumulative" — newer transforms apply
+        // after older ones, matching the visual sequence above.
+        cumulative = composeMatrix(matrix, cumulative);
+        this._scheduleRender();
+      },
+      commit: (label?: string): boolean => {
+        if (closed) return false;
+        closed = true;
+        if (isIdentity(cumulative)) return false;
+        const totalFeatures = buckets.reduce(
+          (n, b) => n + b.arcIds.length + b.pointFeatures.length,
+          0,
+        );
+        const children: EditCommand[] = buckets.map((b) =>
+          new FeatureAffineCommand({
+            source: b.source,
+            arcs: b.source.getArcs(),
+            matrix: cumulative,
+            arcIds: b.arcIds,
+            pointFeatures: b.pointFeatures,
+            label,
+          }),
+        );
+        const pushed: EditCommand =
+          children.length === 1
+            ? children[0]
+            : new CompositeCommand(
+                children,
+                label ?? `Transform ${totalFeatures} feature${totalFeatures === 1 ? '' : 's'}`,
+              );
+        this._history.push(pushed);
+        this._fireHistoryChange();
+        this._clearSpatialIndexesForSources(buckets.map((b) => b.sourceId));
+        this._scheduleRender();
+        return true;
+      },
+      cancel: () => {
+        if (closed) return;
+        closed = true;
+        if (isIdentity(cumulative)) return;
+        // Apply the inverse of the cumulative — restores pre-session state.
+        applyMatrix(invertMatrix(cumulative));
+        cumulative = { ...IDENTITY_MATRIX };
+        this._scheduleRender();
+      },
+      getCumulative: (): AffineMatrix => ({ ...cumulative }),
     };
   }
 
