@@ -20,6 +20,10 @@ import { CompositeCommand } from '../edit/commands/composite';
 import { BulkFeatureDeleteCommand, type BulkFeatureDeleteCommandOptions } from '../edit/commands/feature-delete';
 import { FeatureTranslateCommand, TranslatedPointFeature } from '../edit/commands/feature-translate';
 import {
+  SplitSharedArcsCommand,
+  planSharedArcSplit,
+} from '../edit/commands/split-shared-arcs';
+import {
   FeatureAffineCommand,
   AffineMatrix,
   rotateMatrix,
@@ -124,6 +128,21 @@ export interface RenderedFeatureAttributes {
  * Canonical reference to a single feature within a source/layer.
  * Used by selection, highlight, and downstream geometry operations.
  */
+/** Common options accepted by all selection-drag sessions. */
+export interface DragSessionOptions {
+  /**
+   * When `true` (default), arcs shared between the selection and any
+   * unselected feature are duplicated at session start so the unselected
+   * neighbour stays put when the selection moves. The duplication is
+   * recorded as one extra command alongside the transform on commit, and
+   * is reversed on cancel.
+   *
+   * Set to `false` to keep mapshaper's classic shared-topology behaviour
+   * (the boundary moves and unselected features deform along with it).
+   */
+  splitSharedArcs?: boolean;
+}
+
 /**
  * Live "drag" handle for translating the selection without spamming the
  * undo stack. Returned by {@link Emap.beginTranslateSession}.
@@ -3495,17 +3514,40 @@ export class Emap extends EventDispatcher {
    * selection at start time — concurrent edits to the selection during
    * a drag are intentionally ignored.
    */
-  public beginTranslateSession(): FeatureTranslateSession | null {
-    const refs = this._selection.getAll();
-    if (refs.length === 0) return null;
-
+  /**
+   * Shared scaffolding for translate/affine sessions: groups the active
+   * selection by source into buckets of `(arcIds, pointFeatures)`, and
+   * (when `splitShared` is true) duplicates any arc shared with an
+   * unselected feature so the drag doesn't drag the neighbour along.
+   *
+   * Returns `null` for an empty / fully-resolved-empty selection. The
+   * returned `splitCmds` have already been `do()`-applied; the caller
+   * must push them onto a composite at commit and call `undo()` on
+   * cancel.
+   */
+  private _buildSelectionBuckets(splitShared: boolean): {
+    buckets: Array<{
+      sourceId: string;
+      source: TopologySource;
+      arcIds: number[];
+      pointFeatures: TranslatedPointFeature[];
+    }>;
+    splitCmds: SplitSharedArcsCommand[];
+  } | null {
     type Bucket = {
       sourceId: string;
       source: TopologySource;
       arcIds: number[];
       pointFeatures: TranslatedPointFeature[];
+      pathFeatures: Array<{ layer: MapshaperLayer; featureId: number }>;
     };
 
+    const refs = this._selection.getAll();
+    if (refs.length === 0) return null;
+
+    // First pass: classify selected refs into path / point per source.
+    // We DON'T compute arcIds yet — those need to wait until after the
+    // optional shared-arc split rewrites the shapes.
     const bySource = new globalThis.Map<string, Bucket>();
     for (const ref of refs) {
       const layer = this._resolveLayer(ref.source, ref.layer);
@@ -3517,19 +3559,55 @@ export class Emap extends EventDispatcher {
 
       let bucket = bySource.get(ref.source);
       if (!bucket) {
-        bucket = { sourceId: ref.source, source, arcIds: [], pointFeatures: [] };
+        bucket = {
+          sourceId: ref.source,
+          source,
+          arcIds: [],
+          pointFeatures: [],
+          pathFeatures: [],
+        };
         bySource.set(ref.source, bucket);
       }
 
       if (layer.geometry_type === 'point') {
         bucket.pointFeatures.push({ layer, featureId: ref.id });
       } else {
-        const seen = new Set<number>(bucket.arcIds);
-        for (const part of shape) {
+        bucket.pathFeatures.push({ layer, featureId: ref.id });
+      }
+    }
+
+    if (bySource.size === 0) return null;
+
+    // Optional shared-arc split per source. Plan reads the dataset's
+    // layers, the command's `do()` appends new arcs and rewrites the
+    // selected features' shape arrays in place.
+    const splitCmds: SplitSharedArcsCommand[] = [];
+    if (splitShared) {
+      for (const bucket of bySource.values()) {
+        if (bucket.pathFeatures.length === 0) continue;
+        const plan = planSharedArcSplit(
+          bucket.source,
+          bucket.pathFeatures,
+          bucket.source.getLayers() as MapshaperLayer[],
+        );
+        if (!plan) continue;
+        const cmd = new SplitSharedArcsCommand(plan);
+        cmd.do();
+        splitCmds.push(cmd);
+      }
+    }
+
+    // Second pass: now compute arcIds from the (possibly rewritten) shapes.
+    for (const bucket of bySource.values()) {
+      const seen = new Set<number>();
+      for (const pf of bucket.pathFeatures) {
+        const shape = pf.layer.shapes![pf.featureId];
+        if (!shape) continue;
+        for (const part of shape as number[][]) {
           if (!Array.isArray(part)) continue;
-          for (const rawArcId of part) {
-            if (typeof rawArcId !== 'number') continue;
-            const abs = rawArcId >= 0 ? rawArcId : ~rawArcId;
+          for (const raw of part) {
+            if (typeof raw !== 'number') continue;
+            const abs = raw >= 0 ? raw : ~raw;
             if (!seen.has(abs)) {
               seen.add(abs);
               bucket.arcIds.push(abs);
@@ -3539,9 +3617,19 @@ export class Emap extends EventDispatcher {
       }
     }
 
-    if (bySource.size === 0) return null;
+    const buckets = Array.from(bySource.values()).map((b) => ({
+      sourceId: b.sourceId,
+      source: b.source,
+      arcIds: b.arcIds,
+      pointFeatures: b.pointFeatures,
+    }));
+    return { buckets, splitCmds };
+  }
 
-    const buckets = Array.from(bySource.values());
+  public beginTranslateSession(opts?: DragSessionOptions): FeatureTranslateSession | null {
+    const built = this._buildSelectionBuckets(opts?.splitSharedArcs !== false);
+    if (!built) return null;
+    const { buckets, splitCmds } = built;
     let accumDx = 0;
     let accumDy = 0;
     let closed = false;
@@ -3572,12 +3660,20 @@ export class Emap extends EventDispatcher {
       commit: (): boolean => {
         if (closed) return false;
         closed = true;
-        if (accumDx === 0 && accumDy === 0) return false;
+        const moved = !(accumDx === 0 && accumDy === 0);
+        // If the user opened a session, didn't drag, and committed: roll
+        // any split-shared-arcs work back. Splitting alone with no visible
+        // movement isn't worth a history entry.
+        if (!moved) {
+          for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
+          if (splitCmds.length > 0) this._scheduleRender();
+          return false;
+        }
         // Geometry already moved by `move()` calls; build one cumulative
         // command and push it WITHOUT calling `.do()` — the post-do state
         // is already live. `undo` will subtract the cumulative offset,
         // `redo` re-applies it.
-        const children: EditCommand[] = buckets.map((b) =>
+        const translateChildren: EditCommand[] = buckets.map((b) =>
           new FeatureTranslateCommand({
             source: b.source,
             arcs: b.source.getArcs(),
@@ -3591,6 +3687,10 @@ export class Emap extends EventDispatcher {
           (n, b) => n + b.arcIds.length + b.pointFeatures.length,
           0,
         );
+        // Splits go FIRST in the composite so undo runs translate.undo()
+        // (subtract offset on the duplicated arcs) before split.undo()
+        // (truncate duplicates + restore original shape refs).
+        const children: EditCommand[] = [...splitCmds, ...translateChildren];
         const pushed: EditCommand =
           children.length === 1
             ? children[0]
@@ -3604,8 +3704,10 @@ export class Emap extends EventDispatcher {
       cancel: () => {
         if (closed) return;
         closed = true;
-        if (accumDx === 0 && accumDy === 0) return;
-        applyStep(-accumDx, -accumDy);
+        // Reverse the translate first (on duplicated arcs), then reverse
+        // the splits in LIFO order — each undo sees the state its do() left.
+        if (accumDx !== 0 || accumDy !== 0) applyStep(-accumDx, -accumDy);
+        for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
         accumDx = 0;
         accumDy = 0;
         this._scheduleRender();
@@ -3626,53 +3728,13 @@ export class Emap extends EventDispatcher {
    * use the same pivot; otherwise the cumulative composed matrix on commit
    * won't match the visually applied sequence.
    */
-  public beginAffineSession(origin?: [number, number]): FeatureAffineSession | null {
-    type Bucket = {
-      sourceId: string;
-      source: TopologySource;
-      arcIds: number[];
-      pointFeatures: TranslatedPointFeature[];
-    };
-
-    const refs = this._selection.getAll();
-    if (refs.length === 0) return null;
-
-    const bySource = new globalThis.Map<string, Bucket>();
-    const arcSeen = new globalThis.Map<string, Set<number>>();
-    for (const ref of refs) {
-      const layer = this._resolveLayer(ref.source, ref.layer);
-      if (!layer?.shapes) continue;
-      const shape = layer.shapes[ref.id];
-      if (!shape) continue;
-      const source = this._sources.get(ref.source);
-      if (!source) continue;
-
-      let bucket = bySource.get(ref.source);
-      if (!bucket) {
-        bucket = { sourceId: ref.source, source, arcIds: [], pointFeatures: [] };
-        bySource.set(ref.source, bucket);
-        arcSeen.set(ref.source, new Set<number>());
-      }
-      const seen = arcSeen.get(ref.source)!;
-
-      if (layer.geometry_type === 'point') {
-        bucket.pointFeatures.push({ layer, featureId: ref.id });
-      } else {
-        for (const part of shape) {
-          if (!Array.isArray(part)) continue;
-          for (const rawArcId of part) {
-            if (typeof rawArcId !== 'number') continue;
-            const abs = rawArcId >= 0 ? rawArcId : ~rawArcId;
-            if (!seen.has(abs)) {
-              seen.add(abs);
-              bucket.arcIds.push(abs);
-            }
-          }
-        }
-      }
-    }
-
-    if (bySource.size === 0) return null;
+  public beginAffineSession(
+    origin?: [number, number],
+    opts?: DragSessionOptions,
+  ): FeatureAffineSession | null {
+    const built = this._buildSelectionBuckets(opts?.splitSharedArcs !== false);
+    if (!built) return null;
+    const { buckets, splitCmds } = built;
 
     // Pivot. Same default as `_applyAffineToSelection`: bbox centroid of
     // every vertex the transform will touch.
@@ -3681,24 +3743,30 @@ export class Emap extends EventDispatcher {
     if (origin) {
       [ox, oy] = origin;
     } else {
-      const buckets = new globalThis.Map<
+      const centroidInput = new globalThis.Map<
         string,
         { arcIdSet: Set<number>; pointFeatures: TranslatedPointFeature[] }
       >();
-      for (const b of bySource.values()) {
-        buckets.set(b.sourceId, {
+      for (const b of buckets) {
+        centroidInput.set(b.sourceId, {
           arcIdSet: new Set(b.arcIds),
           pointFeatures: b.pointFeatures,
         });
       }
-      const centroid = this._computeSelectionCentroid(buckets);
-      if (!centroid) return null;
+      const centroid = this._computeSelectionCentroid(centroidInput);
+      if (!centroid) {
+        // Roll back any speculative split before bailing out.
+        for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
+        return null;
+      }
       [ox, oy] = centroid;
     }
-    if (!Number.isFinite(ox) || !Number.isFinite(oy)) return null;
+    if (!Number.isFinite(ox) || !Number.isFinite(oy)) {
+      for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
+      return null;
+    }
     const pivot: [number, number] = [ox, oy];
 
-    const buckets = Array.from(bySource.values());
     let cumulative: AffineMatrix = { ...IDENTITY_MATRIX };
     let closed = false;
 
@@ -3732,12 +3800,18 @@ export class Emap extends EventDispatcher {
       commit: (label?: string): boolean => {
         if (closed) return false;
         closed = true;
-        if (isIdentity(cumulative)) return false;
+        if (isIdentity(cumulative)) {
+          // No movement — undo any speculative split so we don't pollute
+          // the dataset with orphan duplicated arcs and a pointless entry.
+          for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
+          if (splitCmds.length > 0) this._scheduleRender();
+          return false;
+        }
         const totalFeatures = buckets.reduce(
           (n, b) => n + b.arcIds.length + b.pointFeatures.length,
           0,
         );
-        const children: EditCommand[] = buckets.map((b) =>
+        const affineChildren: EditCommand[] = buckets.map((b) =>
           new FeatureAffineCommand({
             source: b.source,
             arcs: b.source.getArcs(),
@@ -3747,6 +3821,9 @@ export class Emap extends EventDispatcher {
             label,
           }),
         );
+        // Splits FIRST so undo runs affine.undo() (apply matrix^-1 on the
+        // duplicated arcs) before split.undo() (truncate + restore shapes).
+        const children: EditCommand[] = [...splitCmds, ...affineChildren];
         const pushed: EditCommand =
           children.length === 1
             ? children[0]
@@ -3763,9 +3840,9 @@ export class Emap extends EventDispatcher {
       cancel: () => {
         if (closed) return;
         closed = true;
-        if (isIdentity(cumulative)) return;
-        // Apply the inverse of the cumulative — restores pre-session state.
-        applyMatrix(invertMatrix(cumulative));
+        // Reverse the affine first, then the splits in LIFO order.
+        if (!isIdentity(cumulative)) applyMatrix(invertMatrix(cumulative));
+        for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
         cumulative = { ...IDENTITY_MATRIX };
         this._scheduleRender();
       },
