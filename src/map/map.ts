@@ -3594,6 +3594,11 @@ export class Emap extends EventDispatcher {
         const cmd = new SplitSharedArcsCommand(plan);
         cmd.do();
         splitCmds.push(cmd);
+        // Splitting appended new arcs onto the ArcCollection — the
+        // line-layer arc-flag cache is sized for the OLD arc count and
+        // will mis-treat the new ids as "not in this layer", silently
+        // dropping the duplicated boundaries from the line render.
+        this._invalidateShapeCachesForSources([bucket.sourceId]);
       }
     }
 
@@ -3697,7 +3702,9 @@ export class Emap extends EventDispatcher {
             : new CompositeCommand(children, `Translate ${total} features`);
         this._history.push(pushed);
         this._fireHistoryChange();
-        this._clearSpatialIndexesForSources(buckets.map((b) => b.sourceId));
+        // `_invalidateShapeCachesForSources` covers both the arc-flag cache
+        // (relevant when a split appended new arcs) and the spatial index.
+        this._invalidateShapeCachesForSources(buckets.map((b) => b.sourceId));
         this._scheduleRender();
         return true;
       },
@@ -3710,6 +3717,9 @@ export class Emap extends EventDispatcher {
         for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
         accumDx = 0;
         accumDy = 0;
+        if (splitCmds.length > 0) {
+          this._invalidateShapeCachesForSources(buckets.map((b) => b.sourceId));
+        }
         this._scheduleRender();
       },
       getAccumulated: (): [number, number] => [accumDx, accumDy],
@@ -3833,7 +3843,9 @@ export class Emap extends EventDispatcher {
               );
         this._history.push(pushed);
         this._fireHistoryChange();
-        this._clearSpatialIndexesForSources(buckets.map((b) => b.sourceId));
+        // `_invalidateShapeCachesForSources` covers both the arc-flag cache
+        // (relevant when a split appended new arcs) and the spatial index.
+        this._invalidateShapeCachesForSources(buckets.map((b) => b.sourceId));
         this._scheduleRender();
         return true;
       },
@@ -3844,6 +3856,9 @@ export class Emap extends EventDispatcher {
         if (!isIdentity(cumulative)) applyMatrix(invertMatrix(cumulative));
         for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
         cumulative = { ...IDENTITY_MATRIX };
+        if (splitCmds.length > 0) {
+          this._invalidateShapeCachesForSources(buckets.map((b) => b.sourceId));
+        }
         this._scheduleRender();
       },
       getCumulative: (): AffineMatrix => ({ ...cumulative }),
