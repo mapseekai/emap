@@ -1619,7 +1619,12 @@ export class Emap extends EventDispatcher {
           arcs.setRetainedInterval &&
           (typeof arcs.isFlat !== 'function' || !arcs.isFlat())
         ) {
-          arcs.setRetainedInterval(pixelSize * 0.5);
+          // User-driven `-simplify` writes a sticky floor on the source.
+          // Per-frame zoom-LOD raises that floor on zoom-out (smaller scale,
+          // bigger pixel) but never below the user's threshold — otherwise
+          // every render would re-introduce detail the user just filtered.
+          const userFloor = source.getSimplifyFloor?.() ?? 0;
+          arcs.setRetainedInterval(Math.max(userFloor, pixelSize * 0.5));
         }
       }
 

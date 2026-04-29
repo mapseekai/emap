@@ -35,6 +35,13 @@ export interface TopologySource extends Source {
    */
   setDataset(dataset: MapshaperDataset): void;
   /**
+   * Sticky simplification floor (in arc-Z units). Set by the most recent
+   * `-simplify` run via `setDataset`; cleared on a fresh load. The render
+   * loop uses this as a lower-bound for `setRetainedInterval` so the
+   * per-frame zoom-LOD never re-introduces detail the user filtered out.
+   */
+  getSimplifyFloor?(): number;
+  /**
    * Serialize the current in-memory dataset to a browser `Blob`.
    *
    * Always emits full-detail geometry; the source's render-time LOD interval

@@ -84,6 +84,18 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   private _data: TopologySourceInput | undefined;
   private _loadVersion: number = 0;
   private _abortController: AbortController | null = null;
+  /**
+   * Sticky simplification floor. mapshaper's `-simplify` writes a
+   * `retainedInterval` into the resulting `ArcCollection`; we cache that
+   * value here so the render loop's per-frame zoom-LOD doesn't stomp it.
+   * Re-captured on every `setDataset` / `setData`.
+   */
+  private _simplifyFloor: number = 0;
+
+  /** Max-detail threshold the user (or last `-simplify` run) asked for. */
+  getSimplifyFloor(): number {
+    return this._simplifyFloor;
+  }
 
   constructor(id: string, options?: TopologySourceOptions) {
     super();
@@ -274,6 +286,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       if (this._dataset?.arcs) {
         this._displayArcs = new DisplayArcs(this._dataset.arcs);
       }
+      this._simplifyFloor = this._dataset?.arcs?.getRetainedInterval?.() ?? 0;
 
       this.fire('data', { reason: 'load' });
     } catch (err: any) {
@@ -460,6 +473,9 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     } else {
       this._displayArcs = null;
     }
+    // Re-capture the simplification floor: mapshaper's `-simplify` writes
+    // a non-zero `retainedInterval` here; other ops typically leave it at 0.
+    this._simplifyFloor = dataset.arcs?.getRetainedInterval?.() ?? 0;
     // `replace` distinguishes edit-driven dataset swaps from initial `load` —
     // listeners that auto-fit the viewport should only react to `load`.
     this.fire('data', { reason: 'replace' });
