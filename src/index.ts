@@ -5,6 +5,7 @@ export { Emap } from './map/map';
 export type {
   QueryRenderedFeaturesOptions,
   RenderedFeatureAttributes,
+  ExpressionEvaluationPolicy,
   FeatureRef,
   HighlightFeatureRef,
   HighlightStyle,

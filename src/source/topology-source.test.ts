@@ -282,6 +282,27 @@ describe('TopologySource.setData multi-file', () => {
   afterEach(() => {
     Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
     Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+    vi.unstubAllGlobals();
+  });
+
+  it('fromUrl resolves after loading a URL-backed dataset', async () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const fetchSpy = vi.fn(async () => ({
+      ok: true,
+      headers: { get: () => 'application/geo+json' },
+      arrayBuffer: async () => bytes.buffer,
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const source = await TopologySource.fromUrl('url-source', 'https://example.test/data.geojson');
+
+    expect(source.id).toBe('url-source');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://example.test/data.geojson',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-i "data.geojson"');
+    expect(source.getDataset()?.info?._injected['data.geojson']).toEqual(bytes);
   });
 
   it('emits one -i command listing every primary file when given an array', async () => {

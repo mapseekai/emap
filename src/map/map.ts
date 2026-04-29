@@ -39,6 +39,8 @@ import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types'
 import type { DrawGeometryType } from '../ui/draw-feature-control';
 import type { CanvasKit } from 'canvaskit-wasm';
 
+export type ExpressionEvaluationPolicy = 'trusted' | 'disabled';
+
 export interface MapOptions {
   container: string | HTMLElement;
   interactive?: boolean;
@@ -53,6 +55,14 @@ export interface MapOptions {
    * @experimental This feature is experimental and may have performance issues with large datasets.
    */
   canvasKit?: CanvasKit;
+  /**
+   * Controls APIs that forward JavaScript expressions to mapshaper
+   * (`applyExpression`, `filterFeatures`, `sortFeatures`, `splitLayer`, and
+   * command options such as `where` / `calc`). Defaults to `'trusted'` for
+   * backward compatibility. Set to `'disabled'` when strings may come from
+   * untrusted end users.
+   */
+  expressionPolicy?: ExpressionEvaluationPolicy;
   /**
    * Routing for dataset-replace operations (clip, dissolve, union,
    * mosaic, simplify, project, ...).
@@ -950,6 +960,7 @@ export class Emap extends EventDispatcher {
   // Vertex-count threshold for the 'auto' mode. Defaults to
   // `DEFAULT_WORKER_THRESHOLD` (50_000).
   private _workerThreshold: number = DEFAULT_WORKER_THRESHOLD;
+  private _expressionPolicy: ExpressionEvaluationPolicy = 'trusted';
 
   constructor(options: MapOptions) {
     super();
@@ -1005,6 +1016,7 @@ export class Emap extends EventDispatcher {
 
     // Set up the worker pool eagerly when requested. Construction is cheap;
     // the underlying Worker is lazy-spawned on first run().
+    this._expressionPolicy = options.expressionPolicy ?? 'trusted';
     this._workerMode = options.useWorker ?? false;
     if (typeof options.workerThreshold === 'number' && options.workerThreshold >= 0) {
       this._workerThreshold = options.workerThreshold;
@@ -1031,6 +1043,23 @@ export class Emap extends EventDispatcher {
    */
   public cancelWorkerJobs(): void {
     this._workerPool?.cancelAll();
+  }
+
+  public setExpressionPolicy(policy: ExpressionEvaluationPolicy): void {
+    this._expressionPolicy = policy;
+  }
+
+  public getExpressionPolicy(): ExpressionEvaluationPolicy {
+    return this._expressionPolicy ?? 'trusted';
+  }
+
+  private _allowExpressionEvaluation(values: Array<string | undefined>, operation: string): boolean {
+    const hasExpression = values.some((value) => typeof value === 'string' && value.trim().length > 0);
+    if (!hasExpression || this.getExpressionPolicy() === 'trusted') return true;
+    this.fire('error', {
+      error: new Error(`${operation}: expression evaluation is disabled`),
+    });
+    return false;
   }
 
 
@@ -1763,6 +1792,12 @@ export class Emap extends EventDispatcher {
     this._featureQuery.clear(sourceId);
   }
 
+  private _clearSpatialIndexesForSources(sourceIds: Iterable<string>): void {
+    for (const sourceId of sourceIds) {
+      this._featureQuery?.clear(sourceId);
+    }
+  }
+
   public setHighlightedFeatures(
     features: Array<RenderedFeatureAttributes | HighlightFeatureRef>,
     style?: HighlightStyle,
@@ -2087,6 +2122,7 @@ export class Emap extends EventDispatcher {
     if (opts.field !== undefined && (typeof opts.field !== 'string' || opts.field.includes(','))) {
       return false;
     }
+    if (!this._allowExpressionEvaluation([opts.calc, opts.where], 'dissolveLayer')) return false;
 
     // Build the positional group-by token (single-field convenience or
     // multi-field array). When neither is set, dissolve collapses every
@@ -2160,6 +2196,9 @@ export class Emap extends EventDispatcher {
     } else if (typeof opts.radius !== 'string' || opts.radius.trim().length === 0) {
       return false;
     }
+    if (typeof opts.radius === 'string' && !this._allowExpressionEvaluation([opts.radius], 'bufferLayer')) {
+      return false;
+    }
 
     // Numbers go in bare; expression strings are quoted so the shell-style
     // command parser keeps them intact.
@@ -2191,6 +2230,7 @@ export class Emap extends EventDispatcher {
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!this._allowExpressionEvaluation([opts.expression, opts.where], 'applyExpression')) return false;
 
     const whereArg = opts.where && opts.where.trim()
       ? ` where=${quoteMapshaperArg(opts.where)}`
@@ -2234,6 +2274,7 @@ export class Emap extends EventDispatcher {
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!this._allowExpressionEvaluation([opts.where], 'innerlinesLayer')) return false;
 
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
@@ -2272,6 +2313,7 @@ export class Emap extends EventDispatcher {
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!this._allowExpressionEvaluation([opts.expression], 'filterFeatures')) return false;
 
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
@@ -2441,6 +2483,7 @@ export class Emap extends EventDispatcher {
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!this._allowExpressionEvaluation([opts.calc], 'mosaicLayer')) return false;
 
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
@@ -2871,6 +2914,7 @@ export class Emap extends EventDispatcher {
     if (!findLayerByName(dataset.layers, opts.target)) return false;
     const expr = (opts.expression ?? '').trim();
     if (expr.length === 0) return false;
+    if (!this._allowExpressionEvaluation([expr], 'splitLayer')) return false;
 
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
@@ -2913,6 +2957,7 @@ export class Emap extends EventDispatcher {
     if (!findLayerByName(dataset.layers, opts.target)) return false;
     const expr = (opts.expression ?? '').trim();
     if (expr.length === 0) return false;
+    if (!this._allowExpressionEvaluation([expr], 'sortFeatures')) return false;
 
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
@@ -2937,6 +2982,7 @@ export class Emap extends EventDispatcher {
     if (!findLayerByName(dataset.layers, opts.target)) return false;
     const expr = (opts.expression ?? '').trim();
     if (expr.length === 0) return false;
+    if (!this._allowExpressionEvaluation([expr], 'uniqueFeatures')) return false;
     if (opts.maxCount !== undefined && !(typeof opts.maxCount === 'number' && opts.maxCount > 0)) {
       return false;
     }
@@ -3183,6 +3229,7 @@ export class Emap extends EventDispatcher {
     } else {
       return false;
     }
+    if (!this._allowExpressionEvaluation([opts.where, opts.calc], 'joinTable')) return false;
 
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
@@ -3311,6 +3358,7 @@ export class Emap extends EventDispatcher {
     if (bySource.size === 0) return false;
 
     const children: EditCommand[] = [];
+    const editedSourceIds: string[] = [];
     for (const [sourceId, bucket] of bySource) {
       const source = this._sources.get(sourceId);
       if (!source) continue;
@@ -3326,6 +3374,7 @@ export class Emap extends EventDispatcher {
       });
       cmd.do();
       children.push(cmd);
+      editedSourceIds.push(sourceId);
     }
 
     if (children.length === 0) return false;
@@ -3336,6 +3385,7 @@ export class Emap extends EventDispatcher {
         : new CompositeCommand(children, `Translate ${refs.length} features`);
     this._history.push(pushed);
     this._fireHistoryChange();
+    this._clearSpatialIndexesForSources(editedSourceIds);
     this._scheduleRender();
     return true;
   }
@@ -3444,6 +3494,7 @@ export class Emap extends EventDispatcher {
     const matrix = matrixForOrigin(ox, oy);
 
     const children: EditCommand[] = [];
+    const editedSourceIds: string[] = [];
     for (const [sourceId, bucket] of bySource) {
       const source = this._sources.get(sourceId);
       if (!source) continue;
@@ -3458,6 +3509,7 @@ export class Emap extends EventDispatcher {
       });
       cmd.do();
       children.push(cmd);
+      editedSourceIds.push(sourceId);
     }
 
     if (children.length === 0) return false;
@@ -3468,6 +3520,7 @@ export class Emap extends EventDispatcher {
         : new CompositeCommand(children, labelFor(refs.length));
     this._history.push(pushed);
     this._fireHistoryChange();
+    this._clearSpatialIndexesForSources(editedSourceIds);
     this._scheduleRender();
     return true;
   }

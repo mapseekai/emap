@@ -44,9 +44,11 @@ export class BasemapControl implements Control {
   private _styles: BasemapStyle[];
   private _activeStyle: BasemapStyle | null = null;
   private _isOn: boolean = false;
+  private _syncBasemapBound: () => void;
 
   constructor(options: BasemapOptions = {}) {
     this._styles = options.styles || DEFAULT_STYLES;
+    this._syncBasemapBound = this._syncBasemap.bind(this);
   }
 
   onAdd(map: Emap): HTMLElement {
@@ -69,7 +71,7 @@ export class BasemapControl implements Control {
     this._createBasemapLayer();
 
     // Listen for map move events to sync basemap
-    this._map.on('move', this._syncBasemap.bind(this));
+    this._map.on('move', this._syncBasemapBound);
 
     return this._container;
   }
@@ -220,6 +222,9 @@ export class BasemapControl implements Control {
   }
 
   onRemove(): void {
+    if (this._map) {
+      this._map.off('move', this._syncBasemapBound);
+    }
     if (this._maplibreMap) {
       this._maplibreMap.remove();
       this._maplibreMap = null;

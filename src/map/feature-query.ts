@@ -12,8 +12,10 @@ const POINT_BULLSEYE_DIST = 2;
 /** Default pixel threshold for point hit-testing */
 const POINT_HIT_THRESHOLD = 25;
 
+type FlatbushIndex = InstanceType<typeof Flatbush>;
+
 /** Sentinel returned by `_getOrBuildIndex` for layers with no shapes. */
-type IndexedLayer = { index: Flatbush; shapeCount: number } | null;
+type IndexedLayer = { index: FlatbushIndex; shapeCount: number } | null;
 
 interface HitCandidate {
   shape: number[][];

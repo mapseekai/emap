@@ -4,11 +4,12 @@
   "description": "A modern, decoupled rendering engine for mapshaper data",
   "main": "dist/emap.js",
   "module": "dist/emap.mjs",
-  "types": "dist/emap.d.ts",
+  "types": "dist/index.d.ts",
   "scripts": {
     "dev": "rollup -c --environment BUILD:development -w",
     "dev-build": "rollup -c --environment BUILD:development",
-    "build": "rollup -c --environment BUILD:production",
+    "build": "rollup -c --environment BUILD:production && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
     "test": "vitest"
   },
   "keywords": [

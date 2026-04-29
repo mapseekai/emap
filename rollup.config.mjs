@@ -9,6 +9,7 @@ import postcss from 'rollup-plugin-postcss';
 
 const isProduction = process.env.BUILD === 'production';
 const mainOutput = isProduction ? 'dist/emap.js' : 'dist/emap-dev.js';
+const moduleOutput = 'dist/emap.mjs';
 // Worker file is always called emap-worker.js so consumers don't have to
 // branch by build mode. Minified in prod, sourcemapped in dev.
 const workerOutput = 'dist/emap-worker.js';
@@ -63,15 +64,22 @@ export default [
   {
     input: 'src/index.ts',
     external: ['mapshaper'],
-    output: {
-      file: mainOutput,
-      format: 'iife',
-      name: 'emap',
-      sourcemap: true,
-      globals: {
-        mapshaper: 'mapshaper',
+    output: [
+      {
+        file: mainOutput,
+        format: 'iife',
+        name: 'emap',
+        sourcemap: true,
+        globals: {
+          mapshaper: 'mapshaper',
+        },
       },
-    },
+      {
+        file: moduleOutput,
+        format: 'es',
+        sourcemap: true,
+      },
+    ],
     plugins: commonPlugins(),
   },
   // Worker bundle. Same external/global treatment, plus a banner that

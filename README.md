@@ -35,6 +35,7 @@ npm install emap
   </head>
   <body>
     <div id="map"></div>
+    <script src="node_modules/emap/dist/mapshaper-vendor.js"></script>
     <script src="node_modules/emap/dist/emap.js"></script>
     <script>
       const { Emap, TopologySource, NavigationControl, EditToolbar } = emap;
@@ -139,7 +140,8 @@ Build outputs in `dist/`:
 - `emap-dev.js` — development bundle with sourcemaps
 - `emap.js` — production minified bundle
 - `emap.mjs` — ES module
-- `emap.d.ts` — TypeScript declarations
+- `index.d.ts` — TypeScript declarations
+- `mapshaper-vendor.js` — Mapshaper vendor bundle required before the IIFE build
 
 Manual testing: open any `test/examples/*.html` in a browser after building.
 

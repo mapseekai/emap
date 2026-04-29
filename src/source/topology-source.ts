@@ -3,6 +3,7 @@ import { EventDispatcher } from '../core/events';
 import { TopologySource as ITopologySource } from './source';
 import { Bounds } from '../geo/bounds';
 import { unzipSync, strFromU8, zipSync } from 'fflate';
+import type { UnzipFileInfo } from 'fflate';
 import { DisplayArcs } from './display-arcs';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { ExportFormat, ExportOptions } from './source';
@@ -93,6 +94,40 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     if (this._data) {
       this._updateData();
     }
+  }
+
+  /**
+   * Convenience loader for URL-backed sources.
+   *
+   * Resolves after the first successful `data` event and rejects on the first
+   * load `error`, so callers can safely add the returned source to a map.
+   */
+  static async fromUrl(
+    id: string,
+    url: string,
+    options?: Omit<TopologySourceOptions, 'data'>,
+  ): Promise<TopologySource> {
+    const source = new TopologySource(id, options);
+    await new Promise<void>((resolve, reject) => {
+      let onData: () => void;
+      let onError: (event: { error?: unknown }) => void;
+      const cleanup = () => {
+        source.off('data', onData);
+        source.off('error', onError);
+      };
+      onData = () => {
+        cleanup();
+        resolve();
+      };
+      onError = (event) => {
+        cleanup();
+        reject(event?.error ?? event);
+      };
+      source.on('data', onData);
+      source.on('error', onError);
+      source.setData(url);
+    });
+    return source;
   }
 
   /**
@@ -499,33 +534,44 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
   private _extractZip(data: Uint8Array): Record<string, Uint8Array | string> {
     const limits = { ...DEFAULT_ZIP_LIMITS, ...this._options.zipLimits };
-    const unzipped = unzipSync(data);
+    let uncompressedTotal = 0;
+    let entryCount = 0;
 
-    const entryNames = Object.keys(unzipped);
-    if (entryNames.length > limits.maxEntries) {
-      throw new Error(
-        `ZIP extraction limit exceeded: ${entryNames.length} entries > maxEntries ${limits.maxEntries}`,
-      );
-    }
+    const unzipped = unzipSync(data, {
+      filter: (file: UnzipFileInfo) => {
+        entryCount++;
+        if (entryCount > limits.maxEntries) {
+          throw new Error(
+            `ZIP extraction limit exceeded: ${entryCount} entries > maxEntries ${limits.maxEntries}`,
+          );
+        }
+
+        uncompressedTotal += file.originalSize;
+        if (uncompressedTotal > limits.maxBytes) {
+          throw new Error(
+            `ZIP extraction limit exceeded: uncompressed total ${uncompressedTotal} > maxBytes ${limits.maxBytes}`,
+          );
+        }
+
+        if (data.byteLength > 0) {
+          const ratio = uncompressedTotal / data.byteLength;
+          if (ratio > limits.maxRatio) {
+            throw new Error(
+              `ZIP extraction limit exceeded: ratio ${ratio.toFixed(1)} > maxRatio ${limits.maxRatio}`,
+            );
+          }
+        }
+
+        // Skip metadata and dot files before inflating their payloads. They are
+        // still counted above, so they cannot hide bytes or entry count.
+        return !(/^__MACOSX/.test(file.name) || file.name.split('/').pop()?.startsWith('.'));
+      },
+    });
 
     const result: Record<string, Uint8Array | string> = {};
-    let uncompressedTotal = 0;
 
-    for (const path of entryNames) {
+    for (const path of Object.keys(unzipped)) {
       const content = unzipped[path];
-      uncompressedTotal += content.byteLength;
-      if (uncompressedTotal > limits.maxBytes) {
-        throw new Error(
-          `ZIP extraction limit exceeded: uncompressed total ${uncompressedTotal} > maxBytes ${limits.maxBytes}`,
-        );
-      }
-
-      // Skip __MACOSX and dot files (still counted toward the byte/entry totals
-      // — a malicious zip can't hide bytes behind those prefixes).
-      if (/^__MACOSX/.test(path) || path.split('/').pop()?.startsWith('.')) {
-        continue;
-      }
-
       const filename = path.split('/').pop() || path;
 
       // Convert text files to strings
@@ -533,15 +579,6 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         result[filename] = strFromU8(content);
       } else {
         result[filename] = content;
-      }
-    }
-
-    if (data.byteLength > 0) {
-      const ratio = uncompressedTotal / data.byteLength;
-      if (ratio > limits.maxRatio) {
-        throw new Error(
-          `ZIP extraction limit exceeded: ratio ${ratio.toFixed(1)} > maxRatio ${limits.maxRatio}`,
-        );
       }
     }
 

@@ -67,6 +67,9 @@ function createBareMap(): Emap {
   setPrivate(map, '_sources', new globalThis.Map());
   setPrivate(map, '_sourceListeners', new globalThis.Map());
   setPrivate(map, '_layers', []);
+  setPrivate(map, '_effectiveLayersCache', []);
+  setPrivate(map, '_defaultLayersDirty', true);
+  setPrivate(map, '_layerArcFlagsCache', new globalThis.Map());
   setPrivate(map, '_pendingRender', 0);
   setPrivate(map, '_rafId', 0);
   setPrivate(map, '_highlightManager', { clearHighlightedFeatures: vi.fn() });
@@ -1465,6 +1468,19 @@ describe('Emap translateSelected', () => {
     map.undo();
     expect(fakeUndo).toHaveBeenCalledTimes(1);
   });
+
+  it('clears spatial indexes for edited sources after translate and affine edits', () => {
+    const clear = vi.fn();
+    setPrivate(map, '_featureQuery', { clear });
+    map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
+
+    map.translateSelected(1, 1);
+    expect(clear).toHaveBeenCalledWith('src1');
+
+    clear.mockClear();
+    map.rotateSelected(10);
+    expect(clear).toHaveBeenCalledWith('src1');
+  });
 });
 
 describe('Emap bufferLayer', () => {
@@ -1648,6 +1664,22 @@ describe('Emap applyExpression', () => {
     expect(parseCommandsSpy.mock.calls[0][0]).toBe(
       '-target "cities" -each "this.kind = \\"city\\""',
     );
+  });
+
+  it('blocks expression execution when expressionPolicy is disabled', async () => {
+    map.setExpressionPolicy('disabled');
+    const errors: Error[] = [];
+    map.on('error', (event: any) => errors.push(event.error));
+
+    const ok = await map.applyExpression({
+      source: 'src1',
+      target: 'cities',
+      expression: 'this.kind = "city"',
+    });
+
+    expect(ok).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(errors[0]?.message).toMatch(/expression evaluation is disabled/);
   });
 });
 
