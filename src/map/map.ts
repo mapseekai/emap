@@ -121,6 +121,25 @@ export interface RenderedFeatureAttributes {
  * Canonical reference to a single feature within a source/layer.
  * Used by selection, highlight, and downstream geometry operations.
  */
+/**
+ * Live "drag" handle for translating the selection without spamming the
+ * undo stack. Returned by {@link Emap.beginTranslateSession}.
+ */
+export interface FeatureTranslateSession {
+  /** Apply an incremental translate; geometry mutates immediately. No history entry. */
+  move(dx: number, dy: number): void;
+  /**
+   * Push ONE cumulative `FeatureTranslateCommand` (or `CompositeCommand`
+   * for multi-source selections) to history and close the session. Returns
+   * `false` when the cumulative offset is zero (nothing to record).
+   */
+  commit(): boolean;
+  /** Roll geometry back to the pre-session state and close. No history entry. */
+  cancel(): void;
+  /** Total `(dx, dy)` applied since the session began. */
+  getAccumulated(): [number, number];
+}
+
 export interface FeatureRef {
   id: number;
   source: string;
@@ -3428,6 +3447,139 @@ export class Emap extends EventDispatcher {
     this._clearSpatialIndexesForSources(editedSourceIds);
     this._scheduleRender();
     return true;
+  }
+
+  /**
+   * Begin a translate "drag session" against the current selection.
+   *
+   * The session lets a UI animate a translate (e.g. follow the cursor)
+   * without spamming the undo stack with one entry per mousemove. Geometry
+   * mutates on every `move(dx, dy)`; only `commit()` pushes a single
+   * cumulative `FeatureTranslateCommand` (or `CompositeCommand`) to history.
+   * `cancel()` rolls the geometry back to the pre-session state and
+   * pushes nothing.
+   *
+   * Returns `null` when the selection is empty. The session captures the
+   * selection at start time — concurrent edits to the selection during
+   * a drag are intentionally ignored.
+   */
+  public beginTranslateSession(): FeatureTranslateSession | null {
+    const refs = this._selection.getAll();
+    if (refs.length === 0) return null;
+
+    type Bucket = {
+      sourceId: string;
+      source: TopologySource;
+      arcIds: number[];
+      pointFeatures: TranslatedPointFeature[];
+    };
+
+    const bySource = new globalThis.Map<string, Bucket>();
+    for (const ref of refs) {
+      const layer = this._resolveLayer(ref.source, ref.layer);
+      if (!layer?.shapes) continue;
+      const shape = layer.shapes[ref.id];
+      if (!shape) continue;
+      const source = this._sources.get(ref.source);
+      if (!source) continue;
+
+      let bucket = bySource.get(ref.source);
+      if (!bucket) {
+        bucket = { sourceId: ref.source, source, arcIds: [], pointFeatures: [] };
+        bySource.set(ref.source, bucket);
+      }
+
+      if (layer.geometry_type === 'point') {
+        bucket.pointFeatures.push({ layer, featureId: ref.id });
+      } else {
+        const seen = new Set<number>(bucket.arcIds);
+        for (const part of shape) {
+          if (!Array.isArray(part)) continue;
+          for (const rawArcId of part) {
+            if (typeof rawArcId !== 'number') continue;
+            const abs = rawArcId >= 0 ? rawArcId : ~rawArcId;
+            if (!seen.has(abs)) {
+              seen.add(abs);
+              bucket.arcIds.push(abs);
+            }
+          }
+        }
+      }
+    }
+
+    if (bySource.size === 0) return null;
+
+    const buckets = Array.from(bySource.values());
+    let accumDx = 0;
+    let accumDy = 0;
+    let closed = false;
+
+    const applyStep = (dx: number, dy: number) => {
+      for (const b of buckets) {
+        if (b.arcIds.length === 0 && b.pointFeatures.length === 0) continue;
+        new FeatureTranslateCommand({
+          source: b.source,
+          arcs: b.source.getArcs(),
+          dx,
+          dy,
+          arcIds: b.arcIds,
+          pointFeatures: b.pointFeatures,
+        }).do();
+      }
+    };
+
+    return {
+      move: (dx: number, dy: number) => {
+        if (closed) return;
+        if (dx === 0 && dy === 0) return;
+        applyStep(dx, dy);
+        accumDx += dx;
+        accumDy += dy;
+        this._scheduleRender();
+      },
+      commit: (): boolean => {
+        if (closed) return false;
+        closed = true;
+        if (accumDx === 0 && accumDy === 0) return false;
+        // Geometry already moved by `move()` calls; build one cumulative
+        // command and push it WITHOUT calling `.do()` — the post-do state
+        // is already live. `undo` will subtract the cumulative offset,
+        // `redo` re-applies it.
+        const children: EditCommand[] = buckets.map((b) =>
+          new FeatureTranslateCommand({
+            source: b.source,
+            arcs: b.source.getArcs(),
+            dx: accumDx,
+            dy: accumDy,
+            arcIds: b.arcIds,
+            pointFeatures: b.pointFeatures,
+          }),
+        );
+        const total = buckets.reduce(
+          (n, b) => n + b.arcIds.length + b.pointFeatures.length,
+          0,
+        );
+        const pushed: EditCommand =
+          children.length === 1
+            ? children[0]
+            : new CompositeCommand(children, `Translate ${total} features`);
+        this._history.push(pushed);
+        this._fireHistoryChange();
+        this._clearSpatialIndexesForSources(buckets.map((b) => b.sourceId));
+        this._scheduleRender();
+        return true;
+      },
+      cancel: () => {
+        if (closed) return;
+        closed = true;
+        if (accumDx === 0 && accumDy === 0) return;
+        applyStep(-accumDx, -accumDy);
+        accumDx = 0;
+        accumDy = 0;
+        this._scheduleRender();
+      },
+      getAccumulated: (): [number, number] => [accumDx, accumDy],
+    };
   }
 
   /**

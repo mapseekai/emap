@@ -7,6 +7,7 @@ export type {
   RenderedFeatureAttributes,
   ExpressionEvaluationPolicy,
   FeatureRef,
+  FeatureTranslateSession,
   HighlightFeatureRef,
   HighlightStyle,
   ClipEraseOptions,
