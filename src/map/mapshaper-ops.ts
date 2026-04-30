@@ -6,6 +6,7 @@
 import mapshaper from 'mapshaper';
 import { DatasetReplaceCommand } from '../edit/commands/dataset-replace';
 import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
+import type { EmapHostInternal } from './emap-host';
 import type {
   ApplyExpressionOptions,
   BufferOptions,
@@ -45,7 +46,7 @@ import type {
  * routes them through the optional worker pool.
  */
 export class MapshaperOps {
-  constructor(private _emap: any) {}
+  constructor(private _emap: EmapHostInternal) {}
 
   async clipLayer(opts: ClipEraseOptions): Promise<boolean> {
     return this._runClipErase(opts, 'clip');
@@ -1283,7 +1284,6 @@ export class MapshaperOps {
    * a spinner without per-call wiring.
    */
   async _runViaWorker(
-    this: any,
     dataset: MapshaperDataset,
     cmd: string,
     label: string,
@@ -1326,12 +1326,15 @@ export class MapshaperOps {
   }
 
   async _runDatasetCommand(
-    this: any,
     sourceId: string,
     cmd: string,
     label: string,
     inputFiles?: Record<string, Uint8Array | string>,
   ): Promise<boolean> {
+    // Stage A: pre-flight bail. If the host is already torn down, skip
+    // the entire command — there is no UI left to update.
+    if (this._emap._removed) return false;
+
     const source = this._emap._sources.get(sourceId);
     if (!source) return false;
     const original = source.getDataset();
@@ -1364,11 +1367,20 @@ export class MapshaperOps {
         after = await runMapshaperCommandOnDataset(cmd, original, inputFiles);
       }
     } catch (err) {
+      // Stage B: post-await error path. If the host is gone, swallow the
+      // error silently — listeners are detached and surfacing it would
+      // only confuse callers awaiting a clean shutdown.
+      if (this._emap._removed) return false;
       // Surface as a fire-and-forget error event; do not throw from a public
       // edit op so that one bad command doesn't tear down the calling page.
       this._emap.fire('error', { error: err });
       return false;
     }
+
+    // Stage C: post-await success path. Drop the result on the floor if
+    // the host was removed mid-await; mutating `_sources` / `_history`
+    // now would either crash or resurrect freed state.
+    if (this._emap._removed) return false;
 
     // Apply: swap the source's active dataset.
     source.setDataset(after);

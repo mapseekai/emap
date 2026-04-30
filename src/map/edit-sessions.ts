@@ -22,6 +22,7 @@ import {
 import type { EditCommand } from '../edit/edit-command';
 import type { TopologySource } from '../source/source';
 import type { MapshaperLayer } from '../types/mapshaper-types';
+import type { EmapHostInternal } from './emap-host';
 import type {
   DragSessionOptions,
   FeatureTranslateSession,
@@ -34,7 +35,7 @@ import type {
  * plus the live "drag" sessions (see {@link FeatureTranslateSession}).
  */
 export class EditSessions {
-  constructor(private _emap: any) {}
+  constructor(private _emap: EmapHostInternal) {}
 
   translateSelected(dx: number, dy: number): boolean {
     if (dx === 0 && dy === 0) return false;

@@ -58,7 +58,9 @@
   <script src="../../dist/emap-dev.js"></script>
   <script>
     const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    const map = new Emap({ container: 'map' });
+    // Join supports `where=` / `calc=` expressions; opt in to evaluation.
+    // The library default is `'disabled'` for safety.
+    const map = new Emap({ container: 'map', expressionPolicy: 'trusted' });
     map.addControl(new NavigationControl(), 'top-left');
     map.addControl(new HistoryControl(), 'top-left');
     map.bindHistoryShortcuts();

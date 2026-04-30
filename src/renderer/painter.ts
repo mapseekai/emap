@@ -26,11 +26,15 @@ export interface DrawOverlayState {
   drawColor: string;
 }
 
-export interface Painter {
+/**
+ * Stateless drawing primitives: enough to render basemap topology, points,
+ * polygons, and arc highlights. Anything that paints actual map content
+ * should depend on `CorePainter`, not the broader `Painter`/`EditPainter`.
+ */
+export interface CorePainter {
   drawPaths(shapes: any[], style: StrokeStyle, arcs: ArcCollection): void;
   drawArcs(arcs: ArcCollection, style: StrokeStyle, filter?: (i: number) => boolean): void;
   drawPoints(shapes: any[], style: PointStyle): void;
-  drawVertexDots(shapes: any[], arcs: ArcCollection, style: VertexDotStyle): void;
   drawPolygonFill(
     shapes: any[],
     arcs: ArcCollection,
@@ -38,12 +42,28 @@ export interface Painter {
     filter?: (i: number) => boolean,
     opacity?: number,
   ): void;
-  drawDrawingOverlay(state: DrawOverlayState): void;
   clear(): void;
   resize(width: number, height: number): void;
   setTransform(transform: AffineTransform): void;
   setPixelRatio(ratio: number): void;
 }
+
+/**
+ * Adds the edit-mode-only overlay primitives — vertex dots and the
+ * draw-overlay state machine — on top of `CorePainter`. Code that does
+ * not paint editing affordances should not depend on this interface.
+ */
+export interface EditPainter extends CorePainter {
+  drawVertexDots(shapes: any[], arcs: ArcCollection, style: VertexDotStyle): void;
+  drawDrawingOverlay(state: DrawOverlayState): void;
+}
+
+/**
+ * Legacy alias preserved for callers that already import `Painter`.
+ * The full painter interface is the edit-aware one because every
+ * existing concrete painter (`CanvasPainter`) implements both halves.
+ */
+export type Painter = EditPainter;
 
 export interface RenderOptions {
   antialias?: boolean;

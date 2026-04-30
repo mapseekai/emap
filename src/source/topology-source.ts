@@ -7,6 +7,10 @@ import type { UnzipFileInfo } from 'fflate';
 import { DisplayArcs } from './display-arcs';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { ExportFormat, ExportOptions } from './source';
+import {
+  getDefaultMapshaperRunner,
+  type MapshaperRunner,
+} from './mapshaper-runner';
 
 export type TopologySourceData = string | { filename: string, content: Uint8Array };
 
@@ -73,6 +77,13 @@ const DEFAULT_ZIP_LIMITS: Required<ZipExtractionLimits> = {
 export interface TopologySourceOptions {
   data?: TopologySourceInput;
   zipLimits?: ZipExtractionLimits;
+  /**
+   * Optional injection point for the mapshaper command runner used by
+   * the load path. Defaults to a process-wide singleton that calls
+   * `mapshaper.internal.parseCommands + runParsedCommands` directly.
+   * Tests and instrumentation use this to swap in a mock runner.
+   */
+  mapshaperRunner?: MapshaperRunner;
 }
 
 export class TopologySource extends EventDispatcher implements ITopologySource {
@@ -91,6 +102,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * Re-captured on every `setDataset` / `setData`.
    */
   private _simplifyFloor: number = 0;
+  private _runner: MapshaperRunner;
 
   /** Max-detail threshold the user (or last `-simplify` run) asked for. */
   getSimplifyFloor(): number {
@@ -102,6 +114,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     this.id = id;
     this._options = options || {};
     this._data = this._options.data;
+    this._runner = this._options.mapshaperRunner ?? getDefaultMapshaperRunner();
 
     if (this._data) {
       this._updateData();
@@ -256,26 +269,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       // sized files unusable. Callers run `Emap.ops.cleanLayer()` /
       // `source.simplifyArcs()` explicitly when they need those passes.
       const cmd = `-i ${primaryFiles.map((f) => `"${f.replace(/"/g, '\\"')}"`).join(' ')}`;
-      const commands = mapshaper.internal.parseCommands(cmd);
-
-      // Inject input files into the import command
-      if (commands.length > 0 && commands[0].name === 'i') {
-        commands[0].options.input = inputFiles;
-      }
-
-      const dataset: MapshaperDataset = await new Promise((resolve, reject) => {
-        mapshaper.internal.runParsedCommands(commands, new mapshaper.internal.Job(), (err: any, job: any) => {
-          if (err) reject(err);
-          else {
-            const targets = job.catalog.getDefaultTargets();
-            if (targets.length > 0) {
-              resolve(targets[0].dataset);
-            } else {
-              reject(new Error('No layers found in dataset'));
-            }
-          }
-        });
-      });
+      const dataset: MapshaperDataset = await this._runner.runImport(cmd, inputFiles);
 
       // Stale guard: another setData superseded this run while it was awaiting.
       // Drop the result silently — the live chain owns the next data/error.

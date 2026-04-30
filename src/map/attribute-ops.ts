@@ -7,6 +7,7 @@ import { FieldAddCommand } from '../edit/commands/field-add';
 import { FieldRemoveCommand } from '../edit/commands/field-remove';
 import { FieldRenameCommand } from '../edit/commands/field-rename';
 import type { FeatureRef } from './types';
+import type { EmapHostInternal } from './emap-host';
 
 /**
  * Attribute-editing manager. Owned by Emap and exposed as `emap.attributes`.
@@ -14,7 +15,7 @@ import type { FeatureRef } from './types';
  * surface of internal helpers (`_resolveLayer`, `_history`, ...) on the host.
  */
 export class AttributeOps {
-  constructor(private _emap: any) {}
+  constructor(private _emap: EmapHostInternal) {}
 
   setFeatureProperty(ref: FeatureRef, key: string, value: unknown): boolean {
     return this.setFeatureProperties(ref, { [key]: value });

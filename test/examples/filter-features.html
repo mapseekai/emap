@@ -43,7 +43,9 @@
   <script src="../../dist/emap-dev.js"></script>
   <script>
     const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
-    const map = new Emap({ container: 'map' });
+    // Filter expressions need `expressionPolicy: 'trusted'`; the library
+    // default is `'disabled'`.
+    const map = new Emap({ container: 'map', expressionPolicy: 'trusted' });
     map.addControl(new NavigationControl(), 'top-left');
     map.addControl(new HistoryControl(), 'top-left');
     map.bindHistoryShortcuts();
