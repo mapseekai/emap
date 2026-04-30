@@ -109,8 +109,8 @@
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        source.on('data', () => {
-          map.setExtent(source.getExtent());
+        source.on('data', ({ reason }) => {
+          if (reason === 'load') map.setExtent(source.getExtent());
           populate(source);
           status.textContent = `已加载 ${file.name}。粘贴 CSV、配置键,然后 Join。`;
         });

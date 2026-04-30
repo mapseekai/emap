@@ -53,27 +53,29 @@
 
     // Toolbar with both polyline and polygon draw — both consume the same
     // snap settings via re-creation when "应用吸附设置" is clicked.
-    let drawPoly, drawLine;
+    let toolbar = null;
     function buildDrawTools() {
       const threshold = Number(document.getElementById('snap-threshold').value) || 12;
       const snapToVertex = document.getElementById('snap-vertex').checked;
       const snapToEdge = document.getElementById('snap-edge').checked;
 
-      // Tear down previous instances if any.
-      if (drawPoly) drawPoly.onRemove?.();
-      if (drawLine) drawLine.onRemove?.();
+      // Tear down the previous toolbar (and via EditToolbar, its child
+      // DrawFeatureControl instances). Skipping this leaves stale mouse
+      // listeners alive that ignore the latest snap settings.
+      if (toolbar) {
+        try { map.removeControl(toolbar); } catch (_) {}
+        toolbar = null;
+      }
 
-      drawPoly = new DrawFeatureControl({
+      const drawPoly = new DrawFeatureControl({
         source: SOURCE_ID, type: 'polygon',
         snapThreshold: threshold, snapToVertex, snapToEdge,
       });
-      drawLine = new DrawFeatureControl({
+      const drawLine = new DrawFeatureControl({
         source: SOURCE_ID, type: 'polyline',
         snapThreshold: threshold, snapToVertex, snapToEdge,
       });
-      const toolbar = new EditToolbar({ controls: [drawPoly, drawLine] });
-      // Re-add toolbar (a bit hacky but example-grade)
-      try { map.removeControl?.(toolbar); } catch (_) {}
+      toolbar = new EditToolbar({ controls: [drawPoly, drawLine] });
       map.addControl(toolbar, 'top-right');
     }
     buildDrawTools();
@@ -89,8 +91,8 @@
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        source.on('data', () => {
-          map.setExtent(source.getExtent());
+        source.on('data', ({ reason }) => {
+          if (reason === 'load') map.setExtent(source.getExtent());
           status.textContent = `已加载 ${file.name}。选工具开始绘制,光标靠近已有顶点 / 边时会吸附。`;
         });
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);

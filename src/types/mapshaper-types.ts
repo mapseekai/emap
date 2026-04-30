@@ -134,6 +134,12 @@ export interface VertexDotStyle {
   dotColor?: string;
   dotRadius?: number;
   hoverVertex?: [number, number] | null;
+  /**
+   * Distinguishes a vertex hover (drawn as a circle) from an interpolated
+   * edge-midpoint hover (drawn as a square — drag-to-insert affordance).
+   * Defaults to `'vertex'` when omitted.
+   */
+  hoverType?: 'vertex' | 'interpolated' | null;
   hoverColor?: string;
   hoverRadius?: number;
   /** Fill color for polygon shapes in vertex edit mode */

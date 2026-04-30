@@ -121,8 +121,8 @@
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        source.on('data', () => {
-          map.setExtent(source.getExtent());
+        source.on('data', ({ reason }) => {
+          if (reason === 'load') map.setExtent(source.getExtent());
           populate(source);
           status.textContent = `已加载 ${file.name}。`;
         });
@@ -164,9 +164,22 @@
       btn.disabled = true;
       try {
         const ok = await map.simplifyLayer(opts);
-        status.textContent = ok
-          ? `已简化 ${label} (${mode}=${raw})。Ctrl+Z 撤销。`
-          : '简化失败 (检查阈值是否合法)。';
+        if (ok) {
+          // Render-LOD verification: floor is what `-simplify` baked into
+          // the arcs; filtered count is how many vertices survive at that
+          // floor. Both are independent of the current zoom level.
+          const arcs = map.getSource(SOURCE_ID)?.getArcs?.();
+          const total = arcs?.getPointCount?.() ?? 0;
+          const floor = arcs?.getRetainedInterval?.() ?? 0;
+          const kept = arcs?.getFilteredPointCount?.() ?? total;
+          const dropped = total - kept;
+          const pct = total > 0 ? ((kept / total) * 100).toFixed(1) : '0';
+          status.textContent =
+            `已简化 ${label} (${mode}=${raw}): 保留 ${kept}/${total} 顶点 (${pct}%, 丢弃 ${dropped}), ` +
+            `floor=${floor.toExponential(2)}。Ctrl+Z 撤销。`;
+        } else {
+          status.textContent = '简化失败 (检查阈值是否合法)。';
+        }
         const src = map.getSource(SOURCE_ID);
         if (src) populate(src);
       } catch (err) {

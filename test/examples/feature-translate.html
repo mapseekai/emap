@@ -45,7 +45,7 @@
       文件:
       <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
     </label>
-    <span class="hint">点击要素选中,方向键步进 1 个单位,Shift+方向键步进 10。Ctrl+Z 撤销。</span>
+    <span class="hint">点击要素选中 → 鼠标移动跟随平移 → 再次单击落位。共享边界自动复制,相邻未选要素保持原位。右键或 Esc 取消。方向键步进(不复制共享边)。Ctrl+Z 撤销。</span>
     <span id="status">加载数据</span>
   </div>
   <div id="map" tabindex="0"></div>
@@ -82,8 +82,8 @@
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        source.on('data', () => {
-          map.setExtent(source.getExtent());
+        source.on('data', ({ reason }) => {
+          if (reason === 'load') map.setExtent(source.getExtent());
           status.textContent = `已加载 ${file.name}。点击要素选中,方向键平移。`;
           // 聚焦 map 容器,让方向键事件被它接收
           document.getElementById('map').focus();
@@ -95,7 +95,40 @@
       reader.readAsArrayBuffer(file);
     });
 
+    // Cursor-follow drag: 1st click selects + opens a translate session,
+    // mousemove streams (dx, dy) into the session in source-data coords,
+    // 2nd click commits one cumulative undo entry. Esc / right-click cancels.
+    let session = null;
+    let lastMapCoord = null;
+
+    function pixelToMap(e) {
+      const rect = mapContainer.getBoundingClientRect();
+      return map.unproject(e.clientX - rect.left, e.clientY - rect.top);
+    }
+
+    function endSession(commit) {
+      if (!session) return;
+      if (commit) {
+        const [adx, ady] = session.getAccumulated();
+        const pushed = session.commit();
+        status.textContent = pushed
+          ? `已落位 (${adx.toFixed(2)}, ${ady.toFixed(2)})。Ctrl+Z 撤销。`
+          : '已取消(零位移)。';
+      } else {
+        session.cancel();
+        status.textContent = '已取消本次拖动。';
+      }
+      session = null;
+      lastMapCoord = null;
+    }
+
     mapContainer.addEventListener('click', (e) => {
+      // 2nd click → commit drag and exit session.
+      if (session) {
+        endSession(true);
+        return;
+      }
+
       const rect = mapContainer.getBoundingClientRect();
       const point = [e.clientX - rect.left, e.clientY - rect.top];
       const features = map.queryRenderedFeatures(point);
@@ -106,9 +139,41 @@
       const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
       map.select(features, { mode });
       document.getElementById('map').focus();
+
+      // Open a drag session against the post-click selection.
+      session = map.beginTranslateSession();
+      if (session) {
+        lastMapCoord = pixelToMap(e);
+        status.textContent = '拖动鼠标平移,再次单击落位,Esc / 右键取消。';
+      }
     });
 
+    mapContainer.addEventListener('mousemove', (e) => {
+      if (!session) return;
+      const cur = pixelToMap(e);
+      if (lastMapCoord) {
+        session.move(cur[0] - lastMapCoord[0], cur[1] - lastMapCoord[1]);
+      }
+      lastMapCoord = cur;
+    });
+
+    mapContainer.addEventListener('contextmenu', (e) => {
+      if (!session) return;
+      e.preventDefault();
+      endSession(false);
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && session) {
+        e.preventDefault();
+        endSession(false);
+        return;
+      }
+    });
+
+    // Arrow-key step nudge still works when no session is active.
     document.getElementById('map').addEventListener('keydown', (e) => {
+      if (session) return; // drag in progress — let mouse own the movement
       const stride = e.shiftKey ? 10 : 1;
       let dx = 0, dy = 0;
       if (e.key === 'ArrowLeft') dx = -stride;
@@ -119,7 +184,7 @@
       e.preventDefault();
       const ok = map.translateSelected(dx, dy);
       if (ok) {
-        status.textContent = `已平移 (${dx}, ${dy}),Ctrl+Z 撤销。`;
+        status.textContent = `已步进 (${dx}, ${dy}),Ctrl+Z 撤销。`;
       }
     });
   </script>

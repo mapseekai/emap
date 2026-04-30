@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 面填充 (Fill) 与轮廓 (Line) 切换</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header select, #header input[type="color"], #header input[type="number"], #header input[type="range"] {
+      padding: 3px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; background: #fff;
+    }
+    #header input[type="color"] { padding: 0; height: 26px; width: 38px; }
+    #header input[type="number"] { width: 60px; }
+    #header label { display: inline-flex; align-items: center; gap: 4px; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .group { display: flex; gap: 6px; align-items: center; padding: 0 4px; border-left: 1px solid #4a5d70; }
+    .group:first-child { border-left: 0; padding-left: 0; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <span class="group">
+      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    </span>
+    <span class="group">
+      <label>面图层:
+        <select id="target"></select>
+      </label>
+    </span>
+    <span class="group">
+      <label><input type="radio" name="mode" value="line" checked /> 轮廓 (line)</label>
+      <label><input type="radio" name="mode" value="fill" /> 填充 (fill)</label>
+    </span>
+    <span class="group" id="fill-group" style="opacity:0.5">
+      <label>填充: <input id="fill-color" type="color" value="#1e88e5" /></label>
+      <label>不透明度: <input id="fill-alpha" type="range" min="0" max="100" value="35" /> <span id="fill-alpha-out">0.35</span></label>
+    </span>
+    <span class="group">
+      <label>描边: <input id="line-color" type="color" value="#222222" /></label>
+      <label>线宽: <input id="line-width" type="number" min="0" max="10" step="0.5" value="1" /></label>
+    </span>
+    <span id="status">加载一个含 polygon 图层的文件</span>
+    <span class="hint">
+      <code>type: 'line'</code> 只画弧;
+      <code>type: 'fill'</code> 先 <code>drawPolygonFill</code> 填面再 <code>drawPaths</code> 画轮廓——同一份共享 paint 决定两者样式。
+      <code>fill-opacity</code> 通过 canvas <code>globalAlpha</code> 叠在 <code>fill-color</code> 自带的 alpha 之上(MapLibre 语义)。
+      切换时通过 <code>removeLayer</code> + <code>addLayer</code> 替换图层规格。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/mapshaper-vendor.js"></script>
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+
+    const SOURCE_ID = 'fill-source';
+    const LAYER_ID = 'fill-demo';
+    const targetSel = document.getElementById('target');
+    const fillColor = document.getElementById('fill-color');
+    const fillAlpha = document.getElementById('fill-alpha');
+    const fillAlphaOut = document.getElementById('fill-alpha-out');
+    const lineColor = document.getElementById('line-color');
+    const lineWidth = document.getElementById('line-width');
+    const fillGroup = document.getElementById('fill-group');
+    const status = document.getElementById('status');
+
+    function currentMode() {
+      return document.querySelector('input[name="mode"]:checked').value;
+    }
+
+    // Re-issue the layer spec from current UI state. We always replace
+    // (remove → add) rather than mutating in place, since `type` itself
+    // changes between line and fill modes.
+    function applyLayer() {
+      const target = targetSel.value;
+      if (!target) { status.textContent = '没有 polygon 图层可渲染'; return; }
+      const mode = currentMode();
+      fillGroup.style.opacity = mode === 'fill' ? '1' : '0.5';
+
+      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
+
+      const paint = {
+        'line-color': lineColor.value,
+        'line-width': Number(lineWidth.value) || 0,
+      };
+      if (mode === 'fill') {
+        // `fill-color` is a plain hex; `fill-opacity` multiplies on top —
+        // matches MapLibre semantics, lets the user tune transparency
+        // without mangling the colour string.
+        paint['fill-color'] = fillColor.value;
+        paint['fill-opacity'] = Number(fillAlpha.value) / 100;
+      }
+
+      map.addLayer({
+        id: LAYER_ID,
+        type: mode,
+        source: SOURCE_ID,
+        sourceLayer: target,
+        paint,
+      });
+
+      status.textContent = `当前: ${target} (${mode})`;
+    }
+
+    function populate(source) {
+      targetSel.innerHTML = '';
+      const polygonLayers = source.getLayers().filter((l) => l?.geometry_type === 'polygon');
+      polygonLayers.forEach((lyr, i) => {
+        const name = lyr?.name || `layer-${i}`;
+        targetSel.appendChild(new Option(name, name));
+      });
+      if (polygonLayers.length === 0) {
+        status.textContent = '此文件没有 polygon 图层';
+        return false;
+      }
+      return true;
+    }
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `正在加载 ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', ({ reason }) => {
+          if (reason === 'load') map.setExtent(source.getExtent());
+          if (populate(source)) applyLayer();
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    // Wire every control to re-apply the layer.
+    targetSel.addEventListener('change', applyLayer);
+    document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener('change', applyLayer));
+    fillColor.addEventListener('input', applyLayer);
+    fillAlpha.addEventListener('input', () => {
+      fillAlphaOut.textContent = (Number(fillAlpha.value) / 100).toFixed(2);
+      applyLayer();
+    });
+    lineColor.addEventListener('input', applyLayer);
+    lineWidth.addEventListener('input', applyLayer);
+  </script>
+</body>
+
+</html>

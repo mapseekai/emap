@@ -133,6 +133,25 @@ export function scaleMatrix(sx: number, sy: number, ox = 0, oy = 0): AffineMatri
 }
 
 /**
+ * Compose two matrices: result applies `b` first, then `a`. I.e. for vertex
+ * `v`, `compose(a, b)` is equivalent to `a * b * v` — the same convention
+ * as DOMMatrix and CSS `transform`.
+ */
+export function composeMatrix(a: AffineMatrix, b: AffineMatrix): AffineMatrix {
+  return {
+    a: a.a * b.a + a.c * b.b,
+    b: a.b * b.a + a.d * b.b,
+    c: a.a * b.c + a.c * b.d,
+    d: a.b * b.c + a.d * b.d,
+    tx: a.a * b.tx + a.c * b.ty + a.tx,
+    ty: a.b * b.tx + a.d * b.ty + a.ty,
+  };
+}
+
+/** Identity matrix — useful as the starting cumulative for `composeMatrix`. */
+export const IDENTITY_MATRIX: AffineMatrix = { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 };
+
+/**
  * Analytical inverse. For a non-degenerate `m`, applying `m` then
  * `invertMatrix(m)` is the identity (within floating-point epsilon).
  */

@@ -28,11 +28,14 @@ export class CanvasPainter implements Painter {
   }
 
   drawPaths(shapes: any[], style: StrokeStyle, arcs: ArcCollection): void {
+    // Width 0 means "no outline" — skip the whole pass so callers can use it
+    // to disable strokes (e.g. fill-only polygons) without paying any cost.
+    if (style.width === 0) return;
     const ctx = this._ctx;
     const batchSize = 25; // Mapshaper uses batch of 25 for optimal performance
 
     ctx.strokeStyle = style.color || '#333';
-    ctx.lineWidth = (style.width || 1) * this._pixelRatio;
+    ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -59,12 +62,13 @@ export class CanvasPainter implements Painter {
 
   // Direct arc rendering for maximum performance (bypasses shape iteration)
   drawArcs(arcs: ArcCollection, style: StrokeStyle, filter?: (i: number) => boolean): void {
+    if (style.width === 0) return;
     const ctx = this._ctx;
     const batchSize = 25;
     const n = arcs.size();
 
     ctx.strokeStyle = style.color || '#333';
-    ctx.lineWidth = (style.width || 1) * this._pixelRatio;
+    ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -205,11 +209,22 @@ export class CanvasPainter implements Painter {
     });
     ctx.fill();
 
-    // Draw hover highlight vertex
+    // Draw hover highlight: circle for actual vertex, square for interpolated
+    // edge-midpoint (drag-to-insert affordance) — same convention as
+    // DrawFeatureControl's snap indicator (vertex=⭕, edge=⬜).
     if (hoverPx) {
       ctx.fillStyle = hoverColor;
       ctx.beginPath();
-      ctx.arc(hoverPx[0], hoverPx[1], hoverRadius, 0, Math.PI * 2);
+      if (style.hoverType === 'interpolated') {
+        ctx.rect(
+          hoverPx[0] - hoverRadius,
+          hoverPx[1] - hoverRadius,
+          hoverRadius * 2,
+          hoverRadius * 2,
+        );
+      } else {
+        ctx.arc(hoverPx[0], hoverPx[1], hoverRadius, 0, Math.PI * 2);
+      }
       ctx.fill();
     }
   }
@@ -226,7 +241,13 @@ export class CanvasPainter implements Painter {
     shapes: any[],
     arcs: ArcCollection & { getShapeIter?: (part: number[]) => { x: number; y: number; hasNext(): boolean } },
     fillColor: string,
-    filter?: (i: number) => boolean
+    filter?: (i: number) => boolean,
+    /**
+     * Multiplier on top of `fillColor`'s own alpha. `1` (default) leaves
+     * the colour as-is; `0.5` halves the resulting alpha. Matches MapLibre's
+     * `fill-opacity` semantics — independent of the colour's own alpha.
+     */
+    opacity?: number,
   ): void {
     if (!arcs.getShapeIter) return; // guard: need shape-aware iterator
 
@@ -238,9 +259,19 @@ export class CanvasPainter implements Painter {
     const by = this._transform.by * pr;
 
     ctx.fillStyle = fillColor;
+    const overrideAlpha = typeof opacity === 'number' && opacity !== 1;
+    const prevAlpha = ctx.globalAlpha;
+    if (overrideAlpha) {
+      // `globalAlpha` multiplies into whatever alpha the rgba/hex string
+      // already encodes, so callers can compose color-baked transparency
+      // with this style-level opacity.
+      ctx.globalAlpha = prevAlpha * Math.max(0, Math.min(1, opacity!));
+    }
     
-    // Batch path building to prevent browser freezes on massive datasets
-    const batchSize = 1000;
+    // Smaller batches keep each `fill('evenodd')` call's path object
+    // bounded — Canvas2D engines slow superlinearly with subpath count,
+    // so 100 polygons/flush is the sweet spot for big topology datasets.
+    const batchSize = 100;
     let counts = 0;
 
     ctx.beginPath();
@@ -303,6 +334,7 @@ export class CanvasPainter implements Painter {
     if (counts > 0) {
       ctx.fill('evenodd');
     }
+    if (overrideAlpha) ctx.globalAlpha = prevAlpha;
   }
 
 

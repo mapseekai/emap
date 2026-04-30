@@ -19,11 +19,10 @@
     <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
     <span id="status">加载数据</span>
     <span class="hint">
-      点击要素选中。
-      <kbd>←</kbd>/<kbd>→</kbd>/<kbd>↑</kbd>/<kbd>↓</kbd> 平移。
-      <kbd>[</kbd>/<kbd>]</kbd> 旋转 ±5°。
-      <kbd>+</kbd>/<kbd>-</kbd> 缩放 1.1× / 0.9×。
-      按住 <kbd>Shift</kbd> 微调步长。
+      点击要素选中 → 鼠标移动跟随变换 → 再次单击落位。
+      <kbd>R</kbd> 进入旋转 · <kbd>S</kbd> 进入缩放 · <kbd>T</kbd>(默认) 平移 · <kbd>Esc</kbd>/右键取消。
+      旋转: 鼠标绕枢轴旋转的角度即为变换。 缩放: 鼠标到枢轴的距离比即为缩放因子。
+      平移仍可用 <kbd>←</kbd>/<kbd>→</kbd>/<kbd>↑</kbd>/<kbd>↓</kbd>(空闲时), <kbd>[</kbd>/<kbd>]</kbd>±5° 步进, <kbd>+</kbd>/<kbd>-</kbd> ×1.1/×0.9。
       <kbd>Ctrl+Z</kbd> 撤销。
     </span>
   </div>
@@ -33,7 +32,7 @@
   <script src="../../dist/mapshaper-vendor.js"></script>
   <script src="../../dist/emap-dev.js"></script>
   <script>
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const { Emap, TopologySource, NavigationControl, HistoryControl, rotateMatrix, scaleMatrix } = emap;
     const map = new Emap({ container: 'map' });
     map.addControl(new NavigationControl(), 'top-left');
     map.addControl(new HistoryControl(), 'top-left');
@@ -56,8 +55,8 @@
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        source.on('data', () => {
-          map.setExtent(source.getExtent());
+        source.on('data', ({ reason }) => {
+          if (reason === 'load') map.setExtent(source.getExtent());
           status.textContent = `已加载 ${file.name}。点击要素选中,按键变换。`;
           document.getElementById('map').focus();
         });
@@ -68,7 +67,53 @@
       reader.readAsArrayBuffer(file);
     });
 
+    // Cursor-follow drag: 1st click selects + opens a session in the current
+    // mode (translate / rotate / scale), mousemove streams deltas, 2nd click
+    // commits, Esc / right-click cancels. Use R/S/T to switch mode while idle.
+    let mode = 't';                  // 't' = translate, 'r' = rotate, 's' = scale
+    let translateSession = null;
+    let affineSession = null;        // rotate or scale session
+    let lastMapCoord = null;         // for translate
+    let initialMapCoord = null;      // for rotate / scale (drag start)
+    let prevAngle = 0;               // last delta-rotation reference angle
+    let prevDist = 0;                // last delta-scale reference distance
+
+    function pixelToMap(e) {
+      const rect = mapContainer.getBoundingClientRect();
+      return map.unproject(e.clientX - rect.left, e.clientY - rect.top);
+    }
+
+    function modeLabel() {
+      return mode === 'r' ? '旋转' : mode === 's' ? '缩放' : '平移';
+    }
+
+    function inSession() {
+      return translateSession !== null || affineSession !== null;
+    }
+
+    function endSession(commit) {
+      if (translateSession) {
+        if (commit) {
+          const [adx, ady] = translateSession.getAccumulated();
+          if (translateSession.commit()) status.textContent = `已落位 (${adx.toFixed(2)}, ${ady.toFixed(2)})。`;
+          else status.textContent = '已取消(零位移)。';
+        } else { translateSession.cancel(); status.textContent = '已取消本次拖动。'; }
+        translateSession = null;
+        lastMapCoord = null;
+      } else if (affineSession) {
+        if (commit) {
+          if (affineSession.commit()) status.textContent = `已落位(${modeLabel()})。`;
+          else status.textContent = '已取消(零变换)。';
+        } else { affineSession.cancel(); status.textContent = '已取消本次拖动。'; }
+        affineSession = null;
+        initialMapCoord = null;
+      }
+    }
+
     mapContainer.addEventListener('click', (e) => {
+      // 2nd click commits whatever session is active.
+      if (inSession()) { endSession(true); return; }
+
       const rect = mapContainer.getBoundingClientRect();
       const point = [e.clientX - rect.left, e.clientY - rect.top];
       const features = map.queryRenderedFeatures(point);
@@ -76,18 +121,71 @@
         if (!e.shiftKey && !e.ctrlKey && !e.metaKey) map.clearSelection();
         return;
       }
-      const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
-      map.select(features, { mode });
+      const selMode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
+      map.select(features, { mode: selMode });
       document.getElementById('map').focus();
+
+      // Open a session matching current mode.
+      if (mode === 't') {
+        translateSession = map.beginTranslateSession();
+        if (translateSession) {
+          lastMapCoord = pixelToMap(e);
+          status.textContent = '平移: 拖动鼠标,再次单击落位,Esc 取消。';
+        }
+      } else {
+        affineSession = map.beginAffineSession();
+        if (affineSession) {
+          initialMapCoord = pixelToMap(e);
+          const [ox, oy] = affineSession.origin;
+          prevAngle = Math.atan2(initialMapCoord[1] - oy, initialMapCoord[0] - ox);
+          prevDist = Math.hypot(initialMapCoord[0] - ox, initialMapCoord[1] - oy) || 1;
+          status.textContent = `${modeLabel()}: 拖动鼠标,再次单击落位,Esc 取消。`;
+        }
+      }
     });
 
+    mapContainer.addEventListener('mousemove', (e) => {
+      const cur = pixelToMap(e);
+      if (translateSession) {
+        if (lastMapCoord) translateSession.move(cur[0] - lastMapCoord[0], cur[1] - lastMapCoord[1]);
+        lastMapCoord = cur;
+      } else if (affineSession) {
+        const [ox, oy] = affineSession.origin;
+        if (mode === 'r') {
+          const ang = Math.atan2(cur[1] - oy, cur[0] - ox);
+          const delta = ang - prevAngle;
+          if (delta !== 0) affineSession.applyDelta(rotateMatrix(delta, ox, oy));
+          prevAngle = ang;
+        } else if (mode === 's') {
+          const dist = Math.hypot(cur[0] - ox, cur[1] - oy) || 1;
+          const factor = dist / prevDist;
+          if (factor !== 1) affineSession.applyDelta(scaleMatrix(factor, factor, ox, oy));
+          prevDist = dist;
+        }
+      }
+    });
+
+    mapContainer.addEventListener('contextmenu', (e) => {
+      if (inSession()) { e.preventDefault(); endSession(false); }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && inSession()) { e.preventDefault(); endSession(false); return; }
+      // Mode switch only while idle — switching mid-drag would invalidate state.
+      if (inSession()) return;
+      if (e.key === 't' || e.key === 'T') { mode = 't'; status.textContent = '模式: 平移(点击要素后拖动)。'; }
+      else if (e.key === 'r' || e.key === 'R') { mode = 'r'; status.textContent = '模式: 旋转(点击要素后绕中心拖动)。'; }
+      else if (e.key === 's' || e.key === 'S') { mode = 's'; status.textContent = '模式: 缩放(点击要素后远离/靠近中心拖动)。'; }
+    });
+
+    // Keyboard step nudge stays available while idle.
     document.getElementById('map').addEventListener('keydown', (e) => {
+      if (inSession()) return;
       const fine = e.shiftKey;
       const stride = fine ? 1 : 10;
       const angle = fine ? 1 : 5;
       const scaleStep = fine ? 1.02 : 1.1;
 
-      // 平移
       let dx = 0, dy = 0;
       if (e.key === 'ArrowLeft') dx = -stride;
       else if (e.key === 'ArrowRight') dx = stride;
@@ -95,11 +193,8 @@
       else if (e.key === 'ArrowDown') dy = -stride;
       if (dx || dy) { e.preventDefault(); map.translateSelected(dx, dy); return; }
 
-      // 旋转
       if (e.key === '[') { e.preventDefault(); map.rotateSelected(-angle); return; }
       if (e.key === ']') { e.preventDefault(); map.rotateSelected(angle); return; }
-
-      // 缩放 ( = 和 - 兼顾 Shift+= 即 + )
       if (e.key === '+' || e.key === '=') { e.preventDefault(); map.scaleSelected(scaleStep); return; }
       if (e.key === '-' || e.key === '_') { e.preventDefault(); map.scaleSelected(1 / scaleStep); return; }
     });

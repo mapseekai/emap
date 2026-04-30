@@ -557,6 +557,7 @@ export class VertexEditControl implements Control {
       shapes: allShapes,
       arcs: this._hoveredFeature.arcs,
       hoverVertex: this._hoverVertexCoords,
+      hoverType: this._hoverType,
       geometryType: geomType,
       polygonFill: geomType === 'polygon' ? this._polygonFillColor : null,
       neighborShapes: this._neighborShapes.length > 0 ? this._neighborShapes : undefined

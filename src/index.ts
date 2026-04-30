@@ -7,6 +7,8 @@ export type {
   RenderedFeatureAttributes,
   ExpressionEvaluationPolicy,
   FeatureRef,
+  FeatureTranslateSession,
+  FeatureAffineSession,
   HighlightFeatureRef,
   HighlightStyle,
   ClipEraseOptions,
@@ -98,11 +100,19 @@ export type {
   FeatureTranslateCommandOptions,
   TranslatedPointFeature,
 } from './edit/commands/feature-translate';
+export { SplitSharedArcsCommand, planSharedArcSplit } from './edit/commands/split-shared-arcs';
+export type {
+  SplitSharedArcsCommandOptions,
+  SplitSharedArcsRemap,
+  AppendedArc,
+} from './edit/commands/split-shared-arcs';
 export {
   FeatureAffineCommand,
   rotateMatrix,
   scaleMatrix,
   invertMatrix,
+  composeMatrix,
+  IDENTITY_MATRIX,
 } from './edit/commands/feature-affine';
 export type {
   FeatureAffineCommandOptions,

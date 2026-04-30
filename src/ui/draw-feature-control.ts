@@ -426,7 +426,7 @@ export class DrawFeatureControl implements Control {
     // Clear drawing state and trigger re-render via source data event
     this._clearDrawState();
     this._map.clearEditDrawState();
-    source.fire('data');
+    source.fire('data', { reason: 'edit' });
   }
 
   private _resolveTargetLayer(layers: MapshaperLayer[]): MapshaperLayer | null {

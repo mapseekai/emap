@@ -93,8 +93,8 @@
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        source.on('data', () => {
-          map.setExtent(source.getExtent());
+        source.on('data', ({ reason }) => {
+          if (reason === 'load') map.setExtent(source.getExtent());
           populate(source);
           status.textContent = `已加载 ${file.name}。选择目标图层与半径,再点击 "生成缓冲区"。`;
         });
