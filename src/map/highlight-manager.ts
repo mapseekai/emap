@@ -1,4 +1,4 @@
-import { Painter } from '../renderer/painter';
+import type { CorePainter } from '../renderer/painter';
 import { AffineTransform } from '../geo/transform';
 import { TopologySource } from '../source/source';
 import { getLayerId } from '../source/layer-utils';
@@ -55,7 +55,7 @@ export class HighlightManager {
   }
 
   renderHighlights(
-    painter: Painter,
+    painter: CorePainter,
     sources: globalThis.Map<string, TopologySource>,
     transform: AffineTransform,
     lineScale: number,

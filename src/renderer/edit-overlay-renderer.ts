@@ -1,4 +1,4 @@
-import type { Painter } from './painter';
+import type { EditPainter } from './painter';
 import type { ArcCollection } from '../types/mapshaper-types';
 import type { EditVertexState, EditDrawState } from '../map/types';
 
@@ -13,7 +13,7 @@ import type { EditVertexState, EditDrawState } from '../map/types';
  * Painter to a concrete implementation.
  */
 export class EditOverlayRenderer {
-  constructor(private _painter: Painter) {}
+  constructor(private _painter: EditPainter) {}
 
   /**
    * Render the edit-mode overlay for the current frame. No-op when
