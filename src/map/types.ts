@@ -2,27 +2,24 @@
 // orchestrator class file can stay focused on behaviour. Re-exported from
 // `./map` to preserve every existing `from '@/map/map'` import path.
 
-import type { CanvasKit } from 'canvaskit-wasm';
 import type { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import type { AffineMatrix } from '../edit/commands/feature-affine';
-import type { DrawGeometryType } from '../ui/draw-feature-control';
+import type {
+  DrawOverlayState,
+  DrawOverlaySnapKind,
+} from '../renderer/painter';
+
+// `EditDrawState` originally lived here; the canonical definition now sits in
+// `src/renderer/painter.ts` (it is the input to `Painter.drawDrawingOverlay`).
+// Re-export under the legacy names so existing imports keep resolving.
+export type EditDrawState = DrawOverlayState;
+export type SnapKind = DrawOverlaySnapKind;
 
 export type ExpressionEvaluationPolicy = 'trusted' | 'disabled';
 
 export interface MapOptions {
   container: string | HTMLElement;
   interactive?: boolean;
-  /**
-   * Renderer backend to use.
-   * - 'canvas': Canvas 2D API (default, recommended for large datasets)
-   * - 'canvaskit': CanvasKit/Skia WASM (experimental)
-   */
-  renderer?: 'canvas' | 'canvaskit';
-  /**
-   * CanvasKit instance (required when renderer is 'canvaskit').
-   * @experimental This feature is experimental and may have performance issues with large datasets.
-   */
-  canvasKit?: CanvasKit;
   /**
    * Controls APIs that forward JavaScript expressions to mapshaper
    * (`applyExpression`, `filterFeatures`, `sortFeatures`, `splitLayer`, and
@@ -923,23 +920,6 @@ export interface EditVertexState {
   geometryType?: string;
   /** Neighbor shapes sharing the hovered arc (different polygon fill) */
   neighborShapes?: EditVertexShape[];
-}
-
-/** Kind of snap target the draw cursor is locked onto. */
-export type SnapKind = 'vertex' | 'edge' | null;
-
-export interface EditDrawState {
-  vertices: [number, number][];
-  cursorCoord: [number, number] | null;
-  snapCoord: [number, number] | null;
-  /**
-   * What kind of geometry the current snap is locked to. Renderers may use
-   * this to draw a different glyph for vertex vs edge snap. `null` when
-   * there is no snap target (`snapCoord === null`).
-   */
-  snapKind: SnapKind;
-  geometryType: DrawGeometryType;
-  drawColor: string;
 }
 
 /** Default vertex-count threshold for `useWorker: 'auto'`. */

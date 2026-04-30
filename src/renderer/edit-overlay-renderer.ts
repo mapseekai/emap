@@ -1,0 +1,55 @@
+import type { Painter } from './painter';
+import type { ArcCollection } from '../types/mapshaper-types';
+import type { EditVertexState, EditDrawState } from '../map/types';
+
+/**
+ * Draws edit-mode-only decorations on top of the regular layer pass:
+ *   - polygon fill highlight while editing a polygon's vertices
+ *   - vertex dots (with hover affordance) while in vertex mode
+ *   - the in-progress draw overlay while creating a new feature
+ *
+ * Pulled out of `Emap.render()` so the main render loop deals with layers
+ * only and doesn't need to introspect edit-mode flags or downcast the
+ * Painter to a concrete implementation.
+ */
+export class EditOverlayRenderer {
+  constructor(private _painter: Painter) {}
+
+  /**
+   * Render the edit-mode overlay for the current frame. No-op when
+   * `editMode === 'none'` or the relevant state object is `null`.
+   */
+  render(
+    editMode: 'none' | 'vertex' | 'draw',
+    vertexState: EditVertexState | null,
+    drawState: EditDrawState | null,
+  ): void {
+    if (editMode === 'vertex' && vertexState) {
+      this._renderVertexOverlay(vertexState);
+    } else if (editMode === 'draw' && drawState) {
+      this._painter.drawDrawingOverlay(drawState);
+    }
+  }
+
+  private _renderVertexOverlay(state: EditVertexState): void {
+    // `EditVertexArcs` is structurally a subset of `ArcCollection` (both
+    // expose `getArcIter`/`getShapeIter`); the cast keeps the Painter API
+    // strictly typed without forcing the editor to depend on the full
+    // mapshaper interface.
+    const arcs = state.arcs as unknown as ArcCollection;
+
+    // Polygon fill is drawn first so vertex dots stack on top of it.
+    if (state.geometryType === 'polygon' && state.polygonFill) {
+      this._painter.drawPolygonFill(state.shapes, arcs, state.polygonFill);
+    }
+
+    this._painter.drawVertexDots(state.shapes, arcs, {
+      dotColor: '#333',
+      dotRadius: 3,
+      hoverVertex: state.hoverVertex,
+      hoverType: state.hoverType ?? 'vertex',
+      hoverColor: '#cc6acc',
+      hoverRadius: 6,
+    });
+  }
+}

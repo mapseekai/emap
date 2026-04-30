@@ -68,7 +68,7 @@ export type { MapshaperWorkerPoolOptions } from './core/mapshaper-worker-pool';
 export * from './source/topology-source';
 export type { ExportFormat, ExportOptions } from './source/source';
 export * from './renderer/canvas-painter';
-export * from './renderer/canvaskit-painter';
+export * from './renderer/edit-overlay-renderer';
 export * from './geo/bounds';
 export { AffineTransform, AffineTransform as Transform } from './geo/transform';
 export { Viewport } from './geo/viewport';

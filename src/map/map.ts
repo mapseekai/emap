@@ -5,7 +5,7 @@ import { Viewport } from '../geo/viewport';
 import { Projection } from '../geo/projection';
 import { Painter } from '../renderer/painter';
 import { CanvasPainter } from '../renderer/canvas-painter';
-import { CanvasKitPainter } from '../renderer/canvaskit-painter';
+import { EditOverlayRenderer } from '../renderer/edit-overlay-renderer';
 import { TopologySource } from '../source/source';
 import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
 import { MouseWheel } from '../core/interactions';
@@ -51,6 +51,7 @@ export class Emap extends EventDispatcher {
   private _canvasContainer: HTMLElement;
   private _canvas: HTMLCanvasElement;
   private _painter: Painter;
+  private _editOverlay: EditOverlayRenderer;
   private _viewport: Viewport = new Viewport();
   private _projection: Projection = new Projection();
   private _sources: globalThis.Map<string, TopologySource> =
@@ -119,13 +120,9 @@ export class Emap extends EventDispatcher {
     this._canvas.style.left = '0';
     this._canvasContainer.appendChild(this._canvas);
 
-    // Select renderer based on options (default: 'canvas')
-    if (options.renderer === 'canvaskit' && options.canvasKit) {
-      this._painter = new CanvasKitPainter(options.canvasKit, this._canvas);
-    } else {
-      this._painter = new CanvasPainter(this._canvas);
-    }
+    this._painter = new CanvasPainter(this._canvas);
     this._painter.setPixelRatio(window.devicePixelRatio || 1);
+    this._editOverlay = new EditOverlayRenderer(this._painter);
 
     this._updateSize();
 
@@ -750,6 +747,17 @@ export class Emap extends EventDispatcher {
 
     const lineScale = this._viewport.getLineScale();
     const pixelSize = 1 / Math.abs(transform.mx);
+
+    this._renderLayers(pixelSize, lineScale);
+    this._renderHighlight(transform, lineScale);
+    this._editOverlay.render(
+      this._editMode,
+      this._editVertexState,
+      this._editDrawState,
+    );
+  }
+
+  private _renderLayers(pixelSize: number, lineScale: number): void {
     const effectiveLayers = this._getEffectiveLayers();
 
     for (const layer of effectiveLayers) {
@@ -763,89 +771,89 @@ export class Emap extends EventDispatcher {
         ? displayArcs.getScaledArcs(pixelSize)
         : source.getArcs();
 
-      if (arcs) {
-        if (
-          arcs.setRetainedInterval &&
-          (typeof arcs.isFlat !== 'function' || !arcs.isFlat())
-        ) {
-          // User-driven `-simplify` writes a sticky floor on the source.
-          // Per-frame zoom-LOD raises that floor on zoom-out (smaller scale,
-          // bigger pixel) but never below the user's threshold — otherwise
-          // every render would re-introduce detail the user just filtered.
-          const userFloor = source.getSimplifyFloor?.() ?? 0;
-          arcs.setRetainedInterval(Math.max(userFloor, pixelSize * 0.5));
-        }
+      if (arcs && arcs.setRetainedInterval &&
+        (typeof arcs.isFlat !== 'function' || !arcs.isFlat())) {
+        // User-driven `-simplify` writes a sticky floor on the source.
+        // Per-frame zoom-LOD raises that floor on zoom-out (smaller scale,
+        // bigger pixel) but never below the user's threshold — otherwise
+        // every render would re-introduce detail the user just filtered.
+        const userFloor = source.getSimplifyFloor?.() ?? 0;
+        arcs.setRetainedInterval(Math.max(userFloor, pixelSize * 0.5));
       }
 
       const ml = this._resolveSourceLayer(source, layer['source-layer']);
       const cacheKey = `${layer.source}:${layer['source-layer'] || 'default'}`;
 
-      if (layer.type === 'line') {
-        const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
-        
-        if (ml?.shapes && arcs) {
-          // Optimized layer line rendering: use drawArcs with a boolean arc presence filter
-          const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
-          const viewportFilter = this._viewport.getArcFilter(arcs);
-          
-          let combinedFilter;
-          if (flags && viewportFilter) {
-            combinedFilter = (i: number) => flags[i] === 1 && viewportFilter(i);
-          } else if (flags) {
-            combinedFilter = (i: number) => flags[i] === 1;
-          } else {
-            combinedFilter = viewportFilter;
-          }
-          
-          this._painter.drawArcs(arcs, style, combinedFilter);
-        } else if (arcs) {
-          // Fallback: draw all arcs
-          const filter = this._viewport.getArcFilter(arcs);
-          this._painter.drawArcs(arcs, style, filter);
-        }
-      } else if (layer.type === 'fill') {
-        if (ml?.shapes && arcs) {
-          // Draw fill
-          const fillPaint = layer.paint as FillPaint | undefined;
-          const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
-          const fillOpacity = fillPaint?.['fill-opacity'];
-          const painter = this._painter as CanvasPainter;
-          if (painter.drawPolygonFill) {
-            const filter = this._viewport.getArcFilter(arcs);
-            painter.drawPolygonFill(
-              ml.shapes,
-              arcs,
-              fillColor,
-              filter,
-              fillOpacity,
-            );
-          }
-          // Outline: stroke each topology arc exactly once via the same flag
-          // cache the line layer uses. drawPaths(shapes,...) would re-walk
-          // every shape and double-stroke shared boundaries — on big polygon
-          // datasets that's the dominant cost of fill mode.
-          const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
-          const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
-          const viewportFilter = this._viewport.getArcFilter(arcs);
-          let combinedFilter;
-          if (flags && viewportFilter) {
-            combinedFilter = (i: number) => flags[i] === 1 && viewportFilter(i);
-          } else if (flags) {
-            combinedFilter = (i: number) => flags[i] === 1;
-          } else {
-            combinedFilter = viewportFilter;
-          }
-          this._painter.drawArcs(arcs, style, combinedFilter);
-        }
-      } else if (layer.type === 'circle') {
-        if (ml?.shapes) {
-          const style = resolvePointStyle(layer.paint as CirclePaint);
-          this._painter.drawPoints(ml.shapes, style);
-        }
+      if (layer.type === 'line' && arcs) {
+        this._renderLineLayer(layer, ml, arcs, cacheKey, lineScale);
+      } else if (layer.type === 'fill' && arcs && ml?.shapes) {
+        this._renderFillLayer(layer, ml, arcs, cacheKey, lineScale);
+      } else if (layer.type === 'circle' && ml?.shapes) {
+        const style = resolvePointStyle(layer.paint as CirclePaint);
+        this._painter.drawPoints(ml.shapes, style);
       }
     }
+  }
 
-    // Delegated highlight rendering
+  private _renderLineLayer(
+    layer: LayerSpecification,
+    ml: MapshaperLayer | null,
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    cacheKey: string,
+    lineScale: number,
+  ): void {
+    const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
+    if (ml?.shapes) {
+      // Optimized layer line rendering: use drawArcs with a boolean arc
+      // presence filter so each shared topology arc strokes exactly once.
+      const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
+      const filter = this._combineArcFilters(flags, this._viewport.getArcFilter(arcs));
+      this._painter.drawArcs(arcs, style, filter);
+    } else {
+      // Fallback: draw all arcs
+      this._painter.drawArcs(arcs, style, this._viewport.getArcFilter(arcs));
+    }
+  }
+
+  private _renderFillLayer(
+    layer: LayerSpecification,
+    ml: MapshaperLayer,
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    cacheKey: string,
+    lineScale: number,
+  ): void {
+    const fillPaint = layer.paint as FillPaint | undefined;
+    const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
+    const fillOpacity = fillPaint?.['fill-opacity'];
+    const viewportFilter = this._viewport.getArcFilter(arcs);
+    this._painter.drawPolygonFill(
+      ml.shapes!,
+      arcs,
+      fillColor,
+      viewportFilter,
+      fillOpacity,
+    );
+    // Outline: stroke each topology arc exactly once via the same flag cache
+    // the line layer uses. drawPaths(shapes,...) would re-walk every shape
+    // and double-stroke shared boundaries — on big polygon datasets that's
+    // the dominant cost of fill mode.
+    const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
+    const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
+    this._painter.drawArcs(arcs, style, this._combineArcFilters(flags, viewportFilter));
+  }
+
+  private _combineArcFilters(
+    flags: Uint8Array | null,
+    viewportFilter: ((i: number) => boolean) | undefined,
+  ): ((i: number) => boolean) | undefined {
+    if (flags && viewportFilter) {
+      return (i: number) => flags[i] === 1 && viewportFilter(i);
+    }
+    if (flags) return (i: number) => flags[i] === 1;
+    return viewportFilter;
+  }
+
+  private _renderHighlight(transform: AffineTransform, lineScale: number): void {
     const visibleKeys = this._getVisibleLayerKeys();
     this._highlightManager.renderHighlights(
       this._painter,
@@ -854,56 +862,6 @@ export class Emap extends EventDispatcher {
       lineScale,
       visibleKeys,
     );
-
-    // Polygon fill in vertex edit mode (drawn before dots so dots appear on top)
-    if (
-      this._editMode === 'vertex' &&
-      this._editVertexState &&
-      this._editVertexState.geometryType === 'polygon' &&
-      this._editVertexState.polygonFill
-    ) {
-      const painter = this._painter as CanvasPainter;
-      if (painter.drawPolygonFill) {
-        painter.drawPolygonFill(
-          this._editVertexState.shapes,
-          this._editVertexState.arcs as unknown as import('../types/mapshaper-types').ArcCollection,
-          this._editVertexState.polygonFill,
-        );
-      }
-    }
-
-    // Vertex dots via Painter interface
-    if (
-      this._editMode === 'vertex' &&
-      this._editVertexState &&
-      this._painter.drawVertexDots
-    ) {
-      this._painter.drawVertexDots(
-        this._editVertexState.shapes,
-        this._editVertexState.arcs as unknown as import('../types/mapshaper-types').ArcCollection,
-        {
-          dotColor: '#333',
-          dotRadius: 3,
-          hoverVertex: this._editVertexState.hoverVertex,
-          hoverType: this._editVertexState.hoverType ?? 'vertex',
-          hoverColor: '#cc6acc',
-          hoverRadius: 6,
-        },
-      );
-    }
-
-    // Drawing overlay (feature creation in progress)
-    if (this._editMode === 'draw' && this._editDrawState) {
-      const painter = this._painter as CanvasPainter;
-      if (painter.drawDrawingOverlay) {
-        painter.drawDrawingOverlay(this._editDrawState);
-      }
-    }
-
-    // Flush GPU commands for CanvasKit
-    if (this._painter.flush) {
-      this._painter.flush();
-    }
   }
 
   public project(x: number, y: number): [number, number] {
