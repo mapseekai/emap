@@ -1,0 +1,56 @@
+// Internal host contract for feature managers (`MapshaperOps`,
+// `EditSessions`, `AttributeOps`). The managers used to take `_emap: any`
+// and reach into private fields by name; this interface declares exactly
+// the surface they may touch, so future refactors of `Emap` can detect
+// breakage at compile time instead of at runtime.
+//
+// Members keep their `_` prefix because they are emap-internal — public
+// API consumers must not depend on this interface.
+
+import type { TopologySource } from '../source/source';
+import type { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
+import type { EditHistory } from '../edit/edit-history';
+import type { Selection } from './selection';
+import type { MapshaperLayer } from '../types/mapshaper-types';
+
+/**
+ * Sentinel returned by `_runDatasetCommand` callers when the host has
+ * been removed mid-await. Managers interpret this as "drop the result on
+ * the floor, do not mutate state, do not emit events".
+ */
+export const HOST_REMOVED = Symbol('emap-host-removed');
+
+export interface EmapHostInternal {
+  // ---- mutable lifecycle flags ---------------------------------------
+  /** `true` once `Emap.remove()` has been called. Async ops MUST check
+   *  this before applying results. */
+  readonly _removed: boolean;
+
+  // ---- shared state owned by Emap ------------------------------------
+  readonly _sources: globalThis.Map<string, TopologySource>;
+  readonly _history: EditHistory;
+  readonly _selection: Selection;
+  readonly _workerPool: MapshaperWorkerPool | null;
+  readonly _workerMode: boolean | 'auto';
+  readonly _workerThreshold: number;
+
+  // ---- helpers managers call back into -------------------------------
+  _resolveLayer(sourceId: string, layerId: string): MapshaperLayer | null;
+  _scheduleRender(): void;
+  _fireHistoryChange(): void;
+  _fireSelectionChange(diff: import('./selection').SelectionDiff): void;
+  _invalidateShapeCachesForSources(sourceIds: Iterable<string>): void;
+  _clearSpatialIndexesForSources(sourceIds: Iterable<string>): void;
+  _allowExpressionEvaluation(values: Array<string | undefined>, operation: string): boolean;
+
+  // ---- event surface (narrow overloads for events managers fire) -----
+  fire(type: 'error', payload: { error: unknown }): void;
+  fire(
+    type: 'workerjobstart',
+    payload: { id: number; cmd: string; label: string; datasetVertexCount: number },
+  ): void;
+  fire(
+    type: 'workerjobend',
+    payload: { id: number; ok: boolean; durationMs: number; errorMessage?: string },
+  ): void;
+}

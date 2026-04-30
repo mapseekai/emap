@@ -56,7 +56,9 @@ export class Emap extends EventDispatcher {
   private _editOverlay: EditOverlayRenderer;
   private _viewport: Viewport = new Viewport();
   private _projection: Projection = new Projection();
-  private _sources: globalThis.Map<string, TopologySource> =
+  // Accessed by composed managers via `EmapHostInternal`. Treat as
+  // read-only outside this class.
+  _sources: globalThis.Map<string, TopologySource> =
     new globalThis.Map();
   private _sourceListeners: globalThis.Map<string, (e: any) => void> =
     new globalThis.Map();
@@ -82,11 +84,12 @@ export class Emap extends EventDispatcher {
   // and the array is short-lived so the duplicate is harmless.
   private _controls: Control[] = [];
 
-  // Delegated managers
+  // Delegated managers. `_selection` and `_history` are read by composed
+  // managers via `EmapHostInternal`; the rest stay private.
   private _highlightManager: HighlightManager = new HighlightManager();
   private _featureQuery: FeatureQuery;
-  private _selection: Selection = new Selection();
-  private _history: EditHistory = new EditHistory();
+  _selection: Selection = new Selection();
+  _history: EditHistory = new EditHistory();
   private _historyShortcutUnbind: (() => void) | null = null;
 
   // Composed feature managers — each wraps a slice of behaviour that used
@@ -122,12 +125,13 @@ export class Emap extends EventDispatcher {
     this._scheduleRender();
   });
 
-  // Worker pool — lazily constructed when `useWorker !== false` was passed.
-  // null when the option is off (or until the first dataset-replace runs).
-  private _workerPool: MapshaperWorkerPool | null = null;
+  // Worker pool / mode / threshold are read by `MapshaperOps` via
+  // `EmapHostInternal`. null when the option is off (or until the first
+  // dataset-replace runs).
+  _workerPool: MapshaperWorkerPool | null = null;
   // Resolved `useWorker` mode: false (off), true (always), or 'auto'
   // (per-call decision based on dataset vertex count).
-  private _workerMode: boolean | 'auto' = false;
+  _workerMode: boolean | 'auto' = false;
   // Vertex-count threshold for the 'auto' mode. Defaults to
   // `DEFAULT_WORKER_THRESHOLD` (50_000). Read by `MapshaperOps`; the `_`
   // prefix still signals internal-only.
@@ -760,7 +764,7 @@ export class Emap extends EventDispatcher {
     this._viewport.zoomOut();
   }
 
-  private _scheduleRender(): void {
+  _scheduleRender(): void {
     if (this._removed) return;
     this._pendingRender++;
     if (this._rafId === 0) {
@@ -1031,7 +1035,7 @@ export class Emap extends EventDispatcher {
     return this._selection.has(feature);
   }
 
-  private _fireSelectionChange(diff: SelectionDiff): void {
+  _fireSelectionChange(diff: SelectionDiff): void {
     if (!diff.changed) return;
     this.fire('selectionchange', {
       selected: this._selection.getAll(),
@@ -1139,7 +1143,7 @@ export class Emap extends EventDispatcher {
    * sources. Call after any edit that mutates `layer.shapes` so subsequent
    * frames and `queryRenderedFeatures` calls don't reference stale features.
    */
-  private _invalidateShapeCachesForSources(sourceIds: Iterable<string>): void {
+  _invalidateShapeCachesForSources(sourceIds: Iterable<string>): void {
     for (const sourceId of sourceIds) {
       const prefix = `${sourceId}:`;
       for (const key of this._layerArcFlagsCache.keys()) {
@@ -1250,7 +1254,7 @@ export class Emap extends EventDispatcher {
     return unbind;
   }
 
-  private _fireHistoryChange(): void {
+  _fireHistoryChange(): void {
     const snap: HistoryStateSnapshot = this._history.snapshot();
     this.fire('historychange', snap);
   }
@@ -1377,6 +1381,7 @@ export class Emap extends EventDispatcher {
       this._container.removeChild(this._canvasContainer);
     }
   }
-  private _removed = false;
+  /** Read by composed managers via `EmapHostInternal._removed`. */
+  _removed = false;
 }
 
