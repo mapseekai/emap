@@ -136,7 +136,11 @@ export class Emap extends EventDispatcher {
   // `DEFAULT_WORKER_THRESHOLD` (50_000). Read by `MapshaperOps`; the `_`
   // prefix still signals internal-only.
   _workerThreshold: number = DEFAULT_WORKER_THRESHOLD;
-  private _expressionPolicy: ExpressionEvaluationPolicy = 'trusted';
+  // Default to `disabled` so apps don't accidentally execute arbitrary
+  // JavaScript from external/untrusted layer config. Apps that load only
+  // their own data can opt back in via `expressionPolicy: 'trusted'` in
+  // `MapOptions` or `setExpressionPolicy('trusted')` at runtime.
+  private _expressionPolicy: ExpressionEvaluationPolicy = 'disabled';
 
   constructor(options: MapOptions) {
     super();
@@ -188,7 +192,7 @@ export class Emap extends EventDispatcher {
 
     // Set up the worker pool eagerly when requested. Construction is cheap;
     // the underlying Worker is lazy-spawned on first run().
-    this._expressionPolicy = options.expressionPolicy ?? 'trusted';
+    this._expressionPolicy = options.expressionPolicy ?? 'disabled';
     this._workerMode = options.useWorker ?? false;
     if (typeof options.workerThreshold === 'number' && options.workerThreshold >= 0) {
       this._workerThreshold = options.workerThreshold;
@@ -222,12 +226,14 @@ export class Emap extends EventDispatcher {
   }
 
   public getExpressionPolicy(): ExpressionEvaluationPolicy {
-    return this._expressionPolicy ?? 'trusted';
+    return this._expressionPolicy ?? 'disabled';
   }
 
   // Called by `MapshaperOps` via `this._emap._allowExpressionEvaluation`.
   _allowExpressionEvaluation(values: Array<string | undefined>, operation: string): boolean {
     const hasExpression = values.some((value) => typeof value === 'string' && value.trim().length > 0);
+    // No expression payload → always allowed regardless of policy.
+    // Policy is `'trusted'` → opt-in, allowed. Anything else → block.
     if (!hasExpression || this.getExpressionPolicy() === 'trusted') return true;
     this.fire('error', {
       error: new Error(`${operation}: expression evaluation is disabled`),

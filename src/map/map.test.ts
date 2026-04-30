@@ -79,6 +79,11 @@ function createBareMap(): Emap {
   setPrivate(map, '_selection', new Selection());
   // Stub _scheduleRender so it doesn't try to use requestAnimationFrame
   setPrivate(map, '_scheduleRender', vi.fn());
+  // Tests exercise expression-evaluating ops (applyExpression, filter,
+  // joinTable, calc); opt them in to `'trusted'` since the default is
+  // `'disabled'` for apps. Individual tests of policy enforcement flip
+  // back to `'disabled'` explicitly.
+  setPrivate(map, '_expressionPolicy', 'trusted');
   return map as Emap;
 }
 

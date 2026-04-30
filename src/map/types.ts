@@ -23,9 +23,14 @@ export interface MapOptions {
   /**
    * Controls APIs that forward JavaScript expressions to mapshaper
    * (`applyExpression`, `filterFeatures`, `sortFeatures`, `splitLayer`, and
-   * command options such as `where` / `calc`). Defaults to `'trusted'` for
-   * backward compatibility. Set to `'disabled'` when strings may come from
-   * untrusted end users.
+   * command options such as `where` / `calc`).
+   *
+   * Defaults to `'disabled'` so apps loading untrusted layer config or
+   * remote datasets cannot accidentally execute arbitrary JavaScript.
+   * Apps that load only their own data may opt in to `'trusted'` here or
+   * via {@link Emap.setExpressionPolicy}.
+   *
+   * BREAKING: prior to this release the default was `'trusted'`.
    */
   expressionPolicy?: ExpressionEvaluationPolicy;
   /**
