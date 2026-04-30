@@ -1745,7 +1745,9 @@ export class Emap extends EventDispatcher {
       } else if (layer.type === 'fill') {
         if (ml?.shapes && arcs) {
           // Draw fill
-          const fillColor = (layer.paint as FillPaint)?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
+          const fillPaint = layer.paint as FillPaint | undefined;
+          const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
+          const fillOpacity = fillPaint?.['fill-opacity'];
           const painter = this._painter as CanvasPainter;
           if (painter.drawPolygonFill) {
             const filter = this._viewport.getArcFilter(arcs);
@@ -1753,12 +1755,26 @@ export class Emap extends EventDispatcher {
               ml.shapes,
               arcs,
               fillColor,
-              filter
+              filter,
+              fillOpacity,
             );
           }
-          // Draw outline
+          // Outline: stroke each topology arc exactly once via the same flag
+          // cache the line layer uses. drawPaths(shapes,...) would re-walk
+          // every shape and double-stroke shared boundaries — on big polygon
+          // datasets that's the dominant cost of fill mode.
           const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
-          this._painter.drawPaths(ml.shapes, style, arcs);
+          const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
+          const viewportFilter = this._viewport.getArcFilter(arcs);
+          let combinedFilter;
+          if (flags && viewportFilter) {
+            combinedFilter = (i: number) => flags[i] === 1 && viewportFilter(i);
+          } else if (flags) {
+            combinedFilter = (i: number) => flags[i] === 1;
+          } else {
+            combinedFilter = viewportFilter;
+          }
+          this._painter.drawArcs(arcs, style, combinedFilter);
         }
       } else if (layer.type === 'circle') {
         if (ml?.shapes) {

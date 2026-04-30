@@ -47,6 +47,7 @@
     <span class="hint">
       <code>type: 'line'</code> 只画弧;
       <code>type: 'fill'</code> 先 <code>drawPolygonFill</code> 填面再 <code>drawPaths</code> 画轮廓——同一份共享 paint 决定两者样式。
+      <code>fill-opacity</code> 通过 canvas <code>globalAlpha</code> 叠在 <code>fill-color</code> 自带的 alpha 之上(MapLibre 语义)。
       切换时通过 <code>removeLayer</code> + <code>addLayer</code> 替换图层规格。
     </span>
   </div>
@@ -75,12 +76,6 @@
       return document.querySelector('input[name="mode"]:checked').value;
     }
 
-    function hexToRgba(hex, alpha) {
-      const v = parseInt(hex.replace('#', ''), 16);
-      const r = (v >> 16) & 0xff, g = (v >> 8) & 0xff, b = v & 0xff;
-      return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
-    }
-
     // Re-issue the layer spec from current UI state. We always replace
     // (remove → add) rather than mutating in place, since `type` itself
     // changes between line and fill modes.
@@ -97,8 +92,11 @@
         'line-width': Number(lineWidth.value) || 0,
       };
       if (mode === 'fill') {
-        const a = Number(fillAlpha.value) / 100;
-        paint['fill-color'] = hexToRgba(fillColor.value, a);
+        // `fill-color` is a plain hex; `fill-opacity` multiplies on top —
+        // matches MapLibre semantics, lets the user tune transparency
+        // without mangling the colour string.
+        paint['fill-color'] = fillColor.value;
+        paint['fill-opacity'] = Number(fillAlpha.value) / 100;
       }
 
       map.addLayer({
