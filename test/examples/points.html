@@ -104,7 +104,7 @@
       status.textContent = `正在按 "${type}" 模式从 "${target}" 提取点...`;
       btn.disabled = true;
       try {
-        const ok = await map.pointsLayer(opts);
+        const ok = await map.ops.pointsLayer(opts);
         status.textContent = ok
           ? `已从 "${target}" 提取点 (${type}),Ctrl+Z 撤销。`
           : '提取失败 (检查图层几何类型与 interpolated 的 interval)。';

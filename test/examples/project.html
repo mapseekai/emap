@@ -127,7 +127,7 @@
       status.textContent = `正在投影 ${label} → ${crs}...`;
       btn.disabled = true;
       try {
-        const ok = await map.projectLayer(opts);
+        const ok = await map.ops.projectLayer(opts);
         if (ok) {
           // Auto-fit: projected extent likely differs from input
           const src = map.getSource(SOURCE_ID);

@@ -6,6 +6,9 @@ import { Projection } from '../geo/projection';
 import { Painter } from '../renderer/painter';
 import { CanvasPainter } from '../renderer/canvas-painter';
 import { EditOverlayRenderer } from '../renderer/edit-overlay-renderer';
+import { MapshaperOps } from './mapshaper-ops';
+import { EditSessions } from './edit-sessions';
+import { AttributeOps } from './attribute-ops';
 import { TopologySource } from '../source/source';
 import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
 import { MouseWheel } from '../core/interactions';
@@ -18,10 +21,8 @@ import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
 import type { EditCommand } from '../edit/edit-command';
 import { CompositeCommand } from '../edit/commands/composite';
 import { BulkFeatureDeleteCommand, type BulkFeatureDeleteCommandOptions } from '../edit/commands/feature-delete';
-// edit-session mixin (translate / rotate / scale / sessions) lives in
-// ./edit-sessions and brings its own command-class imports.
-// attribute-ops mixin (setFeatureProperty / addField / ...) brings its
-// own command-class imports.
+// `MapshaperOps`, `EditSessions`, `AttributeOps` are composed onto `Emap`
+// via the `ops` / `editSession` / `attributes` getters below.
 import mapshaper from 'mapshaper';
 import { Control, ControlPosition } from '../ui/control';
 import { getLayerId } from '../source/layer-utils';
@@ -82,6 +83,27 @@ export class Emap extends EventDispatcher {
   private _history: EditHistory = new EditHistory();
   private _historyShortcutUnbind: (() => void) | null = null;
 
+  // Composed feature managers — each wraps a slice of behaviour that used
+  // to live on `Emap.prototype` via mixin. Lazily constructed on first
+  // access so test helpers that bypass the constructor via
+  // `Object.create(Emap.prototype)` still get a working namespace.
+  private _ops?: MapshaperOps;
+  private _editSession?: EditSessions;
+  private _attributes?: AttributeOps;
+
+  /** Mapshaper layer ops (clip / dissolve / buffer / project / ...). */
+  get ops(): MapshaperOps {
+    return this._ops ?? (this._ops = new MapshaperOps(this));
+  }
+  /** Selection editing (translate / rotate / scale + live drag sessions). */
+  get editSession(): EditSessions {
+    return this._editSession ?? (this._editSession = new EditSessions(this));
+  }
+  /** Per-feature property and per-layer field editing. */
+  get attributes(): AttributeOps {
+    return this._attributes ?? (this._attributes = new AttributeOps(this));
+  }
+
   // Edit mode
   private _editMode: 'none' | 'vertex' | 'draw' = 'none';
   private _editVertexState: EditVertexState | null = null;
@@ -94,9 +116,8 @@ export class Emap extends EventDispatcher {
   // (per-call decision based on dataset vertex count).
   private _workerMode: boolean | 'auto' = false;
   // Vertex-count threshold for the 'auto' mode. Defaults to
-  // `DEFAULT_WORKER_THRESHOLD` (50_000).
-  // Read by the mapshaper-ops mixin via `(this as any)._workerThreshold`; the
-  // `_` prefix still signals internal-only.
+  // `DEFAULT_WORKER_THRESHOLD` (50_000). Read by `MapshaperOps`; the `_`
+  // prefix still signals internal-only.
   _workerThreshold: number = DEFAULT_WORKER_THRESHOLD;
   private _expressionPolicy: ExpressionEvaluationPolicy = 'trusted';
 
@@ -187,7 +208,7 @@ export class Emap extends EventDispatcher {
     return this._expressionPolicy ?? 'trusted';
   }
 
-  // Called by mapshaper-ops mixin via `(this as any)._allowExpressionEvaluation`.
+  // Called by `MapshaperOps` via `this._emap._allowExpressionEvaluation`.
   _allowExpressionEvaluation(values: Array<string | undefined>, operation: string): boolean {
     const hasExpression = values.some((value) => typeof value === 'string' && value.trim().length > 0);
     if (!hasExpression || this.getExpressionPolicy() === 'trusted') return true;
@@ -921,7 +942,7 @@ export class Emap extends EventDispatcher {
     this._featureQuery.clear(sourceId);
   }
 
-  // Read by edit-sessions mixin via `(this as any)._clearSpatialIndexesForSources`.
+  // Called by `EditSessions` via `this._emap._clearSpatialIndexesForSources`.
   _clearSpatialIndexesForSources(sourceIds: Iterable<string>): void {
     for (const sourceId of sourceIds) {
       this._featureQuery?.clear(sourceId);
@@ -1245,8 +1266,7 @@ export class Emap extends EventDispatcher {
 
   /**
    * Resolve a (sourceId, layerId) pair to the actual MapshaperLayer object.
-   * Read by every mixin (mapshaper-ops / edit-sessions / attribute-ops)
-   * via `(this as any)._resolveLayer`.
+   * Called by every composed manager (`ops`, `editSession`, `attributes`).
    */
   _resolveLayer(sourceId: string, layerId: string): MapshaperLayer | null {
     const source = this._sources.get(sourceId);
@@ -1276,17 +1296,3 @@ export class Emap extends EventDispatcher {
   }
 }
 
-// Mapshaper command wrappers (clip / dissolve / buffer / ... — 28 methods)
-// live in `./mapshaper-ops` and are mixed onto `Emap.prototype` here. The
-// interface declaration teaches TypeScript about the methods that
-// `Object.assign` adds at runtime.
-import { mapshaperOpsMixin, type MapshaperOpsApi } from './mapshaper-ops';
-import { editSessionsMixin, type EditSessionsApi } from './edit-sessions';
-import { attributeOpsMixin, type AttributeOpsApi } from './attribute-ops';
-// `Object.assign` skips non-enumerable class prototype methods; copy
-// property descriptors directly so each mixin's methods land on
-// Emap.prototype.
-for (const mixin of [mapshaperOpsMixin, editSessionsMixin, attributeOpsMixin]) {
-  Object.defineProperties(Emap.prototype, Object.getOwnPropertyDescriptors(mixin));
-}
-export interface Emap extends MapshaperOpsApi, EditSessionsApi, AttributeOpsApi {}

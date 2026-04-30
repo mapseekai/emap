@@ -99,7 +99,7 @@
       status.textContent = `正在从 ${target} 抽取共享边...`;
       btn.disabled = true;
       try {
-        const ok = await map.innerlinesLayer(opts);
+        const ok = await map.ops.innerlinesLayer(opts);
         status.textContent = ok ? `已抽取 ${target} 的共享边线,Ctrl+Z 撤销。` : '抽取失败。';
         const src = map.getSource(SOURCE_ID);
         if (src) populate(src);

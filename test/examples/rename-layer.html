@@ -82,7 +82,7 @@
       status.textContent = `正在把 "${target}" 重命名为 "${name}"...`;
       btn.disabled = true;
       try {
-        const ok = await map.renameLayer({ source: SOURCE_ID, target, name });
+        const ok = await map.ops.renameLayer({ source: SOURCE_ID, target, name });
         status.textContent = ok
           ? `已重命名 ${target} → ${name},Ctrl+Z 撤销。`
           : '重命名失败 (可能与已有图层重名)。';

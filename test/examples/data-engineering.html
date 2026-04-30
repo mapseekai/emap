@@ -132,13 +132,13 @@
       });
     }
 
-    wrap(dropBtn, (target) => map.dropLayer({ source: SOURCE_ID, target }));
+    wrap(dropBtn, (target) => map.ops.dropLayer({ source: SOURCE_ID, target }));
 
     wrap(sortBtn, (target) => {
       const expression = document.getElementById('sort-expr').value.trim();
       if (!expression) return false;
       const descending = document.getElementById('sort-desc').checked;
-      return map.sortFeatures({ source: SOURCE_ID, target, expression, descending });
+      return map.ops.sortFeatures({ source: SOURCE_ID, target, expression, descending });
     });
 
     wrap(uniqBtn, (target) => {
@@ -151,7 +151,7 @@
         if (!Number.isNaN(n) && n > 0) opts.maxCount = n;
       }
       if (document.getElementById('uniq-invert').checked) opts.invert = true;
-      return map.uniqueFeatures(opts);
+      return map.ops.uniqueFeatures(opts);
     });
 
     wrap(ffBtn, (target) => {
@@ -159,7 +159,7 @@
       if (!raw) return false;
       const fields = raw.split(',').map((s) => s.trim()).filter(Boolean);
       const invert = document.getElementById('ff-invert').checked;
-      return map.filterFields({ source: SOURCE_ID, target, fields, invert });
+      return map.ops.filterFields({ source: SOURCE_ID, target, fields, invert });
     });
 
     wrap(rfBtn, (target) => {
@@ -170,7 +170,7 @@
         const [k, v] = pair.split('=').map((s) => s.trim());
         if (k && v) mapping[k] = v;
       }
-      return map.renameFields({ source: SOURCE_ID, target, mapping });
+      return map.ops.renameFields({ source: SOURCE_ID, target, mapping });
     });
   </script>
 </body>

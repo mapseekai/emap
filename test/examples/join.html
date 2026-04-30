@@ -144,7 +144,7 @@
       status.textContent = '正在 Join...';
       btn.disabled = true;
       try {
-        const ok = await map.joinTable(opts);
+        const ok = await map.ops.joinTable(opts);
         status.textContent = ok ? `已 Join 到 "${target}"。Ctrl+Z 撤销。` : 'Join 失败。';
         const src = map.getSource(SOURCE_ID);
         if (src) populate(src);

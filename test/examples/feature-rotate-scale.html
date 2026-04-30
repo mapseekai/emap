@@ -127,13 +127,13 @@
 
       // Open a session matching current mode.
       if (mode === 't') {
-        translateSession = map.beginTranslateSession();
+        translateSession = map.editSession.beginTranslateSession();
         if (translateSession) {
           lastMapCoord = pixelToMap(e);
           status.textContent = '平移: 拖动鼠标,再次单击落位,Esc 取消。';
         }
       } else {
-        affineSession = map.beginAffineSession();
+        affineSession = map.editSession.beginAffineSession();
         if (affineSession) {
           initialMapCoord = pixelToMap(e);
           const [ox, oy] = affineSession.origin;
@@ -191,12 +191,12 @@
       else if (e.key === 'ArrowRight') dx = stride;
       else if (e.key === 'ArrowUp') dy = stride;
       else if (e.key === 'ArrowDown') dy = -stride;
-      if (dx || dy) { e.preventDefault(); map.translateSelected(dx, dy); return; }
+      if (dx || dy) { e.preventDefault(); map.editSession.translateSelected(dx, dy); return; }
 
-      if (e.key === '[') { e.preventDefault(); map.rotateSelected(-angle); return; }
-      if (e.key === ']') { e.preventDefault(); map.rotateSelected(angle); return; }
-      if (e.key === '+' || e.key === '=') { e.preventDefault(); map.scaleSelected(scaleStep); return; }
-      if (e.key === '-' || e.key === '_') { e.preventDefault(); map.scaleSelected(1 / scaleStep); return; }
+      if (e.key === '[') { e.preventDefault(); map.editSession.rotateSelected(-angle); return; }
+      if (e.key === ']') { e.preventDefault(); map.editSession.rotateSelected(angle); return; }
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); map.editSession.scaleSelected(scaleStep); return; }
+      if (e.key === '-' || e.key === '_') { e.preventDefault(); map.editSession.scaleSelected(1 / scaleStep); return; }
     });
   </script>
 </body>

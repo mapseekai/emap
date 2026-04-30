@@ -95,7 +95,7 @@
       status.textContent = `正在过滤 ${target}...`;
       btn.disabled = true;
       try {
-        const ok = await map.filterFeatures(opts);
+        const ok = await map.ops.filterFeatures(opts);
         status.textContent = ok ? `已过滤 ${target},Ctrl+Z 撤销。` : '过滤失败 (需要表达式或勾选 "同时移除空几何")。';
       } finally {
         btn.disabled = false;

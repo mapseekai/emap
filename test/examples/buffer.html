@@ -117,7 +117,7 @@
       status.textContent = `正在对 ${target} 生成半径 ${raw} 的缓冲区...`;
       bufBtn.disabled = true;
       try {
-        const ok = await map.bufferLayer(opts);
+        const ok = await map.ops.bufferLayer(opts);
         status.textContent = ok ? `已生成 ${target} 的缓冲区,Ctrl+Z 撤销。` : '生成失败。';
         const src = map.getSource(SOURCE_ID);
         if (src) populate(src);

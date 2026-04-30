@@ -1,9 +1,7 @@
 // Mapshaper command wrappers. Extracted from map.ts so the orchestrator
-// stays focused on render / lifecycle. Methods are mixed onto
-// `Emap.prototype` via `Object.assign` at the bottom of `map.ts`. Each
-// method's `this: any` parameter opts the body out of strict private-
-// access checks against `Emap` — the public surface is enforced by
-// `MapshaperOpsApi` (interface-merged onto `Emap` in `map.ts`).
+// stays focused on render / lifecycle. Composed onto Emap as
+// `emap.ops`; the manager calls back into a small surface of internal
+// helpers (`_resolveLayer`, `_history`, `_workerPool`, ...) on the host.
 
 import mapshaper from 'mapshaper';
 import { DatasetReplaceCommand } from '../edit/commands/dataset-replace';
@@ -41,43 +39,15 @@ import type {
   UnionOptions,
 } from './types';
 
-/** Public method surface this mixin contributes to `Emap`. */
-export interface MapshaperOpsApi {
-  clipLayer(opts: ClipEraseOptions): Promise<boolean>;
-  eraseLayer(opts: ClipEraseOptions): Promise<boolean>;
-  dissolveLayer(opts: DissolveOptions): Promise<boolean>;
-  bufferLayer(opts: BufferOptions): Promise<boolean>;
-  applyExpression(opts: ApplyExpressionOptions): Promise<boolean>;
-  explodeLayer(opts: ExplodeOptions): Promise<boolean>;
-  innerlinesLayer(opts: InnerlinesOptions): Promise<boolean>;
-  filterFeatures(opts: FilterOptions): Promise<boolean>;
-  snapLayer(opts: SnapOptions): Promise<boolean>;
-  cleanLayer(opts: CleanOptions): Promise<boolean>;
-  rebuildTopology(opts: RebuildTopologyOptions): Promise<boolean>;
-  mosaicLayer(opts: MosaicOptions): Promise<boolean>;
-  unionLayers(opts: UnionOptions): Promise<boolean>;
-  divideLayer(opts: DivideOptions): Promise<boolean>;
-  pointsLayer(opts: PointsOptions): Promise<boolean>;
-  linesLayer(opts: LinesOptions): Promise<boolean>;
-  polygonsLayer(opts: PolygonsOptions): Promise<boolean>;
-  simplifyLayer(opts: SimplifyOptions): Promise<boolean>;
-  projectLayer(opts: ProjectOptions): Promise<boolean>;
-  renameLayer(opts: RenameLayerOptions): Promise<boolean>;
-  mergeLayers(opts: MergeLayersOptions): Promise<boolean>;
-  splitLayer(opts: SplitLayerOptions): Promise<boolean>;
-  dropLayer(opts: DropLayerOptions): Promise<boolean>;
-  sortFeatures(opts: SortFeaturesOptions): Promise<boolean>;
-  uniqueFeatures(opts: UniqueFeaturesOptions): Promise<boolean>;
-  filterFields(opts: FilterFieldsOptions): Promise<boolean>;
-  renameFields(opts: RenameFieldsOptions): Promise<boolean>;
-  checkGeometry(opts: CheckGeometryOptions): Promise<GeometryCheckReport | null>;
-  intersectionPointsLayer(opts: IntersectionPointsLayerOptions): Promise<boolean>;
-  joinTable(opts: JoinTableOptions): Promise<boolean>;
-  mergeSelected(): Promise<boolean>;
-}
+/**
+ * Mapshaper command manager. Owned by Emap and exposed as `emap.ops`.
+ * Wraps mapshaper's `-clip`, `-dissolve`, `-buffer`, ... commands and
+ * routes them through the optional worker pool.
+ */
+export class MapshaperOps {
+  constructor(private _emap: any) {}
 
-class _MapshaperOpsMixin {
-  async clipLayer(this: any, opts: ClipEraseOptions): Promise<boolean> {
+  async clipLayer(opts: ClipEraseOptions): Promise<boolean> {
     return this._runClipErase(opts, 'clip');
   }
 
@@ -85,12 +55,12 @@ class _MapshaperOpsMixin {
    * Erase (cut holes from) a layer using a polygon mask layer via mapshaper's
    * `-erase` pipeline. Same semantics as {@link clipLayer}.
    */
-  async eraseLayer(this: any, opts: ClipEraseOptions): Promise<boolean> {
+  async eraseLayer(opts: ClipEraseOptions): Promise<boolean> {
     return this._runClipErase(opts, 'erase');
   }
 
-  async _runClipErase(this: any, opts: ClipEraseOptions, op: 'clip' | 'erase'): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async _runClipErase(opts: ClipEraseOptions, op: 'clip' | 'erase'): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -111,8 +81,8 @@ class _MapshaperOpsMixin {
    * value are merged. Returns `true` on success, `false` for unresolvable
    * source / target. Recorded as a single undoable history entry.
    */
-  async dissolveLayer(this: any, opts: DissolveOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async dissolveLayer(opts: DissolveOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -129,7 +99,7 @@ class _MapshaperOpsMixin {
     if (opts.field !== undefined && (typeof opts.field !== 'string' || opts.field.includes(','))) {
       return false;
     }
-    if (!this._allowExpressionEvaluation([opts.calc, opts.where], 'dissolveLayer')) return false;
+    if (!this._emap._allowExpressionEvaluation([opts.calc, opts.where], 'dissolveLayer')) return false;
 
     // Build the positional group-by token (single-field convenience or
     // multi-field array). When neither is set, dissolve collapses every
@@ -187,8 +157,8 @@ class _MapshaperOpsMixin {
    * Recorded as a single undoable history entry; inherits dataset-replace
    * semantics (history barrier, selection cleared) from `_runDatasetCommand`.
    */
-  async bufferLayer(this: any, opts: BufferOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async bufferLayer(opts: BufferOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -203,7 +173,7 @@ class _MapshaperOpsMixin {
     } else if (typeof opts.radius !== 'string' || opts.radius.trim().length === 0) {
       return false;
     }
-    if (typeof opts.radius === 'string' && !this._allowExpressionEvaluation([opts.radius], 'bufferLayer')) {
+    if (typeof opts.radius === 'string' && !this._emap._allowExpressionEvaluation([opts.radius], 'bufferLayer')) {
       return false;
     }
 
@@ -230,14 +200,14 @@ class _MapshaperOpsMixin {
    * Recorded as one undoable history entry; inherits dataset-replace
    * semantics (history barrier, selection cleared) from `_runDatasetCommand`.
    */
-  async applyExpression(this: any, opts: ApplyExpressionOptions): Promise<boolean> {
+  async applyExpression(opts: ApplyExpressionOptions): Promise<boolean> {
     if (!opts.expression || !opts.expression.trim()) return false;
-    const source = this._sources.get(opts.source);
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
-    if (!this._allowExpressionEvaluation([opts.expression, opts.where], 'applyExpression')) return false;
+    if (!this._emap._allowExpressionEvaluation([opts.expression, opts.where], 'applyExpression')) return false;
 
     const whereArg = opts.where && opts.where.trim()
       ? ` where=${quoteMapshaperArg(opts.where)}`
@@ -254,8 +224,8 @@ class _MapshaperOpsMixin {
    * Useful for unpacking multipolygon islands, multipart polylines, or
    * multipoint clusters into separately-pickable features.
    */
-  async explodeLayer(this: any, opts: ExplodeOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async explodeLayer(opts: ExplodeOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -275,13 +245,13 @@ class _MapshaperOpsMixin {
    * layer name; `noReplace: true` keeps the input polygon layer alongside
    * the new polyline layer.
    */
-  async innerlinesLayer(this: any, opts: InnerlinesOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async innerlinesLayer(opts: InnerlinesOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
-    if (!this._allowExpressionEvaluation([opts.where], 'innerlinesLayer')) return false;
+    if (!this._emap._allowExpressionEvaluation([opts.where], 'innerlinesLayer')) return false;
 
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
@@ -311,16 +281,16 @@ class _MapshaperOpsMixin {
    * (mapshaper would error otherwise). Companion to {@link applyExpression}:
    * same JS context, opposite intent (mutate vs delete).
    */
-  async filterFeatures(this: any, opts: FilterOptions): Promise<boolean> {
+  async filterFeatures(opts: FilterOptions): Promise<boolean> {
     const hasExpr = !!(opts.expression && opts.expression.trim());
     if (!hasExpr && !opts.removeEmpty) return false;
 
-    const source = this._sources.get(opts.source);
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
-    if (!this._allowExpressionEvaluation([opts.expression], 'filterFeatures')) return false;
+    if (!this._emap._allowExpressionEvaluation([opts.expression], 'filterFeatures')) return false;
 
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
@@ -347,8 +317,8 @@ class _MapshaperOpsMixin {
    * small default when omitted. `endpoints: true` restricts to line
    * endpoints. `precision` rounds all coords to a given decimal precision.
    */
-  async snapLayer(this: any, opts: SnapOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async snapLayer(opts: SnapOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -384,8 +354,8 @@ class _MapshaperOpsMixin {
    * All tuning options are optional; omitting them lets mapshaper apply its
    * default cleanup heuristics. See {@link CleanOptions} for the surface.
    */
-  async cleanLayer(this: any, opts: CleanOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async cleanLayer(opts: CleanOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -443,8 +413,8 @@ class _MapshaperOpsMixin {
    * Returns `true` (no-op) for arc-less point-only datasets,
    * `false` for unresolvable source or `addIntersectionCuts` errors.
    */
-  async rebuildTopology(this: any, opts: RebuildTopologyOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async rebuildTopology(opts: RebuildTopologyOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const original = source.getDataset();
     if (!original) return false;
@@ -460,19 +430,19 @@ class _MapshaperOpsMixin {
         rebuild_topology: opts.rebuildTopology,
       });
     } catch (err) {
-      this.fire('error', { error: err });
+      this._emap.fire('error', { error: err });
       return false;
     }
 
     source.setDataset(after);
 
-    this._history.clear();
-    this._history.push(new DatasetReplaceCommand({ source, before, after, label: 'Rebuild topology' }));
-    this._fireHistoryChange();
+    this._emap._history.clear();
+    this._emap._history.push(new DatasetReplaceCommand({ source, before, after, label: 'Rebuild topology' }));
+    this._emap._fireHistoryChange();
 
-    this._fireSelectionChange(this._selection.clear());
+    this._emap._fireSelectionChange(this._emap._selection.clear());
 
-    this._scheduleRender();
+    this._emap._scheduleRender();
     return true;
   }
 
@@ -484,13 +454,13 @@ class _MapshaperOpsMixin {
    * Returns `false` for unresolvable source / target. Inherits all
    * dataset-replace semantics from `_runDatasetCommand`.
    */
-  async mosaicLayer(this: any, opts: MosaicOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async mosaicLayer(opts: MosaicOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
-    if (!this._allowExpressionEvaluation([opts.calc], 'mosaicLayer')) return false;
+    if (!this._emap._allowExpressionEvaluation([opts.calc], 'mosaicLayer')) return false;
 
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
@@ -527,9 +497,9 @@ class _MapshaperOpsMixin {
    * list, not a single layer name; we join `targets` with commas inside one
    * quoted argument.
    */
-  async unionLayers(this: any, opts: UnionOptions): Promise<boolean> {
+  async unionLayers(opts: UnionOptions): Promise<boolean> {
     if (!opts.targets || opts.targets.length < 2) return false;
-    const source = this._sources.get(opts.source);
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -573,8 +543,8 @@ class _MapshaperOpsMixin {
    * use the explicit `source=<name>` form for symmetry with `clipLayer` and
    * `eraseLayer`.
    */
-  async divideLayer(this: any, opts: DivideOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async divideLayer(opts: DivideOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -609,8 +579,8 @@ class _MapshaperOpsMixin {
    * or `interpolated` without a positive `interval`. Inherits dataset-replace
    * semantics from `_runDatasetCommand`.
    */
-  async pointsLayer(this: any, opts: PointsOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async pointsLayer(opts: PointsOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -663,8 +633,8 @@ class _MapshaperOpsMixin {
    * `fields` is mapshaper's positional `DEFAULT: true` arg, emitted as a
    * bare comma-joined token (no `fields=` prefix) to match the CLI norm.
    */
-  async linesLayer(this: any, opts: LinesOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async linesLayer(opts: LinesOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -699,8 +669,8 @@ class _MapshaperOpsMixin {
    * Returns `false` for unresolvable source / target or non-polyline
    * target. Inherits dataset-replace semantics from `_runDatasetCommand`.
    */
-  async polygonsLayer(this: any, opts: PolygonsOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async polygonsLayer(opts: PolygonsOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -733,8 +703,8 @@ class _MapshaperOpsMixin {
    * Returns `false` for unresolvable source, unresolved target, missing /
    * conflicting / out-of-range threshold, or malformed `resolution`.
    */
-  async simplifyLayer(this: any, opts: SimplifyOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async simplifyLayer(opts: SimplifyOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -805,8 +775,8 @@ class _MapshaperOpsMixin {
    * projected extent. Call `setExtent(source.getExtent())` after
    * `await projectLayer(...)` to recentre.
    */
-  async projectLayer(this: any, opts: ProjectOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async projectLayer(opts: ProjectOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -836,8 +806,8 @@ class _MapshaperOpsMixin {
    * Returns `false` for unresolvable source / target, empty name, or
    * collision with another layer.
    */
-  async renameLayer(this: any, opts: RenameLayerOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async renameLayer(opts: RenameLayerOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -868,9 +838,9 @@ class _MapshaperOpsMixin {
    * pass `force: true`, returns `false` rather than letting mapshaper throw
    * an opaque mid-pipeline error.
    */
-  async mergeLayers(this: any, opts: MergeLayersOptions): Promise<boolean> {
+  async mergeLayers(opts: MergeLayersOptions): Promise<boolean> {
     if (!opts.targets || opts.targets.length < 2) return false;
-    const source = this._sources.get(opts.source);
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -913,15 +883,15 @@ class _MapshaperOpsMixin {
    * one-source-one-dataset model in emap doesn't expose those. Use
    * `loadSnapshot` with `defaultIds` if you need that workflow.
    */
-  async splitLayer(this: any, opts: SplitLayerOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async splitLayer(opts: SplitLayerOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
     const expr = (opts.expression ?? '').trim();
     if (expr.length === 0) return false;
-    if (!this._allowExpressionEvaluation([expr], 'splitLayer')) return false;
+    if (!this._emap._allowExpressionEvaluation([expr], 'splitLayer')) return false;
 
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
@@ -939,8 +909,8 @@ class _MapshaperOpsMixin {
    *
    * Returns `false` for unresolvable source / target.
    */
-  async dropLayer(this: any, opts: DropLayerOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async dropLayer(opts: DropLayerOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -956,15 +926,15 @@ class _MapshaperOpsMixin {
    *
    * Returns `false` for unresolvable source / target or empty expression.
    */
-  async sortFeatures(this: any, opts: SortFeaturesOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async sortFeatures(opts: SortFeaturesOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
     const expr = (opts.expression ?? '').trim();
     if (expr.length === 0) return false;
-    if (!this._allowExpressionEvaluation([expr], 'sortFeatures')) return false;
+    if (!this._emap._allowExpressionEvaluation([expr], 'sortFeatures')) return false;
 
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
@@ -981,15 +951,15 @@ class _MapshaperOpsMixin {
    * Returns `false` for unresolvable source / target, empty expression,
    * or non-positive `maxCount`.
    */
-  async uniqueFeatures(this: any, opts: UniqueFeaturesOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async uniqueFeatures(opts: UniqueFeaturesOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!findLayerByName(dataset.layers, opts.target)) return false;
     const expr = (opts.expression ?? '').trim();
     if (expr.length === 0) return false;
-    if (!this._allowExpressionEvaluation([expr], 'uniqueFeatures')) return false;
+    if (!this._emap._allowExpressionEvaluation([expr], 'uniqueFeatures')) return false;
     if (opts.maxCount !== undefined && !(typeof opts.maxCount === 'number' && opts.maxCount > 0)) {
       return false;
     }
@@ -1010,8 +980,8 @@ class _MapshaperOpsMixin {
    * Returns `false` for unresolvable source / target, empty `fields[]`,
    * or any field name that's empty or contains `,`.
    */
-  async filterFields(this: any, opts: FilterFieldsOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async filterFields(opts: FilterFieldsOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -1039,8 +1009,8 @@ class _MapshaperOpsMixin {
    * Returns `false` for unresolvable source / target or any invalid
    * key / value in `mapping`.
    */
-  async renameFields(this: any, opts: RenameFieldsOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async renameFields(opts: RenameFieldsOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -1074,8 +1044,8 @@ class _MapshaperOpsMixin {
    * Lighter than {@link cleanLayer} (heavy + destructive) and complementary
    * to {@link rebuildTopology} (which fixes the issues this command finds).
    */
-  async checkGeometry(this: any, opts: CheckGeometryOptions): Promise<GeometryCheckReport | null> {
-    const source = this._sources.get(opts.source);
+  async checkGeometry(opts: CheckGeometryOptions): Promise<GeometryCheckReport | null> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return null;
     const dataset = source.getDataset();
     if (!dataset) return null;
@@ -1121,8 +1091,8 @@ class _MapshaperOpsMixin {
    * `getIntersectionLayer` returns `shapes: [points]`). Pipe through
    * `explodeLayer` if one feature per intersection is needed.
    */
-  async intersectionPointsLayer(this: any, opts: IntersectionPointsLayerOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async intersectionPointsLayer(opts: IntersectionPointsLayerOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const original = source.getDataset();
     if (!original) return false;
@@ -1164,22 +1134,22 @@ class _MapshaperOpsMixin {
       pointLyr.name = newName;
       after.layers.push(pointLyr);
     } catch (err) {
-      this.fire('error', { error: err });
+      this._emap.fire('error', { error: err });
       return false;
     }
 
     source.setDataset(after);
 
     // Same history-barrier convention as every other dataset-replace op.
-    this._history.clear();
-    this._history.push(new DatasetReplaceCommand({
+    this._emap._history.clear();
+    this._emap._history.push(new DatasetReplaceCommand({
       source, before, after,
       label: `Intersection points ${opts.target}`,
     }));
-    this._fireHistoryChange();
+    this._emap._fireHistoryChange();
 
-    this._fireSelectionChange(this._selection.clear());
-    this._scheduleRender();
+    this._emap._fireSelectionChange(this._emap._selection.clear());
+    this._emap._scheduleRender();
     return true;
   }
 
@@ -1199,8 +1169,8 @@ class _MapshaperOpsMixin {
    * Returns `false` for unresolvable source / target, malformed `keys`, or
    * an invalid `data` shape.
    */
-  async joinTable(this: any, opts: JoinTableOptions): Promise<boolean> {
-    const source = this._sources.get(opts.source);
+  async joinTable(opts: JoinTableOptions): Promise<boolean> {
+    const source = this._emap._sources.get(opts.source);
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
@@ -1236,7 +1206,7 @@ class _MapshaperOpsMixin {
     } else {
       return false;
     }
-    if (!this._allowExpressionEvaluation([opts.where, opts.calc], 'joinTable')) return false;
+    if (!this._emap._allowExpressionEvaluation([opts.where, opts.calc], 'joinTable')) return false;
 
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
@@ -1282,8 +1252,8 @@ class _MapshaperOpsMixin {
    * Returns `false` (and runs no command) for an empty selection or when
    * the selection spans more than one source/layer.
    */
-  async mergeSelected(this: any): Promise<boolean> {
-    const refs = this._selection.getAll();
+  async mergeSelected(): Promise<boolean> {
+    const refs = this._emap._selection.getAll();
     if (refs.length === 0) return false;
 
     // Reject cross-source / cross-layer selections — mapshaper's dissolve
@@ -1294,7 +1264,7 @@ class _MapshaperOpsMixin {
       if (r.source !== sourceId || r.layer !== layerId) return false;
     }
 
-    const layer = this._resolveLayer(sourceId, layerId);
+    const layer = this._emap._resolveLayer(sourceId, layerId);
     if (!layer) return false;
 
     // Sort selected ids ascending so the embedded JSON literal is
@@ -1319,7 +1289,7 @@ class _MapshaperOpsMixin {
     label: string,
     inputFiles?: Record<string, Uint8Array | string>,
   ): Promise<MapshaperDataset> {
-    if (!this._workerPool) {
+    if (!this._emap._workerPool) {
       // Should never reach here — caller checks _workerPool. Defensive.
       throw new Error('_runViaWorker: worker pool not available');
     }
@@ -1327,25 +1297,25 @@ class _MapshaperOpsMixin {
     // appears immediately. Pack on a 1M-vertex dataset takes ~500ms; firing
     // the event after pack delays UI feedback by exactly that amount.
     // Use the pool's id reservation so start/end events stay correlated.
-    const id = this._workerPool.reserveId();
+    const id = this._emap._workerPool.reserveId();
     const datasetVertexCount = dataset.arcs?.getPointCount?.() ?? 0;
     const startedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-    this.fire('workerjobstart', { id, cmd, label, datasetVertexCount });
+    this._emap.fire('workerjobstart', { id, cmd, label, datasetVertexCount });
 
     try {
       const packed = await mapshaper.internal.exportDatasetsToPack([dataset], { compact: false });
-      const promise = this._workerPool.dispatchWithId(id, cmd, packed, inputFiles);
+      const promise = this._emap._workerPool.dispatchWithId(id, cmd, packed, inputFiles);
       const resultPacked = await promise;
       const restored = await mapshaper.internal.restoreSessionData(resultPacked);
       if (!restored.datasets || restored.datasets.length === 0) {
         throw new Error('worker: no dataset in response');
       }
       const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
-      this.fire('workerjobend', { id, ok: true, durationMs });
+      this._emap.fire('workerjobend', { id, ok: true, durationMs });
       return restored.datasets[0];
     } catch (err: any) {
       const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
-      this.fire('workerjobend', {
+      this._emap.fire('workerjobend', {
         id,
         ok: false,
         durationMs,
@@ -1362,7 +1332,7 @@ class _MapshaperOpsMixin {
     label: string,
     inputFiles?: Record<string, Uint8Array | string>,
   ): Promise<boolean> {
-    const source = this._sources.get(sourceId);
+    const source = this._emap._sources.get(sourceId);
     if (!source) return false;
     const original = source.getDataset();
     if (!original) return false;
@@ -1377,12 +1347,12 @@ class _MapshaperOpsMixin {
     // - true       → worker always (when pool exists)
     // - 'auto'     → worker when arc vertex count meets workerThreshold
     let useWorker = false;
-    if (this._workerPool) {
-      if (this._workerMode === true) {
+    if (this._emap._workerPool) {
+      if (this._emap._workerMode === true) {
         useWorker = true;
-      } else if (this._workerMode === 'auto') {
+      } else if (this._emap._workerMode === 'auto') {
         const vertexCount = original.arcs?.getPointCount?.() ?? 0;
-        useWorker = vertexCount >= this._workerThreshold;
+        useWorker = vertexCount >= this._emap._workerThreshold;
       }
     }
 
@@ -1396,7 +1366,7 @@ class _MapshaperOpsMixin {
     } catch (err) {
       // Surface as a fire-and-forget error event; do not throw from a public
       // edit op so that one bad command doesn't tear down the calling page.
-      this.fire('error', { error: err });
+      this._emap.fire('error', { error: err });
       return false;
     }
 
@@ -1406,20 +1376,18 @@ class _MapshaperOpsMixin {
     // History barrier: prior commands closed over the OLD dataset's layers /
     // arcs. Clearing keeps undo predictable; the dataset-replace itself is
     // the single new undoable step.
-    this._history.clear();
-    this._history.push(new DatasetReplaceCommand({ source, before, after, label }));
-    this._fireHistoryChange();
+    this._emap._history.clear();
+    this._emap._history.push(new DatasetReplaceCommand({ source, before, after, label }));
+    this._emap._fireHistoryChange();
 
     // Selection refs are by feature id and may now point at different
     // features. Clear conservatively.
-    this._fireSelectionChange(this._selection.clear());
+    this._emap._fireSelectionChange(this._emap._selection.clear());
 
-    this._scheduleRender();
+    this._emap._scheduleRender();
     return true;
   }
 }
-export const mapshaperOpsMixin = _MapshaperOpsMixin.prototype;
-
 function findLayerByName(layers: MapshaperLayer[], nameOrId: string): MapshaperLayer | null {
   for (const layer of layers) {
     if (layer.name === nameOrId || layer.id === nameOrId) return layer;

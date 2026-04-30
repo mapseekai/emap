@@ -141,7 +141,7 @@
       document.getElementById('map').focus();
 
       // Open a drag session against the post-click selection.
-      session = map.beginTranslateSession();
+      session = map.editSession.beginTranslateSession();
       if (session) {
         lastMapCoord = pixelToMap(e);
         status.textContent = '拖动鼠标平移,再次单击落位,Esc / 右键取消。';
@@ -182,7 +182,7 @@
       else if (e.key === 'ArrowDown') dy = -stride;
       else return;
       e.preventDefault();
-      const ok = map.translateSelected(dx, dy);
+      const ok = map.editSession.translateSelected(dx, dy);
       if (ok) {
         status.textContent = `已步进 (${dx}, ${dy}),Ctrl+Z 撤销。`;
       }

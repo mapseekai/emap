@@ -84,7 +84,7 @@
       status.textContent = '检查中...';
       checkBtn.disabled = true;
       try {
-        const r = await map.checkGeometry(opts);
+        const r = await map.ops.checkGeometry(opts);
         if (!r) {
           report.innerHTML = '<span class="bad">无法检查 (检查源/图层)</span>';
           status.textContent = '检查失败。';
@@ -109,7 +109,7 @@
       status.textContent = '正在重建拓扑...';
       rebuildBtn.disabled = true;
       try {
-        const ok = await map.rebuildTopology({ source: SOURCE_ID });
+        const ok = await map.ops.rebuildTopology({ source: SOURCE_ID });
         status.textContent = ok ? '已重建。再次检查几何确认结果。' : '重建失败。';
       } catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;

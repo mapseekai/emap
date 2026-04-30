@@ -109,7 +109,7 @@
       status.textContent = `正在吸附 ${target}...(顶点 ${before})`;
       btn.disabled = true;
       try {
-        const ok = await map.snapLayer(opts);
+        const ok = await map.ops.snapLayer(opts);
         const after = map.getSource(SOURCE_ID)?.getArcs?.()?.getPointCount?.() ?? 0;
         const delta = before - after;
         status.textContent = ok

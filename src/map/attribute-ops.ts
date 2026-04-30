@@ -1,6 +1,6 @@
 // Per-feature attribute editing (set property/properties) and per-layer
-// schema editing (add/remove/rename field). Same mixin pattern as
-// `mapshaper-ops.ts` and `edit-sessions.ts`.
+// schema editing (add/remove/rename field). Composed onto Emap as
+// `emap.attributes`.
 
 import { FeaturePropertyChangeCommand } from '../edit/commands/feature-property-change';
 import { FieldAddCommand } from '../edit/commands/field-add';
@@ -8,17 +8,15 @@ import { FieldRemoveCommand } from '../edit/commands/field-remove';
 import { FieldRenameCommand } from '../edit/commands/field-rename';
 import type { FeatureRef } from './types';
 
-/** Public method surface this mixin contributes to Emap. */
-export interface AttributeOpsApi {
-  setFeatureProperty(ref: FeatureRef, key: string, value: unknown): boolean;
-  setFeatureProperties(ref: FeatureRef, props: Record<string, unknown>): boolean;
-  addField(opts: { source: string; target: string; field: string; defaultValue?: unknown }): boolean;
-  removeField(opts: { source: string; target: string; field: string }): boolean;
-  renameField(opts: { source: string; target: string; from: string; to: string }): boolean;
-}
+/**
+ * Attribute-editing manager. Owned by Emap and exposed as `emap.attributes`.
+ * Construction takes the host Emap; the manager calls back into a small
+ * surface of internal helpers (`_resolveLayer`, `_history`, ...) on the host.
+ */
+export class AttributeOps {
+  constructor(private _emap: any) {}
 
-class _AttributeOpsMixin {
-  setFeatureProperty(this: any, ref: FeatureRef, key: string, value: unknown): boolean {
+  setFeatureProperty(ref: FeatureRef, key: string, value: unknown): boolean {
     return this.setFeatureProperties(ref, { [key]: value });
   }
 
@@ -33,11 +31,10 @@ class _AttributeOpsMixin {
    * requested value (no-op call); no command is pushed and no events fire.
    */
   setFeatureProperties(
-    this: any,
     ref: FeatureRef,
     props: Record<string, unknown>,
   ): boolean {
-    const layer = this._resolveLayer(ref.source, ref.layer);
+    const layer = this._emap._resolveLayer(ref.source, ref.layer);
     if (!layer) return false;
     const records = layer.data?.getRecords?.();
     const record = records?.[ref.id];
@@ -69,9 +66,9 @@ class _AttributeOpsMixin {
       next,
     });
     cmd.do();
-    this._history.push(cmd);
-    this._fireHistoryChange();
-    this._scheduleRender();
+    this._emap._history.push(cmd);
+    this._emap._fireHistoryChange();
+    this._emap._scheduleRender();
     return true;
   }
 
@@ -82,10 +79,9 @@ class _AttributeOpsMixin {
    * resolved.
    */
   addField(
-    this: any,
     opts: { source: string; target: string; field: string; defaultValue?: unknown },
   ): boolean {
-    const layer = this._resolveLayer(opts.source, opts.target);
+    const layer = this._emap._resolveLayer(opts.source, opts.target);
     if (!layer?.data) return false;
     const cmd = new FieldAddCommand({
       layer,
@@ -93,9 +89,9 @@ class _AttributeOpsMixin {
       defaultValue: opts.defaultValue,
     });
     cmd.do();
-    this._history.push(cmd);
-    this._fireHistoryChange();
-    this._scheduleRender();
+    this._emap._history.push(cmd);
+    this._emap._fireHistoryChange();
+    this._emap._scheduleRender();
     return true;
   }
 
@@ -105,16 +101,15 @@ class _AttributeOpsMixin {
    * Returns `false` if the source / target / data table cannot be resolved.
    */
   removeField(
-    this: any,
     opts: { source: string; target: string; field: string },
   ): boolean {
-    const layer = this._resolveLayer(opts.source, opts.target);
+    const layer = this._emap._resolveLayer(opts.source, opts.target);
     if (!layer?.data) return false;
     const cmd = new FieldRemoveCommand({ layer, field: opts.field });
     cmd.do();
-    this._history.push(cmd);
-    this._fireHistoryChange();
-    this._scheduleRender();
+    this._emap._history.push(cmd);
+    this._emap._fireHistoryChange();
+    this._emap._scheduleRender();
     return true;
   }
 
@@ -124,10 +119,9 @@ class _AttributeOpsMixin {
    * impossible. Use `removeField(to)` first if that is the intent.
    */
   renameField(
-    this: any,
     opts: { source: string; target: string; from: string; to: string },
   ): boolean {
-    const layer = this._resolveLayer(opts.source, opts.target);
+    const layer = this._emap._resolveLayer(opts.source, opts.target);
     if (!layer?.data) return false;
     const records = layer.data.getRecords?.();
     if (!records) return false;
@@ -139,11 +133,9 @@ class _AttributeOpsMixin {
     }
     const cmd = new FieldRenameCommand({ layer, from: opts.from, to: opts.to });
     cmd.do();
-    this._history.push(cmd);
-    this._fireHistoryChange();
-    this._scheduleRender();
+    this._emap._history.push(cmd);
+    this._emap._fireHistoryChange();
+    this._emap._scheduleRender();
     return true;
   }
 }
-
-export const attributeOpsMixin = _AttributeOpsMixin.prototype;

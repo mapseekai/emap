@@ -160,7 +160,7 @@
       status.textContent = `正在合并 ${targets.length} 个图层...`;
       btn.disabled = true;
       try {
-        const ok = await map.mergeLayers(opts);
+        const ok = await map.ops.mergeLayers(opts);
         status.textContent = ok
           ? `已合并 ${targets.join(' / ')},Ctrl+Z 撤销。`
           : '合并失败 (跨几何类型时勾选 force,或检查图层名)。';

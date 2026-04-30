@@ -95,7 +95,7 @@
       status.textContent = `正在从 "${target}" 提取边界...`;
       btn.disabled = true;
       try {
-        const ok = await map.linesLayer(opts);
+        const ok = await map.ops.linesLayer(opts);
         status.textContent = ok ? `"${target}" 已转换为边界折线,Ctrl+Z 撤销。` : '提取失败。';
         const src = map.getSource(SOURCE_ID);
         if (src) populate(src);

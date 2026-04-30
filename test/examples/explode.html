@@ -74,7 +74,7 @@
       status.textContent = `正在拆分 ${target}...`;
       btn.disabled = true;
       try {
-        const ok = await map.explodeLayer({ source: SOURCE_ID, target });
+        const ok = await map.ops.explodeLayer({ source: SOURCE_ID, target });
         status.textContent = ok ? `已拆分 ${target},Ctrl+Z 撤销。` : '拆分失败。';
       } finally {
         btn.disabled = false;
