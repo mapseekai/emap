@@ -91,7 +91,7 @@
       status.textContent = `正在把 "${target}" 转换为面...`;
       btn.disabled = true;
       try {
-        const ok = await map.polygonsLayer(opts);
+        const ok = await map.ops.polygonsLayer(opts);
         status.textContent = ok ? `"${target}" 已转换为面,Ctrl+Z 撤销。` : '转换失败。';
         const src = map.getSource(SOURCE_ID);
         if (src) populate(src);

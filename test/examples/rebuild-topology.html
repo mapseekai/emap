@@ -136,7 +136,7 @@
         status.textContent = '请先点击要素选中。';
         return;
       }
-      const ok = map.translateSelected(dx, dy);
+      const ok = map.editSession.translateSelected(dx, dy);
       refreshStats();
       status.textContent = ok
         ? `已平移所选 (Δ ${dx}, ${dy})。可能产生新的交叉,点击 "重建拓扑" 修复。`
@@ -153,7 +153,7 @@
       status.textContent = '正在重建拓扑...';
       rebuildBtn.disabled = true;
       try {
-        const ok = await map.rebuildTopology(opts);
+        const ok = await map.ops.rebuildTopology(opts);
         refreshStats();
         const after = stats.textContent;
         status.textContent = ok

@@ -1,6 +1,5 @@
 // Edit-session methods (translate/affine cursor-drag, rotate, scale).
-// Extracted from map.ts; mixed onto Emap.prototype via Object.defineProperties
-// in map.ts. See `mapshaper-ops.ts` for the same pattern.
+// Composed onto Emap as `emap.editSession`.
 
 import { CompositeCommand } from '../edit/commands/composite';
 import {
@@ -29,22 +28,17 @@ import type {
   FeatureAffineSession,
 } from './types';
 
-/** Public method surface this mixin contributes to Emap. */
-export interface EditSessionsApi {
-  translateSelected(dx: number, dy: number): boolean;
-  beginTranslateSession(opts?: DragSessionOptions): FeatureTranslateSession | null;
-  beginAffineSession(
-    origin?: [number, number],
-    opts?: DragSessionOptions,
-  ): FeatureAffineSession | null;
-  rotateSelected(angleDegrees: number, origin?: [number, number]): boolean;
-  scaleSelected(sx: number, sy?: number, origin?: [number, number]): boolean;
-}
+/**
+ * Selection-editing manager. Owned by Emap and exposed as `emap.editSession`.
+ * Provides translate / rotate / scale operations on the current selection
+ * plus the live "drag" sessions (see {@link FeatureTranslateSession}).
+ */
+export class EditSessions {
+  constructor(private _emap: any) {}
 
-class _EditSessionsMixin {
-  translateSelected(this: any, dx: number, dy: number): boolean {
+  translateSelected(dx: number, dy: number): boolean {
     if (dx === 0 && dy === 0) return false;
-    const refs = this._selection.getAll();
+    const refs = this._emap._selection.getAll();
     if (refs.length === 0) return false;
 
     // Group selection by source, collecting unique abs-arc-ids (for path
@@ -58,7 +52,7 @@ class _EditSessionsMixin {
     >();
 
     for (const ref of refs) {
-      const layer = this._resolveLayer(ref.source, ref.layer);
+      const layer = this._emap._resolveLayer(ref.source, ref.layer);
       if (!layer?.shapes) continue;
       const shape = layer.shapes[ref.id];
       if (!shape) continue;
@@ -89,7 +83,7 @@ class _EditSessionsMixin {
     const children: EditCommand[] = [];
     const editedSourceIds: string[] = [];
     for (const [sourceId, bucket] of bySource) {
-      const source = this._sources.get(sourceId);
+      const source = this._emap._sources.get(sourceId);
       if (!source) continue;
       if (bucket.arcIdSet.size === 0 && bucket.pointFeatures.length === 0) continue;
 
@@ -112,10 +106,10 @@ class _EditSessionsMixin {
       children.length === 1
         ? children[0]
         : new CompositeCommand(children, `Translate ${refs.length} features`);
-    this._history.push(pushed);
-    this._fireHistoryChange();
-    this._clearSpatialIndexesForSources(editedSourceIds);
-    this._scheduleRender();
+    this._emap._history.push(pushed);
+    this._emap._fireHistoryChange();
+    this._emap._clearSpatialIndexesForSources(editedSourceIds);
+    this._emap._scheduleRender();
     return true;
   }
 
@@ -144,7 +138,7 @@ class _EditSessionsMixin {
    * must push them onto a composite at commit and call `undo()` on
    * cancel.
    */
-  _buildSelectionBuckets(this: any, splitShared: boolean): {
+  _buildSelectionBuckets(splitShared: boolean): {
     buckets: Array<{
       sourceId: string;
       source: TopologySource;
@@ -161,7 +155,7 @@ class _EditSessionsMixin {
       pathFeatures: Array<{ layer: MapshaperLayer; featureId: number }>;
     };
 
-    const refs = this._selection.getAll();
+    const refs = this._emap._selection.getAll();
     if (refs.length === 0) return null;
 
     // First pass: classify selected refs into path / point per source.
@@ -169,11 +163,11 @@ class _EditSessionsMixin {
     // optional shared-arc split rewrites the shapes.
     const bySource = new globalThis.Map<string, Bucket>();
     for (const ref of refs) {
-      const layer = this._resolveLayer(ref.source, ref.layer);
+      const layer = this._emap._resolveLayer(ref.source, ref.layer);
       if (!layer?.shapes) continue;
       const shape = layer.shapes[ref.id];
       if (!shape) continue;
-      const source = this._sources.get(ref.source);
+      const source = this._emap._sources.get(ref.source);
       if (!source) continue;
 
       let bucket = bySource.get(ref.source);
@@ -217,7 +211,7 @@ class _EditSessionsMixin {
         // line-layer arc-flag cache is sized for the OLD arc count and
         // will mis-treat the new ids as "not in this layer", silently
         // dropping the duplicated boundaries from the line render.
-        this._invalidateShapeCachesForSources([bucket.sourceId]);
+        this._emap._invalidateShapeCachesForSources([bucket.sourceId]);
       }
     }
 
@@ -250,7 +244,7 @@ class _EditSessionsMixin {
     return { buckets, splitCmds };
   }
 
-  beginTranslateSession(this: any, opts?: DragSessionOptions): FeatureTranslateSession | null {
+  beginTranslateSession(opts?: DragSessionOptions): FeatureTranslateSession | null {
     const built = this._buildSelectionBuckets(opts?.splitSharedArcs !== false);
     if (!built) return null;
     const { buckets, splitCmds } = built;
@@ -279,7 +273,7 @@ class _EditSessionsMixin {
         applyStep(dx, dy);
         accumDx += dx;
         accumDy += dy;
-        this._scheduleRender();
+        this._emap._scheduleRender();
       },
       commit: (): boolean => {
         if (closed) return false;
@@ -290,7 +284,7 @@ class _EditSessionsMixin {
         // movement isn't worth a history entry.
         if (!moved) {
           for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
-          if (splitCmds.length > 0) this._scheduleRender();
+          if (splitCmds.length > 0) this._emap._scheduleRender();
           return false;
         }
         // Geometry already moved by `move()` calls; build one cumulative
@@ -319,12 +313,12 @@ class _EditSessionsMixin {
           children.length === 1
             ? children[0]
             : new CompositeCommand(children, `Translate ${total} features`);
-        this._history.push(pushed);
-        this._fireHistoryChange();
+        this._emap._history.push(pushed);
+        this._emap._fireHistoryChange();
         // `_invalidateShapeCachesForSources` covers both the arc-flag cache
         // (relevant when a split appended new arcs) and the spatial index.
-        this._invalidateShapeCachesForSources(buckets.map((b: any) => b.sourceId));
-        this._scheduleRender();
+        this._emap._invalidateShapeCachesForSources(buckets.map((b: any) => b.sourceId));
+        this._emap._scheduleRender();
         return true;
       },
       cancel: () => {
@@ -337,9 +331,9 @@ class _EditSessionsMixin {
         accumDx = 0;
         accumDy = 0;
         if (splitCmds.length > 0) {
-          this._invalidateShapeCachesForSources(buckets.map((b: any) => b.sourceId));
+          this._emap._invalidateShapeCachesForSources(buckets.map((b: any) => b.sourceId));
         }
-        this._scheduleRender();
+        this._emap._scheduleRender();
       },
       getAccumulated: (): [number, number] => [accumDx, accumDy],
     };
@@ -425,7 +419,7 @@ class _EditSessionsMixin {
         // Cumulative is "delta · cumulative" — newer transforms apply
         // after older ones, matching the visual sequence above.
         cumulative = composeMatrix(matrix, cumulative);
-        this._scheduleRender();
+        this._emap._scheduleRender();
       },
       commit: (label?: string): boolean => {
         if (closed) return false;
@@ -434,7 +428,7 @@ class _EditSessionsMixin {
           // No movement — undo any speculative split so we don't pollute
           // the dataset with orphan duplicated arcs and a pointless entry.
           for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
-          if (splitCmds.length > 0) this._scheduleRender();
+          if (splitCmds.length > 0) this._emap._scheduleRender();
           return false;
         }
         const totalFeatures = buckets.reduce(
@@ -461,12 +455,12 @@ class _EditSessionsMixin {
                 children,
                 label ?? `Transform ${totalFeatures} feature${totalFeatures === 1 ? '' : 's'}`,
               );
-        this._history.push(pushed);
-        this._fireHistoryChange();
+        this._emap._history.push(pushed);
+        this._emap._fireHistoryChange();
         // `_invalidateShapeCachesForSources` covers both the arc-flag cache
         // (relevant when a split appended new arcs) and the spatial index.
-        this._invalidateShapeCachesForSources(buckets.map((b: any) => b.sourceId));
-        this._scheduleRender();
+        this._emap._invalidateShapeCachesForSources(buckets.map((b: any) => b.sourceId));
+        this._emap._scheduleRender();
         return true;
       },
       cancel: () => {
@@ -477,9 +471,9 @@ class _EditSessionsMixin {
         for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
         cumulative = { ...IDENTITY_MATRIX };
         if (splitCmds.length > 0) {
-          this._invalidateShapeCachesForSources(buckets.map((b: any) => b.sourceId));
+          this._emap._invalidateShapeCachesForSources(buckets.map((b: any) => b.sourceId));
         }
-        this._scheduleRender();
+        this._emap._scheduleRender();
       },
       getCumulative: (): AffineMatrix => ({ ...cumulative }),
     };
@@ -494,7 +488,7 @@ class _EditSessionsMixin {
    * in a `CompositeCommand`. Returns `false` for empty selection or zero
    * angle.
    */
-  rotateSelected(this: any, angleDegrees: number, origin?: [number, number]): boolean {
+  rotateSelected(angleDegrees: number, origin?: [number, number]): boolean {
     if (angleDegrees === 0) return false;
     const angleRad = (angleDegrees * Math.PI) / 180;
     return this._applyAffineToSelection(
@@ -510,7 +504,7 @@ class _EditSessionsMixin {
    * centroid of the affected vertices. Returns `false` for empty selection
    * or no-op scale (`sx === 1 && sy === 1`).
    */
-  scaleSelected(this: any, sx: number, sy?: number, origin?: [number, number]): boolean {
+  scaleSelected(sx: number, sy?: number, origin?: [number, number]): boolean {
     const sX = sx;
     const sY = sy ?? sx;
     if (sX === 1 && sY === 1) return false;
@@ -533,7 +527,7 @@ class _EditSessionsMixin {
     origin: [number, number] | undefined,
     labelFor: (totalFeatures: number) => string,
   ): boolean {
-    const refs = this._selection.getAll();
+    const refs = this._emap._selection.getAll();
     if (refs.length === 0) return false;
 
     const bySource = new globalThis.Map<
@@ -545,7 +539,7 @@ class _EditSessionsMixin {
     >();
 
     for (const ref of refs) {
-      const layer = this._resolveLayer(ref.source, ref.layer);
+      const layer = this._emap._resolveLayer(ref.source, ref.layer);
       if (!layer?.shapes) continue;
       const shape = layer.shapes[ref.id];
       if (!shape) continue;
@@ -592,7 +586,7 @@ class _EditSessionsMixin {
     const children: EditCommand[] = [];
     const editedSourceIds: string[] = [];
     for (const [sourceId, bucket] of bySource) {
-      const source = this._sources.get(sourceId);
+      const source = this._emap._sources.get(sourceId);
       if (!source) continue;
       if (bucket.arcIdSet.size === 0 && bucket.pointFeatures.length === 0) continue;
 
@@ -614,10 +608,10 @@ class _EditSessionsMixin {
       children.length === 1
         ? children[0]
         : new CompositeCommand(children, labelFor(refs.length));
-    this._history.push(pushed);
-    this._fireHistoryChange();
-    this._clearSpatialIndexesForSources(editedSourceIds);
-    this._scheduleRender();
+    this._emap._history.push(pushed);
+    this._emap._fireHistoryChange();
+    this._emap._clearSpatialIndexesForSources(editedSourceIds);
+    this._emap._scheduleRender();
     return true;
   }
 
@@ -634,7 +628,7 @@ class _EditSessionsMixin {
     let any = false;
 
     for (const [sourceId, bucket] of bySource) {
-      const source = this._sources.get(sourceId);
+      const source = this._emap._sources.get(sourceId);
       if (!source) continue;
 
       // Path features: walk the affected arcs' xx/yy slices.
@@ -678,4 +672,3 @@ class _EditSessionsMixin {
     return [(xmin + xmax) / 2, (ymin + ymax) / 2];
   }
 }
-export const editSessionsMixin = _EditSessionsMixin.prototype;

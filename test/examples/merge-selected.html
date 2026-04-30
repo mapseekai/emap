@@ -130,7 +130,7 @@
       status.textContent = `正在合并 ${n} 个要素...`;
       mergeBtn.disabled = true;
       try {
-        const ok = await map.mergeSelected();
+        const ok = await map.ops.mergeSelected();
         status.textContent = ok
           ? `已合并 ${n} 个要素,Ctrl+Z 撤销。`
           : '合并失败 (跨图层或跨数据源?)。';

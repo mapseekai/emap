@@ -142,7 +142,7 @@
       status.textContent = `正在用 "${divider}" 切分 "${target}"...`;
       btn.disabled = true;
       try {
-        const ok = await map.divideLayer(opts);
+        const ok = await map.ops.divideLayer(opts);
         status.textContent = ok ? `"${target}" 已按 "${divider}" 切分,Ctrl+Z 撤销。` : '切分失败 (检查图层类型与名称)。';
         const src = map.getSource(SOURCE_ID);
         if (src) populateLayerOptions(src);

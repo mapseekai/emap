@@ -192,8 +192,8 @@
       eraseBtn.disabled = true;
       try {
         const ok = op === 'clip'
-          ? await map.clipLayer({ source: SOURCE_ID, target, mask })
-          : await map.eraseLayer({ source: SOURCE_ID, target, mask });
+          ? await map.ops.clipLayer({ source: SOURCE_ID, target, mask })
+          : await map.ops.eraseLayer({ source: SOURCE_ID, target, mask });
         status.textContent = ok
           ? `${op === 'clip' ? '裁剪' : '擦除'} "${target}" 完成,Ctrl+Z 撤销。`
           : `${op === 'clip' ? '裁剪' : '擦除'} 失败 (请检查图层名称)。`;

@@ -145,7 +145,7 @@
       status.textContent = field ? `正在按 ${field} 融合 ${target}...` : `正在整层融合 ${target}...`;
       dissolveBtn.disabled = true;
       try {
-        const ok = await map.dissolveLayer({ source: SOURCE_ID, target, field });
+        const ok = await map.ops.dissolveLayer({ source: SOURCE_ID, target, field });
         status.textContent = ok
           ? `已完成 ${target}${field ? ` 按 ${field}` : ''} 的融合,Ctrl+Z 撤销。`
           : '融合失败 (请检查图层名称)。';

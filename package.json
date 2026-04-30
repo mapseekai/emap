@@ -14,12 +14,10 @@
   },
   "keywords": [
     "mapshaper",
-    "mapshaper",
     "emap",
     "gis",
     "renderer",
-    "canvas",
-    "canvaskit"
+    "canvas"
   ],
   "author": "",
   "license": "MPL-2.0",
@@ -39,7 +37,6 @@
     "vitest": "^1.0.0"
   },
   "dependencies": {
-    "canvaskit-wasm": "^0.40.0",
     "fflate": "^0.8.2",
     "flatbush": "^4.5.0",
     "kdbush": "^4.0.2",

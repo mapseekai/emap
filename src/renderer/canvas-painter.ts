@@ -1,8 +1,7 @@
-import { Painter } from './painter';
+import { Painter, DrawOverlayState } from './painter';
 import { AffineTransform } from '../geo/transform';
 import { normalizePointShape } from '../source/layer-utils';
 import type { ArcCollection, StrokeStyle, PointStyle, VertexDotStyle } from '../types/mapshaper-types';
-import type { EditDrawState } from '../map/map';
 
 export class CanvasPainter implements Painter {
   private _ctx: CanvasRenderingContext2D;
@@ -13,10 +12,6 @@ export class CanvasPainter implements Painter {
     const ctx = _canvas.getContext('2d');
     if (!ctx) throw new Error('Failed to get 2D context');
     this._ctx = ctx;
-  }
-
-  prepare(_extent: any): void {
-    // Basic setup before drawing a frame
   }
 
   setTransform(transform: AffineTransform): void {
@@ -346,7 +341,7 @@ export class CanvasPainter implements Painter {
    * Renders placed vertices, connecting lines, rubber-band line to cursor,
    * and snap indicator.
    */
-  drawDrawingOverlay(state: EditDrawState): void {
+  drawDrawingOverlay(state: DrawOverlayState): void {
     const ctx = this._ctx;
     const pr = this._pixelRatio;
     const mx = this._transform.mx * pr;

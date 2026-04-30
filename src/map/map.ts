@@ -5,7 +5,11 @@ import { Viewport } from '../geo/viewport';
 import { Projection } from '../geo/projection';
 import { Painter } from '../renderer/painter';
 import { CanvasPainter } from '../renderer/canvas-painter';
-import { CanvasKitPainter } from '../renderer/canvaskit-painter';
+import { EditOverlayRenderer } from '../renderer/edit-overlay-renderer';
+import { MapshaperOps } from './mapshaper-ops';
+import { EditSessions } from './edit-sessions';
+import { AttributeOps } from './attribute-ops';
+import { EditStateStore, type EditMode } from './edit-state-store';
 import { TopologySource } from '../source/source';
 import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
 import { MouseWheel } from '../core/interactions';
@@ -18,10 +22,8 @@ import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
 import type { EditCommand } from '../edit/edit-command';
 import { CompositeCommand } from '../edit/commands/composite';
 import { BulkFeatureDeleteCommand, type BulkFeatureDeleteCommandOptions } from '../edit/commands/feature-delete';
-// edit-session mixin (translate / rotate / scale / sessions) lives in
-// ./edit-sessions and brings its own command-class imports.
-// attribute-ops mixin (setFeatureProperty / addField / ...) brings its
-// own command-class imports.
+// `MapshaperOps`, `EditSessions`, `AttributeOps` are composed onto `Emap`
+// via the `ops` / `editSession` / `attributes` getters below.
 import mapshaper from 'mapshaper';
 import { Control, ControlPosition } from '../ui/control';
 import { getLayerId } from '../source/layer-utils';
@@ -51,6 +53,7 @@ export class Emap extends EventDispatcher {
   private _canvasContainer: HTMLElement;
   private _canvas: HTMLCanvasElement;
   private _painter: Painter;
+  private _editOverlay: EditOverlayRenderer;
   private _viewport: Viewport = new Viewport();
   private _projection: Projection = new Projection();
   private _sources: globalThis.Map<string, TopologySource> =
@@ -73,6 +76,11 @@ export class Emap extends EventDispatcher {
   // UI controls
   private _controlContainers: globalThis.Map<ControlPosition, HTMLElement> =
     new globalThis.Map();
+  // Track every `addControl()` instance so `remove()` can call
+  // `onRemove()` on each. We intentionally don't drop entries on
+  // `removeControl()` — that would require both an Array and a Set —
+  // and the array is short-lived so the duplicate is harmless.
+  private _controls: Control[] = [];
 
   // Delegated managers
   private _highlightManager: HighlightManager = new HighlightManager();
@@ -81,10 +89,38 @@ export class Emap extends EventDispatcher {
   private _history: EditHistory = new EditHistory();
   private _historyShortcutUnbind: (() => void) | null = null;
 
-  // Edit mode
-  private _editMode: 'none' | 'vertex' | 'draw' = 'none';
-  private _editVertexState: EditVertexState | null = null;
-  private _editDrawState: EditDrawState | null = null;
+  // Composed feature managers — each wraps a slice of behaviour that used
+  // to live on `Emap.prototype` via mixin. Lazily constructed on first
+  // access so test helpers that bypass the constructor via
+  // `Object.create(Emap.prototype)` still get a working namespace.
+  private _ops?: MapshaperOps;
+  private _editSession?: EditSessions;
+  private _attributes?: AttributeOps;
+
+  /** Mapshaper layer ops (clip / dissolve / buffer / project / ...). */
+  get ops(): MapshaperOps {
+    return this._ops ?? (this._ops = new MapshaperOps(this));
+  }
+  /** Selection editing (translate / rotate / scale + live drag sessions). */
+  get editSession(): EditSessions {
+    return this._editSession ?? (this._editSession = new EditSessions(this));
+  }
+  /** Per-feature property and per-layer field editing. */
+  get attributes(): AttributeOps {
+    return this._attributes ?? (this._attributes = new AttributeOps(this));
+  }
+
+  // Edit mode (mode + vertex overlay + draw overlay) is owned by a single
+  // store so the three pieces stay coherent — leaving `'vertex'` mode
+  // automatically drops `vertex`, etc. The store calls back into Emap
+  // here to (re)render and emit `editmodechange`.
+  private _editState: EditStateStore = new EditStateStore((change) => {
+    if (change.modeChanged) {
+      this._dragPan?.setEnabled(change.current.mode === 'none');
+      this.fire('editmodechange', { mode: change.current.mode });
+    }
+    this._scheduleRender();
+  });
 
   // Worker pool — lazily constructed when `useWorker !== false` was passed.
   // null when the option is off (or until the first dataset-replace runs).
@@ -93,9 +129,8 @@ export class Emap extends EventDispatcher {
   // (per-call decision based on dataset vertex count).
   private _workerMode: boolean | 'auto' = false;
   // Vertex-count threshold for the 'auto' mode. Defaults to
-  // `DEFAULT_WORKER_THRESHOLD` (50_000).
-  // Read by the mapshaper-ops mixin via `(this as any)._workerThreshold`; the
-  // `_` prefix still signals internal-only.
+  // `DEFAULT_WORKER_THRESHOLD` (50_000). Read by `MapshaperOps`; the `_`
+  // prefix still signals internal-only.
   _workerThreshold: number = DEFAULT_WORKER_THRESHOLD;
   private _expressionPolicy: ExpressionEvaluationPolicy = 'trusted';
 
@@ -119,13 +154,9 @@ export class Emap extends EventDispatcher {
     this._canvas.style.left = '0';
     this._canvasContainer.appendChild(this._canvas);
 
-    // Select renderer based on options (default: 'canvas')
-    if (options.renderer === 'canvaskit' && options.canvasKit) {
-      this._painter = new CanvasKitPainter(options.canvasKit, this._canvas);
-    } else {
-      this._painter = new CanvasPainter(this._canvas);
-    }
+    this._painter = new CanvasPainter(this._canvas);
     this._painter.setPixelRatio(window.devicePixelRatio || 1);
+    this._editOverlay = new EditOverlayRenderer(this._painter);
 
     this._updateSize();
 
@@ -190,7 +221,7 @@ export class Emap extends EventDispatcher {
     return this._expressionPolicy ?? 'trusted';
   }
 
-  // Called by mapshaper-ops mixin via `(this as any)._allowExpressionEvaluation`.
+  // Called by `MapshaperOps` via `this._emap._allowExpressionEvaluation`.
   _allowExpressionEvaluation(values: Array<string | undefined>, operation: string): boolean {
     const hasExpression = values.some((value) => typeof value === 'string' && value.trim().length > 0);
     if (!hasExpression || this.getExpressionPolicy() === 'trusted') return true;
@@ -205,30 +236,28 @@ export class Emap extends EventDispatcher {
     return this._canvasContainer;
   }
 
-  public getEditMode(): 'none' | 'vertex' | 'draw' {
-    return this._editMode;
+  public getEditMode(): EditMode {
+    return this._editState.mode;
   }
 
-  public setEditMode(mode: 'none' | 'vertex' | 'draw'): void {
-    this._editMode = mode;
-    this._dragPan.setEnabled(mode === 'none');
-    this.fire('editmodechange', { mode });
+  public setEditMode(mode: EditMode): void {
+    this._editState.setMode(mode);
   }
 
   public setEditVertexState(state: EditVertexState): void {
-    this._editVertexState = state;
+    this._editState.setVertex(state);
   }
 
   public clearEditVertexState(): void {
-    this._editVertexState = null;
+    this._editState.clearVertex();
   }
 
   public setEditDrawState(state: EditDrawState): void {
-    this._editDrawState = state;
+    this._editState.setDraw(state);
   }
 
   public clearEditDrawState(): void {
-    this._editDrawState = null;
+    this._editState.clearDraw();
   }
 
   private _attachEventListeners(): void {
@@ -714,10 +743,13 @@ export class Emap extends EventDispatcher {
     const el = control.onAdd(this);
     el.style.pointerEvents = 'auto';
     this._controlContainers.get(position)?.appendChild(el);
+    this._controls.push(control);
   }
 
   public removeControl(control: Control): void {
     control.onRemove(this);
+    const idx = this._controls.indexOf(control);
+    if (idx !== -1) this._controls.splice(idx, 1);
   }
 
   public zoomIn(): void {
@@ -729,6 +761,7 @@ export class Emap extends EventDispatcher {
   }
 
   private _scheduleRender(): void {
+    if (this._removed) return;
     this._pendingRender++;
     if (this._rafId === 0) {
       this._rafId = requestAnimationFrame(() => this._doRender());
@@ -750,6 +783,17 @@ export class Emap extends EventDispatcher {
 
     const lineScale = this._viewport.getLineScale();
     const pixelSize = 1 / Math.abs(transform.mx);
+
+    this._renderLayers(pixelSize, lineScale);
+    this._renderHighlight(transform, lineScale);
+    this._editOverlay.render(
+      this._editState.mode,
+      this._editState.vertex,
+      this._editState.draw,
+    );
+  }
+
+  private _renderLayers(pixelSize: number, lineScale: number): void {
     const effectiveLayers = this._getEffectiveLayers();
 
     for (const layer of effectiveLayers) {
@@ -763,89 +807,89 @@ export class Emap extends EventDispatcher {
         ? displayArcs.getScaledArcs(pixelSize)
         : source.getArcs();
 
-      if (arcs) {
-        if (
-          arcs.setRetainedInterval &&
-          (typeof arcs.isFlat !== 'function' || !arcs.isFlat())
-        ) {
-          // User-driven `-simplify` writes a sticky floor on the source.
-          // Per-frame zoom-LOD raises that floor on zoom-out (smaller scale,
-          // bigger pixel) but never below the user's threshold — otherwise
-          // every render would re-introduce detail the user just filtered.
-          const userFloor = source.getSimplifyFloor?.() ?? 0;
-          arcs.setRetainedInterval(Math.max(userFloor, pixelSize * 0.5));
-        }
+      if (arcs && arcs.setRetainedInterval &&
+        (typeof arcs.isFlat !== 'function' || !arcs.isFlat())) {
+        // User-driven `-simplify` writes a sticky floor on the source.
+        // Per-frame zoom-LOD raises that floor on zoom-out (smaller scale,
+        // bigger pixel) but never below the user's threshold — otherwise
+        // every render would re-introduce detail the user just filtered.
+        const userFloor = source.getSimplifyFloor?.() ?? 0;
+        arcs.setRetainedInterval(Math.max(userFloor, pixelSize * 0.5));
       }
 
       const ml = this._resolveSourceLayer(source, layer['source-layer']);
       const cacheKey = `${layer.source}:${layer['source-layer'] || 'default'}`;
 
-      if (layer.type === 'line') {
-        const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
-        
-        if (ml?.shapes && arcs) {
-          // Optimized layer line rendering: use drawArcs with a boolean arc presence filter
-          const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
-          const viewportFilter = this._viewport.getArcFilter(arcs);
-          
-          let combinedFilter;
-          if (flags && viewportFilter) {
-            combinedFilter = (i: number) => flags[i] === 1 && viewportFilter(i);
-          } else if (flags) {
-            combinedFilter = (i: number) => flags[i] === 1;
-          } else {
-            combinedFilter = viewportFilter;
-          }
-          
-          this._painter.drawArcs(arcs, style, combinedFilter);
-        } else if (arcs) {
-          // Fallback: draw all arcs
-          const filter = this._viewport.getArcFilter(arcs);
-          this._painter.drawArcs(arcs, style, filter);
-        }
-      } else if (layer.type === 'fill') {
-        if (ml?.shapes && arcs) {
-          // Draw fill
-          const fillPaint = layer.paint as FillPaint | undefined;
-          const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
-          const fillOpacity = fillPaint?.['fill-opacity'];
-          const painter = this._painter as CanvasPainter;
-          if (painter.drawPolygonFill) {
-            const filter = this._viewport.getArcFilter(arcs);
-            painter.drawPolygonFill(
-              ml.shapes,
-              arcs,
-              fillColor,
-              filter,
-              fillOpacity,
-            );
-          }
-          // Outline: stroke each topology arc exactly once via the same flag
-          // cache the line layer uses. drawPaths(shapes,...) would re-walk
-          // every shape and double-stroke shared boundaries — on big polygon
-          // datasets that's the dominant cost of fill mode.
-          const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
-          const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
-          const viewportFilter = this._viewport.getArcFilter(arcs);
-          let combinedFilter;
-          if (flags && viewportFilter) {
-            combinedFilter = (i: number) => flags[i] === 1 && viewportFilter(i);
-          } else if (flags) {
-            combinedFilter = (i: number) => flags[i] === 1;
-          } else {
-            combinedFilter = viewportFilter;
-          }
-          this._painter.drawArcs(arcs, style, combinedFilter);
-        }
-      } else if (layer.type === 'circle') {
-        if (ml?.shapes) {
-          const style = resolvePointStyle(layer.paint as CirclePaint);
-          this._painter.drawPoints(ml.shapes, style);
-        }
+      if (layer.type === 'line' && arcs) {
+        this._renderLineLayer(layer, ml, arcs, cacheKey, lineScale);
+      } else if (layer.type === 'fill' && arcs && ml?.shapes) {
+        this._renderFillLayer(layer, ml, arcs, cacheKey, lineScale);
+      } else if (layer.type === 'circle' && ml?.shapes) {
+        const style = resolvePointStyle(layer.paint as CirclePaint);
+        this._painter.drawPoints(ml.shapes, style);
       }
     }
+  }
 
-    // Delegated highlight rendering
+  private _renderLineLayer(
+    layer: LayerSpecification,
+    ml: MapshaperLayer | null,
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    cacheKey: string,
+    lineScale: number,
+  ): void {
+    const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
+    if (ml?.shapes) {
+      // Optimized layer line rendering: use drawArcs with a boolean arc
+      // presence filter so each shared topology arc strokes exactly once.
+      const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
+      const filter = this._combineArcFilters(flags, this._viewport.getArcFilter(arcs));
+      this._painter.drawArcs(arcs, style, filter);
+    } else {
+      // Fallback: draw all arcs
+      this._painter.drawArcs(arcs, style, this._viewport.getArcFilter(arcs));
+    }
+  }
+
+  private _renderFillLayer(
+    layer: LayerSpecification,
+    ml: MapshaperLayer,
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    cacheKey: string,
+    lineScale: number,
+  ): void {
+    const fillPaint = layer.paint as FillPaint | undefined;
+    const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
+    const fillOpacity = fillPaint?.['fill-opacity'];
+    const viewportFilter = this._viewport.getArcFilter(arcs);
+    this._painter.drawPolygonFill(
+      ml.shapes!,
+      arcs,
+      fillColor,
+      viewportFilter,
+      fillOpacity,
+    );
+    // Outline: stroke each topology arc exactly once via the same flag cache
+    // the line layer uses. drawPaths(shapes,...) would re-walk every shape
+    // and double-stroke shared boundaries — on big polygon datasets that's
+    // the dominant cost of fill mode.
+    const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
+    const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
+    this._painter.drawArcs(arcs, style, this._combineArcFilters(flags, viewportFilter));
+  }
+
+  private _combineArcFilters(
+    flags: Uint8Array | null,
+    viewportFilter: ((i: number) => boolean) | undefined,
+  ): ((i: number) => boolean) | undefined {
+    if (flags && viewportFilter) {
+      return (i: number) => flags[i] === 1 && viewportFilter(i);
+    }
+    if (flags) return (i: number) => flags[i] === 1;
+    return viewportFilter;
+  }
+
+  private _renderHighlight(transform: AffineTransform, lineScale: number): void {
     const visibleKeys = this._getVisibleLayerKeys();
     this._highlightManager.renderHighlights(
       this._painter,
@@ -854,56 +898,6 @@ export class Emap extends EventDispatcher {
       lineScale,
       visibleKeys,
     );
-
-    // Polygon fill in vertex edit mode (drawn before dots so dots appear on top)
-    if (
-      this._editMode === 'vertex' &&
-      this._editVertexState &&
-      this._editVertexState.geometryType === 'polygon' &&
-      this._editVertexState.polygonFill
-    ) {
-      const painter = this._painter as CanvasPainter;
-      if (painter.drawPolygonFill) {
-        painter.drawPolygonFill(
-          this._editVertexState.shapes,
-          this._editVertexState.arcs as unknown as import('../types/mapshaper-types').ArcCollection,
-          this._editVertexState.polygonFill,
-        );
-      }
-    }
-
-    // Vertex dots via Painter interface
-    if (
-      this._editMode === 'vertex' &&
-      this._editVertexState &&
-      this._painter.drawVertexDots
-    ) {
-      this._painter.drawVertexDots(
-        this._editVertexState.shapes,
-        this._editVertexState.arcs as unknown as import('../types/mapshaper-types').ArcCollection,
-        {
-          dotColor: '#333',
-          dotRadius: 3,
-          hoverVertex: this._editVertexState.hoverVertex,
-          hoverType: this._editVertexState.hoverType ?? 'vertex',
-          hoverColor: '#cc6acc',
-          hoverRadius: 6,
-        },
-      );
-    }
-
-    // Drawing overlay (feature creation in progress)
-    if (this._editMode === 'draw' && this._editDrawState) {
-      const painter = this._painter as CanvasPainter;
-      if (painter.drawDrawingOverlay) {
-        painter.drawDrawingOverlay(this._editDrawState);
-      }
-    }
-
-    // Flush GPU commands for CanvasKit
-    if (this._painter.flush) {
-      this._painter.flush();
-    }
   }
 
   public project(x: number, y: number): [number, number] {
@@ -963,7 +957,7 @@ export class Emap extends EventDispatcher {
     this._featureQuery.clear(sourceId);
   }
 
-  // Read by edit-sessions mixin via `(this as any)._clearSpatialIndexesForSources`.
+  // Called by `EditSessions` via `this._emap._clearSpatialIndexesForSources`.
   _clearSpatialIndexesForSources(sourceIds: Iterable<string>): void {
     for (const sourceId of sourceIds) {
       this._featureQuery?.clear(sourceId);
@@ -1183,8 +1177,7 @@ export class Emap extends EventDispatcher {
     // Any command that touched `layer.shapes` (delete/create/...) will have
     // moved feature ids around; invalidate every shape-derived cache rather
     // than threading per-command source ids through the history.
-    this._layerArcFlagsCache.clear();
-    for (const id of this._sources.keys()) this._featureQuery?.clear(id);
+    this._invalidateAllShapeCaches();
     this._scheduleRender();
     return true;
   }
@@ -1197,10 +1190,16 @@ export class Emap extends EventDispatcher {
     const cmd = this._history.redo();
     if (!cmd) return false;
     this._fireHistoryChange();
-    this._layerArcFlagsCache.clear();
-    for (const id of this._sources.keys()) this._featureQuery?.clear(id);
+    this._invalidateAllShapeCaches();
     this._scheduleRender();
     return true;
+  }
+
+  /** Drop every shape-derived cache. Used by undo/redo where per-source
+   *  invalidation isn't tracked. */
+  private _invalidateAllShapeCaches(): void {
+    this._layerArcFlagsCache.clear();
+    for (const id of this._sources.keys()) this._featureQuery?.clear(id);
   }
 
   public canUndo(): boolean {
@@ -1287,8 +1286,7 @@ export class Emap extends EventDispatcher {
 
   /**
    * Resolve a (sourceId, layerId) pair to the actual MapshaperLayer object.
-   * Read by every mixin (mapshaper-ops / edit-sessions / attribute-ops)
-   * via `(this as any)._resolveLayer`.
+   * Called by every composed manager (`ops`, `editSession`, `attributes`).
    */
   _resolveLayer(sourceId: string, layerId: string): MapshaperLayer | null {
     const source = this._sources.get(sourceId);
@@ -1303,32 +1301,82 @@ export class Emap extends EventDispatcher {
   }
 
 
+  /**
+   * Tear the map down: cancel pending renders, detach every `data` listener
+   * we attached to sources, release each registered control, kill the worker
+   * pool, and unmount the canvas. Idempotent — calling it twice is safe.
+   *
+   * After `remove()` the instance must not be reused. Public methods that
+   * touch DOM / timers are left in place for now (they will fail naturally
+   * when the underlying resources are gone), but `_scheduleRender` is
+   * guarded so post-teardown event firings don't queue another frame.
+   */
   public remove(): void {
+    if (this._removed) return;
+    this._removed = true;
+
+    // Cancel any in-flight RAF so we don't paint after teardown.
+    if (this._rafId !== 0) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = 0;
+    }
+    this._pendingRender = 0;
+
+    // Interaction handlers
     this._dragPan.destroy();
     this._mouseWheel.destroy();
     this._historyShortcutUnbind?.();
     this._historyShortcutUnbind = null;
+
+    // Worker pool — cancelAll first to fail any in-flight ops cleanly,
+    // then destroy to terminate the worker.
     if (this._workerPool) {
+      this._workerPool.cancelAll();
       this._workerPool.destroy();
       this._workerPool = null;
     }
+
+    // Source `data` listeners installed in `addSource()` — without this
+    // the source keeps the Emap instance alive via the closure inside
+    // `onData` and (worse) re-fires render scheduling after teardown.
+    for (const [id, listener] of this._sourceListeners) {
+      const source = this._sources.get(id);
+      source?.off('data', listener);
+    }
+    this._sourceListeners.clear();
+
+    // Per-source feature query + arc-flag caches.
+    for (const id of this._sources.keys()) this._featureQuery?.clear(id);
+    this._layerArcFlagsCache.clear();
+    this._sources.clear();
+
+    // Released registered controls. Each `onRemove` is responsible for its
+    // own DOM detach; we just orchestrate. Iterate over a copy because
+    // some controls may call `removeControl(self)` from inside `onRemove`.
+    // The field initializer normally seeds an empty array; guard for the
+    // test path that builds an Emap via `Object.create(Emap.prototype)`.
+    const controls = this._controls ?? [];
+    for (const control of [...controls]) {
+      try {
+        control.onRemove(this);
+      } catch (err) {
+        // A throwing control mustn't block teardown of the rest. Surface
+        // via the error event so callers can still observe it.
+        this.fire('error', { error: err });
+      }
+    }
+    controls.length = 0;
+    this._controlContainers?.clear();
+
+    // Active edit overlay state — clearing through the store fires the
+    // change callback, which is harmless after `_removed` because
+    // `_scheduleRender` short-circuits.
+    this._editState?.setMode('none');
+
     if (this._container && this._canvasContainer) {
       this._container.removeChild(this._canvasContainer);
     }
   }
+  private _removed = false;
 }
 
-// Mapshaper command wrappers (clip / dissolve / buffer / ... — 28 methods)
-// live in `./mapshaper-ops` and are mixed onto `Emap.prototype` here. The
-// interface declaration teaches TypeScript about the methods that
-// `Object.assign` adds at runtime.
-import { mapshaperOpsMixin, type MapshaperOpsApi } from './mapshaper-ops';
-import { editSessionsMixin, type EditSessionsApi } from './edit-sessions';
-import { attributeOpsMixin, type AttributeOpsApi } from './attribute-ops';
-// `Object.assign` skips non-enumerable class prototype methods; copy
-// property descriptors directly so each mixin's methods land on
-// Emap.prototype.
-for (const mixin of [mapshaperOpsMixin, editSessionsMixin, attributeOpsMixin]) {
-  Object.defineProperties(Emap.prototype, Object.getOwnPropertyDescriptors(mixin));
-}
-export interface Emap extends MapshaperOpsApi, EditSessionsApi, AttributeOpsApi {}

@@ -163,7 +163,7 @@
       status.textContent = `正在简化 ${label}...`;
       btn.disabled = true;
       try {
-        const ok = await map.simplifyLayer(opts);
+        const ok = await map.ops.simplifyLayer(opts);
         if (ok) {
           // Render-LOD verification: floor is what `-simplify` baked into
           // the arcs; filtered count is how many vertices survive at that

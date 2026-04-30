@@ -154,7 +154,7 @@
       status.textContent = `正在对 ${targets.length} 个图层做并集...`;
       unionBtn.disabled = true;
       try {
-        const ok = await map.unionLayers({ source: SOURCE_ID, targets });
+        const ok = await map.ops.unionLayers({ source: SOURCE_ID, targets });
         status.textContent = ok ? `已对 ${targets.join(' / ')} 完成并集,Ctrl+Z 撤销。` : '并集失败。';
         const src = map.getSource(SOURCE_ID);
         if (src) refreshLayerList(src);

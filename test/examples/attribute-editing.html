@@ -173,7 +173,7 @@
           // 数字字符串保持数字类型
           let next = v.value;
           if (/^-?\d+(\.\d+)?$/.test(next)) next = Number(next);
-          map.setFeatureProperty(activeRef, key, next === '' ? undefined : next);
+          map.attributes.setFeatureProperty(activeRef, key, next === '' ? undefined : next);
           status.textContent = `${key} → ${v.value}`;
         });
         row.appendChild(k);
@@ -228,7 +228,7 @@
     document.getElementById('add-field-btn').addEventListener('click', () => {
       const field = document.getElementById('add-field').value.trim();
       if (!field || !activeTarget) return;
-      const ok = map.addField({ source: SOURCE_ID, target: activeTarget, field });
+      const ok = map.attributes.addField({ source: SOURCE_ID, target: activeTarget, field });
       status.textContent = ok ? `已新增字段 "${field}",Ctrl+Z 撤销。` : '新增失败。';
       refreshActiveDisplay();
     });
@@ -236,7 +236,7 @@
     document.getElementById('remove-btn').addEventListener('click', () => {
       const field = document.getElementById('remove-field').value.trim();
       if (!field || !activeTarget) return;
-      const ok = map.removeField({ source: SOURCE_ID, target: activeTarget, field });
+      const ok = map.attributes.removeField({ source: SOURCE_ID, target: activeTarget, field });
       status.textContent = ok ? `已删除字段 "${field}",Ctrl+Z 撤销。` : '删除失败。';
       refreshActiveDisplay();
     });
@@ -245,7 +245,7 @@
       const from = document.getElementById('rename-from').value.trim();
       const to = document.getElementById('rename-to').value.trim();
       if (!from || !to || !activeTarget) return;
-      const ok = map.renameField({ source: SOURCE_ID, target: activeTarget, from, to });
+      const ok = map.attributes.renameField({ source: SOURCE_ID, target: activeTarget, from, to });
       status.textContent = ok ? `已重命名 ${from} → ${to},Ctrl+Z 撤销。` : '重命名失败 (字段冲突)。';
       refreshActiveDisplay();
     });

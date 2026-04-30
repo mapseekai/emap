@@ -88,7 +88,7 @@
       status.textContent = `正在平展 ${target}...`;
       btn.disabled = true;
       try {
-        const ok = await map.mosaicLayer(opts);
+        const ok = await map.ops.mosaicLayer(opts);
         status.textContent = ok ? `${target} 已平展,Ctrl+Z 撤销。` : '平展失败。';
         const src = map.getSource(SOURCE_ID);
         if (src) populate(src);

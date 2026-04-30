@@ -670,24 +670,24 @@ describe('Emap clipLayer / eraseLayer', () => {
   });
 
   it('clipLayer returns false when the source does not exist', async () => {
-    const ok = await map.clipLayer({ source: 'nope', target: 'roads', mask: 'park' });
+    const ok = await map.ops.clipLayer({ source: 'nope', target: 'roads', mask: 'park' });
     expect(ok).toBe(false);
     expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('clipLayer returns false when the target layer is missing', async () => {
-    const ok = await map.clipLayer({ source: 'src1', target: 'missing', mask: 'park' });
+    const ok = await map.ops.clipLayer({ source: 'src1', target: 'missing', mask: 'park' });
     expect(ok).toBe(false);
     expect(copyDatasetSpy).not.toHaveBeenCalled();
   });
 
   it('clipLayer returns false when the mask layer is missing', async () => {
-    const ok = await map.clipLayer({ source: 'src1', target: 'roads', mask: 'nope' });
+    const ok = await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'nope' });
     expect(ok).toBe(false);
   });
 
   it('clipLayer constructs a quoted mapshaper command and swaps the dataset', async () => {
-    const ok = await map.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
+    const ok = await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy).toHaveBeenCalledTimes(1);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clip source="park"');
@@ -695,14 +695,14 @@ describe('Emap clipLayer / eraseLayer', () => {
   });
 
   it('eraseLayer constructs a -erase command', async () => {
-    await map.eraseLayer({ source: 'src1', target: 'roads', mask: 'park' });
+    await map.ops.eraseLayer({ source: 'src1', target: 'roads', mask: 'park' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -erase source="park"');
   });
 
   it('clipLayer pushes exactly one DatasetReplaceCommand and labels it', async () => {
     const historyListener = vi.fn();
     map.on('historychange', historyListener);
-    await map.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
+    await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
     expect(map.canUndo()).toBe(true);
     expect(historyListener).toHaveBeenCalledTimes(1);
     expect(historyListener.mock.calls[0][0].label).toBe('Clip roads');
@@ -713,7 +713,7 @@ describe('Emap clipLayer / eraseLayer', () => {
     map.pushCommand({ do: () => {}, undo: () => {} });
     expect(map.canUndo()).toBe(true);
 
-    await map.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
+    await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
     // After clip, only the dataset-replace command should remain on the stack
     map.undo();
     expect(source.setDataset).toHaveBeenCalledTimes(2);
@@ -729,7 +729,7 @@ describe('Emap clipLayer / eraseLayer', () => {
     map.select([{ source: 'src1', layer: 'roads', id: 0 }]);
     const selectionListener = vi.fn();
     map.on('selectionchange', selectionListener);
-    await map.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
+    await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
     expect(map.getSelection()).toEqual([]);
     expect(selectionListener).toHaveBeenCalled();
   });
@@ -740,7 +740,7 @@ describe('Emap clipLayer / eraseLayer', () => {
     });
     const errorListener = vi.fn();
     map.on('error', errorListener);
-    const ok = await map.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
+    const ok = await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
     expect(ok).toBe(false);
     expect(errorListener).toHaveBeenCalledTimes(1);
     expect(errorListener.mock.calls[0][0].error.message).toBe('mapshaper boom');
@@ -751,20 +751,20 @@ describe('Emap clipLayer / eraseLayer', () => {
   it('quotes layer names containing embedded quotes', async () => {
     beforeDataset.layers.push({ name: 'weird"name', geometry_type: 'polygon', shapes: [] });
     afterDataset.layers.push({ name: 'weird"name', geometry_type: 'polygon', shapes: [] });
-    await map.clipLayer({ source: 'src1', target: 'roads', mask: 'weird"name' });
+    await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'weird"name' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clip source="weird\\"name"');
   });
 
   it('cleanLayer constructs a -clean command and pushes a single history entry', async () => {
-    const ok = await map.cleanLayer({ source: 'src1', target: 'roads' });
+    const ok = await map.ops.cleanLayer({ source: 'src1', target: 'roads' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clean');
     expect(map.canUndo()).toBe(true);
   });
 
   it('cleanLayer returns false when source / target is missing', async () => {
-    expect(await map.cleanLayer({ source: 'nope', target: 'roads' })).toBe(false);
-    expect(await map.cleanLayer({ source: 'src1', target: 'missing' })).toBe(false);
+    expect(await map.ops.cleanLayer({ source: 'nope', target: 'roads' })).toBe(false);
+    expect(await map.ops.cleanLayer({ source: 'src1', target: 'missing' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 });
@@ -829,25 +829,25 @@ describe('Emap dissolveLayer', () => {
   });
 
   it('whole-layer dissolve omits the field argument', async () => {
-    const ok = await map.dissolveLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.dissolveLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -dissolve');
     expect(source.setDataset).toHaveBeenCalledWith(afterDataset);
   });
 
   it('field-based dissolve emits the field as a quoted positional', async () => {
-    await map.dissolveLayer({ source: 'src1', target: 'states', field: 'region' });
+    await map.ops.dissolveLayer({ source: 'src1', target: 'states', field: 'region' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -dissolve "region"');
   });
 
   it('returns false when the source does not exist', async () => {
-    const ok = await map.dissolveLayer({ source: 'nope', target: 'states' });
+    const ok = await map.ops.dissolveLayer({ source: 'nope', target: 'states' });
     expect(ok).toBe(false);
     expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when the target layer is missing', async () => {
-    const ok = await map.dissolveLayer({ source: 'src1', target: 'missing' });
+    const ok = await map.ops.dissolveLayer({ source: 'src1', target: 'missing' });
     expect(ok).toBe(false);
     expect(copyDatasetSpy).not.toHaveBeenCalled();
   });
@@ -855,7 +855,7 @@ describe('Emap dissolveLayer', () => {
   it('pushes one history entry labelled "Dissolve <target>"', async () => {
     const historyListener = vi.fn();
     map.on('historychange', historyListener);
-    await map.dissolveLayer({ source: 'src1', target: 'states' });
+    await map.ops.dissolveLayer({ source: 'src1', target: 'states' });
     expect(historyListener).toHaveBeenCalledTimes(1);
     expect(historyListener.mock.calls[0][0].label).toBe('Dissolve states');
   });
@@ -864,7 +864,7 @@ describe('Emap dissolveLayer', () => {
     map.select([{ source: 'src1', layer: 'states', id: 0 }]);
     const selectionListener = vi.fn();
     map.on('selectionchange', selectionListener);
-    await map.dissolveLayer({ source: 'src1', target: 'states' });
+    await map.ops.dissolveLayer({ source: 'src1', target: 'states' });
     expect(map.getSelection()).toEqual([]);
     expect(selectionListener).toHaveBeenCalled();
   });
@@ -872,14 +872,14 @@ describe('Emap dissolveLayer', () => {
   it('clears prior history (history barrier inherited from runner)', async () => {
     map.pushCommand({ do: () => {}, undo: () => {} });
     expect(map.canUndo()).toBe(true);
-    await map.dissolveLayer({ source: 'src1', target: 'states' });
+    await map.ops.dissolveLayer({ source: 'src1', target: 'states' });
     map.undo();
     // Only the dataset-replace step should be reachable; prior fake command is gone
     expect(map.canUndo()).toBe(false);
   });
 
   it('quotes field names containing special characters', async () => {
-    await map.dissolveLayer({ source: 'src1', target: 'states', field: 'state name' });
+    await map.ops.dissolveLayer({ source: 'src1', target: 'states', field: 'state name' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -dissolve "state name"');
   });
 });
@@ -912,7 +912,7 @@ describe('Emap attribute editing', () => {
 
   describe('setFeatureProperty / setFeatureProperties', () => {
     it('overwrites a key and pushes one history entry', () => {
-      const ok = map.setFeatureProperty(
+      const ok = map.attributes.setFeatureProperty(
         { source: 'src1', layer: 'cities', id: 1 },
         'name',
         'B-renamed',
@@ -923,7 +923,7 @@ describe('Emap attribute editing', () => {
     });
 
     it('returns false for a no-op (value already matches)', () => {
-      const ok = map.setFeatureProperty(
+      const ok = map.attributes.setFeatureProperty(
         { source: 'src1', layer: 'cities', id: 0 },
         'name',
         'A',
@@ -933,7 +933,7 @@ describe('Emap attribute editing', () => {
     });
 
     it('setting undefined deletes the key', () => {
-      const ok = map.setFeatureProperty(
+      const ok = map.attributes.setFeatureProperty(
         { source: 'src1', layer: 'cities', id: 0 },
         'pop',
         undefined,
@@ -947,7 +947,7 @@ describe('Emap attribute editing', () => {
     it('multi-key patch is one history entry and one historychange event', () => {
       const listener = vi.fn();
       map.on('historychange', listener);
-      map.setFeatureProperties(
+      map.attributes.setFeatureProperties(
         { source: 'src1', layer: 'cities', id: 0 },
         { name: 'A2', pop: 999 },
       );
@@ -958,7 +958,7 @@ describe('Emap attribute editing', () => {
     });
 
     it('returns false when the ref does not resolve to a record', () => {
-      const ok = map.setFeatureProperty(
+      const ok = map.attributes.setFeatureProperty(
         { source: 'src1', layer: 'cities', id: 999 },
         'name',
         'X',
@@ -970,7 +970,7 @@ describe('Emap attribute editing', () => {
   describe('addField / removeField / renameField', () => {
     it('addField sets default on records that did not have the key', () => {
       records.push({ name: 'D' }); // no pop
-      map.addField({ source: 'src1', target: 'cities', field: 'pop', defaultValue: 0 });
+      map.attributes.addField({ source: 'src1', target: 'cities', field: 'pop', defaultValue: 0 });
       expect(records[3]).toEqual({ name: 'D', pop: 0 });
       // Pre-existing records keep their original pop
       expect(records[0]).toEqual({ name: 'A', pop: 100 });
@@ -980,7 +980,7 @@ describe('Emap attribute editing', () => {
 
     it('removeField round-trips exact values', () => {
       const before = JSON.parse(JSON.stringify(records));
-      map.removeField({ source: 'src1', target: 'cities', field: 'pop' });
+      map.attributes.removeField({ source: 'src1', target: 'cities', field: 'pop' });
       expect(records.every((r) => !('pop' in r))).toBe(true);
       map.undo();
       expect(records).toEqual(before);
@@ -988,7 +988,7 @@ describe('Emap attribute editing', () => {
 
     it('renameField refuses on collision', () => {
       records[0]['pop_v2'] = 'x'; // record 0 now has both pop and pop_v2
-      const ok = map.renameField({ source: 'src1', target: 'cities', from: 'pop', to: 'pop_v2' });
+      const ok = map.attributes.renameField({ source: 'src1', target: 'cities', from: 'pop', to: 'pop_v2' });
       expect(ok).toBe(false);
       // Records were not mutated
       expect(records[0]).toEqual({ name: 'A', pop: 100, pop_v2: 'x' });
@@ -996,7 +996,7 @@ describe('Emap attribute editing', () => {
     });
 
     it('renameField round-trips when no collision', () => {
-      map.renameField({ source: 'src1', target: 'cities', from: 'pop', to: 'population' });
+      map.attributes.renameField({ source: 'src1', target: 'cities', from: 'pop', to: 'population' });
       expect(records[0]).toEqual({ name: 'A', population: 100 });
       map.undo();
       expect(records[0]).toEqual({ name: 'A', pop: 100 });
@@ -1006,7 +1006,7 @@ describe('Emap attribute editing', () => {
       const noDataLayer = { name: 'no_data', shapes: [], data: undefined } as any;
       const source = { id: 'src1', type: 'topology', getLayers: () => [noDataLayer] };
       (map as any)._sources.set('src1', source);
-      const ok = map.addField({ source: 'src1', target: 'no_data', field: 'x' });
+      const ok = map.attributes.addField({ source: 'src1', target: 'no_data', field: 'x' });
       expect(ok).toBe(false);
     });
   });
@@ -1014,7 +1014,7 @@ describe('Emap attribute editing', () => {
   describe('history composition', () => {
     it('attribute and dataset commands interleave in one timeline', () => {
       // Attribute write
-      map.setFeatureProperty({ source: 'src1', layer: 'cities', id: 0 }, 'name', 'A2');
+      map.attributes.setFeatureProperty({ source: 'src1', layer: 'cities', id: 0 }, 'name', 'A2');
       // Manual fake "geometry" command
       const geomUndo = vi.fn();
       map.pushCommand({ do: () => {}, undo: geomUndo, label: 'fake geom' });
@@ -1097,7 +1097,7 @@ describe('Emap mergeSelected', () => {
   });
 
   it('returns false on empty selection without firing', async () => {
-    const ok = await map.mergeSelected();
+    const ok = await map.ops.mergeSelected();
     expect(ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
@@ -1107,7 +1107,7 @@ describe('Emap mergeSelected', () => {
       { source: 'src1', layer: 'parcels', id: 0 },
       { source: 'src1', layer: 'roads', id: 0 },
     ], { mode: 'add' });
-    const ok = await map.mergeSelected();
+    const ok = await map.ops.mergeSelected();
     expect(ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
@@ -1118,7 +1118,7 @@ describe('Emap mergeSelected', () => {
       { source: 'src1', layer: 'parcels', id: 0 },
       { source: 'src2', layer: 'parcels', id: 0 },
     ], { mode: 'add' });
-    const ok = await map.mergeSelected();
+    const ok = await map.ops.mergeSelected();
     expect(ok).toBe(false);
   });
 
@@ -1128,7 +1128,7 @@ describe('Emap mergeSelected', () => {
       { source: 'src1', layer: 'parcels', id: 0 },
       { source: 'src1', layer: 'parcels', id: 3 },
     ], { mode: 'add' });
-    const ok = await map.mergeSelected();
+    const ok = await map.ops.mergeSelected();
     expect(ok).toBe(true);
     const cmd = parseCommandsSpy.mock.calls[0][0] as string;
     expect(cmd).toContain('-target "parcels"');
@@ -1152,7 +1152,7 @@ describe('Emap mergeSelected', () => {
       { source: 'src1', layer: 'parcels', id: 0 },
       { source: 'src1', layer: 'parcels', id: 1 },
     ], { mode: 'add' });
-    await map.mergeSelected();
+    await map.ops.mergeSelected();
     const cmd = parseCommandsSpy.mock.calls[0][0] as string;
     expect(cmd).not.toContain('copy-fields=');
   });
@@ -1166,7 +1166,7 @@ describe('Emap mergeSelected', () => {
     const selectionListener = vi.fn();
     map.on('historychange', historyListener);
     map.on('selectionchange', selectionListener);
-    await map.mergeSelected();
+    await map.ops.mergeSelected();
     expect(historyListener).toHaveBeenCalledTimes(1);
     expect(historyListener.mock.calls[0][0].label).toBe('Merge 2 features');
     expect(map.getSelection()).toEqual([]);
@@ -1176,7 +1176,7 @@ describe('Emap mergeSelected', () => {
   it('clears prior history (history barrier)', async () => {
     map.pushCommand({ do: () => {}, undo: () => {} });
     map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
-    await map.mergeSelected();
+    await map.ops.mergeSelected();
     map.undo();
     expect(map.canUndo()).toBe(false);
   });
@@ -1190,7 +1190,7 @@ describe('Emap mergeSelected', () => {
       { source: 'src1', layer: 'parcels', id: 0 },
       { source: 'src1', layer: 'parcels', id: 1 },
     ], { mode: 'add' });
-    await map.mergeSelected();
+    await map.ops.mergeSelected();
     const cmd = parseCommandsSpy.mock.calls[0][0] as string;
     expect(cmd).toContain('copy-fields=safe');
     expect(cmd).not.toContain('has,comma');
@@ -1249,7 +1249,7 @@ describe('Emap mergeSelected end-to-end', () => {
       { source: 'src1', layer: layerName, id: 2 },
     ], { mode: 'add' });
 
-    const ok = await map.mergeSelected();
+    const ok = await map.ops.mergeSelected();
     expect(ok).toBe(true);
 
     const records = currentDataset.layers[0].data!.getRecords();
@@ -1290,7 +1290,7 @@ describe('Emap mergeSelected end-to-end', () => {
       { source: 'src1', layer: layerName, id: 1 },
     ], { mode: 'add' });
 
-    const ok = await map.mergeSelected();
+    const ok = await map.ops.mergeSelected();
     expect(ok).toBe(true);
     expect(errs).toEqual([]);
   });
@@ -1344,18 +1344,18 @@ describe('Emap translateSelected', () => {
   });
 
   it('returns false on empty selection', () => {
-    expect(map.translateSelected(10, 5)).toBe(false);
+    expect(map.editSession.translateSelected(10, 5)).toBe(false);
   });
 
   it('returns false on zero offset', () => {
     map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
-    expect(map.translateSelected(0, 0)).toBe(false);
+    expect(map.editSession.translateSelected(0, 0)).toBe(false);
     expect(map.canUndo()).toBe(false);
   });
 
   it('translates one polygon by collecting its arc id', () => {
     map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
-    const ok = map.translateSelected(100, 200);
+    const ok = map.editSession.translateSelected(100, 200);
     expect(ok).toBe(true);
     // Arc 0's verts shifted by (100, 200); arc 1 untouched
     expect(xx[0]).toBe(100); expect(xx[1]).toBe(101);
@@ -1368,7 +1368,7 @@ describe('Emap translateSelected', () => {
   it('handles negative arc-ids in shapes (~ encoding)', () => {
     polyLayer.shapes[0] = [[~0]]; // negative form of arc 0
     map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
-    map.translateSelected(1, 1);
+    map.editSession.translateSelected(1, 1);
     expect(xx[0]).toBe(1); expect(xx[1]).toBe(2);
   });
 
@@ -1379,7 +1379,7 @@ describe('Emap translateSelected', () => {
       { source: 'src1', layer: 'parcels', id: 0 },
       { source: 'src1', layer: 'parcels', id: 1 },
     ], { mode: 'add' });
-    map.translateSelected(1, 0);
+    map.editSession.translateSelected(1, 0);
     // Arc 0 should be moved exactly once (xx[0] = 1, not 2)
     expect(xx[0]).toBe(1);
     expect(updateArcBoundsSpy).toHaveBeenCalledTimes(1);
@@ -1387,7 +1387,7 @@ describe('Emap translateSelected', () => {
 
   it('translates point shapes in place', () => {
     map.select([{ source: 'src1', layer: 'cities', id: 0 }]);
-    map.translateSelected(5, -5);
+    map.editSession.translateSelected(5, -5);
     expect(pointLayer.shapes[0]).toEqual([[105, 195]]);
   });
 
@@ -1395,7 +1395,7 @@ describe('Emap translateSelected', () => {
     map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
     const listener = vi.fn();
     map.on('selectionchange', listener);
-    map.translateSelected(1, 1);
+    map.editSession.translateSelected(1, 1);
     expect(map.getSelection()).toHaveLength(1);
     expect(listener).not.toHaveBeenCalled();
   });
@@ -1404,7 +1404,7 @@ describe('Emap translateSelected', () => {
     map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
     const listener = vi.fn();
     map.on('historychange', listener);
-    map.translateSelected(1, 1);
+    map.editSession.translateSelected(1, 1);
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
@@ -1416,7 +1416,7 @@ describe('Emap translateSelected', () => {
     const xxBefore = Array.from(xx);
     const yyBefore = Array.from(yy);
     const pointBefore = JSON.parse(JSON.stringify(pointLayer.shapes[0]));
-    map.translateSelected(7, 11);
+    map.editSession.translateSelected(7, 11);
     map.undo();
     expect(Array.from(xx)).toEqual(xxBefore);
     expect(Array.from(yy)).toEqual(yyBefore);
@@ -1447,7 +1447,7 @@ describe('Emap translateSelected', () => {
       { source: 'src1', layer: 'parcels', id: 0 },
       { source: 'src2', layer: 'parcels', id: 0 },
     ], { mode: 'add' });
-    map.translateSelected(1, 0);
+    map.editSession.translateSelected(1, 0);
     // Both sources got translated
     expect(xx[0]).toBe(1);
     expect(xx2[0]).toBe(51);
@@ -1461,7 +1461,7 @@ describe('Emap translateSelected', () => {
     map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
     const fakeUndo = vi.fn();
     map.pushCommand({ do: () => {}, undo: fakeUndo, label: 'fake' });
-    map.translateSelected(1, 1);
+    map.editSession.translateSelected(1, 1);
     // Two undos, in reverse order: translate first, then fake
     map.undo();
     expect(xx[0]).toBe(0); // translate reversed
@@ -1474,11 +1474,11 @@ describe('Emap translateSelected', () => {
     setPrivate(map, '_featureQuery', { clear });
     map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
 
-    map.translateSelected(1, 1);
+    map.editSession.translateSelected(1, 1);
     expect(clear).toHaveBeenCalledWith('src1');
 
     clear.mockClear();
-    map.rotateSelected(10);
+    map.editSession.rotateSelected(10);
     expect(clear).toHaveBeenCalledWith('src1');
   });
 });
@@ -1525,31 +1525,31 @@ describe('Emap bufferLayer', () => {
   });
 
   it('emits a numeric radius bare', async () => {
-    const ok = await map.bufferLayer({ source: 'src1', target: 'roads', radius: 5 });
+    const ok = await map.ops.bufferLayer({ source: 'src1', target: 'roads', radius: 5 });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -buffer 5');
   });
 
   it('quotes a string radius (mapshaper expression)', async () => {
-    await map.bufferLayer({ source: 'src1', target: 'roads', radius: 'pop / 1000' });
+    await map.ops.bufferLayer({ source: 'src1', target: 'roads', radius: 'pop / 1000' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -buffer "pop / 1000"');
   });
 
   it('appends cap-style= when capStyle is set', async () => {
-    await map.bufferLayer({ source: 'src1', target: 'roads', radius: 5, capStyle: 'flat' });
+    await map.ops.bufferLayer({ source: 'src1', target: 'roads', radius: 5, capStyle: 'flat' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -buffer 5 cap-style=flat');
   });
 
   it('returns false when source / target is missing', async () => {
-    expect(await map.bufferLayer({ source: 'nope', target: 'roads', radius: 5 })).toBe(false);
-    expect(await map.bufferLayer({ source: 'src1', target: 'nope', radius: 5 })).toBe(false);
+    expect(await map.ops.bufferLayer({ source: 'nope', target: 'roads', radius: 5 })).toBe(false);
+    expect(await map.ops.bufferLayer({ source: 'src1', target: 'nope', radius: 5 })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('pushes one history entry labelled "Buffer <target>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.bufferLayer({ source: 'src1', target: 'roads', radius: 5 });
+    await map.ops.bufferLayer({ source: 'src1', target: 'roads', radius: 5 });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0][0].label).toBe('Buffer roads');
     expect(map.canUndo()).toBe(true);
@@ -1598,7 +1598,7 @@ describe('Emap applyExpression', () => {
   });
 
   it('emits a quoted -each expression', async () => {
-    const ok = await map.applyExpression({
+    const ok = await map.ops.applyExpression({
       source: 'src1',
       target: 'cities',
       expression: 'this.density = this.pop / this.area',
@@ -1610,7 +1610,7 @@ describe('Emap applyExpression', () => {
   });
 
   it('appends a quoted where= when supplied', async () => {
-    await map.applyExpression({
+    await map.ops.applyExpression({
       source: 'src1',
       target: 'cities',
       expression: 'this.flag = true',
@@ -1622,19 +1622,19 @@ describe('Emap applyExpression', () => {
   });
 
   it('returns false on missing source / target', async () => {
-    expect(await map.applyExpression({ source: 'nope', target: 'cities', expression: 'x' })).toBe(false);
-    expect(await map.applyExpression({ source: 'src1', target: 'nope', expression: 'x' })).toBe(false);
+    expect(await map.ops.applyExpression({ source: 'nope', target: 'cities', expression: 'x' })).toBe(false);
+    expect(await map.ops.applyExpression({ source: 'src1', target: 'nope', expression: 'x' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on empty / whitespace-only expression', async () => {
-    expect(await map.applyExpression({ source: 'src1', target: 'cities', expression: '' })).toBe(false);
-    expect(await map.applyExpression({ source: 'src1', target: 'cities', expression: '   ' })).toBe(false);
+    expect(await map.ops.applyExpression({ source: 'src1', target: 'cities', expression: '' })).toBe(false);
+    expect(await map.ops.applyExpression({ source: 'src1', target: 'cities', expression: '   ' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('omits where= when blank / whitespace-only', async () => {
-    await map.applyExpression({
+    await map.ops.applyExpression({
       source: 'src1',
       target: 'cities',
       expression: 'this.x = 1',
@@ -1646,7 +1646,7 @@ describe('Emap applyExpression', () => {
   it('pushes one history entry labelled "Update <target>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.applyExpression({
+    await map.ops.applyExpression({
       source: 'src1',
       target: 'cities',
       expression: 'this.foo = 1',
@@ -1656,7 +1656,7 @@ describe('Emap applyExpression', () => {
   });
 
   it('escapes embedded double quotes in expression', async () => {
-    await map.applyExpression({
+    await map.ops.applyExpression({
       source: 'src1',
       target: 'cities',
       expression: 'this.kind = "city"',
@@ -1671,7 +1671,7 @@ describe('Emap applyExpression', () => {
     const errors: Error[] = [];
     map.on('error', (event: any) => errors.push(event.error));
 
-    const ok = await map.applyExpression({
+    const ok = await map.ops.applyExpression({
       source: 'src1',
       target: 'cities',
       expression: 'this.kind = "city"',
@@ -1720,21 +1720,21 @@ describe('Emap explodeLayer', () => {
   });
 
   it('emits the -explode command', async () => {
-    const ok = await map.explodeLayer({ source: 'src1', target: 'parts' });
+    const ok = await map.ops.explodeLayer({ source: 'src1', target: 'parts' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -explode');
   });
 
   it('returns false on missing source / target', async () => {
-    expect(await map.explodeLayer({ source: 'nope', target: 'parts' })).toBe(false);
-    expect(await map.explodeLayer({ source: 'src1', target: 'nope' })).toBe(false);
+    expect(await map.ops.explodeLayer({ source: 'nope', target: 'parts' })).toBe(false);
+    expect(await map.ops.explodeLayer({ source: 'src1', target: 'nope' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('pushes one history entry labelled "Explode <target>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.explodeLayer({ source: 'src1', target: 'parts' });
+    await map.ops.explodeLayer({ source: 'src1', target: 'parts' });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0][0].label).toBe('Explode parts');
   });
@@ -1777,13 +1777,13 @@ describe('Emap innerlinesLayer', () => {
   });
 
   it('emits the minimal -innerlines command', async () => {
-    const ok = await map.innerlinesLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.innerlinesLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -innerlines');
   });
 
   it('appends a quoted where=', async () => {
-    await map.innerlinesLayer({
+    await map.ops.innerlinesLayer({
       source: 'src1', target: 'states', where: 'A.STATE !== B.STATE',
     });
     expect(parseCommandsSpy.mock.calls[0][0])
@@ -1791,21 +1791,21 @@ describe('Emap innerlinesLayer', () => {
   });
 
   it('appends a quoted name=', async () => {
-    await map.innerlinesLayer({
+    await map.ops.innerlinesLayer({
       source: 'src1', target: 'states', name: 'borders',
     });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -innerlines name="borders"');
   });
 
   it('appends no-replace flag', async () => {
-    await map.innerlinesLayer({
+    await map.ops.innerlinesLayer({
       source: 'src1', target: 'states', noReplace: true,
     });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -innerlines no-replace');
   });
 
   it('combines all options in deterministic order', async () => {
-    await map.innerlinesLayer({
+    await map.ops.innerlinesLayer({
       source: 'src1', target: 'states',
       where: 'A.x !== B.x', name: 'b', noReplace: true,
     });
@@ -1814,15 +1814,15 @@ describe('Emap innerlinesLayer', () => {
   });
 
   it('returns false on missing source / target', async () => {
-    expect(await map.innerlinesLayer({ source: 'nope', target: 'states' })).toBe(false);
-    expect(await map.innerlinesLayer({ source: 'src1', target: 'nope' })).toBe(false);
+    expect(await map.ops.innerlinesLayer({ source: 'nope', target: 'states' })).toBe(false);
+    expect(await map.ops.innerlinesLayer({ source: 'src1', target: 'nope' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('pushes one history entry labelled "Innerlines <target>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.innerlinesLayer({ source: 'src1', target: 'states' });
+    await map.ops.innerlinesLayer({ source: 'src1', target: 'states' });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0][0].label).toBe('Innerlines states');
   });
@@ -1865,7 +1865,7 @@ describe('Emap filterFeatures', () => {
   });
 
   it('emits a quoted expression', async () => {
-    const ok = await map.filterFeatures({
+    const ok = await map.ops.filterFeatures({
       source: 'src1', target: 'cities', expression: 'this.pop > 100',
     });
     expect(ok).toBe(true);
@@ -1875,7 +1875,7 @@ describe('Emap filterFeatures', () => {
   });
 
   it('appends invert flag', async () => {
-    await map.filterFeatures({
+    await map.ops.filterFeatures({
       source: 'src1', target: 'cities', expression: 'this.x', invert: true,
     });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe(
@@ -1884,7 +1884,7 @@ describe('Emap filterFeatures', () => {
   });
 
   it('appends remove-empty flag', async () => {
-    await map.filterFeatures({
+    await map.ops.filterFeatures({
       source: 'src1', target: 'cities', expression: 'this.x', removeEmpty: true,
     });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe(
@@ -1893,28 +1893,28 @@ describe('Emap filterFeatures', () => {
   });
 
   it('removeEmpty alone (no expression) emits bare -filter remove-empty', async () => {
-    await map.filterFeatures({
+    await map.ops.filterFeatures({
       source: 'src1', target: 'cities', removeEmpty: true,
     });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "cities" -filter remove-empty');
   });
 
   it('returns false when neither expression nor removeEmpty is set', async () => {
-    expect(await map.filterFeatures({ source: 'src1', target: 'cities' })).toBe(false);
-    expect(await map.filterFeatures({ source: 'src1', target: 'cities', expression: '   ' })).toBe(false);
+    expect(await map.ops.filterFeatures({ source: 'src1', target: 'cities' })).toBe(false);
+    expect(await map.ops.filterFeatures({ source: 'src1', target: 'cities', expression: '   ' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on missing source / target', async () => {
-    expect(await map.filterFeatures({ source: 'nope', target: 'cities', expression: 'x' })).toBe(false);
-    expect(await map.filterFeatures({ source: 'src1', target: 'nope', expression: 'x' })).toBe(false);
+    expect(await map.ops.filterFeatures({ source: 'nope', target: 'cities', expression: 'x' })).toBe(false);
+    expect(await map.ops.filterFeatures({ source: 'src1', target: 'nope', expression: 'x' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('pushes one history entry labelled "Filter <target>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.filterFeatures({
+    await map.ops.filterFeatures({
       source: 'src1', target: 'cities', expression: 'this.x',
     });
     expect(listener).toHaveBeenCalledTimes(1);
@@ -1959,28 +1959,28 @@ describe('Emap snapLayer', () => {
   });
 
   it('emits the bare -snap command (mapshaper default interval)', async () => {
-    const ok = await map.snapLayer({ source: 'src1', target: 'roads' });
+    const ok = await map.ops.snapLayer({ source: 'src1', target: 'roads' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap');
   });
 
   it('appends a numeric interval positionally', async () => {
-    await map.snapLayer({ source: 'src1', target: 'roads', interval: 0.0001 });
+    await map.ops.snapLayer({ source: 'src1', target: 'roads', interval: 0.0001 });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap 0.0001');
   });
 
   it('appends endpoints flag', async () => {
-    await map.snapLayer({ source: 'src1', target: 'roads', endpoints: true });
+    await map.ops.snapLayer({ source: 'src1', target: 'roads', endpoints: true });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap endpoints');
   });
 
   it('appends precision=', async () => {
-    await map.snapLayer({ source: 'src1', target: 'roads', precision: 0.000001 });
+    await map.ops.snapLayer({ source: 'src1', target: 'roads', precision: 0.000001 });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap precision=0.000001');
   });
 
   it('combines all options in deterministic order', async () => {
-    await map.snapLayer({
+    await map.ops.snapLayer({
       source: 'src1', target: 'roads',
       interval: 0.001, endpoints: true, precision: 0.000001,
     });
@@ -1989,15 +1989,15 @@ describe('Emap snapLayer', () => {
   });
 
   it('returns false on missing source / target', async () => {
-    expect(await map.snapLayer({ source: 'nope', target: 'roads' })).toBe(false);
-    expect(await map.snapLayer({ source: 'src1', target: 'nope' })).toBe(false);
+    expect(await map.ops.snapLayer({ source: 'nope', target: 'roads' })).toBe(false);
+    expect(await map.ops.snapLayer({ source: 'src1', target: 'nope' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('pushes one history entry labelled "Snap <target>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.snapLayer({ source: 'src1', target: 'roads' });
+    await map.ops.snapLayer({ source: 'src1', target: 'roads' });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0][0].label).toBe('Snap roads');
   });
@@ -2049,12 +2049,12 @@ describe('Emap rotateSelected / scaleSelected', () => {
 
   describe('rotateSelected', () => {
     it('returns false on empty selection', () => {
-      expect(map.rotateSelected(45)).toBe(false);
+      expect(map.editSession.rotateSelected(45)).toBe(false);
     });
 
     it('returns false on zero angle', () => {
       map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
-      expect(map.rotateSelected(0)).toBe(false);
+      expect(map.editSession.rotateSelected(0)).toBe(false);
       expect(map.canUndo()).toBe(false);
     });
 
@@ -2062,7 +2062,7 @@ describe('Emap rotateSelected / scaleSelected', () => {
       map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
       // Centroid of (0,0)-(2,2) is (1,1). Rotate by 90 around (1,1):
       // (0,0) -> (2,0); (2,0) -> (2,2); (2,2) -> (0,2); (0,2) -> (0,0)
-      map.rotateSelected(90);
+      map.editSession.rotateSelected(90);
       expect(close(xx[0], 2)).toBe(true);
       expect(close(yy[0], 0)).toBe(true);
       expect(close(xx[1], 2)).toBe(true);
@@ -2076,7 +2076,7 @@ describe('Emap rotateSelected / scaleSelected', () => {
     it('custom origin is honoured', () => {
       map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
       // Rotate by 90 around (0,0): (2,0) -> (0,2)
-      map.rotateSelected(90, [0, 0]);
+      map.editSession.rotateSelected(90, [0, 0]);
       expect(close(xx[1], 0)).toBe(true);
       expect(close(yy[1], 2)).toBe(true);
     });
@@ -2085,7 +2085,7 @@ describe('Emap rotateSelected / scaleSelected', () => {
       map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
       const xxBefore = Array.from(xx);
       const yyBefore = Array.from(yy);
-      map.rotateSelected(37, [3, -1]);
+      map.editSession.rotateSelected(37, [3, -1]);
       map.undo();
       for (let i = 0; i < xxBefore.length; i++) {
         expect(close(xx[i], xxBefore[i])).toBe(true);
@@ -2099,7 +2099,7 @@ describe('Emap rotateSelected / scaleSelected', () => {
       const selListener = vi.fn();
       map.on('historychange', histListener);
       map.on('selectionchange', selListener);
-      map.rotateSelected(45);
+      map.editSession.rotateSelected(45);
       expect(map.getSelection()).toHaveLength(1);
       expect(histListener).toHaveBeenCalledTimes(1);
       expect(selListener).not.toHaveBeenCalled();
@@ -2108,20 +2108,20 @@ describe('Emap rotateSelected / scaleSelected', () => {
 
   describe('scaleSelected', () => {
     it('returns false on empty selection', () => {
-      expect(map.scaleSelected(2)).toBe(false);
+      expect(map.editSession.scaleSelected(2)).toBe(false);
     });
 
     it('returns false on no-op scale (1) and (1, 1)', () => {
       map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
-      expect(map.scaleSelected(1)).toBe(false);
-      expect(map.scaleSelected(1, 1)).toBe(false);
+      expect(map.editSession.scaleSelected(1)).toBe(false);
+      expect(map.editSession.scaleSelected(1, 1)).toBe(false);
       expect(map.canUndo()).toBe(false);
     });
 
     it('uniform scale by 2 around bbox centroid', () => {
       map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
       // Centroid (1,1). Scale 2x: (0,0) -> (-1,-1); (2,2) -> (3,3)
-      map.scaleSelected(2);
+      map.editSession.scaleSelected(2);
       expect(close(xx[0], -1)).toBe(true);
       expect(close(yy[0], -1)).toBe(true);
       expect(close(xx[2], 3)).toBe(true);
@@ -2131,7 +2131,7 @@ describe('Emap rotateSelected / scaleSelected', () => {
     it('non-uniform scale', () => {
       map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
       // Centroid (1,1). Scale (2, 0.5): (0,0) -> (-1, 0.5); (2,2) -> (3, 1.5)
-      map.scaleSelected(2, 0.5);
+      map.editSession.scaleSelected(2, 0.5);
       expect(close(xx[0], -1)).toBe(true);
       expect(close(yy[0], 0.5)).toBe(true);
       expect(close(xx[2], 3)).toBe(true);
@@ -2141,7 +2141,7 @@ describe('Emap rotateSelected / scaleSelected', () => {
     it('one undo reverses the scale', () => {
       map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
       const xxBefore = Array.from(xx);
-      map.scaleSelected(3.7);
+      map.editSession.scaleSelected(3.7);
       map.undo();
       for (let i = 0; i < xxBefore.length; i++) {
         expect(close(xx[i], xxBefore[i])).toBe(true);
@@ -2173,7 +2173,7 @@ describe('Emap rotateSelected / scaleSelected', () => {
         { source: 'src1', layer: 'parcels', id: 0 },
         { source: 'src2', layer: 'parcels', id: 0 },
       ], { mode: 'add' });
-      map.scaleSelected(2);
+      map.editSession.scaleSelected(2);
       // Both sources got scaled
       // Verify by re-running undo: a single undo should reverse both
       map.undo();
@@ -2220,36 +2220,36 @@ describe('Emap mosaicLayer', () => {
   });
 
   it('emits the bare -mosaic command', async () => {
-    const ok = await map.mosaicLayer({ source: 'src1', target: 'parts' });
+    const ok = await map.ops.mosaicLayer({ source: 'src1', target: 'parts' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic');
   });
 
   it('appends snap-interval=', async () => {
-    await map.mosaicLayer({ source: 'src1', target: 'parts', snapInterval: 0.001 });
+    await map.ops.mosaicLayer({ source: 'src1', target: 'parts', snapInterval: 0.001 });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic snap-interval=0.001');
   });
 
   it('appends no-snap and no-replace flags', async () => {
-    await map.mosaicLayer({ source: 'src1', target: 'parts', noSnap: true, noReplace: true });
+    await map.ops.mosaicLayer({ source: 'src1', target: 'parts', noSnap: true, noReplace: true });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic no-snap no-replace');
   });
 
   it('quotes name= when supplied', async () => {
-    await map.mosaicLayer({ source: 'src1', target: 'parts', name: 'flat zones' });
+    await map.ops.mosaicLayer({ source: 'src1', target: 'parts', name: 'flat zones' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic name="flat zones"');
   });
 
   it('returns false on missing source / target', async () => {
-    expect(await map.mosaicLayer({ source: 'nope', target: 'parts' })).toBe(false);
-    expect(await map.mosaicLayer({ source: 'src1', target: 'nope' })).toBe(false);
+    expect(await map.ops.mosaicLayer({ source: 'nope', target: 'parts' })).toBe(false);
+    expect(await map.ops.mosaicLayer({ source: 'src1', target: 'nope' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('pushes one history entry labelled "Mosaic <target>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.mosaicLayer({ source: 'src1', target: 'parts' });
+    await map.ops.mosaicLayer({ source: 'src1', target: 'parts' });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0][0].label).toBe('Mosaic parts');
   });
@@ -2298,58 +2298,58 @@ describe('Emap unionLayers', () => {
   });
 
   it('joins targets with commas inside a single quoted -target arg', async () => {
-    const ok = await map.unionLayers({ source: 'src1', targets: ['parks', 'soils'] });
+    const ok = await map.ops.unionLayers({ source: 'src1', targets: ['parks', 'soils'] });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union');
   });
 
   it('preserves target order for three or more layers', async () => {
-    await map.unionLayers({ source: 'src1', targets: ['soils', 'parks', 'roads'] });
+    await map.ops.unionLayers({ source: 'src1', targets: ['soils', 'parks', 'roads'] });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "soils,parks,roads" -union');
   });
 
   it('appends fields=', async () => {
-    await map.unionLayers({
+    await map.ops.unionLayers({
       source: 'src1', targets: ['parks', 'soils'], fields: ['name', 'type'],
     });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union fields=name,type');
   });
 
   it('quotes name=', async () => {
-    await map.unionLayers({
+    await map.ops.unionLayers({
       source: 'src1', targets: ['parks', 'soils'], name: 'overlay output',
     });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union name="overlay output"');
   });
 
   it('appends no-replace', async () => {
-    await map.unionLayers({
+    await map.ops.unionLayers({
       source: 'src1', targets: ['parks', 'soils'], noReplace: true,
     });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union no-replace');
   });
 
   it('returns false for fewer than two targets', async () => {
-    expect(await map.unionLayers({ source: 'src1', targets: ['parks'] })).toBe(false);
-    expect(await map.unionLayers({ source: 'src1', targets: [] })).toBe(false);
+    expect(await map.ops.unionLayers({ source: 'src1', targets: ['parks'] })).toBe(false);
+    expect(await map.ops.unionLayers({ source: 'src1', targets: [] })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when any target is unresolved', async () => {
-    expect(await map.unionLayers({
+    expect(await map.ops.unionLayers({
       source: 'src1', targets: ['parks', 'missing'],
     })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.unionLayers({ source: 'nope', targets: ['parks', 'soils'] })).toBe(false);
+    expect(await map.ops.unionLayers({ source: 'nope', targets: ['parks', 'soils'] })).toBe(false);
   });
 
   it('history entry is labelled "Union <comma-joined>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.unionLayers({ source: 'src1', targets: ['parks', 'soils'] });
+    await map.ops.unionLayers({ source: 'src1', targets: ['parks', 'soils'] });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0][0].label).toBe('Union parks,soils');
   });
@@ -2398,13 +2398,13 @@ describe('Emap divideLayer', () => {
   });
 
   it('builds the minimal command shape', async () => {
-    const ok = await map.divideLayer({ source: 'src1', target: 'roads', divider: 'tracts' });
+    const ok = await map.ops.divideLayer({ source: 'src1', target: 'roads', divider: 'tracts' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -divide source="tracts"');
   });
 
   it('appends fields=', async () => {
-    await map.divideLayer({
+    await map.ops.divideLayer({
       source: 'src1', target: 'roads', divider: 'tracts',
       fields: ['NAME', 'STATE'],
     });
@@ -2412,41 +2412,41 @@ describe('Emap divideLayer', () => {
   });
 
   it('appends force', async () => {
-    await map.divideLayer({
+    await map.ops.divideLayer({
       source: 'src1', target: 'roads', divider: 'tracts', force: true,
     });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -divide source="tracts" force');
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.divideLayer({ source: 'nope', target: 'roads', divider: 'tracts' })).toBe(false);
+    expect(await map.ops.divideLayer({ source: 'nope', target: 'roads', divider: 'tracts' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.divideLayer({ source: 'src1', target: 'highways', divider: 'tracts' })).toBe(false);
+    expect(await map.ops.divideLayer({ source: 'src1', target: 'highways', divider: 'tracts' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when divider is unresolved', async () => {
-    expect(await map.divideLayer({ source: 'src1', target: 'roads', divider: 'counties' })).toBe(false);
+    expect(await map.ops.divideLayer({ source: 'src1', target: 'roads', divider: 'counties' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is not a polyline', async () => {
-    expect(await map.divideLayer({ source: 'src1', target: 'tracts', divider: 'tracts' })).toBe(false);
+    expect(await map.ops.divideLayer({ source: 'src1', target: 'tracts', divider: 'tracts' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when divider is not a polygon', async () => {
-    expect(await map.divideLayer({ source: 'src1', target: 'roads', divider: 'cities' })).toBe(false);
+    expect(await map.ops.divideLayer({ source: 'src1', target: 'roads', divider: 'cities' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history entry is labelled "Divide <target>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.divideLayer({ source: 'src1', target: 'roads', divider: 'tracts' });
+    await map.ops.divideLayer({ source: 'src1', target: 'roads', divider: 'tracts' });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0][0].label).toBe('Divide roads');
   });
@@ -2495,38 +2495,38 @@ describe('Emap pointsLayer', () => {
   });
 
   it('builds centroid command for polygon target', async () => {
-    const ok = await map.pointsLayer({ source: 'src1', target: 'parks', type: 'centroid' });
+    const ok = await map.ops.pointsLayer({ source: 'src1', target: 'parks', type: 'centroid' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks" -points centroid');
   });
 
   it('builds inner command for polygon target', async () => {
-    await map.pointsLayer({ source: 'src1', target: 'parks', type: 'inner' });
+    await map.ops.pointsLayer({ source: 'src1', target: 'parks', type: 'inner' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks" -points inner');
   });
 
   it('builds vertices command for polyline target', async () => {
-    await map.pointsLayer({ source: 'src1', target: 'roads', type: 'vertices' });
+    await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'vertices' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -points vertices');
   });
 
   it('builds endpoints command for polygon target', async () => {
-    await map.pointsLayer({ source: 'src1', target: 'parks', type: 'endpoints' });
+    await map.ops.pointsLayer({ source: 'src1', target: 'parks', type: 'endpoints' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks" -points endpoints');
   });
 
   it('builds midpoints command for polyline target', async () => {
-    await map.pointsLayer({ source: 'src1', target: 'roads', type: 'midpoints' });
+    await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'midpoints' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -points midpoints');
   });
 
   it('builds interpolated command with interval', async () => {
-    await map.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: 1000 });
+    await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: 1000 });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -points interpolated interval=1000');
   });
 
   it('appends quoted name and no-replace', async () => {
-    await map.pointsLayer({
+    await map.ops.pointsLayer({
       source: 'src1', target: 'parks', type: 'centroid',
       name: 'park labels', noReplace: true,
     });
@@ -2535,40 +2535,40 @@ describe('Emap pointsLayer', () => {
   });
 
   it('rejects centroid on non-polygon target', async () => {
-    expect(await map.pointsLayer({ source: 'src1', target: 'roads', type: 'centroid' })).toBe(false);
+    expect(await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'centroid' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('rejects midpoints on non-polyline target', async () => {
-    expect(await map.pointsLayer({ source: 'src1', target: 'parks', type: 'midpoints' })).toBe(false);
+    expect(await map.ops.pointsLayer({ source: 'src1', target: 'parks', type: 'midpoints' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('rejects vertices on a point target', async () => {
-    expect(await map.pointsLayer({ source: 'src1', target: 'cities', type: 'vertices' })).toBe(false);
+    expect(await map.ops.pointsLayer({ source: 'src1', target: 'cities', type: 'vertices' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('rejects interpolated without interval', async () => {
-    expect(await map.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated' })).toBe(false);
-    expect(await map.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: 0 })).toBe(false);
-    expect(await map.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: -5 })).toBe(false);
+    expect(await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated' })).toBe(false);
+    expect(await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: 0 })).toBe(false);
+    expect(await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: -5 })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.pointsLayer({ source: 'nope', target: 'parks', type: 'centroid' })).toBe(false);
+    expect(await map.ops.pointsLayer({ source: 'nope', target: 'parks', type: 'centroid' })).toBe(false);
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.pointsLayer({ source: 'src1', target: 'forests', type: 'centroid' })).toBe(false);
+    expect(await map.ops.pointsLayer({ source: 'src1', target: 'forests', type: 'centroid' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history entry is labelled "Points <target>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.pointsLayer({ source: 'src1', target: 'parks', type: 'centroid' });
+    await map.ops.pointsLayer({ source: 'src1', target: 'parks', type: 'centroid' });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0][0].label).toBe('Points parks');
   });
@@ -2616,47 +2616,47 @@ describe('Emap linesLayer', () => {
   });
 
   it('builds the minimal command shape', async () => {
-    const ok = await map.linesLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.linesLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -lines');
   });
 
   it('emits comma-joined fields as a bare positional argument', async () => {
-    await map.linesLayer({
+    await map.ops.linesLayer({
       source: 'src1', target: 'states', fields: ['STATE', 'COUNTY'],
     });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -lines STATE,COUNTY');
   });
 
   it('appends quoted name', async () => {
-    await map.linesLayer({ source: 'src1', target: 'states', name: 'borders' });
+    await map.ops.linesLayer({ source: 'src1', target: 'states', name: 'borders' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -lines name="borders"');
   });
 
   it('appends no-replace', async () => {
-    await map.linesLayer({ source: 'src1', target: 'states', noReplace: true });
+    await map.ops.linesLayer({ source: 'src1', target: 'states', noReplace: true });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -lines no-replace');
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.linesLayer({ source: 'nope', target: 'states' })).toBe(false);
+    expect(await map.ops.linesLayer({ source: 'nope', target: 'states' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.linesLayer({ source: 'src1', target: 'counties' })).toBe(false);
+    expect(await map.ops.linesLayer({ source: 'src1', target: 'counties' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is not a polygon', async () => {
-    expect(await map.linesLayer({ source: 'src1', target: 'roads' })).toBe(false);
+    expect(await map.ops.linesLayer({ source: 'src1', target: 'roads' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history entry is labelled "Lines <target>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.linesLayer({ source: 'src1', target: 'states' });
+    await map.ops.linesLayer({ source: 'src1', target: 'states' });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0][0].label).toBe('Lines states');
   });
@@ -2704,50 +2704,50 @@ describe('Emap polygonsLayer', () => {
   });
 
   it('builds the minimal command shape', async () => {
-    const ok = await map.polygonsLayer({ source: 'src1', target: 'edges' });
+    const ok = await map.ops.polygonsLayer({ source: 'src1', target: 'edges' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons');
   });
 
   it('forwards gap-tolerance when positive', async () => {
-    await map.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: 0.001 });
+    await map.ops.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: 0.001 });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons gap-tolerance=0.001');
   });
 
   it('drops gap-tolerance when zero', async () => {
-    await map.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: 0 });
+    await map.ops.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: 0 });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons');
   });
 
   it('drops gap-tolerance when negative', async () => {
-    await map.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: -1 });
+    await map.ops.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: -1 });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons');
   });
 
   it('appends from-rings', async () => {
-    await map.polygonsLayer({ source: 'src1', target: 'edges', fromRings: true });
+    await map.ops.polygonsLayer({ source: 'src1', target: 'edges', fromRings: true });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons from-rings');
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.polygonsLayer({ source: 'nope', target: 'edges' })).toBe(false);
+    expect(await map.ops.polygonsLayer({ source: 'nope', target: 'edges' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.polygonsLayer({ source: 'src1', target: 'rivers' })).toBe(false);
+    expect(await map.ops.polygonsLayer({ source: 'src1', target: 'rivers' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is not a polyline', async () => {
-    expect(await map.polygonsLayer({ source: 'src1', target: 'parks' })).toBe(false);
+    expect(await map.ops.polygonsLayer({ source: 'src1', target: 'parks' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history entry is labelled "Polygons <target>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.polygonsLayer({ source: 'src1', target: 'edges' });
+    await map.ops.polygonsLayer({ source: 'src1', target: 'edges' });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0][0].label).toBe('Polygons edges');
   });
@@ -2795,44 +2795,44 @@ describe('Emap simplifyLayer', () => {
   });
 
   it('builds the percentage form', async () => {
-    const ok = await map.simplifyLayer({ source: 'src1', percentage: 10 });
+    const ok = await map.ops.simplifyLayer({ source: 'src1', percentage: 10 });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10%');
   });
 
   it('preserves decimal percentages', async () => {
-    await map.simplifyLayer({ source: 'src1', percentage: 12.5 });
+    await map.ops.simplifyLayer({ source: 'src1', percentage: 12.5 });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 12.5%');
   });
 
   it('builds the interval form', async () => {
-    await map.simplifyLayer({ source: 'src1', interval: 250 });
+    await map.ops.simplifyLayer({ source: 'src1', interval: 250 });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify interval=250');
   });
 
   it('builds the resolution form', async () => {
-    await map.simplifyLayer({ source: 'src1', resolution: '1000x500' });
+    await map.ops.simplifyLayer({ source: 'src1', resolution: '1000x500' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify resolution=1000x500');
   });
 
   it('appends method dp / visvalingam / weighted', async () => {
-    await map.simplifyLayer({ source: 'src1', percentage: 10, method: 'dp' });
+    await map.ops.simplifyLayer({ source: 'src1', percentage: 10, method: 'dp' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% dp');
     parseCommandsSpy.mockClear();
-    await map.simplifyLayer({ source: 'src1', percentage: 10, method: 'visvalingam' });
+    await map.ops.simplifyLayer({ source: 'src1', percentage: 10, method: 'visvalingam' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% visvalingam');
     parseCommandsSpy.mockClear();
-    await map.simplifyLayer({ source: 'src1', percentage: 10, method: 'weighted' });
+    await map.ops.simplifyLayer({ source: 'src1', percentage: 10, method: 'weighted' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% weighted');
   });
 
   it('appends weighting=', async () => {
-    await map.simplifyLayer({ source: 'src1', percentage: 10, method: 'weighted', weighting: 0.5 });
+    await map.ops.simplifyLayer({ source: 'src1', percentage: 10, method: 'weighted', weighting: 0.5 });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% weighted weighting=0.5');
   });
 
   it('appends every passthrough flag', async () => {
-    await map.simplifyLayer({
+    await map.ops.simplifyLayer({
       source: 'src1', percentage: 10,
       planar: true, keepShapes: true, lockBox: true, noRepair: true,
     });
@@ -2841,69 +2841,69 @@ describe('Emap simplifyLayer', () => {
   });
 
   it('scopes to a target when supplied', async () => {
-    await map.simplifyLayer({ source: 'src1', target: 'roads', percentage: 10 });
+    await map.ops.simplifyLayer({ source: 'src1', target: 'roads', percentage: 10 });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -simplify 10%');
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.simplifyLayer({ source: 'nope', percentage: 10 })).toBe(false);
+    expect(await map.ops.simplifyLayer({ source: 'nope', percentage: 10 })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.simplifyLayer({ source: 'src1', target: 'rivers', percentage: 10 })).toBe(false);
+    expect(await map.ops.simplifyLayer({ source: 'src1', target: 'rivers', percentage: 10 })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when no threshold is supplied', async () => {
-    expect(await map.simplifyLayer({ source: 'src1' })).toBe(false);
+    expect(await map.ops.simplifyLayer({ source: 'src1' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when multiple thresholds are supplied', async () => {
-    expect(await map.simplifyLayer({
+    expect(await map.ops.simplifyLayer({
       source: 'src1', percentage: 10, interval: 250,
     })).toBe(false);
-    expect(await map.simplifyLayer({
+    expect(await map.ops.simplifyLayer({
       source: 'src1', percentage: 10, resolution: '1000x500',
     })).toBe(false);
-    expect(await map.simplifyLayer({
+    expect(await map.ops.simplifyLayer({
       source: 'src1', interval: 250, resolution: '1000x500',
     })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false for out-of-range percentage', async () => {
-    expect(await map.simplifyLayer({ source: 'src1', percentage: -1 })).toBe(false);
-    expect(await map.simplifyLayer({ source: 'src1', percentage: 101 })).toBe(false);
-    expect(await map.simplifyLayer({ source: 'src1', percentage: NaN })).toBe(false);
+    expect(await map.ops.simplifyLayer({ source: 'src1', percentage: -1 })).toBe(false);
+    expect(await map.ops.simplifyLayer({ source: 'src1', percentage: 101 })).toBe(false);
+    expect(await map.ops.simplifyLayer({ source: 'src1', percentage: NaN })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false for non-positive interval', async () => {
-    expect(await map.simplifyLayer({ source: 'src1', interval: 0 })).toBe(false);
-    expect(await map.simplifyLayer({ source: 'src1', interval: -1 })).toBe(false);
+    expect(await map.ops.simplifyLayer({ source: 'src1', interval: 0 })).toBe(false);
+    expect(await map.ops.simplifyLayer({ source: 'src1', interval: -1 })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false for malformed resolution', async () => {
-    expect(await map.simplifyLayer({ source: 'src1', resolution: '1000' })).toBe(false);
-    expect(await map.simplifyLayer({ source: 'src1', resolution: '1000x' })).toBe(false);
-    expect(await map.simplifyLayer({ source: 'src1', resolution: 'abc' })).toBe(false);
+    expect(await map.ops.simplifyLayer({ source: 'src1', resolution: '1000' })).toBe(false);
+    expect(await map.ops.simplifyLayer({ source: 'src1', resolution: '1000x' })).toBe(false);
+    expect(await map.ops.simplifyLayer({ source: 'src1', resolution: 'abc' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history entry is labelled "Simplify <target>" when scoped', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.simplifyLayer({ source: 'src1', target: 'roads', percentage: 10 });
+    await map.ops.simplifyLayer({ source: 'src1', target: 'roads', percentage: 10 });
     expect(listener.mock.calls[0][0].label).toBe('Simplify roads');
   });
 
   it('history entry is labelled "Simplify <source>" when dataset-wide', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.simplifyLayer({ source: 'src1', percentage: 10 });
+    await map.ops.simplifyLayer({ source: 'src1', percentage: 10 });
     expect(listener.mock.calls[0][0].label).toBe('Simplify src1');
   });
 });
@@ -2948,33 +2948,33 @@ describe('Emap projectLayer', () => {
   });
 
   it('builds the whole-source command (no target)', async () => {
-    const ok = await map.projectLayer({ source: 'src1', crs: 'EPSG:3857' });
+    const ok = await map.ops.projectLayer({ source: 'src1', crs: 'EPSG:3857' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "EPSG:3857"');
   });
 
   it('builds the target-scoped command', async () => {
-    await map.projectLayer({ source: 'src1', target: 'states', crs: 'EPSG:3857' });
+    await map.ops.projectLayer({ source: 'src1', target: 'states', crs: 'EPSG:3857' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -proj "EPSG:3857"');
   });
 
   it('quotes Proj.4 strings with spaces', async () => {
-    await map.projectLayer({ source: 'src1', crs: '+proj=utm +zone=10' });
+    await map.ops.projectLayer({ source: 'src1', crs: '+proj=utm +zone=10' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "+proj=utm +zone=10"');
   });
 
   it('appends quoted init=', async () => {
-    await map.projectLayer({ source: 'src1', crs: 'EPSG:3857', init: 'EPSG:4326' });
+    await map.ops.projectLayer({ source: 'src1', crs: 'EPSG:3857', init: 'EPSG:4326' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "EPSG:3857" init="EPSG:4326"');
   });
 
   it('appends densify', async () => {
-    await map.projectLayer({ source: 'src1', crs: 'robinson', densify: true });
+    await map.ops.projectLayer({ source: 'src1', crs: 'robinson', densify: true });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "robinson" densify');
   });
 
   it('combines all options', async () => {
-    await map.projectLayer({
+    await map.ops.projectLayer({
       source: 'src1', target: 'states',
       crs: 'EPSG:3857', init: 'EPSG:4326', densify: true,
     });
@@ -2983,32 +2983,32 @@ describe('Emap projectLayer', () => {
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.projectLayer({ source: 'nope', crs: 'EPSG:3857' })).toBe(false);
+    expect(await map.ops.projectLayer({ source: 'nope', crs: 'EPSG:3857' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.projectLayer({ source: 'src1', target: 'missing', crs: 'EPSG:3857' })).toBe(false);
+    expect(await map.ops.projectLayer({ source: 'src1', target: 'missing', crs: 'EPSG:3857' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on empty / whitespace crs', async () => {
-    expect(await map.projectLayer({ source: 'src1', crs: '' })).toBe(false);
-    expect(await map.projectLayer({ source: 'src1', crs: '   ' })).toBe(false);
+    expect(await map.ops.projectLayer({ source: 'src1', crs: '' })).toBe(false);
+    expect(await map.ops.projectLayer({ source: 'src1', crs: '   ' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history label is "Project <target>" when scoped', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.projectLayer({ source: 'src1', target: 'states', crs: 'EPSG:3857' });
+    await map.ops.projectLayer({ source: 'src1', target: 'states', crs: 'EPSG:3857' });
     expect(listener.mock.calls[0][0].label).toBe('Project states');
   });
 
   it('history label is "Project <source>" when dataset-wide', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.projectLayer({ source: 'src1', crs: 'EPSG:3857' });
+    await map.ops.projectLayer({ source: 'src1', crs: 'EPSG:3857' });
     expect(listener.mock.calls[0][0].label).toBe('Project src1');
   });
 });
@@ -3055,39 +3055,39 @@ describe('Emap renameLayer', () => {
   });
 
   it('builds the minimal command shape', async () => {
-    const ok = await map.renameLayer({ source: 'src1', target: 'old', name: 'new' });
+    const ok = await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'new' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "old" -rename-layers "new"');
   });
 
   it('quotes names with spaces', async () => {
-    await map.renameLayer({ source: 'src1', target: 'old', name: 'My Layer' });
+    await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'My Layer' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "old" -rename-layers "My Layer"');
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.renameLayer({ source: 'nope', target: 'old', name: 'new' })).toBe(false);
+    expect(await map.ops.renameLayer({ source: 'nope', target: 'old', name: 'new' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.renameLayer({ source: 'src1', target: 'missing', name: 'new' })).toBe(false);
+    expect(await map.ops.renameLayer({ source: 'src1', target: 'missing', name: 'new' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on empty / whitespace name', async () => {
-    expect(await map.renameLayer({ source: 'src1', target: 'old', name: '' })).toBe(false);
-    expect(await map.renameLayer({ source: 'src1', target: 'old', name: '   ' })).toBe(false);
+    expect(await map.ops.renameLayer({ source: 'src1', target: 'old', name: '' })).toBe(false);
+    expect(await map.ops.renameLayer({ source: 'src1', target: 'old', name: '   ' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on collision with another layer', async () => {
-    expect(await map.renameLayer({ source: 'src1', target: 'old', name: 'other' })).toBe(false);
+    expect(await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'other' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('allows renaming to the same name (no collision against itself)', async () => {
-    const ok = await map.renameLayer({ source: 'src1', target: 'old', name: 'old' });
+    const ok = await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'old' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "old" -rename-layers "old"');
   });
@@ -3095,7 +3095,7 @@ describe('Emap renameLayer', () => {
   it('history entry is labelled "Rename <from> → <to>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.renameLayer({ source: 'src1', target: 'old', name: 'new' });
+    await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'new' });
     expect(listener.mock.calls[0][0].label).toBe('Rename old → new');
   });
 });
@@ -3144,61 +3144,61 @@ describe('Emap mergeLayers', () => {
   });
 
   it('joins targets with commas inside a single quoted -target arg', async () => {
-    const ok = await map.mergeLayers({ source: 'src1', targets: ['a', 'b'] });
+    const ok = await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'b'] });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers');
   });
 
   it('preserves target order for three or more layers', async () => {
-    await map.mergeLayers({ source: 'src1', targets: ['c', 'a', 'b'] });
+    await map.ops.mergeLayers({ source: 'src1', targets: ['c', 'a', 'b'] });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "c,a,b" -merge-layers');
   });
 
   it('appends quoted name', async () => {
-    await map.mergeLayers({ source: 'src1', targets: ['a', 'b'], name: 'combined' });
+    await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'b'], name: 'combined' });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers name="combined"');
   });
 
   it('appends force', async () => {
-    await map.mergeLayers({ source: 'src1', targets: ['a', 'b'], force: true });
+    await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'b'], force: true });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers force');
   });
 
   it('appends flatten', async () => {
-    await map.mergeLayers({ source: 'src1', targets: ['a', 'b'], flatten: true });
+    await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'b'], flatten: true });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers flatten');
   });
 
   it('returns false for fewer than two targets', async () => {
-    expect(await map.mergeLayers({ source: 'src1', targets: ['a'] })).toBe(false);
-    expect(await map.mergeLayers({ source: 'src1', targets: [] })).toBe(false);
+    expect(await map.ops.mergeLayers({ source: 'src1', targets: ['a'] })).toBe(false);
+    expect(await map.ops.mergeLayers({ source: 'src1', targets: [] })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when any target is unresolved', async () => {
-    expect(await map.mergeLayers({ source: 'src1', targets: ['a', 'missing'] })).toBe(false);
+    expect(await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'missing'] })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('rejects mixed-geometry targets without force', async () => {
-    expect(await map.mergeLayers({ source: 'src1', targets: ['a', 'roads'] })).toBe(false);
+    expect(await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'roads'] })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('allows mixed-geometry targets with force=true', async () => {
-    const ok = await map.mergeLayers({ source: 'src1', targets: ['a', 'roads'], force: true });
+    const ok = await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'roads'], force: true });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,roads" -merge-layers force');
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.mergeLayers({ source: 'nope', targets: ['a', 'b'] })).toBe(false);
+    expect(await map.ops.mergeLayers({ source: 'nope', targets: ['a', 'b'] })).toBe(false);
   });
 
   it('history entry is labelled "Merge <comma-joined>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.mergeLayers({ source: 'src1', targets: ['a', 'b'] });
+    await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'b'] });
     expect(listener.mock.calls[0][0].label).toBe('Merge a,b');
   });
 });
@@ -3242,13 +3242,13 @@ describe('Emap splitLayer', () => {
   });
 
   it('builds the field-name form', async () => {
-    const ok = await map.splitLayer({ source: 'src1', target: 'states', expression: 'REGION' });
+    const ok = await map.ops.splitLayer({ source: 'src1', target: 'states', expression: 'REGION' });
     expect(ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -split "REGION"');
   });
 
   it('forwards JS expressions verbatim, quoted', async () => {
-    await map.splitLayer({
+    await map.ops.splitLayer({
       source: 'src1', target: 'states',
       expression: 'this.pop > 1000000 ? "big" : "small"',
     });
@@ -3257,32 +3257,32 @@ describe('Emap splitLayer', () => {
   });
 
   it('appends no-replace', async () => {
-    await map.splitLayer({
+    await map.ops.splitLayer({
       source: 'src1', target: 'states', expression: 'REGION', noReplace: true,
     });
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -split "REGION" no-replace');
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.splitLayer({ source: 'nope', target: 'states', expression: 'REGION' })).toBe(false);
+    expect(await map.ops.splitLayer({ source: 'nope', target: 'states', expression: 'REGION' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.splitLayer({ source: 'src1', target: 'missing', expression: 'REGION' })).toBe(false);
+    expect(await map.ops.splitLayer({ source: 'src1', target: 'missing', expression: 'REGION' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on empty / whitespace expression', async () => {
-    expect(await map.splitLayer({ source: 'src1', target: 'states', expression: '' })).toBe(false);
-    expect(await map.splitLayer({ source: 'src1', target: 'states', expression: '   ' })).toBe(false);
+    expect(await map.ops.splitLayer({ source: 'src1', target: 'states', expression: '' })).toBe(false);
+    expect(await map.ops.splitLayer({ source: 'src1', target: 'states', expression: '   ' })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history entry is labelled "Split <target>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.splitLayer({ source: 'src1', target: 'states', expression: 'REGION' });
+    await map.ops.splitLayer({ source: 'src1', target: 'states', expression: 'REGION' });
     expect(listener.mock.calls[0][0].label).toBe('Split states');
   });
 });
@@ -3345,25 +3345,25 @@ describe('Emap dropLayer', () => {
   afterEach(() => { ctx.restore(); });
 
   it('builds the minimal command shape', async () => {
-    const ok = await ctx.map.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await ctx.map.ops.dropLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(true);
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -drop');
   });
 
   it('returns false when source is missing', async () => {
-    expect(await ctx.map.dropLayer({ source: 'nope', target: 'states' })).toBe(false);
+    expect(await ctx.map.ops.dropLayer({ source: 'nope', target: 'states' })).toBe(false);
     expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await ctx.map.dropLayer({ source: 'src1', target: 'missing' })).toBe(false);
+    expect(await ctx.map.ops.dropLayer({ source: 'src1', target: 'missing' })).toBe(false);
     expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history label is "Drop <target>"', async () => {
     const listener = vi.fn();
     ctx.map.on('historychange', listener);
-    await ctx.map.dropLayer({ source: 'src1', target: 'states' });
+    await ctx.map.ops.dropLayer({ source: 'src1', target: 'states' });
     expect(listener.mock.calls[0][0].label).toBe('Drop states');
   });
 });
@@ -3374,33 +3374,33 @@ describe('Emap sortFeatures', () => {
   afterEach(() => { ctx.restore(); });
 
   it('builds the ascending command (default)', async () => {
-    const ok = await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: 'POP' });
+    const ok = await ctx.map.ops.sortFeatures({ source: 'src1', target: 'states', expression: 'POP' });
     expect(ok).toBe(true);
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -sort "POP"');
   });
 
   it('appends descending', async () => {
-    await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: 'POP', descending: true });
+    await ctx.map.ops.sortFeatures({ source: 'src1', target: 'states', expression: 'POP', descending: true });
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -sort "POP" descending');
   });
 
   it('quotes JS expressions verbatim', async () => {
-    await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: 'this.pop * -1' });
+    await ctx.map.ops.sortFeatures({ source: 'src1', target: 'states', expression: 'this.pop * -1' });
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -sort "this.pop * -1"');
   });
 
   it('returns false on missing source / unresolved target / empty expression', async () => {
-    expect(await ctx.map.sortFeatures({ source: 'nope', target: 'states', expression: 'POP' })).toBe(false);
-    expect(await ctx.map.sortFeatures({ source: 'src1', target: 'missing', expression: 'POP' })).toBe(false);
-    expect(await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: '' })).toBe(false);
-    expect(await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: '   ' })).toBe(false);
+    expect(await ctx.map.ops.sortFeatures({ source: 'nope', target: 'states', expression: 'POP' })).toBe(false);
+    expect(await ctx.map.ops.sortFeatures({ source: 'src1', target: 'missing', expression: 'POP' })).toBe(false);
+    expect(await ctx.map.ops.sortFeatures({ source: 'src1', target: 'states', expression: '' })).toBe(false);
+    expect(await ctx.map.ops.sortFeatures({ source: 'src1', target: 'states', expression: '   ' })).toBe(false);
     expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history label is "Sort <target>"', async () => {
     const listener = vi.fn();
     ctx.map.on('historychange', listener);
-    await ctx.map.sortFeatures({ source: 'src1', target: 'states', expression: 'POP' });
+    await ctx.map.ops.sortFeatures({ source: 'src1', target: 'states', expression: 'POP' });
     expect(listener.mock.calls[0][0].label).toBe('Sort states');
   });
 });
@@ -3411,32 +3411,32 @@ describe('Emap uniqueFeatures', () => {
   afterEach(() => { ctx.restore(); });
 
   it('builds the minimal command shape', async () => {
-    const ok = await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE_FIPS' });
+    const ok = await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE_FIPS' });
     expect(ok).toBe(true);
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -uniq "STATE_FIPS"');
   });
 
   it('appends max-count', async () => {
-    await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE', maxCount: 3 });
+    await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE', maxCount: 3 });
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -uniq "STATE" max-count=3');
   });
 
   it('appends invert', async () => {
-    await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE', invert: true });
+    await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE', invert: true });
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -uniq "STATE" invert');
   });
 
   it('returns false on empty expression / non-positive maxCount', async () => {
-    expect(await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: '' })).toBe(false);
-    expect(await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'X', maxCount: 0 })).toBe(false);
-    expect(await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'X', maxCount: -1 })).toBe(false);
+    expect(await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: '' })).toBe(false);
+    expect(await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: 'X', maxCount: 0 })).toBe(false);
+    expect(await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: 'X', maxCount: -1 })).toBe(false);
     expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history label is "Uniq <target>"', async () => {
     const listener = vi.fn();
     ctx.map.on('historychange', listener);
-    await ctx.map.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE' });
+    await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE' });
     expect(listener.mock.calls[0][0].label).toBe('Uniq states');
   });
 });
@@ -3447,27 +3447,27 @@ describe('Emap filterFields', () => {
   afterEach(() => { ctx.restore(); });
 
   it('joins fields with commas inside one quoted argument', async () => {
-    const ok = await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['fips', 'name'] });
+    const ok = await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: ['fips', 'name'] });
     expect(ok).toBe(true);
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -filter-fields "fips,name"');
   });
 
   it('appends invert', async () => {
-    await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['fips'], invert: true });
+    await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: ['fips'], invert: true });
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -filter-fields "fips" invert');
   });
 
   it('returns false on empty / invalid fields', async () => {
-    expect(await ctx.map.filterFields({ source: 'src1', target: 'states', fields: [] })).toBe(false);
-    expect(await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['', 'b'] })).toBe(false);
-    expect(await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['a,b'] })).toBe(false);
+    expect(await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: [] })).toBe(false);
+    expect(await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: ['', 'b'] })).toBe(false);
+    expect(await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: ['a,b'] })).toBe(false);
     expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history label is "Filter fields <target>"', async () => {
     const listener = vi.fn();
     ctx.map.on('historychange', listener);
-    await ctx.map.filterFields({ source: 'src1', target: 'states', fields: ['fips'] });
+    await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: ['fips'] });
     expect(listener.mock.calls[0][0].label).toBe('Filter fields states');
   });
 });
@@ -3478,13 +3478,13 @@ describe('Emap renameFields', () => {
   afterEach(() => { ctx.restore(); });
 
   it('serializes a single rename', async () => {
-    const ok = await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { OLD: 'NEW' } });
+    const ok = await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { OLD: 'NEW' } });
     expect(ok).toBe(true);
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -rename-fields "OLD=NEW"');
   });
 
   it('serializes a multi-field rename in iteration order', async () => {
-    await ctx.map.renameFields({
+    await ctx.map.ops.renameFields({
       source: 'src1', target: 'states',
       mapping: { fips: 'STATE_FIPS', st: 'state' },
     });
@@ -3493,20 +3493,20 @@ describe('Emap renameFields', () => {
   });
 
   it('returns false on empty mapping or invalid keys/values', async () => {
-    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: {} })).toBe(false);
-    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { '': 'b' } })).toBe(false);
-    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { a: '' } })).toBe(false);
-    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { 'a,b': 'c' } })).toBe(false);
-    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { 'a=b': 'c' } })).toBe(false);
-    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b,c' } })).toBe(false);
-    expect(await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b=c' } })).toBe(false);
+    expect(await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: {} })).toBe(false);
+    expect(await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { '': 'b' } })).toBe(false);
+    expect(await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { a: '' } })).toBe(false);
+    expect(await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { 'a,b': 'c' } })).toBe(false);
+    expect(await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { 'a=b': 'c' } })).toBe(false);
+    expect(await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b,c' } })).toBe(false);
+    expect(await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b=c' } })).toBe(false);
     expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history label is "Rename fields <target>"', async () => {
     const listener = vi.fn();
     ctx.map.on('historychange', listener);
-    await ctx.map.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b' } });
+    await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b' } });
     expect(listener.mock.calls[0][0].label).toBe('Rename fields states');
   });
 });
@@ -3562,7 +3562,7 @@ describe('Emap joinTable', () => {
   }
 
   it('CSV-based join — command shape + input cache', async () => {
-    const ok = await map.joinTable({
+    const ok = await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { csv: 'fips,pop\n01,4M\n02,800K' },
       keys: ['STATE_FIPS', 'fips'],
@@ -3575,7 +3575,7 @@ describe('Emap joinTable', () => {
 
   it('CSV bytes (Uint8Array) flow through unchanged', async () => {
     const bytes = new TextEncoder().encode('a,b\n1,2');
-    await map.joinTable({
+    await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { csv: bytes },
       keys: ['k', 's'],
@@ -3584,7 +3584,7 @@ describe('Emap joinTable', () => {
   });
 
   it('JSON string is injected as .emap-join.json', async () => {
-    await map.joinTable({
+    await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { json: '[{"a":1}]' },
       keys: ['k', 's'],
@@ -3595,7 +3595,7 @@ describe('Emap joinTable', () => {
   });
 
   it('JSON array is auto-stringified', async () => {
-    await map.joinTable({
+    await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { json: [{ a: 1 }, { a: 2 }] },
       keys: ['k', 's'],
@@ -3605,7 +3605,7 @@ describe('Emap joinTable', () => {
   });
 
   it('JSON plain object is auto-stringified', async () => {
-    await map.joinTable({
+    await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { json: { rows: [{ a: 1 }] } },
       keys: ['k', 's'],
@@ -3615,7 +3615,7 @@ describe('Emap joinTable', () => {
   });
 
   it('Layer-based join — no inputFiles cache', async () => {
-    await map.joinTable({
+    await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { layer: 'pop_table' },
       keys: ['STATE_FIPS', 'fips'],
@@ -3626,7 +3626,7 @@ describe('Emap joinTable', () => {
   });
 
   it('forwards every optional passthrough', async () => {
-    await map.joinTable({
+    await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { layer: 't' }, keys: ['k', 's'],
       fields: ['pop', 'gdp'], prefix: 'p_',
@@ -3644,7 +3644,7 @@ describe('Emap joinTable', () => {
   });
 
   it('returns false on missing source', async () => {
-    expect(await map.joinTable({
+    expect(await map.ops.joinTable({
       source: 'nope', target: 'states',
       data: { csv: 'a,b\n1,2' }, keys: ['k', 's'],
     })).toBe(false);
@@ -3652,7 +3652,7 @@ describe('Emap joinTable', () => {
   });
 
   it('returns false on unresolved target', async () => {
-    expect(await map.joinTable({
+    expect(await map.ops.joinTable({
       source: 'src1', target: 'missing',
       data: { csv: 'a,b\n1,2' }, keys: ['k', 's'],
     })).toBe(false);
@@ -3661,18 +3661,18 @@ describe('Emap joinTable', () => {
 
   it('returns false on malformed keys', async () => {
     const base = { source: 'src1' as const, target: 'states' as const, data: { layer: 't' } as const };
-    expect(await map.joinTable({ ...base, keys: ['k'] as any })).toBe(false);
-    expect(await map.joinTable({ ...base, keys: ['', 's'] })).toBe(false);
-    expect(await map.joinTable({ ...base, keys: ['k', '   '] })).toBe(false);
+    expect(await map.ops.joinTable({ ...base, keys: ['k'] as any })).toBe(false);
+    expect(await map.ops.joinTable({ ...base, keys: ['', 's'] })).toBe(false);
+    expect(await map.ops.joinTable({ ...base, keys: ['k', '   '] })).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on invalid data shape', async () => {
-    expect(await map.joinTable({
+    expect(await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: {} as any, keys: ['k', 's'],
     })).toBe(false);
-    expect(await map.joinTable({
+    expect(await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { layer: '' } as any, keys: ['k', 's'],
     })).toBe(false);
@@ -3682,7 +3682,7 @@ describe('Emap joinTable', () => {
   it('history label is "Join <target>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.joinTable({
+    await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { layer: 't' }, keys: ['k', 's'],
     });
@@ -3716,7 +3716,7 @@ describe('Emap joinTable round-trip (real mapshaper)', () => {
 
     const layerName = source.getDataset()!.layers[0].name;
     const csv = 'fips,pop\nAL,1000\nAK,2000\n';
-    const ok = await map.joinTable({
+    const ok = await map.ops.joinTable({
       source: 'rt', target: layerName,
       data: { csv }, keys: ['fips', 'fips'],
     });
@@ -3766,7 +3766,7 @@ describe('Emap checkGeometry (mocked mapshaper)', () => {
   });
 
   it('returns the clean report when there are no intersections', async () => {
-    const report = await map.checkGeometry({ source: 'src1' });
+    const report = await map.ops.checkGeometry({ source: 'src1' });
     expect(report).toEqual({ ok: true, intersections: [], intersectionCount: 0 });
     expect(findSegmentIntersectionsSpy).toHaveBeenCalledTimes(1);
     const args = findSegmentIntersectionsSpy.mock.calls[0] as unknown[];
@@ -3778,7 +3778,7 @@ describe('Emap checkGeometry (mocked mapshaper)', () => {
       { x: 1, y: 2, _internal: 'a' },
       { x: 3, y: 4, _internal: 'b' },
     ]);
-    const report = await map.checkGeometry({ source: 'src1' });
+    const report = await map.ops.checkGeometry({ source: 'src1' });
     expect(report).toEqual({
       ok: false,
       intersectionCount: 2,
@@ -3787,17 +3787,17 @@ describe('Emap checkGeometry (mocked mapshaper)', () => {
   });
 
   it('forwards tolerance to mapshaper', async () => {
-    await map.checkGeometry({ source: 'src1', tolerance: 0.001 });
+    await map.ops.checkGeometry({ source: 'src1', tolerance: 0.001 });
     expect(findSegmentIntersectionsSpy.mock.calls[0][1]).toEqual({ tolerance: 0.001 });
   });
 
   it('omits tolerance when not supplied', async () => {
-    await map.checkGeometry({ source: 'src1' });
+    await map.ops.checkGeometry({ source: 'src1' });
     expect(findSegmentIntersectionsSpy.mock.calls[0][1]).toEqual({});
   });
 
   it('returns null on missing source', async () => {
-    expect(await map.checkGeometry({ source: 'nope' })).toBeNull();
+    expect(await map.ops.checkGeometry({ source: 'nope' })).toBeNull();
     expect(findSegmentIntersectionsSpy).not.toHaveBeenCalled();
   });
 
@@ -3809,11 +3809,11 @@ describe('Emap checkGeometry (mocked mapshaper)', () => {
       off: vi.fn(), on: vi.fn(),
     } as any;
     (map as any)._sources.set('s2', noDsSource);
-    expect(await map.checkGeometry({ source: 's2' })).toBeNull();
+    expect(await map.ops.checkGeometry({ source: 's2' })).toBeNull();
   });
 
   it('returns null on unresolved target', async () => {
-    expect(await map.checkGeometry({ source: 'src1', target: 'missing' })).toBeNull();
+    expect(await map.ops.checkGeometry({ source: 'src1', target: 'missing' })).toBeNull();
     expect(findSegmentIntersectionsSpy).not.toHaveBeenCalled();
   });
 
@@ -3825,7 +3825,7 @@ describe('Emap checkGeometry (mocked mapshaper)', () => {
       off: vi.fn(), on: vi.fn(),
     } as any;
     (map as any)._sources.set('pts', pointSource);
-    const report = await map.checkGeometry({ source: 'pts' });
+    const report = await map.ops.checkGeometry({ source: 'pts' });
     expect(report).toEqual({ ok: true, intersections: [], intersectionCount: 0 });
     expect(findSegmentIntersectionsSpy).not.toHaveBeenCalled();
   });
@@ -3833,10 +3833,10 @@ describe('Emap checkGeometry (mocked mapshaper)', () => {
   it('does NOT push history on any branch', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.checkGeometry({ source: 'src1' });
+    await map.ops.checkGeometry({ source: 'src1' });
     findSegmentIntersectionsSpy.mockReturnValueOnce([{ x: 0, y: 0 }]);
-    await map.checkGeometry({ source: 'src1' });
-    await map.checkGeometry({ source: 'nope' });
+    await map.ops.checkGeometry({ source: 'src1' });
+    await map.ops.checkGeometry({ source: 'nope' });
     expect(listener).not.toHaveBeenCalled();
   });
 });
@@ -3868,7 +3868,7 @@ describe('Emap checkGeometry round-trip (real mapshaper)', () => {
     setPrivate(map, '_viewport', { setCRS: vi.fn() });
     map.addSource('clean', source);
 
-    const report = await map.checkGeometry({ source: 'clean' });
+    const report = await map.ops.checkGeometry({ source: 'clean' });
     expect(report).not.toBeNull();
     expect(report!.ok).toBe(true);
     expect(report!.intersectionCount).toBe(0);
@@ -3893,7 +3893,7 @@ describe('Emap checkGeometry round-trip (real mapshaper)', () => {
     setPrivate(map, '_viewport', { setCRS: vi.fn() });
     map.addSource('crossing', source);
 
-    const report = await map.checkGeometry({ source: 'crossing' });
+    const report = await map.ops.checkGeometry({ source: 'crossing' });
     expect(report).not.toBeNull();
     expect(report!.ok).toBe(false);
     expect(report!.intersectionCount).toBeGreaterThan(0);
@@ -3946,7 +3946,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
   });
 
   it('calls addIntersectionCuts on a deep copy of the source dataset', async () => {
-    const ok = await map.rebuildTopology({ source: 'src1' });
+    const ok = await map.ops.rebuildTopology({ source: 'src1' });
     expect(ok).toBe(true);
     expect(copyDatasetSpy).toHaveBeenCalledTimes(2); // before snapshot + working copy
     expect(addIntersectionCutsSpy).toHaveBeenCalledTimes(1);
@@ -3955,7 +3955,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
   });
 
   it('forwards options as snake_case', async () => {
-    await map.rebuildTopology({
+    await map.ops.rebuildTopology({
       source: 'src1', snapInterval: 0.001, noSnap: false, rebuildTopology: true,
     });
     const opts = addIntersectionCutsSpy.mock.calls[0][1] as any;
@@ -3967,7 +3967,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.rebuildTopology({ source: 'nope' })).toBe(false);
+    expect(await map.ops.rebuildTopology({ source: 'nope' })).toBe(false);
     expect(addIntersectionCutsSpy).not.toHaveBeenCalled();
   });
 
@@ -3979,7 +3979,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
       off: vi.fn(), on: vi.fn(),
     } as any;
     (map as any)._sources.set('s2', noDsSource);
-    expect(await map.rebuildTopology({ source: 's2' })).toBe(false);
+    expect(await map.ops.rebuildTopology({ source: 's2' })).toBe(false);
     expect(addIntersectionCutsSpy).not.toHaveBeenCalled();
   });
 
@@ -3991,13 +3991,13 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
       off: vi.fn(), on: vi.fn(),
     } as any;
     (map as any)._sources.set('pts', pointSource);
-    expect(await map.rebuildTopology({ source: 'pts' })).toBe(true);
+    expect(await map.ops.rebuildTopology({ source: 'pts' })).toBe(true);
     expect(addIntersectionCutsSpy).not.toHaveBeenCalled();
     expect(map.canUndo()).toBe(false);
   });
 
   it('swaps the dataset via setDataset on success', async () => {
-    await map.rebuildTopology({ source: 'src1' });
+    await map.ops.rebuildTopology({ source: 'src1' });
     expect(setDatasetSpy).toHaveBeenCalledTimes(1);
     const after = setDatasetSpy.mock.calls[0][0] as any;
     expect(after._copy).toBeDefined();
@@ -4006,7 +4006,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
   it('pushes one DatasetReplaceCommand labelled "Rebuild topology"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.rebuildTopology({ source: 'src1' });
+    await map.ops.rebuildTopology({ source: 'src1' });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0][0].label).toBe('Rebuild topology');
     expect(map.canUndo()).toBe(true);
@@ -4017,7 +4017,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
     history.push({ label: 'fake', do: vi.fn(), undo: vi.fn() } as any);
     expect(map.canUndo()).toBe(true);
     // After rebuild, prior 'fake' command is gone; only 'Rebuild topology' remains.
-    await map.rebuildTopology({ source: 'src1' });
+    await map.ops.rebuildTopology({ source: 'src1' });
     const command = history.undo();
     expect(command?.label).toBe('Rebuild topology');
     expect(map.canUndo()).toBe(false);
@@ -4027,7 +4027,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
     const selection = (map as any)._selection as Selection;
     selection.apply([{ source: 'src1', layer: 'shapes', id: 1 }], 'add');
     expect(selection.getAll().length).toBe(1);
-    await map.rebuildTopology({ source: 'src1' });
+    await map.ops.rebuildTopology({ source: 'src1' });
     expect(selection.getAll().length).toBe(0);
   });
 
@@ -4035,7 +4035,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
     addIntersectionCutsSpy.mockImplementation(() => { throw new Error('boom'); });
     const errors: any[] = [];
     map.on('error', (e: any) => errors.push(e));
-    expect(await map.rebuildTopology({ source: 'src1' })).toBe(false);
+    expect(await map.ops.rebuildTopology({ source: 'src1' })).toBe(false);
     expect(errors).toHaveLength(1);
     expect(errors[0].error.message).toBe('boom');
     expect(setDatasetSpy).not.toHaveBeenCalled();
@@ -4075,7 +4075,7 @@ describe('Emap rebuildTopology round-trip (real mapshaper)', () => {
     setPrivate(map, '_viewport', { setCRS: vi.fn() });
     map.addSource('rt', source);
 
-    const ok = await map.rebuildTopology({ source: 'rt' });
+    const ok = await map.ops.rebuildTopology({ source: 'rt' });
     expect(ok).toBe(true);
     const ds = map.getSource('rt')?.getDataset();
     expect(ds).toBeDefined();
@@ -4435,7 +4435,7 @@ describe('Emap useWorker routing', () => {
   });
 
   it('routes _runDatasetCommand through workerPool.run with packed payload', async () => {
-    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(true);
 
     expect(exportSpy).toHaveBeenCalledTimes(1);
@@ -4456,7 +4456,7 @@ describe('Emap useWorker routing', () => {
   });
 
   it('forwards inputFiles to workerPool.run when present (joinTable path)', async () => {
-    const ok = await map.joinTable({
+    const ok = await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { csv: 'a,b\n1,2' }, keys: ['k', 's'],
     });
@@ -4470,7 +4470,7 @@ describe('Emap useWorker routing', () => {
     const errors: any[] = [];
     map.on('error', (e: any) => errors.push(e));
 
-    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(false);
     expect(errors).toHaveLength(1);
     expect(errors[0].error.message).toBe('worker boom');
@@ -4482,7 +4482,7 @@ describe('Emap useWorker routing', () => {
     restoreSpy.mockImplementationOnce(async () => ({ datasets: [] }));
     const errors: any[] = [];
     map.on('error', (e: any) => errors.push(e));
-    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(false);
     expect(errors).toHaveLength(1);
     expect(errors[0].error.message).toMatch(/no dataset in response/);
@@ -4490,13 +4490,15 @@ describe('Emap useWorker routing', () => {
 
   it('Emap.remove() destroys the worker pool', () => {
     const destroySpy = vi.fn();
-    setPrivate(map, '_workerPool', { run: runSpy, destroy: destroySpy });
+    const cancelAllSpy = vi.fn();
+    setPrivate(map, '_workerPool', { run: runSpy, destroy: destroySpy, cancelAll: cancelAllSpy });
     // remove() also tries to manipulate _container/_canvasContainer; stub.
     setPrivate(map, '_container', { removeChild: vi.fn() });
     setPrivate(map, '_canvasContainer', {});
     setPrivate(map, '_dragPan', { destroy: vi.fn() });
     setPrivate(map, '_mouseWheel', { destroy: vi.fn() });
     map.remove();
+    expect(cancelAllSpy).toHaveBeenCalledTimes(1);
     expect(destroySpy).toHaveBeenCalledTimes(1);
   });
 });
@@ -4584,28 +4586,28 @@ describe('Emap useWorker: \'auto\' thresholding', () => {
 
   it('routes to main thread when vertex count is below threshold', async () => {
     setVertexCount(500); // threshold is 1000
-    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(true);
     expect(runSpy).not.toHaveBeenCalled();
   });
 
   it('routes to worker when vertex count is at threshold', async () => {
     setVertexCount(1000);
-    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(true);
     expect(runSpy).toHaveBeenCalledTimes(1);
   });
 
   it('routes to worker when vertex count is above threshold', async () => {
     setVertexCount(50_000);
-    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(true);
     expect(runSpy).toHaveBeenCalledTimes(1);
   });
 
   it('routes arc-less datasets (point-only) to main thread', async () => {
     beforeDs.arcs = undefined;
-    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(true);
     expect(runSpy).not.toHaveBeenCalled();
   });
@@ -4613,7 +4615,7 @@ describe('Emap useWorker: \'auto\' thresholding', () => {
   it('honours custom workerThreshold', async () => {
     setPrivate(map, '_workerThreshold', 100);
     setVertexCount(150);
-    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(true);
     expect(runSpy).toHaveBeenCalledTimes(1);
   });
@@ -4694,7 +4696,7 @@ describe('Emap workerjobstart / workerjobend events', () => {
     map.on('workerjobstart', (e: any) => events.push({ type: 'start', payload: e }));
     map.on('workerjobend', (e: any) => events.push({ type: 'end', payload: e }));
 
-    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(true);
     expect(events.length).toBe(2);
     expect(events[0].type).toBe('start');
@@ -4714,7 +4716,7 @@ describe('Emap workerjobstart / workerjobend events', () => {
     const events: any[] = [];
     map.on('workerjobend', (e: any) => events.push(e));
 
-    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(false);
     expect(events.length).toBe(1);
     expect(events[0].ok).toBe(false);
@@ -4727,7 +4729,7 @@ describe('Emap workerjobstart / workerjobend events', () => {
     map.on('workerjobstart', (e: any) => events.push(e));
     map.on('workerjobend', (e: any) => events.push(e));
 
-    const ok = await map.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
     expect(ok).toBe(true);
     expect(events.length).toBe(0);
     expect(runSpy).not.toHaveBeenCalled();
@@ -4738,8 +4740,8 @@ describe('Emap workerjobstart / workerjobend events', () => {
     map.on('workerjobstart', (e: any) => events.push({ type: 'start', payload: e }));
     map.on('workerjobend', (e: any) => events.push({ type: 'end', payload: e }));
 
-    const a = map.dropLayer({ source: 'src1', target: 'states' });
-    const b = map.dropLayer({ source: 'src1', target: 'states' });
+    const a = map.ops.dropLayer({ source: 'src1', target: 'states' });
+    const b = map.ops.dropLayer({ source: 'src1', target: 'states' });
     await Promise.all([a, b]);
 
     const startIds = events.filter((e) => e.type === 'start').map((e) => e.payload.id);
@@ -4807,31 +4809,31 @@ describe('audit-fix: reject comma-bearing names that would silently split', () =
 
   it('unionLayers rejects a target containing a comma', async () => {
     const { map, parseSpy } = makeMapWithLayers(['a,b', 'c']);
-    expect(await map.unionLayers({ source: 'src1', targets: ['a,b', 'c'] })).toBe(false);
+    expect(await map.ops.unionLayers({ source: 'src1', targets: ['a,b', 'c'] })).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('mergeLayers rejects a target containing a comma', async () => {
     const { map, parseSpy } = makeMapWithLayers(['a,b', 'c']);
-    expect(await map.mergeLayers({ source: 'src1', targets: ['a,b', 'c'] })).toBe(false);
+    expect(await map.ops.mergeLayers({ source: 'src1', targets: ['a,b', 'c'] })).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('dissolveLayer rejects a field containing a comma', async () => {
     const { map, parseSpy } = makeMapWithLayers(['states']);
-    expect(await map.dissolveLayer({ source: 'src1', target: 'states', field: 'STATE,FIPS' })).toBe(false);
+    expect(await map.ops.dissolveLayer({ source: 'src1', target: 'states', field: 'STATE,FIPS' })).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('renameLayer rejects a new name containing a comma', async () => {
     const { map, parseSpy } = makeMapWithLayers(['old']);
-    expect(await map.renameLayer({ source: 'src1', target: 'old', name: 'a,b' })).toBe(false);
+    expect(await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'a,b' })).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('joinTable rejects a key containing a comma (target side)', async () => {
     const { map, parseSpy } = makeMapWithLayers(['states']);
-    expect(await map.joinTable({
+    expect(await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { layer: 't' },
       keys: ['STATE,FIPS', 'fips'],
@@ -4841,7 +4843,7 @@ describe('audit-fix: reject comma-bearing names that would silently split', () =
 
   it('joinTable rejects a key containing a comma (source side)', async () => {
     const { map, parseSpy } = makeMapWithLayers(['states']);
-    expect(await map.joinTable({
+    expect(await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { layer: 't' },
       keys: ['fips', 'fips,extra'],
@@ -4875,36 +4877,36 @@ describe('audit-fix: bufferLayer rejects non-positive / non-finite radius', () =
 
   it('rejects radius: 0', async () => {
     const { map, parseSpy } = makeMapWithLayers(['parks']);
-    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: 0 })).toBe(false);
+    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: 0 })).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('rejects negative radius', async () => {
     const { map } = makeMapWithLayers(['parks']);
-    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: -1 })).toBe(false);
+    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: -1 })).toBe(false);
   });
 
   it('rejects NaN / Infinity radius', async () => {
     const { map } = makeMapWithLayers(['parks']);
-    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: NaN })).toBe(false);
-    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: Infinity })).toBe(false);
+    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: NaN })).toBe(false);
+    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: Infinity })).toBe(false);
   });
 
   it('rejects empty / whitespace expression-string radius', async () => {
     const { map } = makeMapWithLayers(['parks']);
-    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: '' })).toBe(false);
-    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: '   ' })).toBe(false);
+    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: '' })).toBe(false);
+    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: '   ' })).toBe(false);
   });
 
   it('still accepts a positive number', async () => {
     const { map, parseSpy } = makeMapWithLayers(['parks']);
-    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: 100 })).toBe(true);
+    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: 100 })).toBe(true);
     expect(parseSpy).toHaveBeenCalled();
   });
 
   it('still accepts an expression-string radius', async () => {
     const { map, parseSpy } = makeMapWithLayers(['parks']);
-    expect(await map.bufferLayer({ source: 'src1', target: 'parks', radius: 'this.pop / 1000' })).toBe(true);
+    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: 'this.pop / 1000' })).toBe(true);
     expect(parseSpy).toHaveBeenCalled();
   });
 });
@@ -4933,7 +4935,7 @@ describe('audit-fix: simplifyLayer rejects weighting with non-weighted method', 
 
   it('rejects method:dp + weighting', async () => {
     const { map, parseSpy } = makeMapWithLayers();
-    expect(await map.simplifyLayer({
+    expect(await map.ops.simplifyLayer({
       source: 'src1', percentage: 10, method: 'dp', weighting: 0.5,
     })).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
@@ -4941,21 +4943,21 @@ describe('audit-fix: simplifyLayer rejects weighting with non-weighted method', 
 
   it('rejects method:visvalingam + weighting', async () => {
     const { map } = makeMapWithLayers();
-    expect(await map.simplifyLayer({
+    expect(await map.ops.simplifyLayer({
       source: 'src1', percentage: 10, method: 'visvalingam', weighting: 0.5,
     })).toBe(false);
   });
 
   it('accepts method:weighted + weighting', async () => {
     const { map } = makeMapWithLayers();
-    expect(await map.simplifyLayer({
+    expect(await map.ops.simplifyLayer({
       source: 'src1', percentage: 10, method: 'weighted', weighting: 0.5,
     })).toBe(true);
   });
 
   it('accepts weighting without explicit method (defaults to weighted)', async () => {
     const { map } = makeMapWithLayers();
-    expect(await map.simplifyLayer({
+    expect(await map.ops.simplifyLayer({
       source: 'src1', percentage: 10, weighting: 0.5,
     })).toBe(true);
   });
@@ -4985,25 +4987,25 @@ describe('audit-fix: linesLayer fields token has a single canonical form', () =>
 
   it('emits "-lines" with no fields', async () => {
     const { map, parseSpy } = makeMapWithLayers();
-    await map.linesLayer({ source: 'src1', target: 'states' });
+    await map.ops.linesLayer({ source: 'src1', target: 'states' });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines');
   });
 
   it('emits "-lines a,b" with fields', async () => {
     const { map, parseSpy } = makeMapWithLayers();
-    await map.linesLayer({ source: 'src1', target: 'states', fields: ['STATE', 'COUNTY'] });
+    await map.ops.linesLayer({ source: 'src1', target: 'states', fields: ['STATE', 'COUNTY'] });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines STATE,COUNTY');
   });
 
   it('strips comma-bearing field names but keeps the rest', async () => {
     const { map, parseSpy } = makeMapWithLayers();
-    await map.linesLayer({ source: 'src1', target: 'states', fields: ['ok', 'bad,name', 'ok2'] });
+    await map.ops.linesLayer({ source: 'src1', target: 'states', fields: ['ok', 'bad,name', 'ok2'] });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines ok,ok2');
   });
 
   it('falls back to bare "-lines" when every field is invalid', async () => {
     const { map, parseSpy } = makeMapWithLayers();
-    await map.linesLayer({ source: 'src1', target: 'states', fields: ['bad,name'] });
+    await map.ops.linesLayer({ source: 'src1', target: 'states', fields: ['bad,name'] });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines');
   });
 });
@@ -5042,19 +5044,19 @@ function makeMapWithLayer(layerName: string, geometry_type = 'polygon'): {
 describe('mosaicLayer: calc option', () => {
   it('emits calc=<quoted> when supplied', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    await map.mosaicLayer({ source: 'src1', target: 'parks', calc: 'sum(area)' });
+    await map.ops.mosaicLayer({ source: 'src1', target: 'parks', calc: 'sum(area)' });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -mosaic calc="sum(area)"');
   });
 
   it('omits calc= when not supplied', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    await map.mosaicLayer({ source: 'src1', target: 'parks' });
+    await map.ops.mosaicLayer({ source: 'src1', target: 'parks' });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -mosaic');
   });
 
   it('omits calc= when whitespace-only', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    await map.mosaicLayer({ source: 'src1', target: 'parks', calc: '   ' });
+    await map.ops.mosaicLayer({ source: 'src1', target: 'parks', calc: '   ' });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -mosaic');
   });
 });
@@ -5062,13 +5064,13 @@ describe('mosaicLayer: calc option', () => {
 describe('snapLayer: fixGeometry option', () => {
   it('emits fix-geometry flag when truthy', async () => {
     const { map, parseSpy } = makeMapWithLayer('roads', 'polyline');
-    await map.snapLayer({ source: 'src1', target: 'roads', interval: 0.001, fixGeometry: true });
+    await map.ops.snapLayer({ source: 'src1', target: 'roads', interval: 0.001, fixGeometry: true });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "roads" -snap 0.001 fix-geometry');
   });
 
   it('omits fix-geometry when falsy', async () => {
     const { map, parseSpy } = makeMapWithLayer('roads', 'polyline');
-    await map.snapLayer({ source: 'src1', target: 'roads', interval: 0.001 });
+    await map.ops.snapLayer({ source: 'src1', target: 'roads', interval: 0.001 });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "roads" -snap 0.001');
   });
 });
@@ -5076,7 +5078,7 @@ describe('snapLayer: fixGeometry option', () => {
 describe('dissolveLayer: expanded options', () => {
   it('multi-field group-by via fields[]', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
-    await map.dissolveLayer({
+    await map.ops.dissolveLayer({
       source: 'src1', target: 'counties',
       fields: ['STATE', 'REGION'],
     });
@@ -5085,7 +5087,7 @@ describe('dissolveLayer: expanded options', () => {
 
   it('field and fields are mutually exclusive', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
-    expect(await map.dissolveLayer({
+    expect(await map.ops.dissolveLayer({
       source: 'src1', target: 'counties',
       field: 'STATE', fields: ['REGION'],
     })).toBe(false);
@@ -5094,7 +5096,7 @@ describe('dissolveLayer: expanded options', () => {
 
   it('comma-bearing fields[] entries are filtered out', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
-    await map.dissolveLayer({
+    await map.ops.dissolveLayer({
       source: 'src1', target: 'counties',
       fields: ['ok', 'bad,name', 'ok2'],
     });
@@ -5103,13 +5105,13 @@ describe('dissolveLayer: expanded options', () => {
 
   it('empty fields[] is treated as no group-by', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
-    await map.dissolveLayer({ source: 'src1', target: 'counties', fields: [] });
+    await map.ops.dissolveLayer({ source: 'src1', target: 'counties', fields: [] });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "counties" -dissolve');
   });
 
   it('sumFields emits sum-fields=', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
-    await map.dissolveLayer({
+    await map.ops.dissolveLayer({
       source: 'src1', target: 'counties',
       field: 'STATE',
       sumFields: ['POP', 'GDP'],
@@ -5120,7 +5122,7 @@ describe('dissolveLayer: expanded options', () => {
 
   it('copyFields emits copy-fields=', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
-    await map.dissolveLayer({
+    await map.ops.dissolveLayer({
       source: 'src1', target: 'counties',
       field: 'STATE',
       copyFields: ['NAME', 'CAPITAL'],
@@ -5131,7 +5133,7 @@ describe('dissolveLayer: expanded options', () => {
 
   it('calc / where forwarded as quoted JS expressions', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
-    await map.dissolveLayer({
+    await map.ops.dissolveLayer({
       source: 'src1', target: 'counties',
       field: 'STATE',
       calc: 'mean(POP)',
@@ -5144,7 +5146,7 @@ describe('dissolveLayer: expanded options', () => {
 
   it('multipart / name / noReplace flags', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
-    await map.dissolveLayer({
+    await map.ops.dissolveLayer({
       source: 'src1', target: 'counties',
       multipart: true, name: 'states-out', noReplace: true,
     });
@@ -5154,7 +5156,7 @@ describe('dissolveLayer: expanded options', () => {
 
   it('comma-bearing entries in sumFields/copyFields are filtered', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
-    await map.dissolveLayer({
+    await map.ops.dissolveLayer({
       source: 'src1', target: 'counties',
       field: 'STATE',
       sumFields: ['POP', 'bad,one'],
@@ -5166,7 +5168,7 @@ describe('dissolveLayer: expanded options', () => {
 
   it('full minimal call still works (regression)', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
-    await map.dissolveLayer({ source: 'src1', target: 'counties' });
+    await map.ops.dissolveLayer({ source: 'src1', target: 'counties' });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "counties" -dissolve');
   });
 });
@@ -5174,25 +5176,25 @@ describe('dissolveLayer: expanded options', () => {
 describe('cleanLayer: expanded options', () => {
   it('emits gap-fill-area=', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    await map.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: 100 });
+    await map.ops.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: 100 });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean gap-fill-area=100');
   });
 
   it('emits sliver-control=', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    await map.cleanLayer({ source: 'src1', target: 'parks', sliverControl: 0.5 });
+    await map.ops.cleanLayer({ source: 'src1', target: 'parks', sliverControl: 0.5 });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean sliver-control=0.5');
   });
 
   it('emits snap-interval=', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    await map.cleanLayer({ source: 'src1', target: 'parks', snapInterval: 0.001 });
+    await map.ops.cleanLayer({ source: 'src1', target: 'parks', snapInterval: 0.001 });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean snap-interval=0.001');
   });
 
   it('emits boolean flags', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    await map.cleanLayer({
+    await map.ops.cleanLayer({
       source: 'src1', target: 'parks',
       noSnap: true, allowOverlaps: true, allowEmpty: true,
       rewind: true, onlyArcs: true, noArcDissolve: true,
@@ -5204,13 +5206,13 @@ describe('cleanLayer: expanded options', () => {
 
   it('emits overlap-rule=', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    await map.cleanLayer({ source: 'src1', target: 'parks', overlapRule: 'min-id' });
+    await map.ops.cleanLayer({ source: 'src1', target: 'parks', overlapRule: 'min-id' });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean overlap-rule=min-id');
   });
 
   it('rejects invalid overlapRule', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    expect(await map.cleanLayer({
+    expect(await map.ops.cleanLayer({
       source: 'src1', target: 'parks',
       overlapRule: 'bogus' as any,
     })).toBe(false);
@@ -5219,27 +5221,27 @@ describe('cleanLayer: expanded options', () => {
 
   it('rejects negative numeric tuning options', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    expect(await map.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: -1 })).toBe(false);
-    expect(await map.cleanLayer({ source: 'src1', target: 'parks', sliverControl: -0.5 })).toBe(false);
-    expect(await map.cleanLayer({ source: 'src1', target: 'parks', snapInterval: -10 })).toBe(false);
+    expect(await map.ops.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: -1 })).toBe(false);
+    expect(await map.ops.cleanLayer({ source: 'src1', target: 'parks', sliverControl: -0.5 })).toBe(false);
+    expect(await map.ops.cleanLayer({ source: 'src1', target: 'parks', snapInterval: -10 })).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('rejects NaN numeric tuning options', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    expect(await map.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: NaN })).toBe(false);
+    expect(await map.ops.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: NaN })).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('full minimal call still works (regression)', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    await map.cleanLayer({ source: 'src1', target: 'parks' });
+    await map.ops.cleanLayer({ source: 'src1', target: 'parks' });
     expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean');
   });
 
   it('all-options-combined produces the canonical token order', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    await map.cleanLayer({
+    await map.ops.cleanLayer({
       source: 'src1', target: 'parks',
       gapFillArea: 100, sliverControl: 0.5, snapInterval: 0.001,
       noSnap: true, allowOverlaps: true, overlapRule: 'max-area',
@@ -5351,7 +5353,7 @@ describe('Emap.intersectionPointsLayer (mocked mapshaper)', () => {
   });
 
   it('adds a new point layer named "<target>-intersections" by default', async () => {
-    const ok = await map.intersectionPointsLayer({ source: 'src1', target: 'edges' });
+    const ok = await map.ops.intersectionPointsLayer({ source: 'src1', target: 'edges' });
     expect(ok).toBe(true);
     expect(setDatasetSpy).toHaveBeenCalledTimes(1);
     const after = setDatasetSpy.mock.calls[0][0] as any;
@@ -5361,37 +5363,37 @@ describe('Emap.intersectionPointsLayer (mocked mapshaper)', () => {
   });
 
   it('honours custom name', async () => {
-    await map.intersectionPointsLayer({ source: 'src1', target: 'edges', name: 'crossings' });
+    await map.ops.intersectionPointsLayer({ source: 'src1', target: 'edges', name: 'crossings' });
     const after = setDatasetSpy.mock.calls[0][0] as any;
     expect(after.layers[1].name).toBe('crossings');
   });
 
   it('forwards tolerance to findSegmentIntersections', async () => {
-    await map.intersectionPointsLayer({
+    await map.ops.intersectionPointsLayer({
       source: 'src1', target: 'edges', tolerance: 0.001,
     });
     expect(findSpy.mock.calls[0][1]).toEqual({ tolerance: 0.001 });
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.intersectionPointsLayer({ source: 'nope', target: 'edges' })).toBe(false);
+    expect(await map.ops.intersectionPointsLayer({ source: 'nope', target: 'edges' })).toBe(false);
     expect(findSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.intersectionPointsLayer({ source: 'src1', target: 'missing' })).toBe(false);
+    expect(await map.ops.intersectionPointsLayer({ source: 'src1', target: 'missing' })).toBe(false);
     expect(findSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is a point layer (no segments)', async () => {
     beforeDs.layers[0].geometry_type = 'point';
-    expect(await map.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
+    expect(await map.ops.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
     expect(findSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when name collides with an existing layer', async () => {
     beforeDs.layers.push({ name: 'crossings', shapes: [], geometry_type: 'point' });
-    expect(await map.intersectionPointsLayer({
+    expect(await map.ops.intersectionPointsLayer({
       source: 'src1', target: 'edges', name: 'crossings',
     })).toBe(false);
     expect(findSpy).not.toHaveBeenCalled();
@@ -5399,18 +5401,18 @@ describe('Emap.intersectionPointsLayer (mocked mapshaper)', () => {
 
   it('returns false when arcs is missing (point-only dataset)', async () => {
     beforeDs.arcs = undefined;
-    expect(await map.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
+    expect(await map.ops.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
     expect(findSpy).not.toHaveBeenCalled();
   });
 
   it('rejects non-positive / non-finite tolerance', async () => {
-    expect(await map.intersectionPointsLayer({
+    expect(await map.ops.intersectionPointsLayer({
       source: 'src1', target: 'edges', tolerance: 0,
     })).toBe(false);
-    expect(await map.intersectionPointsLayer({
+    expect(await map.ops.intersectionPointsLayer({
       source: 'src1', target: 'edges', tolerance: -1,
     })).toBe(false);
-    expect(await map.intersectionPointsLayer({
+    expect(await map.ops.intersectionPointsLayer({
       source: 'src1', target: 'edges', tolerance: NaN,
     })).toBe(false);
     expect(findSpy).not.toHaveBeenCalled();
@@ -5419,7 +5421,7 @@ describe('Emap.intersectionPointsLayer (mocked mapshaper)', () => {
   it('history label is "Intersection points <target>"', async () => {
     const listener = vi.fn();
     map.on('historychange', listener);
-    await map.intersectionPointsLayer({ source: 'src1', target: 'edges' });
+    await map.ops.intersectionPointsLayer({ source: 'src1', target: 'edges' });
     expect(listener.mock.calls[0][0].label).toBe('Intersection points edges');
   });
 
@@ -5427,7 +5429,7 @@ describe('Emap.intersectionPointsLayer (mocked mapshaper)', () => {
     findSpy.mockImplementation(() => { throw new Error('boom'); });
     const errors: any[] = [];
     map.on('error', (e: any) => errors.push(e));
-    expect(await map.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
+    expect(await map.ops.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
     expect(errors).toHaveLength(1);
     expect(errors[0].error.message).toBe('boom');
     expect(setDatasetSpy).not.toHaveBeenCalled();
@@ -5467,7 +5469,7 @@ describe('Emap.intersectionPointsLayer round-trip (real mapshaper)', () => {
     map.addSource('rt', source);
 
     const layerName = source.getDataset()!.layers[0].name;
-    const ok = await map.intersectionPointsLayer({
+    const ok = await map.ops.intersectionPointsLayer({
       source: 'rt', target: layerName,
     });
     expect(ok).toBe(true);
@@ -5478,5 +5480,153 @@ describe('Emap.intersectionPointsLayer round-trip (real mapshaper)', () => {
     expect(ptLayer).toBeDefined();
     expect(ptLayer!.geometry_type).toBe('point');
     expect(ptLayer!.shapes[0].length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Emap.remove() teardown
+// ---------------------------------------------------------------------------
+
+describe('Emap.remove() teardown', () => {
+  // Build a stub map that has just the surface `remove()` interacts with,
+  // so we can assert each cleanup step in isolation without spinning up a
+  // real DOM. Mirrors the pattern used by the worker-pool teardown test
+  // above.
+  function buildStubMap(): {
+    map: Emap;
+    dragDestroy: ReturnType<typeof vi.fn>;
+    wheelDestroy: ReturnType<typeof vi.fn>;
+    historyUnbind: ReturnType<typeof vi.fn>;
+    poolCancel: ReturnType<typeof vi.fn>;
+    poolDestroy: ReturnType<typeof vi.fn>;
+    sourceOff: ReturnType<typeof vi.fn>;
+    fqClear: ReturnType<typeof vi.fn>;
+    containerRemove: ReturnType<typeof vi.fn>;
+  } {
+    const map = Object.create(Emap.prototype) as Emap;
+    setPrivate(map, '_listeners', {});
+    const dragDestroy = vi.fn();
+    const wheelDestroy = vi.fn();
+    const historyUnbind = vi.fn();
+    const poolCancel = vi.fn();
+    const poolDestroy = vi.fn();
+    const sourceOff = vi.fn();
+    const fqClear = vi.fn();
+    const containerRemove = vi.fn();
+
+    setPrivate(map, '_dragPan', { destroy: dragDestroy });
+    setPrivate(map, '_mouseWheel', { destroy: wheelDestroy });
+    setPrivate(map, '_historyShortcutUnbind', historyUnbind);
+    setPrivate(map, '_workerPool', { cancelAll: poolCancel, destroy: poolDestroy });
+
+    const sourceA = { off: sourceOff };
+    const sourceB = { off: sourceOff };
+    const sources = new globalThis.Map([
+      ['a', sourceA],
+      ['b', sourceB],
+    ]);
+    const listenerA = vi.fn();
+    const listenerB = vi.fn();
+    const sourceListeners = new globalThis.Map([
+      ['a', listenerA],
+      ['b', listenerB],
+    ]);
+    setPrivate(map, '_sources', sources);
+    setPrivate(map, '_sourceListeners', sourceListeners);
+    setPrivate(map, '_featureQuery', { clear: fqClear });
+    setPrivate(map, '_layerArcFlagsCache', new globalThis.Map([['a:l', new Uint8Array(1)]]));
+    setPrivate(map, '_pendingRender', 3);
+    setPrivate(map, '_rafId', 0);
+
+    setPrivate(map, '_container', { removeChild: containerRemove });
+    setPrivate(map, '_canvasContainer', {});
+
+    return { map, dragDestroy, wheelDestroy, historyUnbind, poolCancel, poolDestroy, sourceOff, fqClear, containerRemove };
+  }
+
+  it('detaches every source data listener', () => {
+    const { map, sourceOff } = buildStubMap();
+    map.remove();
+    expect(sourceOff).toHaveBeenCalledTimes(2);
+    expect(sourceOff).toHaveBeenCalledWith('data', expect.any(Function));
+  });
+
+  it('cancels then destroys the worker pool in order', () => {
+    const { map, poolCancel, poolDestroy } = buildStubMap();
+    map.remove();
+    expect(poolCancel).toHaveBeenCalled();
+    expect(poolDestroy).toHaveBeenCalled();
+    // cancelAll must run before destroy so in-flight ops fail cleanly.
+    expect(poolCancel.mock.invocationCallOrder[0]).toBeLessThan(
+      poolDestroy.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('clears feature-query indexes for every source', () => {
+    const { map, fqClear } = buildStubMap();
+    map.remove();
+    expect(fqClear).toHaveBeenCalledTimes(2);
+    expect(fqClear).toHaveBeenCalledWith('a');
+    expect(fqClear).toHaveBeenCalledWith('b');
+  });
+
+  it('drops the arc-flag cache and clears the source map', () => {
+    const { map } = buildStubMap();
+    map.remove();
+    expect((getPrivate(map, '_layerArcFlagsCache') as globalThis.Map<string, unknown>).size).toBe(0);
+    expect((getPrivate(map, '_sources') as globalThis.Map<string, unknown>).size).toBe(0);
+    expect((getPrivate(map, '_sourceListeners') as globalThis.Map<string, unknown>).size).toBe(0);
+  });
+
+  it('cancels a pending RAF', () => {
+    const { map } = buildStubMap();
+    setPrivate(map, '_rafId', 99);
+    const orig = (globalThis as any).cancelAnimationFrame;
+    const cancelSpy = vi.fn();
+    (globalThis as any).cancelAnimationFrame = cancelSpy;
+    try {
+      map.remove();
+    } finally {
+      (globalThis as any).cancelAnimationFrame = orig;
+    }
+    expect(cancelSpy).toHaveBeenCalledWith(99);
+    expect(getPrivate(map, '_rafId')).toBe(0);
+  });
+
+  it('is idempotent — second call is a no-op', () => {
+    const { map, poolDestroy } = buildStubMap();
+    map.remove();
+    map.remove();
+    expect(poolDestroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks subsequent _scheduleRender calls', () => {
+    const { map } = buildStubMap();
+    map.remove();
+    setPrivate(map, '_rafId', 0);
+    setPrivate(map, '_pendingRender', 0);
+    callPrivate(map, '_scheduleRender');
+    // _rafId should still be 0 — schedule was short-circuited.
+    expect(getPrivate(map, '_rafId')).toBe(0);
+    expect(getPrivate(map, '_pendingRender')).toBe(0);
+  });
+
+  it('calls onRemove on every registered control, even if one throws', () => {
+    const { map } = buildStubMap();
+    const goodA = { onAdd: vi.fn(), onRemove: vi.fn() };
+    const bad = { onAdd: vi.fn(), onRemove: vi.fn(() => { throw new Error('boom'); }) };
+    const goodB = { onAdd: vi.fn(), onRemove: vi.fn() };
+    setPrivate(map, '_controls', [goodA, bad, goodB]);
+    setPrivate(map, '_controlContainers', new globalThis.Map());
+
+    const errors: any[] = [];
+    map.on('error', (e: any) => errors.push(e));
+    map.remove();
+
+    expect(goodA.onRemove).toHaveBeenCalled();
+    expect(goodB.onRemove).toHaveBeenCalled();
+    expect(errors).toHaveLength(1);
+    expect(errors[0].error.message).toBe('boom');
+    expect((getPrivate(map, '_controls') as unknown[]).length).toBe(0);
   });
 });

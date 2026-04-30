@@ -113,7 +113,7 @@
       status.textContent = '正在执行表达式...';
       applyBtn.disabled = true;
       try {
-        const ok = await map.applyExpression(opts);
+        const ok = await map.ops.applyExpression(opts);
         status.textContent = ok
           ? `已执行,点击要素查看新属性。Ctrl+Z 撤销。`
           : '执行失败,请检查表达式。';

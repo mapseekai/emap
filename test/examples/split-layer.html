@@ -87,7 +87,7 @@
       status.textContent = `正在按 "${expression}" 拆分 "${target}"...`;
       btn.disabled = true;
       try {
-        const ok = await map.splitLayer(opts);
+        const ok = await map.ops.splitLayer(opts);
         status.textContent = ok ? `已按 "${expression}" 拆分 "${target}",Ctrl+Z 撤销。` : '拆分失败。';
         const src = map.getSource(SOURCE_ID);
         if (src) populate(src);

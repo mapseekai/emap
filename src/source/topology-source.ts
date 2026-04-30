@@ -253,7 +253,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       // sharing required by topology-aware vertex editing), both cheap.
       // We deliberately do NOT run `-clean` or `-simplify 100%` here — both
       // are O(N²) / O(N log N) and make interactive imports of moderate-
-      // sized files unusable. Callers run `Emap.cleanLayer()` /
+      // sized files unusable. Callers run `Emap.ops.cleanLayer()` /
       // `source.simplifyArcs()` explicitly when they need those passes.
       const cmd = `-i ${primaryFiles.map((f) => `"${f.replace(/"/g, '\\"')}"`).join(' ')}`;
       const commands = mapshaper.internal.parseCommands(cmd);
