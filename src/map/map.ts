@@ -76,6 +76,11 @@ export class Emap extends EventDispatcher {
   // UI controls
   private _controlContainers: globalThis.Map<ControlPosition, HTMLElement> =
     new globalThis.Map();
+  // Track every `addControl()` instance so `remove()` can call
+  // `onRemove()` on each. We intentionally don't drop entries on
+  // `removeControl()` — that would require both an Array and a Set —
+  // and the array is short-lived so the duplicate is harmless.
+  private _controls: Control[] = [];
 
   // Delegated managers
   private _highlightManager: HighlightManager = new HighlightManager();
@@ -738,10 +743,13 @@ export class Emap extends EventDispatcher {
     const el = control.onAdd(this);
     el.style.pointerEvents = 'auto';
     this._controlContainers.get(position)?.appendChild(el);
+    this._controls.push(control);
   }
 
   public removeControl(control: Control): void {
     control.onRemove(this);
+    const idx = this._controls.indexOf(control);
+    if (idx !== -1) this._controls.splice(idx, 1);
   }
 
   public zoomIn(): void {
@@ -753,6 +761,7 @@ export class Emap extends EventDispatcher {
   }
 
   private _scheduleRender(): void {
+    if (this._removed) return;
     this._pendingRender++;
     if (this._rafId === 0) {
       this._rafId = requestAnimationFrame(() => this._doRender());
@@ -1292,18 +1301,82 @@ export class Emap extends EventDispatcher {
   }
 
 
+  /**
+   * Tear the map down: cancel pending renders, detach every `data` listener
+   * we attached to sources, release each registered control, kill the worker
+   * pool, and unmount the canvas. Idempotent — calling it twice is safe.
+   *
+   * After `remove()` the instance must not be reused. Public methods that
+   * touch DOM / timers are left in place for now (they will fail naturally
+   * when the underlying resources are gone), but `_scheduleRender` is
+   * guarded so post-teardown event firings don't queue another frame.
+   */
   public remove(): void {
+    if (this._removed) return;
+    this._removed = true;
+
+    // Cancel any in-flight RAF so we don't paint after teardown.
+    if (this._rafId !== 0) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = 0;
+    }
+    this._pendingRender = 0;
+
+    // Interaction handlers
     this._dragPan.destroy();
     this._mouseWheel.destroy();
     this._historyShortcutUnbind?.();
     this._historyShortcutUnbind = null;
+
+    // Worker pool — cancelAll first to fail any in-flight ops cleanly,
+    // then destroy to terminate the worker.
     if (this._workerPool) {
+      this._workerPool.cancelAll();
       this._workerPool.destroy();
       this._workerPool = null;
     }
+
+    // Source `data` listeners installed in `addSource()` — without this
+    // the source keeps the Emap instance alive via the closure inside
+    // `onData` and (worse) re-fires render scheduling after teardown.
+    for (const [id, listener] of this._sourceListeners) {
+      const source = this._sources.get(id);
+      source?.off('data', listener);
+    }
+    this._sourceListeners.clear();
+
+    // Per-source feature query + arc-flag caches.
+    for (const id of this._sources.keys()) this._featureQuery?.clear(id);
+    this._layerArcFlagsCache.clear();
+    this._sources.clear();
+
+    // Released registered controls. Each `onRemove` is responsible for its
+    // own DOM detach; we just orchestrate. Iterate over a copy because
+    // some controls may call `removeControl(self)` from inside `onRemove`.
+    // The field initializer normally seeds an empty array; guard for the
+    // test path that builds an Emap via `Object.create(Emap.prototype)`.
+    const controls = this._controls ?? [];
+    for (const control of [...controls]) {
+      try {
+        control.onRemove(this);
+      } catch (err) {
+        // A throwing control mustn't block teardown of the rest. Surface
+        // via the error event so callers can still observe it.
+        this.fire('error', { error: err });
+      }
+    }
+    controls.length = 0;
+    this._controlContainers?.clear();
+
+    // Active edit overlay state — clearing through the store fires the
+    // change callback, which is harmless after `_removed` because
+    // `_scheduleRender` short-circuits.
+    this._editState?.setMode('none');
+
     if (this._container && this._canvasContainer) {
       this._container.removeChild(this._canvasContainer);
     }
   }
+  private _removed = false;
 }
 

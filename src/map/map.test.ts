@@ -4490,13 +4490,15 @@ describe('Emap useWorker routing', () => {
 
   it('Emap.remove() destroys the worker pool', () => {
     const destroySpy = vi.fn();
-    setPrivate(map, '_workerPool', { run: runSpy, destroy: destroySpy });
+    const cancelAllSpy = vi.fn();
+    setPrivate(map, '_workerPool', { run: runSpy, destroy: destroySpy, cancelAll: cancelAllSpy });
     // remove() also tries to manipulate _container/_canvasContainer; stub.
     setPrivate(map, '_container', { removeChild: vi.fn() });
     setPrivate(map, '_canvasContainer', {});
     setPrivate(map, '_dragPan', { destroy: vi.fn() });
     setPrivate(map, '_mouseWheel', { destroy: vi.fn() });
     map.remove();
+    expect(cancelAllSpy).toHaveBeenCalledTimes(1);
     expect(destroySpy).toHaveBeenCalledTimes(1);
   });
 });
@@ -5478,5 +5480,153 @@ describe('Emap.intersectionPointsLayer round-trip (real mapshaper)', () => {
     expect(ptLayer).toBeDefined();
     expect(ptLayer!.geometry_type).toBe('point');
     expect(ptLayer!.shapes[0].length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Emap.remove() teardown
+// ---------------------------------------------------------------------------
+
+describe('Emap.remove() teardown', () => {
+  // Build a stub map that has just the surface `remove()` interacts with,
+  // so we can assert each cleanup step in isolation without spinning up a
+  // real DOM. Mirrors the pattern used by the worker-pool teardown test
+  // above.
+  function buildStubMap(): {
+    map: Emap;
+    dragDestroy: ReturnType<typeof vi.fn>;
+    wheelDestroy: ReturnType<typeof vi.fn>;
+    historyUnbind: ReturnType<typeof vi.fn>;
+    poolCancel: ReturnType<typeof vi.fn>;
+    poolDestroy: ReturnType<typeof vi.fn>;
+    sourceOff: ReturnType<typeof vi.fn>;
+    fqClear: ReturnType<typeof vi.fn>;
+    containerRemove: ReturnType<typeof vi.fn>;
+  } {
+    const map = Object.create(Emap.prototype) as Emap;
+    setPrivate(map, '_listeners', {});
+    const dragDestroy = vi.fn();
+    const wheelDestroy = vi.fn();
+    const historyUnbind = vi.fn();
+    const poolCancel = vi.fn();
+    const poolDestroy = vi.fn();
+    const sourceOff = vi.fn();
+    const fqClear = vi.fn();
+    const containerRemove = vi.fn();
+
+    setPrivate(map, '_dragPan', { destroy: dragDestroy });
+    setPrivate(map, '_mouseWheel', { destroy: wheelDestroy });
+    setPrivate(map, '_historyShortcutUnbind', historyUnbind);
+    setPrivate(map, '_workerPool', { cancelAll: poolCancel, destroy: poolDestroy });
+
+    const sourceA = { off: sourceOff };
+    const sourceB = { off: sourceOff };
+    const sources = new globalThis.Map([
+      ['a', sourceA],
+      ['b', sourceB],
+    ]);
+    const listenerA = vi.fn();
+    const listenerB = vi.fn();
+    const sourceListeners = new globalThis.Map([
+      ['a', listenerA],
+      ['b', listenerB],
+    ]);
+    setPrivate(map, '_sources', sources);
+    setPrivate(map, '_sourceListeners', sourceListeners);
+    setPrivate(map, '_featureQuery', { clear: fqClear });
+    setPrivate(map, '_layerArcFlagsCache', new globalThis.Map([['a:l', new Uint8Array(1)]]));
+    setPrivate(map, '_pendingRender', 3);
+    setPrivate(map, '_rafId', 0);
+
+    setPrivate(map, '_container', { removeChild: containerRemove });
+    setPrivate(map, '_canvasContainer', {});
+
+    return { map, dragDestroy, wheelDestroy, historyUnbind, poolCancel, poolDestroy, sourceOff, fqClear, containerRemove };
+  }
+
+  it('detaches every source data listener', () => {
+    const { map, sourceOff } = buildStubMap();
+    map.remove();
+    expect(sourceOff).toHaveBeenCalledTimes(2);
+    expect(sourceOff).toHaveBeenCalledWith('data', expect.any(Function));
+  });
+
+  it('cancels then destroys the worker pool in order', () => {
+    const { map, poolCancel, poolDestroy } = buildStubMap();
+    map.remove();
+    expect(poolCancel).toHaveBeenCalled();
+    expect(poolDestroy).toHaveBeenCalled();
+    // cancelAll must run before destroy so in-flight ops fail cleanly.
+    expect(poolCancel.mock.invocationCallOrder[0]).toBeLessThan(
+      poolDestroy.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('clears feature-query indexes for every source', () => {
+    const { map, fqClear } = buildStubMap();
+    map.remove();
+    expect(fqClear).toHaveBeenCalledTimes(2);
+    expect(fqClear).toHaveBeenCalledWith('a');
+    expect(fqClear).toHaveBeenCalledWith('b');
+  });
+
+  it('drops the arc-flag cache and clears the source map', () => {
+    const { map } = buildStubMap();
+    map.remove();
+    expect((getPrivate(map, '_layerArcFlagsCache') as globalThis.Map<string, unknown>).size).toBe(0);
+    expect((getPrivate(map, '_sources') as globalThis.Map<string, unknown>).size).toBe(0);
+    expect((getPrivate(map, '_sourceListeners') as globalThis.Map<string, unknown>).size).toBe(0);
+  });
+
+  it('cancels a pending RAF', () => {
+    const { map } = buildStubMap();
+    setPrivate(map, '_rafId', 99);
+    const orig = (globalThis as any).cancelAnimationFrame;
+    const cancelSpy = vi.fn();
+    (globalThis as any).cancelAnimationFrame = cancelSpy;
+    try {
+      map.remove();
+    } finally {
+      (globalThis as any).cancelAnimationFrame = orig;
+    }
+    expect(cancelSpy).toHaveBeenCalledWith(99);
+    expect(getPrivate(map, '_rafId')).toBe(0);
+  });
+
+  it('is idempotent — second call is a no-op', () => {
+    const { map, poolDestroy } = buildStubMap();
+    map.remove();
+    map.remove();
+    expect(poolDestroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks subsequent _scheduleRender calls', () => {
+    const { map } = buildStubMap();
+    map.remove();
+    setPrivate(map, '_rafId', 0);
+    setPrivate(map, '_pendingRender', 0);
+    callPrivate(map, '_scheduleRender');
+    // _rafId should still be 0 — schedule was short-circuited.
+    expect(getPrivate(map, '_rafId')).toBe(0);
+    expect(getPrivate(map, '_pendingRender')).toBe(0);
+  });
+
+  it('calls onRemove on every registered control, even if one throws', () => {
+    const { map } = buildStubMap();
+    const goodA = { onAdd: vi.fn(), onRemove: vi.fn() };
+    const bad = { onAdd: vi.fn(), onRemove: vi.fn(() => { throw new Error('boom'); }) };
+    const goodB = { onAdd: vi.fn(), onRemove: vi.fn() };
+    setPrivate(map, '_controls', [goodA, bad, goodB]);
+    setPrivate(map, '_controlContainers', new globalThis.Map());
+
+    const errors: any[] = [];
+    map.on('error', (e: any) => errors.push(e));
+    map.remove();
+
+    expect(goodA.onRemove).toHaveBeenCalled();
+    expect(goodB.onRemove).toHaveBeenCalled();
+    expect(errors).toHaveLength(1);
+    expect(errors[0].error.message).toBe('boom');
+    expect((getPrivate(map, '_controls') as unknown[]).length).toBe(0);
   });
 });
