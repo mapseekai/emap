@@ -9,6 +9,7 @@ import { EditOverlayRenderer } from '../renderer/edit-overlay-renderer';
 import { MapshaperOps } from './mapshaper-ops';
 import { EditSessions } from './edit-sessions';
 import { AttributeOps } from './attribute-ops';
+import { EditStateStore, type EditMode } from './edit-state-store';
 import { TopologySource } from '../source/source';
 import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
 import { MouseWheel } from '../core/interactions';
@@ -104,10 +105,17 @@ export class Emap extends EventDispatcher {
     return this._attributes ?? (this._attributes = new AttributeOps(this));
   }
 
-  // Edit mode
-  private _editMode: 'none' | 'vertex' | 'draw' = 'none';
-  private _editVertexState: EditVertexState | null = null;
-  private _editDrawState: EditDrawState | null = null;
+  // Edit mode (mode + vertex overlay + draw overlay) is owned by a single
+  // store so the three pieces stay coherent — leaving `'vertex'` mode
+  // automatically drops `vertex`, etc. The store calls back into Emap
+  // here to (re)render and emit `editmodechange`.
+  private _editState: EditStateStore = new EditStateStore((change) => {
+    if (change.modeChanged) {
+      this._dragPan?.setEnabled(change.current.mode === 'none');
+      this.fire('editmodechange', { mode: change.current.mode });
+    }
+    this._scheduleRender();
+  });
 
   // Worker pool — lazily constructed when `useWorker !== false` was passed.
   // null when the option is off (or until the first dataset-replace runs).
@@ -223,30 +231,28 @@ export class Emap extends EventDispatcher {
     return this._canvasContainer;
   }
 
-  public getEditMode(): 'none' | 'vertex' | 'draw' {
-    return this._editMode;
+  public getEditMode(): EditMode {
+    return this._editState.mode;
   }
 
-  public setEditMode(mode: 'none' | 'vertex' | 'draw'): void {
-    this._editMode = mode;
-    this._dragPan.setEnabled(mode === 'none');
-    this.fire('editmodechange', { mode });
+  public setEditMode(mode: EditMode): void {
+    this._editState.setMode(mode);
   }
 
   public setEditVertexState(state: EditVertexState): void {
-    this._editVertexState = state;
+    this._editState.setVertex(state);
   }
 
   public clearEditVertexState(): void {
-    this._editVertexState = null;
+    this._editState.clearVertex();
   }
 
   public setEditDrawState(state: EditDrawState): void {
-    this._editDrawState = state;
+    this._editState.setDraw(state);
   }
 
   public clearEditDrawState(): void {
-    this._editDrawState = null;
+    this._editState.clearDraw();
   }
 
   private _attachEventListeners(): void {
@@ -772,9 +778,9 @@ export class Emap extends EventDispatcher {
     this._renderLayers(pixelSize, lineScale);
     this._renderHighlight(transform, lineScale);
     this._editOverlay.render(
-      this._editMode,
-      this._editVertexState,
-      this._editDrawState,
+      this._editState.mode,
+      this._editState.vertex,
+      this._editState.draw,
     );
   }
 
@@ -1162,8 +1168,7 @@ export class Emap extends EventDispatcher {
     // Any command that touched `layer.shapes` (delete/create/...) will have
     // moved feature ids around; invalidate every shape-derived cache rather
     // than threading per-command source ids through the history.
-    this._layerArcFlagsCache.clear();
-    for (const id of this._sources.keys()) this._featureQuery?.clear(id);
+    this._invalidateAllShapeCaches();
     this._scheduleRender();
     return true;
   }
@@ -1176,10 +1181,16 @@ export class Emap extends EventDispatcher {
     const cmd = this._history.redo();
     if (!cmd) return false;
     this._fireHistoryChange();
-    this._layerArcFlagsCache.clear();
-    for (const id of this._sources.keys()) this._featureQuery?.clear(id);
+    this._invalidateAllShapeCaches();
     this._scheduleRender();
     return true;
+  }
+
+  /** Drop every shape-derived cache. Used by undo/redo where per-source
+   *  invalidation isn't tracked. */
+  private _invalidateAllShapeCaches(): void {
+    this._layerArcFlagsCache.clear();
+    for (const id of this._sources.keys()) this._featureQuery?.clear(id);
   }
 
   public canUndo(): boolean {
