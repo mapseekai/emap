@@ -70,7 +70,7 @@ export class SplitSharedArcsCommand implements EditCommand {
     for (const r of this.opts.remaps) {
       r.layer.shapes![r.featureId] = cloneShape(r.newShape);
     }
-    this.opts.source.refreshDisplayArcs();
+    this.opts.source.markDisplayArcsDirty?.();
   }
 
   undo(): void {
@@ -80,7 +80,7 @@ export class SplitSharedArcsCommand implements EditCommand {
     for (const r of this.opts.remaps) {
       r.layer.shapes![r.featureId] = cloneShape(r.originalShape);
     }
-    this.opts.source.refreshDisplayArcs();
+    this.opts.source.markDisplayArcsDirty?.();
   }
 }
 

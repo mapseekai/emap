@@ -51,13 +51,13 @@ export class VertexMoveCommand implements EditCommand {
   do(): void {
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     adapter.snapVertices(this.opts.vertexIds, this.opts.to, this.opts.arcs);
-    this.opts.source.refreshDisplayArcs();
+    this.opts.source.markDisplayArcsDirty?.();
   }
 
   undo(): void {
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     adapter.snapVertices(this.opts.vertexIds, this.opts.from, this.opts.arcs);
-    this.opts.source.refreshDisplayArcs();
+    this.opts.source.markDisplayArcsDirty?.();
   }
 
   mergeable(prev: EditCommand): boolean {

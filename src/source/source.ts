@@ -24,10 +24,18 @@ export interface TopologySource extends Source {
   getDataset(): MapshaperDataset | undefined;
   getDisplayArcs(): DisplayArcs | null;
   /**
-   * Re-initialize the LOD copy in DisplayArcs from the current dataset arcs.
-   * Call after any edit that mutates arc vertex layout (insert / delete / append).
+   * Eagerly re-initialize the LOD copy in DisplayArcs from the current
+   * dataset arcs. Use for one-shot mutations that need the new copy ready
+   * immediately. Per-frame in-place edits (drag sessions) should prefer
+   * {@link markDisplayArcsDirty} to defer the rebuild until the renderer
+   * actually needs the filtered copy.
    */
   refreshDisplayArcs(): void;
+  /**
+   * Mark the LOD copy stale; the next `getScaledArcs` rebuilds it lazily.
+   * O(1); safe inside per-frame drag callbacks.
+   */
+  markDisplayArcsDirty?(): void;
   /**
    * Replace the active dataset (used by undo/redo of dataset-replace commands
    * and by reproject). Rebuilds DisplayArcs and fires the `data` event so the

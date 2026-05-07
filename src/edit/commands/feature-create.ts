@@ -75,7 +75,7 @@ export class FeatureCreateCommand implements EditCommand {
       const records = o.layer.data?.getRecords?.();
       records?.push(o.appendedRecord);
     }
-    o.source.refreshDisplayArcs();
+    o.source.markDisplayArcsDirty?.();
   }
 
   undo(): void {
@@ -89,6 +89,6 @@ export class FeatureCreateCommand implements EditCommand {
     if (o.geometryType !== 'point' && o.arcs) {
       adapter.deleteLastArc(o.arcs);
     }
-    o.source.refreshDisplayArcs();
+    o.source.markDisplayArcsDirty?.();
   }
 }

@@ -33,9 +33,16 @@ function makeArcs(xx: number[], yy: number[], nn: number[]) {
   };
 }
 
-function makeSource(): TopologySource & { refreshDisplayArcs: ReturnType<typeof vi.fn> } {
-  return { refreshDisplayArcs: vi.fn() } as unknown as TopologySource & {
+function makeSource(): TopologySource & {
+  refreshDisplayArcs: ReturnType<typeof vi.fn>;
+  markDisplayArcsDirty: ReturnType<typeof vi.fn>;
+} {
+  return {
+    refreshDisplayArcs: vi.fn(),
+    markDisplayArcsDirty: vi.fn(),
+  } as unknown as TopologySource & {
     refreshDisplayArcs: ReturnType<typeof vi.fn>;
+    markDisplayArcsDirty: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -74,16 +81,18 @@ describe('FeatureTranslateCommand', () => {
     expect(updateArcBounds).toHaveBeenCalledWith(1);
   });
 
-  it('refreshDisplayArcs is called once per pass', () => {
+  it('markDisplayArcsDirty is called once per pass (lazy LOD refresh)', () => {
     const { arcs } = makeArcs([0, 1], [0, 1], [2]);
     const source = makeSource();
     const cmd = new FeatureTranslateCommand({
       source, arcs, dx: 1, dy: 1, arcIds: [0], pointFeatures: [],
     });
     cmd.do();
-    expect(source.refreshDisplayArcs).toHaveBeenCalledTimes(1);
+    expect(source.markDisplayArcsDirty).toHaveBeenCalledTimes(1);
     cmd.undo();
-    expect(source.refreshDisplayArcs).toHaveBeenCalledTimes(2);
+    expect(source.markDisplayArcsDirty).toHaveBeenCalledTimes(2);
+    // Eager refresh path is no longer used by per-step edits.
+    expect(source.refreshDisplayArcs).not.toHaveBeenCalled();
   });
 
   it('do() then undo() restores xx/yy bit-equal', () => {

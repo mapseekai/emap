@@ -429,8 +429,20 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   }
 
   /**
-   * Re-initialize DisplayArcs from the current dataset arcs.
-   * Call after modifying the arc collection (e.g. adding new features).
+   * Mark the cached LOD copy stale; the next `getScaledArcs()` call inside
+   * the renderer will rebuild it lazily. Cheap (O(1)) so per-frame edit
+   * sessions can call this on every step without paying the rebuild cost
+   * until the user actually zooms out far enough to need the filtered copy.
+   */
+  markDisplayArcsDirty(): void {
+    this._displayArcs?.markDirty();
+  }
+
+  /**
+   * Eagerly re-initialize DisplayArcs from the current dataset arcs. Use
+   * for one-shot mutations where the caller wants the new LOD copy ready
+   * immediately (project, dataset-replace). Per-frame in-place edits
+   * should prefer {@link markDisplayArcsDirty}.
    */
   refreshDisplayArcs(): void {
     if (this._dataset?.arcs) {

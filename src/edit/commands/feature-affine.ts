@@ -93,7 +93,7 @@ export class FeatureAffineCommand implements EditCommand {
       }
     }
 
-    source.refreshDisplayArcs();
+    source.markDisplayArcsDirty?.();
   }
 }
 

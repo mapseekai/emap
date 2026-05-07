@@ -17,7 +17,13 @@ describe('VertexMoveCommand', () => {
   });
 
   function makeSource(): TopologySource {
-    return { refreshDisplayArcs: vi.fn() } as unknown as TopologySource;
+    // PR-13: edit commands now mark the LOD dirty (lazy) instead of calling
+    // the eager `refreshDisplayArcs`. Mock both so older + newer assertions
+    // can both inspect call counts.
+    return {
+      refreshDisplayArcs: vi.fn(),
+      markDisplayArcsDirty: vi.fn(),
+    } as unknown as TopologySource;
   }
 
   it('do() snaps vertices to the recorded `to` coordinate', () => {
@@ -32,7 +38,7 @@ describe('VertexMoveCommand', () => {
     });
     cmd.do();
     expect(snapSpy).toHaveBeenCalledWith([1, 2, 3], [10, 20], arcs);
-    expect(source.refreshDisplayArcs).toHaveBeenCalled();
+    expect((source as any).markDisplayArcsDirty).toHaveBeenCalled();
   });
 
   it('undo() snaps vertices back to the recorded `from` coordinate', () => {

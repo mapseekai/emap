@@ -130,6 +130,6 @@ export class FeatureTranslateCommand implements EditCommand {
       }
     }
 
-    source.refreshDisplayArcs();
+    source.markDisplayArcsDirty?.();
   }
 }

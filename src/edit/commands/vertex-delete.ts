@@ -30,12 +30,12 @@ export class VertexDeleteCommand implements EditCommand {
   do(): void {
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     adapter.deleteVertex(this.opts.arcs, this.opts.vertexIndex);
-    this.opts.source.refreshDisplayArcs();
+    this.opts.source.markDisplayArcsDirty?.();
   }
 
   undo(): void {
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     adapter.insertVertex(this.opts.arcs, this.opts.vertexIndex, this.opts.coords);
-    this.opts.source.refreshDisplayArcs();
+    this.opts.source.markDisplayArcsDirty?.();
   }
 }

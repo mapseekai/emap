@@ -15,6 +15,17 @@ export class DisplayArcs {
   private _unfilteredArcs: ArcCollection;
   private _filteredArcs: ArcCollection | null = null;
   private _filteredSegLen = 0;
+  /**
+   * Set by {@link markDirty} when an in-place edit (translate / vertex move /
+   * shared-arc split / …) mutates the underlying arcs. Cleared the next time
+   * {@link getScaledArcs} actually needs the filtered copy and rebuilds it.
+   *
+   * The flag lets per-frame edit sessions defer the (~O(N)) filtered-copy
+   * rebuild until the renderer asks for it. Most drags happen at zoom levels
+   * where the unfiltered arcs are used directly, so the rebuild often fires
+   * exactly once — at the next zoom-out.
+   */
+  private _dirty = false;
 
   constructor(arcs: ArcCollection) {
     this._unfilteredArcs = arcs;
@@ -22,6 +33,18 @@ export class DisplayArcs {
     if (pointCount > LARGE_DATASET_THRESHOLD) {
       this._initFilteredArcs();
     }
+  }
+
+  /**
+   * Mark the cached LOD copy stale. Cheap (O(1) flag flip) so callers
+   * inside per-frame drag loops can safely invoke this on every step;
+   * the actual rebuild happens lazily inside {@link getScaledArcs}.
+   *
+   * For datasets below `LARGE_DATASET_THRESHOLD` (no LOD copy ever
+   * created), this is effectively a no-op.
+   */
+  markDirty(): void {
+    this._dirty = true;
   }
 
   private _initFilteredArcs(): void {
@@ -53,9 +76,29 @@ export class DisplayArcs {
    * @returns Low-detail arcs when zoomed out, full-detail arcs when zoomed in
    */
   getScaledArcs(unitsPerPixel: number): ArcCollection {
-    // Check for arc count changes (e.g., due to editing)
-    if (this._filteredArcs && this._filteredArcs.size() !== this._unfilteredArcs.size()) {
-      this._initFilteredArcs();
+    // Decide whether the filtered copy is even relevant at this zoom.
+    // When it isn't, postpone any rebuild — saves the O(N) work for
+    // drags that stay zoomed in.
+    const wantFiltered = this._filteredArcs !== null
+      && unitsPerPixel > this._filteredSegLen * 1.5;
+
+    // Rebuild conditions:
+    //   1. Arc count changed since last LOD build (e.g. shared-arc split).
+    //   2. `markDirty()` was called and the filtered copy is needed now.
+    if (this._filteredArcs) {
+      const arcCountChanged = this._filteredArcs.size() !== this._unfilteredArcs.size();
+      if (arcCountChanged || (this._dirty && wantFiltered)) {
+        this._initFilteredArcs();
+        this._dirty = false;
+      }
+    } else if (this._dirty) {
+      // No LOD copy yet but caller marked dirty — only matters once the
+      // dataset crosses the LARGE_DATASET_THRESHOLD via append. Re-check.
+      const pointCount = this._unfilteredArcs.getPointCount?.() ?? 0;
+      if (pointCount > LARGE_DATASET_THRESHOLD) {
+        this._initFilteredArcs();
+      }
+      this._dirty = false;
     }
 
     // Sync simplification interval with the unfiltered arcs
