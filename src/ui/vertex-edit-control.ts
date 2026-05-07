@@ -6,6 +6,7 @@ import { VertexInsertCommand } from '../edit/commands/vertex-insert';
 import { VertexDeleteCommand } from '../edit/commands/vertex-delete';
 import type { ArcCollection } from '../types/mapshaper-types';
 import type { TopologySource } from '../source/source';
+import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 
 interface EditableArcs extends EditVertexArcs {
   getVertex2(vertexId: number): [number, number] | null;
@@ -229,10 +230,10 @@ export class VertexEditControl implements Control {
     // Snapshot the vertex's coordinate BEFORE deletion so undo can re-insert it.
     const coordsBefore = arcs.getVertex2(vtxId);
 
-    // Delete vertex from arcs (mapshaper internal API).
-    // mapshaper's deleteVertex calls updateVertexData() internally, which rebuilds
-    // all arc bounds via initBounds(). No explicit updateArcBounds needed.
-    vertexOps.deleteVertex(arcs, vtxId);
+    // Delete vertex via the adapter; mapshaper's deleteVertex calls
+    // updateVertexData() internally, which rebuilds all arc bounds via
+    // initBounds(). No explicit updateArcBounds needed.
+    getDefaultMapshaperAdapter().deleteVertex(arcs as unknown as ArcCollection, vtxId);
 
     // Re-initialize the LOD copy in DisplayArcs since vertex layout changed.
     this._refreshSourceDisplayArcs(sourceId);
@@ -406,7 +407,11 @@ export class VertexEditControl implements Control {
     const p = this._map.unproject(px, py);
 
     // findNearestVertices returns ALL vertex IDs at the same topological node
-    const ids: number[] = vertexOps.findNearestVertices(p, shape, arcs);
+    const ids: number[] = getDefaultMapshaperAdapter().findNearestVertices(
+      p,
+      shape,
+      arcs as unknown as ArcCollection,
+    );
     if (!ids || ids.length === 0) {
       this._hoverVertexCoords = null;
       this._hoverVertexIds = [];
@@ -575,7 +580,11 @@ export class VertexEditControl implements Control {
     if (this._hoverType === 'interpolated' && this._hoverInsertionId >= 0) {
       const arcs = this._hoveredFeature.arcs;
       const point: [number, number] = [this._hoverVertexCoords[0], this._hoverVertexCoords[1]];
-      vertexOps.insertVertex(arcs, this._hoverInsertionId, point);
+      getDefaultMapshaperAdapter().insertVertex(
+        arcs as unknown as ArcCollection,
+        this._hoverInsertionId,
+        point,
+      );
       this._hoverVertexIds = [this._hoverInsertionId];
       this._hoverType = 'vertex';
 
@@ -612,10 +621,10 @@ export class VertexEditControl implements Control {
     const arcs = this._hoveredFeature.arcs;
 
     // Topology-aware: move ALL shared vertices to the new position
-    vertexOps.snapVerticesToPoint(
+    getDefaultMapshaperAdapter().snapVertices(
       this._hoverVertexIds,
       [dataCoords[0], dataCoords[1]],
-      arcs
+      arcs as unknown as ArcCollection,
     );
 
     // Update hover coords so highlight follows the pointer

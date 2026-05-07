@@ -11,6 +11,7 @@ import {
   getDefaultMapshaperRunner,
   type MapshaperRunner,
 } from './mapshaper-runner';
+import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 
 export type TopologySourceData = string | { filename: string, content: Uint8Array };
 
@@ -401,30 +402,13 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
     const cmd = `-proj ${targetCrs}`;
 
-    return new Promise((resolve, reject) => {
-      const job = new mapshaper.internal.Job();
-
-      job.catalog.addDataset(this._dataset);
-
-      const commands = mapshaper.internal.parseCommands(cmd);
-
-      mapshaper.internal.runParsedCommands(commands, job, (err: any, finishedJob: any) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        const targets = finishedJob.catalog.getDefaultTargets();
-        if (targets.length > 0) {
-          this._dataset = targets[0].dataset;
-        }
-        // Re-initialize DisplayArcs (including LOD threshold detection) against
-        // the post-projection arcs — coordinates and z-values may have changed.
-        if (this._dataset?.arcs) {
-          this._displayArcs = new DisplayArcs(this._dataset.arcs);
-        }
-        resolve();
-      });
-    });
+    const result = await getDefaultMapshaperAdapter().runOnDataset(cmd, this._dataset);
+    this._dataset = result;
+    // Re-initialize DisplayArcs (including LOD threshold detection) against
+    // the post-projection arcs — coordinates and z-values may have changed.
+    if (this._dataset?.arcs) {
+      this._displayArcs = new DisplayArcs(this._dataset.arcs);
+    }
   }
 
   getExtent(): Bounds {

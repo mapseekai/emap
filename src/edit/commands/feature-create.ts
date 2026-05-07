@@ -1,4 +1,3 @@
-import mapshaper from 'mapshaper';
 import type { EditCommand } from '../edit-command';
 import type {
   ArcCollection,
@@ -6,6 +5,10 @@ import type {
   MapshaperLayer,
 } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
+import {
+  getDefaultMapshaperAdapter,
+  type MapshaperAdapter,
+} from '../../adapter/mapshaper-adapter';
 
 export type FeatureGeometryType = 'point' | 'polyline' | 'polygon';
 
@@ -17,6 +20,8 @@ export interface FeatureCreateCommandOptions {
   source: TopologySource;
   /** The shape value pushed onto `layer.shapes`. */
   appendedShape: FeatureShape;
+  /** Adapter override for tests; defaults to the process-wide singleton. */
+  adapter?: MapshaperAdapter;
   /**
    * The data record pushed onto `layer.data.getRecords()`. `null` when the
    * layer has no data table.
@@ -52,15 +57,16 @@ export class FeatureCreateCommand implements EditCommand {
 
   do(): void {
     const o = this.opts;
+    const adapter = o.adapter ?? getDefaultMapshaperAdapter();
     if (o.geometryType !== 'point') {
       if (!o.arcs || !o.arcVertices) {
         throw new Error('FeatureCreateCommand: path features require arcs and arcVertices');
       }
       // Re-create the arc using mapshaper's canonical helpers, matching what
       // DrawFeatureControl produced originally.
-      mapshaper.internal.appendEmptyArc(o.arcs);
+      adapter.appendEmptyArc(o.arcs);
       for (const v of o.arcVertices) {
-        mapshaper.internal.appendVertex(o.arcs, v);
+        adapter.appendVertex(o.arcs, v);
       }
     }
     if (!o.layer.shapes) o.layer.shapes = [];
@@ -74,13 +80,14 @@ export class FeatureCreateCommand implements EditCommand {
 
   undo(): void {
     const o = this.opts;
+    const adapter = o.adapter ?? getDefaultMapshaperAdapter();
     o.layer.shapes?.pop();
     if (o.appendedRecord !== null) {
       const records = o.layer.data?.getRecords?.();
       records?.pop();
     }
     if (o.geometryType !== 'point' && o.arcs) {
-      mapshaper.internal.deleteLastArc(o.arcs);
+      adapter.deleteLastArc(o.arcs);
     }
     o.source.refreshDisplayArcs();
   }

@@ -1,7 +1,10 @@
-import mapshaper from 'mapshaper';
 import type { EditCommand } from '../edit-command';
 import type { ArcCollection } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
+import {
+  getDefaultMapshaperAdapter,
+  type MapshaperAdapter,
+} from '../../adapter/mapshaper-adapter';
 
 export interface VertexInsertCommandOptions {
   /** Global vertex index where the new vertex was inserted. */
@@ -10,6 +13,8 @@ export interface VertexInsertCommandOptions {
   point: [number, number];
   arcs: ArcCollection;
   source: TopologySource;
+  /** Adapter override for tests; defaults to the process-wide singleton. */
+  adapter?: MapshaperAdapter;
 }
 
 /**
@@ -23,12 +28,14 @@ export class VertexInsertCommand implements EditCommand {
   constructor(private readonly opts: VertexInsertCommandOptions) {}
 
   do(): void {
-    mapshaper.internal.insertVertex(this.opts.arcs, this.opts.insertionId, this.opts.point);
+    const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
+    adapter.insertVertex(this.opts.arcs, this.opts.insertionId, this.opts.point);
     this.opts.source.refreshDisplayArcs();
   }
 
   undo(): void {
-    mapshaper.internal.deleteVertex(this.opts.arcs, this.opts.insertionId);
+    const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
+    adapter.deleteVertex(this.opts.arcs, this.opts.insertionId);
     this.opts.source.refreshDisplayArcs();
   }
 }

@@ -1,7 +1,10 @@
-import mapshaper from 'mapshaper';
 import type { EditCommand } from '../edit-command';
 import type { ArcCollection } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
+import {
+  getDefaultMapshaperAdapter,
+  type MapshaperAdapter,
+} from '../../adapter/mapshaper-adapter';
 
 export interface VertexMoveCommandOptions {
   /**
@@ -15,11 +18,13 @@ export interface VertexMoveCommandOptions {
   to: [number, number];
   arcs: ArcCollection;
   source: TopologySource;
+  /** Adapter override for tests; defaults to the process-wide singleton. */
+  adapter?: MapshaperAdapter;
 }
 
 /**
  * Reverse a vertex drag (including topologically shared vertices) by
- * re-running mapshaper's snapVerticesToPoint with the captured `from` /
+ * re-running mapshaper's snapVertices with the captured `from` /
  * `to` coordinates. The function updates each affected arc's bounds
  * internally, so no extra bookkeeping is required.
  */
@@ -29,12 +34,14 @@ export class VertexMoveCommand implements EditCommand {
   constructor(private readonly opts: VertexMoveCommandOptions) {}
 
   do(): void {
-    mapshaper.internal.snapVerticesToPoint(this.opts.vertexIds, this.opts.to, this.opts.arcs);
+    const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
+    adapter.snapVertices(this.opts.vertexIds, this.opts.to, this.opts.arcs);
     this.opts.source.refreshDisplayArcs();
   }
 
   undo(): void {
-    mapshaper.internal.snapVerticesToPoint(this.opts.vertexIds, this.opts.from, this.opts.arcs);
+    const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
+    adapter.snapVertices(this.opts.vertexIds, this.opts.from, this.opts.arcs);
     this.opts.source.refreshDisplayArcs();
   }
 }

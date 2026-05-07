@@ -8,6 +8,7 @@ import { DatasetReplaceCommand } from '../edit/commands/dataset-replace';
 import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import type { EmapHostInternal } from './emap-host';
 import { resolveLayerInList } from './layer-registry';
+import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import type {
   ApplyExpressionOptions,
   BufferOptions,
@@ -1344,7 +1345,7 @@ export class MapshaperOps {
     // Deep snapshot for undo. mapshaper's clip / erase / dissolve mutate the
     // input dataset in place; without this snapshot there is nothing to
     // restore on undo.
-    const before: MapshaperDataset = mapshaper.internal.copyDataset(original);
+    const before: MapshaperDataset = getDefaultMapshaperAdapter().copyDataset(original);
 
     // Decide worker vs main-thread.
     // - false      → main-thread always
@@ -1473,39 +1474,14 @@ function buildMergeSelectedCommand(
 
 /**
  * Run a mapshaper command string against a single dataset and resolve with
- * the resulting (post-mutation) dataset. Wraps the parseCommands +
- * runParsedCommands + Job dance in a Promise.
+ * the resulting (post-mutation) dataset. Thin shim around the adapter so
+ * the existing main-thread path stays callable; tests can swap behaviour
+ * by injecting a mock adapter via {@link setDefaultMapshaperAdapter}.
  */
 function runMapshaperCommandOnDataset(
   cmd: string,
   dataset: MapshaperDataset,
   inputFiles?: Record<string, Uint8Array | string>,
 ): Promise<MapshaperDataset> {
-  return new Promise((resolve, reject) => {
-    const job = new mapshaper.internal.Job();
-    job.catalog.addDataset(dataset);
-    const commands = mapshaper.internal.parseCommands(cmd);
-    if (inputFiles) {
-      // mapshaper resolves filename references in command args via
-      // `cli.readFile(name, null, opts.input)`, so the cache must be present
-      // on every command's options. Cheap to set on all of them.
-      for (const c of commands) {
-        if (c.options) c.options.input = inputFiles;
-      }
-    }
-    mapshaper.internal.runParsedCommands(commands, job, (err: any, finished) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      const targets = finished.catalog.getDefaultTargets();
-      if (targets.length > 0) {
-        resolve(targets[0].dataset);
-      } else {
-        // mapshaper sometimes leaves the input dataset untouched if no target
-        // applied — treat as success and return the original ref.
-        resolve(dataset);
-      }
-    });
-  });
+  return getDefaultMapshaperAdapter().runOnDataset(cmd, dataset, inputFiles);
 }
