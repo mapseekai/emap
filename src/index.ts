@@ -1,16 +1,28 @@
+// Public entry point. Sections below match the conceptual layers documented
+// in CLAUDE.md (`map.ts orchestrates → painters → sources → edit commands →
+// UI controls`). Avoid `export *` — every public name is listed explicitly so
+// tree-shaking is precise and the API surface stays auditable.
+
 import './shim';
 import 'mapshaper';
 
+// ===========================================================================
+// Core orchestrator + types
+// ===========================================================================
 export { Emap } from './map/map';
 export type {
+  // map options + view
+  ExpressionEvaluationPolicy,
+  // queries
   QueryRenderedFeaturesOptions,
   RenderedFeatureAttributes,
-  ExpressionEvaluationPolicy,
   FeatureRef,
-  FeatureTranslateSession,
-  FeatureAffineSession,
   HighlightFeatureRef,
   HighlightStyle,
+  // edit sessions
+  FeatureTranslateSession,
+  FeatureAffineSession,
+  // mapshaper-op option records
   ClipEraseOptions,
   DissolveOptions,
   CleanOptions,
@@ -44,21 +56,14 @@ export type {
   CheckGeometryOptions,
   GeometryCheckReport,
   IntersectionPointsLayerOptions,
+  // snapshot
   ExportSnapshotOptions,
   LoadSnapshotOptions,
 } from './map/map';
-export { FeatureQuery } from './map/feature-query';
-export {
-  quoteCliArg,
-  isValidLayerName,
-  isValidFieldName,
-  findInvalidFieldName,
-} from './map/command-args';
-export { Err, OK, okValue } from './map/op-result';
-export type { OpError, OpResult } from './map/op-result';
-export { HighlightManager } from './map/highlight-manager';
-export { Selection } from './map/selection';
-export type { SelectMode, SelectionDiff } from './map/selection';
+
+// ===========================================================================
+// Layers + selection + highlights
+// ===========================================================================
 export type {
   LayerSpecification,
   LayerType,
@@ -69,34 +74,123 @@ export type {
   CirclePaint,
 } from './map/layer';
 export { resolveStrokeStyle, resolvePointStyle } from './map/layer';
-export * from './core/events';
-export { DragPanHandler } from './core/drag-pan-handler';
+export { HighlightManager } from './map/highlight-manager';
+export { Selection } from './map/selection';
+export type { SelectMode, SelectionDiff } from './map/selection';
+export { FeatureQuery } from './map/feature-query';
+
+// ===========================================================================
+// Op-result + CLI safety helpers
+// ===========================================================================
+export { Err, OK, okValue } from './map/op-result';
+export type { OpError, OpResult } from './map/op-result';
+export {
+  quoteCliArg,
+  isValidLayerName,
+  isValidFieldName,
+  findInvalidFieldName,
+} from './map/command-args';
+
+// ===========================================================================
+// Mapshaper / topology types (path / point shape vocabulary, ArcCollection,
+// dataset shape). Re-exported so apps that build custom commands can type
+// against the same shapes the engine uses.
+// ===========================================================================
+export type {
+  ArcCollection,
+  ArcIterator,
+  ArcVertexData,
+  Coord2,
+  DataTable,
+  FeatureShape,
+  GeometryType,
+  LegacyPointShape,
+  MapshaperDataset,
+  MapshaperLayer,
+  PathGeometryType,
+  PathLayer,
+  PathPart,
+  PathShape,
+  PointLayer,
+  PointShape,
+  PointStyle,
+  SignedArcId,
+  StrokeStyle,
+  VertexDotStyle,
+} from './types/mapshaper-types';
+export { isPathLayer, isPointLayer, bumpEditVersion } from './types/mapshaper-types';
+
+// ===========================================================================
+// Adapter + worker pool (low-level mapshaper bridges; advanced users only)
+// ===========================================================================
+export {
+  DefaultMapshaperAdapter,
+  getDefaultMapshaperAdapter,
+  setDefaultMapshaperAdapter,
+} from './adapter/mapshaper-adapter';
+export type {
+  ExportedFile,
+  MapshaperAdapter,
+  MapshaperBBox,
+  PackedSession,
+  RunnerInputFiles,
+  SegmentIntersection,
+} from './adapter/mapshaper-adapter';
 export { MapshaperWorkerPool } from './core/mapshaper-worker-pool';
 export type { MapshaperWorkerPoolOptions } from './core/mapshaper-worker-pool';
-export * from './source/topology-source';
-export type { ExportFormat, ExportOptions } from './source/source';
-export * from './renderer/canvas-painter';
-export * from './renderer/edit-overlay-renderer';
-export * from './geo/bounds';
+
+// ===========================================================================
+// Sources / data loading
+// ===========================================================================
+export { TopologySource } from './source/topology-source';
+export type {
+  TopologySourceData,
+  TopologySourceInput,
+  TopologySourceOptions,
+  ZipExtractionLimits,
+} from './source/topology-source';
+export type { TopologySource as ITopologySource, ExportFormat, ExportOptions } from './source/source';
+
+// ===========================================================================
+// Geometry / projection
+// ===========================================================================
+export { Bounds } from './geo/bounds';
 export { AffineTransform, AffineTransform as Transform } from './geo/transform';
 export { Viewport } from './geo/viewport';
 export { Projection } from './geo/projection';
-export * from './ui/control';
-export * from './ui/navigation-control';
-export * from './ui/status-control';
-export * from './ui/basemap-control';
-export * from './ui/vertex-edit-control';
-export * from './ui/edit-toolbar';
-export * from './ui/draw-feature-control';
-export * from './ui/history-control';
-export * from './ui/box-select-control';
-export * from './ui/lasso-select-control';
+export {
+  DEFAULT_CRS,
+  inferFromPrj,
+  normalizeCrsString,
+  resolveDatasetCRS,
+} from './geo/crs-resolver';
+
+// ===========================================================================
+// Renderers
+// ===========================================================================
+export { CanvasPainter } from './renderer/canvas-painter';
+export { EditOverlayRenderer } from './renderer/edit-overlay-renderer';
+
+// ===========================================================================
+// Core events + interactions
+// ===========================================================================
+export { EventDispatcher } from './core/events';
+export type { EventListener } from './core/events';
+export { DragPanHandler } from './core/drag-pan-handler';
+
+// ===========================================================================
+// Edit history + commands
+// ===========================================================================
 export type { EditCommand } from './edit/edit-command';
 export { EditHistory } from './edit/edit-history';
 export type { HistoryStateSnapshot, EditHistoryOptions } from './edit/edit-history';
+
+// vertex-level
 export { VertexMoveCommand } from './edit/commands/vertex-move';
 export { VertexInsertCommand } from './edit/commands/vertex-insert';
 export { VertexDeleteCommand } from './edit/commands/vertex-delete';
+
+// feature-level
 export { FeatureCreateCommand } from './edit/commands/feature-create';
 export { FeatureDeleteCommand, BulkFeatureDeleteCommand } from './edit/commands/feature-delete';
 export type {
@@ -108,12 +202,6 @@ export type {
   FeatureTranslateCommandOptions,
   TranslatedPointFeature,
 } from './edit/commands/feature-translate';
-export { SplitSharedArcsCommand, planSharedArcSplit } from './edit/commands/split-shared-arcs';
-export type {
-  SplitSharedArcsCommandOptions,
-  SplitSharedArcsRemap,
-  AppendedArc,
-} from './edit/commands/split-shared-arcs';
 export {
   FeatureAffineCommand,
   rotateMatrix,
@@ -126,9 +214,21 @@ export type {
   FeatureAffineCommandOptions,
   AffineMatrix,
 } from './edit/commands/feature-affine';
+
+// topology-level
+export { SplitSharedArcsCommand, planSharedArcSplit } from './edit/commands/split-shared-arcs';
+export type {
+  SplitSharedArcsCommandOptions,
+  SplitSharedArcsRemap,
+  AppendedArc,
+} from './edit/commands/split-shared-arcs';
+
+// dataset-replace + composite envelope
 export { CompositeCommand } from './edit/commands/composite';
 export { DatasetReplaceCommand } from './edit/commands/dataset-replace';
 export type { DatasetReplaceCommandOptions } from './edit/commands/dataset-replace';
+
+// attribute / schema commands
 export { FeaturePropertyChangeCommand } from './edit/commands/feature-property-change';
 export type { FeaturePropertyChangeCommandOptions } from './edit/commands/feature-property-change';
 export { FieldAddCommand } from './edit/commands/field-add';
@@ -137,4 +237,30 @@ export { FieldRemoveCommand } from './edit/commands/field-remove';
 export type { FieldRemoveCommandOptions } from './edit/commands/field-remove';
 export { FieldRenameCommand } from './edit/commands/field-rename';
 export type { FieldRenameCommandOptions } from './edit/commands/field-rename';
-export * from './types/mapshaper-types';
+
+// ===========================================================================
+// UI controls
+// ===========================================================================
+export type { Control, ControlPosition } from './ui/control';
+export { NavigationControl } from './ui/navigation-control';
+export type { NavigationOptions } from './ui/navigation-control';
+export { StatusControl } from './ui/status-control';
+export type { StatusOptions } from './ui/status-control';
+export { BasemapControl } from './ui/basemap-control';
+export type { BasemapOptions, BasemapStyle } from './ui/basemap-control';
+export { VertexEditControl } from './ui/vertex-edit-control';
+export type { VertexEditControlOptions } from './ui/vertex-edit-control';
+export { EditToolbar } from './ui/edit-toolbar';
+export type { EditToolbarOptions } from './ui/edit-toolbar';
+export { DrawFeatureControl } from './ui/draw-feature-control';
+export type { DrawFeatureControlOptions, DrawGeometryType } from './ui/draw-feature-control';
+export { HistoryControl } from './ui/history-control';
+export type { HistoryControlOptions } from './ui/history-control';
+export { BoxSelectControl } from './ui/box-select-control';
+export type { BoxSelectControlOptions, BoxSelectStyle } from './ui/box-select-control';
+export {
+  LassoSelectControl,
+  pointInPolygon,
+  featureRepresentativePixel,
+} from './ui/lasso-select-control';
+export type { LassoSelectControlOptions, LassoSelectStyle } from './ui/lasso-select-control';
