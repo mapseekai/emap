@@ -10,6 +10,7 @@ import type { EmapHostInternal } from './emap-host';
 import { resolveLayerInList } from './layer-registry';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { quoteCliArg } from './command-args';
+import { Err, OK, okValue, type OpResult } from './op-result';
 import type {
   ApplyExpressionOptions,
   BufferOptions,
@@ -51,7 +52,7 @@ import type {
 export class MapshaperOps {
   constructor(private _emap: EmapHostInternal) {}
 
-  async clipLayer(opts: ClipEraseOptions): Promise<boolean> {
+  async clipLayer(opts: ClipEraseOptions): Promise<OpResult> {
     return this._runClipErase(opts, 'clip');
   }
 
@@ -59,19 +60,19 @@ export class MapshaperOps {
    * Erase (cut holes from) a layer using a polygon mask layer via mapshaper's
    * `-erase` pipeline. Same semantics as {@link clipLayer}.
    */
-  async eraseLayer(opts: ClipEraseOptions): Promise<boolean> {
+  async eraseLayer(opts: ClipEraseOptions): Promise<OpResult> {
     return this._runClipErase(opts, 'erase');
   }
 
-  async _runClipErase(opts: ClipEraseOptions, op: 'clip' | 'erase'): Promise<boolean> {
+  async _runClipErase(opts: ClipEraseOptions, op: 'clip' | 'erase'): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
     // Validate that both target and mask resolve to layers in this source's
     // dataset. mapshaper would throw an opaque error otherwise.
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
-    if (!resolveLayerInList(dataset.layers, opts.mask)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
+    if (!resolveLayerInList(dataset.layers, opts.mask)) return Err.notFound('mask', opts.mask);
 
     const verb = op === 'clip' ? 'Clip' : 'Erase';
     const cmd = `-target ${quoteCliArg(opts.target)} -${op} source=${quoteCliArg(opts.mask)}`;
@@ -85,25 +86,29 @@ export class MapshaperOps {
    * value are merged. Returns `true` on success, `false` for unresolvable
    * source / target. Recorded as a single undoable history entry.
    */
-  async dissolveLayer(opts: DissolveOptions): Promise<boolean> {
+  async dissolveLayer(opts: DissolveOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
 
     // `field` (single) and `fields` (multi) are mutually exclusive — both
     // set is a configuration error.
     const hasFields = Array.isArray(opts.fields) && opts.fields.length > 0;
-    if (opts.field !== undefined && hasFields) return false;
+    if (opts.field !== undefined && hasFields) {
+      return Err.validation('field', '`field` and `fields` are mutually exclusive');
+    }
 
     // mapshaper's -dissolve DEFAULT option is `fields` (comma-list, type
     // strings). A field name containing `,` would silently group by N
     // imaginary fields; reject up-front instead.
     if (opts.field !== undefined && (typeof opts.field !== 'string' || opts.field.includes(','))) {
-      return false;
+      return Err.validation('field', 'field name must be a string without `,`');
     }
-    if (!this._emap._allowExpressionEvaluation([opts.calc, opts.where], 'dissolveLayer')) return false;
+    if (!this._emap._allowExpressionEvaluation([opts.calc, opts.where], 'dissolveLayer')) {
+      return Err.expressionDisabled('dissolveLayer');
+    }
 
     // Build the positional group-by token (single-field convenience or
     // multi-field array). When neither is set, dissolve collapses every
@@ -161,24 +166,26 @@ export class MapshaperOps {
    * Recorded as a single undoable history entry; inherits dataset-replace
    * semantics (history barrier, selection cleared) from `_runDatasetCommand`.
    */
-  async bufferLayer(opts: BufferOptions): Promise<boolean> {
+  async bufferLayer(opts: BufferOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
 
     // Validate numeric radius up-front: 0 silently produces empty buffers,
     // negative values throw inside mapshaper. Expression-string radii are
     // forwarded as-is — mapshaper evaluates per-feature and there's no
     // sound way to validate them without parsing JS.
     if (typeof opts.radius === 'number') {
-      if (!Number.isFinite(opts.radius) || opts.radius <= 0) return false;
+      if (!Number.isFinite(opts.radius) || opts.radius <= 0) {
+        return Err.validation('radius', 'must be a positive finite number');
+      }
     } else if (typeof opts.radius !== 'string' || opts.radius.trim().length === 0) {
-      return false;
+      return Err.validation('radius', 'must be a positive number or non-empty expression');
     }
     if (typeof opts.radius === 'string' && !this._emap._allowExpressionEvaluation([opts.radius], 'bufferLayer')) {
-      return false;
+      return Err.expressionDisabled('bufferLayer');
     }
 
     // Numbers go in bare; expression strings are quoted so the shell-style
@@ -204,14 +211,18 @@ export class MapshaperOps {
    * Recorded as one undoable history entry; inherits dataset-replace
    * semantics (history barrier, selection cleared) from `_runDatasetCommand`.
    */
-  async applyExpression(opts: ApplyExpressionOptions): Promise<boolean> {
-    if (!opts.expression || !opts.expression.trim()) return false;
+  async applyExpression(opts: ApplyExpressionOptions): Promise<OpResult> {
+    if (!opts.expression || !opts.expression.trim()) {
+      return Err.validation('expression', 'must be a non-empty expression');
+    }
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
-    if (!this._emap._allowExpressionEvaluation([opts.expression, opts.where], 'applyExpression')) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
+    if (!this._emap._allowExpressionEvaluation([opts.expression, opts.where], 'applyExpression')) {
+      return Err.expressionDisabled('applyExpression');
+    }
 
     const whereArg = opts.where && opts.where.trim()
       ? ` where=${quoteCliArg(opts.where)}`
@@ -228,12 +239,12 @@ export class MapshaperOps {
    * Useful for unpacking multipolygon islands, multipart polylines, or
    * multipoint clusters into separately-pickable features.
    */
-  async explodeLayer(opts: ExplodeOptions): Promise<boolean> {
+  async explodeLayer(opts: ExplodeOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
     const cmd = `-target ${quoteCliArg(opts.target)} -explode`;
     return this._runDatasetCommand(opts.source, cmd, `Explode ${opts.target}`);
   }
@@ -249,13 +260,15 @@ export class MapshaperOps {
    * layer name; `noReplace: true` keeps the input polygon layer alongside
    * the new polyline layer.
    */
-  async innerlinesLayer(opts: InnerlinesOptions): Promise<boolean> {
+  async innerlinesLayer(opts: InnerlinesOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
-    if (!this._emap._allowExpressionEvaluation([opts.where], 'innerlinesLayer')) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
+    if (!this._emap._allowExpressionEvaluation([opts.where], 'innerlinesLayer')) {
+      return Err.expressionDisabled('innerlinesLayer');
+    }
 
     const parts: string[] = [
       `-target ${quoteCliArg(opts.target)}`,
@@ -285,16 +298,20 @@ export class MapshaperOps {
    * (mapshaper would error otherwise). Companion to {@link applyExpression}:
    * same JS context, opposite intent (mutate vs delete).
    */
-  async filterFeatures(opts: FilterOptions): Promise<boolean> {
+  async filterFeatures(opts: FilterOptions): Promise<OpResult> {
     const hasExpr = !!(opts.expression && opts.expression.trim());
-    if (!hasExpr && !opts.removeEmpty) return false;
+    if (!hasExpr && !opts.removeEmpty) {
+      return Err.validation('expression', 'must supply `expression` or `removeEmpty: true`');
+    }
 
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
-    if (!this._emap._allowExpressionEvaluation([opts.expression], 'filterFeatures')) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
+    if (!this._emap._allowExpressionEvaluation([opts.expression], 'filterFeatures')) {
+      return Err.expressionDisabled('filterFeatures');
+    }
 
     const parts: string[] = [
       `-target ${quoteCliArg(opts.target)}`,
@@ -321,12 +338,12 @@ export class MapshaperOps {
    * small default when omitted. `endpoints: true` restricts to line
    * endpoints. `precision` rounds all coords to a given decimal precision.
    */
-  async snapLayer(opts: SnapOptions): Promise<boolean> {
+  async snapLayer(opts: SnapOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
 
     const parts: string[] = [
       `-target ${quoteCliArg(opts.target)}`,
@@ -351,31 +368,33 @@ export class MapshaperOps {
    * Run mapshaper's `-clean` against a layer to repair topology issues
    * (intersection cuts, polygon overlaps, sliver removal). Heavy — O(N²) on
    * polygon counts in the worst case — so it is opt-in instead of running on
-   * every import. Returns `Promise<boolean>`; failure modes match the other
-   * dataset-replace ops (false on unresolvable source/target, error event on
-   * mapshaper failure).
+   * every import. Returns `Promise<OpResult>`; failure modes match the other
+   * dataset-replace ops (`Err.notFound` / `Err.validation` for input shape
+   * problems, `Err.mapshaper` if mapshaper threw mid-pipeline).
    *
    * All tuning options are optional; omitting them lets mapshaper apply its
    * default cleanup heuristics. See {@link CleanOptions} for the surface.
    */
-  async cleanLayer(opts: CleanOptions): Promise<boolean> {
+  async cleanLayer(opts: CleanOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
 
     // Numeric tuning options reject NaN / negative — mapshaper would either
     // error opaquely or silently produce surprising results.
     const validNumOrUnset = (n?: number) =>
       n === undefined || (typeof n === 'number' && Number.isFinite(n) && n >= 0);
-    if (!validNumOrUnset(opts.gapFillArea)) return false;
-    if (!validNumOrUnset(opts.sliverControl)) return false;
-    if (!validNumOrUnset(opts.snapInterval)) return false;
+    if (!validNumOrUnset(opts.gapFillArea)) return Err.validation('gapFillArea', 'must be a finite non-negative number');
+    if (!validNumOrUnset(opts.sliverControl)) return Err.validation('sliverControl', 'must be a finite non-negative number');
+    if (!validNumOrUnset(opts.snapInterval)) return Err.validation('snapInterval', 'must be a finite non-negative number');
 
     if (opts.overlapRule !== undefined) {
       const allowed = ['min-id', 'max-id', 'min-area', 'max-area'];
-      if (!allowed.includes(opts.overlapRule)) return false;
+      if (!allowed.includes(opts.overlapRule)) {
+        return Err.validation('overlapRule', `must be one of ${allowed.join(', ')}`);
+      }
     }
 
     const parts: string[] = [
@@ -417,12 +436,12 @@ export class MapshaperOps {
    * Returns `true` (no-op) for arc-less point-only datasets,
    * `false` for unresolvable source or `addIntersectionCuts` errors.
    */
-  async rebuildTopology(opts: RebuildTopologyOptions): Promise<boolean> {
+  async rebuildTopology(opts: RebuildTopologyOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const original = source.getDataset();
-    if (!original) return false;
-    if (!original.arcs) return true; // point-only — nothing to rebuild
+    if (!original) return Err.notFound('source', opts.source);
+    if (!original.arcs) return OK; // point-only — nothing to rebuild
 
     const before: MapshaperDataset = mapshaper.internal.copyDataset(original);
     const after: MapshaperDataset = mapshaper.internal.copyDataset(original);
@@ -435,7 +454,7 @@ export class MapshaperOps {
       });
     } catch (err) {
       this._emap.fire('error', { error: err });
-      return false;
+      return Err.mapshaper(err, { operation: 'rebuildTopology' });
     }
 
     source.setDataset(after);
@@ -447,7 +466,7 @@ export class MapshaperOps {
     this._emap._fireSelectionChange(this._emap._selection.clear());
 
     this._emap._scheduleRender();
-    return true;
+    return OK;
   }
 
   /**
@@ -458,13 +477,15 @@ export class MapshaperOps {
    * Returns `false` for unresolvable source / target. Inherits all
    * dataset-replace semantics from `_runDatasetCommand`.
    */
-  async mosaicLayer(opts: MosaicOptions): Promise<boolean> {
+  async mosaicLayer(opts: MosaicOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
-    if (!this._emap._allowExpressionEvaluation([opts.calc], 'mosaicLayer')) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
+    if (!this._emap._allowExpressionEvaluation([opts.calc], 'mosaicLayer')) {
+      return Err.expressionDisabled('mosaicLayer');
+    }
 
     const parts: string[] = [
       `-target ${quoteCliArg(opts.target)}`,
@@ -501,18 +522,22 @@ export class MapshaperOps {
    * list, not a single layer name; we join `targets` with commas inside one
    * quoted argument.
    */
-  async unionLayers(opts: UnionOptions): Promise<boolean> {
-    if (!opts.targets || opts.targets.length < 2) return false;
+  async unionLayers(opts: UnionOptions): Promise<OpResult> {
+    if (!opts.targets || opts.targets.length < 2) {
+      return Err.validation('targets', 'must supply at least 2 target layers');
+    }
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
     // Every target must resolve and be `,`-free — mapshaper joins the list
     // with commas and would otherwise silently split a comma-bearing name
     // into multiple bogus targets.
     for (const t of opts.targets) {
-      if (typeof t !== 'string' || t.includes(',')) return false;
-      if (!resolveLayerInList(dataset.layers, t)) return false;
+      if (typeof t !== 'string' || t.includes(',')) {
+        return Err.validation('targets', `target name must not contain ',': ${String(t)}`);
+      }
+      if (!resolveLayerInList(dataset.layers, t)) return Err.notFound('layer', t);
     }
 
     const targetList = opts.targets.join(',');
@@ -547,15 +572,21 @@ export class MapshaperOps {
    * use the explicit `source=<name>` form for symmetry with `clipLayer` and
    * `eraseLayer`.
    */
-  async divideLayer(opts: DivideOptions): Promise<boolean> {
+  async divideLayer(opts: DivideOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
     const targetLayer = resolveLayerInList(dataset.layers, opts.target);
-    if (!targetLayer || targetLayer.geometry_type !== 'polyline') return false;
+    if (!targetLayer) return Err.notFound('layer', opts.target);
+    if (targetLayer.geometry_type !== 'polyline') {
+      return Err.validation('target', `expected polyline layer, got ${targetLayer.geometry_type ?? 'unknown'}`);
+    }
     const dividerLayer = resolveLayerInList(dataset.layers, opts.divider);
-    if (!dividerLayer || dividerLayer.geometry_type !== 'polygon') return false;
+    if (!dividerLayer) return Err.notFound('divider', opts.divider);
+    if (dividerLayer.geometry_type !== 'polygon') {
+      return Err.validation('divider', `expected polygon layer, got ${dividerLayer.geometry_type ?? 'unknown'}`);
+    }
 
     const parts: string[] = [
       `-target ${quoteCliArg(opts.target)}`,
@@ -583,33 +614,39 @@ export class MapshaperOps {
    * or `interpolated` without a positive `interval`. Inherits dataset-replace
    * semantics from `_runDatasetCommand`.
    */
-  async pointsLayer(opts: PointsOptions): Promise<boolean> {
+  async pointsLayer(opts: PointsOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
     const layer = resolveLayerInList(dataset.layers, opts.target);
-    if (!layer) return false;
+    if (!layer) return Err.notFound('layer', opts.target);
 
     const geom = layer.geometry_type;
     switch (opts.type) {
       case 'centroid':
       case 'inner':
-        if (geom !== 'polygon') return false;
+        if (geom !== 'polygon') {
+          return Err.validation('type', `${opts.type} requires polygon target, got ${geom ?? 'unknown'}`);
+        }
         break;
       case 'midpoints':
       case 'interpolated':
-        if (geom !== 'polyline') return false;
+        if (geom !== 'polyline') {
+          return Err.validation('type', `${opts.type} requires polyline target, got ${geom ?? 'unknown'}`);
+        }
         break;
       case 'vertices':
       case 'endpoints':
-        if (geom !== 'polygon' && geom !== 'polyline') return false;
+        if (geom !== 'polygon' && geom !== 'polyline') {
+          return Err.validation('type', `${opts.type} requires polygon/polyline target, got ${geom ?? 'unknown'}`);
+        }
         break;
       default:
-        return false;
+        return Err.validation('type', `unknown type: ${String((opts as PointsOptions).type)}`);
     }
     if (opts.type === 'interpolated' && !(typeof opts.interval === 'number' && opts.interval > 0)) {
-      return false;
+      return Err.validation('interval', 'interpolated points require a positive interval');
     }
 
     const parts: string[] = [
@@ -637,13 +674,16 @@ export class MapshaperOps {
    * `fields` is mapshaper's positional `DEFAULT: true` arg, emitted as a
    * bare comma-joined token (no `fields=` prefix) to match the CLI norm.
    */
-  async linesLayer(opts: LinesOptions): Promise<boolean> {
+  async linesLayer(opts: LinesOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
     const layer = resolveLayerInList(dataset.layers, opts.target);
-    if (!layer || layer.geometry_type !== 'polygon') return false;
+    if (!layer) return Err.notFound('layer', opts.target);
+    if (layer.geometry_type !== 'polygon') {
+      return Err.validation('target', `expected polygon layer, got ${layer.geometry_type ?? 'unknown'}`);
+    }
 
     // mapshaper's `-lines` DEFAULT positional is the comma-joined fields
     // list. Build the `-lines [fields-csv]` token in one place rather than
@@ -673,13 +713,16 @@ export class MapshaperOps {
    * Returns `false` for unresolvable source / target or non-polyline
    * target. Inherits dataset-replace semantics from `_runDatasetCommand`.
    */
-  async polygonsLayer(opts: PolygonsOptions): Promise<boolean> {
+  async polygonsLayer(opts: PolygonsOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
     const layer = resolveLayerInList(dataset.layers, opts.target);
-    if (!layer || layer.geometry_type !== 'polyline') return false;
+    if (!layer) return Err.notFound('layer', opts.target);
+    if (layer.geometry_type !== 'polyline') {
+      return Err.validation('target', `expected polyline layer, got ${layer.geometry_type ?? 'unknown'}`);
+    }
 
     const parts: string[] = [
       `-target ${quoteCliArg(opts.target)}`,
@@ -707,13 +750,13 @@ export class MapshaperOps {
    * Returns `false` for unresolvable source, unresolved target, missing /
    * conflicting / out-of-range threshold, or malformed `resolution`.
    */
-  async simplifyLayer(opts: SimplifyOptions): Promise<boolean> {
+  async simplifyLayer(opts: SimplifyOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
     if (opts.target !== undefined) {
-      if (!resolveLayerInList(dataset.layers, opts.target)) return false;
+      if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
     }
 
     // Exactly one threshold mode.
@@ -722,20 +765,28 @@ export class MapshaperOps {
       opts.interval !== undefined,
       opts.resolution !== undefined,
     ].filter(Boolean).length;
-    if (thresholdsSet !== 1) return false;
+    if (thresholdsSet !== 1) {
+      return Err.validation('threshold', 'must supply exactly one of percentage, interval, resolution');
+    }
 
     let thresholdToken: string;
     if (opts.percentage !== undefined) {
       const p = opts.percentage;
-      if (!Number.isFinite(p) || p < 0 || p > 100) return false;
+      if (!Number.isFinite(p) || p < 0 || p > 100) {
+        return Err.validation('percentage', 'must be a finite number in [0, 100]');
+      }
       thresholdToken = `${p}%`;
     } else if (opts.interval !== undefined) {
       const v = opts.interval;
-      if (!Number.isFinite(v) || v <= 0) return false;
+      if (!Number.isFinite(v) || v <= 0) {
+        return Err.validation('interval', 'must be a positive finite number');
+      }
       thresholdToken = `interval=${v}`;
     } else {
       const r = opts.resolution!;
-      if (!/^\d+x\d+$/.test(r)) return false;
+      if (!/^\d+x\d+$/.test(r)) {
+        return Err.validation('resolution', 'must match `WIDTHxHEIGHT` (digits)');
+      }
       thresholdToken = `resolution=${r}`;
     }
 
@@ -744,7 +795,7 @@ export class MapshaperOps {
     // which leaves the caller wondering why their tuning had no effect.
     // Reject up-front. (Method `undefined` is fine — defaults to weighted.)
     if (opts.weighting !== undefined && opts.method !== undefined && opts.method !== 'weighted') {
-      return false;
+      return Err.validation('weighting', `weighting only applies to method='weighted', not ${opts.method}`);
     }
 
     const parts: string[] = [];
@@ -779,16 +830,16 @@ export class MapshaperOps {
    * projected extent. Call `setExtent(source.getExtent())` after
    * `await projectLayer(...)` to recentre.
    */
-  async projectLayer(opts: ProjectOptions): Promise<boolean> {
+  async projectLayer(opts: ProjectOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
     if (opts.target !== undefined) {
-      if (!resolveLayerInList(dataset.layers, opts.target)) return false;
+      if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
     }
     const crs = (opts.crs ?? '').trim();
-    if (crs.length === 0) return false;
+    if (crs.length === 0) return Err.validation('crs', 'must be a non-empty CRS string');
 
     const parts: string[] = [];
     if (opts.target) parts.push(`-target ${quoteCliArg(opts.target)}`);
@@ -810,24 +861,24 @@ export class MapshaperOps {
    * Returns `false` for unresolvable source / target, empty name, or
    * collision with another layer.
    */
-  async renameLayer(opts: RenameLayerOptions): Promise<boolean> {
+  async renameLayer(opts: RenameLayerOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
     const newName = (opts.name ?? '').trim();
-    if (newName.length === 0) return false;
+    if (newName.length === 0) return Err.validation('name', 'must be a non-empty string');
     // mapshaper's -rename-layers DEFAULT is `names` (comma-list). A name
     // containing `,` would silently split into N rename pairs.
-    if (newName.includes(',')) return false;
+    if (newName.includes(',')) return Err.validation('name', 'must not contain `,`');
     // Allow renaming to the same name (no-op-ish), but reject if another
     // layer in this dataset already owns it.
     if (newName !== opts.target) {
       const collision = dataset.layers.some(
         (l: any) => (l?.name ?? '') === newName,
       );
-      if (collision) return false;
+      if (collision) return Err.validation('name', `another layer already named '${newName}'`);
     }
     const cmd = `-target ${quoteCliArg(opts.target)} -rename-layers ${quoteCliArg(newName)}`;
     return this._runDatasetCommand(opts.source, cmd, `Rename ${opts.target} → ${newName}`);
@@ -842,25 +893,35 @@ export class MapshaperOps {
    * pass `force: true`, returns `false` rather than letting mapshaper throw
    * an opaque mid-pipeline error.
    */
-  async mergeLayers(opts: MergeLayersOptions): Promise<boolean> {
-    if (!opts.targets || opts.targets.length < 2) return false;
+  async mergeLayers(opts: MergeLayersOptions): Promise<OpResult> {
+    if (!opts.targets || opts.targets.length < 2) {
+      return Err.validation('targets', 'must supply at least 2 target layers');
+    }
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
 
     // Targets are joined with commas inside the `-target` arg; reject names
     // that themselves contain `,` so we don't silently split into bogus
     // targets.
-    if (opts.targets.some((t) => typeof t !== 'string' || t.includes(','))) return false;
+    for (const t of opts.targets) {
+      if (typeof t !== 'string' || t.includes(',')) {
+        return Err.validation('targets', `target name must not contain ',': ${String(t)}`);
+      }
+    }
 
     const layers = opts.targets.map((t) => resolveLayerInList(dataset.layers, t));
-    if (layers.some((l) => !l)) return false;
+    for (let i = 0; i < layers.length; i++) {
+      if (!layers[i]) return Err.notFound('layer', opts.targets[i]);
+    }
 
     if (!opts.force) {
       const firstGeom = layers[0]?.geometry_type;
       const allSame = layers.every((l) => l?.geometry_type === firstGeom);
-      if (!allSame) return false;
+      if (!allSame) {
+        return Err.validation('targets', 'targets have mixed geometry types; pass `force: true` to merge anyway');
+      }
     }
 
     const targetList = opts.targets.join(',');
@@ -887,15 +948,17 @@ export class MapshaperOps {
    * one-source-one-dataset model in emap doesn't expose those. Use
    * `loadSnapshot` with `defaultIds` if you need that workflow.
    */
-  async splitLayer(opts: SplitLayerOptions): Promise<boolean> {
+  async splitLayer(opts: SplitLayerOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
     const expr = (opts.expression ?? '').trim();
-    if (expr.length === 0) return false;
-    if (!this._emap._allowExpressionEvaluation([expr], 'splitLayer')) return false;
+    if (expr.length === 0) return Err.validation('expression', 'must be a non-empty expression');
+    if (!this._emap._allowExpressionEvaluation([expr], 'splitLayer')) {
+      return Err.expressionDisabled('splitLayer');
+    }
 
     const parts: string[] = [
       `-target ${quoteCliArg(opts.target)}`,
@@ -913,12 +976,12 @@ export class MapshaperOps {
    *
    * Returns `false` for unresolvable source / target.
    */
-  async dropLayer(opts: DropLayerOptions): Promise<boolean> {
+  async dropLayer(opts: DropLayerOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
     const cmd = `-target ${quoteCliArg(opts.target)} -drop`;
     return this._runDatasetCommand(opts.source, cmd, `Drop ${opts.target}`);
   }
@@ -930,15 +993,17 @@ export class MapshaperOps {
    *
    * Returns `false` for unresolvable source / target or empty expression.
    */
-  async sortFeatures(opts: SortFeaturesOptions): Promise<boolean> {
+  async sortFeatures(opts: SortFeaturesOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
     const expr = (opts.expression ?? '').trim();
-    if (expr.length === 0) return false;
-    if (!this._emap._allowExpressionEvaluation([expr], 'sortFeatures')) return false;
+    if (expr.length === 0) return Err.validation('expression', 'must be a non-empty expression');
+    if (!this._emap._allowExpressionEvaluation([expr], 'sortFeatures')) {
+      return Err.expressionDisabled('sortFeatures');
+    }
 
     const parts: string[] = [
       `-target ${quoteCliArg(opts.target)}`,
@@ -955,17 +1020,19 @@ export class MapshaperOps {
    * Returns `false` for unresolvable source / target, empty expression,
    * or non-positive `maxCount`.
    */
-  async uniqueFeatures(opts: UniqueFeaturesOptions): Promise<boolean> {
+  async uniqueFeatures(opts: UniqueFeaturesOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
     const expr = (opts.expression ?? '').trim();
-    if (expr.length === 0) return false;
-    if (!this._emap._allowExpressionEvaluation([expr], 'uniqueFeatures')) return false;
+    if (expr.length === 0) return Err.validation('expression', 'must be a non-empty expression');
+    if (!this._emap._allowExpressionEvaluation([expr], 'uniqueFeatures')) {
+      return Err.expressionDisabled('uniqueFeatures');
+    }
     if (opts.maxCount !== undefined && !(typeof opts.maxCount === 'number' && opts.maxCount > 0)) {
-      return false;
+      return Err.validation('maxCount', 'must be a positive number');
     }
 
     const parts: string[] = [
@@ -984,16 +1051,22 @@ export class MapshaperOps {
    * Returns `false` for unresolvable source / target, empty `fields[]`,
    * or any field name that's empty or contains `,`.
    */
-  async filterFields(opts: FilterFieldsOptions): Promise<boolean> {
+  async filterFields(opts: FilterFieldsOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
-    if (!Array.isArray(opts.fields) || opts.fields.length === 0) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
+    if (!Array.isArray(opts.fields) || opts.fields.length === 0) {
+      return Err.validation('fields', 'must be a non-empty array');
+    }
     for (const f of opts.fields) {
-      if (typeof f !== 'string' || f.trim().length === 0) return false;
-      if (f.includes(',')) return false;
+      if (typeof f !== 'string' || f.trim().length === 0) {
+        return Err.validation('fields', `field name must be a non-empty string: ${String(f)}`);
+      }
+      if (f.includes(',')) {
+        return Err.validation('fields', `field name must not contain ',': ${f}`);
+      }
     }
 
     const list = opts.fields.join(',');
@@ -1013,21 +1086,27 @@ export class MapshaperOps {
    * Returns `false` for unresolvable source / target or any invalid
    * key / value in `mapping`.
    */
-  async renameFields(opts: RenameFieldsOptions): Promise<boolean> {
+  async renameFields(opts: RenameFieldsOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
-    if (!opts.mapping || typeof opts.mapping !== 'object') return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
+    if (!opts.mapping || typeof opts.mapping !== 'object') {
+      return Err.validation('mapping', 'must be an object of { oldName: newName }');
+    }
     const entries = Object.entries(opts.mapping);
-    if (entries.length === 0) return false;
+    if (entries.length === 0) return Err.validation('mapping', 'must contain at least one rename pair');
     const pairs: string[] = [];
     for (const [oldName, newName] of entries) {
       const o = (oldName ?? '').trim();
       const n = (newName ?? '').trim();
-      if (o.length === 0 || n.length === 0) return false;
-      if (o.includes(',') || o.includes('=') || n.includes(',') || n.includes('=')) return false;
+      if (o.length === 0 || n.length === 0) {
+        return Err.validation('mapping', `field names must be non-empty: ${oldName}=${newName}`);
+      }
+      if (o.includes(',') || o.includes('=') || n.includes(',') || n.includes('=')) {
+        return Err.validation('mapping', `field names must not contain ',' or '=': ${oldName}=${newName}`);
+      }
       pairs.push(`${o}=${n}`);
     }
     const list = pairs.join(',');
@@ -1048,16 +1127,16 @@ export class MapshaperOps {
    * Lighter than {@link cleanLayer} (heavy + destructive) and complementary
    * to {@link rebuildTopology} (which fixes the issues this command finds).
    */
-  async checkGeometry(opts: CheckGeometryOptions): Promise<GeometryCheckReport | null> {
+  async checkGeometry(opts: CheckGeometryOptions): Promise<OpResult<GeometryCheckReport>> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return null;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return null;
+    if (!dataset) return Err.notFound('source', opts.source);
     if (opts.target !== undefined) {
-      if (!resolveLayerInList(dataset.layers, opts.target)) return null;
+      if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
     }
     if (!dataset.arcs) {
-      return { ok: true, intersections: [], intersectionCount: 0 };
+      return okValue({ ok: true, intersections: [], intersectionCount: 0 });
     }
 
     const internalOpts: { tolerance?: number } = {};
@@ -1065,11 +1144,11 @@ export class MapshaperOps {
 
     const raw = mapshaper.internal.findSegmentIntersections(dataset.arcs, internalOpts);
     const intersections = raw.map((r) => ({ x: r.x, y: r.y }));
-    return {
+    return okValue({
       ok: intersections.length === 0,
       intersections,
       intersectionCount: intersections.length,
-    };
+    });
   }
 
   /**
@@ -1095,23 +1174,25 @@ export class MapshaperOps {
    * `getIntersectionLayer` returns `shapes: [points]`). Pipe through
    * `explodeLayer` if one feature per intersection is needed.
    */
-  async intersectionPointsLayer(opts: IntersectionPointsLayerOptions): Promise<boolean> {
+  async intersectionPointsLayer(opts: IntersectionPointsLayerOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const original = source.getDataset();
-    if (!original) return false;
+    if (!original) return Err.notFound('source', opts.source);
     const targetLayer = resolveLayerInList(original.layers, opts.target);
-    if (!targetLayer) return false;
+    if (!targetLayer) return Err.notFound('layer', opts.target);
     if (targetLayer.geometry_type !== 'polygon' && targetLayer.geometry_type !== 'polyline') {
-      return false;
+      return Err.validation('target', `expected polygon/polyline target, got ${targetLayer.geometry_type ?? 'unknown'}`);
     }
-    if (!original.arcs) return false;
+    if (!original.arcs) return Err.validation('source', 'source has no arcs');
 
     const newName = (opts.name && opts.name.trim()) || `${opts.target}-intersections`;
-    if (original.layers.some((l: any) => l?.name === newName)) return false;
+    if (original.layers.some((l: any) => l?.name === newName)) {
+      return Err.validation('name', `another layer already named '${newName}'`);
+    }
     if (opts.tolerance !== undefined) {
       if (typeof opts.tolerance !== 'number' || !Number.isFinite(opts.tolerance) || opts.tolerance <= 0) {
-        return false;
+        return Err.validation('tolerance', 'must be a positive finite number');
       }
     }
 
@@ -1139,7 +1220,7 @@ export class MapshaperOps {
       after.layers.push(pointLyr);
     } catch (err) {
       this._emap.fire('error', { error: err });
-      return false;
+      return Err.mapshaper(err, { operation: 'intersectionPointsLayer' });
     }
 
     source.setDataset(after);
@@ -1154,7 +1235,7 @@ export class MapshaperOps {
 
     this._emap._fireSelectionChange(this._emap._selection.clear());
     this._emap._scheduleRender();
-    return true;
+    return OK;
   }
 
   /**
@@ -1173,23 +1254,31 @@ export class MapshaperOps {
    * Returns `false` for unresolvable source / target, malformed `keys`, or
    * an invalid `data` shape.
    */
-  async joinTable(opts: JoinTableOptions): Promise<boolean> {
+  async joinTable(opts: JoinTableOptions): Promise<OpResult> {
     const source = this._emap._sources.get(opts.source);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', opts.source);
     const dataset = source.getDataset();
-    if (!dataset) return false;
-    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
-    if (!Array.isArray(opts.keys) || opts.keys.length !== 2) return false;
+    if (!dataset) return Err.notFound('source', opts.source);
+    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
+    if (!Array.isArray(opts.keys) || opts.keys.length !== 2) {
+      return Err.validation('keys', 'must be a 2-element [targetKey, sourceKey] array');
+    }
     const [targetKey, sourceKey] = opts.keys.map((k) => (typeof k === 'string' ? k.trim() : ''));
-    if (targetKey.length === 0 || sourceKey.length === 0) return false;
+    if (targetKey.length === 0 || sourceKey.length === 0) {
+      return Err.validation('keys', 'both keys must be non-empty strings');
+    }
     // mapshaper serializes `keys=` as `target,source`; a key containing `,`
     // would split into 3+ keys and trip mapshaper's length validator.
-    if (targetKey.includes(',') || sourceKey.includes(',')) return false;
+    if (targetKey.includes(',') || sourceKey.includes(',')) {
+      return Err.validation('keys', 'keys must not contain `,`');
+    }
 
     let joinSource: string;
     let inputFiles: Record<string, Uint8Array | string> | undefined;
     const data = opts.data as Record<string, unknown> | undefined;
-    if (!data || typeof data !== 'object') return false;
+    if (!data || typeof data !== 'object') {
+      return Err.validation('data', 'must be { csv } | { json } | { layer }');
+    }
 
     if ('layer' in data && typeof data.layer === 'string' && data.layer.trim().length > 0) {
       joinSource = data.layer.trim();
@@ -1208,9 +1297,11 @@ export class MapshaperOps {
       joinSource = filename;
       inputFiles = { [filename]: payload };
     } else {
-      return false;
+      return Err.validation('data', 'must contain one of `csv`, `json`, or `layer`');
     }
-    if (!this._emap._allowExpressionEvaluation([opts.where, opts.calc], 'joinTable')) return false;
+    if (!this._emap._allowExpressionEvaluation([opts.where, opts.calc], 'joinTable')) {
+      return Err.expressionDisabled('joinTable');
+    }
 
     const parts: string[] = [
       `-target ${quoteCliArg(opts.target)}`,
@@ -1256,20 +1347,22 @@ export class MapshaperOps {
    * Returns `false` (and runs no command) for an empty selection or when
    * the selection spans more than one source/layer.
    */
-  async mergeSelected(): Promise<boolean> {
+  async mergeSelected(): Promise<OpResult> {
     const refs = this._emap._selection.getAll();
-    if (refs.length === 0) return false;
+    if (refs.length === 0) return Err.validation('selection', 'selection is empty');
 
     // Reject cross-source / cross-layer selections — mapshaper's dissolve
     // operates on a single layer at a time.
     const sourceId = refs[0].source;
     const layerId = refs[0].layer;
     for (const r of refs) {
-      if (r.source !== sourceId || r.layer !== layerId) return false;
+      if (r.source !== sourceId || r.layer !== layerId) {
+        return Err.validation('selection', 'selection spans multiple sources or layers');
+      }
     }
 
     const layer = this._emap.layers.resolve(sourceId, layerId);
-    if (!layer) return false;
+    if (!layer) return Err.notFound('layer', layerId);
 
     // Sort selected ids ascending so the discriminator pre-write is
     // deterministic (helpful for tests + diffs).
@@ -1281,18 +1374,20 @@ export class MapshaperOps {
     // strings for selections of 10k+ features and forced mapshaper to JS-eval
     // the membership test on every record. Direct record mutation is O(N)
     // either way and avoids the parser blow-up entirely.
-    if (!stampMergeDiscriminator(layer, ids)) return false;
+    if (!stampMergeDiscriminator(layer, ids)) {
+      return Err.validation('layer', 'layer has no data table; cannot stamp discriminator');
+    }
 
     const cmd = buildMergeDissolveCommand(layerId, layer);
     const label = `Merge ${refs.length} feature${refs.length > 1 ? 's' : ''}`;
-    const ok = await this._runDatasetCommand(sourceId, cmd, label);
-    if (!ok) {
+    const result = await this._runDatasetCommand(sourceId, cmd, label);
+    if (!result.ok) {
       // The pre-stamp mutated the LIVE dataset's records. If the dissolve
       // bailed (host removed, mapshaper threw, …), unwind the stamp so the
       // caller's view of the data isn't polluted with our internal field.
       unstampMergeDiscriminator(layer);
     }
-    return ok;
+    return result;
   }
   /**
    * Worker-thread variant of {@link runMapshaperCommandOnDataset}: packs
@@ -1348,15 +1443,15 @@ export class MapshaperOps {
     cmd: string,
     label: string,
     inputFiles?: Record<string, Uint8Array | string>,
-  ): Promise<boolean> {
+  ): Promise<OpResult> {
     // Stage A: pre-flight bail. If the host is already torn down, skip
     // the entire command — there is no UI left to update.
-    if (this._emap._removed) return false;
+    if (this._emap._removed) return Err.hostRemoved();
 
     const source = this._emap._sources.get(sourceId);
-    if (!source) return false;
+    if (!source) return Err.notFound('source', sourceId);
     const original = source.getDataset();
-    if (!original) return false;
+    if (!original) return Err.notFound('source', sourceId);
 
     // Deep snapshot for undo. mapshaper's clip / erase / dissolve mutate the
     // input dataset in place; without this snapshot there is nothing to
@@ -1388,17 +1483,17 @@ export class MapshaperOps {
       // Stage B: post-await error path. If the host is gone, swallow the
       // error silently — listeners are detached and surfacing it would
       // only confuse callers awaiting a clean shutdown.
-      if (this._emap._removed) return false;
+      if (this._emap._removed) return Err.hostRemoved();
       // Surface as a fire-and-forget error event; do not throw from a public
       // edit op so that one bad command doesn't tear down the calling page.
       this._emap.fire('error', { error: err });
-      return false;
+      return Err.mapshaper(err, { cmd, operation: label });
     }
 
     // Stage C: post-await success path. Drop the result on the floor if
     // the host was removed mid-await; mutating `_sources` / `_history`
     // now would either crash or resurrect freed state.
-    if (this._emap._removed) return false;
+    if (this._emap._removed) return Err.hostRemoved();
 
     // Apply: swap the source's active dataset.
     source.setDataset(after);
@@ -1415,7 +1510,7 @@ export class MapshaperOps {
     this._emap._fireSelectionChange(this._emap._selection.clear());
 
     this._emap._scheduleRender();
-    return true;
+    return OK;
   }
 }
 

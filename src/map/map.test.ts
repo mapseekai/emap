@@ -676,24 +676,24 @@ describe('Emap clipLayer / eraseLayer', () => {
 
   it('clipLayer returns false when the source does not exist', async () => {
     const ok = await map.ops.clipLayer({ source: 'nope', target: 'roads', mask: 'park' });
-    expect(ok).toBe(false);
+    expect(ok.ok).toBe(false);
     expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('clipLayer returns false when the target layer is missing', async () => {
     const ok = await map.ops.clipLayer({ source: 'src1', target: 'missing', mask: 'park' });
-    expect(ok).toBe(false);
+    expect(ok.ok).toBe(false);
     expect(copyDatasetSpy).not.toHaveBeenCalled();
   });
 
   it('clipLayer returns false when the mask layer is missing', async () => {
     const ok = await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'nope' });
-    expect(ok).toBe(false);
+    expect(ok.ok).toBe(false);
   });
 
   it('clipLayer constructs a quoted mapshaper command and swaps the dataset', async () => {
     const ok = await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy).toHaveBeenCalledTimes(1);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clip source="park"');
     expect(source.setDataset).toHaveBeenCalledWith(afterDataset);
@@ -746,7 +746,7 @@ describe('Emap clipLayer / eraseLayer', () => {
     const errorListener = vi.fn();
     map.on('error', errorListener);
     const ok = await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
-    expect(ok).toBe(false);
+    expect(ok.ok).toBe(false);
     expect(errorListener).toHaveBeenCalledTimes(1);
     expect(errorListener.mock.calls[0][0].error.message).toBe('mapshaper boom');
     // No history change on failure
@@ -762,14 +762,14 @@ describe('Emap clipLayer / eraseLayer', () => {
 
   it('cleanLayer constructs a -clean command and pushes a single history entry', async () => {
     const ok = await map.ops.cleanLayer({ source: 'src1', target: 'roads' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clean');
     expect(map.canUndo()).toBe(true);
   });
 
   it('cleanLayer returns false when source / target is missing', async () => {
-    expect(await map.ops.cleanLayer({ source: 'nope', target: 'roads' })).toBe(false);
-    expect(await map.ops.cleanLayer({ source: 'src1', target: 'missing' })).toBe(false);
+    expect((await map.ops.cleanLayer({ source: 'nope', target: 'roads' })).ok).toBe(false);
+    expect((await map.ops.cleanLayer({ source: 'src1', target: 'missing' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 });
@@ -835,7 +835,7 @@ describe('Emap dissolveLayer', () => {
 
   it('whole-layer dissolve omits the field argument', async () => {
     const ok = await map.ops.dissolveLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -dissolve');
     expect(source.setDataset).toHaveBeenCalledWith(afterDataset);
   });
@@ -847,13 +847,13 @@ describe('Emap dissolveLayer', () => {
 
   it('returns false when the source does not exist', async () => {
     const ok = await map.ops.dissolveLayer({ source: 'nope', target: 'states' });
-    expect(ok).toBe(false);
+    expect(ok.ok).toBe(false);
     expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when the target layer is missing', async () => {
     const ok = await map.ops.dissolveLayer({ source: 'src1', target: 'missing' });
-    expect(ok).toBe(false);
+    expect(ok.ok).toBe(false);
     expect(copyDatasetSpy).not.toHaveBeenCalled();
   });
 
@@ -1109,7 +1109,7 @@ describe('Emap mergeSelected', () => {
 
   it('returns false on empty selection without firing', async () => {
     const ok = await map.ops.mergeSelected();
-    expect(ok).toBe(false);
+    expect(ok.ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -1119,7 +1119,7 @@ describe('Emap mergeSelected', () => {
       { source: 'src1', layer: 'roads', id: 0 },
     ], { mode: 'add' });
     const ok = await map.ops.mergeSelected();
-    expect(ok).toBe(false);
+    expect(ok.ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -1130,7 +1130,7 @@ describe('Emap mergeSelected', () => {
       { source: 'src2', layer: 'parcels', id: 0 },
     ], { mode: 'add' });
     const ok = await map.ops.mergeSelected();
-    expect(ok).toBe(false);
+    expect(ok.ok).toBe(false);
   });
 
   it('stamps the discriminator field directly onto records and emits a string-size-bounded dissolve command', async () => {
@@ -1141,7 +1141,7 @@ describe('Emap mergeSelected', () => {
       { source: 'src1', layer: 'parcels', id: 3 },
     ], { mode: 'add' });
     const ok = await map.ops.mergeSelected();
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
 
     // Discriminator: selected rows get 'M', unselected rows get 'k_<id>'.
     expect(liveRecords[0].__emap_merge).toBe('M');
@@ -1169,7 +1169,7 @@ describe('Emap mergeSelected', () => {
       { source: 'src1', layer: 'parcels', id: 1 },
     ], { mode: 'add' });
     const ok = await map.ops.mergeSelected();
-    expect(ok).toBe(false);
+    expect(ok.ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -1273,7 +1273,7 @@ describe('Emap mergeSelected end-to-end', () => {
     ], { mode: 'add' });
 
     const ok = await map.ops.mergeSelected();
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
 
     const records = currentDataset.layers[0].data!.getRecords();
     expect(records).toHaveLength(3);
@@ -1314,7 +1314,7 @@ describe('Emap mergeSelected end-to-end', () => {
     ], { mode: 'add' });
 
     const ok = await map.ops.mergeSelected();
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(errs).toEqual([]);
   });
 });
@@ -1549,7 +1549,7 @@ describe('Emap bufferLayer', () => {
 
   it('emits a numeric radius bare', async () => {
     const ok = await map.ops.bufferLayer({ source: 'src1', target: 'roads', radius: 5 });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -buffer 5');
   });
 
@@ -1564,8 +1564,8 @@ describe('Emap bufferLayer', () => {
   });
 
   it('returns false when source / target is missing', async () => {
-    expect(await map.ops.bufferLayer({ source: 'nope', target: 'roads', radius: 5 })).toBe(false);
-    expect(await map.ops.bufferLayer({ source: 'src1', target: 'nope', radius: 5 })).toBe(false);
+    expect((await map.ops.bufferLayer({ source: 'nope', target: 'roads', radius: 5 })).ok).toBe(false);
+    expect((await map.ops.bufferLayer({ source: 'src1', target: 'nope', radius: 5 })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -1626,7 +1626,7 @@ describe('Emap applyExpression', () => {
       target: 'cities',
       expression: 'this.density = this.pop / this.area',
     });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe(
       '-target "cities" -each "this.density = this.pop / this.area"',
     );
@@ -1645,14 +1645,14 @@ describe('Emap applyExpression', () => {
   });
 
   it('returns false on missing source / target', async () => {
-    expect(await map.ops.applyExpression({ source: 'nope', target: 'cities', expression: 'x' })).toBe(false);
-    expect(await map.ops.applyExpression({ source: 'src1', target: 'nope', expression: 'x' })).toBe(false);
+    expect((await map.ops.applyExpression({ source: 'nope', target: 'cities', expression: 'x' })).ok).toBe(false);
+    expect((await map.ops.applyExpression({ source: 'src1', target: 'nope', expression: 'x' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on empty / whitespace-only expression', async () => {
-    expect(await map.ops.applyExpression({ source: 'src1', target: 'cities', expression: '' })).toBe(false);
-    expect(await map.ops.applyExpression({ source: 'src1', target: 'cities', expression: '   ' })).toBe(false);
+    expect((await map.ops.applyExpression({ source: 'src1', target: 'cities', expression: '' })).ok).toBe(false);
+    expect((await map.ops.applyExpression({ source: 'src1', target: 'cities', expression: '   ' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -1700,7 +1700,7 @@ describe('Emap applyExpression', () => {
       expression: 'this.kind = "city"',
     });
 
-    expect(ok).toBe(false);
+    expect(ok.ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
     expect(errors[0]?.message).toMatch(/expression evaluation is disabled/);
   });
@@ -1744,13 +1744,13 @@ describe('Emap explodeLayer', () => {
 
   it('emits the -explode command', async () => {
     const ok = await map.ops.explodeLayer({ source: 'src1', target: 'parts' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -explode');
   });
 
   it('returns false on missing source / target', async () => {
-    expect(await map.ops.explodeLayer({ source: 'nope', target: 'parts' })).toBe(false);
-    expect(await map.ops.explodeLayer({ source: 'src1', target: 'nope' })).toBe(false);
+    expect((await map.ops.explodeLayer({ source: 'nope', target: 'parts' })).ok).toBe(false);
+    expect((await map.ops.explodeLayer({ source: 'src1', target: 'nope' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -1801,7 +1801,7 @@ describe('Emap innerlinesLayer', () => {
 
   it('emits the minimal -innerlines command', async () => {
     const ok = await map.ops.innerlinesLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -innerlines');
   });
 
@@ -1837,8 +1837,8 @@ describe('Emap innerlinesLayer', () => {
   });
 
   it('returns false on missing source / target', async () => {
-    expect(await map.ops.innerlinesLayer({ source: 'nope', target: 'states' })).toBe(false);
-    expect(await map.ops.innerlinesLayer({ source: 'src1', target: 'nope' })).toBe(false);
+    expect((await map.ops.innerlinesLayer({ source: 'nope', target: 'states' })).ok).toBe(false);
+    expect((await map.ops.innerlinesLayer({ source: 'src1', target: 'nope' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -1891,7 +1891,7 @@ describe('Emap filterFeatures', () => {
     const ok = await map.ops.filterFeatures({
       source: 'src1', target: 'cities', expression: 'this.pop > 100',
     });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe(
       '-target "cities" -filter "this.pop > 100"',
     );
@@ -1923,14 +1923,14 @@ describe('Emap filterFeatures', () => {
   });
 
   it('returns false when neither expression nor removeEmpty is set', async () => {
-    expect(await map.ops.filterFeatures({ source: 'src1', target: 'cities' })).toBe(false);
-    expect(await map.ops.filterFeatures({ source: 'src1', target: 'cities', expression: '   ' })).toBe(false);
+    expect((await map.ops.filterFeatures({ source: 'src1', target: 'cities' })).ok).toBe(false);
+    expect((await map.ops.filterFeatures({ source: 'src1', target: 'cities', expression: '   ' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on missing source / target', async () => {
-    expect(await map.ops.filterFeatures({ source: 'nope', target: 'cities', expression: 'x' })).toBe(false);
-    expect(await map.ops.filterFeatures({ source: 'src1', target: 'nope', expression: 'x' })).toBe(false);
+    expect((await map.ops.filterFeatures({ source: 'nope', target: 'cities', expression: 'x' })).ok).toBe(false);
+    expect((await map.ops.filterFeatures({ source: 'src1', target: 'nope', expression: 'x' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -1983,7 +1983,7 @@ describe('Emap snapLayer', () => {
 
   it('emits the bare -snap command (mapshaper default interval)', async () => {
     const ok = await map.ops.snapLayer({ source: 'src1', target: 'roads' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap');
   });
 
@@ -2012,8 +2012,8 @@ describe('Emap snapLayer', () => {
   });
 
   it('returns false on missing source / target', async () => {
-    expect(await map.ops.snapLayer({ source: 'nope', target: 'roads' })).toBe(false);
-    expect(await map.ops.snapLayer({ source: 'src1', target: 'nope' })).toBe(false);
+    expect((await map.ops.snapLayer({ source: 'nope', target: 'roads' })).ok).toBe(false);
+    expect((await map.ops.snapLayer({ source: 'src1', target: 'nope' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -2244,7 +2244,7 @@ describe('Emap mosaicLayer', () => {
 
   it('emits the bare -mosaic command', async () => {
     const ok = await map.ops.mosaicLayer({ source: 'src1', target: 'parts' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic');
   });
 
@@ -2264,8 +2264,8 @@ describe('Emap mosaicLayer', () => {
   });
 
   it('returns false on missing source / target', async () => {
-    expect(await map.ops.mosaicLayer({ source: 'nope', target: 'parts' })).toBe(false);
-    expect(await map.ops.mosaicLayer({ source: 'src1', target: 'nope' })).toBe(false);
+    expect((await map.ops.mosaicLayer({ source: 'nope', target: 'parts' })).ok).toBe(false);
+    expect((await map.ops.mosaicLayer({ source: 'src1', target: 'nope' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -2322,7 +2322,7 @@ describe('Emap unionLayers', () => {
 
   it('joins targets with commas inside a single quoted -target arg', async () => {
     const ok = await map.ops.unionLayers({ source: 'src1', targets: ['parks', 'soils'] });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union');
   });
 
@@ -2353,20 +2353,20 @@ describe('Emap unionLayers', () => {
   });
 
   it('returns false for fewer than two targets', async () => {
-    expect(await map.ops.unionLayers({ source: 'src1', targets: ['parks'] })).toBe(false);
-    expect(await map.ops.unionLayers({ source: 'src1', targets: [] })).toBe(false);
+    expect((await map.ops.unionLayers({ source: 'src1', targets: ['parks'] })).ok).toBe(false);
+    expect((await map.ops.unionLayers({ source: 'src1', targets: [] })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when any target is unresolved', async () => {
-    expect(await map.ops.unionLayers({
+    expect((await map.ops.unionLayers({
       source: 'src1', targets: ['parks', 'missing'],
-    })).toBe(false);
+    })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.ops.unionLayers({ source: 'nope', targets: ['parks', 'soils'] })).toBe(false);
+    expect((await map.ops.unionLayers({ source: 'nope', targets: ['parks', 'soils'] })).ok).toBe(false);
   });
 
   it('history entry is labelled "Union <comma-joined>"', async () => {
@@ -2422,7 +2422,7 @@ describe('Emap divideLayer', () => {
 
   it('builds the minimal command shape', async () => {
     const ok = await map.ops.divideLayer({ source: 'src1', target: 'roads', divider: 'tracts' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -divide source="tracts"');
   });
 
@@ -2442,27 +2442,27 @@ describe('Emap divideLayer', () => {
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.ops.divideLayer({ source: 'nope', target: 'roads', divider: 'tracts' })).toBe(false);
+    expect((await map.ops.divideLayer({ source: 'nope', target: 'roads', divider: 'tracts' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.ops.divideLayer({ source: 'src1', target: 'highways', divider: 'tracts' })).toBe(false);
+    expect((await map.ops.divideLayer({ source: 'src1', target: 'highways', divider: 'tracts' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when divider is unresolved', async () => {
-    expect(await map.ops.divideLayer({ source: 'src1', target: 'roads', divider: 'counties' })).toBe(false);
+    expect((await map.ops.divideLayer({ source: 'src1', target: 'roads', divider: 'counties' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is not a polyline', async () => {
-    expect(await map.ops.divideLayer({ source: 'src1', target: 'tracts', divider: 'tracts' })).toBe(false);
+    expect((await map.ops.divideLayer({ source: 'src1', target: 'tracts', divider: 'tracts' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when divider is not a polygon', async () => {
-    expect(await map.ops.divideLayer({ source: 'src1', target: 'roads', divider: 'cities' })).toBe(false);
+    expect((await map.ops.divideLayer({ source: 'src1', target: 'roads', divider: 'cities' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -2519,7 +2519,7 @@ describe('Emap pointsLayer', () => {
 
   it('builds centroid command for polygon target', async () => {
     const ok = await map.ops.pointsLayer({ source: 'src1', target: 'parks', type: 'centroid' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks" -points centroid');
   });
 
@@ -2558,33 +2558,33 @@ describe('Emap pointsLayer', () => {
   });
 
   it('rejects centroid on non-polygon target', async () => {
-    expect(await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'centroid' })).toBe(false);
+    expect((await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'centroid' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('rejects midpoints on non-polyline target', async () => {
-    expect(await map.ops.pointsLayer({ source: 'src1', target: 'parks', type: 'midpoints' })).toBe(false);
+    expect((await map.ops.pointsLayer({ source: 'src1', target: 'parks', type: 'midpoints' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('rejects vertices on a point target', async () => {
-    expect(await map.ops.pointsLayer({ source: 'src1', target: 'cities', type: 'vertices' })).toBe(false);
+    expect((await map.ops.pointsLayer({ source: 'src1', target: 'cities', type: 'vertices' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('rejects interpolated without interval', async () => {
-    expect(await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated' })).toBe(false);
-    expect(await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: 0 })).toBe(false);
-    expect(await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: -5 })).toBe(false);
+    expect((await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated' })).ok).toBe(false);
+    expect((await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: 0 })).ok).toBe(false);
+    expect((await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: -5 })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.ops.pointsLayer({ source: 'nope', target: 'parks', type: 'centroid' })).toBe(false);
+    expect((await map.ops.pointsLayer({ source: 'nope', target: 'parks', type: 'centroid' })).ok).toBe(false);
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.ops.pointsLayer({ source: 'src1', target: 'forests', type: 'centroid' })).toBe(false);
+    expect((await map.ops.pointsLayer({ source: 'src1', target: 'forests', type: 'centroid' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -2640,7 +2640,7 @@ describe('Emap linesLayer', () => {
 
   it('builds the minimal command shape', async () => {
     const ok = await map.ops.linesLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -lines');
   });
 
@@ -2662,17 +2662,17 @@ describe('Emap linesLayer', () => {
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.ops.linesLayer({ source: 'nope', target: 'states' })).toBe(false);
+    expect((await map.ops.linesLayer({ source: 'nope', target: 'states' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.ops.linesLayer({ source: 'src1', target: 'counties' })).toBe(false);
+    expect((await map.ops.linesLayer({ source: 'src1', target: 'counties' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is not a polygon', async () => {
-    expect(await map.ops.linesLayer({ source: 'src1', target: 'roads' })).toBe(false);
+    expect((await map.ops.linesLayer({ source: 'src1', target: 'roads' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -2728,7 +2728,7 @@ describe('Emap polygonsLayer', () => {
 
   it('builds the minimal command shape', async () => {
     const ok = await map.ops.polygonsLayer({ source: 'src1', target: 'edges' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons');
   });
 
@@ -2753,17 +2753,17 @@ describe('Emap polygonsLayer', () => {
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.ops.polygonsLayer({ source: 'nope', target: 'edges' })).toBe(false);
+    expect((await map.ops.polygonsLayer({ source: 'nope', target: 'edges' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.ops.polygonsLayer({ source: 'src1', target: 'rivers' })).toBe(false);
+    expect((await map.ops.polygonsLayer({ source: 'src1', target: 'rivers' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is not a polyline', async () => {
-    expect(await map.ops.polygonsLayer({ source: 'src1', target: 'parks' })).toBe(false);
+    expect((await map.ops.polygonsLayer({ source: 'src1', target: 'parks' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -2819,7 +2819,7 @@ describe('Emap simplifyLayer', () => {
 
   it('builds the percentage form', async () => {
     const ok = await map.ops.simplifyLayer({ source: 'src1', percentage: 10 });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10%');
   });
 
@@ -2869,50 +2869,50 @@ describe('Emap simplifyLayer', () => {
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.ops.simplifyLayer({ source: 'nope', percentage: 10 })).toBe(false);
+    expect((await map.ops.simplifyLayer({ source: 'nope', percentage: 10 })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.ops.simplifyLayer({ source: 'src1', target: 'rivers', percentage: 10 })).toBe(false);
+    expect((await map.ops.simplifyLayer({ source: 'src1', target: 'rivers', percentage: 10 })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when no threshold is supplied', async () => {
-    expect(await map.ops.simplifyLayer({ source: 'src1' })).toBe(false);
+    expect((await map.ops.simplifyLayer({ source: 'src1' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when multiple thresholds are supplied', async () => {
-    expect(await map.ops.simplifyLayer({
+    expect((await map.ops.simplifyLayer({
       source: 'src1', percentage: 10, interval: 250,
-    })).toBe(false);
-    expect(await map.ops.simplifyLayer({
+    })).ok).toBe(false);
+    expect((await map.ops.simplifyLayer({
       source: 'src1', percentage: 10, resolution: '1000x500',
-    })).toBe(false);
-    expect(await map.ops.simplifyLayer({
+    })).ok).toBe(false);
+    expect((await map.ops.simplifyLayer({
       source: 'src1', interval: 250, resolution: '1000x500',
-    })).toBe(false);
+    })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false for out-of-range percentage', async () => {
-    expect(await map.ops.simplifyLayer({ source: 'src1', percentage: -1 })).toBe(false);
-    expect(await map.ops.simplifyLayer({ source: 'src1', percentage: 101 })).toBe(false);
-    expect(await map.ops.simplifyLayer({ source: 'src1', percentage: NaN })).toBe(false);
+    expect((await map.ops.simplifyLayer({ source: 'src1', percentage: -1 })).ok).toBe(false);
+    expect((await map.ops.simplifyLayer({ source: 'src1', percentage: 101 })).ok).toBe(false);
+    expect((await map.ops.simplifyLayer({ source: 'src1', percentage: NaN })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false for non-positive interval', async () => {
-    expect(await map.ops.simplifyLayer({ source: 'src1', interval: 0 })).toBe(false);
-    expect(await map.ops.simplifyLayer({ source: 'src1', interval: -1 })).toBe(false);
+    expect((await map.ops.simplifyLayer({ source: 'src1', interval: 0 })).ok).toBe(false);
+    expect((await map.ops.simplifyLayer({ source: 'src1', interval: -1 })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false for malformed resolution', async () => {
-    expect(await map.ops.simplifyLayer({ source: 'src1', resolution: '1000' })).toBe(false);
-    expect(await map.ops.simplifyLayer({ source: 'src1', resolution: '1000x' })).toBe(false);
-    expect(await map.ops.simplifyLayer({ source: 'src1', resolution: 'abc' })).toBe(false);
+    expect((await map.ops.simplifyLayer({ source: 'src1', resolution: '1000' })).ok).toBe(false);
+    expect((await map.ops.simplifyLayer({ source: 'src1', resolution: '1000x' })).ok).toBe(false);
+    expect((await map.ops.simplifyLayer({ source: 'src1', resolution: 'abc' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -2972,7 +2972,7 @@ describe('Emap projectLayer', () => {
 
   it('builds the whole-source command (no target)', async () => {
     const ok = await map.ops.projectLayer({ source: 'src1', crs: 'EPSG:3857' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "EPSG:3857"');
   });
 
@@ -3006,18 +3006,18 @@ describe('Emap projectLayer', () => {
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.ops.projectLayer({ source: 'nope', crs: 'EPSG:3857' })).toBe(false);
+    expect((await map.ops.projectLayer({ source: 'nope', crs: 'EPSG:3857' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.ops.projectLayer({ source: 'src1', target: 'missing', crs: 'EPSG:3857' })).toBe(false);
+    expect((await map.ops.projectLayer({ source: 'src1', target: 'missing', crs: 'EPSG:3857' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on empty / whitespace crs', async () => {
-    expect(await map.ops.projectLayer({ source: 'src1', crs: '' })).toBe(false);
-    expect(await map.ops.projectLayer({ source: 'src1', crs: '   ' })).toBe(false);
+    expect((await map.ops.projectLayer({ source: 'src1', crs: '' })).ok).toBe(false);
+    expect((await map.ops.projectLayer({ source: 'src1', crs: '   ' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -3079,7 +3079,7 @@ describe('Emap renameLayer', () => {
 
   it('builds the minimal command shape', async () => {
     const ok = await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'new' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "old" -rename-layers "new"');
   });
 
@@ -3089,29 +3089,29 @@ describe('Emap renameLayer', () => {
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.ops.renameLayer({ source: 'nope', target: 'old', name: 'new' })).toBe(false);
+    expect((await map.ops.renameLayer({ source: 'nope', target: 'old', name: 'new' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.ops.renameLayer({ source: 'src1', target: 'missing', name: 'new' })).toBe(false);
+    expect((await map.ops.renameLayer({ source: 'src1', target: 'missing', name: 'new' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on empty / whitespace name', async () => {
-    expect(await map.ops.renameLayer({ source: 'src1', target: 'old', name: '' })).toBe(false);
-    expect(await map.ops.renameLayer({ source: 'src1', target: 'old', name: '   ' })).toBe(false);
+    expect((await map.ops.renameLayer({ source: 'src1', target: 'old', name: '' })).ok).toBe(false);
+    expect((await map.ops.renameLayer({ source: 'src1', target: 'old', name: '   ' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on collision with another layer', async () => {
-    expect(await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'other' })).toBe(false);
+    expect((await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'other' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('allows renaming to the same name (no collision against itself)', async () => {
     const ok = await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'old' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "old" -rename-layers "old"');
   });
 
@@ -3168,7 +3168,7 @@ describe('Emap mergeLayers', () => {
 
   it('joins targets with commas inside a single quoted -target arg', async () => {
     const ok = await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'b'] });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers');
   });
 
@@ -3193,29 +3193,29 @@ describe('Emap mergeLayers', () => {
   });
 
   it('returns false for fewer than two targets', async () => {
-    expect(await map.ops.mergeLayers({ source: 'src1', targets: ['a'] })).toBe(false);
-    expect(await map.ops.mergeLayers({ source: 'src1', targets: [] })).toBe(false);
+    expect((await map.ops.mergeLayers({ source: 'src1', targets: ['a'] })).ok).toBe(false);
+    expect((await map.ops.mergeLayers({ source: 'src1', targets: [] })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when any target is unresolved', async () => {
-    expect(await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'missing'] })).toBe(false);
+    expect((await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'missing'] })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('rejects mixed-geometry targets without force', async () => {
-    expect(await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'roads'] })).toBe(false);
+    expect((await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'roads'] })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('allows mixed-geometry targets with force=true', async () => {
     const ok = await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'roads'], force: true });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,roads" -merge-layers force');
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.ops.mergeLayers({ source: 'nope', targets: ['a', 'b'] })).toBe(false);
+    expect((await map.ops.mergeLayers({ source: 'nope', targets: ['a', 'b'] })).ok).toBe(false);
   });
 
   it('history entry is labelled "Merge <comma-joined>"', async () => {
@@ -3266,7 +3266,7 @@ describe('Emap splitLayer', () => {
 
   it('builds the field-name form', async () => {
     const ok = await map.ops.splitLayer({ source: 'src1', target: 'states', expression: 'REGION' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -split "REGION"');
   });
 
@@ -3287,18 +3287,18 @@ describe('Emap splitLayer', () => {
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.ops.splitLayer({ source: 'nope', target: 'states', expression: 'REGION' })).toBe(false);
+    expect((await map.ops.splitLayer({ source: 'nope', target: 'states', expression: 'REGION' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.ops.splitLayer({ source: 'src1', target: 'missing', expression: 'REGION' })).toBe(false);
+    expect((await map.ops.splitLayer({ source: 'src1', target: 'missing', expression: 'REGION' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on empty / whitespace expression', async () => {
-    expect(await map.ops.splitLayer({ source: 'src1', target: 'states', expression: '' })).toBe(false);
-    expect(await map.ops.splitLayer({ source: 'src1', target: 'states', expression: '   ' })).toBe(false);
+    expect((await map.ops.splitLayer({ source: 'src1', target: 'states', expression: '' })).ok).toBe(false);
+    expect((await map.ops.splitLayer({ source: 'src1', target: 'states', expression: '   ' })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -3369,17 +3369,17 @@ describe('Emap dropLayer', () => {
 
   it('builds the minimal command shape', async () => {
     const ok = await ctx.map.ops.dropLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -drop');
   });
 
   it('returns false when source is missing', async () => {
-    expect(await ctx.map.ops.dropLayer({ source: 'nope', target: 'states' })).toBe(false);
+    expect((await ctx.map.ops.dropLayer({ source: 'nope', target: 'states' })).ok).toBe(false);
     expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await ctx.map.ops.dropLayer({ source: 'src1', target: 'missing' })).toBe(false);
+    expect((await ctx.map.ops.dropLayer({ source: 'src1', target: 'missing' })).ok).toBe(false);
     expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -3398,7 +3398,7 @@ describe('Emap sortFeatures', () => {
 
   it('builds the ascending command (default)', async () => {
     const ok = await ctx.map.ops.sortFeatures({ source: 'src1', target: 'states', expression: 'POP' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -sort "POP"');
   });
 
@@ -3413,10 +3413,10 @@ describe('Emap sortFeatures', () => {
   });
 
   it('returns false on missing source / unresolved target / empty expression', async () => {
-    expect(await ctx.map.ops.sortFeatures({ source: 'nope', target: 'states', expression: 'POP' })).toBe(false);
-    expect(await ctx.map.ops.sortFeatures({ source: 'src1', target: 'missing', expression: 'POP' })).toBe(false);
-    expect(await ctx.map.ops.sortFeatures({ source: 'src1', target: 'states', expression: '' })).toBe(false);
-    expect(await ctx.map.ops.sortFeatures({ source: 'src1', target: 'states', expression: '   ' })).toBe(false);
+    expect((await ctx.map.ops.sortFeatures({ source: 'nope', target: 'states', expression: 'POP' })).ok).toBe(false);
+    expect((await ctx.map.ops.sortFeatures({ source: 'src1', target: 'missing', expression: 'POP' })).ok).toBe(false);
+    expect((await ctx.map.ops.sortFeatures({ source: 'src1', target: 'states', expression: '' })).ok).toBe(false);
+    expect((await ctx.map.ops.sortFeatures({ source: 'src1', target: 'states', expression: '   ' })).ok).toBe(false);
     expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -3435,7 +3435,7 @@ describe('Emap uniqueFeatures', () => {
 
   it('builds the minimal command shape', async () => {
     const ok = await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE_FIPS' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -uniq "STATE_FIPS"');
   });
 
@@ -3450,9 +3450,9 @@ describe('Emap uniqueFeatures', () => {
   });
 
   it('returns false on empty expression / non-positive maxCount', async () => {
-    expect(await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: '' })).toBe(false);
-    expect(await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: 'X', maxCount: 0 })).toBe(false);
-    expect(await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: 'X', maxCount: -1 })).toBe(false);
+    expect((await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: '' })).ok).toBe(false);
+    expect((await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: 'X', maxCount: 0 })).ok).toBe(false);
+    expect((await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: 'X', maxCount: -1 })).ok).toBe(false);
     expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -3471,7 +3471,7 @@ describe('Emap filterFields', () => {
 
   it('joins fields with commas inside one quoted argument', async () => {
     const ok = await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: ['fips', 'name'] });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -filter-fields "fips,name"');
   });
 
@@ -3481,9 +3481,9 @@ describe('Emap filterFields', () => {
   });
 
   it('returns false on empty / invalid fields', async () => {
-    expect(await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: [] })).toBe(false);
-    expect(await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: ['', 'b'] })).toBe(false);
-    expect(await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: ['a,b'] })).toBe(false);
+    expect((await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: [] })).ok).toBe(false);
+    expect((await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: ['', 'b'] })).ok).toBe(false);
+    expect((await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: ['a,b'] })).ok).toBe(false);
     expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -3502,7 +3502,7 @@ describe('Emap renameFields', () => {
 
   it('serializes a single rename', async () => {
     const ok = await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { OLD: 'NEW' } });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -rename-fields "OLD=NEW"');
   });
 
@@ -3516,13 +3516,13 @@ describe('Emap renameFields', () => {
   });
 
   it('returns false on empty mapping or invalid keys/values', async () => {
-    expect(await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: {} })).toBe(false);
-    expect(await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { '': 'b' } })).toBe(false);
-    expect(await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { a: '' } })).toBe(false);
-    expect(await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { 'a,b': 'c' } })).toBe(false);
-    expect(await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { 'a=b': 'c' } })).toBe(false);
-    expect(await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b,c' } })).toBe(false);
-    expect(await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b=c' } })).toBe(false);
+    expect((await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: {} })).ok).toBe(false);
+    expect((await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { '': 'b' } })).ok).toBe(false);
+    expect((await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { a: '' } })).ok).toBe(false);
+    expect((await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { 'a,b': 'c' } })).ok).toBe(false);
+    expect((await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { 'a=b': 'c' } })).ok).toBe(false);
+    expect((await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b,c' } })).ok).toBe(false);
+    expect((await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { a: 'b=c' } })).ok).toBe(false);
     expect(ctx.parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -3590,7 +3590,7 @@ describe('Emap joinTable', () => {
       data: { csv: 'fips,pop\n01,4M\n02,800K' },
       keys: ['STATE_FIPS', 'fips'],
     });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(parseCommandsSpy.mock.calls[0][0])
       .toBe('-target "states" -join ".emap-join.csv" keys="STATE_FIPS,fips"');
     expect(injectedInput()).toEqual({ '.emap-join.csv': 'fips,pop\n01,4M\n02,800K' });
@@ -3667,38 +3667,38 @@ describe('Emap joinTable', () => {
   });
 
   it('returns false on missing source', async () => {
-    expect(await map.ops.joinTable({
+    expect((await map.ops.joinTable({
       source: 'nope', target: 'states',
       data: { csv: 'a,b\n1,2' }, keys: ['k', 's'],
-    })).toBe(false);
+    })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on unresolved target', async () => {
-    expect(await map.ops.joinTable({
+    expect((await map.ops.joinTable({
       source: 'src1', target: 'missing',
       data: { csv: 'a,b\n1,2' }, keys: ['k', 's'],
-    })).toBe(false);
+    })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on malformed keys', async () => {
     const base = { source: 'src1' as const, target: 'states' as const, data: { layer: 't' } as const };
-    expect(await map.ops.joinTable({ ...base, keys: ['k'] as any })).toBe(false);
-    expect(await map.ops.joinTable({ ...base, keys: ['', 's'] })).toBe(false);
-    expect(await map.ops.joinTable({ ...base, keys: ['k', '   '] })).toBe(false);
+    expect((await map.ops.joinTable({ ...base, keys: ['k'] as any })).ok).toBe(false);
+    expect((await map.ops.joinTable({ ...base, keys: ['', 's'] })).ok).toBe(false);
+    expect((await map.ops.joinTable({ ...base, keys: ['k', '   '] })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on invalid data shape', async () => {
-    expect(await map.ops.joinTable({
+    expect((await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: {} as any, keys: ['k', 's'],
-    })).toBe(false);
-    expect(await map.ops.joinTable({
+    })).ok).toBe(false);
+    expect((await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { layer: '' } as any, keys: ['k', 's'],
-    })).toBe(false);
+    })).ok).toBe(false);
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
@@ -3743,7 +3743,7 @@ describe('Emap joinTable round-trip (real mapshaper)', () => {
       source: 'rt', target: layerName,
       data: { csv }, keys: ['fips', 'fips'],
     });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
 
     const ds = map.getSource('rt')!.getDataset()!;
     const recs = ds.layers[0].data!.getRecords();
@@ -3789,8 +3789,11 @@ describe('Emap checkGeometry (mocked mapshaper)', () => {
   });
 
   it('returns the clean report when there are no intersections', async () => {
-    const report = await map.ops.checkGeometry({ source: 'src1' });
-    expect(report).toEqual({ ok: true, intersections: [], intersectionCount: 0 });
+    const result = await map.ops.checkGeometry({ source: 'src1' });
+    expect(result).toEqual({
+      ok: true,
+      value: { ok: true, intersections: [], intersectionCount: 0 },
+    });
     expect(findSegmentIntersectionsSpy).toHaveBeenCalledTimes(1);
     const args = findSegmentIntersectionsSpy.mock.calls[0] as unknown[];
     expect((args[0] as any)._sentinel).toBe('arcs');
@@ -3801,11 +3804,14 @@ describe('Emap checkGeometry (mocked mapshaper)', () => {
       { x: 1, y: 2, _internal: 'a' },
       { x: 3, y: 4, _internal: 'b' },
     ]);
-    const report = await map.ops.checkGeometry({ source: 'src1' });
-    expect(report).toEqual({
-      ok: false,
-      intersectionCount: 2,
-      intersections: [{ x: 1, y: 2 }, { x: 3, y: 4 }],
+    const result = await map.ops.checkGeometry({ source: 'src1' });
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        ok: false,
+        intersectionCount: 2,
+        intersections: [{ x: 1, y: 2 }, { x: 3, y: 4 }],
+      },
     });
   });
 
@@ -3819,12 +3825,14 @@ describe('Emap checkGeometry (mocked mapshaper)', () => {
     expect(findSegmentIntersectionsSpy.mock.calls[0][1]).toEqual({});
   });
 
-  it('returns null on missing source', async () => {
-    expect(await map.ops.checkGeometry({ source: 'nope' })).toBeNull();
+  it('returns a not-found error on missing source', async () => {
+    const result = await map.ops.checkGeometry({ source: 'nope' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('not-found');
     expect(findSegmentIntersectionsSpy).not.toHaveBeenCalled();
   });
 
-  it('returns null on missing dataset', async () => {
+  it('returns a not-found error on missing dataset', async () => {
     const noDsSource = {
       id: 's2', type: 'topology' as const,
       getDataset: () => undefined,
@@ -3832,11 +3840,14 @@ describe('Emap checkGeometry (mocked mapshaper)', () => {
       off: vi.fn(), on: vi.fn(),
     } as any;
     (map as any)._sources.set('s2', noDsSource);
-    expect(await map.ops.checkGeometry({ source: 's2' })).toBeNull();
+    const result = await map.ops.checkGeometry({ source: 's2' });
+    expect(result.ok).toBe(false);
   });
 
-  it('returns null on unresolved target', async () => {
-    expect(await map.ops.checkGeometry({ source: 'src1', target: 'missing' })).toBeNull();
+  it('returns a not-found error on unresolved target', async () => {
+    const result = await map.ops.checkGeometry({ source: 'src1', target: 'missing' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('not-found');
     expect(findSegmentIntersectionsSpy).not.toHaveBeenCalled();
   });
 
@@ -3848,8 +3859,11 @@ describe('Emap checkGeometry (mocked mapshaper)', () => {
       off: vi.fn(), on: vi.fn(),
     } as any;
     (map as any)._sources.set('pts', pointSource);
-    const report = await map.ops.checkGeometry({ source: 'pts' });
-    expect(report).toEqual({ ok: true, intersections: [], intersectionCount: 0 });
+    const result = await map.ops.checkGeometry({ source: 'pts' });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({ ok: true, intersections: [], intersectionCount: 0 });
+    }
     expect(findSegmentIntersectionsSpy).not.toHaveBeenCalled();
   });
 
@@ -3891,10 +3905,11 @@ describe('Emap checkGeometry round-trip (real mapshaper)', () => {
     setPrivate(map, '_viewport', { setCRS: vi.fn() });
     map.addSource('clean', source);
 
-    const report = await map.ops.checkGeometry({ source: 'clean' });
-    expect(report).not.toBeNull();
-    expect(report!.ok).toBe(true);
-    expect(report!.intersectionCount).toBe(0);
+    const result = await map.ops.checkGeometry({ source: 'clean' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected success');
+    expect(result.value.ok).toBe(true);
+    expect(result.value.intersectionCount).toBe(0);
   });
 
   it('reports a positive count for a pair of crossing polylines', async () => {
@@ -3916,12 +3931,13 @@ describe('Emap checkGeometry round-trip (real mapshaper)', () => {
     setPrivate(map, '_viewport', { setCRS: vi.fn() });
     map.addSource('crossing', source);
 
-    const report = await map.ops.checkGeometry({ source: 'crossing' });
-    expect(report).not.toBeNull();
-    expect(report!.ok).toBe(false);
-    expect(report!.intersectionCount).toBeGreaterThan(0);
-    expect(report!.intersections[0]).toHaveProperty('x');
-    expect(report!.intersections[0]).toHaveProperty('y');
+    const result = await map.ops.checkGeometry({ source: 'crossing' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected success');
+    expect(result.value.ok).toBe(false);
+    expect(result.value.intersectionCount).toBeGreaterThan(0);
+    expect(result.value.intersections[0]).toHaveProperty('x');
+    expect(result.value.intersections[0]).toHaveProperty('y');
   });
 });
 
@@ -3970,7 +3986,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
 
   it('calls addIntersectionCuts on a deep copy of the source dataset', async () => {
     const ok = await map.ops.rebuildTopology({ source: 'src1' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(copyDatasetSpy).toHaveBeenCalledTimes(2); // before snapshot + working copy
     expect(addIntersectionCutsSpy).toHaveBeenCalledTimes(1);
     const arg = addIntersectionCutsSpy.mock.calls[0][0] as any;
@@ -3990,7 +4006,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.ops.rebuildTopology({ source: 'nope' })).toBe(false);
+    expect((await map.ops.rebuildTopology({ source: 'nope' })).ok).toBe(false);
     expect(addIntersectionCutsSpy).not.toHaveBeenCalled();
   });
 
@@ -4002,7 +4018,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
       off: vi.fn(), on: vi.fn(),
     } as any;
     (map as any)._sources.set('s2', noDsSource);
-    expect(await map.ops.rebuildTopology({ source: 's2' })).toBe(false);
+    expect((await map.ops.rebuildTopology({ source: 's2' })).ok).toBe(false);
     expect(addIntersectionCutsSpy).not.toHaveBeenCalled();
   });
 
@@ -4014,7 +4030,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
       off: vi.fn(), on: vi.fn(),
     } as any;
     (map as any)._sources.set('pts', pointSource);
-    expect(await map.ops.rebuildTopology({ source: 'pts' })).toBe(true);
+    expect((await map.ops.rebuildTopology({ source: 'pts' })).ok).toBe(true);
     expect(addIntersectionCutsSpy).not.toHaveBeenCalled();
     expect(map.canUndo()).toBe(false);
   });
@@ -4058,7 +4074,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
     addIntersectionCutsSpy.mockImplementation(() => { throw new Error('boom'); });
     const errors: any[] = [];
     map.on('error', (e: any) => errors.push(e));
-    expect(await map.ops.rebuildTopology({ source: 'src1' })).toBe(false);
+    expect((await map.ops.rebuildTopology({ source: 'src1' })).ok).toBe(false);
     expect(errors).toHaveLength(1);
     expect(errors[0].error.message).toBe('boom');
     expect(setDatasetSpy).not.toHaveBeenCalled();
@@ -4099,7 +4115,7 @@ describe('Emap rebuildTopology round-trip (real mapshaper)', () => {
     map.addSource('rt', source);
 
     const ok = await map.ops.rebuildTopology({ source: 'rt' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     const ds = map.getSource('rt')?.getDataset();
     expect(ds).toBeDefined();
     expect(ds!.layers[0].shapes.length).toBe(2);
@@ -4459,7 +4475,7 @@ describe('Emap useWorker routing', () => {
 
   it('routes _runDatasetCommand through workerPool.run with packed payload', async () => {
     const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
 
     expect(exportSpy).toHaveBeenCalledTimes(1);
     expect(exportSpy.mock.calls[0][1]).toEqual({ compact: false });
@@ -4483,7 +4499,7 @@ describe('Emap useWorker routing', () => {
       source: 'src1', target: 'states',
       data: { csv: 'a,b\n1,2' }, keys: ['k', 's'],
     });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     const args = runSpy.mock.calls[0] as unknown[];
     expect(args[2]).toEqual({ '.emap-join.csv': 'a,b\n1,2' });
   });
@@ -4494,7 +4510,7 @@ describe('Emap useWorker routing', () => {
     map.on('error', (e: any) => errors.push(e));
 
     const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(false);
+    expect(ok.ok).toBe(false);
     expect(errors).toHaveLength(1);
     expect(errors[0].error.message).toBe('worker boom');
     expect(setDatasetSpy).not.toHaveBeenCalled();
@@ -4506,7 +4522,7 @@ describe('Emap useWorker routing', () => {
     const errors: any[] = [];
     map.on('error', (e: any) => errors.push(e));
     const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(false);
+    expect(ok.ok).toBe(false);
     expect(errors).toHaveLength(1);
     expect(errors[0].error.message).toMatch(/no dataset in response/);
   });
@@ -4610,28 +4626,28 @@ describe('Emap useWorker: \'auto\' thresholding', () => {
   it('routes to main thread when vertex count is below threshold', async () => {
     setVertexCount(500); // threshold is 1000
     const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(runSpy).not.toHaveBeenCalled();
   });
 
   it('routes to worker when vertex count is at threshold', async () => {
     setVertexCount(1000);
     const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(runSpy).toHaveBeenCalledTimes(1);
   });
 
   it('routes to worker when vertex count is above threshold', async () => {
     setVertexCount(50_000);
     const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(runSpy).toHaveBeenCalledTimes(1);
   });
 
   it('routes arc-less datasets (point-only) to main thread', async () => {
     beforeDs.arcs = undefined;
     const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(runSpy).not.toHaveBeenCalled();
   });
 
@@ -4639,7 +4655,7 @@ describe('Emap useWorker: \'auto\' thresholding', () => {
     setPrivate(map, '_workerThreshold', 100);
     setVertexCount(150);
     const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(runSpy).toHaveBeenCalledTimes(1);
   });
 });
@@ -4720,7 +4736,7 @@ describe('Emap workerjobstart / workerjobend events', () => {
     map.on('workerjobend', (e: any) => events.push({ type: 'end', payload: e }));
 
     const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(events.length).toBe(2);
     expect(events[0].type).toBe('start');
     expect(events[0].payload.cmd).toMatch(/-drop/);
@@ -4740,7 +4756,7 @@ describe('Emap workerjobstart / workerjobend events', () => {
     map.on('workerjobend', (e: any) => events.push(e));
 
     const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(false);
+    expect(ok.ok).toBe(false);
     expect(events.length).toBe(1);
     expect(events[0].ok).toBe(false);
     expect(events[0].errorMessage).toBe('worker boom');
@@ -4753,7 +4769,7 @@ describe('Emap workerjobstart / workerjobend events', () => {
     map.on('workerjobend', (e: any) => events.push(e));
 
     const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(events.length).toBe(0);
     expect(runSpy).not.toHaveBeenCalled();
   });
@@ -4832,45 +4848,45 @@ describe('audit-fix: reject comma-bearing names that would silently split', () =
 
   it('unionLayers rejects a target containing a comma', async () => {
     const { map, parseSpy } = makeMapWithLayers(['a,b', 'c']);
-    expect(await map.ops.unionLayers({ source: 'src1', targets: ['a,b', 'c'] })).toBe(false);
+    expect((await map.ops.unionLayers({ source: 'src1', targets: ['a,b', 'c'] })).ok).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('mergeLayers rejects a target containing a comma', async () => {
     const { map, parseSpy } = makeMapWithLayers(['a,b', 'c']);
-    expect(await map.ops.mergeLayers({ source: 'src1', targets: ['a,b', 'c'] })).toBe(false);
+    expect((await map.ops.mergeLayers({ source: 'src1', targets: ['a,b', 'c'] })).ok).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('dissolveLayer rejects a field containing a comma', async () => {
     const { map, parseSpy } = makeMapWithLayers(['states']);
-    expect(await map.ops.dissolveLayer({ source: 'src1', target: 'states', field: 'STATE,FIPS' })).toBe(false);
+    expect((await map.ops.dissolveLayer({ source: 'src1', target: 'states', field: 'STATE,FIPS' })).ok).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('renameLayer rejects a new name containing a comma', async () => {
     const { map, parseSpy } = makeMapWithLayers(['old']);
-    expect(await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'a,b' })).toBe(false);
+    expect((await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'a,b' })).ok).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('joinTable rejects a key containing a comma (target side)', async () => {
     const { map, parseSpy } = makeMapWithLayers(['states']);
-    expect(await map.ops.joinTable({
+    expect((await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { layer: 't' },
       keys: ['STATE,FIPS', 'fips'],
-    })).toBe(false);
+    })).ok).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('joinTable rejects a key containing a comma (source side)', async () => {
     const { map, parseSpy } = makeMapWithLayers(['states']);
-    expect(await map.ops.joinTable({
+    expect((await map.ops.joinTable({
       source: 'src1', target: 'states',
       data: { layer: 't' },
       keys: ['fips', 'fips,extra'],
-    })).toBe(false);
+    })).ok).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 });
@@ -4900,36 +4916,36 @@ describe('audit-fix: bufferLayer rejects non-positive / non-finite radius', () =
 
   it('rejects radius: 0', async () => {
     const { map, parseSpy } = makeMapWithLayers(['parks']);
-    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: 0 })).toBe(false);
+    expect((await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: 0 })).ok).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('rejects negative radius', async () => {
     const { map } = makeMapWithLayers(['parks']);
-    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: -1 })).toBe(false);
+    expect((await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: -1 })).ok).toBe(false);
   });
 
   it('rejects NaN / Infinity radius', async () => {
     const { map } = makeMapWithLayers(['parks']);
-    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: NaN })).toBe(false);
-    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: Infinity })).toBe(false);
+    expect((await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: NaN })).ok).toBe(false);
+    expect((await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: Infinity })).ok).toBe(false);
   });
 
   it('rejects empty / whitespace expression-string radius', async () => {
     const { map } = makeMapWithLayers(['parks']);
-    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: '' })).toBe(false);
-    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: '   ' })).toBe(false);
+    expect((await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: '' })).ok).toBe(false);
+    expect((await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: '   ' })).ok).toBe(false);
   });
 
   it('still accepts a positive number', async () => {
     const { map, parseSpy } = makeMapWithLayers(['parks']);
-    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: 100 })).toBe(true);
+    expect((await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: 100 })).ok).toBe(true);
     expect(parseSpy).toHaveBeenCalled();
   });
 
   it('still accepts an expression-string radius', async () => {
     const { map, parseSpy } = makeMapWithLayers(['parks']);
-    expect(await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: 'this.pop / 1000' })).toBe(true);
+    expect((await map.ops.bufferLayer({ source: 'src1', target: 'parks', radius: 'this.pop / 1000' })).ok).toBe(true);
     expect(parseSpy).toHaveBeenCalled();
   });
 });
@@ -4958,31 +4974,31 @@ describe('audit-fix: simplifyLayer rejects weighting with non-weighted method', 
 
   it('rejects method:dp + weighting', async () => {
     const { map, parseSpy } = makeMapWithLayers();
-    expect(await map.ops.simplifyLayer({
+    expect((await map.ops.simplifyLayer({
       source: 'src1', percentage: 10, method: 'dp', weighting: 0.5,
-    })).toBe(false);
+    })).ok).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('rejects method:visvalingam + weighting', async () => {
     const { map } = makeMapWithLayers();
-    expect(await map.ops.simplifyLayer({
+    expect((await map.ops.simplifyLayer({
       source: 'src1', percentage: 10, method: 'visvalingam', weighting: 0.5,
-    })).toBe(false);
+    })).ok).toBe(false);
   });
 
   it('accepts method:weighted + weighting', async () => {
     const { map } = makeMapWithLayers();
-    expect(await map.ops.simplifyLayer({
+    expect((await map.ops.simplifyLayer({
       source: 'src1', percentage: 10, method: 'weighted', weighting: 0.5,
-    })).toBe(true);
+    })).ok).toBe(true);
   });
 
   it('accepts weighting without explicit method (defaults to weighted)', async () => {
     const { map } = makeMapWithLayers();
-    expect(await map.ops.simplifyLayer({
+    expect((await map.ops.simplifyLayer({
       source: 'src1', percentage: 10, weighting: 0.5,
-    })).toBe(true);
+    })).ok).toBe(true);
   });
 });
 
@@ -5110,10 +5126,10 @@ describe('dissolveLayer: expanded options', () => {
 
   it('field and fields are mutually exclusive', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
-    expect(await map.ops.dissolveLayer({
+    expect((await map.ops.dissolveLayer({
       source: 'src1', target: 'counties',
       field: 'STATE', fields: ['REGION'],
-    })).toBe(false);
+    })).ok).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
@@ -5235,24 +5251,24 @@ describe('cleanLayer: expanded options', () => {
 
   it('rejects invalid overlapRule', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    expect(await map.ops.cleanLayer({
+    expect((await map.ops.cleanLayer({
       source: 'src1', target: 'parks',
       overlapRule: 'bogus' as any,
-    })).toBe(false);
+    })).ok).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('rejects negative numeric tuning options', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    expect(await map.ops.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: -1 })).toBe(false);
-    expect(await map.ops.cleanLayer({ source: 'src1', target: 'parks', sliverControl: -0.5 })).toBe(false);
-    expect(await map.ops.cleanLayer({ source: 'src1', target: 'parks', snapInterval: -10 })).toBe(false);
+    expect((await map.ops.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: -1 })).ok).toBe(false);
+    expect((await map.ops.cleanLayer({ source: 'src1', target: 'parks', sliverControl: -0.5 })).ok).toBe(false);
+    expect((await map.ops.cleanLayer({ source: 'src1', target: 'parks', snapInterval: -10 })).ok).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('rejects NaN numeric tuning options', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
-    expect(await map.ops.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: NaN })).toBe(false);
+    expect((await map.ops.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: NaN })).ok).toBe(false);
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
@@ -5377,7 +5393,7 @@ describe('Emap.intersectionPointsLayer (mocked mapshaper)', () => {
 
   it('adds a new point layer named "<target>-intersections" by default', async () => {
     const ok = await map.ops.intersectionPointsLayer({ source: 'src1', target: 'edges' });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     expect(setDatasetSpy).toHaveBeenCalledTimes(1);
     const after = setDatasetSpy.mock.calls[0][0] as any;
     expect(after.layers).toHaveLength(2);
@@ -5399,45 +5415,45 @@ describe('Emap.intersectionPointsLayer (mocked mapshaper)', () => {
   });
 
   it('returns false when source is missing', async () => {
-    expect(await map.ops.intersectionPointsLayer({ source: 'nope', target: 'edges' })).toBe(false);
+    expect((await map.ops.intersectionPointsLayer({ source: 'nope', target: 'edges' })).ok).toBe(false);
     expect(findSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
-    expect(await map.ops.intersectionPointsLayer({ source: 'src1', target: 'missing' })).toBe(false);
+    expect((await map.ops.intersectionPointsLayer({ source: 'src1', target: 'missing' })).ok).toBe(false);
     expect(findSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is a point layer (no segments)', async () => {
     beforeDs.layers[0].geometry_type = 'point';
-    expect(await map.ops.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
+    expect((await map.ops.intersectionPointsLayer({ source: 'src1', target: 'edges' })).ok).toBe(false);
     expect(findSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when name collides with an existing layer', async () => {
     beforeDs.layers.push({ name: 'crossings', shapes: [], geometry_type: 'point' });
-    expect(await map.ops.intersectionPointsLayer({
+    expect((await map.ops.intersectionPointsLayer({
       source: 'src1', target: 'edges', name: 'crossings',
-    })).toBe(false);
+    })).ok).toBe(false);
     expect(findSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when arcs is missing (point-only dataset)', async () => {
     beforeDs.arcs = undefined;
-    expect(await map.ops.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
+    expect((await map.ops.intersectionPointsLayer({ source: 'src1', target: 'edges' })).ok).toBe(false);
     expect(findSpy).not.toHaveBeenCalled();
   });
 
   it('rejects non-positive / non-finite tolerance', async () => {
-    expect(await map.ops.intersectionPointsLayer({
+    expect((await map.ops.intersectionPointsLayer({
       source: 'src1', target: 'edges', tolerance: 0,
-    })).toBe(false);
-    expect(await map.ops.intersectionPointsLayer({
+    })).ok).toBe(false);
+    expect((await map.ops.intersectionPointsLayer({
       source: 'src1', target: 'edges', tolerance: -1,
-    })).toBe(false);
-    expect(await map.ops.intersectionPointsLayer({
+    })).ok).toBe(false);
+    expect((await map.ops.intersectionPointsLayer({
       source: 'src1', target: 'edges', tolerance: NaN,
-    })).toBe(false);
+    })).ok).toBe(false);
     expect(findSpy).not.toHaveBeenCalled();
   });
 
@@ -5452,7 +5468,7 @@ describe('Emap.intersectionPointsLayer (mocked mapshaper)', () => {
     findSpy.mockImplementation(() => { throw new Error('boom'); });
     const errors: any[] = [];
     map.on('error', (e: any) => errors.push(e));
-    expect(await map.ops.intersectionPointsLayer({ source: 'src1', target: 'edges' })).toBe(false);
+    expect((await map.ops.intersectionPointsLayer({ source: 'src1', target: 'edges' })).ok).toBe(false);
     expect(errors).toHaveLength(1);
     expect(errors[0].error.message).toBe('boom');
     expect(setDatasetSpy).not.toHaveBeenCalled();
@@ -5495,7 +5511,7 @@ describe('Emap.intersectionPointsLayer round-trip (real mapshaper)', () => {
     const ok = await map.ops.intersectionPointsLayer({
       source: 'rt', target: layerName,
     });
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
 
     const ds = map.getSource('rt')!.getDataset()!;
     expect(ds.layers.length).toBe(2);

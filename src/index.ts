@@ -54,6 +54,8 @@ export {
   isValidFieldName,
   findInvalidFieldName,
 } from './map/command-args';
+export { Err, OK, okValue } from './map/op-result';
+export type { OpError, OpResult } from './map/op-result';
 export { HighlightManager } from './map/highlight-manager';
 export { Selection } from './map/selection';
 export type { SelectMode, SelectionDiff } from './map/selection';
