@@ -4258,7 +4258,7 @@ describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
   });
 
   it('loadSnapshot restores source IDs from emap metadata', async () => {
-    const ids = await map.loadSnapshot(new Uint8Array([0]));
+    const ids = await map.loadSnapshot(new Uint8Array([0x80]));
     expect(ids).toEqual(['a', 'b']);
     expect(map.getSource('a')).toBeDefined();
     expect(map.getSource('b')).toBeDefined();
@@ -4266,19 +4266,19 @@ describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
   });
 
   it('loadSnapshot accepts ArrayBuffer input', async () => {
-    const buf = new Uint8Array([1, 2, 3]).buffer;
+    const buf = new Uint8Array([0x80, 0x01, 0x02]).buffer;
     const ids = await map.loadSnapshot(buf);
     expect(ids).toEqual(['a', 'b']);
   });
 
   it('loadSnapshot accepts Blob input', async () => {
-    const blob = new Blob([new Uint8Array([1, 2, 3])]);
+    const blob = new Blob([new Uint8Array([0x80, 0x01, 0x02])]);
     const ids = await map.loadSnapshot(blob);
     expect(ids).toEqual(['a', 'b']);
   });
 
   it('loadSnapshot prepends idPrefix to stored IDs', async () => {
-    const ids = await map.loadSnapshot(new Uint8Array([0]), { idPrefix: 'restored-' });
+    const ids = await map.loadSnapshot(new Uint8Array([0x80]), { idPrefix: 'restored-' });
     expect(ids).toEqual(['restored-a', 'restored-b']);
     expect(map.getSource('restored-a')).toBeDefined();
   });
@@ -4288,7 +4288,7 @@ describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
       version: 1,
       datasets: [{ layers: [] }, { layers: [] }],
     });
-    const ids = await map.loadSnapshot(new Uint8Array([0]), { defaultIds: ['x', 'y'] });
+    const ids = await map.loadSnapshot(new Uint8Array([0x80]), { defaultIds: ['x', 'y'] });
     expect(ids).toEqual(['x', 'y']);
   });
 
@@ -4297,7 +4297,7 @@ describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
       version: 1,
       datasets: [{ layers: [] }, { layers: [] }],
     });
-    const ids = await map.loadSnapshot(new Uint8Array([0]));
+    const ids = await map.loadSnapshot(new Uint8Array([0x80]));
     expect(ids).toEqual(['snapshot-0', 'snapshot-1']);
   });
 
@@ -4307,7 +4307,7 @@ describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
     const sourceListenersBeforeAdd = (map as any)._sourceListeners as Map<string, unknown>;
     sourceListenersBeforeAdd.set('a', () => {}); // satisfy removeSource cleanup
 
-    const ids = await map.loadSnapshot(new Uint8Array([0]));
+    const ids = await map.loadSnapshot(new Uint8Array([0x80]));
     expect(ids).toEqual(['a', 'b']);
     // The source registered at 'a' is the new one, not the original
     expect(map.getSource('a')).not.toBe(existing);
@@ -4317,7 +4317,7 @@ describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
     const existing = makeSource('a', { layers: [] });
     (map as any)._sources.set('a', existing);
     await expect(
-      map.loadSnapshot(new Uint8Array([0]), { replace: false }),
+      map.loadSnapshot(new Uint8Array([0x80]), { replace: false }),
     ).rejects.toThrow(/already exists/);
     // Map state untouched: 'a' is the original, 'b' was not added
     expect(map.getSource('a')).toBe(existing);
@@ -4335,7 +4335,7 @@ describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
     selection.apply([{ source: 's', layer: 'l', id: 1 }], 'add');
     expect(selection.getAll().length).toBeGreaterThan(0);
 
-    await map.loadSnapshot(new Uint8Array([0]));
+    await map.loadSnapshot(new Uint8Array([0x80]));
     expect(map.canUndo()).toBe(false);
     expect(map.canRedo()).toBe(false);
     expect(selection.getAll().length).toBe(0);
@@ -4345,6 +4345,41 @@ describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
     await expect(
       map.loadSnapshot('not bytes' as unknown as Uint8Array),
     ).rejects.toThrow(/Blob, Uint8Array, or ArrayBuffer/);
+  });
+
+  it('loadSnapshot rejects empty bytes with a structured message (PR-17)', async () => {
+    await expect(
+      map.loadSnapshot(new Uint8Array(0)),
+    ).rejects.toThrow(/does not look like a mapshaper \.msx/);
+    expect(unpackSessionDataSpy).not.toHaveBeenCalled();
+  });
+
+  it('loadSnapshot rejects GeoJSON-shaped bytes (starts with `{` = 0x7b, not msgpack)', async () => {
+    const geojson = new TextEncoder().encode('{"type":"FeatureCollection","features":[]}');
+    await expect(
+      map.loadSnapshot(geojson),
+    ).rejects.toThrow(/does not look like a mapshaper \.msx/);
+    expect(unpackSessionDataSpy).not.toHaveBeenCalled();
+  });
+
+  it('loadSnapshot rejects ZIP-shaped bytes (starts with `PK` = 0x50)', async () => {
+    const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14]); // PK\x03\x04 — local file header
+    await expect(
+      map.loadSnapshot(zip),
+    ).rejects.toThrow(/does not look like a mapshaper \.msx/);
+  });
+
+  it('loadSnapshot accepts every msgpack map marker as the first byte (fixmap / map16 / map32)', async () => {
+    const first = await map.loadSnapshot(new Uint8Array([0x80]));            // fixmap
+    expect(first).toEqual(['a', 'b']);
+    map.removeSource('a');
+    map.removeSource('b');
+    const second = await map.loadSnapshot(new Uint8Array([0xde, 0x00, 0x02])); // map16
+    expect(second).toEqual(['a', 'b']);
+    map.removeSource('a');
+    map.removeSource('b');
+    const third = await map.loadSnapshot(new Uint8Array([0xdf, 0, 0, 0, 2]));  // map32
+    expect(third).toEqual(['a', 'b']);
   });
 });
 

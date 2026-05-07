@@ -479,6 +479,22 @@ export class Emap extends EventDispatcher {
       throw new Error('loadSnapshot: input must be Blob, Uint8Array, or ArrayBuffer');
     }
 
+    // Pre-flight sanity check before handing the bytes to mapshaper's
+    // msgpack-based unpacker. The unpacker throws opaque errors on garbage
+    // input ("Unexpected end of buffer" / "Invalid code 0x..") that aren't
+    // useful to surface in a UI. The .msx format is a top-level map; its
+    // first byte must therefore be a msgpack map marker:
+    //   - fixmap   (0-15 entries):    0x80..0x8F
+    //   - map16    (0..2^16 entries): 0xDE
+    //   - map32    (0..2^32 entries): 0xDF
+    // GeoJSON / TopoJSON / random ZIPs / empty buffers all fail this check.
+    if (!_looksLikeMsxBytes(bytes)) {
+      throw new Error(
+        'loadSnapshot: input does not look like a mapshaper .msx snapshot ' +
+        '(expected msgpack map marker as the first byte)',
+      );
+    }
+
     const obj = await getDefaultMapshaperAdapter().unpackSessionData(bytes);
     const datasets = obj.datasets ?? [];
     const meta = (obj as Record<string, unknown>).emap as
@@ -1402,5 +1418,22 @@ export class Emap extends EventDispatcher {
   }
   /** Read by composed managers via `EmapHostInternal._removed`. */
   _removed = false;
+}
+
+/**
+ * Cheap pre-validator for `.msx` (mapshaper-pack) bytes. Looks for any
+ * msgpack map marker as the first byte; that's the only structural rule
+ * `unpackSessionData` requires (the rest of the format is a content map).
+ *
+ * Exported for tests that want to assert the boundary.
+ */
+function _looksLikeMsxBytes(bytes: Uint8Array): boolean {
+  if (!bytes || bytes.length === 0) return false;
+  const b = bytes[0];
+  return (
+    (b >= 0x80 && b <= 0x8f) // fixmap
+    || b === 0xde // map16
+    || b === 0xdf // map32
+  );
 }
 
