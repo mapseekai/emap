@@ -1,5 +1,5 @@
 import type { EditCommand } from '../edit-command';
-import type { MapshaperLayer } from '../../types/mapshaper-types';
+import type { FeatureShape, MapshaperLayer } from '../../types/mapshaper-types';
 
 export interface FeatureDeleteCommandOptions {
   /** The layer object that owns the feature. */
@@ -7,7 +7,7 @@ export interface FeatureDeleteCommandOptions {
   /** Index of the feature within `layer.shapes`. Captured at construction. */
   featureId: number;
   /** Snapshot of the shape, taken before deletion. Restored by undo. */
-  shape: unknown;
+  shape: FeatureShape | null;
   /**
    * Snapshot of the data record, taken before deletion. `null` when the
    * layer has no data table.
@@ -46,7 +46,7 @@ export class FeatureDeleteCommand implements EditCommand {
   undo(): void {
     const { layer, featureId, shape, record } = this.opts;
     if (!layer.shapes) layer.shapes = [];
-    layer.shapes.splice(featureId, 0, shape as any);
+    layer.shapes.splice(featureId, 0, shape);
     if (record !== null) {
       const records = layer.data?.getRecords?.();
       records?.splice(featureId, 0, record);
@@ -64,7 +64,7 @@ export interface BulkFeatureDeleteCommandOptions {
    */
   snapshots: Array<{
     id: number;
-    shape: unknown;
+    shape: FeatureShape | null;
     record: Record<string, unknown> | null;
   }>;
 }
@@ -98,12 +98,12 @@ export class BulkFeatureDeleteCommand implements EditCommand {
     for (const s of snapshots) del.add(s.id);
 
     const oldShapes = layer.shapes;
-    const newShapes: unknown[] = new Array(oldShapes.length - del.size);
+    const newShapes: (FeatureShape | null)[] = new Array(oldShapes.length - del.size);
     let dst = 0;
     for (let i = 0; i < oldShapes.length; i++) {
       if (!del.has(i)) newShapes[dst++] = oldShapes[i];
     }
-    layer.shapes = newShapes as any;
+    layer.shapes = newShapes;
 
     const records = layer.data?.getRecords?.();
     if (records) {
@@ -121,7 +121,7 @@ export class BulkFeatureDeleteCommand implements EditCommand {
     const sorted = [...snapshots].sort((a, b) => a.id - b.id);
     const records = layer.data?.getRecords?.();
     for (const s of sorted) {
-      layer.shapes.splice(s.id, 0, s.shape as any);
+      layer.shapes.splice(s.id, 0, s.shape);
       if (records && s.record !== null) records.splice(s.id, 0, s.record);
     }
   }

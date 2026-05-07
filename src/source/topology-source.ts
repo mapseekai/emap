@@ -1,9 +1,8 @@
-import mapshaper from 'mapshaper';
 import { EventDispatcher } from '../core/events';
 import { TopologySource as ITopologySource } from './source';
 import { Bounds } from '../geo/bounds';
-import { unzipSync, strFromU8, zipSync } from 'fflate';
-import type { UnzipFileInfo } from 'fflate';
+import { unzip, strFromU8, zipSync } from 'fflate';
+import type { UnzipFileInfo, Unzipped } from 'fflate';
 import { DisplayArcs } from './display-arcs';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { ExportFormat, ExportOptions } from './source';
@@ -11,6 +10,8 @@ import {
   getDefaultMapshaperRunner,
   type MapshaperRunner,
 } from './mapshaper-runner';
+import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
+import { resolveDatasetCRS } from '../geo/crs-resolver';
 
 export type TopologySourceData = string | { filename: string, content: Uint8Array };
 
@@ -80,7 +81,7 @@ export interface TopologySourceOptions {
   /**
    * Optional injection point for the mapshaper command runner used by
    * the load path. Defaults to a process-wide singleton that calls
-   * `mapshaper.internal.parseCommands + runParsedCommands` directly.
+   * `MapshaperAdapter.runImport / runOnDataset` directly.
    * Tests and instrumentation use this to swap in a mock runner.
    */
   mapshaperRunner?: MapshaperRunner;
@@ -200,7 +201,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         }
         for (const entry of this._data) {
           if (this._isZipFile(entry.filename)) {
-            const extracted = this._extractZip(entry.content);
+            const extracted = await this._extractZip(entry.content);
             const primary = this._findPrimaryFile(extracted);
             if (!primary) {
               throw new Error(`No importable file found in zip archive: ${entry.filename}`);
@@ -245,7 +246,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         }
 
         if (this._isZipFile(input.filename)) {
-          const extracted = this._extractZip(input.content);
+          const extracted = await this._extractZip(input.content);
           const primary = this._findPrimaryFile(extracted);
           if (!primary) {
             throw new Error('No importable file found in zip archive');
@@ -317,67 +318,13 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     return this._dataset;
   }
 
+  /**
+   * Canonical CRS identifier for the loaded dataset (`EPSG:NNNN` or a
+   * passthrough label). Heuristics live in {@link resolveDatasetCRS} so the
+   * resolution can be unit-tested independently of TopologySource.
+   */
   public getCRS(): string {
-    if (!this._dataset) return 'EPSG:4326';
-
-    const info = this._dataset.info;
-
-    if (!info) return 'EPSG:4326';
-
-    // Try to get crs_string (e.g. "wgs84", "epsg:4326")
-    if (info.crs_string) {
-      return this._normalizeCrsString(info.crs_string);
-    }
-
-    // Try to extract from prj (WKT-style projection string)
-    if (info.prj) {
-      // Look for EPSG code in WKT AUTHORITY clause
-      const authorityMatch = info.prj.match(/AUTHORITY\["EPSG"\s*,\s*"(\d+)"\]/i);
-      if (authorityMatch) {
-        return `EPSG:${authorityMatch[1]}`;
-      }
-
-      // Detect Web Mercator from projection name
-      if (/Mercator.*WGS.*84.*Pseudo/i.test(info.prj) ||
-        /WGS.*84.*Pseudo.*Mercator/i.test(info.prj) ||
-        /Web_Mercator/i.test(info.prj)) {
-        return 'EPSG:3857';
-      }
-
-      // Detect WGS84 from DATUM
-      if (/DATUM\["WGS_1984"/i.test(info.prj) && /GEOGCS/i.test(info.prj)) {
-        return 'EPSG:4326';
-      }
-    }
-
-    // Try to detect from CRS object properties (parsed by Mapshaper)
-    if (info.crs) {
-      if (info.crs.is_latlong) {
-        return 'EPSG:4326'; // WGS84
-      }
-      // Check for Web Mercator by projection parameters
-      if (info.crs.projName === 'merc' && info.crs.a === 6378137) {
-        return 'EPSG:3857';
-      }
-    }
-
-    // Default to WGS84
-    return 'EPSG:4326';
-  }
-
-  private _normalizeCrsString(str: string): string {
-    const lower = str.toLowerCase();
-    if (lower === 'wgs84' || lower.includes('4326')) {
-      return 'EPSG:4326';
-    }
-    if (lower.includes('3857') || lower === 'webmercator') {
-      return 'EPSG:3857';
-    }
-    // Return as-is if it looks like EPSG:XXXX
-    if (/^epsg:\d+$/i.test(str)) {
-      return str.toUpperCase();
-    }
-    return str.toUpperCase();
+    return resolveDatasetCRS(this._dataset);
   }
 
   public async reproject(targetCrs: string): Promise<void> {
@@ -401,35 +348,18 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
     const cmd = `-proj ${targetCrs}`;
 
-    return new Promise((resolve, reject) => {
-      const job = new mapshaper.internal.Job();
-
-      job.catalog.addDataset(this._dataset);
-
-      const commands = mapshaper.internal.parseCommands(cmd);
-
-      mapshaper.internal.runParsedCommands(commands, job, (err: any, finishedJob: any) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        const targets = finishedJob.catalog.getDefaultTargets();
-        if (targets.length > 0) {
-          this._dataset = targets[0].dataset;
-        }
-        // Re-initialize DisplayArcs (including LOD threshold detection) against
-        // the post-projection arcs — coordinates and z-values may have changed.
-        if (this._dataset?.arcs) {
-          this._displayArcs = new DisplayArcs(this._dataset.arcs);
-        }
-        resolve();
-      });
-    });
+    const result = await getDefaultMapshaperAdapter().runOnDataset(cmd, this._dataset);
+    this._dataset = result;
+    // Re-initialize DisplayArcs (including LOD threshold detection) against
+    // the post-projection arcs — coordinates and z-values may have changed.
+    if (this._dataset?.arcs) {
+      this._displayArcs = new DisplayArcs(this._dataset.arcs);
+    }
   }
 
   getExtent(): Bounds {
     if (!this._dataset) return new Bounds();
-    const info = mapshaper.internal.getDatasetBounds(this._dataset);
+    const info = getDefaultMapshaperAdapter().getDatasetBounds(this._dataset);
     return new Bounds(info.xmin, info.ymin, info.xmax, info.ymax);
   }
 
@@ -446,8 +376,20 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   }
 
   /**
-   * Re-initialize DisplayArcs from the current dataset arcs.
-   * Call after modifying the arc collection (e.g. adding new features).
+   * Mark the cached LOD copy stale; the next `getScaledArcs()` call inside
+   * the renderer will rebuild it lazily. Cheap (O(1)) so per-frame edit
+   * sessions can call this on every step without paying the rebuild cost
+   * until the user actually zooms out far enough to need the filtered copy.
+   */
+  markDisplayArcsDirty(): void {
+    this._displayArcs?.markDirty();
+  }
+
+  /**
+   * Eagerly re-initialize DisplayArcs from the current dataset arcs. Use
+   * for one-shot mutations where the caller wants the new LOD copy ready
+   * immediately (project, dataset-replace). Per-frame in-place edits
+   * should prefer {@link markDisplayArcsDirty}.
    */
   refreshDisplayArcs(): void {
     if (this._dataset?.arcs) {
@@ -500,9 +442,10 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       // does not handle it, so we go through the Pack pipeline directly.
       // `compact: true` matches mapshaper CLI defaults — bakes simplification
       // thresholds into `zz` and gzip-compresses arc buffers for a small file.
+      const adapter = getDefaultMapshaperAdapter();
       const files = options.format === 'msx'
-        ? await mapshaper.internal.exportPackedDatasets([this._dataset], { compact: true })
-        : mapshaper.internal.exportFileContent(this._dataset, { format: options.format });
+        ? await adapter.exportPackedDatasets([this._dataset], { compact: true })
+        : adapter.exportFileContent(this._dataset, { format: options.format });
       return this._filesToBlob(files, options.format);
     } finally {
       if (savedInterval && arcs?.setRetainedInterval) {
@@ -544,40 +487,56 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     return /\.zip$/i.test(filename);
   }
 
-  private _extractZip(data: Uint8Array): Record<string, Uint8Array | string> {
+  private async _extractZip(data: Uint8Array): Promise<Record<string, Uint8Array | string>> {
     const limits = { ...DEFAULT_ZIP_LIMITS, ...this._options.zipLimits };
     let uncompressedTotal = 0;
     let entryCount = 0;
 
-    const unzipped = unzipSync(data, {
-      filter: (file: UnzipFileInfo) => {
-        entryCount++;
-        if (entryCount > limits.maxEntries) {
-          throw new Error(
-            `ZIP extraction limit exceeded: ${entryCount} entries > maxEntries ${limits.maxEntries}`,
-          );
-        }
+    // Async unzip splits the work across microtask boundaries instead of
+    // hogging the main thread for the whole archive — the synchronous
+    // `unzipSync` form would block for hundreds of ms on a 100 MB shapefile
+    // bundle. The `filter` callback retains its strict pre-inflation
+    // resource ceilings; throwing from it propagates through the promise
+    // rejection.
+    const unzipped: Unzipped = await new Promise((resolve, reject) => {
+      unzip(
+        data,
+        {
+          filter: (file: UnzipFileInfo) => {
+            entryCount++;
+            if (entryCount > limits.maxEntries) {
+              throw new Error(
+                `ZIP extraction limit exceeded: ${entryCount} entries > maxEntries ${limits.maxEntries}`,
+              );
+            }
 
-        uncompressedTotal += file.originalSize;
-        if (uncompressedTotal > limits.maxBytes) {
-          throw new Error(
-            `ZIP extraction limit exceeded: uncompressed total ${uncompressedTotal} > maxBytes ${limits.maxBytes}`,
-          );
-        }
+            uncompressedTotal += file.originalSize;
+            if (uncompressedTotal > limits.maxBytes) {
+              throw new Error(
+                `ZIP extraction limit exceeded: uncompressed total ${uncompressedTotal} > maxBytes ${limits.maxBytes}`,
+              );
+            }
 
-        if (data.byteLength > 0) {
-          const ratio = uncompressedTotal / data.byteLength;
-          if (ratio > limits.maxRatio) {
-            throw new Error(
-              `ZIP extraction limit exceeded: ratio ${ratio.toFixed(1)} > maxRatio ${limits.maxRatio}`,
-            );
-          }
-        }
+            if (data.byteLength > 0) {
+              const ratio = uncompressedTotal / data.byteLength;
+              if (ratio > limits.maxRatio) {
+                throw new Error(
+                  `ZIP extraction limit exceeded: ratio ${ratio.toFixed(1)} > maxRatio ${limits.maxRatio}`,
+                );
+              }
+            }
 
-        // Skip metadata and dot files before inflating their payloads. They are
-        // still counted above, so they cannot hide bytes or entry count.
-        return !(/^__MACOSX/.test(file.name) || file.name.split('/').pop()?.startsWith('.'));
-      },
+            // Skip metadata and dot files before inflating their payloads.
+            // They are still counted above, so they cannot hide bytes or
+            // entry count.
+            return !(/^__MACOSX/.test(file.name) || file.name.split('/').pop()?.startsWith('.'));
+          },
+        },
+        (err, result) => {
+          if (err) reject(err);
+          else resolve(result);
+        },
+      );
     });
 
     const result: Record<string, Uint8Array | string> = {};

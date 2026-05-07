@@ -1,11 +1,15 @@
-// Thin abstraction over `mapshaper.internal.parseCommands +
-// runParsedCommands`. Lets `TopologySource` (and, eventually, the
-// dataset-replace ops) accept an injected runner instead of reaching
-// into the unstable `mapshaper.internal.*` API directly. The default
-// implementation still uses the internal API; tests may swap in a mock.
+// @deprecated Prefer `MapshaperAdapter.runImport` from
+// `src/adapter/mapshaper-adapter`. This module is kept as a thin shim so
+// existing imports (`getDefaultMapshaperRunner`, `DefaultMapshaperRunner`,
+// `MapshaperRunner`) keep resolving while the wider migration to the
+// adapter is in progress. New code should depend on `MapshaperAdapter`
+// directly.
 
-import mapshaper from 'mapshaper';
 import type { MapshaperDataset } from '../types/mapshaper-types';
+import {
+  getDefaultMapshaperAdapter,
+  type MapshaperAdapter,
+} from '../adapter/mapshaper-adapter';
 
 /** Files injected into the runner's input cache (e.g. `.shp` payloads). */
 export type RunnerInputFiles = Record<string, Uint8Array | string>;
@@ -14,42 +18,20 @@ export interface MapshaperRunner {
   /**
    * Run a mapshaper CLI-style command string and resolve to the first
    * default-target dataset. Throws on parse / runtime errors.
-   *
-   * `inputFiles` is injected onto the parsed `-i` command's `input`
-   * option, mirroring mapshaper's GUI import path.
    */
   runImport(cmd: string, inputFiles: RunnerInputFiles): Promise<MapshaperDataset>;
 }
 
 /**
- * Production runner that delegates straight to `mapshaper.internal`.
- * Kept as a class so callers can subclass for instrumentation
- * (timing, telemetry, error remapping) without touching call sites.
+ * Production runner that delegates to {@link MapshaperAdapter.runImport}.
+ * Kept as a class so callers can subclass for instrumentation (timing,
+ * telemetry, error remapping).
  */
 export class DefaultMapshaperRunner implements MapshaperRunner {
+  constructor(private readonly _adapter: MapshaperAdapter = getDefaultMapshaperAdapter()) {}
+
   async runImport(cmd: string, inputFiles: RunnerInputFiles): Promise<MapshaperDataset> {
-    const commands = mapshaper.internal.parseCommands(cmd);
-    if (commands.length > 0 && commands[0].name === 'i') {
-      commands[0].options.input = inputFiles;
-    }
-    return new Promise<MapshaperDataset>((resolve, reject) => {
-      mapshaper.internal.runParsedCommands(
-        commands,
-        new mapshaper.internal.Job(),
-        (err: any, job: any) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          const targets = job.catalog.getDefaultTargets();
-          if (targets.length === 0) {
-            reject(new Error('No layers found in dataset'));
-            return;
-          }
-          resolve(targets[0].dataset);
-        },
-      );
-    });
+    return this._adapter.runImport(cmd, inputFiles);
   }
 }
 

@@ -22,6 +22,7 @@ import {
 import type { EditCommand } from '../edit/edit-command';
 import type { TopologySource } from '../source/source';
 import type { MapshaperLayer } from '../types/mapshaper-types';
+import { normalizePointShape } from '../source/layer-utils';
 import type { EmapHostInternal } from './emap-host';
 import type {
   DragSessionOptions,
@@ -53,7 +54,7 @@ export class EditSessions {
     >();
 
     for (const ref of refs) {
-      const layer = this._emap._resolveLayer(ref.source, ref.layer);
+      const layer = this._emap.layers.resolve(ref.source, ref.layer);
       if (!layer?.shapes) continue;
       const shape = layer.shapes[ref.id];
       if (!shape) continue;
@@ -69,7 +70,8 @@ export class EditSessions {
       } else {
         // Path feature: shape is a list of parts, each part is a list of
         // signed arc ids. Negative ids encode reversed direction; abs them.
-        for (const part of shape) {
+        const pathShape = shape as import('../types/mapshaper-types').PathShape;
+        for (const part of pathShape) {
           if (!Array.isArray(part)) continue;
           for (const rawArcId of part) {
             if (typeof rawArcId !== 'number') continue;
@@ -164,7 +166,7 @@ export class EditSessions {
     // optional shared-arc split rewrites the shapes.
     const bySource = new globalThis.Map<string, Bucket>();
     for (const ref of refs) {
-      const layer = this._emap._resolveLayer(ref.source, ref.layer);
+      const layer = this._emap.layers.resolve(ref.source, ref.layer);
       if (!layer?.shapes) continue;
       const shape = layer.shapes[ref.id];
       if (!shape) continue;
@@ -217,12 +219,17 @@ export class EditSessions {
     }
 
     // Second pass: now compute arcIds from the (possibly rewritten) shapes.
+    // pathFeatures are pre-filtered to non-point layers, so the shape is a
+    // PathShape (list of parts of signed arc ids).
     for (const bucket of bySource.values()) {
       const seen = new Set<number>();
       for (const pf of bucket.pathFeatures) {
-        const shape = pf.layer.shapes![pf.featureId];
+        const shape = pf.layer.shapes?.[pf.featureId] as
+          | import('../types/mapshaper-types').PathShape
+          | null
+          | undefined;
         if (!shape) continue;
-        for (const part of shape as number[][]) {
+        for (const part of shape) {
           if (!Array.isArray(part)) continue;
           for (const raw of part) {
             if (typeof raw !== 'number') continue;
@@ -540,7 +547,7 @@ export class EditSessions {
     >();
 
     for (const ref of refs) {
-      const layer = this._emap._resolveLayer(ref.source, ref.layer);
+      const layer = this._emap.layers.resolve(ref.source, ref.layer);
       if (!layer?.shapes) continue;
       const shape = layer.shapes[ref.id];
       if (!shape) continue;
@@ -554,7 +561,9 @@ export class EditSessions {
       if (layer.geometry_type === 'point') {
         bucket.pointFeatures.push({ layer, featureId: ref.id });
       } else {
-        for (const part of shape) {
+        // Non-point layers: shape is a PathShape (parts of signed arc ids).
+        const pathShape = shape as import('../types/mapshaper-types').PathShape;
+        for (const part of pathShape) {
           if (!Array.isArray(part)) continue;
           for (const rawArcId of part) {
             if (typeof rawArcId !== 'number') continue;
@@ -654,9 +663,9 @@ export class EditSessions {
 
       // Point features: walk each shape's coords.
       for (const pf of bucket.pointFeatures) {
-        const shape = pf.layer.shapes?.[pf.featureId] as number[][] | undefined;
+        const shape = pf.layer.shapes?.[pf.featureId];
         if (!shape) continue;
-        for (const coord of shape) {
+        for (const coord of normalizePointShape(shape)) {
           if (!coord || coord.length < 2) continue;
           const x = coord[0];
           const y = coord[1];

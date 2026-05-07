@@ -123,6 +123,18 @@ export class MapshaperWorkerPool {
     cmd: string,
     packed: any,
     inputFiles?: Record<string, Uint8Array | string>,
+    /**
+     * Optional list of `Transferable` objects (typed-array `.buffer`s,
+     * `MessagePort`s, …) handed to `postMessage`. When supplied,
+     * ownership moves to the worker — saves a structured-clone copy
+     * and roughly halves the main-thread memory peak around a
+     * pack/unpack round-trip.
+     *
+     * Callers that share the buffers with main-thread code must NOT
+     * pass them via this list (transfer is destructive on the source
+     * realm).
+     */
+    transferList?: Transferable[],
   ): Promise<any> {
     if (this._destroyed) {
       return Promise.reject(new Error('MapshaperWorkerPool: destroyed'));
@@ -143,7 +155,11 @@ export class MapshaperWorkerPool {
       this._pending.set(id, { resolve, reject, epoch });
       const msg: RunMessage = { id, type: 'run', cmd, packed };
       if (inputFiles) msg.inputFiles = inputFiles;
-      worker.postMessage(msg);
+      if (transferList && transferList.length > 0) {
+        worker.postMessage(msg, transferList);
+      } else {
+        worker.postMessage(msg);
+      }
     });
   }
 

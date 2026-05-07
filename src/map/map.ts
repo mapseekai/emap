@@ -10,6 +10,7 @@ import { MapshaperOps } from './mapshaper-ops';
 import { EditSessions } from './edit-sessions';
 import { AttributeOps } from './attribute-ops';
 import { EditStateStore, type EditMode } from './edit-state-store';
+import { LayerRegistry } from './layer-registry';
 import { TopologySource } from '../source/source';
 import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
 import { MouseWheel } from '../core/interactions';
@@ -24,12 +25,12 @@ import { CompositeCommand } from '../edit/commands/composite';
 import { BulkFeatureDeleteCommand, type BulkFeatureDeleteCommandOptions } from '../edit/commands/feature-delete';
 // `MapshaperOps`, `EditSessions`, `AttributeOps` are composed onto `Emap`
 // via the `ops` / `editSession` / `attributes` getters below.
-import mapshaper from 'mapshaper';
+import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { Control, ControlPosition } from '../ui/control';
 import { getLayerId } from '../source/layer-utils';
 import { resolveStrokeStyle, resolvePointStyle } from './layer';
 import type { LayerSpecification, FillPaint, LinePaint, CirclePaint } from './layer';
-import type { MapshaperLayer } from '../types/mapshaper-types';
+import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 // All public type/option surfaces moved to `./types`. Re-export here so
 // existing `import { MapOptions, ... } from './map'` paths keep working.
 export * from './types';
@@ -60,6 +61,18 @@ export class Emap extends EventDispatcher {
   // read-only outside this class.
   _sources: globalThis.Map<string, TopologySource> =
     new globalThis.Map();
+  /**
+   * Single resolution surface for `(sourceId, layerId) → MapshaperLayer`.
+   * Exposed to managers via `EmapHostInternal.layers`. Reads `_sources`
+   * lazily so it stays in sync with `addSource`/`removeSource` without
+   * needing its own listener. Constructed on first access so test paths
+   * that bypass the constructor via `Object.create(Emap.prototype)` still
+   * see a working registry once they `setPrivate(map, '_sources', ...)`.
+   */
+  private _layersCache?: LayerRegistry;
+  get layers(): LayerRegistry {
+    return this._layersCache ?? (this._layersCache = new LayerRegistry(this._sources));
+  }
   private _sourceListeners: globalThis.Map<string, (e: any) => void> =
     new globalThis.Map();
   private _layers: LayerSpecification[] = [];
@@ -136,6 +149,13 @@ export class Emap extends EventDispatcher {
   // `DEFAULT_WORKER_THRESHOLD` (50_000). Read by `MapshaperOps`; the `_`
   // prefix still signals internal-only.
   _workerThreshold: number = DEFAULT_WORKER_THRESHOLD;
+  /**
+   * Optional caller-supplied routing decision. When set, `_runDatasetCommand`
+   * forwards every command-info bundle to it and uses the boolean result
+   * verbatim. Pass `MapOptions.workerRouting` to install one. Read by
+   * `MapshaperOps` via the host.
+   */
+  _workerRouting?: import('./worker-routing').WorkerRoutingFn;
   // Default to `disabled` so apps don't accidentally execute arbitrary
   // JavaScript from external/untrusted layer config. Apps that load only
   // their own data can opt back in via `expressionPolicy: 'trusted'` in
@@ -197,6 +217,7 @@ export class Emap extends EventDispatcher {
     if (typeof options.workerThreshold === 'number' && options.workerThreshold >= 0) {
       this._workerThreshold = options.workerThreshold;
     }
+    this._workerRouting = options.workerRouting;
     if (this._workerMode !== false || options.workerPool) {
       if (options.workerPool) {
         this._workerPool = options.workerPool;
@@ -320,9 +341,16 @@ export class Emap extends EventDispatcher {
       // none` on the container itself prevents hit-testing on empty space
       // around buttons, but events on the buttons themselves still bubble.
       const swallow = (e: Event) => e.stopPropagation();
-      for (const type of ['click', 'mousedown', 'mouseup', 'dblclick', 'contextmenu', 'wheel']) {
+      for (const type of ['click', 'mousedown', 'mouseup', 'dblclick', 'contextmenu']) {
         container.addEventListener(type, swallow);
       }
+      // Wheel events listed separately: register passive so the page can
+      // continue scrolling normally when the cursor sits over the control
+      // chrome, AND so Chrome doesn't log a "non-passive wheel handler"
+      // warning. We still call stopPropagation, which prevents the wheel
+      // event from reaching the canvas's zoom handler — that's the part
+      // we actually want.
+      container.addEventListener('wheel', swallow, { passive: true });
 
       el.appendChild(container);
       this._controlContainers.set(pos, container);
@@ -419,12 +447,13 @@ export class Emap extends EventDispatcher {
       datasets.push(ds);
     }
 
-    const obj = await mapshaper.internal.exportDatasetsToPack(datasets, { compact });
+    const adapter = getDefaultMapshaperAdapter();
+    const obj = await adapter.exportDatasetsToPack(datasets, { compact });
     (obj as Record<string, unknown>).emap = {
       version: 1,
       sources: ids.map((id) => ({ id })),
     };
-    const bytes = mapshaper.internal.pack(obj);
+    const bytes = adapter.pack(obj);
     return new Blob([bytes as BlobPart], { type: 'application/octet-stream' });
   }
 
@@ -465,7 +494,23 @@ export class Emap extends EventDispatcher {
       throw new Error('loadSnapshot: input must be Blob, Uint8Array, or ArrayBuffer');
     }
 
-    const obj = await mapshaper.internal.unpackSessionData(bytes);
+    // Pre-flight sanity check before handing the bytes to mapshaper's
+    // msgpack-based unpacker. The unpacker throws opaque errors on garbage
+    // input ("Unexpected end of buffer" / "Invalid code 0x..") that aren't
+    // useful to surface in a UI. The .msx format is a top-level map; its
+    // first byte must therefore be a msgpack map marker:
+    //   - fixmap   (0-15 entries):    0x80..0x8F
+    //   - map16    (0..2^16 entries): 0xDE
+    //   - map32    (0..2^32 entries): 0xDF
+    // GeoJSON / TopoJSON / random ZIPs / empty buffers all fail this check.
+    if (!_looksLikeMsxBytes(bytes)) {
+      throw new Error(
+        'loadSnapshot: input does not look like a mapshaper .msx snapshot ' +
+        '(expected msgpack map marker as the first byte)',
+      );
+    }
+
+    const obj = await getDefaultMapshaperAdapter().unpackSessionData(bytes);
     const datasets = obj.datasets ?? [];
     const meta = (obj as Record<string, unknown>).emap as
       | { sources?: Array<{ id?: string }> }
@@ -497,7 +542,7 @@ export class Emap extends EventDispatcher {
       const id = resolvedIds[i];
       if (replace && this._sources.has(id)) this.removeSource(id);
       const src = new ConcreteTopologySource(id);
-      src.setDataset(datasets[i]);
+      src.setDataset(datasets[i] as MapshaperDataset);
       this.addSource(id, src);
       registered.push(id);
     }
@@ -645,18 +690,25 @@ export class Emap extends EventDispatcher {
   /**
    * Generates a boolean flag array for arcs that belong to a specific source layer.
    * Cached to prevent walking shapes on every frame.
+   *
+   * Only meaningful for path layers (polygon/polyline). Point layers have no
+   * arc references, so iterating their shapes contributes nothing — caller
+   * should filter by `isPathLayer` before invoking.
    */
   private _getLayerArcFlags(ml: MapshaperLayer, arcs: any, cacheKey: string): Uint8Array | null {
     if (!ml || !ml.shapes || !arcs) return null;
-    
+
     let flags = this._layerArcFlagsCache.get(cacheKey);
     if (flags) return flags;
 
     const arcCount = arcs.size();
     flags = new Uint8Array(arcCount);
-    
-    // Tag all arcs used by this layer's shapes
-    for (const shape of ml.shapes) {
+
+    // Tag all arcs used by this layer's shapes. Layer is expected to be a
+    // path layer; we cast for narrow access since the runtime guard at the
+    // call sites ensures correctness.
+    const pathShapes = ml.shapes as Array<import('../types/mapshaper-types').PathShape | null>;
+    for (const shape of pathShapes) {
       if (!shape) continue;
       for (const part of shape) {
         for (const arcId of part) {
@@ -665,7 +717,7 @@ export class Emap extends EventDispatcher {
         }
       }
     }
-    
+
     this._layerArcFlagsCache.set(cacheKey, flags);
     return flags;
   }
@@ -1295,19 +1347,11 @@ export class Emap extends EventDispatcher {
    */
 
   /**
-   * Resolve a (sourceId, layerId) pair to the actual MapshaperLayer object.
-   * Called by every composed manager (`ops`, `editSession`, `attributes`).
+   * @deprecated Prefer `emap.layers.resolve(sourceId, layerId)`. Kept as a
+   * thin shim while the composed managers migrate over.
    */
   _resolveLayer(sourceId: string, layerId: string): MapshaperLayer | null {
-    const source = this._sources.get(sourceId);
-    if (!source) return null;
-    const layers = source.getLayers();
-    for (let i = 0; i < layers.length; i++) {
-      if (getLayerId(layers[i], i) === layerId) {
-        return layers[i] as MapshaperLayer;
-      }
-    }
-    return null;
+    return this.layers.resolve(sourceId, layerId);
   }
 
 
@@ -1389,5 +1433,22 @@ export class Emap extends EventDispatcher {
   }
   /** Read by composed managers via `EmapHostInternal._removed`. */
   _removed = false;
+}
+
+/**
+ * Cheap pre-validator for `.msx` (mapshaper-pack) bytes. Looks for any
+ * msgpack map marker as the first byte; that's the only structural rule
+ * `unpackSessionData` requires (the rest of the format is a content map).
+ *
+ * Exported for tests that want to assert the boundary.
+ */
+function _looksLikeMsxBytes(bytes: Uint8Array): boolean {
+  if (!bytes || bytes.length === 0) return false;
+  const b = bytes[0];
+  return (
+    (b >= 0x80 && b <= 0x8f) // fixmap
+    || b === 0xde // map16
+    || b === 0xdf // map32
+  );
 }
 

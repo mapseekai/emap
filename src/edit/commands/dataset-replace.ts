@@ -19,7 +19,7 @@ export interface DatasetReplaceCommandOptions {
  * references and swapping which one is active on the `TopologySource`.
  *
  * The `before` reference must be a deep copy (typically produced by
- * `mapshaper.internal.copyDataset`); the `after` reference is the dataset
+ * `MapshaperAdapter.copyDataset`); the `after` reference is the dataset
  * mapshaper mutated in place. `setDataset` rebuilds DisplayArcs and fires
  * `'data'` so the map re-renders.
  *
@@ -30,6 +30,15 @@ export interface DatasetReplaceCommandOptions {
  */
 export class DatasetReplaceCommand implements EditCommand {
   readonly label: string;
+
+  /**
+   * Pushing a DatasetReplaceCommand marks every prior entry on the undo
+   * stack as `stale`. Their captured dataset / arc references point at
+   * the object this command swapped out, so undoing them post-swap would
+   * write to the wrong place. See `EditCommand.stale` for the full
+   * rationale.
+   */
+  readonly invalidatesPriorCommands = true;
 
   constructor(private readonly opts: DatasetReplaceCommandOptions) {
     this.label = opts.label;

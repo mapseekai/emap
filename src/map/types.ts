@@ -71,6 +71,17 @@ export interface MapOptions {
    * multiple `Emap` instances.
    */
   workerPool?: MapshaperWorkerPool;
+  /**
+   * Override the engine's per-call routing decision when `useWorker`
+   * is `'auto'`. Receives the parsed command head set, vertex count,
+   * and the engine's default decision; return `true` to route through
+   * the worker, `false` to keep on the main thread. The default
+   * decision tree handles cheap commands (rename-fields / sort / …)
+   * and expensive ones (buffer / clean / dissolve / …) but apps with
+   * domain knowledge can refine it here. Ignored when `useWorker` is
+   * `true` / `false`.
+   */
+  workerRouting?: import('./worker-routing').WorkerRoutingFn;
 }
 
 export interface QueryRenderedFeaturesOptions {
@@ -893,8 +904,10 @@ export interface HighlightStyle {
   fill?: boolean;
 }
 
-export type EditVertexShapePart = number[];
-export type EditVertexShape = EditVertexShapePart[];
+// Aliased to the canonical path-shape vocabulary in `types/mapshaper-types`.
+// Kept as named exports for backwards compatibility with existing imports.
+export type EditVertexShapePart = import('../types/mapshaper-types').PathPart;
+export type EditVertexShape = import('../types/mapshaper-types').PathShape;
 
 export interface EditVertexArcs {
   getArcIter(arcId: number): {

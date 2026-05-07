@@ -1,6 +1,6 @@
-import mapshaper from 'mapshaper';
 import { Bounds } from './bounds';
 import { TopologySource } from '../source/source';
+import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 
 /** WGS84 semi-major axis (Earth radius in meters) */
 const WGS84_SEMI_MAJOR_AXIS = 6378137;
@@ -67,16 +67,14 @@ export class Projection {
 
     this._crs = targetCrs;
 
+    const adapter = getDefaultMapshaperAdapter();
     const newExtent = new Bounds();
     for (const source of sources.values()) {
       const dataset = source.getDataset();
       if (dataset?.layers) {
         for (const layer of dataset.layers) {
-          if (mapshaper.internal.layerHasGeometry(layer)) {
-            const bb = mapshaper.internal.getLayerBounds(
-              layer,
-              dataset.arcs,
-            );
+          if (adapter.layerHasGeometry(layer)) {
+            const bb = adapter.getLayerBounds(layer, dataset.arcs);
             if (bb) {
               newExtent.merge(new Bounds(bb.xmin, bb.ymin, bb.xmax, bb.ymax));
             }

@@ -29,9 +29,16 @@ function makeArcs(xx: number[], yy: number[], nn: number[]) {
   };
 }
 
-function makeSource(): TopologySource & { refreshDisplayArcs: ReturnType<typeof vi.fn> } {
-  return { refreshDisplayArcs: vi.fn() } as unknown as TopologySource & {
+function makeSource(): TopologySource & {
+  refreshDisplayArcs: ReturnType<typeof vi.fn>;
+  markDisplayArcsDirty: ReturnType<typeof vi.fn>;
+} {
+  return {
+    refreshDisplayArcs: vi.fn(),
+    markDisplayArcsDirty: vi.fn(),
+  } as unknown as TopologySource & {
     refreshDisplayArcs: ReturnType<typeof vi.fn>;
+    markDisplayArcsDirty: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -185,7 +192,7 @@ describe('FeatureAffineCommand', () => {
     });
     cmd.do();
     expect(updateArcBounds).toHaveBeenCalledTimes(2);
-    expect(source.refreshDisplayArcs).toHaveBeenCalledTimes(1);
+    expect(source.markDisplayArcsDirty).toHaveBeenCalledTimes(1);
   });
 
   it('label reflects affected feature count', () => {

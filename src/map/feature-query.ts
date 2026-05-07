@@ -2,9 +2,14 @@ import mapshaper from 'mapshaper';
 import Flatbush from 'flatbush';
 import { AffineTransform } from '../geo/transform';
 import { TopologySource } from '../source/source';
-import { getLayerId } from '../source/layer-utils';
+import { getLayerId, normalizePointShape } from '../source/layer-utils';
 import type { QueryRenderedFeaturesOptions, RenderedFeatureAttributes } from './map';
-import type { ArcCollection, MapshaperLayer } from '../types/mapshaper-types';
+import type {
+  ArcCollection,
+  MapshaperLayer,
+  PathPart,
+  PathShape,
+} from '../types/mapshaper-types';
 
 /** Pixel distance for a bullseye hit on point features */
 const POINT_BULLSEYE_DIST = 2;
@@ -18,7 +23,7 @@ type FlatbushIndex = InstanceType<typeof Flatbush>;
 type IndexedLayer = { index: FlatbushIndex; shapeCount: number } | null;
 
 interface HitCandidate {
-  shape: number[][];
+  shape: PathShape;
   id: number;
   dist: number;
   info?: { distance: number };
@@ -35,14 +40,18 @@ export class FeatureQuery {
   private _getInitialMX: () => number;
 
   // Per-(source, layer) Flatbush spatial index cache. Keyed by
-  // `${sourceId}|${layerIndex}|${shapes.length}|${arcs.size()}` so any
-  // dataset-replace op (which always changes shape and / or arc counts)
-  // implicitly invalidates. In-place geometry edits like translateSelected
-  // do NOT change the counts and therefore don't auto-invalidate — callers
-  // must call `clear(sourceId)` after such edits if they want fresh
-  // results. The map of (sourceId, layerIndex) → null entries marks
-  // layers that have been seen as empty so the no-shape fallback path
-  // also short-circuits.
+  // `${sourceId}|${layerIndex}|${shapes.length}|${arcs.size()}|${editVersion}`
+  // so any of three things implicitly invalidates a cached entry:
+  //   1. Dataset-replace ops change shape and/or arc counts.
+  //   2. In-place edits (vertex move / translate / shared-arc split / …)
+  //      bump `dataset.editVersion` via `bumpEditVersion`, which lands in
+  //      the cache key.
+  //   3. Manual `clear(sourceId)` calls (kept as an escape hatch for
+  //      callers that mutate via paths that don't go through edit
+  //      commands).
+  // The map of (sourceId, layerIndex) → null entries marks layers that
+  // have been seen as empty so the no-shape fallback path also
+  // short-circuits.
   private _indexCache: globalThis.Map<string, IndexedLayer> =
     new globalThis.Map();
 
@@ -107,8 +116,9 @@ export class FeatureQuery {
     if (source.type !== 'topology') return;
     const layers = source.getLayers();
     const arcs = source.getArcs();
+    const dataset = source.getDataset?.();
     for (let i = 0; i < layers.length; i++) {
-      this._getOrBuildIndex(sourceId, i, layers[i] as MapshaperLayer, arcs);
+      this._getOrBuildIndex(sourceId, i, layers[i] as MapshaperLayer, arcs, dataset);
     }
   }
 
@@ -126,11 +136,18 @@ export class FeatureQuery {
     layerIndex: number,
     layer: MapshaperLayer,
     arcs: ArcCollection | undefined,
+    /**
+     * Optional dataset reference. When supplied, its `editVersion` is
+     * folded into the cache key so in-place edits that don't change
+     * shape or arc counts (vertex move, translate, …) auto-invalidate.
+     */
+    dataset?: { editVersion?: number },
   ): IndexedLayer {
     const shapes = layer?.shapes;
     if (!shapes || shapes.length === 0) return null;
     const arcsSize = arcs?.size?.() ?? 0;
-    const key = `${sourceId}|${layerIndex}|${shapes.length}|${arcsSize}`;
+    const editVersion = dataset?.editVersion ?? 0;
+    const key = `${sourceId}|${layerIndex}|${shapes.length}|${arcsSize}|${editVersion}`;
     const cached = this._indexCache.get(key);
     if (cached !== undefined) return cached;
 
@@ -158,8 +175,7 @@ export class FeatureQuery {
       }
       let xmin = Infinity, ymin = Infinity, xmax = -Infinity, ymax = -Infinity;
       if (isPoint) {
-        const points = Array.isArray(shp[0]) ? (shp as unknown as number[][]) : [shp as unknown as number[]];
-        for (const p of points) {
+        for (const p of normalizePointShape(shp)) {
           if (!p || p.length < 2) continue;
           if (p[0] < xmin) xmin = p[0];
           if (p[0] > xmax) xmax = p[0];
@@ -167,8 +183,9 @@ export class FeatureQuery {
           if (p[1] > ymax) ymax = p[1];
         }
       } else if (arcs?.getSimpleShapeBbox) {
-        for (let i = 0; i < shp.length; i++) {
-          arcs.getSimpleShapeBbox(shp[i] as number[], partBox);
+        const path = shp as PathShape;
+        for (let i = 0; i < path.length; i++) {
+          arcs.getSimpleShapeBbox(path[i], partBox);
           if (partBox[0] < xmin) xmin = partBox[0];
           if (partBox[1] < ymin) ymin = partBox[1];
           if (partBox[2] > xmax) xmax = partBox[2];
@@ -260,6 +277,7 @@ export class FeatureQuery {
     x: number,
     y: number,
     dist: number,
+    dataset?: { editVersion?: number },
   ): HitCandidate[] {
     const cands: HitCandidate[] = [];
     const index: Record<number, HitCandidate> = {};
@@ -270,7 +288,7 @@ export class FeatureQuery {
     // Spatial index prefilter — only iterate shapes whose stored bbox
     // overlaps `[x ± dist, y ± dist]`. The per-part inner test below is
     // unchanged so precision stays identical.
-    const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, arcs);
+    const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, arcs, dataset);
     const candidateIds = indexed
       ? indexed.index.search(x - dist, y - dist, x + dist, y + dist)
       : null;
@@ -278,10 +296,11 @@ export class FeatureQuery {
 
     for (let i = 0; i < idCount; i++) {
       const shpId = candidateIds !== null ? candidateIds[i] : i;
-      const shp = shapes[shpId];
+      const shp = shapes[shpId] as PathShape | null | undefined;
       if (!shp) continue;
       for (let j = 0; j < shp.length; j++) {
-        arcs.getSimpleShapeBbox!(shp[j], bbox);
+        const part: PathPart = shp[j];
+        arcs.getSimpleShapeBbox!(part, bbox);
         if (
           x + dist < bbox[0] ||
           x - dist > bbox[2] ||
@@ -295,7 +314,7 @@ export class FeatureQuery {
           cand = index[shpId] = { shape: [], id: shpId, dist: 0 };
           cands.push(cand);
         }
-        cand.shape.push(shp[j]);
+        cand.shape.push(part);
       }
     }
     return cands;
@@ -336,6 +355,7 @@ export class FeatureQuery {
     layer: MapshaperLayer,
     x: number,
     y: number,
+    dataset?: { editVersion?: number },
   ): number[] {
     const geom = mapshaper.geom;
     const toPx = Math.abs(this._getTransform().mx || 1);
@@ -349,7 +369,7 @@ export class FeatureQuery {
     // y ± hitThresholdInData]`. Since we're working in data-space here,
     // convert the pixel threshold to data units via `1 / toPx`.
     const dataThresh = hitThreshold / (toPx || 1);
-    const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, undefined);
+    const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, undefined, dataset);
     const candidateIds = indexed
       ? indexed.index.search(x - dataThresh, y - dataThresh, x + dataThresh, y + dataThresh)
       : null;
@@ -359,7 +379,7 @@ export class FeatureQuery {
       const id = candidateIds !== null ? candidateIds[i] : i;
       const shp = shapes[id];
       if (!shp) continue;
-      for (const p of shp) {
+      for (const p of normalizePointShape(shp)) {
         if (!p) continue;
         const dist = geom.distance2D(x, y, p[0], p[1]) * toPx;
         if (dist > hitThreshold) continue;
@@ -383,11 +403,12 @@ export class FeatureQuery {
     x: number,
     y: number,
     bufArg: number,
+    dataset?: { editVersion?: number },
   ): number[] {
     const maxDist = this._getZoomAdjustedHitBuffer(15, 2);
     const bufPix = bufArg >= 0 ? bufArg : 0.05;
     const bufDist = this._getZoomAdjustedHitBuffer(bufPix, 0);
-    let cands = this._findHitCandidates(sourceId, layerIndex, layer, arcs, x, y, maxDist);
+    let cands = this._findHitCandidates(sourceId, layerIndex, layer, arcs, x, y, maxDist, dataset);
     this._sortByDistance(x, y, cands, arcs);
     cands = this._pickNearestCandidates(cands, bufDist, maxDist);
     return cands.length ? [cands[0].id] : [];
@@ -400,10 +421,11 @@ export class FeatureQuery {
     arcs: ArcCollection,
     x: number,
     y: number,
+    dataset?: { editVersion?: number },
   ): number[] {
     const geom = mapshaper.geom;
     const maxDist = this._getZoomAdjustedHitBuffer(10, 1);
-    const cands = this._findHitCandidates(sourceId, layerIndex, layer, arcs, x, y, maxDist);
+    const cands = this._findHitCandidates(sourceId, layerIndex, layer, arcs, x, y, maxDist, dataset);
     let hits: HitCandidate[] = [];
     for (const cand of cands) {
       if (geom.testPointInPolygon(x, y, cand.shape, arcs)) {
@@ -426,9 +448,10 @@ export class FeatureQuery {
     arcs: ArcCollection,
     x: number,
     y: number,
+    dataset?: { editVersion?: number },
   ): number[] {
-    const a = this._polygonTest(sourceId, layerIndex, layer, arcs, x, y);
-    const b = this._polylineTest(sourceId, layerIndex, layer, arcs, x, y, 5);
+    const a = this._polygonTest(sourceId, layerIndex, layer, arcs, x, y, dataset);
+    const b = this._polylineTest(sourceId, layerIndex, layer, arcs, x, y, 5, dataset);
     return a.length ? a : b;
   }
 
@@ -452,6 +475,7 @@ export class FeatureQuery {
       const arcs = displayArcs
         ? displayArcs.getScaledArcs(pixelSize)
         : source.getArcs();
+      const dataset = source.getDataset?.();
 
       for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
         const layer = layers[layerIndex] as MapshaperLayer;
@@ -464,11 +488,11 @@ export class FeatureQuery {
         const geometryType = layer.geometry_type;
         let ids: number[] = [];
         if (geometryType === 'point') {
-          ids = this._pointTest(sourceId, layerIndex, layer, mx, my);
+          ids = this._pointTest(sourceId, layerIndex, layer, mx, my, dataset);
         } else if (geometryType === 'polyline' && arcs) {
-          ids = this._polylineTest(sourceId, layerIndex, layer, arcs, mx, my, -1);
+          ids = this._polylineTest(sourceId, layerIndex, layer, arcs, mx, my, -1, dataset);
         } else if (geometryType === 'polygon' && arcs) {
-          ids = this._polygonVertexTest(sourceId, layerIndex, layer, arcs, mx, my);
+          ids = this._polygonVertexTest(sourceId, layerIndex, layer, arcs, mx, my, dataset);
         }
         if (ids.length === 0) continue;
 
@@ -516,6 +540,7 @@ export class FeatureQuery {
       const arcs = displayArcs
         ? displayArcs.getScaledArcs(pixelSize)
         : source.getArcs();
+      const dataset = source.getDataset?.();
 
       for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
         const layer = layers[layerIndex] as MapshaperLayer;
@@ -532,7 +557,7 @@ export class FeatureQuery {
         // Spatial index prefilter — `index.search` returns only shape ids
         // whose stored bbox overlaps the query bbox. Falls back to a full
         // scan for shape-less / un-indexed layers.
-        const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, arcs);
+        const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, arcs, dataset);
         const candidateIds = indexed
           ? indexed.index.search(xmin, ymin, xmax, ymax)
           : null;
@@ -544,14 +569,14 @@ export class FeatureQuery {
           if (!shp) continue;
           let hit = false;
           if (geometryType === 'point') {
-            const points = Array.isArray(shp[0]) ? shp : [shp];
-            hit = points.some(
-              (p: number[]) =>
+            hit = normalizePointShape(shp).some(
+              (p) =>
                 p[0] >= xmin && p[0] <= xmax && p[1] >= ymin && p[1] <= ymax,
             );
           } else if (arcs) {
-            for (let i = 0; i < shp.length; i++) {
-              arcs.getSimpleShapeBbox!(shp[i], bboxTmp);
+            const path = shp as PathShape;
+            for (let i = 0; i < path.length; i++) {
+              arcs.getSimpleShapeBbox!(path[i], bboxTmp);
               if (
                 xmax < bboxTmp[0] ||
                 xmin > bboxTmp[2] ||

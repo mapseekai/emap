@@ -21,13 +21,40 @@ export interface TopologySource extends Source {
   type: 'topology';
   getArcs(): ArcCollection | undefined;
   getLayers(): any[];
+  /**
+   * Returns the live mapshaper dataset reference owned by this source.
+   *
+   * **Do not mutate the returned object directly**. Edit-history caches
+   * (arc-flag flags, Flatbush spatial indices, the LOD copy in DisplayArcs)
+   * key off `(layer, shape, arc)` identity and shape/arc counts; mutations
+   * applied outside the official edit-command surface will silently desync
+   * those caches. To change a dataset, route the change through
+   * `Emap.ops.*` (clip / dissolve / buffer / …), `Emap.editSession.*`
+   * (translate / rotate / scale), or a custom `EditCommand`. Read-only
+   * inspection — `getDataset()?.info?.crs_string`, `dataset.layers[0].name`,
+   * arc iteration via `dataset.arcs.getArcIter()` — is always safe.
+   *
+   * The TypeScript return type intentionally stays `MapshaperDataset` (not
+   * `Readonly<MapshaperDataset>`) because mapshaper's own internal helpers
+   * — and a number of in-tree edit commands — receive the dataset and
+   * mutate it through trusted code paths. A blanket `Readonly` would just
+   * force casts everywhere.
+   */
   getDataset(): MapshaperDataset | undefined;
   getDisplayArcs(): DisplayArcs | null;
   /**
-   * Re-initialize the LOD copy in DisplayArcs from the current dataset arcs.
-   * Call after any edit that mutates arc vertex layout (insert / delete / append).
+   * Eagerly re-initialize the LOD copy in DisplayArcs from the current
+   * dataset arcs. Use for one-shot mutations that need the new copy ready
+   * immediately. Per-frame in-place edits (drag sessions) should prefer
+   * {@link markDisplayArcsDirty} to defer the rebuild until the renderer
+   * actually needs the filtered copy.
    */
   refreshDisplayArcs(): void;
+  /**
+   * Mark the LOD copy stale; the next `getScaledArcs` rebuilds it lazily.
+   * O(1); safe inside per-frame drag callbacks.
+   */
+  markDisplayArcsDirty?(): void;
   /**
    * Replace the active dataset (used by undo/redo of dataset-replace commands
    * and by reproject). Rebuilds DisplayArcs and fires the `data` event so the

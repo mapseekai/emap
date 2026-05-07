@@ -8,16 +8,21 @@ import { FieldRemoveCommand } from '../edit/commands/field-remove';
 import { FieldRenameCommand } from '../edit/commands/field-rename';
 import type { FeatureRef } from './types';
 import type { EmapHostInternal } from './emap-host';
+import { Err, OK, type OpResult } from './op-result';
 
 /**
  * Attribute-editing manager. Owned by Emap and exposed as `emap.attributes`.
  * Construction takes the host Emap; the manager calls back into a small
- * surface of internal helpers (`_resolveLayer`, `_history`, ...) on the host.
+ * surface of internal helpers (`layers.resolve`, `_history`, ...) on the host.
+ *
+ * Every method returns `OpResult<void>` — `{ ok: true, value: undefined }` on
+ * success, `{ ok: false, error: OpError }` for unresolvable refs or no-op
+ * calls. Errors carry a structured `kind` so UIs can branch on the cause.
  */
 export class AttributeOps {
   constructor(private _emap: EmapHostInternal) {}
 
-  setFeatureProperty(ref: FeatureRef, key: string, value: unknown): boolean {
+  setFeatureProperty(ref: FeatureRef, key: string, value: unknown): OpResult {
     return this.setFeatureProperties(ref, { [key]: value });
   }
 
@@ -28,18 +33,18 @@ export class AttributeOps {
    * - `props[key] === undefined` → delete the key from the record
    * - any other value → set / overwrite the key
    *
-   * Returns `false` for unresolvable refs or when every key already has the
-   * requested value (no-op call); no command is pushed and no events fire.
+   * Returns a `validation` error when every key already has the requested
+   * value (no-op call); no command is pushed and no events fire.
    */
   setFeatureProperties(
     ref: FeatureRef,
     props: Record<string, unknown>,
-  ): boolean {
-    const layer = this._emap._resolveLayer(ref.source, ref.layer);
-    if (!layer) return false;
+  ): OpResult {
+    const layer = this._emap.layers.resolve(ref.source, ref.layer);
+    if (!layer) return Err.notFound('layer', ref.layer);
     const records = layer.data?.getRecords?.();
     const record = records?.[ref.id];
-    if (!record) return false;
+    if (!record) return Err.notFound('field', `record#${ref.id}`);
 
     const prev: Record<string, unknown> = {};
     const next: Record<string, unknown> = {};
@@ -57,7 +62,7 @@ export class AttributeOps {
     }
 
     if (Object.keys(prev).length === 0 && Object.keys(next).length === 0) {
-      return false;
+      return Err.validation('props', 'no-op: every requested value already matches the record');
     }
 
     const cmd = new FeaturePropertyChangeCommand({
@@ -70,20 +75,21 @@ export class AttributeOps {
     this._emap._history.push(cmd);
     this._emap._fireHistoryChange();
     this._emap._scheduleRender();
-    return true;
+    return OK;
   }
 
   /**
    * Add a new column to a layer's data table. Records that already carry the
    * key are skipped (and not rolled back by undo). `defaultValue` defaults to
-   * `null`. Returns `false` if the source / target / data table cannot be
-   * resolved.
+   * `null`. Returns a `not-found` error when the source / target / data table
+   * cannot be resolved.
    */
   addField(
     opts: { source: string; target: string; field: string; defaultValue?: unknown },
-  ): boolean {
-    const layer = this._emap._resolveLayer(opts.source, opts.target);
-    if (!layer?.data) return false;
+  ): OpResult {
+    const layer = this._emap.layers.resolve(opts.source, opts.target);
+    if (!layer) return Err.notFound('layer', opts.target);
+    if (!layer.data) return Err.validation('target', 'layer has no data table');
     const cmd = new FieldAddCommand({
       layer,
       field: opts.field,
@@ -93,43 +99,45 @@ export class AttributeOps {
     this._emap._history.push(cmd);
     this._emap._fireHistoryChange();
     this._emap._scheduleRender();
-    return true;
+    return OK;
   }
 
   /**
    * Drop a column from a layer's data table. Per-record values are
    * snapshotted for undo so removing the field is fully reversible.
-   * Returns `false` if the source / target / data table cannot be resolved.
    */
   removeField(
     opts: { source: string; target: string; field: string },
-  ): boolean {
-    const layer = this._emap._resolveLayer(opts.source, opts.target);
-    if (!layer?.data) return false;
+  ): OpResult {
+    const layer = this._emap.layers.resolve(opts.source, opts.target);
+    if (!layer) return Err.notFound('layer', opts.target);
+    if (!layer.data) return Err.validation('target', 'layer has no data table');
     const cmd = new FieldRemoveCommand({ layer, field: opts.field });
     cmd.do();
     this._emap._history.push(cmd);
     this._emap._fireHistoryChange();
     this._emap._scheduleRender();
-    return true;
+    return OK;
   }
 
   /**
-   * Rename a column on every record in a layer. Refuses (returns `false`) when
-   * any record already carries both `from` and `to` so silent overwrites are
-   * impossible. Use `removeField(to)` first if that is the intent.
+   * Rename a column on every record in a layer. Refuses with a `validation`
+   * error when any record already carries both `from` and `to` so silent
+   * overwrites are impossible. Use `removeField(to)` first if that is the
+   * intent.
    */
   renameField(
     opts: { source: string; target: string; from: string; to: string },
-  ): boolean {
-    const layer = this._emap._resolveLayer(opts.source, opts.target);
-    if (!layer?.data) return false;
+  ): OpResult {
+    const layer = this._emap.layers.resolve(opts.source, opts.target);
+    if (!layer) return Err.notFound('layer', opts.target);
+    if (!layer.data) return Err.validation('target', 'layer has no data table');
     const records = layer.data.getRecords?.();
-    if (!records) return false;
-    if (opts.from === opts.to) return false;
+    if (!records) return Err.validation('target', 'data table has no records');
+    if (opts.from === opts.to) return Err.validation('to', '`from` and `to` are identical');
     for (const r of records) {
       if (r && opts.from in r && opts.to in r) {
-        return false;
+        return Err.validation('to', `would overwrite existing '${opts.to}' on at least one record`);
       }
     }
     const cmd = new FieldRenameCommand({ layer, from: opts.from, to: opts.to });
@@ -137,6 +145,6 @@ export class AttributeOps {
     this._emap._history.push(cmd);
     this._emap._fireHistoryChange();
     this._emap._scheduleRender();
-    return true;
+    return OK;
   }
 }
