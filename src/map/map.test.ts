@@ -4530,7 +4530,7 @@ describe('Emap useWorker routing', () => {
   });
 
   it('routes _runDatasetCommand through workerPool.run with packed payload', async () => {
-    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.explodeLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(true);
 
     expect(exportSpy).toHaveBeenCalledTimes(1);
@@ -4539,7 +4539,7 @@ describe('Emap useWorker routing', () => {
     expect(runSpy).toHaveBeenCalledTimes(1);
     const [cmd, packed] = runSpy.mock.calls[0] as unknown[];
     expect(typeof cmd).toBe('string');
-    expect(cmd).toMatch(/-drop/);
+    expect(cmd).toMatch(/-explode/);
     expect(packed).toEqual({ datasets: [{ kind: 'packed-original' }] });
 
     expect(restoreSpy).toHaveBeenCalledTimes(1);
@@ -4565,7 +4565,7 @@ describe('Emap useWorker routing', () => {
     const errors: any[] = [];
     map.on('error', (e: any) => errors.push(e));
 
-    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.explodeLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(false);
     expect(errors).toHaveLength(1);
     expect(errors[0].error.message).toBe('worker boom');
@@ -4577,7 +4577,7 @@ describe('Emap useWorker routing', () => {
     restoreSpy.mockImplementationOnce(async () => ({ datasets: [] }));
     const errors: any[] = [];
     map.on('error', (e: any) => errors.push(e));
-    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.explodeLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(false);
     expect(errors).toHaveLength(1);
     expect(errors[0].error.message).toMatch(/no dataset in response/);
@@ -4681,28 +4681,28 @@ describe('Emap useWorker: \'auto\' thresholding', () => {
 
   it('routes to main thread when vertex count is below threshold', async () => {
     setVertexCount(500); // threshold is 1000
-    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.explodeLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(true);
     expect(runSpy).not.toHaveBeenCalled();
   });
 
   it('routes to worker when vertex count is at threshold', async () => {
     setVertexCount(1000);
-    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.explodeLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(true);
     expect(runSpy).toHaveBeenCalledTimes(1);
   });
 
   it('routes to worker when vertex count is above threshold', async () => {
     setVertexCount(50_000);
-    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.explodeLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(true);
     expect(runSpy).toHaveBeenCalledTimes(1);
   });
 
   it('routes arc-less datasets (point-only) to main thread', async () => {
     beforeDs.arcs = undefined;
-    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.explodeLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(true);
     expect(runSpy).not.toHaveBeenCalled();
   });
@@ -4710,7 +4710,7 @@ describe('Emap useWorker: \'auto\' thresholding', () => {
   it('honours custom workerThreshold', async () => {
     setPrivate(map, '_workerThreshold', 100);
     setVertexCount(150);
-    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.explodeLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(true);
     expect(runSpy).toHaveBeenCalledTimes(1);
   });
@@ -4791,12 +4791,12 @@ describe('Emap workerjobstart / workerjobend events', () => {
     map.on('workerjobstart', (e: any) => events.push({ type: 'start', payload: e }));
     map.on('workerjobend', (e: any) => events.push({ type: 'end', payload: e }));
 
-    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.explodeLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(true);
     expect(events.length).toBe(2);
     expect(events[0].type).toBe('start');
-    expect(events[0].payload.cmd).toMatch(/-drop/);
-    expect(events[0].payload.label).toBe('Drop states');
+    expect(events[0].payload.cmd).toMatch(/-explode/);
+    expect(events[0].payload.label).toBe('Explode states');
     expect(events[0].payload.datasetVertexCount).toBe(12345);
     expect(typeof events[0].payload.id).toBe('number');
 
@@ -4811,7 +4811,7 @@ describe('Emap workerjobstart / workerjobend events', () => {
     const events: any[] = [];
     map.on('workerjobend', (e: any) => events.push(e));
 
-    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.explodeLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(false);
     expect(events.length).toBe(1);
     expect(events[0].ok).toBe(false);
@@ -4824,7 +4824,7 @@ describe('Emap workerjobstart / workerjobend events', () => {
     map.on('workerjobstart', (e: any) => events.push(e));
     map.on('workerjobend', (e: any) => events.push(e));
 
-    const ok = await map.ops.dropLayer({ source: 'src1', target: 'states' });
+    const ok = await map.ops.explodeLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(true);
     expect(events.length).toBe(0);
     expect(runSpy).not.toHaveBeenCalled();
@@ -4835,8 +4835,8 @@ describe('Emap workerjobstart / workerjobend events', () => {
     map.on('workerjobstart', (e: any) => events.push({ type: 'start', payload: e }));
     map.on('workerjobend', (e: any) => events.push({ type: 'end', payload: e }));
 
-    const a = map.ops.dropLayer({ source: 'src1', target: 'states' });
-    const b = map.ops.dropLayer({ source: 'src1', target: 'states' });
+    const a = map.ops.explodeLayer({ source: 'src1', target: 'states' });
+    const b = map.ops.explodeLayer({ source: 'src1', target: 'states' });
     await Promise.all([a, b]);
 
     const startIds = events.filter((e) => e.type === 'start').map((e) => e.payload.id);

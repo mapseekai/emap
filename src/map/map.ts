@@ -149,6 +149,13 @@ export class Emap extends EventDispatcher {
   // `DEFAULT_WORKER_THRESHOLD` (50_000). Read by `MapshaperOps`; the `_`
   // prefix still signals internal-only.
   _workerThreshold: number = DEFAULT_WORKER_THRESHOLD;
+  /**
+   * Optional caller-supplied routing decision. When set, `_runDatasetCommand`
+   * forwards every command-info bundle to it and uses the boolean result
+   * verbatim. Pass `MapOptions.workerRouting` to install one. Read by
+   * `MapshaperOps` via the host.
+   */
+  _workerRouting?: import('./worker-routing').WorkerRoutingFn;
   // Default to `disabled` so apps don't accidentally execute arbitrary
   // JavaScript from external/untrusted layer config. Apps that load only
   // their own data can opt back in via `expressionPolicy: 'trusted'` in
@@ -210,6 +217,7 @@ export class Emap extends EventDispatcher {
     if (typeof options.workerThreshold === 'number' && options.workerThreshold >= 0) {
       this._workerThreshold = options.workerThreshold;
     }
+    this._workerRouting = options.workerRouting;
     if (this._workerMode !== false || options.workerPool) {
       if (options.workerPool) {
         this._workerPool = options.workerPool;

@@ -34,6 +34,7 @@ export interface EmapHostInternal {
   readonly _workerPool: MapshaperWorkerPool | null;
   readonly _workerMode: boolean | 'auto';
   readonly _workerThreshold: number;
+  readonly _workerRouting?: import('./worker-routing').WorkerRoutingFn;
 
   // ---- shared services -----------------------------------------------
   /**

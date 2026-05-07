@@ -71,6 +71,17 @@ export interface MapOptions {
    * multiple `Emap` instances.
    */
   workerPool?: MapshaperWorkerPool;
+  /**
+   * Override the engine's per-call routing decision when `useWorker`
+   * is `'auto'`. Receives the parsed command head set, vertex count,
+   * and the engine's default decision; return `true` to route through
+   * the worker, `false` to keep on the main thread. The default
+   * decision tree handles cheap commands (rename-fields / sort / …)
+   * and expensive ones (buffer / clean / dissolve / …) but apps with
+   * domain knowledge can refine it here. Ignored when `useWorker` is
+   * `true` / `false`.
+   */
+  workerRouting?: import('./worker-routing').WorkerRoutingFn;
 }
 
 export interface QueryRenderedFeaturesOptions {

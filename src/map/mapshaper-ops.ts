@@ -10,6 +10,7 @@ import { resolveLayerInList } from './layer-registry';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { quoteCliArg } from './command-args';
 import { Err, OK, okValue, type OpResult } from './op-result';
+import { parseCommandHeads, shouldUseWorker } from './worker-routing';
 import type {
   ApplyExpressionOptions,
   BufferOptions,
@@ -1419,7 +1420,13 @@ export class MapshaperOps {
 
     try {
       const packed = await getDefaultMapshaperAdapter().exportDatasetsToPack([dataset], { compact: false });
-      const promise = this._emap._workerPool.dispatchWithId(id, cmd, packed, inputFiles);
+      // Collect every Uint8Array buffer in `packed` (mapshaper packs arc
+      // storage as TypedArrays) and hand them to postMessage as
+      // transferables. Net effect: structured-clone no longer copies
+      // multi-MB arc buffers across the boundary; main-thread peak
+      // memory drops from ~2× dataset to ~1×.
+      const transferList = collectTransferables(packed);
+      const promise = this._emap._workerPool.dispatchWithId(id, cmd, packed, inputFiles, transferList);
       const resultPacked = await promise;
       const restored = await getDefaultMapshaperAdapter().restoreSessionData(resultPacked);
       if (!restored.datasets || restored.datasets.length === 0) {
@@ -1460,18 +1467,28 @@ export class MapshaperOps {
     // restore on undo.
     const before: MapshaperDataset = getDefaultMapshaperAdapter().copyDataset(original);
 
-    // Decide worker vs main-thread.
-    // - false      → main-thread always
-    // - true       → worker always (when pool exists)
-    // - 'auto'     → worker when arc vertex count meets workerThreshold
+    // Routing: command-family aware (cheap commands stay on main thread,
+    // expensive ones trip at half the threshold). Pure when no pool exists.
     let useWorker = false;
     if (this._emap._workerPool) {
-      if (this._emap._workerMode === true) {
-        useWorker = true;
-      } else if (this._emap._workerMode === 'auto') {
-        const vertexCount = original.arcs?.getPointCount?.() ?? 0;
-        useWorker = vertexCount >= this._emap._workerThreshold;
-      }
+      const vertexCount = original.arcs?.getPointCount?.() ?? 0;
+      const defaultDecision = shouldUseWorker(
+        cmd,
+        vertexCount,
+        this._emap._workerMode,
+        this._emap._workerThreshold,
+      );
+      const routing = this._emap._workerRouting;
+      useWorker = routing
+        ? routing({
+          cmd,
+          heads: parseCommandHeads(cmd),
+          vertexCount,
+          mode: this._emap._workerMode,
+          threshold: this._emap._workerThreshold,
+          defaultDecision,
+        })
+        : defaultDecision;
     }
 
     let after: MapshaperDataset;
@@ -1607,4 +1624,51 @@ function runMapshaperCommandOnDataset(
   inputFiles?: Record<string, Uint8Array | string>,
 ): Promise<MapshaperDataset> {
   return getDefaultMapshaperAdapter().runOnDataset(cmd, dataset, inputFiles);
+}
+
+/**
+ * Walk a `PackedSession` object and gather every `ArrayBuffer` referenced
+ * by a `Uint8Array` field for postMessage transfer. Visits arrays and
+ * plain-object children recursively; skips primitives and known-cycle
+ * types (DataView, ArrayBuffer-on-shared-realm). De-dups by buffer
+ * identity so the same backing store isn't transferred twice.
+ *
+ * Returns a fresh array; callers should NOT continue using the
+ * Uint8Arrays after the transfer (their byteLength becomes 0 in the
+ * source realm).
+ */
+function collectTransferables(root: unknown): Transferable[] {
+  const out: Transferable[] = [];
+  const seen = new Set<ArrayBuffer>();
+  const visit = (val: unknown): void => {
+    if (!val || typeof val !== 'object') return;
+    if (val instanceof Uint8Array) {
+      const buf = val.buffer;
+      if (buf instanceof ArrayBuffer && !seen.has(buf)) {
+        seen.add(buf);
+        out.push(buf);
+      }
+      return;
+    }
+    if (val instanceof ArrayBuffer) {
+      if (!seen.has(val)) {
+        seen.add(val);
+        out.push(val);
+      }
+      return;
+    }
+    if (Array.isArray(val)) {
+      for (const item of val) visit(item);
+      return;
+    }
+    // Plain object: walk own enumerable values. Skip DataView /
+    // typed-array views that aren't Uint8Array — packed sessions only
+    // ever carry the latter, and casting other views to ArrayBuffer
+    // would over-eagerly transfer shared-buffer slices.
+    for (const k of Object.keys(val)) {
+      visit((val as Record<string, unknown>)[k]);
+    }
+  };
+  visit(root);
+  return out;
 }
