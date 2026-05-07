@@ -48,6 +48,12 @@ export type {
   LoadSnapshotOptions,
 } from './map/map';
 export { FeatureQuery } from './map/feature-query';
+export {
+  quoteCliArg,
+  isValidLayerName,
+  isValidFieldName,
+  findInvalidFieldName,
+} from './map/command-args';
 export { HighlightManager } from './map/highlight-manager';
 export { Selection } from './map/selection';
 export type { SelectMode, SelectionDiff } from './map/selection';

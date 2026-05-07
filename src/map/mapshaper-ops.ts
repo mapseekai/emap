@@ -9,6 +9,7 @@ import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types'
 import type { EmapHostInternal } from './emap-host';
 import { resolveLayerInList } from './layer-registry';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
+import { quoteCliArg } from './command-args';
 import type {
   ApplyExpressionOptions,
   BufferOptions,
@@ -73,7 +74,7 @@ export class MapshaperOps {
     if (!resolveLayerInList(dataset.layers, opts.mask)) return false;
 
     const verb = op === 'clip' ? 'Clip' : 'Erase';
-    const cmd = `-target ${quoteMapshaperArg(opts.target)} -${op} source=${quoteMapshaperArg(opts.mask)}`;
+    const cmd = `-target ${quoteCliArg(opts.target)} -${op} source=${quoteCliArg(opts.mask)}`;
     return this._runDatasetCommand(opts.source, cmd, `${verb} ${opts.target}`);
   }
 
@@ -109,16 +110,16 @@ export class MapshaperOps {
     // feature into one (mapshaper's default for -dissolve with no key).
     let groupToken = '';
     if (opts.field) {
-      groupToken = ` ${quoteMapshaperArg(opts.field)}`;
+      groupToken = ` ${quoteCliArg(opts.field)}`;
     } else if (hasFields) {
       const safeFields = opts.fields!.filter((f) => typeof f === 'string' && !f.includes(','));
       if (safeFields.length > 0) {
-        groupToken = ` ${quoteMapshaperArg(safeFields.join(','))}`;
+        groupToken = ` ${quoteCliArg(safeFields.join(','))}`;
       }
     }
 
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-target ${quoteCliArg(opts.target)}`,
       `-dissolve${groupToken}`,
     ];
 
@@ -134,14 +135,14 @@ export class MapshaperOps {
     if (copyFields.length > 0) parts.push(`copy-fields=${copyFields.join(',')}`);
 
     if (opts.calc && opts.calc.trim()) {
-      parts.push(`calc=${quoteMapshaperArg(opts.calc)}`);
+      parts.push(`calc=${quoteCliArg(opts.calc)}`);
     }
     if (opts.where && opts.where.trim()) {
-      parts.push(`where=${quoteMapshaperArg(opts.where)}`);
+      parts.push(`where=${quoteCliArg(opts.where)}`);
     }
     if (opts.multipart) parts.push('multipart');
     if (opts.name && opts.name.trim()) {
-      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+      parts.push(`name=${quoteCliArg(opts.name)}`);
     }
     if (opts.noReplace) parts.push('no-replace');
 
@@ -183,9 +184,9 @@ export class MapshaperOps {
     // Numbers go in bare; expression strings are quoted so the shell-style
     // command parser keeps them intact.
     const radiusArg =
-      typeof opts.radius === 'number' ? String(opts.radius) : quoteMapshaperArg(opts.radius);
+      typeof opts.radius === 'number' ? String(opts.radius) : quoteCliArg(opts.radius);
     const capArg = opts.capStyle ? ` cap-style=${opts.capStyle}` : '';
-    const cmd = `-target ${quoteMapshaperArg(opts.target)} -buffer ${radiusArg}${capArg}`;
+    const cmd = `-target ${quoteCliArg(opts.target)} -buffer ${radiusArg}${capArg}`;
     return this._runDatasetCommand(opts.source, cmd, `Buffer ${opts.target}`);
   }
 
@@ -213,9 +214,9 @@ export class MapshaperOps {
     if (!this._emap._allowExpressionEvaluation([opts.expression, opts.where], 'applyExpression')) return false;
 
     const whereArg = opts.where && opts.where.trim()
-      ? ` where=${quoteMapshaperArg(opts.where)}`
+      ? ` where=${quoteCliArg(opts.where)}`
       : '';
-    const cmd = `-target ${quoteMapshaperArg(opts.target)} -each ${quoteMapshaperArg(opts.expression)}${whereArg}`;
+    const cmd = `-target ${quoteCliArg(opts.target)} -each ${quoteCliArg(opts.expression)}${whereArg}`;
     return this._runDatasetCommand(opts.source, cmd, `Update ${opts.target}`);
   }
 
@@ -233,7 +234,7 @@ export class MapshaperOps {
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!resolveLayerInList(dataset.layers, opts.target)) return false;
-    const cmd = `-target ${quoteMapshaperArg(opts.target)} -explode`;
+    const cmd = `-target ${quoteCliArg(opts.target)} -explode`;
     return this._runDatasetCommand(opts.source, cmd, `Explode ${opts.target}`);
   }
 
@@ -257,14 +258,14 @@ export class MapshaperOps {
     if (!this._emap._allowExpressionEvaluation([opts.where], 'innerlinesLayer')) return false;
 
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-target ${quoteCliArg(opts.target)}`,
       `-innerlines`,
     ];
     if (opts.where && opts.where.trim()) {
-      parts.push(`where=${quoteMapshaperArg(opts.where)}`);
+      parts.push(`where=${quoteCliArg(opts.where)}`);
     }
     if (opts.name && opts.name.trim()) {
-      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+      parts.push(`name=${quoteCliArg(opts.name)}`);
     }
     if (opts.noReplace) {
       parts.push('no-replace');
@@ -296,11 +297,11 @@ export class MapshaperOps {
     if (!this._emap._allowExpressionEvaluation([opts.expression], 'filterFeatures')) return false;
 
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-target ${quoteCliArg(opts.target)}`,
       `-filter`,
     ];
     if (hasExpr) {
-      parts.push(quoteMapshaperArg(opts.expression as string));
+      parts.push(quoteCliArg(opts.expression as string));
     }
     if (opts.invert) {
       parts.push('invert');
@@ -328,7 +329,7 @@ export class MapshaperOps {
     if (!resolveLayerInList(dataset.layers, opts.target)) return false;
 
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-target ${quoteCliArg(opts.target)}`,
       `-snap`,
     ];
     if (typeof opts.interval === 'number') {
@@ -378,7 +379,7 @@ export class MapshaperOps {
     }
 
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-target ${quoteCliArg(opts.target)}`,
       `-clean`,
     ];
     if (opts.gapFillArea !== undefined) parts.push(`gap-fill-area=${opts.gapFillArea}`);
@@ -466,7 +467,7 @@ export class MapshaperOps {
     if (!this._emap._allowExpressionEvaluation([opts.calc], 'mosaicLayer')) return false;
 
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-target ${quoteCliArg(opts.target)}`,
       `-mosaic`,
     ];
     if (typeof opts.snapInterval === 'number') {
@@ -479,10 +480,10 @@ export class MapshaperOps {
       parts.push('no-replace');
     }
     if (opts.name && opts.name.trim()) {
-      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+      parts.push(`name=${quoteCliArg(opts.name)}`);
     }
     if (opts.calc && opts.calc.trim()) {
-      parts.push(`calc=${quoteMapshaperArg(opts.calc)}`);
+      parts.push(`calc=${quoteCliArg(opts.calc)}`);
     }
     return this._runDatasetCommand(opts.source, parts.join(' '), `Mosaic ${opts.target}`);
   }
@@ -516,7 +517,7 @@ export class MapshaperOps {
 
     const targetList = opts.targets.join(',');
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(targetList)}`,
+      `-target ${quoteCliArg(targetList)}`,
       `-union`,
     ];
     if (opts.fields && opts.fields.length > 0) {
@@ -524,7 +525,7 @@ export class MapshaperOps {
       if (safe.length > 0) parts.push(`fields=${safe.join(',')}`);
     }
     if (opts.name && opts.name.trim()) {
-      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+      parts.push(`name=${quoteCliArg(opts.name)}`);
     }
     if (opts.noReplace) {
       parts.push('no-replace');
@@ -557,8 +558,8 @@ export class MapshaperOps {
     if (!dividerLayer || dividerLayer.geometry_type !== 'polygon') return false;
 
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
-      `-divide source=${quoteMapshaperArg(opts.divider)}`,
+      `-target ${quoteCliArg(opts.target)}`,
+      `-divide source=${quoteCliArg(opts.divider)}`,
     ];
     if (opts.fields && opts.fields.length > 0) {
       const safe = opts.fields.filter((f) => !f.includes(','));
@@ -612,14 +613,14 @@ export class MapshaperOps {
     }
 
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-target ${quoteCliArg(opts.target)}`,
       `-points ${opts.type}`,
     ];
     if (opts.type === 'interpolated') {
       parts.push(`interval=${opts.interval}`);
     }
     if (opts.name && opts.name.trim()) {
-      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+      parts.push(`name=${quoteCliArg(opts.name)}`);
     }
     if (opts.noReplace) parts.push('no-replace');
     return this._runDatasetCommand(opts.source, parts.join(' '), `Points ${opts.target}`);
@@ -653,11 +654,11 @@ export class MapshaperOps {
       : '-lines';
 
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-target ${quoteCliArg(opts.target)}`,
       linesToken,
     ];
     if (opts.name && opts.name.trim()) {
-      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+      parts.push(`name=${quoteCliArg(opts.name)}`);
     }
     if (opts.noReplace) parts.push('no-replace');
     return this._runDatasetCommand(opts.source, parts.join(' '), `Lines ${opts.target}`);
@@ -681,7 +682,7 @@ export class MapshaperOps {
     if (!layer || layer.geometry_type !== 'polyline') return false;
 
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
+      `-target ${quoteCliArg(opts.target)}`,
       '-polygons',
     ];
     if (typeof opts.gapTolerance === 'number' && opts.gapTolerance > 0) {
@@ -747,7 +748,7 @@ export class MapshaperOps {
     }
 
     const parts: string[] = [];
-    if (opts.target) parts.push(`-target ${quoteMapshaperArg(opts.target)}`);
+    if (opts.target) parts.push(`-target ${quoteCliArg(opts.target)}`);
     parts.push(`-simplify ${thresholdToken}`);
     if (opts.method) parts.push(opts.method);
     if (typeof opts.weighting === 'number' && Number.isFinite(opts.weighting)) {
@@ -790,10 +791,10 @@ export class MapshaperOps {
     if (crs.length === 0) return false;
 
     const parts: string[] = [];
-    if (opts.target) parts.push(`-target ${quoteMapshaperArg(opts.target)}`);
-    parts.push(`-proj ${quoteMapshaperArg(crs)}`);
+    if (opts.target) parts.push(`-target ${quoteCliArg(opts.target)}`);
+    parts.push(`-proj ${quoteCliArg(crs)}`);
     if (opts.init && opts.init.trim()) {
-      parts.push(`init=${quoteMapshaperArg(opts.init)}`);
+      parts.push(`init=${quoteCliArg(opts.init)}`);
     }
     if (opts.densify) parts.push('densify');
 
@@ -828,7 +829,7 @@ export class MapshaperOps {
       );
       if (collision) return false;
     }
-    const cmd = `-target ${quoteMapshaperArg(opts.target)} -rename-layers ${quoteMapshaperArg(newName)}`;
+    const cmd = `-target ${quoteCliArg(opts.target)} -rename-layers ${quoteCliArg(newName)}`;
     return this._runDatasetCommand(opts.source, cmd, `Rename ${opts.target} → ${newName}`);
   }
 
@@ -864,11 +865,11 @@ export class MapshaperOps {
 
     const targetList = opts.targets.join(',');
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(targetList)}`,
+      `-target ${quoteCliArg(targetList)}`,
       '-merge-layers',
     ];
     if (opts.name && opts.name.trim()) {
-      parts.push(`name=${quoteMapshaperArg(opts.name)}`);
+      parts.push(`name=${quoteCliArg(opts.name)}`);
     }
     if (opts.force) parts.push('force');
     if (opts.flatten) parts.push('flatten');
@@ -897,8 +898,8 @@ export class MapshaperOps {
     if (!this._emap._allowExpressionEvaluation([expr], 'splitLayer')) return false;
 
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
-      `-split ${quoteMapshaperArg(expr)}`,
+      `-target ${quoteCliArg(opts.target)}`,
+      `-split ${quoteCliArg(expr)}`,
     ];
     if (opts.noReplace) parts.push('no-replace');
     return this._runDatasetCommand(opts.source, parts.join(' '), `Split ${opts.target}`);
@@ -918,7 +919,7 @@ export class MapshaperOps {
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (!resolveLayerInList(dataset.layers, opts.target)) return false;
-    const cmd = `-target ${quoteMapshaperArg(opts.target)} -drop`;
+    const cmd = `-target ${quoteCliArg(opts.target)} -drop`;
     return this._runDatasetCommand(opts.source, cmd, `Drop ${opts.target}`);
   }
 
@@ -940,8 +941,8 @@ export class MapshaperOps {
     if (!this._emap._allowExpressionEvaluation([expr], 'sortFeatures')) return false;
 
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
-      `-sort ${quoteMapshaperArg(expr)}`,
+      `-target ${quoteCliArg(opts.target)}`,
+      `-sort ${quoteCliArg(expr)}`,
     ];
     if (opts.descending) parts.push('descending');
     return this._runDatasetCommand(opts.source, parts.join(' '), `Sort ${opts.target}`);
@@ -968,8 +969,8 @@ export class MapshaperOps {
     }
 
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
-      `-uniq ${quoteMapshaperArg(expr)}`,
+      `-target ${quoteCliArg(opts.target)}`,
+      `-uniq ${quoteCliArg(expr)}`,
     ];
     if (opts.maxCount !== undefined) parts.push(`max-count=${opts.maxCount}`);
     if (opts.invert) parts.push('invert');
@@ -997,8 +998,8 @@ export class MapshaperOps {
 
     const list = opts.fields.join(',');
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
-      `-filter-fields ${quoteMapshaperArg(list)}`,
+      `-target ${quoteCliArg(opts.target)}`,
+      `-filter-fields ${quoteCliArg(list)}`,
     ];
     if (opts.invert) parts.push('invert');
     return this._runDatasetCommand(opts.source, parts.join(' '), `Filter fields ${opts.target}`);
@@ -1030,7 +1031,7 @@ export class MapshaperOps {
       pairs.push(`${o}=${n}`);
     }
     const list = pairs.join(',');
-    const cmd = `-target ${quoteMapshaperArg(opts.target)} -rename-fields ${quoteMapshaperArg(list)}`;
+    const cmd = `-target ${quoteCliArg(opts.target)} -rename-fields ${quoteCliArg(list)}`;
     return this._runDatasetCommand(opts.source, cmd, `Rename fields ${opts.target}`);
   }
 
@@ -1212,22 +1213,22 @@ export class MapshaperOps {
     if (!this._emap._allowExpressionEvaluation([opts.where, opts.calc], 'joinTable')) return false;
 
     const parts: string[] = [
-      `-target ${quoteMapshaperArg(opts.target)}`,
-      `-join ${quoteMapshaperArg(joinSource)}`,
-      `keys=${quoteMapshaperArg(`${targetKey},${sourceKey}`)}`,
+      `-target ${quoteCliArg(opts.target)}`,
+      `-join ${quoteCliArg(joinSource)}`,
+      `keys=${quoteCliArg(`${targetKey},${sourceKey}`)}`,
     ];
     if (opts.fields && opts.fields.length > 0) {
       const safe = opts.fields.filter((f) => typeof f === 'string' && !f.includes(','));
       if (safe.length > 0) parts.push(`fields=${safe.join(',')}`);
     }
     if (opts.prefix && opts.prefix.length > 0) {
-      parts.push(`prefix=${quoteMapshaperArg(opts.prefix)}`);
+      parts.push(`prefix=${quoteCliArg(opts.prefix)}`);
     }
     if (opts.where && opts.where.trim().length > 0) {
-      parts.push(`where=${quoteMapshaperArg(opts.where)}`);
+      parts.push(`where=${quoteCliArg(opts.where)}`);
     }
     if (opts.calc && opts.calc.trim().length > 0) {
-      parts.push(`calc=${quoteMapshaperArg(opts.calc)}`);
+      parts.push(`calc=${quoteCliArg(opts.calc)}`);
     }
     if (opts.unjoined) parts.push('unjoined');
     if (opts.unmatched) parts.push('unmatched');
@@ -1270,13 +1271,28 @@ export class MapshaperOps {
     const layer = this._emap.layers.resolve(sourceId, layerId);
     if (!layer) return false;
 
-    // Sort selected ids ascending so the embedded JSON literal is
+    // Sort selected ids ascending so the discriminator pre-write is
     // deterministic (helpful for tests + diffs).
     const ids = refs.map((r: { id: number }) => r.id).slice().sort((a: number, b: number) => a - b);
 
-    const cmd = buildMergeSelectedCommand(layerId, ids, layer);
+    // Stamp the discriminator field directly onto the records BEFORE running
+    // mapshaper. This replaces the older "embed `JSON.stringify(ids)` into a
+    // `-each` expression" recipe — that approach generated MB-sized command
+    // strings for selections of 10k+ features and forced mapshaper to JS-eval
+    // the membership test on every record. Direct record mutation is O(N)
+    // either way and avoids the parser blow-up entirely.
+    if (!stampMergeDiscriminator(layer, ids)) return false;
+
+    const cmd = buildMergeDissolveCommand(layerId, layer);
     const label = `Merge ${refs.length} feature${refs.length > 1 ? 's' : ''}`;
-    return this._runDatasetCommand(sourceId, cmd, label);
+    const ok = await this._runDatasetCommand(sourceId, cmd, label);
+    if (!ok) {
+      // The pre-stamp mutated the LIVE dataset's records. If the dissolve
+      // bailed (host removed, mapshaper threw, …), unwind the stamp so the
+      // caller's view of the data isn't polluted with our internal field.
+      unstampMergeDiscriminator(layer);
+    }
+    return ok;
   }
   /**
    * Worker-thread variant of {@link runMapshaperCommandOnDataset}: packs
@@ -1403,53 +1419,64 @@ export class MapshaperOps {
   }
 }
 
-/**
- * Quote a layer name so it can be embedded in a mapshaper command string.
- * mapshaper accepts double-quoted arguments; we escape any embedded quotes.
- */
-function quoteMapshaperArg(value: string): string {
-  return `"${value.replace(/"/g, '\\"')}"`;
-}
-
 /** Internal field name used by `mergeSelected`'s discriminator pass. */
 const MERGE_SELECTED_FIELD = '__emap_merge';
 
 /**
- * Build the mapshaper command string that implements `mergeSelected` for
- * one (target layer, selected ids) pair. Recipe:
- *   1. Tag every record with a discriminator field — selected rows get
- *      'M', unselected rows get a unique value so they pass through.
- *   2. Run `-dissolve` on the discriminator with `copy-fields=` listing
- *      every original field so attributes survive.
- *   3. Drop the discriminator field via `-filter-fields ... invert`.
+ * Stamp the discriminator field onto each record IN PLACE so the subsequent
+ * `-dissolve` collapses the selected rows into one.
  *
- * IMPORTANT: mapshaper's `-each` interprets BARE assignments
- * (`foo = ...`) as writes to the record, but `this.foo = ...` writes to
- * the synthetic feature proxy and is silently dropped (see
- * `mapshaper-feature-expressions.mjs`). The discriminator is therefore
- * assigned bare; reads of `this.id` / `this.<field>` still proxy through
- * the feature object and work normally.
+ *   - Selected rows get `'M'`.
+ *   - Unselected rows get a unique `'k_<id>'` so they pass through dissolve
+ *     unchanged.
+ *
+ * Returns `false` when the layer has no data table or no records — without
+ * a record array there is nothing to stamp and dissolve would have no
+ * group key.
+ *
+ * Direct mutation (rather than building a `-each` expression that does the
+ * same work via `JSON.stringify(selectedIds).indexOf(this.id) >= 0 ? ... :
+ * ...`) keeps the command string a constant size regardless of selection
+ * cardinality. For a 10k-id selection the prior approach generated a
+ * roughly 0.3 MB literal that mapshaper's parser had to tokenise and
+ * mapshaper's `-each` had to JS-eval per record.
+ */
+function stampMergeDiscriminator(layer: MapshaperLayer, selectedIds: number[]): boolean {
+  const records = layer.data?.getRecords?.();
+  if (!records || records.length === 0) return false;
+  const selected = new Set<number>(selectedIds);
+  for (let i = 0; i < records.length; i++) {
+    const r = records[i] ?? {};
+    r[MERGE_SELECTED_FIELD] = selected.has(i) ? 'M' : `k_${i}`;
+    records[i] = r;
+  }
+  return true;
+}
+
+/**
+ * Reverse of {@link stampMergeDiscriminator}. Used when the dissolve fails
+ * (host removed, mapshaper threw) so the live dataset doesn't end up with
+ * the internal field clinging to it.
+ */
+function unstampMergeDiscriminator(layer: MapshaperLayer): void {
+  const records = layer.data?.getRecords?.();
+  if (!records) return;
+  for (const r of records) {
+    if (r && MERGE_SELECTED_FIELD in r) delete r[MERGE_SELECTED_FIELD];
+  }
+}
+
+/**
+ * Build the dissolve+cleanup command string. The discriminator field is
+ * already stamped onto records by {@link stampMergeDiscriminator}; this
+ * function just wires `-target` / `-dissolve` / `-filter-fields` together.
  *
  * Cleanup uses `-filter-fields __emap_merge invert` rather than
  * `-each "delete __emap_merge"` because deleting from a `with(record)`
- * scope by bare name doesn't remove the field from the DataTable schema
- * — the field would still appear in subsequent `getFields()` calls.
- *
- * Returns the full command as a single string suitable for
- * `mapshaper.internal.parseCommands`.
+ * scope by bare name doesn't remove the field from the DataTable schema —
+ * the field would still appear in subsequent `getFields()` calls.
  */
-function buildMergeSelectedCommand(
-  layerName: string,
-  selectedIds: number[],
-  layer: MapshaperLayer,
-): string {
-  // JSON.stringify produces a stable, parser-safe array literal.
-  const idsJSON = JSON.stringify(selectedIds);
-  // Single quotes wrap the JS expression; literal string values inside
-  // use double quotes so they don't collide with the outer delimiter.
-  const tagExpr =
-    `'${MERGE_SELECTED_FIELD} = ${idsJSON}.indexOf(this.id) >= 0 ? "M" : "k_" + this.id'`;
-
+function buildMergeDissolveCommand(layerName: string, layer: MapshaperLayer): string {
   // Build copy-fields= from the layer's data table when one exists.
   // Field names with commas are intentionally rejected (mapshaper's
   // copy-fields= is comma-delimited and does not quote individual entries).
@@ -1465,9 +1492,8 @@ function buildMergeSelectedCommand(
   }
 
   return [
-    `-target ${quoteMapshaperArg(layerName)}`,
-    `-each ${tagExpr}`,
-    `-dissolve ${quoteMapshaperArg(MERGE_SELECTED_FIELD)}${copyFieldsArg}`,
+    `-target ${quoteCliArg(layerName)}`,
+    `-dissolve ${quoteCliArg(MERGE_SELECTED_FIELD)}${copyFieldsArg}`,
     `-filter-fields ${MERGE_SELECTED_FIELD} invert`,
   ].join(' ');
 }

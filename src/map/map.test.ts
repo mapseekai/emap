@@ -1050,18 +1050,24 @@ describe('Emap mergeSelected', () => {
     map = createBareMap();
     setPrivate(map, '_history', new EditHistory());
 
+    // Records must live in a stable closure-captured array so the
+    // discriminator stamp written by mergeSelected is observable on the
+    // next getRecords() call. Real mapshaper's DataTable returns the same
+    // array reference on every call; the prior `() => [...]` mock returned
+    // a fresh array each time and silently discarded mutations.
+    const layerRecords = [
+      { name: 'A', area: 1 } as Record<string, unknown>,
+      { name: 'B', area: 2 } as Record<string, unknown>,
+      { name: 'C', area: 3 } as Record<string, unknown>,
+      { name: 'D', area: 4 } as Record<string, unknown>,
+    ];
     const layer = {
       name: 'parcels',
       geometry_type: 'polygon',
       shapes: [['s0'], ['s1'], ['s2'], ['s3']],
       data: {
         getFields: () => ['name', 'area'],
-        getRecords: () => [
-          { name: 'A', area: 1 },
-          { name: 'B', area: 2 },
-          { name: 'C', area: 3 },
-          { name: 'D', area: 4 },
-        ],
+        getRecords: () => layerRecords,
       },
     };
     const otherLayer = {
@@ -1127,7 +1133,8 @@ describe('Emap mergeSelected', () => {
     expect(ok).toBe(false);
   });
 
-  it('builds the dissolve recipe with sorted ids and copy-fields=', async () => {
+  it('stamps the discriminator field directly onto records and emits a string-size-bounded dissolve command', async () => {
+    const liveRecords = beforeDataset.layers[0].data.getRecords();
     map.select([
       { source: 'src1', layer: 'parcels', id: 2 },
       { source: 'src1', layer: 'parcels', id: 0 },
@@ -1135,31 +1142,35 @@ describe('Emap mergeSelected', () => {
     ], { mode: 'add' });
     const ok = await map.ops.mergeSelected();
     expect(ok).toBe(true);
+
+    // Discriminator: selected rows get 'M', unselected rows get 'k_<id>'.
+    expect(liveRecords[0].__emap_merge).toBe('M');
+    expect(liveRecords[1].__emap_merge).toBe('k_1');
+    expect(liveRecords[2].__emap_merge).toBe('M');
+    expect(liveRecords[3].__emap_merge).toBe('M');
+
     const cmd = parseCommandsSpy.mock.calls[0][0] as string;
     expect(cmd).toContain('-target "parcels"');
-    expect(cmd).toContain('[0,2,3]'); // sorted ascending
-    expect(cmd).toContain('this.id');
-    // discriminator is assigned BARE (not via this.foo) so mapshaper
-    // writes through to the record / DataTable schema
-    expect(cmd).toContain('__emap_merge =');
-    expect(cmd).not.toContain('this.__emap_merge');
     expect(cmd).toContain('-dissolve "__emap_merge"');
     expect(cmd).toContain('copy-fields=name,area');
-    // cleanup uses -filter-fields invert (not -each delete) so the field
-    // is dropped from the schema, not just from individual records
     expect(cmd).toContain('-filter-fields __emap_merge invert');
-    expect(cmd).not.toContain('delete this.__emap_merge');
+    // Regression: pre-PR-4 embedded a JSON-stringified id list and a
+    // `-each` expression. Both must be gone after the direct-record
+    // refactor or large selections will explode the command string.
+    expect(cmd).not.toContain('-each');
+    expect(cmd).not.toContain('this.id');
+    expect(cmd).not.toContain('[0,2,3]');
   });
 
-  it('omits copy-fields= when the layer has no data table', async () => {
+  it('refuses to run when the layer has no data table (cannot stamp without records)', async () => {
     beforeDataset.layers[0].data = undefined;
     map.select([
       { source: 'src1', layer: 'parcels', id: 0 },
       { source: 'src1', layer: 'parcels', id: 1 },
     ], { mode: 'add' });
-    await map.ops.mergeSelected();
-    const cmd = parseCommandsSpy.mock.calls[0][0] as string;
-    expect(cmd).not.toContain('copy-fields=');
+    const ok = await map.ops.mergeSelected();
+    expect(ok).toBe(false);
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('pushes one history entry labelled "Merge N features" and clears selection', async () => {
@@ -1187,9 +1198,16 @@ describe('Emap mergeSelected', () => {
   });
 
   it('drops fields whose names contain a comma (mapshaper copy-fields= is comma-delimited)', async () => {
+    // Records must be non-empty so the discriminator stamp succeeds — we
+    // only care about the copy-fields= filtering here, not the stamp.
     beforeDataset.layers[0].data = {
       getFields: () => ['safe', 'has,comma'],
-      getRecords: () => [],
+      getRecords: () => [
+        { safe: 1, 'has,comma': 'a' },
+        { safe: 2, 'has,comma': 'b' },
+        { safe: 3, 'has,comma': 'c' },
+        { safe: 4, 'has,comma': 'd' },
+      ],
     };
     map.select([
       { source: 'src1', layer: 'parcels', id: 0 },
