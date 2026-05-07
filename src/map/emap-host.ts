@@ -12,6 +12,7 @@ import type { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import type { EditHistory } from '../edit/edit-history';
 import type { Selection } from './selection';
 import type { MapshaperLayer } from '../types/mapshaper-types';
+import type { LayerRegistry } from './layer-registry';
 
 /**
  * Sentinel returned by `_runDatasetCommand` callers when the host has
@@ -34,7 +35,20 @@ export interface EmapHostInternal {
   readonly _workerMode: boolean | 'auto';
   readonly _workerThreshold: number;
 
+  // ---- shared services -----------------------------------------------
+  /**
+   * Single source of truth for `(sourceId, layerId) → MapshaperLayer`
+   * resolution. Replaces the legacy `_resolveLayer` method on the host;
+   * managers should prefer `host.layers.resolve(...)` going forward.
+   */
+  readonly layers: LayerRegistry;
+
   // ---- helpers managers call back into -------------------------------
+  /**
+   * @deprecated Use `host.layers.resolve(sourceId, layerId)` instead. Kept
+   * as a thin shim for one release so in-flight refactors don't all need
+   * to land at once.
+   */
   _resolveLayer(sourceId: string, layerId: string): MapshaperLayer | null;
   _scheduleRender(): void;
   _fireHistoryChange(): void;

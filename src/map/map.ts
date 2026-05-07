@@ -10,6 +10,7 @@ import { MapshaperOps } from './mapshaper-ops';
 import { EditSessions } from './edit-sessions';
 import { AttributeOps } from './attribute-ops';
 import { EditStateStore, type EditMode } from './edit-state-store';
+import { LayerRegistry } from './layer-registry';
 import { TopologySource } from '../source/source';
 import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
 import { MouseWheel } from '../core/interactions';
@@ -60,6 +61,18 @@ export class Emap extends EventDispatcher {
   // read-only outside this class.
   _sources: globalThis.Map<string, TopologySource> =
     new globalThis.Map();
+  /**
+   * Single resolution surface for `(sourceId, layerId) → MapshaperLayer`.
+   * Exposed to managers via `EmapHostInternal.layers`. Reads `_sources`
+   * lazily so it stays in sync with `addSource`/`removeSource` without
+   * needing its own listener. Constructed on first access so test paths
+   * that bypass the constructor via `Object.create(Emap.prototype)` still
+   * see a working registry once they `setPrivate(map, '_sources', ...)`.
+   */
+  private _layersCache?: LayerRegistry;
+  get layers(): LayerRegistry {
+    return this._layersCache ?? (this._layersCache = new LayerRegistry(this._sources));
+  }
   private _sourceListeners: globalThis.Map<string, (e: any) => void> =
     new globalThis.Map();
   private _layers: LayerSpecification[] = [];
@@ -1302,19 +1315,11 @@ export class Emap extends EventDispatcher {
    */
 
   /**
-   * Resolve a (sourceId, layerId) pair to the actual MapshaperLayer object.
-   * Called by every composed manager (`ops`, `editSession`, `attributes`).
+   * @deprecated Prefer `emap.layers.resolve(sourceId, layerId)`. Kept as a
+   * thin shim while the composed managers migrate over.
    */
   _resolveLayer(sourceId: string, layerId: string): MapshaperLayer | null {
-    const source = this._sources.get(sourceId);
-    if (!source) return null;
-    const layers = source.getLayers();
-    for (let i = 0; i < layers.length; i++) {
-      if (getLayerId(layers[i], i) === layerId) {
-        return layers[i] as MapshaperLayer;
-      }
-    }
-    return null;
+    return this.layers.resolve(sourceId, layerId);
   }
 
 

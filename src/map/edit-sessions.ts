@@ -54,7 +54,7 @@ export class EditSessions {
     >();
 
     for (const ref of refs) {
-      const layer = this._emap._resolveLayer(ref.source, ref.layer);
+      const layer = this._emap.layers.resolve(ref.source, ref.layer);
       if (!layer?.shapes) continue;
       const shape = layer.shapes[ref.id];
       if (!shape) continue;
@@ -166,7 +166,7 @@ export class EditSessions {
     // optional shared-arc split rewrites the shapes.
     const bySource = new globalThis.Map<string, Bucket>();
     for (const ref of refs) {
-      const layer = this._emap._resolveLayer(ref.source, ref.layer);
+      const layer = this._emap.layers.resolve(ref.source, ref.layer);
       if (!layer?.shapes) continue;
       const shape = layer.shapes[ref.id];
       if (!shape) continue;
@@ -547,7 +547,7 @@ export class EditSessions {
     >();
 
     for (const ref of refs) {
-      const layer = this._emap._resolveLayer(ref.source, ref.layer);
+      const layer = this._emap.layers.resolve(ref.source, ref.layer);
       if (!layer?.shapes) continue;
       const shape = layer.shapes[ref.id];
       if (!shape) continue;

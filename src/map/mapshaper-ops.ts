@@ -1,12 +1,13 @@
 // Mapshaper command wrappers. Extracted from map.ts so the orchestrator
 // stays focused on render / lifecycle. Composed onto Emap as
 // `emap.ops`; the manager calls back into a small surface of internal
-// helpers (`_resolveLayer`, `_history`, `_workerPool`, ...) on the host.
+// helpers (`layers.resolve`, `_history`, `_workerPool`, ...) on the host.
 
 import mapshaper from 'mapshaper';
 import { DatasetReplaceCommand } from '../edit/commands/dataset-replace';
 import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import type { EmapHostInternal } from './emap-host';
+import { resolveLayerInList } from './layer-registry';
 import type {
   ApplyExpressionOptions,
   BufferOptions,
@@ -67,8 +68,8 @@ export class MapshaperOps {
     if (!dataset) return false;
     // Validate that both target and mask resolve to layers in this source's
     // dataset. mapshaper would throw an opaque error otherwise.
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
-    if (!findLayerByName(dataset.layers, opts.mask)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.mask)) return false;
 
     const verb = op === 'clip' ? 'Clip' : 'Erase';
     const cmd = `-target ${quoteMapshaperArg(opts.target)} -${op} source=${quoteMapshaperArg(opts.mask)}`;
@@ -87,7 +88,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
 
     // `field` (single) and `fields` (multi) are mutually exclusive — both
     // set is a configuration error.
@@ -163,7 +164,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
 
     // Validate numeric radius up-front: 0 silently produces empty buffers,
     // negative values throw inside mapshaper. Expression-string radii are
@@ -207,7 +208,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     if (!this._emap._allowExpressionEvaluation([opts.expression, opts.where], 'applyExpression')) return false;
 
     const whereArg = opts.where && opts.where.trim()
@@ -230,7 +231,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     const cmd = `-target ${quoteMapshaperArg(opts.target)} -explode`;
     return this._runDatasetCommand(opts.source, cmd, `Explode ${opts.target}`);
   }
@@ -251,7 +252,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     if (!this._emap._allowExpressionEvaluation([opts.where], 'innerlinesLayer')) return false;
 
     const parts: string[] = [
@@ -290,7 +291,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     if (!this._emap._allowExpressionEvaluation([opts.expression], 'filterFeatures')) return false;
 
     const parts: string[] = [
@@ -323,7 +324,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
 
     const parts: string[] = [
       `-target ${quoteMapshaperArg(opts.target)}`,
@@ -360,7 +361,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
 
     // Numeric tuning options reject NaN / negative — mapshaper would either
     // error opaquely or silently produce surprising results.
@@ -460,7 +461,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     if (!this._emap._allowExpressionEvaluation([opts.calc], 'mosaicLayer')) return false;
 
     const parts: string[] = [
@@ -509,7 +510,7 @@ export class MapshaperOps {
     // into multiple bogus targets.
     for (const t of opts.targets) {
       if (typeof t !== 'string' || t.includes(',')) return false;
-      if (!findLayerByName(dataset.layers, t)) return false;
+      if (!resolveLayerInList(dataset.layers, t)) return false;
     }
 
     const targetList = opts.targets.join(',');
@@ -549,9 +550,9 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    const targetLayer = findLayerByName(dataset.layers, opts.target);
+    const targetLayer = resolveLayerInList(dataset.layers, opts.target);
     if (!targetLayer || targetLayer.geometry_type !== 'polyline') return false;
-    const dividerLayer = findLayerByName(dataset.layers, opts.divider);
+    const dividerLayer = resolveLayerInList(dataset.layers, opts.divider);
     if (!dividerLayer || dividerLayer.geometry_type !== 'polygon') return false;
 
     const parts: string[] = [
@@ -585,7 +586,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    const layer = findLayerByName(dataset.layers, opts.target);
+    const layer = resolveLayerInList(dataset.layers, opts.target);
     if (!layer) return false;
 
     const geom = layer.geometry_type;
@@ -639,7 +640,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    const layer = findLayerByName(dataset.layers, opts.target);
+    const layer = resolveLayerInList(dataset.layers, opts.target);
     if (!layer || layer.geometry_type !== 'polygon') return false;
 
     // mapshaper's `-lines` DEFAULT positional is the comma-joined fields
@@ -675,7 +676,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    const layer = findLayerByName(dataset.layers, opts.target);
+    const layer = resolveLayerInList(dataset.layers, opts.target);
     if (!layer || layer.geometry_type !== 'polyline') return false;
 
     const parts: string[] = [
@@ -710,7 +711,7 @@ export class MapshaperOps {
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (opts.target !== undefined) {
-      if (!findLayerByName(dataset.layers, opts.target)) return false;
+      if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     }
 
     // Exactly one threshold mode.
@@ -782,7 +783,7 @@ export class MapshaperOps {
     const dataset = source.getDataset();
     if (!dataset) return false;
     if (opts.target !== undefined) {
-      if (!findLayerByName(dataset.layers, opts.target)) return false;
+      if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     }
     const crs = (opts.crs ?? '').trim();
     if (crs.length === 0) return false;
@@ -812,7 +813,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     const newName = (opts.name ?? '').trim();
     if (newName.length === 0) return false;
     // mapshaper's -rename-layers DEFAULT is `names` (comma-list). A name
@@ -851,7 +852,7 @@ export class MapshaperOps {
     // targets.
     if (opts.targets.some((t) => typeof t !== 'string' || t.includes(','))) return false;
 
-    const layers = opts.targets.map((t) => findLayerByName(dataset.layers, t));
+    const layers = opts.targets.map((t) => resolveLayerInList(dataset.layers, t));
     if (layers.some((l) => !l)) return false;
 
     if (!opts.force) {
@@ -889,7 +890,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     const expr = (opts.expression ?? '').trim();
     if (expr.length === 0) return false;
     if (!this._emap._allowExpressionEvaluation([expr], 'splitLayer')) return false;
@@ -915,7 +916,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     const cmd = `-target ${quoteMapshaperArg(opts.target)} -drop`;
     return this._runDatasetCommand(opts.source, cmd, `Drop ${opts.target}`);
   }
@@ -932,7 +933,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     const expr = (opts.expression ?? '').trim();
     if (expr.length === 0) return false;
     if (!this._emap._allowExpressionEvaluation([expr], 'sortFeatures')) return false;
@@ -957,7 +958,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     const expr = (opts.expression ?? '').trim();
     if (expr.length === 0) return false;
     if (!this._emap._allowExpressionEvaluation([expr], 'uniqueFeatures')) return false;
@@ -986,7 +987,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     if (!Array.isArray(opts.fields) || opts.fields.length === 0) return false;
     for (const f of opts.fields) {
       if (typeof f !== 'string' || f.trim().length === 0) return false;
@@ -1015,7 +1016,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     if (!opts.mapping || typeof opts.mapping !== 'object') return false;
     const entries = Object.entries(opts.mapping);
     if (entries.length === 0) return false;
@@ -1051,7 +1052,7 @@ export class MapshaperOps {
     const dataset = source.getDataset();
     if (!dataset) return null;
     if (opts.target !== undefined) {
-      if (!findLayerByName(dataset.layers, opts.target)) return null;
+      if (!resolveLayerInList(dataset.layers, opts.target)) return null;
     }
     if (!dataset.arcs) {
       return { ok: true, intersections: [], intersectionCount: 0 };
@@ -1097,7 +1098,7 @@ export class MapshaperOps {
     if (!source) return false;
     const original = source.getDataset();
     if (!original) return false;
-    const targetLayer = findLayerByName(original.layers, opts.target);
+    const targetLayer = resolveLayerInList(original.layers, opts.target);
     if (!targetLayer) return false;
     if (targetLayer.geometry_type !== 'polygon' && targetLayer.geometry_type !== 'polyline') {
       return false;
@@ -1126,7 +1127,7 @@ export class MapshaperOps {
     try {
       const intersections = mapshaper.internal.findSegmentIntersections(after.arcs!, internalOpts);
       // Find the cloned target inside the working copy by name.
-      const workingTarget = findLayerByName(after.layers, opts.target);
+      const workingTarget = resolveLayerInList(after.layers, opts.target);
       if (!workingTarget) {
         // Should never happen — target was in original, copyDataset preserves names.
         throw new Error('intersectionPointsLayer: target lost in copyDataset');
@@ -1175,7 +1176,7 @@ export class MapshaperOps {
     if (!source) return false;
     const dataset = source.getDataset();
     if (!dataset) return false;
-    if (!findLayerByName(dataset.layers, opts.target)) return false;
+    if (!resolveLayerInList(dataset.layers, opts.target)) return false;
     if (!Array.isArray(opts.keys) || opts.keys.length !== 2) return false;
     const [targetKey, sourceKey] = opts.keys.map((k) => (typeof k === 'string' ? k.trim() : ''));
     if (targetKey.length === 0 || sourceKey.length === 0) return false;
@@ -1265,7 +1266,7 @@ export class MapshaperOps {
       if (r.source !== sourceId || r.layer !== layerId) return false;
     }
 
-    const layer = this._emap._resolveLayer(sourceId, layerId);
+    const layer = this._emap.layers.resolve(sourceId, layerId);
     if (!layer) return false;
 
     // Sort selected ids ascending so the embedded JSON literal is
@@ -1399,12 +1400,6 @@ export class MapshaperOps {
     this._emap._scheduleRender();
     return true;
   }
-}
-function findLayerByName(layers: MapshaperLayer[], nameOrId: string): MapshaperLayer | null {
-  for (const layer of layers) {
-    if (layer.name === nameOrId || layer.id === nameOrId) return layer;
-  }
-  return null;
 }
 
 /**

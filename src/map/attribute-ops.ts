@@ -12,7 +12,7 @@ import type { EmapHostInternal } from './emap-host';
 /**
  * Attribute-editing manager. Owned by Emap and exposed as `emap.attributes`.
  * Construction takes the host Emap; the manager calls back into a small
- * surface of internal helpers (`_resolveLayer`, `_history`, ...) on the host.
+ * surface of internal helpers (`layers.resolve`, `_history`, ...) on the host.
  */
 export class AttributeOps {
   constructor(private _emap: EmapHostInternal) {}
@@ -35,7 +35,7 @@ export class AttributeOps {
     ref: FeatureRef,
     props: Record<string, unknown>,
   ): boolean {
-    const layer = this._emap._resolveLayer(ref.source, ref.layer);
+    const layer = this._emap.layers.resolve(ref.source, ref.layer);
     if (!layer) return false;
     const records = layer.data?.getRecords?.();
     const record = records?.[ref.id];
@@ -82,7 +82,7 @@ export class AttributeOps {
   addField(
     opts: { source: string; target: string; field: string; defaultValue?: unknown },
   ): boolean {
-    const layer = this._emap._resolveLayer(opts.source, opts.target);
+    const layer = this._emap.layers.resolve(opts.source, opts.target);
     if (!layer?.data) return false;
     const cmd = new FieldAddCommand({
       layer,
@@ -104,7 +104,7 @@ export class AttributeOps {
   removeField(
     opts: { source: string; target: string; field: string },
   ): boolean {
-    const layer = this._emap._resolveLayer(opts.source, opts.target);
+    const layer = this._emap.layers.resolve(opts.source, opts.target);
     if (!layer?.data) return false;
     const cmd = new FieldRemoveCommand({ layer, field: opts.field });
     cmd.do();
@@ -122,7 +122,7 @@ export class AttributeOps {
   renameField(
     opts: { source: string; target: string; from: string; to: string },
   ): boolean {
-    const layer = this._emap._resolveLayer(opts.source, opts.target);
+    const layer = this._emap.layers.resolve(opts.source, opts.target);
     if (!layer?.data) return false;
     const records = layer.data.getRecords?.();
     if (!records) return false;
