@@ -333,9 +333,16 @@ export class Emap extends EventDispatcher {
       // none` on the container itself prevents hit-testing on empty space
       // around buttons, but events on the buttons themselves still bubble.
       const swallow = (e: Event) => e.stopPropagation();
-      for (const type of ['click', 'mousedown', 'mouseup', 'dblclick', 'contextmenu', 'wheel']) {
+      for (const type of ['click', 'mousedown', 'mouseup', 'dblclick', 'contextmenu']) {
         container.addEventListener(type, swallow);
       }
+      // Wheel events listed separately: register passive so the page can
+      // continue scrolling normally when the cursor sits over the control
+      // chrome, AND so Chrome doesn't log a "non-passive wheel handler"
+      // warning. We still call stopPropagation, which prevents the wheel
+      // event from reaching the canvas's zoom handler — that's the part
+      // we actually want.
+      container.addEventListener('wheel', swallow, { passive: true });
 
       el.appendChild(container);
       this._controlContainers.set(pos, container);

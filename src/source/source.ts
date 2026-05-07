@@ -21,6 +21,25 @@ export interface TopologySource extends Source {
   type: 'topology';
   getArcs(): ArcCollection | undefined;
   getLayers(): any[];
+  /**
+   * Returns the live mapshaper dataset reference owned by this source.
+   *
+   * **Do not mutate the returned object directly**. Edit-history caches
+   * (arc-flag flags, Flatbush spatial indices, the LOD copy in DisplayArcs)
+   * key off `(layer, shape, arc)` identity and shape/arc counts; mutations
+   * applied outside the official edit-command surface will silently desync
+   * those caches. To change a dataset, route the change through
+   * `Emap.ops.*` (clip / dissolve / buffer / …), `Emap.editSession.*`
+   * (translate / rotate / scale), or a custom `EditCommand`. Read-only
+   * inspection — `getDataset()?.info?.crs_string`, `dataset.layers[0].name`,
+   * arc iteration via `dataset.arcs.getArcIter()` — is always safe.
+   *
+   * The TypeScript return type intentionally stays `MapshaperDataset` (not
+   * `Readonly<MapshaperDataset>`) because mapshaper's own internal helpers
+   * — and a number of in-tree edit commands — receive the dataset and
+   * mutate it through trusted code paths. A blanket `Readonly` would just
+   * force casts everywhere.
+   */
   getDataset(): MapshaperDataset | undefined;
   getDisplayArcs(): DisplayArcs | null;
   /**
