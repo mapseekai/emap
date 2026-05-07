@@ -11,6 +11,7 @@ import {
   type MapshaperRunner,
 } from './mapshaper-runner';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
+import { resolveDatasetCRS } from '../geo/crs-resolver';
 
 export type TopologySourceData = string | { filename: string, content: Uint8Array };
 
@@ -317,67 +318,13 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     return this._dataset;
   }
 
+  /**
+   * Canonical CRS identifier for the loaded dataset (`EPSG:NNNN` or a
+   * passthrough label). Heuristics live in {@link resolveDatasetCRS} so the
+   * resolution can be unit-tested independently of TopologySource.
+   */
   public getCRS(): string {
-    if (!this._dataset) return 'EPSG:4326';
-
-    const info = this._dataset.info;
-
-    if (!info) return 'EPSG:4326';
-
-    // Try to get crs_string (e.g. "wgs84", "epsg:4326")
-    if (info.crs_string) {
-      return this._normalizeCrsString(info.crs_string);
-    }
-
-    // Try to extract from prj (WKT-style projection string)
-    if (info.prj) {
-      // Look for EPSG code in WKT AUTHORITY clause
-      const authorityMatch = info.prj.match(/AUTHORITY\["EPSG"\s*,\s*"(\d+)"\]/i);
-      if (authorityMatch) {
-        return `EPSG:${authorityMatch[1]}`;
-      }
-
-      // Detect Web Mercator from projection name
-      if (/Mercator.*WGS.*84.*Pseudo/i.test(info.prj) ||
-        /WGS.*84.*Pseudo.*Mercator/i.test(info.prj) ||
-        /Web_Mercator/i.test(info.prj)) {
-        return 'EPSG:3857';
-      }
-
-      // Detect WGS84 from DATUM
-      if (/DATUM\["WGS_1984"/i.test(info.prj) && /GEOGCS/i.test(info.prj)) {
-        return 'EPSG:4326';
-      }
-    }
-
-    // Try to detect from CRS object properties (parsed by Mapshaper)
-    if (info.crs) {
-      if (info.crs.is_latlong) {
-        return 'EPSG:4326'; // WGS84
-      }
-      // Check for Web Mercator by projection parameters
-      if (info.crs.projName === 'merc' && info.crs.a === 6378137) {
-        return 'EPSG:3857';
-      }
-    }
-
-    // Default to WGS84
-    return 'EPSG:4326';
-  }
-
-  private _normalizeCrsString(str: string): string {
-    const lower = str.toLowerCase();
-    if (lower === 'wgs84' || lower.includes('4326')) {
-      return 'EPSG:4326';
-    }
-    if (lower.includes('3857') || lower === 'webmercator') {
-      return 'EPSG:3857';
-    }
-    // Return as-is if it looks like EPSG:XXXX
-    if (/^epsg:\d+$/i.test(str)) {
-      return str.toUpperCase();
-    }
-    return str.toUpperCase();
+    return resolveDatasetCRS(this._dataset);
   }
 
   public async reproject(targetCrs: string): Promise<void> {
