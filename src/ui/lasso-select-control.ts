@@ -1,5 +1,6 @@
 import type { Control } from './control';
 import type { Emap, FeatureRef } from '../map/map';
+import { normalizePointShape } from '../source/layer-utils';
 
 /** Visual style for the rubber-band lasso path. */
 export interface LassoSelectStyle {
@@ -299,8 +300,10 @@ export function featureRepresentativePixel(
   if (!shape) return null;
 
   if (layer.geometry_type === 'point') {
-    // Multi-point shape: shape is [[x, y], ...]. Use first point.
-    const first = shape[0];
+    // Multi-point shape: shape is [[x, y], ...]. Use first point. Tolerate
+    // legacy bare `[x, y]` form via normalizePointShape.
+    const points = normalizePointShape(shape);
+    const first = points[0];
     if (!first || first.length < 2) return null;
     return map.project(first[0], first[1]);
   }
@@ -308,7 +311,8 @@ export function featureRepresentativePixel(
   // Path feature: shape is [[arcId, ...], ...]. First arc, first vertex.
   const arcs = source.getArcs?.();
   if (!arcs) return null;
-  const part = shape[0];
+  const pathShape = shape as import('../types/mapshaper-types').PathShape;
+  const part = pathShape[0];
   if (!part || part.length === 0) return null;
   const rawArcId = part[0];
   if (typeof rawArcId !== 'number') return null;

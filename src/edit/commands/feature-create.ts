@@ -1,6 +1,10 @@
 import mapshaper from 'mapshaper';
 import type { EditCommand } from '../edit-command';
-import type { ArcCollection, MapshaperLayer } from '../../types/mapshaper-types';
+import type {
+  ArcCollection,
+  FeatureShape,
+  MapshaperLayer,
+} from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
 
 export type FeatureGeometryType = 'point' | 'polyline' | 'polygon';
@@ -12,7 +16,7 @@ export interface FeatureCreateCommandOptions {
   /** Source so we can refresh DisplayArcs after the mutation. */
   source: TopologySource;
   /** The shape value pushed onto `layer.shapes`. */
-  appendedShape: any[];
+  appendedShape: FeatureShape;
   /**
    * The data record pushed onto `layer.data.getRecords()`. `null` when the
    * layer has no data table.

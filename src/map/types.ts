@@ -893,8 +893,10 @@ export interface HighlightStyle {
   fill?: boolean;
 }
 
-export type EditVertexShapePart = number[];
-export type EditVertexShape = EditVertexShapePart[];
+// Aliased to the canonical path-shape vocabulary in `types/mapshaper-types`.
+// Kept as named exports for backwards compatibility with existing imports.
+export type EditVertexShapePart = import('../types/mapshaper-types').PathPart;
+export type EditVertexShape = import('../types/mapshaper-types').PathShape;
 
 export interface EditVertexArcs {
   getArcIter(arcId: number): {

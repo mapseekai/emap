@@ -2,6 +2,7 @@ import type { EditCommand } from '../edit-command';
 import type { ArcCollection } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
 import type { TranslatedPointFeature } from './feature-translate';
+import { normalizePointShape } from '../../source/layer-utils';
 
 /**
  * 2x3 affine matrix in SVG/Canvas convention.
@@ -80,7 +81,9 @@ export class FeatureAffineCommand implements EditCommand {
     for (const pf of pointFeatures) {
       const shape = pf.layer.shapes?.[pf.featureId];
       if (!shape) continue;
-      for (const coord of shape as number[][]) {
+      // See `feature-translate.ts` for why `normalizePointShape` preserves
+      // mutability across the legacy single-coord shape.
+      for (const coord of normalizePointShape(shape)) {
         if (coord && coord.length >= 2) {
           const x = coord[0];
           const y = coord[1];

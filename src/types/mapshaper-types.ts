@@ -77,6 +77,37 @@ export interface ArcCollection {
 // ---------------------------------------------------------------------------
 
 export type GeometryType = 'point' | 'polyline' | 'polygon';
+export type PathGeometryType = 'polyline' | 'polygon';
+
+/**
+ * Mapshaper feature shape vocabulary.
+ *
+ * Path features (polygon / polyline):
+ * - {@link SignedArcId}: a signed arc id; negative values encode reversed
+ *   direction. Use `arcId >= 0 ? arcId : ~arcId` for the absolute id.
+ * - {@link PathPart}: list of signed arc ids that traverse one ring or
+ *   polyline stroke.
+ * - {@link PathShape}: list of parts. Polygons use multiple parts for rings
+ *   (outer + holes); polylines use multiple parts for multipart features.
+ *
+ * Point features:
+ * - {@link Coord2}: a single `[x, y]` pair. Mutable so in-place edits can
+ *   write back through the same array.
+ * - {@link PointShape}: list of points (multi-point features). Some legacy
+ *   mapshaper datasets store a single bare `[x, y]` instead of `[[x, y]]`;
+ *   prefer {@link normalizePointShape} from `source/layer-utils` to coerce.
+ *
+ * `null` is reserved for deleted-but-still-indexed features (mapshaper keeps
+ * positional alignment between `shapes` and `data.records`).
+ */
+export type SignedArcId = number;
+export type PathPart = SignedArcId[];
+export type PathShape = PathPart[];
+export type Coord2 = [number, number];
+export type PointShape = Coord2[];
+/** Legacy single-coord form some older datasets carry. */
+export type LegacyPointShape = Coord2;
+export type FeatureShape = PathShape | PointShape | LegacyPointShape;
 
 /** Mapshaper DataTable holding feature attributes for a layer */
 export interface DataTable {
@@ -86,13 +117,45 @@ export interface DataTable {
   size?(): number;
 }
 
-/** A single layer within a Mapshaper dataset */
+/**
+ * A single layer within a Mapshaper dataset.
+ *
+ * `shapes` is intentionally typed loosely (`(FeatureShape | null)[] | null`)
+ * because mapshaper itself does not statically tag the array. Use the
+ * {@link isPathLayer} / {@link isPointLayer} type guards to narrow to a
+ * {@link PathLayer} / {@link PointLayer} where shapes carry a precise type.
+ */
 export interface MapshaperLayer {
   name?: string;
   id?: string;
   geometry_type?: GeometryType;
-  shapes: any[][] | null;
+  shapes: (FeatureShape | null)[] | null;
   data?: DataTable;
+}
+
+/** Layer narrowed to path geometry. `shapes[i]` is `PathShape | null`. */
+export interface PathLayer extends MapshaperLayer {
+  geometry_type: PathGeometryType;
+  shapes: (PathShape | null)[] | null;
+}
+
+/**
+ * Layer narrowed to point geometry. `shapes[i]` is `PointShape | LegacyPointShape | null`;
+ * use {@link normalizePointShape} to coerce to a uniform `Coord2[]`.
+ */
+export interface PointLayer extends MapshaperLayer {
+  geometry_type: 'point';
+  shapes: ((PointShape | LegacyPointShape) | null)[] | null;
+}
+
+/** True iff `layer.geometry_type` is `'polygon'` or `'polyline'`. */
+export function isPathLayer(layer: MapshaperLayer): layer is PathLayer {
+  return layer.geometry_type === 'polygon' || layer.geometry_type === 'polyline';
+}
+
+/** True iff `layer.geometry_type` is `'point'`. */
+export function isPointLayer(layer: MapshaperLayer): layer is PointLayer {
+  return layer.geometry_type === 'point';
 }
 
 /** A Mapshaper dataset containing layers and arcs */

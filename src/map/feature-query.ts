@@ -2,9 +2,14 @@ import mapshaper from 'mapshaper';
 import Flatbush from 'flatbush';
 import { AffineTransform } from '../geo/transform';
 import { TopologySource } from '../source/source';
-import { getLayerId } from '../source/layer-utils';
+import { getLayerId, normalizePointShape } from '../source/layer-utils';
 import type { QueryRenderedFeaturesOptions, RenderedFeatureAttributes } from './map';
-import type { ArcCollection, MapshaperLayer } from '../types/mapshaper-types';
+import type {
+  ArcCollection,
+  MapshaperLayer,
+  PathPart,
+  PathShape,
+} from '../types/mapshaper-types';
 
 /** Pixel distance for a bullseye hit on point features */
 const POINT_BULLSEYE_DIST = 2;
@@ -18,7 +23,7 @@ type FlatbushIndex = InstanceType<typeof Flatbush>;
 type IndexedLayer = { index: FlatbushIndex; shapeCount: number } | null;
 
 interface HitCandidate {
-  shape: number[][];
+  shape: PathShape;
   id: number;
   dist: number;
   info?: { distance: number };
@@ -158,8 +163,7 @@ export class FeatureQuery {
       }
       let xmin = Infinity, ymin = Infinity, xmax = -Infinity, ymax = -Infinity;
       if (isPoint) {
-        const points = Array.isArray(shp[0]) ? (shp as unknown as number[][]) : [shp as unknown as number[]];
-        for (const p of points) {
+        for (const p of normalizePointShape(shp)) {
           if (!p || p.length < 2) continue;
           if (p[0] < xmin) xmin = p[0];
           if (p[0] > xmax) xmax = p[0];
@@ -167,8 +171,9 @@ export class FeatureQuery {
           if (p[1] > ymax) ymax = p[1];
         }
       } else if (arcs?.getSimpleShapeBbox) {
-        for (let i = 0; i < shp.length; i++) {
-          arcs.getSimpleShapeBbox(shp[i] as number[], partBox);
+        const path = shp as PathShape;
+        for (let i = 0; i < path.length; i++) {
+          arcs.getSimpleShapeBbox(path[i], partBox);
           if (partBox[0] < xmin) xmin = partBox[0];
           if (partBox[1] < ymin) ymin = partBox[1];
           if (partBox[2] > xmax) xmax = partBox[2];
@@ -278,10 +283,11 @@ export class FeatureQuery {
 
     for (let i = 0; i < idCount; i++) {
       const shpId = candidateIds !== null ? candidateIds[i] : i;
-      const shp = shapes[shpId];
+      const shp = shapes[shpId] as PathShape | null | undefined;
       if (!shp) continue;
       for (let j = 0; j < shp.length; j++) {
-        arcs.getSimpleShapeBbox!(shp[j], bbox);
+        const part: PathPart = shp[j];
+        arcs.getSimpleShapeBbox!(part, bbox);
         if (
           x + dist < bbox[0] ||
           x - dist > bbox[2] ||
@@ -295,7 +301,7 @@ export class FeatureQuery {
           cand = index[shpId] = { shape: [], id: shpId, dist: 0 };
           cands.push(cand);
         }
-        cand.shape.push(shp[j]);
+        cand.shape.push(part);
       }
     }
     return cands;
@@ -359,7 +365,7 @@ export class FeatureQuery {
       const id = candidateIds !== null ? candidateIds[i] : i;
       const shp = shapes[id];
       if (!shp) continue;
-      for (const p of shp) {
+      for (const p of normalizePointShape(shp)) {
         if (!p) continue;
         const dist = geom.distance2D(x, y, p[0], p[1]) * toPx;
         if (dist > hitThreshold) continue;
@@ -544,14 +550,14 @@ export class FeatureQuery {
           if (!shp) continue;
           let hit = false;
           if (geometryType === 'point') {
-            const points = Array.isArray(shp[0]) ? shp : [shp];
-            hit = points.some(
-              (p: number[]) =>
+            hit = normalizePointShape(shp).some(
+              (p) =>
                 p[0] >= xmin && p[0] <= xmax && p[1] >= ymin && p[1] <= ymax,
             );
           } else if (arcs) {
-            for (let i = 0; i < shp.length; i++) {
-              arcs.getSimpleShapeBbox!(shp[i], bboxTmp);
+            const path = shp as PathShape;
+            for (let i = 0; i < path.length; i++) {
+              arcs.getSimpleShapeBbox!(path[i], bboxTmp);
               if (
                 xmax < bboxTmp[0] ||
                 xmin > bboxTmp[2] ||

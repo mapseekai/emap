@@ -1,12 +1,11 @@
 import type { EditCommand } from '../edit-command';
-import type {
-  ArcCollection,
-  MapshaperLayer,
+import {
+  isPathLayer,
+  type ArcCollection,
+  type MapshaperLayer,
+  type PathShape,
 } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
-
-/** A path-feature shape — list of parts, each part is a list of signed arc ids. */
-type PathShape = number[][];
 
 /**
  * One feature whose shape was rewritten to point at duplicated arc ids.
@@ -69,7 +68,7 @@ export class SplitSharedArcsCommand implements EditCommand {
     if (!arcs) return;
     appendArcs(arcs, this.opts.appendedArcs);
     for (const r of this.opts.remaps) {
-      r.layer.shapes![r.featureId] = cloneShape(r.newShape) as any;
+      r.layer.shapes![r.featureId] = cloneShape(r.newShape);
     }
     this.opts.source.refreshDisplayArcs();
   }
@@ -79,7 +78,7 @@ export class SplitSharedArcsCommand implements EditCommand {
     if (!arcs) return;
     truncateArcs(arcs, this.opts.originalArcCount);
     for (const r of this.opts.remaps) {
-      r.layer.shapes![r.featureId] = cloneShape(r.originalShape) as any;
+      r.layer.shapes![r.featureId] = cloneShape(r.originalShape);
     }
     this.opts.source.refreshDisplayArcs();
   }
@@ -123,10 +122,10 @@ export function planSharedArcSplit(
 
   for (const layer of allLayers) {
     if (!layer.shapes) continue;
-    if (layer.geometry_type !== 'polygon' && layer.geometry_type !== 'polyline') continue;
+    if (!isPathLayer(layer)) continue;
     const shapes = layer.shapes;
     for (let fid = 0; fid < shapes.length; fid++) {
-      const shape = shapes[fid] as PathShape | null | undefined;
+      const shape = shapes[fid];
       if (!shape) continue;
       const isSelected = selectedKey.has(featureKey(layer, fid));
       for (const part of shape) {
@@ -174,7 +173,8 @@ export function planSharedArcSplit(
   // arc → corresponding new arc id with the same sign (preserving direction).
   const remaps: SplitSharedArcsRemap[] = [];
   for (const s of selected) {
-    const oldShape = s.layer.shapes![s.featureId] as PathShape | null | undefined;
+    if (!isPathLayer(s.layer)) continue;
+    const oldShape = s.layer.shapes?.[s.featureId];
     if (!oldShape) continue;
     let touched = false;
     const newShape: PathShape = oldShape.map((part) =>

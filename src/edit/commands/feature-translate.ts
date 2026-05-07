@@ -1,6 +1,7 @@
 import type { EditCommand } from '../edit-command';
 import type { ArcCollection, MapshaperLayer } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
+import { normalizePointShape } from '../../source/layer-utils';
 
 /** Point-feature reference within a single source. */
 export interface TranslatedPointFeature {
@@ -77,10 +78,13 @@ export class FeatureTranslateCommand implements EditCommand {
     }
 
     // Point features: mutate every coordinate pair in the shape array.
+    // `normalizePointShape` wraps a legacy bare `[x, y]` in a one-element
+    // array, but the inner array is the SAME reference, so the in-place
+    // mutation still writes through to the layer's shape storage.
     for (const pf of pointFeatures) {
       const shape = pf.layer.shapes?.[pf.featureId];
       if (!shape) continue;
-      for (const coord of shape as number[][]) {
+      for (const coord of normalizePointShape(shape)) {
         if (coord && coord.length >= 2) {
           coord[0] += dx;
           coord[1] += dy;

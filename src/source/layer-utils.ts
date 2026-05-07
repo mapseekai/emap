@@ -1,4 +1,4 @@
-import type { MapshaperLayer } from '../types/mapshaper-types';
+import type { Coord2, MapshaperLayer } from '../types/mapshaper-types';
 
 /**
  * Derive a stable layer identifier from a Mapshaper layer object.
@@ -11,17 +11,18 @@ export function getLayerId(layer: MapshaperLayer, index: number): string {
 }
 
 /**
- * Normalize a Mapshaper point shape to a consistent `number[][]` format.
- * Handles both `[x, y]` (single point) and `[[x, y], ...]` (multi-point).
+ * Coerce a mapshaper point shape to a uniform `Coord2[]` (multi-point) form.
+ * Tolerates the legacy bare `[x, y]` single-point shape that some older
+ * datasets carry by wrapping it in a one-element array.
  */
-export function normalizePointShape(shape: unknown): number[][] {
+export function normalizePointShape(shape: unknown): Coord2[] {
   if (!shape) return [];
   if (!Array.isArray(shape)) return [];
   if (typeof shape[0] === 'number') {
-    return [shape as number[]];
+    return [shape as Coord2];
   }
   if (Array.isArray(shape[0])) {
-    return shape as number[][];
+    return shape as Coord2[];
   }
   return [];
 }

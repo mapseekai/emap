@@ -645,18 +645,25 @@ export class Emap extends EventDispatcher {
   /**
    * Generates a boolean flag array for arcs that belong to a specific source layer.
    * Cached to prevent walking shapes on every frame.
+   *
+   * Only meaningful for path layers (polygon/polyline). Point layers have no
+   * arc references, so iterating their shapes contributes nothing — caller
+   * should filter by `isPathLayer` before invoking.
    */
   private _getLayerArcFlags(ml: MapshaperLayer, arcs: any, cacheKey: string): Uint8Array | null {
     if (!ml || !ml.shapes || !arcs) return null;
-    
+
     let flags = this._layerArcFlagsCache.get(cacheKey);
     if (flags) return flags;
 
     const arcCount = arcs.size();
     flags = new Uint8Array(arcCount);
-    
-    // Tag all arcs used by this layer's shapes
-    for (const shape of ml.shapes) {
+
+    // Tag all arcs used by this layer's shapes. Layer is expected to be a
+    // path layer; we cast for narrow access since the runtime guard at the
+    // call sites ensures correctness.
+    const pathShapes = ml.shapes as Array<import('../types/mapshaper-types').PathShape | null>;
+    for (const shape of pathShapes) {
       if (!shape) continue;
       for (const part of shape) {
         for (const arcId of part) {
@@ -665,7 +672,7 @@ export class Emap extends EventDispatcher {
         }
       }
     }
-    
+
     this._layerArcFlagsCache.set(cacheKey, flags);
     return flags;
   }
