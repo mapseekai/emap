@@ -517,13 +517,17 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
           return;
         }
         const targets = finished.catalog.getDefaultTargets();
-        if (targets.length > 0) {
-          resolve(targets[0].dataset);
-        } else {
-          // mapshaper sometimes leaves the input dataset untouched if no
-          // target applied — treat as success and return the original ref.
-          resolve(dataset);
+        if (targets.length === 0) {
+          // mapshaper completed without producing a default target — the
+          // command was effectively a no-op (e.g. `-target NAME` alone).
+          // The previous behaviour silently resolved with the input
+          // dataset reference, which let no-op commands pollute history
+          // with empty `DatasetReplaceCommand`s. Surface as an error so
+          // `_runDatasetCommand` records `Err.mapshaper` instead.
+          reject(new Error('mapshaper command completed but produced no default target'));
+          return;
         }
+        resolve(targets[0].dataset);
       });
     });
   }
