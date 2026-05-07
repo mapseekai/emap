@@ -31,6 +31,15 @@ export interface DatasetReplaceCommandOptions {
 export class DatasetReplaceCommand implements EditCommand {
   readonly label: string;
 
+  /**
+   * Pushing a DatasetReplaceCommand marks every prior entry on the undo
+   * stack as `stale`. Their captured dataset / arc references point at
+   * the object this command swapped out, so undoing them post-swap would
+   * write to the wrong place. See `EditCommand.stale` for the full
+   * rationale.
+   */
+  readonly invalidatesPriorCommands = true;
+
   constructor(private readonly opts: DatasetReplaceCommandOptions) {
     this.label = opts.label;
   }

@@ -459,7 +459,10 @@ export class MapshaperOps {
 
     source.setDataset(after);
 
-    this._emap._history.clear();
+    // Push the dataset-replace; it self-flags every prior undoStack entry
+    // as `stale` via `invalidatesPriorCommands`. UI can render the
+    // boundary; the user can still undo across it (and into individual
+    // stale entries, which then get skipped).
     this._emap._history.push(new DatasetReplaceCommand({ source, before, after, label: 'Rebuild topology' }));
     this._emap._fireHistoryChange();
 
@@ -1225,8 +1228,8 @@ export class MapshaperOps {
 
     source.setDataset(after);
 
-    // Same history-barrier convention as every other dataset-replace op.
-    this._emap._history.clear();
+    // Push the dataset-replace; it self-flags every prior undoStack entry
+    // as `stale` so the UI can render a barrier without losing the entries.
     this._emap._history.push(new DatasetReplaceCommand({
       source, before, after,
       label: `Intersection points ${opts.target}`,
@@ -1498,10 +1501,10 @@ export class MapshaperOps {
     // Apply: swap the source's active dataset.
     source.setDataset(after);
 
-    // History barrier: prior commands closed over the OLD dataset's layers /
-    // arcs. Clearing keeps undo predictable; the dataset-replace itself is
-    // the single new undoable step.
-    this._emap._history.clear();
+    // Push the dataset-replace; it self-flags every prior undoStack entry
+    // as `stale` (its captured refs target the now-discarded dataset
+    // object). UI can render a divider; the entries stay in the stack
+    // for visibility, but `EditHistory.undo` skips them.
     this._emap._history.push(new DatasetReplaceCommand({ source, before, after, label }));
     this._emap._fireHistoryChange();
 

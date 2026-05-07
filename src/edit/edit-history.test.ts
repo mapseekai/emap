@@ -109,8 +109,128 @@ describe('EditHistory', () => {
     const h = new EditHistory();
     h.push(makeCmd('first'));
     h.push(makeCmd('second'));
-    expect(h.snapshot()).toEqual({ canUndo: true, canRedo: false, label: 'second' });
+    expect(h.snapshot()).toEqual({
+      canUndo: true,
+      canRedo: false,
+      label: 'second',
+      staleCount: 0,
+      topIsStale: false,
+    });
     h.undo();
-    expect(h.snapshot()).toEqual({ canUndo: true, canRedo: true, label: 'first' });
+    expect(h.snapshot()).toEqual({
+      canUndo: true,
+      canRedo: true,
+      label: 'first',
+      staleCount: 0,
+      topIsStale: false,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Stale-marker flow (PR-6, H2)
+// ---------------------------------------------------------------------------
+
+function makeBarrier(label?: string): EditCommand & {
+  do: ReturnType<typeof vi.fn>;
+  undo: ReturnType<typeof vi.fn>;
+} {
+  return {
+    do: vi.fn(),
+    undo: vi.fn(),
+    label,
+    invalidatesPriorCommands: true,
+  };
+}
+
+describe('EditHistory stale marker (history barrier)', () => {
+  it('pushing an `invalidatesPriorCommands` command marks every prior entry stale', () => {
+    const h = new EditHistory();
+    const a = makeCmd('a');
+    const b = makeCmd('b');
+    const dr = makeBarrier('clip');
+    h.push(a);
+    h.push(b);
+    expect(a.stale).toBeUndefined();
+    expect(b.stale).toBeUndefined();
+    h.push(dr);
+    expect(a.stale).toBe(true);
+    expect(b.stale).toBe(true);
+    // The barrier itself remains undoable
+    expect(dr.stale).toBeUndefined();
+  });
+
+  it('snapshot reports staleCount and topIsStale across the barrier', () => {
+    const h = new EditHistory();
+    h.push(makeCmd('a'));
+    h.push(makeCmd('b'));
+    h.push(makeBarrier('clip'));
+    let snap = h.snapshot();
+    expect(snap.staleCount).toBe(2);
+    expect(snap.topIsStale).toBe(false); // barrier is on top, not stale
+    expect(snap.label).toBe('clip');
+    // After undoing the barrier, the top of undo is now stale.
+    h.undo();
+    snap = h.snapshot();
+    expect(snap.canUndo).toBe(true);
+    expect(snap.staleCount).toBe(2);
+    expect(snap.topIsStale).toBe(true);
+    expect(snap.label).toBe('b');
+  });
+
+  it('undo skips a stale command without invoking its undo() and surfaces skippedStale once', () => {
+    const h = new EditHistory();
+    const a = makeCmd('a');
+    h.push(a);
+    h.push(makeBarrier('clip'));
+    h.undo(); // pop barrier — barrier.undo() invoked
+    expect(h.snapshot().skippedStale).toBeUndefined();
+    const popped = h.undo();
+    expect(popped).toBe(a);
+    expect(a.undo).not.toHaveBeenCalled();
+    const snap = h.snapshot();
+    expect(snap.skippedStale).toBe(true);
+    expect(snap.canUndo).toBe(false);
+    expect(snap.canRedo).toBe(true);
+  });
+
+  it('redo skips a stale command without invoking its do() and surfaces skippedStale', () => {
+    const h = new EditHistory();
+    const a = makeCmd('a');
+    h.push(a);
+    h.push(makeBarrier('clip'));
+    h.undo(); // barrier
+    h.undo(); // a (stale, skipped)
+    // both now on redo stack: [barrier, a] from bottom to top — wait,
+    // pushed in pop order: barrier first, then a. So redoStack top is a.
+    const redone = h.redo();
+    expect(redone).toBe(a);
+    expect(a.do).not.toHaveBeenCalled();
+    expect(h.snapshot().skippedStale).toBe(true);
+  });
+
+  it('a barrier push on a non-empty stack also drops the redo stack', () => {
+    const h = new EditHistory();
+    const a = makeCmd('a');
+    h.push(a);
+    h.undo();
+    expect(h.canRedo()).toBe(true);
+    h.push(makeBarrier('clip'));
+    expect(h.canRedo()).toBe(false);
+  });
+
+  it('skippedStale resets on the next non-stale traversal', () => {
+    const h = new EditHistory();
+    const a = makeCmd('a');
+    h.push(a);
+    h.push(makeBarrier('clip'));
+    h.undo(); // barrier — non-stale
+    expect(h.snapshot().skippedStale).toBeFalsy();
+    h.undo(); // a — stale, skip
+    expect(h.snapshot().skippedStale).toBe(true);
+    h.redo(); // a — still stale, skip
+    expect(h.snapshot().skippedStale).toBe(true);
+    h.redo(); // barrier — non-stale, runs do()
+    expect(h.snapshot().skippedStale).toBeFalsy();
   });
 });

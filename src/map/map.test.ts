@@ -713,20 +713,27 @@ describe('Emap clipLayer / eraseLayer', () => {
     expect(historyListener.mock.calls[0][0].label).toBe('Clip roads');
   });
 
-  it('clipLayer clears any prior history (history barrier)', async () => {
+  it('clipLayer flags prior history as stale (history barrier)', async () => {
     // Push a fake earlier command so the history is non-empty
-    map.pushCommand({ do: () => {}, undo: () => {} });
+    const priorCmd: any = { do: () => {}, undo: vi.fn() };
+    map.pushCommand(priorCmd);
     expect(map.canUndo()).toBe(true);
 
     await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
-    // After clip, only the dataset-replace command should remain on the stack
+    // Prior command must have been flagged stale by the DatasetReplaceCommand push.
+    expect(priorCmd.stale).toBe(true);
+
     map.undo();
     expect(source.setDataset).toHaveBeenCalledTimes(2);
     // First call: do() applied afterDataset; second call: undo() applies the
     // copyDataset snapshot (the value returned by copyDatasetSpy).
     const restoredArg = source.setDataset.mock.calls[1][0];
     expect(restoredArg._isCopy).toBe(true);
-    // No further undo is available — prior history was cleared
+
+    // Prior history is preserved (not cleared) but the next undo target is stale.
+    expect(map.canUndo()).toBe(true);
+    map.undo(); // skips priorCmd because it's stale; doesn't invoke its undo()
+    expect(priorCmd.undo).not.toHaveBeenCalled();
     expect(map.canUndo()).toBe(false);
   });
 
@@ -874,12 +881,15 @@ describe('Emap dissolveLayer', () => {
     expect(selectionListener).toHaveBeenCalled();
   });
 
-  it('clears prior history (history barrier inherited from runner)', async () => {
-    map.pushCommand({ do: () => {}, undo: () => {} });
+  it('flags prior history as stale (history barrier inherited from runner)', async () => {
+    const prior: any = { do: () => {}, undo: vi.fn() };
+    map.pushCommand(prior);
     expect(map.canUndo()).toBe(true);
     await map.ops.dissolveLayer({ source: 'src1', target: 'states' });
-    map.undo();
-    // Only the dataset-replace step should be reachable; prior fake command is gone
+    expect(prior.stale).toBe(true);
+    map.undo(); // undoes the dataset-replace
+    map.undo(); // skips the stale prior cmd
+    expect(prior.undo).not.toHaveBeenCalled();
     expect(map.canUndo()).toBe(false);
   });
 
@@ -1189,11 +1199,15 @@ describe('Emap mergeSelected', () => {
     expect(selectionListener).toHaveBeenCalled();
   });
 
-  it('clears prior history (history barrier)', async () => {
-    map.pushCommand({ do: () => {}, undo: () => {} });
+  it('flags prior history as stale (history barrier)', async () => {
+    const prior: any = { do: () => {}, undo: vi.fn() };
+    map.pushCommand(prior);
     map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
     await map.ops.mergeSelected();
-    map.undo();
+    expect(prior.stale).toBe(true);
+    map.undo(); // dataset-replace
+    map.undo(); // stale prior — skipped
+    expect(prior.undo).not.toHaveBeenCalled();
     expect(map.canUndo()).toBe(false);
   });
 
@@ -4051,14 +4065,21 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
     expect(map.canUndo()).toBe(true);
   });
 
-  it('acts as a history barrier (clears prior history)', async () => {
+  it('acts as a history barrier (flags prior commands stale)', async () => {
     const history = (map as any)._history as EditHistory;
-    history.push({ label: 'fake', do: vi.fn(), undo: vi.fn() } as any);
+    const fakeUndo = vi.fn();
+    const fake = { label: 'fake', do: vi.fn(), undo: fakeUndo } as any;
+    history.push(fake);
     expect(map.canUndo()).toBe(true);
-    // After rebuild, prior 'fake' command is gone; only 'Rebuild topology' remains.
+    // After rebuild, the fake prior command is flagged stale rather than
+    // dropped — visible in the history list, but its undo() is skipped.
     await map.ops.rebuildTopology({ source: 'src1' });
+    expect(fake.stale).toBe(true);
     const command = history.undo();
     expect(command?.label).toBe('Rebuild topology');
+    expect(map.canUndo()).toBe(true);
+    history.undo();
+    expect(fakeUndo).not.toHaveBeenCalled();
     expect(map.canUndo()).toBe(false);
   });
 
