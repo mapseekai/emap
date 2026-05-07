@@ -66,12 +66,29 @@ export class EditHistory {
   /**
    * Push a new command, evicting the oldest entry if at capacity.
    *
+   * Merge fast-path: if the top of the undo stack defines a `merge`
+   * companion AND the incoming command's `mergeable(top)` returns true,
+   * the top absorbs the incoming command and nothing is pushed. The
+   * redo stack is still cleared (the new edit invalidates forward
+   * replay). Used by `VertexMoveCommand` / `FeatureTranslateCommand`
+   * to coalesce rapid drag / nudge sequences into one undo step.
+   *
    * If `cmd.invalidatesPriorCommands` is `true` (DatasetReplaceCommand),
    * every entry currently in the undo stack is flagged `stale = true`
    * before this command is pushed. The command itself is NOT marked
    * stale — it remains undoable as the boundary itself.
    */
   push(cmd: EditCommand): void {
+    // Merge attempt comes BEFORE the barrier check so the merged command
+    // (still on top) keeps its non-stale status. A barrier never tries
+    // to merge — it's not a vertex/translate operation.
+    const top = this._undoStack[this._undoStack.length - 1];
+    if (top && !top.stale && top.merge && cmd.mergeable?.(top)) {
+      top.merge(cmd);
+      this._redoStack.length = 0;
+      return;
+    }
+
     if (cmd.invalidatesPriorCommands) {
       for (const prior of this._undoStack) prior.stale = true;
       // Items currently on the redo stack are also outdated — a

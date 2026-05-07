@@ -150,4 +150,44 @@ describe('FeatureTranslateCommand', () => {
     const c2 = new FeatureTranslateCommand({ source, dx: 1, dy: 0, arcIds: [3, 4], pointFeatures: [] });
     expect(c2.label).toBe('Translate 2 features');
   });
+
+  describe('mergeable + merge', () => {
+    it('merges consecutive translates of the same arcIds + source by accumulating dx/dy', () => {
+      const { arcs, xx, yy } = makeArcs([0, 1], [0, 1], [2]);
+      const source = makeSource();
+      const a = new FeatureTranslateCommand({
+        source, arcs, dx: 2, dy: 3, arcIds: [0], pointFeatures: [],
+      });
+      const b = new FeatureTranslateCommand({
+        source, arcs, dx: 5, dy: 7, arcIds: [0], pointFeatures: [],
+      });
+      a.do();
+      b.do();
+      expect(xx[0]).toBe(7);  // 0 + 2 + 5
+      expect(yy[0]).toBe(10); // 0 + 3 + 7
+      expect(b.mergeable(a)).toBe(true);
+      a.merge(b);
+      // After merge, undoing `a` reverses BOTH: xx[0] = 7 - 7 = 0
+      a.undo();
+      expect(xx[0]).toBe(0);
+      expect(yy[0]).toBe(0);
+    });
+
+    it('refuses to merge when arcIds differ', () => {
+      const source = makeSource();
+      const a = new FeatureTranslateCommand({ source, dx: 1, dy: 0, arcIds: [0], pointFeatures: [] });
+      const b = new FeatureTranslateCommand({ source, dx: 1, dy: 0, arcIds: [1], pointFeatures: [] });
+      expect(b.mergeable(a)).toBe(false);
+    });
+
+    it('refuses to merge across sources', () => {
+      const a = new FeatureTranslateCommand({
+        source: makeSource(), dx: 1, dy: 0, arcIds: [0], pointFeatures: [],
+      });
+      const b = new FeatureTranslateCommand({
+        source: makeSource(), dx: 1, dy: 0, arcIds: [0], pointFeatures: [],
+      });
+      expect(b.mergeable(a)).toBe(false);
+    });
+  });
 });

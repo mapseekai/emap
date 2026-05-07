@@ -19,11 +19,27 @@ export interface EditCommand {
   /** Optional human-readable label, surfaced in `historychange` events. */
   readonly label?: string;
   /**
-   * Optional merge hook for collapsing consecutive related edits into one
-   * history entry. Reserved for future use; v1 always pushes one entry per
-   * command.
+   * Optional merge predicate, evaluated by `EditHistory.push` against the
+   * current top of the undo stack. When `true`, the new command is NOT
+   * pushed; instead `prev.merge(this)` is invoked and `prev` absorbs the
+   * follow-up's effect. Used to collapse rapid repeated edits — successive
+   * arrow-key vertex nudges, mouse-drag tween steps, etc. — into one
+   * undoable entry.
+   *
+   * Implementations should be cheap (O(N) at worst over command-internal
+   * fields) and stable (no I/O, no side effects).
    */
   mergeable?(prev: EditCommand): boolean;
+
+  /**
+   * Companion to {@link mergeable}: invoked by `EditHistory.push` only
+   * when `next.mergeable(this)` returned `true`. Mutates this command in
+   * place to absorb `next`'s effect; `next` is discarded after the call
+   * returns. Implementations typically refresh a "newest-coordinate"
+   * field while preserving the oldest "starting" capture so undo still
+   * reverses the cumulative work.
+   */
+  merge?(next: EditCommand): void;
 
   /**
    * Static marker: when `true`, pushing this command tells `EditHistory`

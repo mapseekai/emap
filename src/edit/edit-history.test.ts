@@ -234,3 +234,81 @@ describe('EditHistory stale marker (history barrier)', () => {
     expect(h.snapshot().skippedStale).toBeFalsy();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Merge fast-path (PR-9, M2)
+// ---------------------------------------------------------------------------
+
+function makeMergeable(label: string, key: string): EditCommand & {
+  do: ReturnType<typeof vi.fn>;
+  undo: ReturnType<typeof vi.fn>;
+  merge: ReturnType<typeof vi.fn>;
+  mergeKey: string;
+  mergedCount: number;
+} {
+  const cmd: any = {
+    do: vi.fn(),
+    undo: vi.fn(),
+    label,
+    mergeKey: key,
+    mergedCount: 0,
+    mergeable(prev: EditCommand): boolean {
+      return (prev as any).mergeKey === this.mergeKey;
+    },
+    merge: vi.fn(function (this: any, next: EditCommand) {
+      this.mergedCount = ((next as any).mergedCount ?? 0) + 1;
+    }),
+  };
+  return cmd;
+}
+
+describe('EditHistory merge fast-path', () => {
+  it('absorbs a follow-up command when mergeable returns true', () => {
+    const h = new EditHistory();
+    const a = makeMergeable('move', 'k1');
+    const b = makeMergeable('move', 'k1');
+    h.push(a);
+    h.push(b);
+    expect(h.size()).toBe(1);
+    expect(a.merge).toHaveBeenCalledWith(b);
+    expect(a.mergedCount).toBe(1);
+  });
+
+  it('does NOT merge when mergeKey differs', () => {
+    const h = new EditHistory();
+    const a = makeMergeable('move', 'k1');
+    const b = makeMergeable('move', 'k2');
+    h.push(a);
+    h.push(b);
+    expect(h.size()).toBe(2);
+    expect(a.merge).not.toHaveBeenCalled();
+  });
+
+  it('clears the redo stack on merge (forward replay is invalidated)', () => {
+    const h = new EditHistory();
+    const a = makeMergeable('move', 'k1');
+    const x = makeCmd('unrelated');
+    h.push(a);
+    h.push(x);
+    h.undo();
+    expect(h.canRedo()).toBe(true);
+    const b = makeMergeable('move', 'k1');
+    // 'a' is the new top after undo of 'x'. b merges into a.
+    h.push(b);
+    expect(h.canRedo()).toBe(false);
+    expect(a.merge).toHaveBeenCalled();
+  });
+
+  it('refuses to merge into a stale top', () => {
+    const h = new EditHistory();
+    const a = makeMergeable('move', 'k1');
+    h.push(a);
+    h.push(makeBarrier('clip')); // marks `a` stale
+    h.undo(); // pop barrier
+    const b = makeMergeable('move', 'k1');
+    h.push(b);
+    // `a` is stale — merge fast-path bypassed; `b` is pushed alongside.
+    expect(h.size()).toBe(2);
+    expect(a.merge).not.toHaveBeenCalled();
+  });
+});
