@@ -2,8 +2,8 @@ import mapshaper from 'mapshaper';
 import { EventDispatcher } from '../core/events';
 import { TopologySource as ITopologySource } from './source';
 import { Bounds } from '../geo/bounds';
-import { unzipSync, strFromU8, zipSync } from 'fflate';
-import type { UnzipFileInfo } from 'fflate';
+import { unzip, strFromU8, zipSync } from 'fflate';
+import type { UnzipFileInfo, Unzipped } from 'fflate';
 import { DisplayArcs } from './display-arcs';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { ExportFormat, ExportOptions } from './source';
@@ -201,7 +201,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         }
         for (const entry of this._data) {
           if (this._isZipFile(entry.filename)) {
-            const extracted = this._extractZip(entry.content);
+            const extracted = await this._extractZip(entry.content);
             const primary = this._findPrimaryFile(extracted);
             if (!primary) {
               throw new Error(`No importable file found in zip archive: ${entry.filename}`);
@@ -246,7 +246,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         }
 
         if (this._isZipFile(input.filename)) {
-          const extracted = this._extractZip(input.content);
+          const extracted = await this._extractZip(input.content);
           const primary = this._findPrimaryFile(extracted);
           if (!primary) {
             throw new Error('No importable file found in zip archive');
@@ -528,40 +528,56 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     return /\.zip$/i.test(filename);
   }
 
-  private _extractZip(data: Uint8Array): Record<string, Uint8Array | string> {
+  private async _extractZip(data: Uint8Array): Promise<Record<string, Uint8Array | string>> {
     const limits = { ...DEFAULT_ZIP_LIMITS, ...this._options.zipLimits };
     let uncompressedTotal = 0;
     let entryCount = 0;
 
-    const unzipped = unzipSync(data, {
-      filter: (file: UnzipFileInfo) => {
-        entryCount++;
-        if (entryCount > limits.maxEntries) {
-          throw new Error(
-            `ZIP extraction limit exceeded: ${entryCount} entries > maxEntries ${limits.maxEntries}`,
-          );
-        }
+    // Async unzip splits the work across microtask boundaries instead of
+    // hogging the main thread for the whole archive — the synchronous
+    // `unzipSync` form would block for hundreds of ms on a 100 MB shapefile
+    // bundle. The `filter` callback retains its strict pre-inflation
+    // resource ceilings; throwing from it propagates through the promise
+    // rejection.
+    const unzipped: Unzipped = await new Promise((resolve, reject) => {
+      unzip(
+        data,
+        {
+          filter: (file: UnzipFileInfo) => {
+            entryCount++;
+            if (entryCount > limits.maxEntries) {
+              throw new Error(
+                `ZIP extraction limit exceeded: ${entryCount} entries > maxEntries ${limits.maxEntries}`,
+              );
+            }
 
-        uncompressedTotal += file.originalSize;
-        if (uncompressedTotal > limits.maxBytes) {
-          throw new Error(
-            `ZIP extraction limit exceeded: uncompressed total ${uncompressedTotal} > maxBytes ${limits.maxBytes}`,
-          );
-        }
+            uncompressedTotal += file.originalSize;
+            if (uncompressedTotal > limits.maxBytes) {
+              throw new Error(
+                `ZIP extraction limit exceeded: uncompressed total ${uncompressedTotal} > maxBytes ${limits.maxBytes}`,
+              );
+            }
 
-        if (data.byteLength > 0) {
-          const ratio = uncompressedTotal / data.byteLength;
-          if (ratio > limits.maxRatio) {
-            throw new Error(
-              `ZIP extraction limit exceeded: ratio ${ratio.toFixed(1)} > maxRatio ${limits.maxRatio}`,
-            );
-          }
-        }
+            if (data.byteLength > 0) {
+              const ratio = uncompressedTotal / data.byteLength;
+              if (ratio > limits.maxRatio) {
+                throw new Error(
+                  `ZIP extraction limit exceeded: ratio ${ratio.toFixed(1)} > maxRatio ${limits.maxRatio}`,
+                );
+              }
+            }
 
-        // Skip metadata and dot files before inflating their payloads. They are
-        // still counted above, so they cannot hide bytes or entry count.
-        return !(/^__MACOSX/.test(file.name) || file.name.split('/').pop()?.startsWith('.'));
-      },
+            // Skip metadata and dot files before inflating their payloads.
+            // They are still counted above, so they cannot hide bytes or
+            // entry count.
+            return !(/^__MACOSX/.test(file.name) || file.name.split('/').pop()?.startsWith('.'));
+          },
+        },
+        (err, result) => {
+          if (err) reject(err);
+          else resolve(result);
+        },
+      );
     });
 
     const result: Record<string, Uint8Array | string> = {};

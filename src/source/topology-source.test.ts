@@ -369,50 +369,53 @@ describe('TopologySource.setData multi-file', () => {
 // ---------------------------------------------------------------------------
 
 describe('TopologySource._extractZip — resource limits', () => {
-  function callExtract(source: TopologySource, data: Uint8Array): Record<string, Uint8Array | string> {
+  function callExtract(
+    source: TopologySource,
+    data: Uint8Array,
+  ): Promise<Record<string, Uint8Array | string>> {
     return Reflect.get(source, '_extractZip').call(source, data);
   }
 
-  it('accepts a normal multi-file shapefile zip with default limits', () => {
+  it('accepts a normal multi-file shapefile zip with default limits', async () => {
     const buf = zipSync({
       'a.shp': new Uint8Array([1, 2, 3]),
       'a.dbf': new Uint8Array([4, 5]),
       'a.prj': new TextEncoder().encode('GEOGCS[]'),
     });
     const source = new TopologySource('t');
-    const out = callExtract(source, buf);
+    const out = await callExtract(source, buf);
     expect(Object.keys(out).sort()).toEqual(['a.dbf', 'a.prj', 'a.shp']);
   });
 
-  it('throws when entry count exceeds maxEntries', () => {
+  it('throws when entry count exceeds maxEntries', async () => {
     const entries: Record<string, Uint8Array> = {};
     for (let i = 0; i < 12; i++) entries[`f${i}.shp`] = new Uint8Array([i]);
     const buf = zipSync(entries);
     const source = new TopologySource('t', { zipLimits: { maxEntries: 5 } });
-    expect(() => callExtract(source, buf)).toThrow(/maxEntries/);
+    await expect(callExtract(source, buf)).rejects.toThrow(/maxEntries/);
   });
 
-  it('throws when uncompressed total exceeds maxBytes', () => {
+  it('throws when uncompressed total exceeds maxBytes', async () => {
     const buf = zipSync({ 'big.shp': new Uint8Array(2048) });
     const source = new TopologySource('t', { zipLimits: { maxBytes: 1024 } });
-    expect(() => callExtract(source, buf)).toThrow(/maxBytes/);
+    await expect(callExtract(source, buf)).rejects.toThrow(/maxBytes/);
   });
 
-  it('throws when compression ratio exceeds maxRatio', () => {
+  it('throws when compression ratio exceeds maxRatio', async () => {
     // 100 KB of zeros compresses to a few hundred bytes — easily >100x ratio
     const buf = zipSync({ 'zeros.shp': new Uint8Array(100 * 1024) });
     const source = new TopologySource('t', { zipLimits: { maxRatio: 5 } });
-    expect(() => callExtract(source, buf)).toThrow(/maxRatio/);
+    await expect(callExtract(source, buf)).rejects.toThrow(/maxRatio/);
   });
 
-  it('user-supplied higher limits permit previously-rejected payloads', () => {
+  it('user-supplied higher limits permit previously-rejected payloads', async () => {
     const entries: Record<string, Uint8Array> = {};
     for (let i = 0; i < 12; i++) entries[`f${i}.shp`] = new Uint8Array([i]);
     const buf = zipSync(entries);
     const source = new TopologySource('t', {
       zipLimits: { maxEntries: 100, maxRatio: 1000 },
     });
-    const out = callExtract(source, buf);
+    const out = await callExtract(source, buf);
     expect(Object.keys(out)).toHaveLength(12);
   });
 });
