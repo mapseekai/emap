@@ -1381,19 +1381,19 @@ describe('Emap translateSelected', () => {
   });
 
   it('returns false on empty selection', () => {
-    expect(map.editSession.translateSelected(10, 5)).toBe(false);
+    expect(map.editSession.translateSelected(10, 5).ok).toBe(false);
   });
 
   it('returns false on zero offset', () => {
     map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
-    expect(map.editSession.translateSelected(0, 0)).toBe(false);
+    expect(map.editSession.translateSelected(0, 0).ok).toBe(false);
     expect(map.canUndo()).toBe(false);
   });
 
   it('translates one polygon by collecting its arc id', () => {
     map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
     const ok = map.editSession.translateSelected(100, 200);
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     // Arc 0's verts shifted by (100, 200); arc 1 untouched
     expect(xx[0]).toBe(100); expect(xx[1]).toBe(101);
     expect(xx[2]).toBe(10); expect(xx[3]).toBe(11);
@@ -2086,12 +2086,12 @@ describe('Emap rotateSelected / scaleSelected', () => {
 
   describe('rotateSelected', () => {
     it('returns false on empty selection', () => {
-      expect(map.editSession.rotateSelected(45)).toBe(false);
+      expect(map.editSession.rotateSelected(45).ok).toBe(false);
     });
 
     it('returns false on zero angle', () => {
       map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
-      expect(map.editSession.rotateSelected(0)).toBe(false);
+      expect(map.editSession.rotateSelected(0).ok).toBe(false);
       expect(map.canUndo()).toBe(false);
     });
 
@@ -2145,13 +2145,13 @@ describe('Emap rotateSelected / scaleSelected', () => {
 
   describe('scaleSelected', () => {
     it('returns false on empty selection', () => {
-      expect(map.editSession.scaleSelected(2)).toBe(false);
+      expect(map.editSession.scaleSelected(2).ok).toBe(false);
     });
 
     it('returns false on no-op scale (1) and (1, 1)', () => {
       map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
-      expect(map.editSession.scaleSelected(1)).toBe(false);
-      expect(map.editSession.scaleSelected(1, 1)).toBe(false);
+      expect(map.editSession.scaleSelected(1).ok).toBe(false);
+      expect(map.editSession.scaleSelected(1, 1).ok).toBe(false);
       expect(map.canUndo()).toBe(false);
     });
 

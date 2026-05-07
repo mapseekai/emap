@@ -24,6 +24,7 @@ import type { TopologySource } from '../source/source';
 import type { MapshaperLayer } from '../types/mapshaper-types';
 import { normalizePointShape } from '../source/layer-utils';
 import type { EmapHostInternal } from './emap-host';
+import { Err, OK, type OpResult } from './op-result';
 import type {
   DragSessionOptions,
   FeatureTranslateSession,
@@ -38,10 +39,10 @@ import type {
 export class EditSessions {
   constructor(private _emap: EmapHostInternal) {}
 
-  translateSelected(dx: number, dy: number): boolean {
-    if (dx === 0 && dy === 0) return false;
+  translateSelected(dx: number, dy: number): OpResult {
+    if (dx === 0 && dy === 0) return Err.validation('offset', 'dx and dy are both 0 (no-op)');
     const refs = this._emap._selection.getAll();
-    if (refs.length === 0) return false;
+    if (refs.length === 0) return Err.validation('selection', 'selection is empty');
 
     // Group selection by source, collecting unique abs-arc-ids (for path
     // features) and (layer, featureId) pairs (for point features).
@@ -81,7 +82,7 @@ export class EditSessions {
       }
     }
 
-    if (bySource.size === 0) return false;
+    if (bySource.size === 0) return Err.validation('selection', 'no resolvable layers in selection');
 
     const children: EditCommand[] = [];
     const editedSourceIds: string[] = [];
@@ -103,7 +104,7 @@ export class EditSessions {
       editedSourceIds.push(sourceId);
     }
 
-    if (children.length === 0) return false;
+    if (children.length === 0) return Err.validation('selection', 'every resolved layer was empty');
 
     const pushed: EditCommand =
       children.length === 1
@@ -113,7 +114,7 @@ export class EditSessions {
     this._emap._fireHistoryChange();
     this._emap._clearSpatialIndexesForSources(editedSourceIds);
     this._emap._scheduleRender();
-    return true;
+    return OK;
   }
 
   /**
@@ -496,8 +497,8 @@ export class EditSessions {
    * in a `CompositeCommand`. Returns `false` for empty selection or zero
    * angle.
    */
-  rotateSelected(angleDegrees: number, origin?: [number, number]): boolean {
-    if (angleDegrees === 0) return false;
+  rotateSelected(angleDegrees: number, origin?: [number, number]): OpResult {
+    if (angleDegrees === 0) return Err.validation('angleDegrees', 'angle is 0 (no-op)');
     const angleRad = (angleDegrees * Math.PI) / 180;
     return this._applyAffineToSelection(
       (ox: number, oy: number) => rotateMatrix(angleRad, ox, oy),
@@ -509,13 +510,12 @@ export class EditSessions {
   /**
    * Scale every selected feature by `(sx, sy)` around `origin`.
    * `sy` defaults to `sx` (uniform scale). Default `origin` is the bbox
-   * centroid of the affected vertices. Returns `false` for empty selection
-   * or no-op scale (`sx === 1 && sy === 1`).
+   * centroid of the affected vertices.
    */
-  scaleSelected(sx: number, sy?: number, origin?: [number, number]): boolean {
+  scaleSelected(sx: number, sy?: number, origin?: [number, number]): OpResult {
     const sX = sx;
     const sY = sy ?? sx;
-    if (sX === 1 && sY === 1) return false;
+    if (sX === 1 && sY === 1) return Err.validation('scale', 'sx and sy are both 1 (no-op)');
     return this._applyAffineToSelection(
       (ox: number, oy: number) => scaleMatrix(sX, sY, ox, oy),
       origin,
@@ -534,9 +534,9 @@ export class EditSessions {
     matrixForOrigin: (ox: number, oy: number) => AffineMatrix,
     origin: [number, number] | undefined,
     labelFor: (totalFeatures: number) => string,
-  ): boolean {
+  ): OpResult {
     const refs = this._emap._selection.getAll();
-    if (refs.length === 0) return false;
+    if (refs.length === 0) return Err.validation('selection', 'selection is empty');
 
     const bySource = new globalThis.Map<
       string,
@@ -573,7 +573,9 @@ export class EditSessions {
       }
     }
 
-    if (bySource.size === 0) return false;
+    if (bySource.size === 0) {
+      return Err.validation('selection', 'no resolvable layers in selection');
+    }
 
     // Default origin = bbox centroid of every vertex the transform will
     // touch. Picked once and reused across all per-source commands so
@@ -585,11 +587,15 @@ export class EditSessions {
       oy = origin[1];
     } else {
       const centroid = this._computeSelectionCentroid(bySource);
-      if (!centroid) return false;
+      if (!centroid) {
+        return Err.validation('origin', 'no vertices in selection; cannot compute centroid');
+      }
       [ox, oy] = centroid;
     }
 
-    if (!Number.isFinite(ox) || !Number.isFinite(oy)) return false;
+    if (!Number.isFinite(ox) || !Number.isFinite(oy)) {
+      return Err.validation('origin', 'computed origin is not finite');
+    }
 
     const matrix = matrixForOrigin(ox, oy);
 
@@ -612,7 +618,9 @@ export class EditSessions {
       editedSourceIds.push(sourceId);
     }
 
-    if (children.length === 0) return false;
+    if (children.length === 0) {
+      return Err.validation('selection', 'every resolved layer was empty');
+    }
 
     const pushed: EditCommand =
       children.length === 1
@@ -622,7 +630,7 @@ export class EditSessions {
     this._emap._fireHistoryChange();
     this._emap._clearSpatialIndexesForSources(editedSourceIds);
     this._emap._scheduleRender();
-    return true;
+    return OK;
   }
 
   /**
