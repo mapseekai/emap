@@ -173,6 +173,27 @@ export interface MapshaperDataset {
       a?: number;
     };
   };
+  /**
+   * Monotonic counter bumped by every in-place edit (vertex move / insert /
+   * delete, feature translate / affine, shared-arc split). Cache layers that
+   * key off arc geometry — the per-layer Flatbush spatial index, future
+   * arc-flag caches — include this in their cache key so coord-only
+   * mutations auto-invalidate without a manual `clear` call.
+   *
+   * Optional because mapshaper itself doesn't set it; emap initialises to
+   * `0` when first observed via {@link bumpEditVersion}.
+   */
+  editVersion?: number;
+}
+
+/**
+ * Bump (or initialise to `1`) the dataset's `editVersion` counter. Called
+ * by every in-place edit command at the end of `do()` / `undo()` so the
+ * spatial index sees a fresh cache key on the next query.
+ */
+export function bumpEditVersion(dataset: MapshaperDataset | null | undefined): void {
+  if (!dataset) return;
+  dataset.editVersion = (dataset.editVersion ?? 0) + 1;
 }
 
 // ---------------------------------------------------------------------------

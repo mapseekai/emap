@@ -1,8 +1,9 @@
 import type { EditCommand } from '../edit-command';
-import type {
-  ArcCollection,
-  FeatureShape,
-  MapshaperLayer,
+import {
+  bumpEditVersion,
+  type ArcCollection,
+  type FeatureShape,
+  type MapshaperLayer,
 } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
 import {
@@ -76,6 +77,7 @@ export class FeatureCreateCommand implements EditCommand {
       records?.push(o.appendedRecord);
     }
     o.source.markDisplayArcsDirty?.();
+    bumpEditVersion(o.source.getDataset?.());
   }
 
   undo(): void {
@@ -90,5 +92,6 @@ export class FeatureCreateCommand implements EditCommand {
       adapter.deleteLastArc(o.arcs);
     }
     o.source.markDisplayArcsDirty?.();
+    bumpEditVersion(o.source.getDataset?.());
   }
 }

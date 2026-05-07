@@ -40,14 +40,18 @@ export class FeatureQuery {
   private _getInitialMX: () => number;
 
   // Per-(source, layer) Flatbush spatial index cache. Keyed by
-  // `${sourceId}|${layerIndex}|${shapes.length}|${arcs.size()}` so any
-  // dataset-replace op (which always changes shape and / or arc counts)
-  // implicitly invalidates. In-place geometry edits like translateSelected
-  // do NOT change the counts and therefore don't auto-invalidate — callers
-  // must call `clear(sourceId)` after such edits if they want fresh
-  // results. The map of (sourceId, layerIndex) → null entries marks
-  // layers that have been seen as empty so the no-shape fallback path
-  // also short-circuits.
+  // `${sourceId}|${layerIndex}|${shapes.length}|${arcs.size()}|${editVersion}`
+  // so any of three things implicitly invalidates a cached entry:
+  //   1. Dataset-replace ops change shape and/or arc counts.
+  //   2. In-place edits (vertex move / translate / shared-arc split / …)
+  //      bump `dataset.editVersion` via `bumpEditVersion`, which lands in
+  //      the cache key.
+  //   3. Manual `clear(sourceId)` calls (kept as an escape hatch for
+  //      callers that mutate via paths that don't go through edit
+  //      commands).
+  // The map of (sourceId, layerIndex) → null entries marks layers that
+  // have been seen as empty so the no-shape fallback path also
+  // short-circuits.
   private _indexCache: globalThis.Map<string, IndexedLayer> =
     new globalThis.Map();
 
@@ -112,8 +116,9 @@ export class FeatureQuery {
     if (source.type !== 'topology') return;
     const layers = source.getLayers();
     const arcs = source.getArcs();
+    const dataset = source.getDataset?.();
     for (let i = 0; i < layers.length; i++) {
-      this._getOrBuildIndex(sourceId, i, layers[i] as MapshaperLayer, arcs);
+      this._getOrBuildIndex(sourceId, i, layers[i] as MapshaperLayer, arcs, dataset);
     }
   }
 
@@ -131,11 +136,18 @@ export class FeatureQuery {
     layerIndex: number,
     layer: MapshaperLayer,
     arcs: ArcCollection | undefined,
+    /**
+     * Optional dataset reference. When supplied, its `editVersion` is
+     * folded into the cache key so in-place edits that don't change
+     * shape or arc counts (vertex move, translate, …) auto-invalidate.
+     */
+    dataset?: { editVersion?: number },
   ): IndexedLayer {
     const shapes = layer?.shapes;
     if (!shapes || shapes.length === 0) return null;
     const arcsSize = arcs?.size?.() ?? 0;
-    const key = `${sourceId}|${layerIndex}|${shapes.length}|${arcsSize}`;
+    const editVersion = dataset?.editVersion ?? 0;
+    const key = `${sourceId}|${layerIndex}|${shapes.length}|${arcsSize}|${editVersion}`;
     const cached = this._indexCache.get(key);
     if (cached !== undefined) return cached;
 
@@ -265,6 +277,7 @@ export class FeatureQuery {
     x: number,
     y: number,
     dist: number,
+    dataset?: { editVersion?: number },
   ): HitCandidate[] {
     const cands: HitCandidate[] = [];
     const index: Record<number, HitCandidate> = {};
@@ -275,7 +288,7 @@ export class FeatureQuery {
     // Spatial index prefilter — only iterate shapes whose stored bbox
     // overlaps `[x ± dist, y ± dist]`. The per-part inner test below is
     // unchanged so precision stays identical.
-    const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, arcs);
+    const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, arcs, dataset);
     const candidateIds = indexed
       ? indexed.index.search(x - dist, y - dist, x + dist, y + dist)
       : null;
@@ -342,6 +355,7 @@ export class FeatureQuery {
     layer: MapshaperLayer,
     x: number,
     y: number,
+    dataset?: { editVersion?: number },
   ): number[] {
     const geom = mapshaper.geom;
     const toPx = Math.abs(this._getTransform().mx || 1);
@@ -355,7 +369,7 @@ export class FeatureQuery {
     // y ± hitThresholdInData]`. Since we're working in data-space here,
     // convert the pixel threshold to data units via `1 / toPx`.
     const dataThresh = hitThreshold / (toPx || 1);
-    const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, undefined);
+    const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, undefined, dataset);
     const candidateIds = indexed
       ? indexed.index.search(x - dataThresh, y - dataThresh, x + dataThresh, y + dataThresh)
       : null;
@@ -389,11 +403,12 @@ export class FeatureQuery {
     x: number,
     y: number,
     bufArg: number,
+    dataset?: { editVersion?: number },
   ): number[] {
     const maxDist = this._getZoomAdjustedHitBuffer(15, 2);
     const bufPix = bufArg >= 0 ? bufArg : 0.05;
     const bufDist = this._getZoomAdjustedHitBuffer(bufPix, 0);
-    let cands = this._findHitCandidates(sourceId, layerIndex, layer, arcs, x, y, maxDist);
+    let cands = this._findHitCandidates(sourceId, layerIndex, layer, arcs, x, y, maxDist, dataset);
     this._sortByDistance(x, y, cands, arcs);
     cands = this._pickNearestCandidates(cands, bufDist, maxDist);
     return cands.length ? [cands[0].id] : [];
@@ -406,10 +421,11 @@ export class FeatureQuery {
     arcs: ArcCollection,
     x: number,
     y: number,
+    dataset?: { editVersion?: number },
   ): number[] {
     const geom = mapshaper.geom;
     const maxDist = this._getZoomAdjustedHitBuffer(10, 1);
-    const cands = this._findHitCandidates(sourceId, layerIndex, layer, arcs, x, y, maxDist);
+    const cands = this._findHitCandidates(sourceId, layerIndex, layer, arcs, x, y, maxDist, dataset);
     let hits: HitCandidate[] = [];
     for (const cand of cands) {
       if (geom.testPointInPolygon(x, y, cand.shape, arcs)) {
@@ -432,9 +448,10 @@ export class FeatureQuery {
     arcs: ArcCollection,
     x: number,
     y: number,
+    dataset?: { editVersion?: number },
   ): number[] {
-    const a = this._polygonTest(sourceId, layerIndex, layer, arcs, x, y);
-    const b = this._polylineTest(sourceId, layerIndex, layer, arcs, x, y, 5);
+    const a = this._polygonTest(sourceId, layerIndex, layer, arcs, x, y, dataset);
+    const b = this._polylineTest(sourceId, layerIndex, layer, arcs, x, y, 5, dataset);
     return a.length ? a : b;
   }
 
@@ -458,6 +475,7 @@ export class FeatureQuery {
       const arcs = displayArcs
         ? displayArcs.getScaledArcs(pixelSize)
         : source.getArcs();
+      const dataset = source.getDataset?.();
 
       for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
         const layer = layers[layerIndex] as MapshaperLayer;
@@ -470,11 +488,11 @@ export class FeatureQuery {
         const geometryType = layer.geometry_type;
         let ids: number[] = [];
         if (geometryType === 'point') {
-          ids = this._pointTest(sourceId, layerIndex, layer, mx, my);
+          ids = this._pointTest(sourceId, layerIndex, layer, mx, my, dataset);
         } else if (geometryType === 'polyline' && arcs) {
-          ids = this._polylineTest(sourceId, layerIndex, layer, arcs, mx, my, -1);
+          ids = this._polylineTest(sourceId, layerIndex, layer, arcs, mx, my, -1, dataset);
         } else if (geometryType === 'polygon' && arcs) {
-          ids = this._polygonVertexTest(sourceId, layerIndex, layer, arcs, mx, my);
+          ids = this._polygonVertexTest(sourceId, layerIndex, layer, arcs, mx, my, dataset);
         }
         if (ids.length === 0) continue;
 
@@ -522,6 +540,7 @@ export class FeatureQuery {
       const arcs = displayArcs
         ? displayArcs.getScaledArcs(pixelSize)
         : source.getArcs();
+      const dataset = source.getDataset?.();
 
       for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
         const layer = layers[layerIndex] as MapshaperLayer;
@@ -538,7 +557,7 @@ export class FeatureQuery {
         // Spatial index prefilter — `index.search` returns only shape ids
         // whose stored bbox overlaps the query bbox. Falls back to a full
         // scan for shape-less / un-indexed layers.
-        const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, arcs);
+        const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, arcs, dataset);
         const candidateIds = indexed
           ? indexed.index.search(xmin, ymin, xmax, ymax)
           : null;

@@ -1,5 +1,5 @@
 import type { EditCommand } from '../edit-command';
-import type { ArcCollection } from '../../types/mapshaper-types';
+import { bumpEditVersion, type ArcCollection } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
 import {
   getDefaultMapshaperAdapter,
@@ -31,11 +31,13 @@ export class VertexDeleteCommand implements EditCommand {
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     adapter.deleteVertex(this.opts.arcs, this.opts.vertexIndex);
     this.opts.source.markDisplayArcsDirty?.();
+    bumpEditVersion(this.opts.source.getDataset?.());
   }
 
   undo(): void {
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     adapter.insertVertex(this.opts.arcs, this.opts.vertexIndex, this.opts.coords);
     this.opts.source.markDisplayArcsDirty?.();
+    bumpEditVersion(this.opts.source.getDataset?.());
   }
 }

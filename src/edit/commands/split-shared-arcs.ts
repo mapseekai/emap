@@ -1,5 +1,6 @@
 import type { EditCommand } from '../edit-command';
 import {
+  bumpEditVersion,
   isPathLayer,
   type ArcCollection,
   type MapshaperLayer,
@@ -71,6 +72,7 @@ export class SplitSharedArcsCommand implements EditCommand {
       r.layer.shapes![r.featureId] = cloneShape(r.newShape);
     }
     this.opts.source.markDisplayArcsDirty?.();
+    bumpEditVersion(this.opts.source.getDataset?.());
   }
 
   undo(): void {
@@ -81,6 +83,7 @@ export class SplitSharedArcsCommand implements EditCommand {
       r.layer.shapes![r.featureId] = cloneShape(r.originalShape);
     }
     this.opts.source.markDisplayArcsDirty?.();
+    bumpEditVersion(this.opts.source.getDataset?.());
   }
 }
 

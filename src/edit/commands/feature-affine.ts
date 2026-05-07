@@ -1,5 +1,5 @@
 import type { EditCommand } from '../edit-command';
-import type { ArcCollection } from '../../types/mapshaper-types';
+import { bumpEditVersion, type ArcCollection } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
 import type { TranslatedPointFeature } from './feature-translate';
 import { normalizePointShape } from '../../source/layer-utils';
@@ -94,6 +94,7 @@ export class FeatureAffineCommand implements EditCommand {
     }
 
     source.markDisplayArcsDirty?.();
+    bumpEditVersion(source.getDataset?.());
   }
 }
 
