@@ -25,12 +25,12 @@ import { CompositeCommand } from '../edit/commands/composite';
 import { BulkFeatureDeleteCommand, type BulkFeatureDeleteCommandOptions } from '../edit/commands/feature-delete';
 // `MapshaperOps`, `EditSessions`, `AttributeOps` are composed onto `Emap`
 // via the `ops` / `editSession` / `attributes` getters below.
-import mapshaper from 'mapshaper';
+import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { Control, ControlPosition } from '../ui/control';
 import { getLayerId } from '../source/layer-utils';
 import { resolveStrokeStyle, resolvePointStyle } from './layer';
 import type { LayerSpecification, FillPaint, LinePaint, CirclePaint } from './layer';
-import type { MapshaperLayer } from '../types/mapshaper-types';
+import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 // All public type/option surfaces moved to `./types`. Re-export here so
 // existing `import { MapOptions, ... } from './map'` paths keep working.
 export * from './types';
@@ -432,12 +432,13 @@ export class Emap extends EventDispatcher {
       datasets.push(ds);
     }
 
-    const obj = await mapshaper.internal.exportDatasetsToPack(datasets, { compact });
+    const adapter = getDefaultMapshaperAdapter();
+    const obj = await adapter.exportDatasetsToPack(datasets, { compact });
     (obj as Record<string, unknown>).emap = {
       version: 1,
       sources: ids.map((id) => ({ id })),
     };
-    const bytes = mapshaper.internal.pack(obj);
+    const bytes = adapter.pack(obj);
     return new Blob([bytes as BlobPart], { type: 'application/octet-stream' });
   }
 
@@ -478,7 +479,7 @@ export class Emap extends EventDispatcher {
       throw new Error('loadSnapshot: input must be Blob, Uint8Array, or ArrayBuffer');
     }
 
-    const obj = await mapshaper.internal.unpackSessionData(bytes);
+    const obj = await getDefaultMapshaperAdapter().unpackSessionData(bytes);
     const datasets = obj.datasets ?? [];
     const meta = (obj as Record<string, unknown>).emap as
       | { sources?: Array<{ id?: string }> }
@@ -510,7 +511,7 @@ export class Emap extends EventDispatcher {
       const id = resolvedIds[i];
       if (replace && this._sources.has(id)) this.removeSource(id);
       const src = new ConcreteTopologySource(id);
-      src.setDataset(datasets[i]);
+      src.setDataset(datasets[i] as MapshaperDataset);
       this.addSource(id, src);
       registered.push(id);
     }

@@ -3,7 +3,6 @@
 // `emap.ops`; the manager calls back into a small surface of internal
 // helpers (`layers.resolve`, `_history`, `_workerPool`, ...) on the host.
 
-import mapshaper from 'mapshaper';
 import { DatasetReplaceCommand } from '../edit/commands/dataset-replace';
 import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import type { EmapHostInternal } from './emap-host';
@@ -443,11 +442,11 @@ export class MapshaperOps {
     if (!original) return Err.notFound('source', opts.source);
     if (!original.arcs) return OK; // point-only — nothing to rebuild
 
-    const before: MapshaperDataset = mapshaper.internal.copyDataset(original);
-    const after: MapshaperDataset = mapshaper.internal.copyDataset(original);
+    const before: MapshaperDataset = getDefaultMapshaperAdapter().copyDataset(original);
+    const after: MapshaperDataset = getDefaultMapshaperAdapter().copyDataset(original);
 
     try {
-      mapshaper.internal.addIntersectionCuts(after, {
+      getDefaultMapshaperAdapter().addIntersectionCuts(after, {
         snap_interval: opts.snapInterval,
         no_snap: opts.noSnap,
         rebuild_topology: opts.rebuildTopology,
@@ -1119,7 +1118,7 @@ export class MapshaperOps {
 
   /**
    * Read-only topology validation pass over a source's arcs via
-   * `mapshaper.internal.findSegmentIntersections`. Reports self-intersection
+   * `MapshaperAdapter.findSegmentIntersections`. Reports self-intersection
    * count and a sample of intersection points; does NOT mutate the dataset
    * or push to history.
    *
@@ -1145,7 +1144,7 @@ export class MapshaperOps {
     const internalOpts: { tolerance?: number } = {};
     if (opts.tolerance !== undefined) internalOpts.tolerance = opts.tolerance;
 
-    const raw = mapshaper.internal.findSegmentIntersections(dataset.arcs, internalOpts);
+    const raw = getDefaultMapshaperAdapter().findSegmentIntersections(dataset.arcs, internalOpts);
     const intersections = raw.map((r) => ({ x: r.x, y: r.y }));
     return okValue({
       ok: intersections.length === 0,
@@ -1206,19 +1205,19 @@ export class MapshaperOps {
     // copy, swap. Mirrors `_runDatasetCommand` but skips parseCommands
     // because mapshaper's CLI `-points intersections` is broken upstream
     // — we go directly to the internal primitives.
-    const before: MapshaperDataset = mapshaper.internal.copyDataset(original);
-    const after: MapshaperDataset = mapshaper.internal.copyDataset(original);
+    const before: MapshaperDataset = getDefaultMapshaperAdapter().copyDataset(original);
+    const after: MapshaperDataset = getDefaultMapshaperAdapter().copyDataset(original);
 
     let pointLyr: any;
     try {
-      const intersections = mapshaper.internal.findSegmentIntersections(after.arcs!, internalOpts);
+      const intersections = getDefaultMapshaperAdapter().findSegmentIntersections(after.arcs!, internalOpts);
       // Find the cloned target inside the working copy by name.
       const workingTarget = resolveLayerInList(after.layers, opts.target);
       if (!workingTarget) {
         // Should never happen — target was in original, copyDataset preserves names.
         throw new Error('intersectionPointsLayer: target lost in copyDataset');
       }
-      pointLyr = mapshaper.internal.getIntersectionLayer(intersections, workingTarget, after.arcs!);
+      pointLyr = getDefaultMapshaperAdapter().getIntersectionLayer(intersections, workingTarget, after.arcs!);
       pointLyr.name = newName;
       after.layers.push(pointLyr);
     } catch (err) {
@@ -1419,10 +1418,10 @@ export class MapshaperOps {
     this._emap.fire('workerjobstart', { id, cmd, label, datasetVertexCount });
 
     try {
-      const packed = await mapshaper.internal.exportDatasetsToPack([dataset], { compact: false });
+      const packed = await getDefaultMapshaperAdapter().exportDatasetsToPack([dataset], { compact: false });
       const promise = this._emap._workerPool.dispatchWithId(id, cmd, packed, inputFiles);
       const resultPacked = await promise;
-      const restored = await mapshaper.internal.restoreSessionData(resultPacked);
+      const restored = await getDefaultMapshaperAdapter().restoreSessionData(resultPacked);
       if (!restored.datasets || restored.datasets.length === 0) {
         throw new Error('worker: no dataset in response');
       }

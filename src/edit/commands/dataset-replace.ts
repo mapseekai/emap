@@ -19,7 +19,7 @@ export interface DatasetReplaceCommandOptions {
  * references and swapping which one is active on the `TopologySource`.
  *
  * The `before` reference must be a deep copy (typically produced by
- * `mapshaper.internal.copyDataset`); the `after` reference is the dataset
+ * `MapshaperAdapter.copyDataset`); the `after` reference is the dataset
  * mapshaper mutated in place. `setDataset` rebuilds DisplayArcs and fires
  * `'data'` so the map re-renders.
  *

@@ -1,5 +1,5 @@
-import mapshaper from 'mapshaper';
 import type { ArcCollection } from '../types/mapshaper-types';
+import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 
 /** Threshold for generating low-detail arcs (500k points) */
 const LARGE_DATASET_THRESHOLD = 5e5;
@@ -37,12 +37,13 @@ export class DisplayArcs {
       this._filteredArcs = arcs.setRetainedInterval?.(filterZ)?.getFilteredCopy?.() ?? null;
       arcs.setRetainedInterval?.(currInterval); // Reset to original state
       if (this._filteredArcs) {
-        this._filteredSegLen = mapshaper.internal.getAvgSegment(this._filteredArcs);
+        this._filteredSegLen = getDefaultMapshaperAdapter().getAvgSegment(this._filteredArcs);
       }
     } else {
       // Fallback: use fast simplification if no Z values available
-      this._filteredSegLen = mapshaper.internal.getAvgSegment(arcs) * 4;
-      this._filteredArcs = mapshaper.internal.simplifyArcsFast(arcs, this._filteredSegLen);
+      const adapter = getDefaultMapshaperAdapter();
+      this._filteredSegLen = adapter.getAvgSegment(arcs) * 4;
+      this._filteredArcs = adapter.simplifyArcsFast(arcs, this._filteredSegLen);
     }
   }
 

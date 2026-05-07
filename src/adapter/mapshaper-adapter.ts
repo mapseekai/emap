@@ -7,11 +7,13 @@
 // future mapshaper upgrade fail (or be forwarded to a shim) in exactly one
 // file instead of thirteen.
 //
-// Phase 1 (this file) covers the topology-editing surface plus the command
-// runner — the methods used by vertex / feature-create commands and by every
-// dataset-replace pipeline. Subsequent phases (PR-11) will fold in the
-// remaining `internal.*` callers (projection, display-arcs, snapshot
-// pack/unpack, intersection layers, segment / endpoint helpers).
+// Phase 1 (PR-3) covered the topology-editing surface plus the command
+// runner. Phase 2 (PR-11, this version) folds in projection / display-arcs /
+// snapshot pack-unpack / intersection layers / segment-endpoint helpers, so
+// every main-thread `mapshaper.internal.*` reference now routes here. The
+// dedicated worker entry (`src/worker/mapshaper-worker.ts`) intentionally
+// keeps direct calls — it IS the host that exposes mapshaper to the rest
+// of the bundle, not a consumer.
 //
 // Tests inject a mock adapter via the `adapter` option on each command and via
 // {@link setDefaultMapshaperAdapter} for shared/global paths. Production code
@@ -21,7 +23,37 @@
 import type {
   ArcCollection,
   MapshaperDataset,
+  MapshaperLayer,
 } from '../types/mapshaper-types';
+
+// -- Pack / snapshot serialisation ------------------------------------------
+// Mapshaper's pack format has no published TypeScript shape. Treat it as an
+// opaque structured-clone-friendly value here; only the adapter and worker
+// produce / consume it.
+
+/** Plain-object form produced by `exportDatasetsToPack` / consumed by `restoreSessionData`. */
+export type PackedSession = Record<string, unknown> & { datasets?: unknown[] };
+
+/** Single export-file output — `exportFileContent` / `exportPackedDatasets` shape. */
+export interface ExportedFile {
+  filename: string;
+  content: string | Uint8Array | ArrayBuffer;
+}
+
+/** A single segment-intersection record; mapshaper carries extra fields we don't expose. */
+export interface SegmentIntersection {
+  x: number;
+  y: number;
+  [key: string]: unknown;
+}
+
+/** Bounding box returned by `getDatasetBounds` / `getLayerBounds`. */
+export interface MapshaperBBox {
+  xmin: number;
+  ymin: number;
+  xmax: number;
+  ymax: number;
+}
 
 /** Files injected onto a `-i` command's `input` option. */
 export type RunnerInputFiles = Record<string, Uint8Array | string>;
@@ -93,6 +125,150 @@ export interface MapshaperAdapter {
     shape: number[][],
     arcs: ArcCollection,
   ): number[];
+
+  /**
+   * Resolve a global vertex index back to its parent arc id, given the
+   * `ii` (per-arc start-index) array from `ArcCollection.getVertexData()`.
+   * Used by VertexEditControl when mapping a vertex hit to a single arc.
+   */
+  findArcIdFromVertexId(vertexId: number, ii: Int32Array | Uint32Array): number;
+
+  /**
+   * `true` iff the vertex at `idx` is the start- or end-vertex of its
+   * arc — those endpoints are shared topological nodes and cannot be
+   * deleted without breaking adjacency.
+   */
+  vertexIsArcEndpoint(idx: number, arcs: ArcCollection): boolean;
+
+  /**
+   * Walk every segment of every arc referenced by `shape`, invoking `cb`
+   * with the (i, j) global-vertex pair plus the shared `xx` / `yy`
+   * arrays. Used by VertexEditControl to find the closest edge under
+   * the cursor for drag-to-insert.
+   */
+  forEachSegmentInShape(
+    shape: number[][],
+    arcs: ArcCollection,
+    cb: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void,
+  ): void;
+
+  /**
+   * Project (px, py) onto the segment from (ax, ay) to (bx, by). The
+   * returned coord is clamped to the segment endpoints when the
+   * projection falls outside them. `snapArg` mirrors mapshaper's
+   * snap-tolerance argument and is forwarded as-is.
+   */
+  findClosestPointOnSeg(
+    px: number, py: number,
+    ax: number, ay: number,
+    bx: number, by: number,
+    snapArg: number,
+  ): [number, number];
+
+  // -- Geometry / topology repair ----------------------------------------
+
+  /**
+   * Pre-pass run by every overlay command (clip / dissolve / union / …):
+   * inserts vertices at every detected segment intersection and rebuilds
+   * shared-arc topology. Mutates `dataset.arcs` in place. Surfaces as
+   * `Emap.ops.rebuildTopology()` when called explicitly.
+   */
+  addIntersectionCuts(
+    dataset: MapshaperDataset,
+    opts?: { snap_interval?: number; no_snap?: boolean; rebuild_topology?: boolean },
+  ): void;
+
+  /**
+   * Read-only segment-intersection scan; populates the report consumed
+   * by `Emap.ops.checkGeometry`. Does NOT mutate the arcs.
+   */
+  findSegmentIntersections(
+    arcs: ArcCollection,
+    opts?: { tolerance?: number },
+  ): SegmentIntersection[];
+
+  /**
+   * Materialise a multi-point layer at every intersection found by
+   * {@link findSegmentIntersections}. Used by
+   * `Emap.ops.intersectionPointsLayer` to expose intersections as a
+   * pickable / editable layer.
+   */
+  getIntersectionLayer(
+    intersections: SegmentIntersection[],
+    target: MapshaperLayer,
+    arcs: ArcCollection,
+  ): MapshaperLayer;
+
+  // -- LOD / measurement -------------------------------------------------
+
+  /**
+   * Average segment length across the arc collection. Used by
+   * `DisplayArcs` to pick a sensible per-frame simplification floor.
+   */
+  getAvgSegment(arcs: ArcCollection): number;
+
+  /**
+   * Fast (non-Visvalingam) simplification: drops vertices below a
+   * length threshold. Used to pre-build a coarse "always-on" LOD copy
+   * the renderer falls back to at zoomed-out scales.
+   */
+  simplifyArcsFast(arcs: ArcCollection, segLength: number): ArcCollection;
+
+  /**
+   * Returns `true` iff the layer carries renderable shape data (a
+   * `geometry_type` plus a non-empty `shapes` array). Used by the
+   * projection module to decide whether a layer participates in the
+   * extent rebuild.
+   */
+  layerHasGeometry(layer: MapshaperLayer): boolean;
+
+  /**
+   * Bounds of one layer's shapes against an arc collection. Returns a
+   * mapshaper-internal Bounds-like object — typed loosely because the
+   * caller only reads `xmin/ymin/xmax/ymax`.
+   */
+  getLayerBounds(layer: MapshaperLayer, arcs?: ArcCollection): MapshaperBBox;
+
+  /** Bounding box across every layer in the dataset. */
+  getDatasetBounds(dataset: MapshaperDataset): MapshaperBBox;
+
+  // -- Snapshot / export -------------------------------------------------
+
+  /**
+   * Pack one or more datasets into a structured-clone-friendly object
+   * suitable for `postMessage` (worker round-trips) or
+   * {@link pack} (`.msx` snapshot bytes). `compact: true` bakes
+   * simplification thresholds into `zz` and gzip-compresses arc
+   * buffers; `false` skips that for the worker pipeline.
+   */
+  exportDatasetsToPack(
+    datasets: MapshaperDataset[],
+    opts?: { compact?: boolean },
+  ): Promise<PackedSession>;
+
+  /**
+   * Inverse of {@link exportDatasetsToPack}. Decodes a packed session
+   * (typically produced by the worker) back into live datasets.
+   */
+  restoreSessionData(packed: PackedSession): Promise<{ datasets: MapshaperDataset[] }>;
+
+  /** Materialise a `.msx` snapshot byte buffer from a packed session. */
+  pack(obj: PackedSession): Uint8Array;
+
+  /** Inverse of {@link pack}: `.msx` bytes → packed session object. */
+  unpackSessionData(bytes: Uint8Array): Promise<PackedSession>;
+
+  /** Convenience: pack + bytes in one call (`.msx` export pipeline). */
+  exportPackedDatasets(
+    datasets: MapshaperDataset[],
+    opts?: { compact?: boolean },
+  ): Promise<ExportedFile[]>;
+
+  /** Plain-text export (GeoJSON / TopoJSON). */
+  exportFileContent(
+    dataset: MapshaperDataset,
+    opts: { format: string },
+  ): ExportedFile[];
 
   // -- Dataset cloning (used by dataset-replace ops) ---------------------
 
@@ -173,6 +349,117 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     arcs: ArcCollection,
   ): number[] {
     return mapshaper.internal.findNearestVertices(point, shape, arcs);
+  }
+
+  findArcIdFromVertexId(vertexId: number, ii: Int32Array | Uint32Array): number {
+    return mapshaper.internal.findArcIdFromVertexId(vertexId, ii);
+  }
+
+  vertexIsArcEndpoint(idx: number, arcs: ArcCollection): boolean {
+    return mapshaper.internal.vertexIsArcEndpoint(idx, arcs);
+  }
+
+  forEachSegmentInShape(
+    shape: number[][],
+    arcs: ArcCollection,
+    cb: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void,
+  ): void {
+    mapshaper.internal.forEachSegmentInShape(shape, arcs, cb);
+  }
+
+  findClosestPointOnSeg(
+    px: number, py: number,
+    ax: number, ay: number,
+    bx: number, by: number,
+    snapArg: number,
+  ): [number, number] {
+    return mapshaper.internal.findClosestPointOnSeg(px, py, ax, ay, bx, by, snapArg);
+  }
+
+  addIntersectionCuts(
+    dataset: MapshaperDataset,
+    opts?: { snap_interval?: number; no_snap?: boolean; rebuild_topology?: boolean },
+  ): void {
+    mapshaper.internal.addIntersectionCuts(dataset, opts);
+  }
+
+  findSegmentIntersections(
+    arcs: ArcCollection,
+    opts?: { tolerance?: number },
+  ): SegmentIntersection[] {
+    return mapshaper.internal.findSegmentIntersections(arcs, opts);
+  }
+
+  getIntersectionLayer(
+    intersections: SegmentIntersection[],
+    target: MapshaperLayer,
+    arcs: ArcCollection,
+  ): MapshaperLayer {
+    return mapshaper.internal.getIntersectionLayer(intersections, target, arcs);
+  }
+
+  getAvgSegment(arcs: ArcCollection): number {
+    return mapshaper.internal.getAvgSegment(arcs);
+  }
+
+  simplifyArcsFast(arcs: ArcCollection, segLength: number): ArcCollection {
+    return mapshaper.internal.simplifyArcsFast(arcs, segLength);
+  }
+
+  layerHasGeometry(layer: MapshaperLayer): boolean {
+    return mapshaper.internal.layerHasGeometry(layer);
+  }
+
+  getLayerBounds(layer: MapshaperLayer, arcs?: ArcCollection): MapshaperBBox {
+    // mapshaper returns null for empty layers; surface that via NaN-bounds
+    // rather than mid-pipeline `null` so callers don't have to branch.
+    const bb = mapshaper.internal.getLayerBounds(layer, arcs);
+    if (!bb) return { xmin: NaN, ymin: NaN, xmax: NaN, ymax: NaN };
+    return { xmin: bb.xmin, ymin: bb.ymin, xmax: bb.xmax, ymax: bb.ymax };
+  }
+
+  getDatasetBounds(dataset: MapshaperDataset): MapshaperBBox {
+    const bb = mapshaper.internal.getDatasetBounds(dataset);
+    return { xmin: bb.xmin, ymin: bb.ymin, xmax: bb.xmax, ymax: bb.ymax };
+  }
+
+  exportDatasetsToPack(
+    datasets: MapshaperDataset[],
+    opts?: { compact?: boolean },
+  ): Promise<PackedSession> {
+    return mapshaper.internal.exportDatasetsToPack(datasets, opts ?? {});
+  }
+
+  restoreSessionData(packed: PackedSession): Promise<{ datasets: MapshaperDataset[] }> {
+    // mapshaper's `.d.ts` insists `datasets` is required on the input; our
+    // public `PackedSession` keeps it optional so callers can spread `emap`
+    // metadata onto a fresh object. Cast on the way down.
+    return mapshaper.internal.restoreSessionData(packed as { [k: string]: unknown; datasets: unknown[] });
+  }
+
+  pack(obj: PackedSession): Uint8Array {
+    return mapshaper.internal.pack(obj as { [k: string]: unknown; datasets: unknown[] });
+  }
+
+  unpackSessionData(bytes: Uint8Array): Promise<PackedSession> {
+    return mapshaper.internal.unpackSessionData(bytes);
+  }
+
+  exportPackedDatasets(
+    datasets: MapshaperDataset[],
+    opts?: { compact?: boolean },
+  ): Promise<ExportedFile[]> {
+    // mapshaper's `.d.ts` requires the opts object; our public signature
+    // keeps it optional. Default to `{}` so the exported shape stays
+    // forgiving.
+    return mapshaper.internal.exportPackedDatasets(datasets, opts ?? {});
+  }
+
+  exportFileContent(
+    dataset: MapshaperDataset,
+    opts: { format: string },
+  ): ExportedFile[] {
+    return mapshaper.internal.exportFileContent(dataset, opts);
   }
 
   copyDataset(dataset: MapshaperDataset): MapshaperDataset {

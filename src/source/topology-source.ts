@@ -1,4 +1,3 @@
-import mapshaper from 'mapshaper';
 import { EventDispatcher } from '../core/events';
 import { TopologySource as ITopologySource } from './source';
 import { Bounds } from '../geo/bounds';
@@ -81,7 +80,7 @@ export interface TopologySourceOptions {
   /**
    * Optional injection point for the mapshaper command runner used by
    * the load path. Defaults to a process-wide singleton that calls
-   * `mapshaper.internal.parseCommands + runParsedCommands` directly.
+   * `MapshaperAdapter.runImport / runOnDataset` directly.
    * Tests and instrumentation use this to swap in a mock runner.
    */
   mapshaperRunner?: MapshaperRunner;
@@ -413,7 +412,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
   getExtent(): Bounds {
     if (!this._dataset) return new Bounds();
-    const info = mapshaper.internal.getDatasetBounds(this._dataset);
+    const info = getDefaultMapshaperAdapter().getDatasetBounds(this._dataset);
     return new Bounds(info.xmin, info.ymin, info.xmax, info.ymax);
   }
 
@@ -484,9 +483,10 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       // does not handle it, so we go through the Pack pipeline directly.
       // `compact: true` matches mapshaper CLI defaults — bakes simplification
       // thresholds into `zz` and gzip-compresses arc buffers for a small file.
+      const adapter = getDefaultMapshaperAdapter();
       const files = options.format === 'msx'
-        ? await mapshaper.internal.exportPackedDatasets([this._dataset], { compact: true })
-        : mapshaper.internal.exportFileContent(this._dataset, { format: options.format });
+        ? await adapter.exportPackedDatasets([this._dataset], { compact: true })
+        : adapter.exportFileContent(this._dataset, { format: options.format });
       return this._filesToBlob(files, options.format);
     } finally {
       if (savedInterval && arcs?.setRetainedInterval) {
