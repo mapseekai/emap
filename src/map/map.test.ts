@@ -932,7 +932,7 @@ describe('Emap attribute editing', () => {
         'name',
         'B-renamed',
       );
-      expect(ok).toBe(true);
+      expect(ok.ok).toBe(true);
       expect(records[1]).toEqual({ name: 'B-renamed', pop: 200 });
       expect(map.canUndo()).toBe(true);
     });
@@ -943,7 +943,7 @@ describe('Emap attribute editing', () => {
         'name',
         'A',
       );
-      expect(ok).toBe(false);
+      expect(ok.ok).toBe(false);
       expect(map.canUndo()).toBe(false);
     });
 
@@ -953,7 +953,7 @@ describe('Emap attribute editing', () => {
         'pop',
         undefined,
       );
-      expect(ok).toBe(true);
+      expect(ok.ok).toBe(true);
       expect('pop' in records[0]).toBe(false);
       map.undo();
       expect(records[0]).toEqual({ name: 'A', pop: 100 });
@@ -978,7 +978,7 @@ describe('Emap attribute editing', () => {
         'name',
         'X',
       );
-      expect(ok).toBe(false);
+      expect(ok.ok).toBe(false);
     });
   });
 
@@ -1004,7 +1004,7 @@ describe('Emap attribute editing', () => {
     it('renameField refuses on collision', () => {
       records[0]['pop_v2'] = 'x'; // record 0 now has both pop and pop_v2
       const ok = map.attributes.renameField({ source: 'src1', target: 'cities', from: 'pop', to: 'pop_v2' });
-      expect(ok).toBe(false);
+      expect(ok.ok).toBe(false);
       // Records were not mutated
       expect(records[0]).toEqual({ name: 'A', pop: 100, pop_v2: 'x' });
       expect(map.canUndo()).toBe(false);
@@ -1022,7 +1022,7 @@ describe('Emap attribute editing', () => {
       const source = { id: 'src1', type: 'topology', getLayers: () => [noDataLayer] };
       (map as any)._sources.set('src1', source);
       const ok = map.attributes.addField({ source: 'src1', target: 'no_data', field: 'x' });
-      expect(ok).toBe(false);
+      expect(ok.ok).toBe(false);
     });
   });
 
