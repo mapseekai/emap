@@ -96,13 +96,10 @@
     });
 
     // Press-and-hold drag: mousedown on a feature opens a translate
-    // session (and suppresses the map pan handler for THIS gesture by
-    // calling stopImmediatePropagation in the window capture phase —
-    // capture-phase listeners on `window` fire before bubble-phase
-    // listeners on inner elements, so the pan handler never sees the
-    // mousedown). mousemove streams (dx, dy) into the session in
-    // source-data coords. mouseup commits one cumulative undo entry.
-    // Esc / right-click cancels.
+    // session AND disables the built-in drag-to-pan handler so the map
+    // doesn't pan along with the feature. mousemove streams (dx, dy)
+    // into the session in source-data coords. mouseup commits one
+    // cumulative undo entry and re-enables pan. Esc / right-click cancels.
     let session = null;
     let lastMapCoord = null;
     let dragging = false;
@@ -127,43 +124,46 @@
       session = null;
       lastMapCoord = null;
       dragging = false;
+      // Always re-enable pan when the gesture ends, regardless of how.
+      map.setDragPanEnabled(true);
     }
 
-    // Capture-phase on window so we run BEFORE the map-container's pan
-    // handler. Only intercept when the target is inside the map.
-    window.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return; // left-button only
-      if (!mapContainer.contains(e.target)) return;
-      // Modifier-clicks belong to selection helpers (shift = add, ctrl/meta = toggle).
-      // Let those go through as normal clicks (no drag).
+    // mousedown on the canvas container: hit-test, and if we hit a
+    // feature start a drag (and lock pan); otherwise let pan proceed.
+    mapContainer.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
       const rect = mapContainer.getBoundingClientRect();
       const point = [e.clientX - rect.left, e.clientY - rect.top];
       const features = map.queryFeatures(point);
       if (!features.length) {
-        // Empty space → let pan handler proceed (no stopPropagation).
+        // Empty space → let pan handler proceed.
         return;
       }
-      // Hit a feature. Suppress the pan handler for this gesture and
-      // open a drag session.
-      e.stopImmediatePropagation();
-      e.preventDefault();
 
       const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
       map.select(features, { mode });
       document.getElementById('map').focus();
 
-      // Modifier-clicks are selection-only — don't start a drag (so a
-      // shift-click adds to the selection without inadvertently
-      // translating).
+      // Modifier-clicks are selection-only — no drag.
       if (e.shiftKey || e.ctrlKey || e.metaKey) return;
+
+      // Lock pan for the duration of this gesture. The pan handler's
+      // mousedown listener checks `isEnabled()` first, so disabling
+      // before the pan handler runs (or even AFTER, since this event
+      // bubbles up to it) prevents a pan from starting on this click.
+      map.setDragPanEnabled(false);
 
       session = map.editSession.beginTranslateSession();
       if (session) {
         lastMapCoord = pixelToMap(e);
         dragging = true;
         status.textContent = '拖动中… 松开鼠标落位,Esc / 右键取消。';
+      } else {
+        // Couldn't open session (e.g. selection empty for some reason);
+        // unlock pan so the next click works normally.
+        map.setDragPanEnabled(true);
       }
-    }, { capture: true });
+    });
 
     window.addEventListener('mousemove', (e) => {
       if (!dragging || !session) return;
@@ -180,10 +180,10 @@
       endSession(true);
     });
 
-    // Empty-space click clears the selection (mousedown on empty space
-    // doesn't stop pan; the click that follows runs once).
+    // Empty-space click clears the selection (mousedown fell through to
+    // pan, but the click that follows still fires here).
     mapContainer.addEventListener('click', (e) => {
-      if (dragging || session) return; // we already handled it via mouseup
+      if (dragging || session) return;
       const rect = mapContainer.getBoundingClientRect();
       const point = [e.clientX - rect.left, e.clientY - rect.top];
       const features = map.queryFeatures(point);
