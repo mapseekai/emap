@@ -185,7 +185,7 @@
       const rect = mapContainer.getBoundingClientRect();
       const point = [e.clientX - rect.left, e.clientY - rect.top];
       const layers = layerSelect.value ? [layerSelect.value] : undefined;
-      const features = map.queryRenderedFeatures(point, { layers });
+      const features = map.queryFeatures(point, { layers });
 
       if (!features.length) {
         attributes.textContent = "(未命中要素)";

@@ -185,7 +185,7 @@
 
     function refreshActiveDisplay() {
       if (!activeRef) return;
-      const hits = map.queryRenderedFeatures([0, 0], { layers: [activeRef.layer] });
+      const hits = map.queryFeatures([0, 0], { layers: [activeRef.layer] });
       const fresh = hits.find((h) => h.id === activeRef.id);
       if (fresh) renderProps(fresh);
     }
@@ -217,7 +217,7 @@
     mapContainer.addEventListener('click', (e) => {
       const rect = mapContainer.getBoundingClientRect();
       const point = [e.clientX - rect.left, e.clientY - rect.top];
-      const features = map.queryRenderedFeatures(point);
+      const features = map.queryFeatures(point);
       if (!features.length) {
         propsDiv.textContent = '(未命中要素)';
         return;

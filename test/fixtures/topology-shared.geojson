@@ -1,0 +1,30 @@
+{
+  "type": "FeatureCollection",
+  "name": "topology-shared",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "id": 1, "name": "left" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": 2, "name": "right" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[10, 0], [20, 0], [20, 10], [10, 10], [10, 0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": 3, "name": "top" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[0, 10], [20, 10], [20, 15], [0, 15], [0, 10]]]
+      }
+    }
+  ]
+}

@@ -14,8 +14,8 @@ export type {
   // map options + view
   ExpressionEvaluationPolicy,
   // queries
-  QueryRenderedFeaturesOptions,
-  RenderedFeatureAttributes,
+  QueryFeaturesOptions,
+  QueriedFeature,
   FeatureRef,
   HighlightFeatureRef,
   HighlightStyle,
@@ -76,8 +76,10 @@ export type {
 export { resolveStrokeStyle, resolvePointStyle } from './map/layer';
 export { HighlightManager } from './map/highlight-manager';
 export { Selection } from './map/selection';
-export type { SelectMode, SelectionDiff } from './map/selection';
+export type { SelectMode, SelectionDiff, SelectionSnapshot } from './map/selection';
 export { FeatureQuery } from './map/feature-query';
+export { FeatureAccessor } from './map/feature-accessor';
+export type { Feature } from './map/feature-accessor';
 
 // ===========================================================================
 // Op-result + CLI safety helpers
@@ -184,6 +186,22 @@ export { DragPanHandler } from './core/drag-pan-handler';
 export type { EditCommand } from './edit/edit-command';
 export { EditHistory } from './edit/edit-history';
 export type { HistoryStateSnapshot, EditHistoryOptions } from './edit/edit-history';
+export { Transaction } from './edit/transaction';
+
+// ===========================================================================
+// Validation (post-edit hooks for GIS / attribute constraints)
+// ===========================================================================
+export { ValidatorRegistry } from './validation/registry';
+export type {
+  Validator,
+  ValidatorPhase,
+  ValidatorResult,
+  ValidationChange,
+  ValidationIssue,
+  ValidationReport,
+} from './validation/validator';
+export { topologyValidator } from './validation/builtin/topology';
+export type { TopologyValidatorOptions } from './validation/builtin/topology';
 
 // vertex-level
 export { VertexMoveCommand } from './edit/commands/vertex-move';

@@ -3,7 +3,7 @@ import Flatbush from 'flatbush';
 import { AffineTransform } from '../geo/transform';
 import { TopologySource } from '../source/source';
 import { getLayerId, normalizePointShape } from '../source/layer-utils';
-import type { QueryRenderedFeaturesOptions, RenderedFeatureAttributes } from './map';
+import type { QueryFeaturesOptions, QueriedFeature } from './map';
 import type {
   ArcCollection,
   MapshaperLayer,
@@ -208,10 +208,10 @@ export class FeatureQuery {
     geometryOrOptions?:
       | [number, number]
       | [[number, number], [number, number]]
-      | QueryRenderedFeaturesOptions,
-    options?: QueryRenderedFeaturesOptions,
+      | QueryFeaturesOptions,
+    options?: QueryFeaturesOptions,
     visibleLayers?: Set<string>,
-  ): RenderedFeatureAttributes[] {
+  ): QueriedFeature[] {
     const { width, height } = this._getSize();
     const isGeometry = Array.isArray(geometryOrOptions);
     const geometry = isGeometry
@@ -461,11 +461,11 @@ export class FeatureQuery {
 
   private _queryFeaturesAtPoint(
     point: [number, number],
-    options: QueryRenderedFeaturesOptions,
+    options: QueryFeaturesOptions,
     visibleLayers?: Set<string>,
-  ): RenderedFeatureAttributes[] {
+  ): QueriedFeature[] {
     const transform = this._getTransform();
-    const results: RenderedFeatureAttributes[] = [];
+    const results: QueriedFeature[] = [];
     const [mx, my] = this._unproject(point[0], point[1]);
     const pixelSize = 1 / Math.abs(transform.mx || 1);
 
@@ -520,11 +520,11 @@ export class FeatureQuery {
 
   private _queryFeaturesInBBox(
     bbox: [[number, number], [number, number]],
-    options: QueryRenderedFeaturesOptions,
+    options: QueryFeaturesOptions,
     visibleLayers?: Set<string>,
-  ): RenderedFeatureAttributes[] {
+  ): QueriedFeature[] {
     const transform = this._getTransform();
-    const results: RenderedFeatureAttributes[] = [];
+    const results: QueriedFeature[] = [];
     const [p1, p2] = bbox;
     const a = this._unproject(p1[0], p1[1]);
     const b = this._unproject(p2[0], p2[1]);

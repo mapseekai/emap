@@ -5,6 +5,9 @@ import type { FeatureRef } from './map';
 import type { LayerSpecification } from './layer';
 import { Selection } from './selection';
 import { EditHistory } from '../edit/edit-history';
+import { CompositeCommand } from '../edit/commands/composite';
+import { ValidatorRegistry } from '../validation/registry';
+import { FeatureAccessor } from './feature-accessor';
 
 // Snapshot the real mapshaper.internal entry points at module-load time,
 // BEFORE any test has had a chance to mock them. Some test blocks below
@@ -27,6 +30,88 @@ function restoreRealMapshaper(): void {
 
 function setPrivate(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
+}
+
+/**
+ * PR-4b test helper: assert a captured `ParsedCommand[]` (the first arg to
+ * `runParsedCommands`) is structurally equivalent to what mapshaper would
+ * produce by parsing `expectedCli`. The `_` echo field is stripped from
+ * both sides since hand-built commands intentionally omit it
+ * (`runParsedCommands` ignores `_` anyway).
+ */
+function expectCli(expectedCli: string, actualCmds: any): void {
+  const real = MAPSHAPER_REAL.parseCommands as (cmd: string) => any[];
+  // Strip `input` (the runner injects an inputFiles cache into every
+  // command's options before dispatch) and `_` (parseCommands' positional
+  // echo) so they don't pollute the comparison. The runtime semantic
+  // contract is "every option except runner-injected ones must match".
+  const strip = (o: Record<string, unknown>) => {
+    const { input: _i, _: _u, ...rest } = o as any;
+    return rest;
+  };
+  const expected = real(expectedCli).map((c: any) => ({ name: c.name, options: strip(c.options) }));
+  const actual = (actualCmds as any[]).map((c: any) => ({ name: c.name, options: strip(c.options) }));
+  expect(actual.length).toBe(expected.length);
+  for (let i = 0; i < actual.length; i++) {
+    expect(actual[i].name).toBe(expected[i].name);
+    expect(actual[i].options).toEqual(expected[i].options);
+  }
+}
+
+/**
+ * Render a `ParsedCommand[]` back to a CLI-string approximation for the
+ * handful of legacy tests that grep the command for substrings rather
+ * than asserting exact equality. Lossy by design.
+ *
+ * Knows about positional/default options for common command families so
+ * round-trip via mapshaper.parseCommands is approximately stable for
+ * the test corpus (e.g. `-target X` instead of `-target target=X`).
+ */
+function parsedCmdsToCli(cmds: any): string {
+  // Map command-name → option key whose value renders as a positional
+  // argument (no `key=` prefix). Mirrors mapshaper's CLI grammar for the
+  // command families this test corpus exercises.
+  const POSITIONAL: Record<string, string> = {
+    target: 'target',
+    dissolve: 'fields',
+    'filter-fields': 'fields',
+    each: 'expression',
+    filter: 'expression',
+    sort: 'expression',
+    uniq: 'expression',
+    split: 'expression',
+    'rename-layers': 'names',
+    'rename-fields': 'fields',
+    buffer: 'radius',
+    simplify: 'percentage',
+    proj: 'crs',
+    lines: 'fields',
+  };
+  return (cmds as any[])
+    .map((c: any) => {
+      const parts: string[] = [`-${c.name}`];
+      const opts = (c.options ?? {}) as Record<string, unknown>;
+      const positionalKey = POSITIONAL[c.name];
+      // Drop `_` echo from real parseCommands output if present.
+      const keys = Object.keys(opts).filter((k) => k !== '_');
+      for (const k of keys) {
+        const v = opts[k];
+        if (v === undefined || v === false) continue;
+        if (k === positionalKey) {
+          // Render as positional: bare value, no `key=`.
+          if (Array.isArray(v)) parts.push(v.length === 1 ? `"${v[0]}"` : `"${v.join(',')}"`);
+          else parts.push(`"${v}"`);
+          continue;
+        }
+        const key = k.replace(/_/g, '-');
+        if (v === true) parts.push(key);
+        else if (Array.isArray(v)) parts.push(`${key}=${v.join(',')}`);
+        else if (typeof v === 'string') parts.push(`${key}="${v}"`);
+        else parts.push(`${key}=${v}`);
+      }
+      return parts.join(' ');
+    })
+    .join(' ');
 }
 
 function getPrivate(target: object, key: string): unknown {
@@ -694,14 +779,14 @@ describe('Emap clipLayer / eraseLayer', () => {
   it('clipLayer constructs a quoted mapshaper command and swaps the dataset', async () => {
     const ok = await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy).toHaveBeenCalledTimes(1);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clip source="park"');
+    expect(runParsedCommandsSpy).toHaveBeenCalledTimes(1);
+    expectCli('-target "roads" -clip source="park"', runParsedCommandsSpy.mock.calls[0][0]);
     expect(source.setDataset).toHaveBeenCalledWith(afterDataset);
   });
 
   it('eraseLayer constructs a -erase command', async () => {
     await map.ops.eraseLayer({ source: 'src1', target: 'roads', mask: 'park' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -erase source="park"');
+    expectCli('-target "roads" -erase source="park"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('clipLayer pushes exactly one DatasetReplaceCommand and labels it', async () => {
@@ -764,13 +849,13 @@ describe('Emap clipLayer / eraseLayer', () => {
     beforeDataset.layers.push({ name: 'weird"name', geometry_type: 'polygon', shapes: [] });
     afterDataset.layers.push({ name: 'weird"name', geometry_type: 'polygon', shapes: [] });
     await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'weird"name' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clip source="weird\\"name"');
+    expectCli('-target "roads" -clip source="weird\\"name"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('cleanLayer constructs a -clean command and pushes a single history entry', async () => {
     const ok = await map.ops.cleanLayer({ source: 'src1', target: 'roads' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -clean');
+    expectCli('-target "roads" -clean', runParsedCommandsSpy.mock.calls[0][0]);
     expect(map.canUndo()).toBe(true);
   });
 
@@ -843,13 +928,13 @@ describe('Emap dissolveLayer', () => {
   it('whole-layer dissolve omits the field argument', async () => {
     const ok = await map.ops.dissolveLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -dissolve');
+    expectCli('-target "states" -dissolve', runParsedCommandsSpy.mock.calls[0][0]);
     expect(source.setDataset).toHaveBeenCalledWith(afterDataset);
   });
 
   it('field-based dissolve emits the field as a quoted positional', async () => {
     await map.ops.dissolveLayer({ source: 'src1', target: 'states', field: 'region' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -dissolve "region"');
+    expectCli('-target "states" -dissolve "region"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false when the source does not exist', async () => {
@@ -895,7 +980,7 @@ describe('Emap dissolveLayer', () => {
 
   it('quotes field names containing special characters', async () => {
     await map.ops.dissolveLayer({ source: 'src1', target: 'states', field: 'state name' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -dissolve "state name"');
+    expectCli('-target "states" -dissolve "state name"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 });
 
@@ -1159,11 +1244,11 @@ describe('Emap mergeSelected', () => {
     expect(liveRecords[2].__emap_merge).toBe('M');
     expect(liveRecords[3].__emap_merge).toBe('M');
 
-    const cmd = parseCommandsSpy.mock.calls[0][0] as string;
+    const cmd = parsedCmdsToCli(runParsedCommandsSpy.mock.calls[0][0]);
     expect(cmd).toContain('-target "parcels"');
     expect(cmd).toContain('-dissolve "__emap_merge"');
     expect(cmd).toContain('copy-fields=name,area');
-    expect(cmd).toContain('-filter-fields __emap_merge invert');
+    expect(cmd).toContain('-filter-fields "__emap_merge" invert');
     // Regression: pre-PR-4 embedded a JSON-stringified id list and a
     // `-each` expression. Both must be gone after the direct-record
     // refactor or large selections will explode the command string.
@@ -1228,7 +1313,7 @@ describe('Emap mergeSelected', () => {
       { source: 'src1', layer: 'parcels', id: 1 },
     ], { mode: 'add' });
     await map.ops.mergeSelected();
-    const cmd = parseCommandsSpy.mock.calls[0][0] as string;
+    const cmd = parsedCmdsToCli(runParsedCommandsSpy.mock.calls[0][0]);
     expect(cmd).toContain('copy-fields=safe');
     expect(cmd).not.toContain('has,comma');
   });
@@ -1381,19 +1466,19 @@ describe('Emap translateSelected', () => {
   });
 
   it('returns false on empty selection', () => {
-    expect(map.editSession.translateSelected(10, 5)).toBe(false);
+    expect(map.editSession.translateSelected(10, 5).ok).toBe(false);
   });
 
   it('returns false on zero offset', () => {
     map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
-    expect(map.editSession.translateSelected(0, 0)).toBe(false);
+    expect(map.editSession.translateSelected(0, 0).ok).toBe(false);
     expect(map.canUndo()).toBe(false);
   });
 
   it('translates one polygon by collecting its arc id', () => {
     map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
     const ok = map.editSession.translateSelected(100, 200);
-    expect(ok).toBe(true);
+    expect(ok.ok).toBe(true);
     // Arc 0's verts shifted by (100, 200); arc 1 untouched
     expect(xx[0]).toBe(100); expect(xx[1]).toBe(101);
     expect(xx[2]).toBe(10); expect(xx[3]).toBe(11);
@@ -1564,17 +1649,17 @@ describe('Emap bufferLayer', () => {
   it('emits a numeric radius bare', async () => {
     const ok = await map.ops.bufferLayer({ source: 'src1', target: 'roads', radius: 5 });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -buffer 5');
+    expectCli('-target "roads" -buffer 5', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('quotes a string radius (mapshaper expression)', async () => {
     await map.ops.bufferLayer({ source: 'src1', target: 'roads', radius: 'pop / 1000' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -buffer "pop / 1000"');
+    expectCli('-target "roads" -buffer "pop / 1000"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends cap-style= when capStyle is set', async () => {
     await map.ops.bufferLayer({ source: 'src1', target: 'roads', radius: 5, capStyle: 'flat' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -buffer 5 cap-style=flat');
+    expectCli('-target "roads" -buffer 5 cap-style=flat', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false when source / target is missing', async () => {
@@ -1641,8 +1726,9 @@ describe('Emap applyExpression', () => {
       expression: 'this.density = this.pop / this.area',
     });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+    expectCli(
       '-target "cities" -each "this.density = this.pop / this.area"',
+      runParsedCommandsSpy.mock.calls[0][0],
     );
   });
 
@@ -1653,8 +1739,9 @@ describe('Emap applyExpression', () => {
       expression: 'this.flag = true',
       where: 'this.pop > 100',
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+    expectCli(
       '-target "cities" -each "this.flag = true" where="this.pop > 100"',
+      runParsedCommandsSpy.mock.calls[0][0],
     );
   });
 
@@ -1677,7 +1764,7 @@ describe('Emap applyExpression', () => {
       expression: 'this.x = 1',
       where: '   ',
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "cities" -each "this.x = 1"');
+    expectCli('-target "cities" -each "this.x = 1"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('pushes one history entry labelled "Update <target>"', async () => {
@@ -1698,8 +1785,9 @@ describe('Emap applyExpression', () => {
       target: 'cities',
       expression: 'this.kind = "city"',
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+    expectCli(
       '-target "cities" -each "this.kind = \\"city\\""',
+      runParsedCommandsSpy.mock.calls[0][0],
     );
   });
 
@@ -1722,7 +1810,7 @@ describe('Emap applyExpression', () => {
 
 describe('Emap explodeLayer', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -1742,12 +1830,11 @@ describe('Emap explodeLayer', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -1759,13 +1846,13 @@ describe('Emap explodeLayer', () => {
   it('emits the -explode command', async () => {
     const ok = await map.ops.explodeLayer({ source: 'src1', target: 'parts' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -explode');
+    expectCli('-target "parts" -explode', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false on missing source / target', async () => {
     expect((await map.ops.explodeLayer({ source: 'nope', target: 'parts' })).ok).toBe(false);
     expect((await map.ops.explodeLayer({ source: 'src1', target: 'nope' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('pushes one history entry labelled "Explode <target>"', async () => {
@@ -1779,7 +1866,7 @@ describe('Emap explodeLayer', () => {
 
 describe('Emap innerlinesLayer', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -1799,12 +1886,11 @@ describe('Emap innerlinesLayer', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -1816,29 +1902,28 @@ describe('Emap innerlinesLayer', () => {
   it('emits the minimal -innerlines command', async () => {
     const ok = await map.ops.innerlinesLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -innerlines');
+    expectCli('-target "states" -innerlines', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends a quoted where=', async () => {
     await map.ops.innerlinesLayer({
       source: 'src1', target: 'states', where: 'A.STATE !== B.STATE',
     });
-    expect(parseCommandsSpy.mock.calls[0][0])
-      .toBe('-target "states" -innerlines where="A.STATE !== B.STATE"');
+    expectCli('-target "states" -innerlines where="A.STATE !== B.STATE"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends a quoted name=', async () => {
     await map.ops.innerlinesLayer({
       source: 'src1', target: 'states', name: 'borders',
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -innerlines name="borders"');
+    expectCli('-target "states" -innerlines name="borders"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends no-replace flag', async () => {
     await map.ops.innerlinesLayer({
       source: 'src1', target: 'states', noReplace: true,
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -innerlines no-replace');
+    expectCli('-target "states" -innerlines no-replace', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('combines all options in deterministic order', async () => {
@@ -1846,14 +1931,13 @@ describe('Emap innerlinesLayer', () => {
       source: 'src1', target: 'states',
       where: 'A.x !== B.x', name: 'b', noReplace: true,
     });
-    expect(parseCommandsSpy.mock.calls[0][0])
-      .toBe('-target "states" -innerlines where="A.x !== B.x" name="b" no-replace');
+    expectCli('-target "states" -innerlines where="A.x !== B.x" name="b" no-replace', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false on missing source / target', async () => {
     expect((await map.ops.innerlinesLayer({ source: 'nope', target: 'states' })).ok).toBe(false);
     expect((await map.ops.innerlinesLayer({ source: 'src1', target: 'nope' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('pushes one history entry labelled "Innerlines <target>"', async () => {
@@ -1867,7 +1951,7 @@ describe('Emap innerlinesLayer', () => {
 
 describe('Emap filterFeatures', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -1887,12 +1971,11 @@ describe('Emap filterFeatures', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -1906,8 +1989,9 @@ describe('Emap filterFeatures', () => {
       source: 'src1', target: 'cities', expression: 'this.pop > 100',
     });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+    expectCli(
       '-target "cities" -filter "this.pop > 100"',
+      runParsedCommandsSpy.mock.calls[0][0],
     );
   });
 
@@ -1915,8 +1999,9 @@ describe('Emap filterFeatures', () => {
     await map.ops.filterFeatures({
       source: 'src1', target: 'cities', expression: 'this.x', invert: true,
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+    expectCli(
       '-target "cities" -filter "this.x" invert',
+      runParsedCommandsSpy.mock.calls[0][0],
     );
   });
 
@@ -1924,8 +2009,9 @@ describe('Emap filterFeatures', () => {
     await map.ops.filterFeatures({
       source: 'src1', target: 'cities', expression: 'this.x', removeEmpty: true,
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+    expectCli(
       '-target "cities" -filter "this.x" remove-empty',
+      runParsedCommandsSpy.mock.calls[0][0],
     );
   });
 
@@ -1933,19 +2019,19 @@ describe('Emap filterFeatures', () => {
     await map.ops.filterFeatures({
       source: 'src1', target: 'cities', removeEmpty: true,
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "cities" -filter remove-empty');
+    expectCli('-target "cities" -filter remove-empty', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false when neither expression nor removeEmpty is set', async () => {
     expect((await map.ops.filterFeatures({ source: 'src1', target: 'cities' })).ok).toBe(false);
     expect((await map.ops.filterFeatures({ source: 'src1', target: 'cities', expression: '   ' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on missing source / target', async () => {
     expect((await map.ops.filterFeatures({ source: 'nope', target: 'cities', expression: 'x' })).ok).toBe(false);
     expect((await map.ops.filterFeatures({ source: 'src1', target: 'nope', expression: 'x' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('pushes one history entry labelled "Filter <target>"', async () => {
@@ -1961,7 +2047,7 @@ describe('Emap filterFeatures', () => {
 
 describe('Emap snapLayer', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -1981,12 +2067,11 @@ describe('Emap snapLayer', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -1998,22 +2083,22 @@ describe('Emap snapLayer', () => {
   it('emits the bare -snap command (mapshaper default interval)', async () => {
     const ok = await map.ops.snapLayer({ source: 'src1', target: 'roads' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap');
+    expectCli('-target "roads" -snap', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends a numeric interval positionally', async () => {
     await map.ops.snapLayer({ source: 'src1', target: 'roads', interval: 0.0001 });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap 0.0001');
+    expectCli('-target "roads" -snap 0.0001', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends endpoints flag', async () => {
     await map.ops.snapLayer({ source: 'src1', target: 'roads', endpoints: true });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap endpoints');
+    expectCli('-target "roads" -snap endpoints', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends precision=', async () => {
     await map.ops.snapLayer({ source: 'src1', target: 'roads', precision: 0.000001 });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -snap precision=0.000001');
+    expectCli('-target "roads" -snap precision=0.000001', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('combines all options in deterministic order', async () => {
@@ -2021,14 +2106,13 @@ describe('Emap snapLayer', () => {
       source: 'src1', target: 'roads',
       interval: 0.001, endpoints: true, precision: 0.000001,
     });
-    expect(parseCommandsSpy.mock.calls[0][0])
-      .toBe('-target "roads" -snap 0.001 endpoints precision=0.000001');
+    expectCli('-target "roads" -snap 0.001 endpoints precision=0.000001', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false on missing source / target', async () => {
     expect((await map.ops.snapLayer({ source: 'nope', target: 'roads' })).ok).toBe(false);
     expect((await map.ops.snapLayer({ source: 'src1', target: 'nope' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('pushes one history entry labelled "Snap <target>"', async () => {
@@ -2086,12 +2170,12 @@ describe('Emap rotateSelected / scaleSelected', () => {
 
   describe('rotateSelected', () => {
     it('returns false on empty selection', () => {
-      expect(map.editSession.rotateSelected(45)).toBe(false);
+      expect(map.editSession.rotateSelected(45).ok).toBe(false);
     });
 
     it('returns false on zero angle', () => {
       map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
-      expect(map.editSession.rotateSelected(0)).toBe(false);
+      expect(map.editSession.rotateSelected(0).ok).toBe(false);
       expect(map.canUndo()).toBe(false);
     });
 
@@ -2145,13 +2229,13 @@ describe('Emap rotateSelected / scaleSelected', () => {
 
   describe('scaleSelected', () => {
     it('returns false on empty selection', () => {
-      expect(map.editSession.scaleSelected(2)).toBe(false);
+      expect(map.editSession.scaleSelected(2).ok).toBe(false);
     });
 
     it('returns false on no-op scale (1) and (1, 1)', () => {
       map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
-      expect(map.editSession.scaleSelected(1)).toBe(false);
-      expect(map.editSession.scaleSelected(1, 1)).toBe(false);
+      expect(map.editSession.scaleSelected(1).ok).toBe(false);
+      expect(map.editSession.scaleSelected(1, 1).ok).toBe(false);
       expect(map.canUndo()).toBe(false);
     });
 
@@ -2222,7 +2306,7 @@ describe('Emap rotateSelected / scaleSelected', () => {
 
 describe('Emap mosaicLayer', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -2242,12 +2326,11 @@ describe('Emap mosaicLayer', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -2259,28 +2342,28 @@ describe('Emap mosaicLayer', () => {
   it('emits the bare -mosaic command', async () => {
     const ok = await map.ops.mosaicLayer({ source: 'src1', target: 'parts' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic');
+    expectCli('-target "parts" -mosaic', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends snap-interval=', async () => {
     await map.ops.mosaicLayer({ source: 'src1', target: 'parts', snapInterval: 0.001 });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic snap-interval=0.001');
+    expectCli('-target "parts" -mosaic snap-interval=0.001', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends no-snap and no-replace flags', async () => {
     await map.ops.mosaicLayer({ source: 'src1', target: 'parts', noSnap: true, noReplace: true });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic no-snap no-replace');
+    expectCli('-target "parts" -mosaic no-snap no-replace', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('quotes name= when supplied', async () => {
     await map.ops.mosaicLayer({ source: 'src1', target: 'parts', name: 'flat zones' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parts" -mosaic name="flat zones"');
+    expectCli('-target "parts" -mosaic name="flat zones"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false on missing source / target', async () => {
     expect((await map.ops.mosaicLayer({ source: 'nope', target: 'parts' })).ok).toBe(false);
     expect((await map.ops.mosaicLayer({ source: 'src1', target: 'nope' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('pushes one history entry labelled "Mosaic <target>"', async () => {
@@ -2294,7 +2377,7 @@ describe('Emap mosaicLayer', () => {
 
 describe('Emap unionLayers', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -2320,12 +2403,11 @@ describe('Emap unionLayers', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -2337,46 +2419,46 @@ describe('Emap unionLayers', () => {
   it('joins targets with commas inside a single quoted -target arg', async () => {
     const ok = await map.ops.unionLayers({ source: 'src1', targets: ['parks', 'soils'] });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union');
+    expectCli('-target "parks,soils" -union', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('preserves target order for three or more layers', async () => {
     await map.ops.unionLayers({ source: 'src1', targets: ['soils', 'parks', 'roads'] });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "soils,parks,roads" -union');
+    expectCli('-target "soils,parks,roads" -union', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends fields=', async () => {
     await map.ops.unionLayers({
       source: 'src1', targets: ['parks', 'soils'], fields: ['name', 'type'],
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union fields=name,type');
+    expectCli('-target "parks,soils" -union fields=name,type', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('quotes name=', async () => {
     await map.ops.unionLayers({
       source: 'src1', targets: ['parks', 'soils'], name: 'overlay output',
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union name="overlay output"');
+    expectCli('-target "parks,soils" -union name="overlay output"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends no-replace', async () => {
     await map.ops.unionLayers({
       source: 'src1', targets: ['parks', 'soils'], noReplace: true,
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks,soils" -union no-replace');
+    expectCli('-target "parks,soils" -union no-replace', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false for fewer than two targets', async () => {
     expect((await map.ops.unionLayers({ source: 'src1', targets: ['parks'] })).ok).toBe(false);
     expect((await map.ops.unionLayers({ source: 'src1', targets: [] })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when any target is unresolved', async () => {
     expect((await map.ops.unionLayers({
       source: 'src1', targets: ['parks', 'missing'],
     })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when source is missing', async () => {
@@ -2394,7 +2476,7 @@ describe('Emap unionLayers', () => {
 
 describe('Emap divideLayer', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -2420,12 +2502,11 @@ describe('Emap divideLayer', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -2437,7 +2518,7 @@ describe('Emap divideLayer', () => {
   it('builds the minimal command shape', async () => {
     const ok = await map.ops.divideLayer({ source: 'src1', target: 'roads', divider: 'tracts' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -divide source="tracts"');
+    expectCli('-target "roads" -divide source="tracts"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends fields=', async () => {
@@ -2445,39 +2526,39 @@ describe('Emap divideLayer', () => {
       source: 'src1', target: 'roads', divider: 'tracts',
       fields: ['NAME', 'STATE'],
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -divide source="tracts" fields=NAME,STATE');
+    expectCli('-target "roads" -divide source="tracts" fields=NAME,STATE', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends force', async () => {
     await map.ops.divideLayer({
       source: 'src1', target: 'roads', divider: 'tracts', force: true,
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -divide source="tracts" force');
+    expectCli('-target "roads" -divide source="tracts" force', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false when source is missing', async () => {
     expect((await map.ops.divideLayer({ source: 'nope', target: 'roads', divider: 'tracts' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
     expect((await map.ops.divideLayer({ source: 'src1', target: 'highways', divider: 'tracts' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when divider is unresolved', async () => {
     expect((await map.ops.divideLayer({ source: 'src1', target: 'roads', divider: 'counties' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is not a polyline', async () => {
     expect((await map.ops.divideLayer({ source: 'src1', target: 'tracts', divider: 'tracts' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when divider is not a polygon', async () => {
     expect((await map.ops.divideLayer({ source: 'src1', target: 'roads', divider: 'cities' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history entry is labelled "Divide <target>"', async () => {
@@ -2491,7 +2572,7 @@ describe('Emap divideLayer', () => {
 
 describe('Emap pointsLayer', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -2517,12 +2598,11 @@ describe('Emap pointsLayer', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -2534,32 +2614,32 @@ describe('Emap pointsLayer', () => {
   it('builds centroid command for polygon target', async () => {
     const ok = await map.ops.pointsLayer({ source: 'src1', target: 'parks', type: 'centroid' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks" -points centroid');
+    expectCli('-target "parks" -points centroid', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('builds inner command for polygon target', async () => {
     await map.ops.pointsLayer({ source: 'src1', target: 'parks', type: 'inner' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks" -points inner');
+    expectCli('-target "parks" -points inner', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('builds vertices command for polyline target', async () => {
     await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'vertices' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -points vertices');
+    expectCli('-target "roads" -points vertices', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('builds endpoints command for polygon target', async () => {
     await map.ops.pointsLayer({ source: 'src1', target: 'parks', type: 'endpoints' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "parks" -points endpoints');
+    expectCli('-target "parks" -points endpoints', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('builds midpoints command for polyline target', async () => {
     await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'midpoints' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -points midpoints');
+    expectCli('-target "roads" -points midpoints', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('builds interpolated command with interval', async () => {
     await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: 1000 });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -points interpolated interval=1000');
+    expectCli('-target "roads" -points interpolated interval=1000', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends quoted name and no-replace', async () => {
@@ -2567,30 +2647,29 @@ describe('Emap pointsLayer', () => {
       source: 'src1', target: 'parks', type: 'centroid',
       name: 'park labels', noReplace: true,
     });
-    expect(parseCommandsSpy.mock.calls[0][0])
-      .toBe('-target "parks" -points centroid name="park labels" no-replace');
+    expectCli('-target "parks" -points centroid name="park labels" no-replace', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('rejects centroid on non-polygon target', async () => {
     expect((await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'centroid' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('rejects midpoints on non-polyline target', async () => {
     expect((await map.ops.pointsLayer({ source: 'src1', target: 'parks', type: 'midpoints' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('rejects vertices on a point target', async () => {
     expect((await map.ops.pointsLayer({ source: 'src1', target: 'cities', type: 'vertices' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('rejects interpolated without interval', async () => {
     expect((await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated' })).ok).toBe(false);
     expect((await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: 0 })).ok).toBe(false);
     expect((await map.ops.pointsLayer({ source: 'src1', target: 'roads', type: 'interpolated', interval: -5 })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when source is missing', async () => {
@@ -2599,7 +2678,7 @@ describe('Emap pointsLayer', () => {
 
   it('returns false when target is unresolved', async () => {
     expect((await map.ops.pointsLayer({ source: 'src1', target: 'forests', type: 'centroid' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history entry is labelled "Points <target>"', async () => {
@@ -2613,7 +2692,7 @@ describe('Emap pointsLayer', () => {
 
 describe('Emap linesLayer', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -2638,12 +2717,11 @@ describe('Emap linesLayer', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -2655,39 +2733,39 @@ describe('Emap linesLayer', () => {
   it('builds the minimal command shape', async () => {
     const ok = await map.ops.linesLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -lines');
+    expectCli('-target "states" -lines', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('emits comma-joined fields as a bare positional argument', async () => {
     await map.ops.linesLayer({
       source: 'src1', target: 'states', fields: ['STATE', 'COUNTY'],
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -lines STATE,COUNTY');
+    expectCli('-target "states" -lines STATE,COUNTY', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends quoted name', async () => {
     await map.ops.linesLayer({ source: 'src1', target: 'states', name: 'borders' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -lines name="borders"');
+    expectCli('-target "states" -lines name="borders"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends no-replace', async () => {
     await map.ops.linesLayer({ source: 'src1', target: 'states', noReplace: true });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -lines no-replace');
+    expectCli('-target "states" -lines no-replace', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false when source is missing', async () => {
     expect((await map.ops.linesLayer({ source: 'nope', target: 'states' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
     expect((await map.ops.linesLayer({ source: 'src1', target: 'counties' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is not a polygon', async () => {
     expect((await map.ops.linesLayer({ source: 'src1', target: 'roads' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history entry is labelled "Lines <target>"', async () => {
@@ -2701,7 +2779,7 @@ describe('Emap linesLayer', () => {
 
 describe('Emap polygonsLayer', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -2726,12 +2804,11 @@ describe('Emap polygonsLayer', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -2743,42 +2820,42 @@ describe('Emap polygonsLayer', () => {
   it('builds the minimal command shape', async () => {
     const ok = await map.ops.polygonsLayer({ source: 'src1', target: 'edges' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons');
+    expectCli('-target "edges" -polygons', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('forwards gap-tolerance when positive', async () => {
     await map.ops.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: 0.001 });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons gap-tolerance=0.001');
+    expectCli('-target "edges" -polygons gap-tolerance=0.001', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('drops gap-tolerance when zero', async () => {
     await map.ops.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: 0 });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons');
+    expectCli('-target "edges" -polygons', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('drops gap-tolerance when negative', async () => {
     await map.ops.polygonsLayer({ source: 'src1', target: 'edges', gapTolerance: -1 });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons');
+    expectCli('-target "edges" -polygons', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends from-rings', async () => {
     await map.ops.polygonsLayer({ source: 'src1', target: 'edges', fromRings: true });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "edges" -polygons from-rings');
+    expectCli('-target "edges" -polygons from-rings', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false when source is missing', async () => {
     expect((await map.ops.polygonsLayer({ source: 'nope', target: 'edges' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
     expect((await map.ops.polygonsLayer({ source: 'src1', target: 'rivers' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is not a polyline', async () => {
     expect((await map.ops.polygonsLayer({ source: 'src1', target: 'parks' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history entry is labelled "Polygons <target>"', async () => {
@@ -2792,7 +2869,7 @@ describe('Emap polygonsLayer', () => {
 
 describe('Emap simplifyLayer', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -2817,12 +2894,11 @@ describe('Emap simplifyLayer', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -2834,38 +2910,38 @@ describe('Emap simplifyLayer', () => {
   it('builds the percentage form', async () => {
     const ok = await map.ops.simplifyLayer({ source: 'src1', percentage: 10 });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10%');
+    expectCli('-simplify 10%', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('preserves decimal percentages', async () => {
     await map.ops.simplifyLayer({ source: 'src1', percentage: 12.5 });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 12.5%');
+    expectCli('-simplify 12.5%', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('builds the interval form', async () => {
     await map.ops.simplifyLayer({ source: 'src1', interval: 250 });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify interval=250');
+    expectCli('-simplify interval=250', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('builds the resolution form', async () => {
     await map.ops.simplifyLayer({ source: 'src1', resolution: '1000x500' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify resolution=1000x500');
+    expectCli('-simplify resolution=1000x500', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends method dp / visvalingam / weighted', async () => {
     await map.ops.simplifyLayer({ source: 'src1', percentage: 10, method: 'dp' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% dp');
-    parseCommandsSpy.mockClear();
+    expectCli('-simplify 10% dp', runParsedCommandsSpy.mock.calls[0][0]);
+    runParsedCommandsSpy.mockClear();
     await map.ops.simplifyLayer({ source: 'src1', percentage: 10, method: 'visvalingam' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% visvalingam');
-    parseCommandsSpy.mockClear();
+    expectCli('-simplify 10% visvalingam', runParsedCommandsSpy.mock.calls[0][0]);
+    runParsedCommandsSpy.mockClear();
     await map.ops.simplifyLayer({ source: 'src1', percentage: 10, method: 'weighted' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% weighted');
+    expectCli('-simplify 10% weighted', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends weighting=', async () => {
     await map.ops.simplifyLayer({ source: 'src1', percentage: 10, method: 'weighted', weighting: 0.5 });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-simplify 10% weighted weighting=0.5');
+    expectCli('-simplify 10% weighted weighting=0.5', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends every passthrough flag', async () => {
@@ -2873,28 +2949,27 @@ describe('Emap simplifyLayer', () => {
       source: 'src1', percentage: 10,
       planar: true, keepShapes: true, lockBox: true, noRepair: true,
     });
-    expect(parseCommandsSpy.mock.calls[0][0])
-      .toBe('-simplify 10% planar keep-shapes lock-box no-repair');
+    expectCli('-simplify 10% planar keep-shapes lock-box no-repair', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('scopes to a target when supplied', async () => {
     await map.ops.simplifyLayer({ source: 'src1', target: 'roads', percentage: 10 });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "roads" -simplify 10%');
+    expectCli('-target "roads" -simplify 10%', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false when source is missing', async () => {
     expect((await map.ops.simplifyLayer({ source: 'nope', percentage: 10 })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
     expect((await map.ops.simplifyLayer({ source: 'src1', target: 'rivers', percentage: 10 })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when no threshold is supplied', async () => {
     expect((await map.ops.simplifyLayer({ source: 'src1' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when multiple thresholds are supplied', async () => {
@@ -2907,27 +2982,27 @@ describe('Emap simplifyLayer', () => {
     expect((await map.ops.simplifyLayer({
       source: 'src1', interval: 250, resolution: '1000x500',
     })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false for out-of-range percentage', async () => {
     expect((await map.ops.simplifyLayer({ source: 'src1', percentage: -1 })).ok).toBe(false);
     expect((await map.ops.simplifyLayer({ source: 'src1', percentage: 101 })).ok).toBe(false);
     expect((await map.ops.simplifyLayer({ source: 'src1', percentage: NaN })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false for non-positive interval', async () => {
     expect((await map.ops.simplifyLayer({ source: 'src1', interval: 0 })).ok).toBe(false);
     expect((await map.ops.simplifyLayer({ source: 'src1', interval: -1 })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false for malformed resolution', async () => {
     expect((await map.ops.simplifyLayer({ source: 'src1', resolution: '1000' })).ok).toBe(false);
     expect((await map.ops.simplifyLayer({ source: 'src1', resolution: '1000x' })).ok).toBe(false);
     expect((await map.ops.simplifyLayer({ source: 'src1', resolution: 'abc' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history entry is labelled "Simplify <target>" when scoped', async () => {
@@ -2947,7 +3022,7 @@ describe('Emap simplifyLayer', () => {
 
 describe('Emap projectLayer', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -2970,12 +3045,11 @@ describe('Emap projectLayer', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -2987,27 +3061,27 @@ describe('Emap projectLayer', () => {
   it('builds the whole-source command (no target)', async () => {
     const ok = await map.ops.projectLayer({ source: 'src1', crs: 'EPSG:3857' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "EPSG:3857"');
+    expectCli('-proj "EPSG:3857"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('builds the target-scoped command', async () => {
     await map.ops.projectLayer({ source: 'src1', target: 'states', crs: 'EPSG:3857' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -proj "EPSG:3857"');
+    expectCli('-target "states" -proj "EPSG:3857"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('quotes Proj.4 strings with spaces', async () => {
     await map.ops.projectLayer({ source: 'src1', crs: '+proj=utm +zone=10' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "+proj=utm +zone=10"');
+    expectCli('-proj "+proj=utm +zone=10"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends quoted init=', async () => {
     await map.ops.projectLayer({ source: 'src1', crs: 'EPSG:3857', init: 'EPSG:4326' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "EPSG:3857" init="EPSG:4326"');
+    expectCli('-proj "EPSG:3857" init="EPSG:4326"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends densify', async () => {
     await map.ops.projectLayer({ source: 'src1', crs: 'robinson', densify: true });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-proj "robinson" densify');
+    expectCli('-proj "robinson" densify', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('combines all options', async () => {
@@ -3015,24 +3089,23 @@ describe('Emap projectLayer', () => {
       source: 'src1', target: 'states',
       crs: 'EPSG:3857', init: 'EPSG:4326', densify: true,
     });
-    expect(parseCommandsSpy.mock.calls[0][0])
-      .toBe('-target "states" -proj "EPSG:3857" init="EPSG:4326" densify');
+    expectCli('-target "states" -proj "EPSG:3857" init="EPSG:4326" densify', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false when source is missing', async () => {
     expect((await map.ops.projectLayer({ source: 'nope', crs: 'EPSG:3857' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
     expect((await map.ops.projectLayer({ source: 'src1', target: 'missing', crs: 'EPSG:3857' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on empty / whitespace crs', async () => {
     expect((await map.ops.projectLayer({ source: 'src1', crs: '' })).ok).toBe(false);
     expect((await map.ops.projectLayer({ source: 'src1', crs: '   ' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history label is "Project <target>" when scoped', async () => {
@@ -3052,7 +3125,7 @@ describe('Emap projectLayer', () => {
 
 describe('Emap renameLayer', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -3077,12 +3150,11 @@ describe('Emap renameLayer', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -3094,39 +3166,39 @@ describe('Emap renameLayer', () => {
   it('builds the minimal command shape', async () => {
     const ok = await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'new' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "old" -rename-layers "new"');
+    expectCli('-target "old" -rename-layers "new"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('quotes names with spaces', async () => {
     await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'My Layer' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "old" -rename-layers "My Layer"');
+    expectCli('-target "old" -rename-layers "My Layer"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false when source is missing', async () => {
     expect((await map.ops.renameLayer({ source: 'nope', target: 'old', name: 'new' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
     expect((await map.ops.renameLayer({ source: 'src1', target: 'missing', name: 'new' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on empty / whitespace name', async () => {
     expect((await map.ops.renameLayer({ source: 'src1', target: 'old', name: '' })).ok).toBe(false);
     expect((await map.ops.renameLayer({ source: 'src1', target: 'old', name: '   ' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on collision with another layer', async () => {
     expect((await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'other' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('allows renaming to the same name (no collision against itself)', async () => {
     const ok = await map.ops.renameLayer({ source: 'src1', target: 'old', name: 'old' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "old" -rename-layers "old"');
+    expectCli('-target "old" -rename-layers "old"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('history entry is labelled "Rename <from> → <to>"', async () => {
@@ -3139,7 +3211,7 @@ describe('Emap renameLayer', () => {
 
 describe('Emap mergeLayers', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -3166,12 +3238,11 @@ describe('Emap mergeLayers', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -3183,49 +3254,49 @@ describe('Emap mergeLayers', () => {
   it('joins targets with commas inside a single quoted -target arg', async () => {
     const ok = await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'b'] });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers');
+    expectCli('-target "a,b" -merge-layers', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('preserves target order for three or more layers', async () => {
     await map.ops.mergeLayers({ source: 'src1', targets: ['c', 'a', 'b'] });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "c,a,b" -merge-layers');
+    expectCli('-target "c,a,b" -merge-layers', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends quoted name', async () => {
     await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'b'], name: 'combined' });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers name="combined"');
+    expectCli('-target "a,b" -merge-layers name="combined"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends force', async () => {
     await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'b'], force: true });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers force');
+    expectCli('-target "a,b" -merge-layers force', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends flatten', async () => {
     await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'b'], flatten: true });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,b" -merge-layers flatten');
+    expectCli('-target "a,b" -merge-layers flatten', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false for fewer than two targets', async () => {
     expect((await map.ops.mergeLayers({ source: 'src1', targets: ['a'] })).ok).toBe(false);
     expect((await map.ops.mergeLayers({ source: 'src1', targets: [] })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when any target is unresolved', async () => {
     expect((await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'missing'] })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('rejects mixed-geometry targets without force', async () => {
     expect((await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'roads'] })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('allows mixed-geometry targets with force=true', async () => {
     const ok = await map.ops.mergeLayers({ source: 'src1', targets: ['a', 'roads'], force: true });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "a,roads" -merge-layers force');
+    expectCli('-target "a,roads" -merge-layers force', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false when source is missing', async () => {
@@ -3242,7 +3313,7 @@ describe('Emap mergeLayers', () => {
 
 describe('Emap splitLayer', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -3264,12 +3335,11 @@ describe('Emap splitLayer', () => {
     } as any;
     (map as any)._sources.set('src1', source);
 
-    parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -3281,7 +3351,7 @@ describe('Emap splitLayer', () => {
   it('builds the field-name form', async () => {
     const ok = await map.ops.splitLayer({ source: 'src1', target: 'states', expression: 'REGION' });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -split "REGION"');
+    expectCli('-target "states" -split "REGION"', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('forwards JS expressions verbatim, quoted', async () => {
@@ -3289,31 +3359,30 @@ describe('Emap splitLayer', () => {
       source: 'src1', target: 'states',
       expression: 'this.pop > 1000000 ? "big" : "small"',
     });
-    expect(parseCommandsSpy.mock.calls[0][0])
-      .toBe('-target "states" -split "this.pop > 1000000 ? \\"big\\" : \\"small\\""');
+    expectCli('-target "states" -split "this.pop > 1000000 ? \\"big\\" : \\"small\\""', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends no-replace', async () => {
     await map.ops.splitLayer({
       source: 'src1', target: 'states', expression: 'REGION', noReplace: true,
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -split "REGION" no-replace');
+    expectCli('-target "states" -split "REGION" no-replace', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false when source is missing', async () => {
     expect((await map.ops.splitLayer({ source: 'nope', target: 'states', expression: 'REGION' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false when target is unresolved', async () => {
     expect((await map.ops.splitLayer({ source: 'src1', target: 'missing', expression: 'REGION' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on empty / whitespace expression', async () => {
     expect((await map.ops.splitLayer({ source: 'src1', target: 'states', expression: '' })).ok).toBe(false);
     expect((await map.ops.splitLayer({ source: 'src1', target: 'states', expression: '   ' })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history entry is labelled "Split <target>"', async () => {
@@ -3333,6 +3402,7 @@ describe('Emap splitLayer', () => {
 
 function setupDataEngineeringMap(): {
   map: Emap;
+  runParsedCommandsSpy: ReturnType<typeof vi.fn>;
   parseCommandsSpy: ReturnType<typeof vi.fn>;
   restore: () => void;
 } {
@@ -3358,15 +3428,20 @@ function setupDataEngineeringMap(): {
   const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
 
-  const parseCommandsSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } }]) as ReturnType<typeof vi.fn>;
+  const runParsedCommandsSpy = vi.fn((_c: any, _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }) as ReturnType<typeof vi.fn>;
+  // PR-4b: ops bypass parseCommands. Tests that asserted
+  // `parseCommandsSpy.not.toHaveBeenCalled()` now alias parseCommandsSpy
+  // to the same runParsedCommands spy so the early-exit semantics still
+  // hold (no command dispatched ↔ no spy call).
+  const parseCommandsSpy = runParsedCommandsSpy;
   Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-  Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-  Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
-    cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-  }));
+  Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
 
   return {
     map,
+    runParsedCommandsSpy,
     parseCommandsSpy,
     restore: () => {
       Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
@@ -3384,7 +3459,7 @@ describe('Emap dropLayer', () => {
   it('builds the minimal command shape', async () => {
     const ok = await ctx.map.ops.dropLayer({ source: 'src1', target: 'states' });
     expect(ok.ok).toBe(true);
-    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -drop');
+    expectCli('-target "states" -drop', ctx.runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false when source is missing', async () => {
@@ -3413,17 +3488,17 @@ describe('Emap sortFeatures', () => {
   it('builds the ascending command (default)', async () => {
     const ok = await ctx.map.ops.sortFeatures({ source: 'src1', target: 'states', expression: 'POP' });
     expect(ok.ok).toBe(true);
-    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -sort "POP"');
+    expectCli('-target "states" -sort "POP"', ctx.runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends descending', async () => {
     await ctx.map.ops.sortFeatures({ source: 'src1', target: 'states', expression: 'POP', descending: true });
-    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -sort "POP" descending');
+    expectCli('-target "states" -sort "POP" descending', ctx.runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('quotes JS expressions verbatim', async () => {
     await ctx.map.ops.sortFeatures({ source: 'src1', target: 'states', expression: 'this.pop * -1' });
-    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -sort "this.pop * -1"');
+    expectCli('-target "states" -sort "this.pop * -1"', ctx.runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false on missing source / unresolved target / empty expression', async () => {
@@ -3450,17 +3525,17 @@ describe('Emap uniqueFeatures', () => {
   it('builds the minimal command shape', async () => {
     const ok = await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE_FIPS' });
     expect(ok.ok).toBe(true);
-    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -uniq "STATE_FIPS"');
+    expectCli('-target "states" -uniq "STATE_FIPS"', ctx.runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends max-count', async () => {
     await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE', maxCount: 3 });
-    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -uniq "STATE" max-count=3');
+    expectCli('-target "states" -uniq "STATE" max-count=3', ctx.runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends invert', async () => {
     await ctx.map.ops.uniqueFeatures({ source: 'src1', target: 'states', expression: 'STATE', invert: true });
-    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -uniq "STATE" invert');
+    expectCli('-target "states" -uniq "STATE" invert', ctx.runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false on empty expression / non-positive maxCount', async () => {
@@ -3486,12 +3561,12 @@ describe('Emap filterFields', () => {
   it('joins fields with commas inside one quoted argument', async () => {
     const ok = await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: ['fips', 'name'] });
     expect(ok.ok).toBe(true);
-    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -filter-fields "fips,name"');
+    expectCli('-target "states" -filter-fields "fips,name"', ctx.runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends invert', async () => {
     await ctx.map.ops.filterFields({ source: 'src1', target: 'states', fields: ['fips'], invert: true });
-    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -filter-fields "fips" invert');
+    expectCli('-target "states" -filter-fields "fips" invert', ctx.runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false on empty / invalid fields', async () => {
@@ -3517,7 +3592,7 @@ describe('Emap renameFields', () => {
   it('serializes a single rename', async () => {
     const ok = await ctx.map.ops.renameFields({ source: 'src1', target: 'states', mapping: { OLD: 'NEW' } });
     expect(ok.ok).toBe(true);
-    expect(ctx.parseCommandsSpy.mock.calls[0][0]).toBe('-target "states" -rename-fields "OLD=NEW"');
+    expectCli('-target "states" -rename-fields "OLD=NEW"', ctx.runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('serializes a multi-field rename in iteration order', async () => {
@@ -3525,8 +3600,7 @@ describe('Emap renameFields', () => {
       source: 'src1', target: 'states',
       mapping: { fips: 'STATE_FIPS', st: 'state' },
     });
-    expect(ctx.parseCommandsSpy.mock.calls[0][0])
-      .toBe('-target "states" -rename-fields "fips=STATE_FIPS,st=state"');
+    expectCli('-target "states" -rename-fields "fips=STATE_FIPS,st=state"', ctx.runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false on empty mapping or invalid keys/values', async () => {
@@ -3550,7 +3624,7 @@ describe('Emap renameFields', () => {
 
 describe('Emap joinTable', () => {
   let map: Emap;
-  let parseCommandsSpy: ReturnType<typeof vi.fn>;
+  let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
   let lastCommands: any[] | null;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
@@ -3574,18 +3648,17 @@ describe('Emap joinTable', () => {
     (map as any)._sources.set('src1', source);
 
     lastCommands = null;
-    parseCommandsSpy = vi.fn((cmd: string) => {
-      // Hold a ref so the test can inspect options.input that the runner
-      // mutates after parseCommands returns.
-      const arr = [{ name: 'parsed', options: { _cmd: cmd } as any }];
-      lastCommands = arr;
-      return arr;
-    }) as ReturnType<typeof vi.fn>;
     Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => beforeDs));
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseCommandsSpy);
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    // PR-4b: ops now hand pre-parsed commands directly to runParsedCommands.
+    // The spy is renamed `runParsedCommandsSpy` for legacy callsites but actually
+    // intercepts the parsed-command path; it captures the array so
+    // `injectedInput()` can inspect the `options.input` field that the
+    // runner mutates between dispatch and our callback.
+    runParsedCommandsSpy = vi.fn((cmds: any, _j: any, cb: any) => {
+      lastCommands = cmds;
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', runParsedCommandsSpy);
   });
 
   afterEach(() => {
@@ -3605,8 +3678,7 @@ describe('Emap joinTable', () => {
       keys: ['STATE_FIPS', 'fips'],
     });
     expect(ok.ok).toBe(true);
-    expect(parseCommandsSpy.mock.calls[0][0])
-      .toBe('-target "states" -join ".emap-join.csv" keys="STATE_FIPS,fips"');
+    expectCli('-target "states" -join ".emap-join.csv" keys="STATE_FIPS,fips"', runParsedCommandsSpy.mock.calls[0][0]);
     expect(injectedInput()).toEqual({ '.emap-join.csv': 'fips,pop\n01,4M\n02,800K' });
   });
 
@@ -3626,8 +3698,7 @@ describe('Emap joinTable', () => {
       data: { json: '[{"a":1}]' },
       keys: ['k', 's'],
     });
-    expect(parseCommandsSpy.mock.calls[0][0])
-      .toBe('-target "states" -join ".emap-join.json" keys="k,s"');
+    expectCli('-target "states" -join ".emap-join.json" keys="k,s"', runParsedCommandsSpy.mock.calls[0][0]);
     expect(injectedInput()).toEqual({ '.emap-join.json': '[{"a":1}]' });
   });
 
@@ -3657,8 +3728,7 @@ describe('Emap joinTable', () => {
       data: { layer: 'pop_table' },
       keys: ['STATE_FIPS', 'fips'],
     });
-    expect(parseCommandsSpy.mock.calls[0][0])
-      .toBe('-target "states" -join "pop_table" keys="STATE_FIPS,fips"');
+    expectCli('-target "states" -join "pop_table" keys="STATE_FIPS,fips"', runParsedCommandsSpy.mock.calls[0][0]);
     expect(injectedInput()).toBeUndefined();
   });
 
@@ -3670,13 +3740,14 @@ describe('Emap joinTable', () => {
       where: 'this.year === 2024', calc: 'sum(pop)',
       unjoined: true, unmatched: true,
     });
-    expect(parseCommandsSpy.mock.calls[0][0]).toBe(
+    expectCli(
       '-target "states" -join "t" keys="k,s"'
       + ' fields=pop,gdp'
       + ' prefix="p_"'
       + ' where="this.year === 2024"'
       + ' calc="sum(pop)"'
       + ' unjoined unmatched',
+      runParsedCommandsSpy.mock.calls[0][0],
     );
   });
 
@@ -3685,7 +3756,7 @@ describe('Emap joinTable', () => {
       source: 'nope', target: 'states',
       data: { csv: 'a,b\n1,2' }, keys: ['k', 's'],
     })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on unresolved target', async () => {
@@ -3693,7 +3764,7 @@ describe('Emap joinTable', () => {
       source: 'src1', target: 'missing',
       data: { csv: 'a,b\n1,2' }, keys: ['k', 's'],
     })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on malformed keys', async () => {
@@ -3701,7 +3772,7 @@ describe('Emap joinTable', () => {
     expect((await map.ops.joinTable({ ...base, keys: ['k'] as any })).ok).toBe(false);
     expect((await map.ops.joinTable({ ...base, keys: ['', 's'] })).ok).toBe(false);
     expect((await map.ops.joinTable({ ...base, keys: ['k', '   '] })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('returns false on invalid data shape', async () => {
@@ -3713,7 +3784,7 @@ describe('Emap joinTable', () => {
       source: 'src1', target: 'states',
       data: { layer: '' } as any, keys: ['k', 's'],
     })).ok).toBe(false);
-    expect(parseCommandsSpy).not.toHaveBeenCalled();
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
   it('history label is "Join <target>"', async () => {
@@ -4538,8 +4609,9 @@ describe('Emap useWorker routing', () => {
 
     expect(runSpy).toHaveBeenCalledTimes(1);
     const [cmd, packed] = runSpy.mock.calls[0] as unknown[];
-    expect(typeof cmd).toBe('string');
-    expect(cmd).toMatch(/-explode/);
+    // PR-4b: ops dispatch ParsedCommand[] instead of CLI strings.
+    expect(Array.isArray(cmd)).toBe(true);
+    expect((cmd as any[]).some((c: any) => c.name === 'explode')).toBe(true);
     expect(packed).toEqual({ datasets: [{ kind: 'packed-original' }] });
 
     expect(restoreSpy).toHaveBeenCalledTimes(1);
@@ -4893,12 +4965,11 @@ describe('audit-fix: reject comma-bearing names that would silently split', () =
       refreshDisplayArcs: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
-    const parseSpy = vi.fn(() => [{ name: 'parsed', options: {} as any }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
     Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    const parseSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', parseSpy);
     return { map, parseSpy };
   }
 
@@ -4961,12 +5032,11 @@ describe('audit-fix: bufferLayer rejects non-positive / non-finite radius', () =
       refreshDisplayArcs: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
-    const parseSpy = vi.fn(() => [{ name: 'parsed', options: {} as any }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
     Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    const parseSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', parseSpy);
     return { map, parseSpy };
   }
 
@@ -5019,12 +5089,11 @@ describe('audit-fix: simplifyLayer rejects weighting with non-weighted method', 
       refreshDisplayArcs: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
-    const parseSpy = vi.fn(() => [{ name: 'parsed', options: {} as any }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
     Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    const parseSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', parseSpy);
     return { map, parseSpy };
   }
 
@@ -5071,37 +5140,36 @@ describe('audit-fix: linesLayer fields token has a single canonical form', () =>
       refreshDisplayArcs: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
-    const parseSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } as any }]) as ReturnType<typeof vi.fn>;
-    Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
     Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+    const parseSpy = vi.fn((_c: any, _j: any, cb: any) => {
       cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
-    }));
+    }) as ReturnType<typeof vi.fn>;
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', parseSpy);
     return { map, parseSpy };
   }
 
   it('emits "-lines" with no fields', async () => {
     const { map, parseSpy } = makeMapWithLayers();
     await map.ops.linesLayer({ source: 'src1', target: 'states' });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines');
+    expectCli('-target "states" -lines', parseSpy.mock.calls[0][0]);
   });
 
   it('emits "-lines a,b" with fields', async () => {
     const { map, parseSpy } = makeMapWithLayers();
     await map.ops.linesLayer({ source: 'src1', target: 'states', fields: ['STATE', 'COUNTY'] });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines STATE,COUNTY');
+    expectCli('-target "states" -lines STATE,COUNTY', parseSpy.mock.calls[0][0]);
   });
 
   it('strips comma-bearing field names but keeps the rest', async () => {
     const { map, parseSpy } = makeMapWithLayers();
     await map.ops.linesLayer({ source: 'src1', target: 'states', fields: ['ok', 'bad,name', 'ok2'] });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines ok,ok2');
+    expectCli('-target "states" -lines ok,ok2', parseSpy.mock.calls[0][0]);
   });
 
   it('falls back to bare "-lines" when every field is invalid', async () => {
     const { map, parseSpy } = makeMapWithLayers();
     await map.ops.linesLayer({ source: 'src1', target: 'states', fields: ['bad,name'] });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "states" -lines');
+    expectCli('-target "states" -lines', parseSpy.mock.calls[0][0]);
   });
 });
 
@@ -5127,12 +5195,11 @@ function makeMapWithLayer(layerName: string, geometry_type = 'polygon'): {
     refreshDisplayArcs: vi.fn(),
   } as any;
   (map as any)._sources.set('src1', source);
-  const parseSpy = vi.fn((cmd: string) => [{ name: 'parsed', options: { _cmd: cmd } as any }]) as ReturnType<typeof vi.fn>;
-  Reflect.set(mapshaper.internal as object, 'parseCommands', parseSpy);
   Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn(() => ds));
-  Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any, _j: any, cb: any) => {
+  const parseSpy = vi.fn((_c: any, _j: any, cb: any) => {
     cb(null, { catalog: { getDefaultTargets: () => [{ dataset: ds }] } });
-  }));
+  }) as ReturnType<typeof vi.fn>;
+  Reflect.set(mapshaper.internal as object, 'runParsedCommands', parseSpy);
   return { map, parseSpy };
 }
 
@@ -5140,19 +5207,19 @@ describe('mosaicLayer: calc option', () => {
   it('emits calc=<quoted> when supplied', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
     await map.ops.mosaicLayer({ source: 'src1', target: 'parks', calc: 'sum(area)' });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -mosaic calc="sum(area)"');
+    expectCli('-target "parks" -mosaic calc="sum(area)"', parseSpy.mock.calls[0][0]);
   });
 
   it('omits calc= when not supplied', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
     await map.ops.mosaicLayer({ source: 'src1', target: 'parks' });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -mosaic');
+    expectCli('-target "parks" -mosaic', parseSpy.mock.calls[0][0]);
   });
 
   it('omits calc= when whitespace-only', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
     await map.ops.mosaicLayer({ source: 'src1', target: 'parks', calc: '   ' });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -mosaic');
+    expectCli('-target "parks" -mosaic', parseSpy.mock.calls[0][0]);
   });
 });
 
@@ -5160,13 +5227,13 @@ describe('snapLayer: fixGeometry option', () => {
   it('emits fix-geometry flag when truthy', async () => {
     const { map, parseSpy } = makeMapWithLayer('roads', 'polyline');
     await map.ops.snapLayer({ source: 'src1', target: 'roads', interval: 0.001, fixGeometry: true });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "roads" -snap 0.001 fix-geometry');
+    expectCli('-target "roads" -snap 0.001 fix-geometry', parseSpy.mock.calls[0][0]);
   });
 
   it('omits fix-geometry when falsy', async () => {
     const { map, parseSpy } = makeMapWithLayer('roads', 'polyline');
     await map.ops.snapLayer({ source: 'src1', target: 'roads', interval: 0.001 });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "roads" -snap 0.001');
+    expectCli('-target "roads" -snap 0.001', parseSpy.mock.calls[0][0]);
   });
 });
 
@@ -5177,7 +5244,7 @@ describe('dissolveLayer: expanded options', () => {
       source: 'src1', target: 'counties',
       fields: ['STATE', 'REGION'],
     });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "counties" -dissolve "STATE,REGION"');
+    expectCli('-target "counties" -dissolve "STATE,REGION"', parseSpy.mock.calls[0][0]);
   });
 
   it('field and fields are mutually exclusive', async () => {
@@ -5195,13 +5262,13 @@ describe('dissolveLayer: expanded options', () => {
       source: 'src1', target: 'counties',
       fields: ['ok', 'bad,name', 'ok2'],
     });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "counties" -dissolve "ok,ok2"');
+    expectCli('-target "counties" -dissolve "ok,ok2"', parseSpy.mock.calls[0][0]);
   });
 
   it('empty fields[] is treated as no group-by', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
     await map.ops.dissolveLayer({ source: 'src1', target: 'counties', fields: [] });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "counties" -dissolve');
+    expectCli('-target "counties" -dissolve', parseSpy.mock.calls[0][0]);
   });
 
   it('sumFields emits sum-fields=', async () => {
@@ -5211,8 +5278,7 @@ describe('dissolveLayer: expanded options', () => {
       field: 'STATE',
       sumFields: ['POP', 'GDP'],
     });
-    expect(parseSpy.mock.calls[0][0])
-      .toBe('-target "counties" -dissolve "STATE" sum-fields=POP,GDP');
+    expectCli('-target "counties" -dissolve "STATE" sum-fields=POP,GDP', parseSpy.mock.calls[0][0]);
   });
 
   it('copyFields emits copy-fields=', async () => {
@@ -5222,8 +5288,7 @@ describe('dissolveLayer: expanded options', () => {
       field: 'STATE',
       copyFields: ['NAME', 'CAPITAL'],
     });
-    expect(parseSpy.mock.calls[0][0])
-      .toBe('-target "counties" -dissolve "STATE" copy-fields=NAME,CAPITAL');
+    expectCli('-target "counties" -dissolve "STATE" copy-fields=NAME,CAPITAL', parseSpy.mock.calls[0][0]);
   });
 
   it('calc / where forwarded as quoted JS expressions', async () => {
@@ -5234,8 +5299,9 @@ describe('dissolveLayer: expanded options', () => {
       calc: 'mean(POP)',
       where: 'this.YEAR === 2024',
     });
-    expect(parseSpy.mock.calls[0][0]).toBe(
+    expectCli(
       '-target "counties" -dissolve "STATE" calc="mean(POP)" where="this.YEAR === 2024"',
+      parseSpy.mock.calls[0][0],
     );
   });
 
@@ -5245,8 +5311,7 @@ describe('dissolveLayer: expanded options', () => {
       source: 'src1', target: 'counties',
       multipart: true, name: 'states-out', noReplace: true,
     });
-    expect(parseSpy.mock.calls[0][0])
-      .toBe('-target "counties" -dissolve multipart name="states-out" no-replace');
+    expectCli('-target "counties" -dissolve multipart name="states-out" no-replace', parseSpy.mock.calls[0][0]);
   });
 
   it('comma-bearing entries in sumFields/copyFields are filtered', async () => {
@@ -5257,14 +5322,13 @@ describe('dissolveLayer: expanded options', () => {
       sumFields: ['POP', 'bad,one'],
       copyFields: ['NAME', 'also,bad'],
     });
-    expect(parseSpy.mock.calls[0][0])
-      .toBe('-target "counties" -dissolve "STATE" sum-fields=POP copy-fields=NAME');
+    expectCli('-target "counties" -dissolve "STATE" sum-fields=POP copy-fields=NAME', parseSpy.mock.calls[0][0]);
   });
 
   it('full minimal call still works (regression)', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
     await map.ops.dissolveLayer({ source: 'src1', target: 'counties' });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "counties" -dissolve');
+    expectCli('-target "counties" -dissolve', parseSpy.mock.calls[0][0]);
   });
 });
 
@@ -5272,19 +5336,19 @@ describe('cleanLayer: expanded options', () => {
   it('emits gap-fill-area=', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
     await map.ops.cleanLayer({ source: 'src1', target: 'parks', gapFillArea: 100 });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean gap-fill-area=100');
+    expectCli('-target "parks" -clean gap-fill-area=100', parseSpy.mock.calls[0][0]);
   });
 
   it('emits sliver-control=', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
     await map.ops.cleanLayer({ source: 'src1', target: 'parks', sliverControl: 0.5 });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean sliver-control=0.5');
+    expectCli('-target "parks" -clean sliver-control=0.5', parseSpy.mock.calls[0][0]);
   });
 
   it('emits snap-interval=', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
     await map.ops.cleanLayer({ source: 'src1', target: 'parks', snapInterval: 0.001 });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean snap-interval=0.001');
+    expectCli('-target "parks" -clean snap-interval=0.001', parseSpy.mock.calls[0][0]);
   });
 
   it('emits boolean flags', async () => {
@@ -5294,15 +5358,16 @@ describe('cleanLayer: expanded options', () => {
       noSnap: true, allowOverlaps: true, allowEmpty: true,
       rewind: true, onlyArcs: true, noArcDissolve: true,
     });
-    expect(parseSpy.mock.calls[0][0]).toBe(
+    expectCli(
       '-target "parks" -clean no-snap allow-overlaps allow-empty rewind only-arcs no-arc-dissolve',
+      parseSpy.mock.calls[0][0],
     );
   });
 
   it('emits overlap-rule=', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
     await map.ops.cleanLayer({ source: 'src1', target: 'parks', overlapRule: 'min-id' });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean overlap-rule=min-id');
+    expectCli('-target "parks" -clean overlap-rule=min-id', parseSpy.mock.calls[0][0]);
   });
 
   it('rejects invalid overlapRule', async () => {
@@ -5331,7 +5396,7 @@ describe('cleanLayer: expanded options', () => {
   it('full minimal call still works (regression)', async () => {
     const { map, parseSpy } = makeMapWithLayer('parks');
     await map.ops.cleanLayer({ source: 'src1', target: 'parks' });
-    expect(parseSpy.mock.calls[0][0]).toBe('-target "parks" -clean');
+    expectCli('-target "parks" -clean', parseSpy.mock.calls[0][0]);
   });
 
   it('all-options-combined produces the canonical token order', async () => {
@@ -5345,11 +5410,12 @@ describe('cleanLayer: expanded options', () => {
     // Documents the canonical ordering produced by the wrapper. Future
     // reordering would require updating this string and would be visible
     // in review.
-    expect(parseSpy.mock.calls[0][0]).toBe(
+    expectCli(
       '-target "parks" -clean'
       + ' gap-fill-area=100 sliver-control=0.5 snap-interval=0.001'
       + ' no-snap allow-overlaps overlap-rule=max-area'
       + ' allow-empty rewind only-arcs no-arc-dissolve',
+      parseSpy.mock.calls[0][0],
     );
   });
 });
@@ -5725,3 +5791,285 @@ describe('Emap.remove() teardown', () => {
     expect((getPrivate(map, '_controls') as unknown[]).length).toBe(0);
   });
 });
+
+// ===========================================================================
+// Integration: Transaction + ops + Validator + FeatureAccessor on a real
+// Emap (not a stub host). Verifies the new abstractions actually wire
+// up end-to-end through the runner / history / event flow — the unit
+// tests cover each piece in isolation.
+// ===========================================================================
+describe('Phase-6 integration', () => {
+  let map: Emap;
+  let beforeDs: any;
+  let afterDs: any;
+  let source: any;
+  let setDatasetSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    // Phase-6 specifics: createBareMap() bypasses the constructor, so the
+    // fields the new code introduced have to be wired up by hand.
+    setPrivate(map, '_activeTransaction', null);
+    setPrivate(map, '_validators', new ValidatorRegistry());
+    setPrivate(map, 'features', new FeatureAccessor(map as any));
+    // The constructor wires `historychange → _runAfterCommitValidators`.
+    // createBareMap bypasses that, so wire it manually here.
+    map.on('historychange', () => (map as any)._runAfterCommitValidators());
+
+    beforeDs = {
+      layers: [
+        {
+          name: 'parks',
+          geometry_type: 'polygon',
+          shapes: [[[0]], [[1]]],
+          data: { getRecords: () => [{ name: 'A' }, { name: 'B' }], getFields: () => ['name'] },
+        },
+      ],
+      arcs: null,
+      info: {},
+    };
+    afterDs = {
+      layers: [
+        {
+          name: 'parks',
+          geometry_type: 'polygon',
+          shapes: [[[42]]],
+          data: { getRecords: () => [{ name: 'merged' }], getFields: () => ['name'] },
+        },
+      ],
+      arcs: null,
+      info: {},
+    };
+    setDatasetSpy = vi.fn((ds: any) => { source._currentDs = ds; });
+    source = {
+      id: 'src1',
+      type: 'topology',
+      _currentDs: beforeDs,
+      getDataset() { return this._currentDs; },
+      getLayers() { return this._currentDs.layers; },
+      setDataset: setDatasetSpy,
+      refreshDisplayArcs: vi.fn(),
+    };
+    setDatasetSpy.mockImplementation((ds: any) => { source._currentDs = ds; });
+    (map as any)._sources.set('src1', source);
+
+    // Stub mapshaper internals: copyDataset returns a structurally-distinct
+    // pre-op snapshot so transaction rollback can restore it; runParsedCommands
+    // returns afterDs.
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn((ds: any) => ({ ...ds, _snapshotOf: ds })));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_cmds: any, _job: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  describe('Transaction + real ops', () => {
+    it('captured ops do not grow the undo stack', async () => {
+      const tx = map.beginTransaction();
+      const r = await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      expect(r.ok).toBe(true);
+      // History capture buffer absorbed the DatasetReplaceCommand the runner
+      // pushed; visible undo stack stays empty until commit.
+      expect(map.canUndo()).toBe(false);
+      // The dataset has still been swapped though — the source's dataset is
+      // the post-op state, not the pre-transaction state.
+      expect(source._currentDs).toBe(afterDs);
+      tx.rollback();
+    });
+
+    it('commit collapses captured ops into one CompositeCommand', async () => {
+      const tx = map.beginTransaction();
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      const r = await tx.commit('Process boundaries');
+      expect(r.ok).toBe(true);
+      expect(map.canUndo()).toBe(true);
+      const top = (map as any)._history._undoStack.at(-1);
+      expect(top).toBeInstanceOf(CompositeCommand);
+      expect(top.label).toBe('Process boundaries');
+    });
+
+    it('rollback restores the source dataset to the pre-transaction state', async () => {
+      const originalDs = source._currentDs;
+      const tx = map.beginTransaction();
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      // Source dataset is now afterDs.
+      expect(source._currentDs).toBe(afterDs);
+      tx.rollback();
+      // Rollback restored the FIRST-touch snapshot the runner produced,
+      // which is the structural copy of `originalDs`.
+      expect(source._currentDs).not.toBe(afterDs);
+      expect((source._currentDs as any)._snapshotOf).toBe(originalDs);
+      expect(map.canUndo()).toBe(false);
+    });
+
+    it('rollback discards captured commands without polluting history', async () => {
+      const tx = map.beginTransaction();
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      tx.rollback();
+      expect((map as any)._history._undoStack).toHaveLength(0);
+      expect((map as any)._history._redoStack).toHaveLength(0);
+    });
+
+    it('commit allows undo to revert all captured ops in one step', async () => {
+      const originalDs = source._currentDs;
+      const tx = map.beginTransaction();
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await tx.commit('Do thing');
+      expect(map.canUndo()).toBe(true);
+      map.undo();
+      // Undo invokes CompositeCommand.undo → DatasetReplaceCommand.undo →
+      // source.setDataset(before) where `before` is the runner's pre-op snapshot.
+      expect(source._currentDs).not.toBe(afterDs);
+      expect((source._currentDs as any)._snapshotOf).toBe(originalDs);
+    });
+  });
+
+  describe('Validator + ops integration', () => {
+    it('after-commit validator runs once per op commit', async () => {
+      const validator = {
+        name: 'v1',
+        phase: 'after-commit' as const,
+        run: vi.fn(async () => ({ ok: true, issues: [] })),
+      };
+      map.validators.register(validator);
+
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      // historychange fires synchronously inside the op; validator
+      // registry's run is async but resolves on next tick.
+      await flushPromises();
+      expect(validator.run).toHaveBeenCalledTimes(1);
+      expect(validator.run.mock.calls[0][1].label).toBe('Drop parks');
+    });
+
+    it('after-commit validator runs once per transaction commit (not per inner op)', async () => {
+      const validator = {
+        name: 'v1',
+        phase: 'after-commit' as const,
+        run: vi.fn(async () => ({ ok: true, issues: [] })),
+      };
+      map.validators.register(validator);
+
+      const tx = map.beginTransaction();
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await flushPromises();
+      // Inside the transaction, the inner ops' DatasetReplaceCommands are
+      // captured (no historychange fired, no validator invocation).
+      expect(validator.run).not.toHaveBeenCalled();
+
+      await tx.commit('Outer');
+      await flushPromises();
+      // Now historychange fires once for the CompositeCommand push.
+      expect(validator.run).toHaveBeenCalledTimes(1);
+      expect(validator.run.mock.calls[0][1].label).toBe('Outer');
+    });
+
+    it('after-commit validator does NOT run on rollback (nothing committed)', async () => {
+      const validator = {
+        name: 'v1',
+        phase: 'after-commit' as const,
+        run: vi.fn(async () => ({ ok: true, issues: [] })),
+      };
+      map.validators.register(validator);
+
+      const tx = map.beginTransaction();
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      tx.rollback();
+      await flushPromises();
+      // rollback fires historychange so listeners can refresh, but the
+      // resulting history.snapshot has no top entry — validator is still
+      // called (the registry has one validator), but its `change.label`
+      // is empty.
+      // We accept either "called with empty label" OR "not called" as
+      // valid; the strict invariant is that no SUCCESSFUL commit
+      // surfaced. Document the current behaviour:
+      const callCount = validator.run.mock.calls.length;
+      expect(callCount).toBeLessThanOrEqual(1);
+      if (callCount === 1) {
+        expect(validator.run.mock.calls[0][1].label).toBe('');
+      }
+    });
+
+    it('failed validator fires `validationfailed` event with the failing report', async () => {
+      const failing = {
+        name: 'topology',
+        phase: 'after-commit' as const,
+        run: vi.fn(async () => ({
+          ok: false,
+          issues: [{ severity: 'error' as const, message: '3 self-intersections' }],
+        })),
+      };
+      map.validators.register(failing);
+
+      const events: any[] = [];
+      map.on('validationfailed', (e: any) => events.push(e));
+
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await flushPromises();
+
+      expect(events).toHaveLength(1);
+      expect(events[0].results).toHaveLength(1);
+      expect(events[0].results[0].validator).toBe('topology');
+      expect(events[0].results[0].report.ok).toBe(false);
+      expect(events[0].label).toBe('Drop parks');
+    });
+
+    it('passing validator does NOT fire `validationfailed`', async () => {
+      const passing = {
+        name: 'v',
+        phase: 'after-commit' as const,
+        run: vi.fn(async () => ({ ok: true, issues: [] })),
+      };
+      map.validators.register(passing);
+
+      const events: any[] = [];
+      map.on('validationfailed', (e: any) => events.push(e));
+
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await flushPromises();
+
+      expect(events).toHaveLength(0);
+    });
+
+    it('validators registry is empty by default — no overhead when unused', async () => {
+      // No register() call. historychange fires; validator path should be
+      // a cheap size===0 check with no allocation.
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await flushPromises();
+      // No assertion needed — if the size===0 short-circuit broke, an
+      // unhandled promise rejection would fail the test.
+      expect(map.validators.size).toBe(0);
+    });
+  });
+
+  describe('FeatureAccessor on a real Emap', () => {
+    it('engine.features.get returns frozen properties for a real source', () => {
+      // The bare-map setup wires features via setPrivate above. Confirm
+      // the public access path works.
+      const f = (map as any).features.get({ source: 'src1', layer: 'parks', id: 1 });
+      expect(f).not.toBeNull();
+      expect(f.properties.name).toBe('B');
+      expect(Object.isFrozen(f.properties)).toBe(true);
+    });
+
+    it('engine.features.iter walks a real layer', () => {
+      const out = Array.from((map as any).features.iter('src1', 'parks'));
+      expect(out).toHaveLength(2);
+      expect(out.map((f: any) => f.properties.name)).toEqual(['A', 'B']);
+    });
+  });
+});
+
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}

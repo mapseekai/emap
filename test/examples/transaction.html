@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - Transaction + Validation</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header {
+      padding: 10px;
+      background: #2c3e50;
+      color: white;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+    #header button {
+      padding: 5px 12px;
+      background: #16a085;
+      color: white;
+      border: 0;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #header button.danger { background: #c0392b; }
+    #header button.muted { background: #34495e; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+
+    #log {
+      max-height: 180px;
+      overflow-y: auto;
+      padding: 6px 10px;
+      background: #ecf0f1;
+      border-top: 1px solid #bdc3c7;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    #log div { padding: 1px 0; }
+    #log .commit { color: #27ae60; }
+    #log .rollback { color: #c0392b; }
+    #log .validation-failed { color: #d35400; font-weight: bold; }
+    #log .validation-ok { color: #2980b9; }
+    #log .info { color: #555; }
+
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple /></label>
+    <button id="tx-btn" disabled>开启 Transaction</button>
+    <button id="run-clip-btn" disabled>事务内执行: clip</button>
+    <button id="run-dissolve-btn" disabled>事务内执行: dissolve</button>
+    <button id="commit-btn" disabled class="muted">Commit</button>
+    <button id="rollback-btn" disabled class="danger">Rollback</button>
+    <button id="toggle-validator-btn" disabled>启用 topologyValidator</button>
+    <button id="undo-btn" disabled>Undo</button>
+    <span id="status">上传一个含 polygon 图层的 GeoJSON / TopoJSON / Shapefile</span>
+    <div class="hint">
+      Transaction 示例：在事务里跑 clip → dissolve，commit 时只产生 1 条 history；rollback 时数据恢复到事务开始前。
+      Validator 示例：开启后每次提交（包括事务 commit）会跑拓扑校验，失败时打印到下方日志，引擎不会自动撤销。
+    </div>
+  </div>
+
+  <div id="map" tabindex="0"></div>
+  <div id="log"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/mapshaper-vendor.js"></script>
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl, topologyValidator } = emap;
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'tx-source';
+    const fileInput = document.getElementById('file-input');
+    const txBtn = document.getElementById('tx-btn');
+    const clipBtn = document.getElementById('run-clip-btn');
+    const dissolveBtn = document.getElementById('run-dissolve-btn');
+    const commitBtn = document.getElementById('commit-btn');
+    const rollbackBtn = document.getElementById('rollback-btn');
+    const toggleValidatorBtn = document.getElementById('toggle-validator-btn');
+    const undoBtn = document.getElementById('undo-btn');
+    const status = document.getElementById('status');
+    const logEl = document.getElementById('log');
+
+    let currentTx = null;
+    let unregisterValidator = null;
+
+    function log(msg, cls = 'info') {
+      const d = document.createElement('div');
+      d.className = cls;
+      d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logEl.appendChild(d);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function refreshButtons() {
+      const hasSource = !!map.getSource(SOURCE_ID);
+      const hasTx = currentTx?.isOpen === true;
+      txBtn.disabled = !hasSource || hasTx;
+      clipBtn.disabled = !hasTx;
+      dissolveBtn.disabled = !hasTx;
+      commitBtn.disabled = !hasTx;
+      rollbackBtn.disabled = !hasTx;
+      toggleValidatorBtn.disabled = !hasSource;
+      toggleValidatorBtn.textContent = unregisterValidator
+        ? '禁用 topologyValidator'
+        : '启用 topologyValidator';
+      undoBtn.disabled = !map.canUndo();
+    }
+
+    function readFile(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = (e) => resolve(new Uint8Array(e.target.result));
+        r.onerror = reject;
+        r.readAsArrayBuffer(file);
+      });
+    }
+
+    fileInput.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length === 0) return;
+      const entries = await Promise.all(
+        files.map(async (f) => ({ filename: f.name, content: await readFile(f) }))
+      );
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      const source = new TopologySource(SOURCE_ID);
+      source.on('data', ({ reason }) => {
+        if (reason === 'load') map.setExtent(source.getExtent());
+        const layerNames = source.getLayers().map((l) => l.name).join(', ');
+        status.textContent = `已加载图层: ${layerNames}`;
+        refreshButtons();
+      });
+      source.on('error', (e) => {
+        log(`数据加载失败: ${e.error?.message ?? e}`, 'rollback');
+      });
+      source.setData(entries);
+      map.addSource(SOURCE_ID, source);
+    });
+
+    map.on('historychange', () => refreshButtons());
+    map.on('validationfailed', (e) => {
+      for (const r of e.results) {
+        log(`validator '${r.validator}' 失败 (label="${e.label}"): ${r.report.issues.map((i) => i.message).join('; ')}`, 'validation-failed');
+      }
+    });
+
+    txBtn.addEventListener('click', () => {
+      try {
+        currentTx = map.beginTransaction();
+        log('事务开始 (Transaction begin)', 'info');
+        refreshButtons();
+      } catch (err) {
+        log(`begin 失败: ${err.message}`, 'rollback');
+      }
+    });
+
+    clipBtn.addEventListener('click', async () => {
+      const layers = map.getSource(SOURCE_ID).getLayers();
+      if (layers.length < 2) { log('需要至少 2 个图层 (target + mask)', 'rollback'); return; }
+      const target = layers[0].name;
+      const mask = layers.find((l) => l.geometry_type === 'polygon')?.name;
+      if (!mask) { log('没有可用的 polygon mask', 'rollback'); return; }
+      const r = await map.ops.clipLayer({ source: SOURCE_ID, target, mask });
+      log(`clipLayer(target=${target}, mask=${mask}) → ${r.ok ? 'ok' : `Err ${r.error.kind}`}`, r.ok ? 'commit' : 'rollback');
+    });
+
+    dissolveBtn.addEventListener('click', async () => {
+      const target = map.getSource(SOURCE_ID).getLayers()[0]?.name;
+      if (!target) return;
+      const r = await map.ops.dissolveLayer({ source: SOURCE_ID, target });
+      log(`dissolveLayer(target=${target}) → ${r.ok ? 'ok' : `Err ${r.error.kind}`}`, r.ok ? 'commit' : 'rollback');
+    });
+
+    commitBtn.addEventListener('click', async () => {
+      if (!currentTx) return;
+      const r = await currentTx.commit('Transaction batch');
+      currentTx = null;
+      log(`commit → ${r.ok ? 'ok (1 条 history 已写入)' : `Err ${r.error.kind}`}`, r.ok ? 'commit' : 'rollback');
+      refreshButtons();
+    });
+
+    rollbackBtn.addEventListener('click', () => {
+      if (!currentTx) return;
+      currentTx.rollback();
+      currentTx = null;
+      log('rollback (数据集恢复，无 history 写入)', 'rollback');
+      refreshButtons();
+    });
+
+    toggleValidatorBtn.addEventListener('click', () => {
+      if (unregisterValidator) {
+        unregisterValidator();
+        unregisterValidator = null;
+        log('topologyValidator 已禁用', 'info');
+      } else {
+        unregisterValidator = map.validators.register(
+          topologyValidator({ sources: [SOURCE_ID] })
+        );
+        log('topologyValidator 已启用 (每次 commit 触发)', 'validation-ok');
+      }
+      refreshButtons();
+    });
+
+    undoBtn.addEventListener('click', () => {
+      map.undo();
+      log('undo', 'info');
+    });
+  </script>
+</body>
+
+</html>

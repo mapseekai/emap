@@ -1,0 +1,47 @@
+// unionLayers — overlay two or more polygon layers from the same source
+// via mapshaper's `-union`. Output is one flat mosaic where every
+// intersection region is its own polygon, attributed by the union of
+// input fields. mapshaper's `-target` for `-union` is a comma-separated
+// layer list, so we join `targets` with commas inside one quoted arg.
+
+import { resolveLayerInList } from '../layer-registry';
+import { Err, type OpResult } from '../op-result';
+import type { UnionOptions } from '../types';
+import type { OpContext } from './_context';
+
+export async function unionLayers(ctx: OpContext, opts: UnionOptions): Promise<OpResult> {
+  if (!opts.targets || opts.targets.length < 2) {
+    return Err.validation('targets', 'must supply at least 2 target layers');
+  }
+  const source = ctx.host._sources.get(opts.source);
+  if (!source) return Err.notFound('source', opts.source);
+  const dataset = source.getDataset();
+  if (!dataset) return Err.notFound('source', opts.source);
+  // Every target must resolve and be `,`-free — mapshaper joins the list
+  // with commas and would otherwise silently split a comma-bearing name
+  // into multiple bogus targets.
+  for (const t of opts.targets) {
+    if (typeof t !== 'string' || t.includes(',')) {
+      return Err.validation('targets', `target name must not contain ',': ${String(t)}`);
+    }
+    if (!resolveLayerInList(dataset.layers, t)) return Err.notFound('layer', t);
+  }
+
+  const targetList = opts.targets.join(',');
+  const unionOpts: Record<string, unknown> = {};
+  if (opts.fields && opts.fields.length > 0) {
+    const safe = opts.fields.filter((f) => !f.includes(','));
+    if (safe.length > 0) unionOpts.fields = safe;
+  }
+  if (opts.name && opts.name.trim()) unionOpts.name = opts.name;
+  if (opts.noReplace) unionOpts.no_replace = true;
+
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: targetList } },
+      { name: 'union', options: unionOpts },
+    ],
+    `Union ${targetList}`,
+  );
+}

@@ -116,7 +116,7 @@
 
       const rect = mapContainer.getBoundingClientRect();
       const point = [e.clientX - rect.left, e.clientY - rect.top];
-      const features = map.queryRenderedFeatures(point);
+      const features = map.queryFeatures(point);
       if (!features.length) {
         if (!e.shiftKey && !e.ctrlKey && !e.metaKey) map.clearSelection();
         return;

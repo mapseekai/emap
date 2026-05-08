@@ -65,10 +65,23 @@ export interface MapOptions {
    */
   workerUrl?: string;
   /**
+   * Number of worker threads to maintain. Each adds one mapshaper
+   * instance, so peak parallelism = `workerPoolSize`. Default `1`
+   * (single-worker, the historical behaviour). Set to e.g.
+   * `navigator.hardwareConcurrency - 1` to scale up — useful when
+   * the app dispatches multiple independent dataset-replace ops in
+   * parallel (one per source). Workers spawn lazily, so a high
+   * `workerPoolSize` doesn't pay the spawn cost up-front.
+   *
+   * Ignored when `workerPool` is supplied (the caller's pool already
+   * configures its own size).
+   */
+  workerPoolSize?: number;
+  /**
    * Pre-constructed worker pool. Only consulted when `useWorker` is
-   * truthy; takes precedence over `workerUrl`. Used by tests to inject
-   * a mock pool, and by power users who want to share one pool across
-   * multiple `Emap` instances.
+   * truthy; takes precedence over `workerUrl` / `workerPoolSize`.
+   * Used by tests to inject a mock pool, and by power users who
+   * want to share one pool across multiple `Emap` instances.
    */
   workerPool?: MapshaperWorkerPool;
   /**
@@ -84,11 +97,11 @@ export interface MapOptions {
   workerRouting?: import('./worker-routing').WorkerRoutingFn;
 }
 
-export interface QueryRenderedFeaturesOptions {
+export interface QueryFeaturesOptions {
   layers?: string[];
 }
 
-export interface RenderedFeatureAttributes {
+export interface QueriedFeature {
   id: number;
   source: string;
   layer: string;

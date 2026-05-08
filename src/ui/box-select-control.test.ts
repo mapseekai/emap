@@ -4,14 +4,14 @@ import { BoxSelectControl } from './box-select-control';
 
 interface FakeMap {
   getCanvasContainer: () => HTMLElement;
-  queryRenderedFeatures: ReturnType<typeof vi.fn>;
+  queryFeatures: ReturnType<typeof vi.fn>;
   select: ReturnType<typeof vi.fn>;
 }
 
 function makeFakeMap(canvasContainer: HTMLElement, hits: any[] = []): FakeMap {
   return {
     getCanvasContainer: () => canvasContainer,
-    queryRenderedFeatures: vi.fn(() => hits),
+    queryFeatures: vi.fn(() => hits),
     select: vi.fn(),
   };
 }
@@ -66,7 +66,7 @@ describe('BoxSelectControl', () => {
   });
 
   it('shift+drag selects with replace mode', () => {
-    map.queryRenderedFeatures.mockReturnValueOnce([
+    map.queryFeatures.mockReturnValueOnce([
       { source: 's', layer: 'l', id: 1, geometryType: 'polygon', properties: {} },
       { source: 's', layer: 'l', id: 2, geometryType: 'polygon', properties: {} },
     ]);
@@ -75,8 +75,8 @@ describe('BoxSelectControl', () => {
     dispatch(window, 'mousemove', { shiftKey: true, clientX: 200, clientY: 200 });
     dispatch(window, 'mouseup', { shiftKey: true, clientX: 200, clientY: 200 });
 
-    expect(map.queryRenderedFeatures).toHaveBeenCalledTimes(1);
-    const bbox = map.queryRenderedFeatures.mock.calls[0][0];
+    expect(map.queryFeatures).toHaveBeenCalledTimes(1);
+    const bbox = map.queryFeatures.mock.calls[0][0];
     expect(bbox).toEqual([[100, 100], [200, 200]]);
 
     expect(map.select).toHaveBeenCalledTimes(1);
@@ -93,7 +93,7 @@ describe('BoxSelectControl', () => {
     dispatch(window, 'mousemove', { clientX: 200, clientY: 200 });
     dispatch(window, 'mouseup', { clientX: 200, clientY: 200 });
 
-    expect(map.queryRenderedFeatures).not.toHaveBeenCalled();
+    expect(map.queryFeatures).not.toHaveBeenCalled();
     expect(map.select).not.toHaveBeenCalled();
   });
 
@@ -102,12 +102,12 @@ describe('BoxSelectControl', () => {
     dispatch(window, 'mousemove', { shiftKey: true, clientX: 102, clientY: 102 });
     dispatch(window, 'mouseup', { shiftKey: true, clientX: 102, clientY: 102 });
 
-    expect(map.queryRenderedFeatures).not.toHaveBeenCalled();
+    expect(map.queryFeatures).not.toHaveBeenCalled();
     expect(map.select).not.toHaveBeenCalled();
   });
 
   it('shift+ctrl+drag selects with add mode', () => {
-    map.queryRenderedFeatures.mockReturnValueOnce([
+    map.queryFeatures.mockReturnValueOnce([
       { source: 's', layer: 'l', id: 1, geometryType: 'polygon', properties: {} },
     ]);
     dispatch(canvasContainer, 'mousedown', { shiftKey: true, ctrlKey: true, clientX: 0, clientY: 0 });
@@ -121,7 +121,7 @@ describe('BoxSelectControl', () => {
   });
 
   it('shift+meta+drag selects with add mode (Mac)', () => {
-    map.queryRenderedFeatures.mockReturnValueOnce([
+    map.queryFeatures.mockReturnValueOnce([
       { source: 's', layer: 'l', id: 9, geometryType: 'polygon', properties: {} },
     ]);
     dispatch(canvasContainer, 'mousedown', { shiftKey: true, metaKey: true, clientX: 0, clientY: 0 });
@@ -132,7 +132,7 @@ describe('BoxSelectControl', () => {
   });
 
   it('shift+alt+drag selects with toggle mode', () => {
-    map.queryRenderedFeatures.mockReturnValueOnce([
+    map.queryFeatures.mockReturnValueOnce([
       { source: 's', layer: 'l', id: 7, geometryType: 'polygon', properties: {} },
     ]);
     dispatch(canvasContainer, 'mousedown', { shiftKey: true, altKey: true, clientX: 0, clientY: 0 });
@@ -143,7 +143,7 @@ describe('BoxSelectControl', () => {
   });
 
   it('dedupes refs across visible layers backed by same feature', () => {
-    map.queryRenderedFeatures.mockReturnValueOnce([
+    map.queryFeatures.mockReturnValueOnce([
       { source: 's', layer: 'fill', id: 1, geometryType: 'polygon', properties: {} },
       { source: 's', layer: 'fill', id: 1, geometryType: 'polygon', properties: {} }, // dup of above
       { source: 's', layer: 'line', id: 1, geometryType: 'polygon', properties: {} }, // different layer, kept
@@ -165,22 +165,22 @@ describe('BoxSelectControl', () => {
     dispatch(canvasContainer, 'mousedown', { shiftKey: true, clientX: 0, clientY: 0 });
     dispatch(window, 'mousemove', { shiftKey: true, clientX: 50, clientY: 50 });
     dispatch(window, 'mouseup', { shiftKey: true, clientX: 50, clientY: 50 });
-    expect(map.queryRenderedFeatures).not.toHaveBeenCalled();
+    expect(map.queryFeatures).not.toHaveBeenCalled();
     expect(map.select).not.toHaveBeenCalled();
   });
 
-  it('forwards layers filter to queryRenderedFeatures', () => {
+  it('forwards layers filter to queryFeatures', () => {
     control.onRemove();
     control = new BoxSelectControl({ layers: ['only-this'] });
     const anchor = control.onAdd(map as any);
     document.body.appendChild(anchor);
-    map.queryRenderedFeatures.mockReturnValueOnce([]);
+    map.queryFeatures.mockReturnValueOnce([]);
 
     dispatch(canvasContainer, 'mousedown', { shiftKey: true, clientX: 0, clientY: 0 });
     dispatch(window, 'mousemove', { shiftKey: true, clientX: 50, clientY: 50 });
     dispatch(window, 'mouseup', { shiftKey: true, clientX: 50, clientY: 50 });
 
-    expect(map.queryRenderedFeatures.mock.calls[0][1]).toEqual({ layers: ['only-this'] });
+    expect(map.queryFeatures.mock.calls[0][1]).toEqual({ layers: ['only-this'] });
   });
 
   it('passes pixel bbox in canvas-container coordinates (subtracting boundingClientRect offset)', () => {
@@ -189,12 +189,12 @@ describe('BoxSelectControl', () => {
       x: 50, y: 30, top: 30, left: 50, right: 850, bottom: 630,
       width: 800, height: 600, toJSON: () => ({}),
     } as DOMRect);
-    map.queryRenderedFeatures.mockReturnValueOnce([]);
+    map.queryFeatures.mockReturnValueOnce([]);
 
     dispatch(canvasContainer, 'mousedown', { shiftKey: true, clientX: 150, clientY: 130 });
     dispatch(window, 'mousemove', { shiftKey: true, clientX: 250, clientY: 230 });
     dispatch(window, 'mouseup', { shiftKey: true, clientX: 250, clientY: 230 });
 
-    expect(map.queryRenderedFeatures.mock.calls[0][0]).toEqual([[100, 100], [200, 200]]);
+    expect(map.queryFeatures.mock.calls[0][0]).toEqual([[100, 100], [200, 200]]);
   });
 });

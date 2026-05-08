@@ -94,8 +94,23 @@ export function shouldUseWorker(
 ): boolean {
   if (mode === false) return false;
   if (mode === true) return true;
+  return shouldUseWorkerForHeads(parseCommandHeads(cmd), vertexCount, mode, threshold);
+}
 
-  const heads = parseCommandHeads(cmd);
+/**
+ * Same routing decision as {@link shouldUseWorker} but consuming a
+ * pre-extracted heads array. Used by the PR-4b parsed-command path
+ * (`commands.map(c => c.name)`) so it doesn't have to round-trip through
+ * a CLI string just to make a routing call.
+ */
+export function shouldUseWorkerForHeads(
+  heads: string[],
+  vertexCount: number,
+  mode: boolean | 'auto',
+  threshold: number,
+): boolean {
+  if (mode === false) return false;
+  if (mode === true) return true;
   if (heads.length === 0) return vertexCount >= threshold;
 
   const allCheap = heads.every((h) => CHEAP_COMMANDS.has(h));

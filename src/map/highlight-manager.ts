@@ -2,7 +2,7 @@ import type { CorePainter } from '../renderer/painter';
 import { AffineTransform } from '../geo/transform';
 import { TopologySource } from '../source/source';
 import { getLayerId } from '../source/layer-utils';
-import type { HighlightStyle, HighlightFeatureRef, RenderedFeatureAttributes } from './map';
+import type { HighlightStyle, HighlightFeatureRef, QueriedFeature } from './map';
 
 /**
  * Manages feature highlighting state and rendering.
@@ -26,7 +26,7 @@ export class HighlightManager {
   }
 
   setHighlightedFeatures(
-    features: Array<RenderedFeatureAttributes | HighlightFeatureRef>,
+    features: Array<QueriedFeature | HighlightFeatureRef>,
     style?: HighlightStyle,
   ): void {
     this._highlighted.clear();

@@ -17,7 +17,7 @@ export interface LassoSelectStyle {
 export interface LassoSelectControlOptions {
   /**
    * Restrict the selection to a subset of layer ids. When omitted, every
-   * visible layer participates (matching `queryRenderedFeatures` default).
+   * visible layer participates (matching `queryFeatures` default).
    */
   layers?: string[];
   /** Visual style of the lasso polyline. */
@@ -203,7 +203,7 @@ export class LassoSelectControl implements Control {
     closed.push(path[0]);
 
     // Stage 1 — bbox prefilter via the existing query API.
-    const candidates = this._map.queryRenderedFeatures(
+    const candidates = this._map.queryFeatures(
       [[bbox[0], bbox[1]], [bbox[2], bbox[3]]],
       this._options.layers ? { layers: this._options.layers } : undefined,
     );
@@ -283,7 +283,7 @@ function pathBBox(path: Array<[number, number]>): [number, number, number, numbe
   return [xmin, ymin, xmax, ymax];
 }
 
-/** Convert a `RenderedFeatureAttributes` ref to a representative pixel:
+/** Convert a `QueriedFeature` ref to a representative pixel:
  *  the first vertex of the first arc (path features) or the point itself
  *  (point features). Returns null if the feature can't be resolved. */
 export function featureRepresentativePixel(

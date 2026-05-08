@@ -1,20 +1,21 @@
 # emap
 
-A modern, topology-oriented geographic map rendering and editing engine built around [Mapshaper](https://github.com/mbloch/mapshaper) data structures and HTML5 Canvas.
+A topology-oriented geographic map rendering and editing engine built around [Mapshaper](https://github.com/mbloch/mapshaper) data structures and HTML5 Canvas. Browser-only, framework-agnostic TypeScript.
 
-## Features
+## What you get
 
-- **Topology-based Rendering** — draws and edits geographic boundaries directly from Mapshaper datasets with high efficiency
-- **Multi-format Data Loading** — GeoJSON, TopoJSON, and ZIP Shapefiles loaded from URLs or local files
-- **Interactive Editing** — mouse-wheel zoom, drag-to-pan, hover highlighting, and topology-aware vertex dragging
-- **Dual Rendering Backends**
-  - `CanvasPainter` — HTML5 Canvas 2D, fast and default
-  - `CanvasKitPainter` — Skia WASM (experimental, better anti-aliasing)
-- **Geographic Projections** — CRS support (EPSG:4326, EPSG:3857) with automatic coordinate transformations
-- **Feature Querying** — spatial hit-testing and attribute inspection
-- **Built-in UI Controls** — navigation buttons, vertex edit toolbar, status bar, basemap toggle
+- **Topology rendering** — draws shared-arc datasets directly without re-tessellating per layer
+- **Loaders** — GeoJSON, TopoJSON, ZIP Shapefile (with per-archive resource limits)
+- **Editing** — pan / wheel-zoom / hover, plus vertex, feature, and topology-aware editing
+- **30+ data ops** under `emap.ops.*` — clip, erase, dissolve, buffer, simplify, project, snap, clean, mosaic, union, divide, points / lines / polygons conversions, join-table, filter, sort, uniq, split, merge, rename, …
+- **Worker pool** — expensive ops dispatch to off-thread workers automatically based on dataset size + command family
+- **Undo / redo** with command coalescing, dataset-replace barriers, and structured `OpResult` errors
+- **Selection model** — single / multi / box / lasso, with attribute-only ops preserving feature ids
+- **Snapshots** — pack / unpack a full session (datasets + history) to a compact binary blob
+- **Multiple renderers** — `CanvasPainter` (fast 2D, default) and `CanvasKitPainter` (Skia WASM, experimental)
+- **Built-in controls** — navigation, status, basemap, vertex edit, feature draw, history, box / lasso selection
 
-## Installation
+## Install
 
 ```bash
 pnpm install emap
@@ -22,16 +23,14 @@ pnpm install emap
 npm install emap
 ```
 
-## Basic Usage
+## Hello map
 
 ```html
 <!DOCTYPE html>
 <html>
   <head>
-    <style>
-      #map { width: 100vw; height: 100vh; margin: 0; }
-    </style>
     <link rel="stylesheet" href="node_modules/emap/src/ui/controls.css" />
+    <style>#map { width: 100vw; height: 100vh; margin: 0; }</style>
   </head>
   <body>
     <div id="map"></div>
@@ -40,110 +39,255 @@ npm install emap
     <script>
       const { Emap, TopologySource, NavigationControl, EditToolbar } = emap;
 
-      const map = new Emap({ container: "map" });
+      const map = new Emap({ container: 'map' });
+      map.addControl(new NavigationControl(), 'top-left');
+      map.addControl(new EditToolbar(), 'top-left');
 
-      map.addControl(new NavigationControl(), "top-left");
-      map.addControl(new EditToolbar(), "top-left");
-
-      async function loadData() {
+      (async () => {
         const source = await TopologySource.fromUrl(
-          "china",
-          "https://geojson.cn/api/china/1.6.3/china.topo.json"
+          'china',
+          'https://geojson.cn/api/china/1.6.3/china.topo.json',
         );
-        map.addSource("china", source);
+        map.addSource('china', source);
         map.setExtent(source.getExtent());
-      }
-
-      loadData();
+      })();
     </script>
   </body>
 </html>
 ```
 
-## API Overview
+Live demos in `test/examples/*.html` cover every feature area below.
 
-### `Emap`
+## API tour
 
-The core map instance.
+### Core map
 
-```js
-const map = new Emap({ container: "map" });
+```ts
+const map = new Emap({ container: 'map' });
 
-map.addSource(id, source);          // Register a TopologySource
-map.setExtent(bounds);              // Fit viewport to bounds
-map.addControl(control, position);  // Add a UI control
-map.queryRenderedFeatures(point);   // Hit-test at a pixel coordinate
-map.on("click", (e) => { ... });    // Listen to map events
+map.addSource(id, source);
+map.addLayer({ id, source: 'china', type: 'fill', paint: { 'fill-color': '#eee' } });
+map.setExtent(source.getExtent());
+
+map.queryFeatures(point, { layers: ['borders'] });
+map.on('click', (e) => { /* … */ });
 ```
 
-### `TopologySource`
+### Sources
 
-Loads and manages geographic data.
-
-```js
-// From a URL (GeoJSON, TopoJSON, or ZIP Shapefile)
-const source = await TopologySource.fromUrl("id", url);
-
-source.getExtent();   // Returns bounding box
-source.getLayers();   // Returns available layers
+```ts
+const source = await TopologySource.fromUrl('id', url);     // GeoJSON / TopoJSON / ZIP
+const source2 = await TopologySource.fromBytes('id', buf);  // ArrayBuffer / Uint8Array
+source.getExtent();
+source.getLayers();
 ```
 
-### UI Controls
+### Editing operations (`emap.ops`)
 
-| Control | Description |
+All ops return `Promise<OpResult>` — a discriminated `{ ok: true, value? } | { ok: false, error: OpError }`. Errors are typed (`not-found`, `validation`, `expression-disabled`, `mapshaper`, `host-removed`).
+
+```ts
+// Whole-dataset CLI ops
+await map.ops.clipLayer({ source: 'roads', target: 'streets', mask: 'park' });
+await map.ops.dissolveLayer({ source: 'us', target: 'counties', field: 'STATE' });
+await map.ops.bufferLayer({ source: 'roads', target: 'streets', radius: 50 });
+await map.ops.simplifyLayer({ source: 'world', percentage: 10 });
+await map.ops.projectLayer({ source: 'world', crs: 'EPSG:3857' });
+
+// Layer management
+await map.ops.renameLayer({ source: 's', target: 'old', name: 'new' });
+await map.ops.mergeLayers({ source: 's', targets: ['a', 'b'], name: 'combined' });
+await map.ops.splitLayer({ source: 's', target: 'us', expression: 'STATE' });
+await map.ops.dropLayer({ source: 's', target: 'tmp' });
+
+// Attribute / data
+await map.ops.applyExpression({ source: 's', target: 'l', expression: 'this.area = $.area' });
+await map.ops.filterFeatures({ source: 's', target: 'l', expression: 'this.pop > 1e6' });
+await map.ops.joinTable({
+  source: 's', target: 'states',
+  data: { csv: csvBytes }, keys: ['STATE_FIPS', 'fips'],
+});
+
+// Topology repair / inspection
+await map.ops.cleanLayer({ source: 's', target: 'l' });
+await map.ops.snapLayer({ source: 's', target: 'l', interval: 0.001 });
+const report = await map.ops.checkGeometry({ source: 's' });
+//  → { ok: true, value: { ok, intersections: [...], intersectionCount } }
+
+// Selection-driven
+await map.ops.mergeSelected();
+```
+
+A full list of ops + their option types lives in `src/index.ts` (search for `*Options`).
+
+### Transactions
+
+Stage multiple ops as one atomic edit — commit collapses them into a single undo entry, rollback restores every touched source's dataset (and the selection) to the pre-transaction state.
+
+```ts
+const tx = map.beginTransaction();
+const r1 = await map.ops.clipLayer({ source, target, mask });
+if (!r1.ok)        { tx.rollback(); return; }
+const r2 = await map.ops.dissolveLayer({ source, target, field: 'STATE' });
+if (!r2.ok)        { tx.rollback(); return; }
+await tx.commit('Process boundaries');
+```
+
+Nesting is not supported — opening a transaction while one is active throws.
+
+### Undo / redo
+
+```ts
+map.undo();
+map.redo();
+map.clearHistory();
+
+map.on('historychange', (e) => {
+  console.log(e.canUndo, e.canRedo, e.label);
+});
+```
+
+Vertex drags / feature translates within a session merge into one undo step. Dataset-replace ops (clip, dissolve, …) keep prior commands in the stack but flag them as `stale` for the UI to render appropriately — there's no destructive `clear`.
+
+### Validation hooks
+
+Register validators that run after every committed edit. Failures fire `validationfailed` — the engine doesn't auto-undo, the app decides.
+
+```ts
+import { topologyValidator } from 'emap';
+
+const unregister = map.validators.register(topologyValidator({
+  sources: ['china'],
+}));
+
+map.on('validationfailed', (e) => {
+  console.warn(e.results);    // [{ validator, report }, ...]
+  // Optionally: map.undo();
+});
+```
+
+Custom validators implement `Validator { name, phase: 'after-commit', run(host, change) }` and return `{ ok, issues: [{ severity, message, ref? }] }`.
+
+### Feature accessor
+
+Read one feature (or iterate a layer) without indexing into raw `layer.shapes` / `layer.data.getRecords()`:
+
+```ts
+const f = map.features.get({ source: 'us', layer: 'states', id: 12 });
+if (f) console.log(f.properties.NAME, f.geometry);
+
+for (const f of map.features.iter('us', 'states')) {
+  /* … */
+}
+
+map.features.count('us', 'states'); // O(1)
+```
+
+`f.properties` is `Object.freeze`d so accidental mutation can't leak back into the dataset.
+
+### Selection
+
+```ts
+map.selection.add({ source: 'us', layer: 'counties', id: 42 });
+map.selection.toggle(ref);
+map.selection.clear();
+
+map.on('selectionchange', (e) => {
+  console.log(e.added, e.removed, e.current);
+});
+```
+
+Attribute-only ops (each / join / rename-fields / sort) preserve the selection across the operation. Shape-changing or topology-rebuilding ops clear it.
+
+### Worker offloading
+
+```ts
+const map = new Emap({
+  container: 'map',
+  workerUrl: '/emap-worker.js',     // built alongside dist/emap.js
+  workerMode: 'auto',                // 'auto' | true | false
+  workerThreshold: 200_000,          // vertex count
+  workerPoolSize: 2,                 // multiple workers (PR-22a)
+});
+
+map.on('workerjobstart', (e) => console.log('start', e.label));
+map.on('workerjobend',   (e) => console.log('end',   e.durationMs));
+```
+
+The router classifies each op as cheap / expensive and overrides the threshold accordingly. Override the decision globally with `MapOptions.workerRouting?: (info) => boolean`.
+
+### Snapshots
+
+```ts
+const blob = await map.exportSnapshot();           // → Uint8Array
+await map.loadSnapshot(blob);                       // restore datasets + history
+```
+
+The export is a mapshaper-pack with magic-byte validation on load.
+
+### Controls
+
+| Control | Purpose |
 |---|---|
-| `NavigationControl` | Zoom in/out and reset buttons |
-| `EditToolbar` | Activates vertex editing mode |
-| `StatusControl` | Shows cursor coordinates and CRS |
-| `BasemapControl` | Toggles a MapLibre raster basemap |
+| `NavigationControl` | Zoom in/out + reset |
+| `StatusControl` | Cursor coordinates + EPSG |
+| `BasemapControl` | MapLibre raster basemap toggle |
+| `EditToolbar` | Mode switcher (vertex / feature / draw) |
+| `VertexEditControl` | Topology-aware vertex dragging |
+| `DrawFeatureControl` | Polygon / polyline / point drawing with edge snapping |
+| `HistoryControl` | Visual undo/redo stack with stale-entry markers |
+| `BoxSelectControl` | Drag-to-select bounding box |
+| `LassoSelectControl` | Free-form selection lasso |
 
-All controls implement `onAdd(map)` / `onRemove()` and can be positioned at `"top-left"`, `"top-right"`, `"bottom-left"`, or `"bottom-right"`.
+All controls implement `onAdd(map)` / `onRemove()` and accept `'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'`.
 
 ## Architecture
 
 ```
 src/
-├── map/map.ts              # Emap — orchestrates everything
-├── source/topology-source.ts  # Data loading and LOD management
-├── renderer/               # CanvasPainter, CanvasKitPainter
-├── geo/                    # Viewport, Projection, Transform, Bounds
-├── core/                   # EventDispatcher, drag/wheel interactions, tweening
-└── ui/                     # Control implementations
+├── map/                  # Emap orchestrator, ops facade, selection, history
+│   └── ops/              # one file per data op (clip, dissolve, buffer, …)
+├── adapter/              # MapshaperAdapter — sole bridge to mapshaper.internal.*
+├── source/               # TopologySource, DisplayArcs (LOD)
+├── core/                 # EventDispatcher, MapshaperWorkerPool, drag/wheel
+├── geo/                  # Viewport, Projection, Bounds, AffineTransform, CRS resolver
+├── renderer/             # CanvasPainter (default), CanvasKitPainter (experimental)
+├── edit/                 # EditHistory + per-command memento classes
+├── ui/                   # Control implementations + controls.css
+├── worker/               # off-thread mapshaper entry
+└── types/                # central mapshaper type definitions
 ```
 
-Key design choices:
-- All internal communication uses `EventDispatcher` (`on` / `fire`) — not raw DOM events
-- Coordinate math uses 2D affine transforms: `(x * mx + bx, y * my + by)`
-- Large datasets use Level of Detail (LOD) simplification via `display-arcs.ts`
-- `CanvasPainter` batches 25 paths per `stroke()` call for performance
+Design pillars:
+
+- **One adapter, no leaks.** `MapshaperAdapter` is the only place `mapshaper.internal.*` is touched. Tests stub it; future mapshaper upgrades reroute through it.
+- **Structured commands, no string-build.** Ops emit `ParsedCommand[]` directly — there is no CLI string between the op and mapshaper, on either thread.
+- **Memento commands.** Every edit captures enough state to round-trip do/undo without referencing live dataset internals.
+- **Effect-aware dataset replace.** Each op declares whether it changes shape / topology / attributes / CRS; selection is preserved or cleared accordingly.
+- **Affine coordinate math everywhere.** All viewport conversions pass through `AffineTransform`, never ad-hoc matrix math.
+- **Batch rendering.** `CanvasPainter` groups 25 paths per `stroke()` — measured optimization for large topology datasets.
 
 ## Development
 
 ```bash
-# Install dependencies
 pnpm install
-
-# Watch mode (sourcemaps)
-npm run dev
-
-# Single development build
-npm run dev-build
-
-# Production build (minified)
-npm run build
-
-# Run tests
-npm test
+npm run dev          # watch + sourcemaps
+npm run dev-build    # one-shot dev build
+npm run build        # production (minified) + .d.ts
+npm test             # vitest, ~760 unit tests
+npm run typecheck    # strict tsc
 ```
 
 Build outputs in `dist/`:
-- `emap-dev.js` — development bundle with sourcemaps
-- `emap.js` — production minified bundle
-- `emap.mjs` — ES module
-- `index.d.ts` — TypeScript declarations
-- `mapshaper-vendor.js` — Mapshaper vendor bundle required before the IIFE build
 
-Manual testing: open any `test/examples/*.html` in a browser after building.
+- `emap.js` — production IIFE bundle
+- `emap.mjs` — ES module
+- `emap-dev.js` — dev bundle with sourcemaps
+- `emap-worker.js` — worker entry
+- `mapshaper-vendor.js` — mapshaper vendor bundle (load before `emap.js` in IIFE mode)
+- `index.d.ts` — TypeScript declarations
+
+Manual testing: open any `test/examples/*.html` after building.
 
 ## License
 
