@@ -320,3 +320,105 @@ describe('MapshaperWorkerPool', () => {
     await expect(b).resolves.toBe('fresh-ok');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Multi-worker pool (PR-22a)
+// ---------------------------------------------------------------------------
+
+describe('MapshaperWorkerPool — poolSize > 1', () => {
+  beforeEach(() => {
+    MockWorker.instances.length = 0;
+  });
+  afterEach(() => {
+    MockWorker.instances.length = 0;
+  });
+
+  function makePool(poolSize: number): MapshaperWorkerPool {
+    return new MapshaperWorkerPool({
+      workerUrl: 'fake.js',
+      WorkerCtor: MockWorker as unknown as typeof Worker,
+      poolSize,
+    });
+  }
+
+  it('reports configured poolSize without spawning anything', () => {
+    const pool = makePool(4);
+    expect(pool.poolSize).toBe(4);
+    expect(pool.isWorkerSpawned()).toBe(false);
+    expect(MockWorker.instances).toHaveLength(0);
+  });
+
+  it('spawns workers lazily as load grows', () => {
+    const pool = makePool(3);
+    pool.run('-clip', {});
+    expect(MockWorker.instances).toHaveLength(1);
+    pool.run('-dissolve', {});
+    expect(MockWorker.instances).toHaveLength(2);
+    pool.run('-buffer 5', {});
+    expect(MockWorker.instances).toHaveLength(3);
+    // 4th request reuses an existing worker since all 3 are equally loaded.
+    pool.run('-clean', {});
+    expect(MockWorker.instances).toHaveLength(3);
+  });
+
+  it('routes to the least-loaded worker', async () => {
+    const pool = makePool(2);
+    // First two go to workers 0 and 1 in round-robin.
+    const a = pool.run('-clip', {});
+    const b = pool.run('-clip', {});
+    expect(MockWorker.instances).toHaveLength(2);
+    // Third arrives while both have 1 pending each — round-robin picks
+    // worker 0 (cursor advanced past 1 → wraps to 0).
+    pool.run('-clip', {});
+    // worker 0 has 2 pending, worker 1 has 1.
+    // Resolve one on worker 1.
+    const w1 = MockWorker.instances[1];
+    w1.respond({ id: w1.posted[0].id, type: 'ok', packed: 'b-done' });
+    await b;
+    // Fourth dispatch: worker 1 now has 0 pending, worker 0 has 2 — pick 1.
+    pool.run('-clip', {});
+    const w0 = MockWorker.instances[0];
+    expect(w0.posted).toHaveLength(2);
+    expect(w1.posted).toHaveLength(2);
+    // Cleanup.
+    w0.respond({ id: w0.posted[0].id, type: 'ok', packed: 'a-done' });
+    w0.respond({ id: w0.posted[1].id, type: 'ok', packed: 'c-done' });
+    w1.respond({ id: w1.posted[1].id, type: 'ok', packed: 'd-done' });
+    await a;
+  });
+
+  it('isolates worker errors — a single worker crash does not fail other workers\' pending', async () => {
+    const pool = makePool(2);
+    const a = pool.run('-clip', {}); // → worker 0
+    const b = pool.run('-clip', {}); // → worker 1
+    const w0 = MockWorker.instances[0];
+    const w1 = MockWorker.instances[1];
+
+    // Crash worker 0.
+    const aPromise = a.catch((e) => e);
+    w0.raiseError('boom');
+    const aErr = await aPromise;
+    expect((aErr as Error).message).toMatch(/boom/);
+
+    // Worker 1's request must still be alive and resolvable.
+    w1.respond({ id: w1.posted[0].id, type: 'ok', packed: 'b-ok' });
+    await expect(b).resolves.toBe('b-ok');
+  });
+
+  it('cancelAll() terminates every spawned worker; next dispatch respawns', () => {
+    const pool = makePool(3);
+    pool.run('-clip', {}).catch(() => {});
+    pool.run('-clip', {}).catch(() => {});
+    pool.run('-clip', {}).catch(() => {});
+    expect(MockWorker.instances).toHaveLength(3);
+    pool.cancelAll();
+    for (const w of MockWorker.instances) expect(w.terminateCalled).toBe(true);
+    pool.run('-clip', {});
+    expect(MockWorker.instances).toHaveLength(4); // one new worker spawned
+  });
+
+  it('clamps poolSize < 1 to 1', () => {
+    expect(makePool(0).poolSize).toBe(1);
+    expect(makePool(-3).poolSize).toBe(1);
+  });
+});

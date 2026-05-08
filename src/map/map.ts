@@ -224,6 +224,7 @@ export class Emap extends EventDispatcher {
       } else {
         this._workerPool = new MapshaperWorkerPool({
           workerUrl: options.workerUrl ?? 'emap-worker.js',
+          poolSize: options.workerPoolSize,
         });
       }
     }
