@@ -134,17 +134,17 @@ bundlers strip it).
 - **L3** — `EditHistory` ring buffer instead of `Array.shift` on
   capacity. Only matters when `maxSize` is configured >> 200; trivial
   but unmotivated.
-- **PR-7 remainder** — 24 of 30 ops still live as private methods on
-  the `MapshaperOps` class. The pattern is established (see
-  `src/map/ops/{clip-erase,buffer,dissolve,each-filter}.ts`); each
-  remaining op moves out individually as it's touched.
-- **PR-4b** — `CommandBuilder` returning parsed-command objects
-  instead of CLI strings. Requires the per-op file split (PR-7) to
-  be complete first; quoting / validation safety is already
-  delivered via `quoteCliArg` + `isValidLayerName` /
-  `isValidFieldName` in PR-4.
 - Reverting `MapOptions.workerRouting` to opt-out semantics if real
   apps consistently disagree with the default routing decision tree.
+
+## Recently landed
+
+- **PR-7** — every op extracted into its own file under
+  `src/map/ops/`. Landed in commit `f80d67d`.
+- **PR-4b** — ops now build `ParsedCommand[]` instead of CLI strings;
+  worker / runner / OpContext gained parallel parsed paths;
+  `mergeSelected` no longer touches a shell-style command. Landed in
+  commit `cf17d3d`.
 
 ---
 
