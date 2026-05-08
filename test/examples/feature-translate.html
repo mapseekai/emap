@@ -45,7 +45,7 @@
       文件:
       <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
     </label>
-    <span class="hint">点击要素选中 → 鼠标移动跟随平移 → 再次单击落位。共享边界自动复制,相邻未选要素保持原位。右键或 Esc 取消。方向键步进(不复制共享边)。Ctrl+Z 撤销。</span>
+    <span class="hint">在要素上按住鼠标左键拖动 → 松开落位。空白处按下走平移地图。共享边界自动复制,相邻未选要素保持原位。右键或 Esc 取消拖动。方向键步进(不复制共享边)。Ctrl+Z 撤销。</span>
     <span id="status">加载数据</span>
   </div>
   <div id="map" tabindex="0"></div>
@@ -95,11 +95,17 @@
       reader.readAsArrayBuffer(file);
     });
 
-    // Cursor-follow drag: 1st click selects + opens a translate session,
-    // mousemove streams (dx, dy) into the session in source-data coords,
-    // 2nd click commits one cumulative undo entry. Esc / right-click cancels.
+    // Press-and-hold drag: mousedown on a feature opens a translate
+    // session (and suppresses the map pan handler for THIS gesture by
+    // calling stopImmediatePropagation in the window capture phase —
+    // capture-phase listeners on `window` fire before bubble-phase
+    // listeners on inner elements, so the pan handler never sees the
+    // mousedown). mousemove streams (dx, dy) into the session in
+    // source-data coords. mouseup commits one cumulative undo entry.
+    // Esc / right-click cancels.
     let session = null;
     let lastMapCoord = null;
+    let dragging = false;
 
     function pixelToMap(e) {
       const rect = mapContainer.getBoundingClientRect();
@@ -113,48 +119,77 @@
         const pushed = session.commit();
         status.textContent = pushed
           ? `已落位 (${adx.toFixed(2)}, ${ady.toFixed(2)})。Ctrl+Z 撤销。`
-          : '已取消(零位移)。';
+          : '未移动,选择保留。';
       } else {
         session.cancel();
         status.textContent = '已取消本次拖动。';
       }
       session = null;
       lastMapCoord = null;
+      dragging = false;
     }
 
-    mapContainer.addEventListener('click', (e) => {
-      // 2nd click → commit drag and exit session.
-      if (session) {
-        endSession(true);
-        return;
-      }
-
+    // Capture-phase on window so we run BEFORE the map-container's pan
+    // handler. Only intercept when the target is inside the map.
+    window.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return; // left-button only
+      if (!mapContainer.contains(e.target)) return;
+      // Modifier-clicks belong to selection helpers (shift = add, ctrl/meta = toggle).
+      // Let those go through as normal clicks (no drag).
       const rect = mapContainer.getBoundingClientRect();
       const point = [e.clientX - rect.left, e.clientY - rect.top];
       const features = map.queryFeatures(point);
       if (!features.length) {
-        if (!e.shiftKey && !e.ctrlKey && !e.metaKey) map.clearSelection();
+        // Empty space → let pan handler proceed (no stopPropagation).
         return;
       }
+      // Hit a feature. Suppress the pan handler for this gesture and
+      // open a drag session.
+      e.stopImmediatePropagation();
+      e.preventDefault();
+
       const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
       map.select(features, { mode });
       document.getElementById('map').focus();
 
-      // Open a drag session against the post-click selection.
+      // Modifier-clicks are selection-only — don't start a drag (so a
+      // shift-click adds to the selection without inadvertently
+      // translating).
+      if (e.shiftKey || e.ctrlKey || e.metaKey) return;
+
       session = map.editSession.beginTranslateSession();
       if (session) {
         lastMapCoord = pixelToMap(e);
-        status.textContent = '拖动鼠标平移,再次单击落位,Esc / 右键取消。';
+        dragging = true;
+        status.textContent = '拖动中… 松开鼠标落位,Esc / 右键取消。';
       }
-    });
+    }, { capture: true });
 
-    mapContainer.addEventListener('mousemove', (e) => {
-      if (!session) return;
+    window.addEventListener('mousemove', (e) => {
+      if (!dragging || !session) return;
       const cur = pixelToMap(e);
       if (lastMapCoord) {
         session.move(cur[0] - lastMapCoord[0], cur[1] - lastMapCoord[1]);
       }
       lastMapCoord = cur;
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (!dragging || !session) return;
+      if (e.button !== 0) return;
+      endSession(true);
+    });
+
+    // Empty-space click clears the selection (mousedown on empty space
+    // doesn't stop pan; the click that follows runs once).
+    mapContainer.addEventListener('click', (e) => {
+      if (dragging || session) return; // we already handled it via mouseup
+      const rect = mapContainer.getBoundingClientRect();
+      const point = [e.clientX - rect.left, e.clientY - rect.top];
+      const features = map.queryFeatures(point);
+      if (!features.length && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        map.clearSelection();
+      }
     });
 
     mapContainer.addEventListener('contextmenu', (e) => {
