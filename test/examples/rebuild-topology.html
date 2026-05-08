@@ -109,7 +109,7 @@
 
     map.on('click', (e) => {
       // Tap to toggle selection at the click position
-      const features = map.queryRenderedFeatures(e.point, { radius: 6 });
+      const features = map.queryFeatures(e.point, { radius: 6 });
       if (!features?.length) return;
       const f = features[0];
       map.select([{ source: f.source, layer: f.layer, id: f.id }], 'toggle');

@@ -69,7 +69,7 @@ map.addSource(id, source);
 map.addLayer({ id, source: 'china', type: 'fill', paint: { 'fill-color': '#eee' } });
 map.setExtent(source.getExtent());
 
-map.queryRenderedFeatures(point, { layers: ['borders'] });
+map.queryFeatures(point, { layers: ['borders'] });
 map.on('click', (e) => { /* … */ });
 ```
 

@@ -38,8 +38,8 @@ import {
   DEFAULT_WORKER_THRESHOLD,
   type ExpressionEvaluationPolicy,
   type MapOptions,
-  type QueryRenderedFeaturesOptions,
-  type RenderedFeatureAttributes,
+  type QueryFeaturesOptions,
+  type QueriedFeature,
   type FeatureRef,
   type HighlightFeatureRef,
   type ExportSnapshotOptions,
@@ -977,13 +977,13 @@ export class Emap extends EventDispatcher {
     this.fire('resize');
   }
 
-  public queryRenderedFeatures(
+  public queryFeatures(
     geometryOrOptions?:
       | [number, number]
       | [[number, number], [number, number]]
-      | QueryRenderedFeaturesOptions,
-    options?: QueryRenderedFeaturesOptions,
-  ): RenderedFeatureAttributes[] {
+      | QueryFeaturesOptions,
+    options?: QueryFeaturesOptions,
+  ): QueriedFeature[] {
     const visibleKeys = this._getVisibleLayerKeys();
     return this._featureQuery.query(geometryOrOptions, options, visibleKeys);
   }
@@ -996,7 +996,7 @@ export class Emap extends EventDispatcher {
    * Idempotent — already-cached layer indexes are skipped. No-op for
    * sources without a dataset.
    *
-   * Subsequent `queryRenderedFeatures` calls automatically use whatever's
+   * Subsequent `queryFeatures` calls automatically use whatever's
    * cached, regardless of whether `prebuildSpatialIndex` was called.
    */
   public prebuildSpatialIndex(sourceId?: string): void {
@@ -1028,7 +1028,7 @@ export class Emap extends EventDispatcher {
   }
 
   public setHighlightedFeatures(
-    features: Array<RenderedFeatureAttributes | HighlightFeatureRef>,
+    features: Array<QueriedFeature | HighlightFeatureRef>,
     style?: HighlightStyle,
   ): void {
     this._highlightManager.setHighlightedFeatures(features, style);
@@ -1054,8 +1054,8 @@ export class Emap extends EventDispatcher {
   /**
    * Mutate the persistent feature selection.
    *
-   * @param features Refs to apply. `RenderedFeatureAttributes` is structurally
-   *   compatible with `FeatureRef`, so results from `queryRenderedFeatures` can
+   * @param features Refs to apply. `QueriedFeature` is structurally
+   *   compatible with `FeatureRef`, so results from `queryFeatures` can
    *   be passed directly.
    * @param options.mode `'replace'` (default) wipes prior contents,
    *   `'add'` unions, `'toggle'` flips membership.
@@ -1200,7 +1200,7 @@ export class Emap extends EventDispatcher {
   /**
    * Drop derived caches (line-layer arc flags + spatial index) for the given
    * sources. Call after any edit that mutates `layer.shapes` so subsequent
-   * frames and `queryRenderedFeatures` calls don't reference stale features.
+   * frames and `queryFeatures` calls don't reference stale features.
    */
   _invalidateShapeCachesForSources(sourceIds: Iterable<string>): void {
     for (const sourceId of sourceIds) {

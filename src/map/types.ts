@@ -97,11 +97,11 @@ export interface MapOptions {
   workerRouting?: import('./worker-routing').WorkerRoutingFn;
 }
 
-export interface QueryRenderedFeaturesOptions {
+export interface QueryFeaturesOptions {
   layers?: string[];
 }
 
-export interface RenderedFeatureAttributes {
+export interface QueriedFeature {
   id: number;
   source: string;
   layer: string;

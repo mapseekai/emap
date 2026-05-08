@@ -308,7 +308,7 @@ export class VertexEditControl implements Control {
     const py = e.clientY - rect.top;
 
     // Hit test: find feature under pointer
-    const hits = this._map.queryRenderedFeatures([px, py]);
+    const hits = this._map.queryFeatures([px, py]);
     if (hits.length === 0) {
       this._hoveredFeature = null;
       this._hoverVertexCoords = null;

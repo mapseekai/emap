@@ -14,8 +14,8 @@ export type {
   // map options + view
   ExpressionEvaluationPolicy,
   // queries
-  QueryRenderedFeaturesOptions,
-  RenderedFeatureAttributes,
+  QueryFeaturesOptions,
+  QueriedFeature,
   FeatureRef,
   HighlightFeatureRef,
   HighlightStyle,

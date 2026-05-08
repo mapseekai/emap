@@ -14,7 +14,7 @@ export interface BoxSelectStyle {
 export interface BoxSelectControlOptions {
   /**
    * Restrict the selection to a subset of layer ids. When omitted, every
-   * visible layer participates (matching `queryRenderedFeatures` default).
+   * visible layer participates (matching `queryFeatures` default).
    */
   layers?: string[];
   /** Visual style of the rubber-band rectangle. */
@@ -28,7 +28,7 @@ export interface BoxSelectControlOptions {
 
 /**
  * Shift+drag rubber-band feature selection. Reuses
- * `Emap.queryRenderedFeatures(bbox)` for hit-testing and `Emap.select` for
+ * `Emap.queryFeatures(bbox)` for hit-testing and `Emap.select` for
  * selection state management.
  *
  * Modifier-key conventions (layered on top of shift):
@@ -197,7 +197,7 @@ export class BoxSelectControl implements Control {
     const x2 = Math.max(sx, cx);
     const y2 = Math.max(sy, cy);
 
-    const features = this._map.queryRenderedFeatures(
+    const features = this._map.queryFeatures(
       [[x1, y1], [x2, y2]],
       this._options.layers ? { layers: this._options.layers } : undefined,
     );

@@ -8,7 +8,7 @@ import {
 
 interface FakeMap {
   getCanvasContainer: () => HTMLElement;
-  queryRenderedFeatures: ReturnType<typeof vi.fn>;
+  queryFeatures: ReturnType<typeof vi.fn>;
   select: ReturnType<typeof vi.fn>;
   getSource: ReturnType<typeof vi.fn>;
   project: ReturnType<typeof vi.fn>;
@@ -17,7 +17,7 @@ interface FakeMap {
 function makeFakeMap(canvasContainer: HTMLElement): FakeMap {
   return {
     getCanvasContainer: () => canvasContainer,
-    queryRenderedFeatures: vi.fn(() => []),
+    queryFeatures: vi.fn(() => []),
     select: vi.fn(),
     getSource: vi.fn(),
     project: vi.fn((x: number, y: number) => [x, y]), // identity transform
@@ -174,9 +174,9 @@ describe('LassoSelectControl', () => {
   }
 
   it('shift-drag along a polygon path selects features whose first-vertex is inside (replace mode)', () => {
-    // Two candidates returned by queryRenderedFeatures — only id=1's
+    // Two candidates returned by queryFeatures — only id=1's
     // representative pixel lands inside the lasso polygon.
-    map.queryRenderedFeatures.mockReturnValueOnce([
+    map.queryFeatures.mockReturnValueOnce([
       { source: 's', layer: 'l', id: 1, geometryType: 'polygon', properties: {} },
       { source: 's', layer: 'l', id: 2, geometryType: 'polygon', properties: {} },
     ]);
@@ -195,7 +195,7 @@ describe('LassoSelectControl', () => {
     // (150,150) is inside; id=2's (500,500) is outside.
     drawLasso([[100, 100], [200, 100], [150, 200]]);
 
-    expect(map.queryRenderedFeatures).toHaveBeenCalledTimes(1);
+    expect(map.queryFeatures).toHaveBeenCalledTimes(1);
     expect(map.select).toHaveBeenCalledTimes(1);
     expect(map.select.mock.calls[0][0]).toEqual([
       { source: 's', layer: 'l', id: 1 },
@@ -207,23 +207,23 @@ describe('LassoSelectControl', () => {
     dispatch(canvasContainer, 'mousedown', { clientX: 100, clientY: 100 });
     dispatch(window, 'mousemove', { clientX: 200, clientY: 200 });
     dispatch(window, 'mouseup', { clientX: 200, clientY: 200 });
-    expect(map.queryRenderedFeatures).not.toHaveBeenCalled();
+    expect(map.queryFeatures).not.toHaveBeenCalled();
     expect(map.select).not.toHaveBeenCalled();
   });
 
   it('path with fewer than 3 points is a no-op', () => {
     drawLasso([[100, 100], [200, 200]]); // only 2 points captured
-    expect(map.queryRenderedFeatures).not.toHaveBeenCalled();
+    expect(map.queryFeatures).not.toHaveBeenCalled();
     expect(map.select).not.toHaveBeenCalled();
   });
 
   it('drag below threshold is a no-op', () => {
     drawLasso([[100, 100], [101, 101], [102, 102]]); // bbox 0..2 px
-    expect(map.queryRenderedFeatures).not.toHaveBeenCalled();
+    expect(map.queryFeatures).not.toHaveBeenCalled();
   });
 
   it('shift+ctrl → add mode', () => {
-    map.queryRenderedFeatures.mockReturnValueOnce([
+    map.queryFeatures.mockReturnValueOnce([
       { source: 's', layer: 'l', id: 1, geometryType: 'polygon', properties: {} },
     ]);
     map.getSource.mockImplementation(() => ({
@@ -240,7 +240,7 @@ describe('LassoSelectControl', () => {
   });
 
   it('shift+meta → add mode (Mac)', () => {
-    map.queryRenderedFeatures.mockReturnValueOnce([
+    map.queryFeatures.mockReturnValueOnce([
       { source: 's', layer: 'l', id: 0, geometryType: 'polygon', properties: {} },
     ]);
     map.getSource.mockImplementation(() => ({
@@ -253,7 +253,7 @@ describe('LassoSelectControl', () => {
   });
 
   it('shift+alt → toggle mode', () => {
-    map.queryRenderedFeatures.mockReturnValueOnce([
+    map.queryFeatures.mockReturnValueOnce([
       { source: 's', layer: 'l', id: 0, geometryType: 'polygon', properties: {} },
     ]);
     map.getSource.mockImplementation(() => ({
@@ -266,7 +266,7 @@ describe('LassoSelectControl', () => {
   });
 
   it('dedupes refs across visible layers backed by same feature', () => {
-    map.queryRenderedFeatures.mockReturnValueOnce([
+    map.queryFeatures.mockReturnValueOnce([
       { source: 's', layer: 'fill', id: 0, geometryType: 'polygon', properties: {} },
       { source: 's', layer: 'fill', id: 0, geometryType: 'polygon', properties: {} }, // dup
       { source: 's', layer: 'line', id: 0, geometryType: 'polygon', properties: {} }, // different layer
@@ -291,16 +291,16 @@ describe('LassoSelectControl', () => {
     control.disable();
     expect(control.isEnabled()).toBe(false);
     drawLasso([[100, 100], [200, 100], [150, 200]]);
-    expect(map.queryRenderedFeatures).not.toHaveBeenCalled();
+    expect(map.queryFeatures).not.toHaveBeenCalled();
     expect(map.select).not.toHaveBeenCalled();
   });
 
-  it('forwards layers filter to queryRenderedFeatures', () => {
+  it('forwards layers filter to queryFeatures', () => {
     control.onRemove();
     control = new LassoSelectControl({ layers: ['only-this'] });
     document.body.appendChild(control.onAdd(map as any));
-    map.queryRenderedFeatures.mockReturnValueOnce([]);
+    map.queryFeatures.mockReturnValueOnce([]);
     drawLasso([[100, 100], [200, 100], [150, 200]]);
-    expect(map.queryRenderedFeatures.mock.calls[0][1]).toEqual({ layers: ['only-this'] });
+    expect(map.queryFeatures.mock.calls[0][1]).toEqual({ layers: ['only-this'] });
   });
 });
