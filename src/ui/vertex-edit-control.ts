@@ -3,7 +3,7 @@ import { Emap, EditVertexShape, EditVertexArcs } from '../map/map';
 import { VertexMoveCommand } from '../edit/commands/vertex-move';
 import { VertexInsertCommand } from '../edit/commands/vertex-insert';
 import { VertexDeleteCommand } from '../edit/commands/vertex-delete';
-import type { ArcCollection } from '../types/mapshaper-types';
+import { bumpEditVersion, type ArcCollection } from '../types/mapshaper-types';
 import type { TopologySource } from '../source/source';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 
@@ -212,6 +212,10 @@ export class VertexEditControl implements Control {
 
     // Re-initialize the LOD copy in DisplayArcs since vertex layout changed.
     this._refreshSourceDisplayArcs(sourceId);
+    // Live mutation — bump editVersion so the spatial-index cache
+    // invalidates and the next hit-test against the (potentially
+    // shrunken) bbox reflects the deletion.
+    this._bumpSourceEditVersion(sourceId);
 
     // Push an undoable VertexDeleteCommand
     if (coordsBefore) {
@@ -242,6 +246,22 @@ export class VertexEditControl implements Control {
    */
   private _refreshSourceDisplayArcs(sourceId: string): void {
     this._map?.getSource(sourceId)?.refreshDisplayArcs();
+  }
+
+  /**
+   * Bump the dataset's `editVersion` after a live in-place arc mutation.
+   * The spatial-index cache in `feature-query` keys on `editVersion`, so
+   * this is what tells the next `queryFeatures` call that bboxes may
+   * have changed and the index must rebuild. Cheap (a number
+   * increment); only the next query pays the actual rebuild cost.
+   *
+   * The matching command's `do()/undo()` also bump, but those run on
+   * undo / redo — not on initial commit, since `pushCommand` skips
+   * `do()` per the memento contract.
+   */
+  private _bumpSourceEditVersion(sourceId: string): void {
+    const source = this._map?.getSource(sourceId);
+    bumpEditVersion(source?.getDataset?.() ?? null);
   }
 
   /**
@@ -563,6 +583,13 @@ export class VertexEditControl implements Control {
       );
       this._hoverVertexIds = [this._hoverInsertionId];
       this._hoverType = 'vertex';
+      // Live mutation — bump editVersion so feature-query's spatial-index
+      // cache rebuilds on the next hit-test against the post-edit bbox.
+      // The matching VertexInsertCommand bumps too on undo/redo, but its
+      // .do() is never invoked (pushCommand is memento-style); without
+      // this bump the index cache key wouldn't change and the new vertex
+      // wouldn't be hit-testable in any newly-covered area.
+      this._bumpSourceEditVersion(this._hoveredFeature.source);
 
       this._pushVertexInsertCommand(this._hoverInsertionId, point);
     }
@@ -633,6 +660,14 @@ export class VertexEditControl implements Control {
     // If the source has a low-detail LOD copy, regenerate it so the filtered
     // arcs reflect the new vertex positions.
     this._refreshSourceDisplayArcs(sourceId);
+    // The live drag in `_handleDrag` has been mutating arcs in place
+    // every frame without bumping editVersion; the spatial-index cache
+    // is therefore stale against the new bboxes. Bump now so the next
+    // hover hit-test sees the post-drag bbox — without this, dragging
+    // a vertex outward expands the polygon visually but the new area
+    // is invisible to `queryFeatures` until the next shape-count or
+    // arc-count change.
+    this._bumpSourceEditVersion(sourceId);
 
     // Push an undoable VertexMoveCommand if the drag actually moved the node.
     // (A click-without-drag returns the same coord and is not worth recording.)
