@@ -12,15 +12,13 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TopologySource } from '../source/topology-source';
-import type { MapshaperDataset } from '../types/mapshaper-types';
-import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
+import { TopologySource } from '../../src/source/topology-source';
+import type { MapshaperDataset } from '../../src/types/mapshaper-types';
+import { getDefaultMapshaperAdapter } from '../../src/adapter/mapshaper-adapter';
 
 const FIXTURES_DIR = resolve(
   fileURLToPath(new URL('.', import.meta.url)),
   '..',
-  '..',
-  'test',
   'fixtures',
 );
 

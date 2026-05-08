@@ -4,13 +4,24 @@
 // helpers (`layers.resolve`, `_history`, `_workerPool`, ...) on the host.
 
 import { DatasetReplaceCommand } from '../edit/commands/dataset-replace';
-import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
+import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { EmapHostInternal } from './emap-host';
 import { resolveLayerInList } from './layer-registry';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { quoteCliArg } from './command-args';
 import { Err, OK, okValue, type OpResult } from './op-result';
-import { parseCommandHeads, shouldUseWorker } from './worker-routing';
+// PR-7: ops extracted to dedicated per-op modules. The class facade below
+// delegates to these. Remaining ops still live as private methods until
+// they are touched in subsequent work (borrow-as-you-go).
+import type { OpContext } from './ops/_context';
+import { _runDatasetCommand as _runDatasetCommandShared, _applyDatasetReplace } from './ops/_runner';
+import { clipLayer as clipLayerOp, eraseLayer as eraseLayerOp } from './ops/clip-erase';
+import { bufferLayer as bufferLayerOp } from './ops/buffer';
+import { dissolveLayer as dissolveLayerOp, mergeSelected as mergeSelectedOp } from './ops/dissolve';
+import {
+  applyExpression as applyExpressionOp,
+  filterFeatures as filterFeaturesOp,
+} from './ops/each-filter';
 import type {
   ApplyExpressionOptions,
   BufferOptions,
@@ -52,31 +63,37 @@ import type {
 export class MapshaperOps {
   constructor(private _emap: EmapHostInternal) {}
 
-  async clipLayer(opts: ClipEraseOptions): Promise<OpResult> {
-    return this._runClipErase(opts, 'clip');
+  /**
+   * Lazily-built `OpContext` handed to every extracted op. Recomputed on
+   * every call so nothing captures a stale `this` if the manager is
+   * reconstructed via `Object.create(MapshaperOps.prototype)` in tests.
+   */
+  private get _ctx(): OpContext {
+    return {
+      host: this._emap,
+      runDatasetCommand: (sourceId, cmd, label, inputFiles) =>
+        this._runDatasetCommand(sourceId, cmd, label, inputFiles),
+      applyDatasetReplace: (sourceId, before, after, label) =>
+        _applyDatasetReplace(this._emap, sourceId, before, after, label),
+    };
+  }
+
+  // -- Extracted ops (PR-7) -------------------------------------------
+  // Per the borrow-as-you-go split: a representative subset of ops lives
+  // under `src/map/ops/*.ts` already. The class methods here are thin
+  // facades that build an `OpContext` and delegate. Remaining ops keep
+  // their full bodies in this file until each is touched again.
+
+  clipLayer(opts: ClipEraseOptions): Promise<OpResult> {
+    return clipLayerOp(this._ctx, opts);
   }
 
   /**
    * Erase (cut holes from) a layer using a polygon mask layer via mapshaper's
    * `-erase` pipeline. Same semantics as {@link clipLayer}.
    */
-  async eraseLayer(opts: ClipEraseOptions): Promise<OpResult> {
-    return this._runClipErase(opts, 'erase');
-  }
-
-  async _runClipErase(opts: ClipEraseOptions, op: 'clip' | 'erase'): Promise<OpResult> {
-    const source = this._emap._sources.get(opts.source);
-    if (!source) return Err.notFound('source', opts.source);
-    const dataset = source.getDataset();
-    if (!dataset) return Err.notFound('source', opts.source);
-    // Validate that both target and mask resolve to layers in this source's
-    // dataset. mapshaper would throw an opaque error otherwise.
-    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
-    if (!resolveLayerInList(dataset.layers, opts.mask)) return Err.notFound('mask', opts.mask);
-
-    const verb = op === 'clip' ? 'Clip' : 'Erase';
-    const cmd = `-target ${quoteCliArg(opts.target)} -${op} source=${quoteCliArg(opts.mask)}`;
-    return this._runDatasetCommand(opts.source, cmd, `${verb} ${opts.target}`);
+  eraseLayer(opts: ClipEraseOptions): Promise<OpResult> {
+    return eraseLayerOp(this._ctx, opts);
   }
 
   /**
@@ -86,72 +103,8 @@ export class MapshaperOps {
    * value are merged. Returns `true` on success, `false` for unresolvable
    * source / target. Recorded as a single undoable history entry.
    */
-  async dissolveLayer(opts: DissolveOptions): Promise<OpResult> {
-    const source = this._emap._sources.get(opts.source);
-    if (!source) return Err.notFound('source', opts.source);
-    const dataset = source.getDataset();
-    if (!dataset) return Err.notFound('source', opts.source);
-    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
-
-    // `field` (single) and `fields` (multi) are mutually exclusive — both
-    // set is a configuration error.
-    const hasFields = Array.isArray(opts.fields) && opts.fields.length > 0;
-    if (opts.field !== undefined && hasFields) {
-      return Err.validation('field', '`field` and `fields` are mutually exclusive');
-    }
-
-    // mapshaper's -dissolve DEFAULT option is `fields` (comma-list, type
-    // strings). A field name containing `,` would silently group by N
-    // imaginary fields; reject up-front instead.
-    if (opts.field !== undefined && (typeof opts.field !== 'string' || opts.field.includes(','))) {
-      return Err.validation('field', 'field name must be a string without `,`');
-    }
-    if (!this._emap._allowExpressionEvaluation([opts.calc, opts.where], 'dissolveLayer')) {
-      return Err.expressionDisabled('dissolveLayer');
-    }
-
-    // Build the positional group-by token (single-field convenience or
-    // multi-field array). When neither is set, dissolve collapses every
-    // feature into one (mapshaper's default for -dissolve with no key).
-    let groupToken = '';
-    if (opts.field) {
-      groupToken = ` ${quoteCliArg(opts.field)}`;
-    } else if (hasFields) {
-      const safeFields = opts.fields!.filter((f) => typeof f === 'string' && !f.includes(','));
-      if (safeFields.length > 0) {
-        groupToken = ` ${quoteCliArg(safeFields.join(','))}`;
-      }
-    }
-
-    const parts: string[] = [
-      `-target ${quoteCliArg(opts.target)}`,
-      `-dissolve${groupToken}`,
-    ];
-
-    const safeFieldList = (list?: string[]) =>
-      Array.isArray(list)
-        ? list.filter((f) => typeof f === 'string' && !f.includes(','))
-        : [];
-
-    const sumFields = safeFieldList(opts.sumFields);
-    if (sumFields.length > 0) parts.push(`sum-fields=${sumFields.join(',')}`);
-
-    const copyFields = safeFieldList(opts.copyFields);
-    if (copyFields.length > 0) parts.push(`copy-fields=${copyFields.join(',')}`);
-
-    if (opts.calc && opts.calc.trim()) {
-      parts.push(`calc=${quoteCliArg(opts.calc)}`);
-    }
-    if (opts.where && opts.where.trim()) {
-      parts.push(`where=${quoteCliArg(opts.where)}`);
-    }
-    if (opts.multipart) parts.push('multipart');
-    if (opts.name && opts.name.trim()) {
-      parts.push(`name=${quoteCliArg(opts.name)}`);
-    }
-    if (opts.noReplace) parts.push('no-replace');
-
-    return this._runDatasetCommand(opts.source, parts.join(' '), `Dissolve ${opts.target}`);
+  dissolveLayer(opts: DissolveOptions): Promise<OpResult> {
+    return dissolveLayerOp(this._ctx, opts);
   }
 
   /**
@@ -166,35 +119,8 @@ export class MapshaperOps {
    * Recorded as a single undoable history entry; inherits dataset-replace
    * semantics (history barrier, selection cleared) from `_runDatasetCommand`.
    */
-  async bufferLayer(opts: BufferOptions): Promise<OpResult> {
-    const source = this._emap._sources.get(opts.source);
-    if (!source) return Err.notFound('source', opts.source);
-    const dataset = source.getDataset();
-    if (!dataset) return Err.notFound('source', opts.source);
-    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
-
-    // Validate numeric radius up-front: 0 silently produces empty buffers,
-    // negative values throw inside mapshaper. Expression-string radii are
-    // forwarded as-is — mapshaper evaluates per-feature and there's no
-    // sound way to validate them without parsing JS.
-    if (typeof opts.radius === 'number') {
-      if (!Number.isFinite(opts.radius) || opts.radius <= 0) {
-        return Err.validation('radius', 'must be a positive finite number');
-      }
-    } else if (typeof opts.radius !== 'string' || opts.radius.trim().length === 0) {
-      return Err.validation('radius', 'must be a positive number or non-empty expression');
-    }
-    if (typeof opts.radius === 'string' && !this._emap._allowExpressionEvaluation([opts.radius], 'bufferLayer')) {
-      return Err.expressionDisabled('bufferLayer');
-    }
-
-    // Numbers go in bare; expression strings are quoted so the shell-style
-    // command parser keeps them intact.
-    const radiusArg =
-      typeof opts.radius === 'number' ? String(opts.radius) : quoteCliArg(opts.radius);
-    const capArg = opts.capStyle ? ` cap-style=${opts.capStyle}` : '';
-    const cmd = `-target ${quoteCliArg(opts.target)} -buffer ${radiusArg}${capArg}`;
-    return this._runDatasetCommand(opts.source, cmd, `Buffer ${opts.target}`);
+  bufferLayer(opts: BufferOptions): Promise<OpResult> {
+    return bufferLayerOp(this._ctx, opts);
   }
 
   /**
@@ -211,24 +137,8 @@ export class MapshaperOps {
    * Recorded as one undoable history entry; inherits dataset-replace
    * semantics (history barrier, selection cleared) from `_runDatasetCommand`.
    */
-  async applyExpression(opts: ApplyExpressionOptions): Promise<OpResult> {
-    if (!opts.expression || !opts.expression.trim()) {
-      return Err.validation('expression', 'must be a non-empty expression');
-    }
-    const source = this._emap._sources.get(opts.source);
-    if (!source) return Err.notFound('source', opts.source);
-    const dataset = source.getDataset();
-    if (!dataset) return Err.notFound('source', opts.source);
-    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
-    if (!this._emap._allowExpressionEvaluation([opts.expression, opts.where], 'applyExpression')) {
-      return Err.expressionDisabled('applyExpression');
-    }
-
-    const whereArg = opts.where && opts.where.trim()
-      ? ` where=${quoteCliArg(opts.where)}`
-      : '';
-    const cmd = `-target ${quoteCliArg(opts.target)} -each ${quoteCliArg(opts.expression)}${whereArg}`;
-    return this._runDatasetCommand(opts.source, cmd, `Update ${opts.target}`);
+  applyExpression(opts: ApplyExpressionOptions): Promise<OpResult> {
+    return applyExpressionOp(this._ctx, opts);
   }
 
   /**
@@ -298,35 +208,8 @@ export class MapshaperOps {
    * (mapshaper would error otherwise). Companion to {@link applyExpression}:
    * same JS context, opposite intent (mutate vs delete).
    */
-  async filterFeatures(opts: FilterOptions): Promise<OpResult> {
-    const hasExpr = !!(opts.expression && opts.expression.trim());
-    if (!hasExpr && !opts.removeEmpty) {
-      return Err.validation('expression', 'must supply `expression` or `removeEmpty: true`');
-    }
-
-    const source = this._emap._sources.get(opts.source);
-    if (!source) return Err.notFound('source', opts.source);
-    const dataset = source.getDataset();
-    if (!dataset) return Err.notFound('source', opts.source);
-    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
-    if (!this._emap._allowExpressionEvaluation([opts.expression], 'filterFeatures')) {
-      return Err.expressionDisabled('filterFeatures');
-    }
-
-    const parts: string[] = [
-      `-target ${quoteCliArg(opts.target)}`,
-      `-filter`,
-    ];
-    if (hasExpr) {
-      parts.push(quoteCliArg(opts.expression as string));
-    }
-    if (opts.invert) {
-      parts.push('invert');
-    }
-    if (opts.removeEmpty) {
-      parts.push('remove-empty');
-    }
-    return this._runDatasetCommand(opts.source, parts.join(' '), `Filter ${opts.target}`);
+  filterFeatures(opts: FilterOptions): Promise<OpResult> {
+    return filterFeaturesOp(this._ctx, opts);
   }
 
   /**
@@ -1350,47 +1233,8 @@ export class MapshaperOps {
    * Returns `false` (and runs no command) for an empty selection or when
    * the selection spans more than one source/layer.
    */
-  async mergeSelected(): Promise<OpResult> {
-    const refs = this._emap._selection.getAll();
-    if (refs.length === 0) return Err.validation('selection', 'selection is empty');
-
-    // Reject cross-source / cross-layer selections — mapshaper's dissolve
-    // operates on a single layer at a time.
-    const sourceId = refs[0].source;
-    const layerId = refs[0].layer;
-    for (const r of refs) {
-      if (r.source !== sourceId || r.layer !== layerId) {
-        return Err.validation('selection', 'selection spans multiple sources or layers');
-      }
-    }
-
-    const layer = this._emap.layers.resolve(sourceId, layerId);
-    if (!layer) return Err.notFound('layer', layerId);
-
-    // Sort selected ids ascending so the discriminator pre-write is
-    // deterministic (helpful for tests + diffs).
-    const ids = refs.map((r: { id: number }) => r.id).slice().sort((a: number, b: number) => a - b);
-
-    // Stamp the discriminator field directly onto the records BEFORE running
-    // mapshaper. This replaces the older "embed `JSON.stringify(ids)` into a
-    // `-each` expression" recipe — that approach generated MB-sized command
-    // strings for selections of 10k+ features and forced mapshaper to JS-eval
-    // the membership test on every record. Direct record mutation is O(N)
-    // either way and avoids the parser blow-up entirely.
-    if (!stampMergeDiscriminator(layer, ids)) {
-      return Err.validation('layer', 'layer has no data table; cannot stamp discriminator');
-    }
-
-    const cmd = buildMergeDissolveCommand(layerId, layer);
-    const label = `Merge ${refs.length} feature${refs.length > 1 ? 's' : ''}`;
-    const result = await this._runDatasetCommand(sourceId, cmd, label);
-    if (!result.ok) {
-      // The pre-stamp mutated the LIVE dataset's records. If the dissolve
-      // bailed (host removed, mapshaper threw, …), unwind the stamp so the
-      // caller's view of the data isn't polluted with our internal field.
-      unstampMergeDiscriminator(layer);
-    }
-    return result;
+  mergeSelected(): Promise<OpResult> {
+    return mergeSelectedOp(this._ctx);
   }
   /**
    * Worker-thread variant of {@link runMapshaperCommandOnDataset}: packs
@@ -1399,276 +1243,18 @@ export class MapshaperOps {
    * `workerjobend` events around the pool round-trip so UI code can show
    * a spinner without per-call wiring.
    */
-  async _runViaWorker(
-    dataset: MapshaperDataset,
-    cmd: string,
-    label: string,
-    inputFiles?: Record<string, Uint8Array | string>,
-  ): Promise<MapshaperDataset> {
-    if (!this._emap._workerPool) {
-      // Should never reach here — caller checks _workerPool. Defensive.
-      throw new Error('_runViaWorker: worker pool not available');
-    }
-    // Fire workerjobstart BEFORE the synchronous pack work so a UI spinner
-    // appears immediately. Pack on a 1M-vertex dataset takes ~500ms; firing
-    // the event after pack delays UI feedback by exactly that amount.
-    // Use the pool's id reservation so start/end events stay correlated.
-    const id = this._emap._workerPool.reserveId();
-    const datasetVertexCount = dataset.arcs?.getPointCount?.() ?? 0;
-    const startedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-    this._emap.fire('workerjobstart', { id, cmd, label, datasetVertexCount });
-
-    try {
-      const packed = await getDefaultMapshaperAdapter().exportDatasetsToPack([dataset], { compact: false });
-      // Collect every Uint8Array buffer in `packed` (mapshaper packs arc
-      // storage as TypedArrays) and hand them to postMessage as
-      // transferables. Net effect: structured-clone no longer copies
-      // multi-MB arc buffers across the boundary; main-thread peak
-      // memory drops from ~2× dataset to ~1×.
-      const transferList = collectTransferables(packed);
-      const promise = this._emap._workerPool.dispatchWithId(id, cmd, packed, inputFiles, transferList);
-      const resultPacked = await promise;
-      const restored = await getDefaultMapshaperAdapter().restoreSessionData(resultPacked);
-      if (!restored.datasets || restored.datasets.length === 0) {
-        throw new Error('worker: no dataset in response');
-      }
-      const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
-      this._emap.fire('workerjobend', { id, ok: true, durationMs });
-      return restored.datasets[0];
-    } catch (err: any) {
-      const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
-      this._emap.fire('workerjobend', {
-        id,
-        ok: false,
-        durationMs,
-        errorMessage: err?.message ?? String(err),
-      });
-      throw err;
-    }
-  }
-
-  async _runDatasetCommand(
+  /**
+   * Class-internal shim used by the 24 unmigrated ops (clean / mosaic /
+   * union / divide / sort / …). Delegates to the shared `_runner`
+   * module's `_runDatasetCommand`. Kept private; new ops are encouraged
+   * to use `OpContext.runDatasetCommand` from `_context.ts` instead.
+   */
+  _runDatasetCommand(
     sourceId: string,
     cmd: string,
     label: string,
     inputFiles?: Record<string, Uint8Array | string>,
   ): Promise<OpResult> {
-    // Stage A: pre-flight bail. If the host is already torn down, skip
-    // the entire command — there is no UI left to update.
-    if (this._emap._removed) return Err.hostRemoved();
-
-    const source = this._emap._sources.get(sourceId);
-    if (!source) return Err.notFound('source', sourceId);
-    const original = source.getDataset();
-    if (!original) return Err.notFound('source', sourceId);
-
-    // Deep snapshot for undo. mapshaper's clip / erase / dissolve mutate the
-    // input dataset in place; without this snapshot there is nothing to
-    // restore on undo.
-    const before: MapshaperDataset = getDefaultMapshaperAdapter().copyDataset(original);
-
-    // Routing: command-family aware (cheap commands stay on main thread,
-    // expensive ones trip at half the threshold). Pure when no pool exists.
-    let useWorker = false;
-    if (this._emap._workerPool) {
-      const vertexCount = original.arcs?.getPointCount?.() ?? 0;
-      const defaultDecision = shouldUseWorker(
-        cmd,
-        vertexCount,
-        this._emap._workerMode,
-        this._emap._workerThreshold,
-      );
-      const routing = this._emap._workerRouting;
-      useWorker = routing
-        ? routing({
-          cmd,
-          heads: parseCommandHeads(cmd),
-          vertexCount,
-          mode: this._emap._workerMode,
-          threshold: this._emap._workerThreshold,
-          defaultDecision,
-        })
-        : defaultDecision;
-    }
-
-    let after: MapshaperDataset;
-    try {
-      if (useWorker) {
-        after = await this._runViaWorker(original, cmd, label, inputFiles);
-      } else {
-        after = await runMapshaperCommandOnDataset(cmd, original, inputFiles);
-      }
-    } catch (err) {
-      // Stage B: post-await error path. If the host is gone, swallow the
-      // error silently — listeners are detached and surfacing it would
-      // only confuse callers awaiting a clean shutdown.
-      if (this._emap._removed) return Err.hostRemoved();
-      // Surface as a fire-and-forget error event; do not throw from a public
-      // edit op so that one bad command doesn't tear down the calling page.
-      this._emap.fire('error', { error: err });
-      return Err.mapshaper(err, { cmd, operation: label });
-    }
-
-    // Stage C: post-await success path. Drop the result on the floor if
-    // the host was removed mid-await; mutating `_sources` / `_history`
-    // now would either crash or resurrect freed state.
-    if (this._emap._removed) return Err.hostRemoved();
-
-    // Apply: swap the source's active dataset.
-    source.setDataset(after);
-
-    // Push the dataset-replace; it self-flags every prior undoStack entry
-    // as `stale` (its captured refs target the now-discarded dataset
-    // object). UI can render a divider; the entries stay in the stack
-    // for visibility, but `EditHistory.undo` skips them.
-    this._emap._history.push(new DatasetReplaceCommand({ source, before, after, label }));
-    this._emap._fireHistoryChange();
-
-    // Selection refs are by feature id and may now point at different
-    // features. Clear conservatively.
-    this._emap._fireSelectionChange(this._emap._selection.clear());
-
-    this._emap._scheduleRender();
-    return OK;
+    return _runDatasetCommandShared(this._emap, sourceId, cmd, label, inputFiles);
   }
-}
-
-/** Internal field name used by `mergeSelected`'s discriminator pass. */
-const MERGE_SELECTED_FIELD = '__emap_merge';
-
-/**
- * Stamp the discriminator field onto each record IN PLACE so the subsequent
- * `-dissolve` collapses the selected rows into one.
- *
- *   - Selected rows get `'M'`.
- *   - Unselected rows get a unique `'k_<id>'` so they pass through dissolve
- *     unchanged.
- *
- * Returns `false` when the layer has no data table or no records — without
- * a record array there is nothing to stamp and dissolve would have no
- * group key.
- *
- * Direct mutation (rather than building a `-each` expression that does the
- * same work via `JSON.stringify(selectedIds).indexOf(this.id) >= 0 ? ... :
- * ...`) keeps the command string a constant size regardless of selection
- * cardinality. For a 10k-id selection the prior approach generated a
- * roughly 0.3 MB literal that mapshaper's parser had to tokenise and
- * mapshaper's `-each` had to JS-eval per record.
- */
-function stampMergeDiscriminator(layer: MapshaperLayer, selectedIds: number[]): boolean {
-  const records = layer.data?.getRecords?.();
-  if (!records || records.length === 0) return false;
-  const selected = new Set<number>(selectedIds);
-  for (let i = 0; i < records.length; i++) {
-    const r = records[i] ?? {};
-    r[MERGE_SELECTED_FIELD] = selected.has(i) ? 'M' : `k_${i}`;
-    records[i] = r;
-  }
-  return true;
-}
-
-/**
- * Reverse of {@link stampMergeDiscriminator}. Used when the dissolve fails
- * (host removed, mapshaper threw) so the live dataset doesn't end up with
- * the internal field clinging to it.
- */
-function unstampMergeDiscriminator(layer: MapshaperLayer): void {
-  const records = layer.data?.getRecords?.();
-  if (!records) return;
-  for (const r of records) {
-    if (r && MERGE_SELECTED_FIELD in r) delete r[MERGE_SELECTED_FIELD];
-  }
-}
-
-/**
- * Build the dissolve+cleanup command string. The discriminator field is
- * already stamped onto records by {@link stampMergeDiscriminator}; this
- * function just wires `-target` / `-dissolve` / `-filter-fields` together.
- *
- * Cleanup uses `-filter-fields __emap_merge invert` rather than
- * `-each "delete __emap_merge"` because deleting from a `with(record)`
- * scope by bare name doesn't remove the field from the DataTable schema —
- * the field would still appear in subsequent `getFields()` calls.
- */
-function buildMergeDissolveCommand(layerName: string, layer: MapshaperLayer): string {
-  // Build copy-fields= from the layer's data table when one exists.
-  // Field names with commas are intentionally rejected (mapshaper's
-  // copy-fields= is comma-delimited and does not quote individual entries).
-  let copyFieldsArg = '';
-  const fields = layer.data?.getFields?.();
-  if (fields && fields.length > 0) {
-    const safeFields = fields.filter(
-      (f) => f !== MERGE_SELECTED_FIELD && !f.includes(','),
-    );
-    if (safeFields.length > 0) {
-      copyFieldsArg = ` copy-fields=${safeFields.join(',')}`;
-    }
-  }
-
-  return [
-    `-target ${quoteCliArg(layerName)}`,
-    `-dissolve ${quoteCliArg(MERGE_SELECTED_FIELD)}${copyFieldsArg}`,
-    `-filter-fields ${MERGE_SELECTED_FIELD} invert`,
-  ].join(' ');
-}
-
-/**
- * Run a mapshaper command string against a single dataset and resolve with
- * the resulting (post-mutation) dataset. Thin shim around the adapter so
- * the existing main-thread path stays callable; tests can swap behaviour
- * by injecting a mock adapter via {@link setDefaultMapshaperAdapter}.
- */
-function runMapshaperCommandOnDataset(
-  cmd: string,
-  dataset: MapshaperDataset,
-  inputFiles?: Record<string, Uint8Array | string>,
-): Promise<MapshaperDataset> {
-  return getDefaultMapshaperAdapter().runOnDataset(cmd, dataset, inputFiles);
-}
-
-/**
- * Walk a `PackedSession` object and gather every `ArrayBuffer` referenced
- * by a `Uint8Array` field for postMessage transfer. Visits arrays and
- * plain-object children recursively; skips primitives and known-cycle
- * types (DataView, ArrayBuffer-on-shared-realm). De-dups by buffer
- * identity so the same backing store isn't transferred twice.
- *
- * Returns a fresh array; callers should NOT continue using the
- * Uint8Arrays after the transfer (their byteLength becomes 0 in the
- * source realm).
- */
-function collectTransferables(root: unknown): Transferable[] {
-  const out: Transferable[] = [];
-  const seen = new Set<ArrayBuffer>();
-  const visit = (val: unknown): void => {
-    if (!val || typeof val !== 'object') return;
-    if (val instanceof Uint8Array) {
-      const buf = val.buffer;
-      if (buf instanceof ArrayBuffer && !seen.has(buf)) {
-        seen.add(buf);
-        out.push(buf);
-      }
-      return;
-    }
-    if (val instanceof ArrayBuffer) {
-      if (!seen.has(val)) {
-        seen.add(val);
-        out.push(val);
-      }
-      return;
-    }
-    if (Array.isArray(val)) {
-      for (const item of val) visit(item);
-      return;
-    }
-    // Plain object: walk own enumerable values. Skip DataView /
-    // typed-array views that aren't Uint8Array — packed sessions only
-    // ever carry the latter, and casting other views to ArrayBuffer
-    // would over-eagerly transfer shared-buffer slices.
-    for (const k of Object.keys(val)) {
-      visit((val as Record<string, unknown>)[k]);
-    }
-  };
-  visit(root);
-  return out;
 }
