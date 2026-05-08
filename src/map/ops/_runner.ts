@@ -354,10 +354,19 @@ export function _applyDatasetReplace(
   // object). UI can render a divider; the entries stay in the stack
   // for visibility, but `EditHistory.undo` skips them.
   host._history.push(new DatasetReplaceCommand({ source, before, after, label }));
-  host._fireHistoryChange();
+  // During a transaction, the push above diverts into the capture buffer
+  // — visible history state hasn't changed, so don't fire `historychange`
+  // (would otherwise trip every after-commit validator on each inner
+  // op, defeating the whole point of batching). The transaction's
+  // commit / rollback fires `historychange` once for the whole batch.
+  if (!host._history.isCapturing()) {
+    host._fireHistoryChange();
+  }
   if (effectInvalidatesSelection(effect)) {
     // Selection refs are by feature id and may now point at different
-    // features. Clear conservatively.
+    // features. Clear conservatively. Even inside a transaction, inner
+    // ops should see a clean selection so subsequent ops don't act on
+    // stale ids; transaction rollback restores the pre-tx selection.
     host._fireSelectionChange(host._selection.clear());
   }
   host._scheduleRender();

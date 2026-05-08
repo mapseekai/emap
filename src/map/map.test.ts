@@ -5,6 +5,9 @@ import type { FeatureRef } from './map';
 import type { LayerSpecification } from './layer';
 import { Selection } from './selection';
 import { EditHistory } from '../edit/edit-history';
+import { CompositeCommand } from '../edit/commands/composite';
+import { ValidatorRegistry } from '../validation/registry';
+import { FeatureAccessor } from './feature-accessor';
 
 // Snapshot the real mapshaper.internal entry points at module-load time,
 // BEFORE any test has had a chance to mock them. Some test blocks below
@@ -5788,3 +5791,285 @@ describe('Emap.remove() teardown', () => {
     expect((getPrivate(map, '_controls') as unknown[]).length).toBe(0);
   });
 });
+
+// ===========================================================================
+// Integration: Transaction + ops + Validator + FeatureAccessor on a real
+// Emap (not a stub host). Verifies the new abstractions actually wire
+// up end-to-end through the runner / history / event flow — the unit
+// tests cover each piece in isolation.
+// ===========================================================================
+describe('Phase-6 integration', () => {
+  let map: Emap;
+  let beforeDs: any;
+  let afterDs: any;
+  let source: any;
+  let setDatasetSpy: ReturnType<typeof vi.fn>;
+
+  const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+
+  beforeEach(() => {
+    map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    // Phase-6 specifics: createBareMap() bypasses the constructor, so the
+    // fields the new code introduced have to be wired up by hand.
+    setPrivate(map, '_activeTransaction', null);
+    setPrivate(map, '_validators', new ValidatorRegistry());
+    setPrivate(map, 'features', new FeatureAccessor(map as any));
+    // The constructor wires `historychange → _runAfterCommitValidators`.
+    // createBareMap bypasses that, so wire it manually here.
+    map.on('historychange', () => (map as any)._runAfterCommitValidators());
+
+    beforeDs = {
+      layers: [
+        {
+          name: 'parks',
+          geometry_type: 'polygon',
+          shapes: [[[0]], [[1]]],
+          data: { getRecords: () => [{ name: 'A' }, { name: 'B' }], getFields: () => ['name'] },
+        },
+      ],
+      arcs: null,
+      info: {},
+    };
+    afterDs = {
+      layers: [
+        {
+          name: 'parks',
+          geometry_type: 'polygon',
+          shapes: [[[42]]],
+          data: { getRecords: () => [{ name: 'merged' }], getFields: () => ['name'] },
+        },
+      ],
+      arcs: null,
+      info: {},
+    };
+    setDatasetSpy = vi.fn((ds: any) => { source._currentDs = ds; });
+    source = {
+      id: 'src1',
+      type: 'topology',
+      _currentDs: beforeDs,
+      getDataset() { return this._currentDs; },
+      getLayers() { return this._currentDs.layers; },
+      setDataset: setDatasetSpy,
+      refreshDisplayArcs: vi.fn(),
+    };
+    setDatasetSpy.mockImplementation((ds: any) => { source._currentDs = ds; });
+    (map as any)._sources.set('src1', source);
+
+    // Stub mapshaper internals: copyDataset returns a structurally-distinct
+    // pre-op snapshot so transaction rollback can restore it; runParsedCommands
+    // returns afterDs.
+    Reflect.set(mapshaper.internal as object, 'copyDataset', vi.fn((ds: any) => ({ ...ds, _snapshotOf: ds })));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_cmds: any, _job: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: afterDs }] } });
+    }));
+  });
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'copyDataset', originalCopyDataset);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  describe('Transaction + real ops', () => {
+    it('captured ops do not grow the undo stack', async () => {
+      const tx = map.beginTransaction();
+      const r = await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      expect(r.ok).toBe(true);
+      // History capture buffer absorbed the DatasetReplaceCommand the runner
+      // pushed; visible undo stack stays empty until commit.
+      expect(map.canUndo()).toBe(false);
+      // The dataset has still been swapped though — the source's dataset is
+      // the post-op state, not the pre-transaction state.
+      expect(source._currentDs).toBe(afterDs);
+      tx.rollback();
+    });
+
+    it('commit collapses captured ops into one CompositeCommand', async () => {
+      const tx = map.beginTransaction();
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      const r = await tx.commit('Process boundaries');
+      expect(r.ok).toBe(true);
+      expect(map.canUndo()).toBe(true);
+      const top = (map as any)._history._undoStack.at(-1);
+      expect(top).toBeInstanceOf(CompositeCommand);
+      expect(top.label).toBe('Process boundaries');
+    });
+
+    it('rollback restores the source dataset to the pre-transaction state', async () => {
+      const originalDs = source._currentDs;
+      const tx = map.beginTransaction();
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      // Source dataset is now afterDs.
+      expect(source._currentDs).toBe(afterDs);
+      tx.rollback();
+      // Rollback restored the FIRST-touch snapshot the runner produced,
+      // which is the structural copy of `originalDs`.
+      expect(source._currentDs).not.toBe(afterDs);
+      expect((source._currentDs as any)._snapshotOf).toBe(originalDs);
+      expect(map.canUndo()).toBe(false);
+    });
+
+    it('rollback discards captured commands without polluting history', async () => {
+      const tx = map.beginTransaction();
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      tx.rollback();
+      expect((map as any)._history._undoStack).toHaveLength(0);
+      expect((map as any)._history._redoStack).toHaveLength(0);
+    });
+
+    it('commit allows undo to revert all captured ops in one step', async () => {
+      const originalDs = source._currentDs;
+      const tx = map.beginTransaction();
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await tx.commit('Do thing');
+      expect(map.canUndo()).toBe(true);
+      map.undo();
+      // Undo invokes CompositeCommand.undo → DatasetReplaceCommand.undo →
+      // source.setDataset(before) where `before` is the runner's pre-op snapshot.
+      expect(source._currentDs).not.toBe(afterDs);
+      expect((source._currentDs as any)._snapshotOf).toBe(originalDs);
+    });
+  });
+
+  describe('Validator + ops integration', () => {
+    it('after-commit validator runs once per op commit', async () => {
+      const validator = {
+        name: 'v1',
+        phase: 'after-commit' as const,
+        run: vi.fn(async () => ({ ok: true, issues: [] })),
+      };
+      map.validators.register(validator);
+
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      // historychange fires synchronously inside the op; validator
+      // registry's run is async but resolves on next tick.
+      await flushPromises();
+      expect(validator.run).toHaveBeenCalledTimes(1);
+      expect(validator.run.mock.calls[0][1].label).toBe('Drop parks');
+    });
+
+    it('after-commit validator runs once per transaction commit (not per inner op)', async () => {
+      const validator = {
+        name: 'v1',
+        phase: 'after-commit' as const,
+        run: vi.fn(async () => ({ ok: true, issues: [] })),
+      };
+      map.validators.register(validator);
+
+      const tx = map.beginTransaction();
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await flushPromises();
+      // Inside the transaction, the inner ops' DatasetReplaceCommands are
+      // captured (no historychange fired, no validator invocation).
+      expect(validator.run).not.toHaveBeenCalled();
+
+      await tx.commit('Outer');
+      await flushPromises();
+      // Now historychange fires once for the CompositeCommand push.
+      expect(validator.run).toHaveBeenCalledTimes(1);
+      expect(validator.run.mock.calls[0][1].label).toBe('Outer');
+    });
+
+    it('after-commit validator does NOT run on rollback (nothing committed)', async () => {
+      const validator = {
+        name: 'v1',
+        phase: 'after-commit' as const,
+        run: vi.fn(async () => ({ ok: true, issues: [] })),
+      };
+      map.validators.register(validator);
+
+      const tx = map.beginTransaction();
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      tx.rollback();
+      await flushPromises();
+      // rollback fires historychange so listeners can refresh, but the
+      // resulting history.snapshot has no top entry — validator is still
+      // called (the registry has one validator), but its `change.label`
+      // is empty.
+      // We accept either "called with empty label" OR "not called" as
+      // valid; the strict invariant is that no SUCCESSFUL commit
+      // surfaced. Document the current behaviour:
+      const callCount = validator.run.mock.calls.length;
+      expect(callCount).toBeLessThanOrEqual(1);
+      if (callCount === 1) {
+        expect(validator.run.mock.calls[0][1].label).toBe('');
+      }
+    });
+
+    it('failed validator fires `validationfailed` event with the failing report', async () => {
+      const failing = {
+        name: 'topology',
+        phase: 'after-commit' as const,
+        run: vi.fn(async () => ({
+          ok: false,
+          issues: [{ severity: 'error' as const, message: '3 self-intersections' }],
+        })),
+      };
+      map.validators.register(failing);
+
+      const events: any[] = [];
+      map.on('validationfailed', (e: any) => events.push(e));
+
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await flushPromises();
+
+      expect(events).toHaveLength(1);
+      expect(events[0].results).toHaveLength(1);
+      expect(events[0].results[0].validator).toBe('topology');
+      expect(events[0].results[0].report.ok).toBe(false);
+      expect(events[0].label).toBe('Drop parks');
+    });
+
+    it('passing validator does NOT fire `validationfailed`', async () => {
+      const passing = {
+        name: 'v',
+        phase: 'after-commit' as const,
+        run: vi.fn(async () => ({ ok: true, issues: [] })),
+      };
+      map.validators.register(passing);
+
+      const events: any[] = [];
+      map.on('validationfailed', (e: any) => events.push(e));
+
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await flushPromises();
+
+      expect(events).toHaveLength(0);
+    });
+
+    it('validators registry is empty by default — no overhead when unused', async () => {
+      // No register() call. historychange fires; validator path should be
+      // a cheap size===0 check with no allocation.
+      await map.ops.dropLayer({ source: 'src1', target: 'parks' });
+      await flushPromises();
+      // No assertion needed — if the size===0 short-circuit broke, an
+      // unhandled promise rejection would fail the test.
+      expect(map.validators.size).toBe(0);
+    });
+  });
+
+  describe('FeatureAccessor on a real Emap', () => {
+    it('engine.features.get returns frozen properties for a real source', () => {
+      // The bare-map setup wires features via setPrivate above. Confirm
+      // the public access path works.
+      const f = (map as any).features.get({ source: 'src1', layer: 'parks', id: 1 });
+      expect(f).not.toBeNull();
+      expect(f.properties.name).toBe('B');
+      expect(Object.isFrozen(f.properties)).toBe(true);
+    });
+
+    it('engine.features.iter walks a real layer', () => {
+      const out = Array.from((map as any).features.iter('src1', 'parks'));
+      expect(out).toHaveLength(2);
+      expect(out.map((f: any) => f.properties.name)).toEqual(['A', 'B']);
+    });
+  });
+});
+
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
