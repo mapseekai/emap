@@ -3,7 +3,6 @@
 // full-record dedupe.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { UniqueFeaturesOptions } from '../types';
 import type { OpContext } from './_context';
@@ -26,11 +25,16 @@ export async function uniqueFeatures(
     return Err.validation('maxCount', 'must be a positive number');
   }
 
-  const parts: string[] = [
-    `-target ${quoteCliArg(opts.target)}`,
-    `-uniq ${quoteCliArg(expr)}`,
-  ];
-  if (opts.maxCount !== undefined) parts.push(`max-count=${opts.maxCount}`);
-  if (opts.invert) parts.push('invert');
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Uniq ${opts.target}`);
+  const uniqOpts: Record<string, unknown> = { expression: expr };
+  if (opts.maxCount !== undefined) uniqOpts.max_count = opts.maxCount;
+  if (opts.invert) uniqOpts.invert = true;
+
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'uniq', options: uniqOpts },
+    ],
+    `Uniq ${opts.target}`,
+  );
 }

@@ -4,7 +4,6 @@
 // on every import.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { CleanOptions } from '../types';
 import type { OpContext } from './_context';
@@ -31,20 +30,27 @@ export async function cleanLayer(ctx: OpContext, opts: CleanOptions): Promise<Op
     }
   }
 
-  const parts: string[] = [
-    `-target ${quoteCliArg(opts.target)}`,
-    `-clean`,
-  ];
-  if (opts.gapFillArea !== undefined) parts.push(`gap-fill-area=${opts.gapFillArea}`);
-  if (opts.sliverControl !== undefined) parts.push(`sliver-control=${opts.sliverControl}`);
-  if (opts.snapInterval !== undefined) parts.push(`snap-interval=${opts.snapInterval}`);
-  if (opts.noSnap) parts.push('no-snap');
-  if (opts.allowOverlaps) parts.push('allow-overlaps');
-  if (opts.overlapRule !== undefined) parts.push(`overlap-rule=${opts.overlapRule}`);
-  if (opts.allowEmpty) parts.push('allow-empty');
-  if (opts.rewind) parts.push('rewind');
-  if (opts.onlyArcs) parts.push('only-arcs');
-  if (opts.noArcDissolve) parts.push('no-arc-dissolve');
+  const cleanOpts: Record<string, unknown> = {};
+  // Numeric tuning options are passed as strings to match what
+  // mapshaper's CLI parser produces (its area/interval handlers expect
+  // strings and call parseFloat internally).
+  if (opts.gapFillArea !== undefined) cleanOpts.gap_fill_area = String(opts.gapFillArea);
+  if (opts.sliverControl !== undefined) cleanOpts.sliver_control = opts.sliverControl;
+  if (opts.snapInterval !== undefined) cleanOpts.snap_interval = String(opts.snapInterval);
+  if (opts.noSnap) cleanOpts.no_snap = true;
+  if (opts.allowOverlaps) cleanOpts.allow_overlaps = true;
+  if (opts.overlapRule !== undefined) cleanOpts.overlap_rule = opts.overlapRule;
+  if (opts.allowEmpty) cleanOpts.allow_empty = true;
+  if (opts.rewind) cleanOpts.rewind = true;
+  if (opts.onlyArcs) cleanOpts.only_arcs = true;
+  if (opts.noArcDissolve) cleanOpts.no_arc_dissolve = true;
 
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Clean ${opts.target}`);
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'clean', options: cleanOpts },
+    ],
+    `Clean ${opts.target}`,
+  );
 }

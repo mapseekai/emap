@@ -8,7 +8,6 @@
 // `loadSnapshot` with `defaultIds` if that workflow is needed.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { SplitLayerOptions } from '../types';
 import type { OpContext } from './_context';
@@ -28,10 +27,15 @@ export async function splitLayer(
     return Err.expressionDisabled('splitLayer');
   }
 
-  const parts: string[] = [
-    `-target ${quoteCliArg(opts.target)}`,
-    `-split ${quoteCliArg(expr)}`,
-  ];
-  if (opts.noReplace) parts.push('no-replace');
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Split ${opts.target}`);
+  const splitOpts: Record<string, unknown> = { expression: expr };
+  if (opts.noReplace) splitOpts.no_replace = true;
+
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'split', options: splitOpts },
+    ],
+    `Split ${opts.target}`,
+  );
 }

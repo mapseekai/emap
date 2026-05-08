@@ -62,9 +62,24 @@ interface PendingResolver {
 interface RunMessage {
   id: number;
   type: 'run';
-  cmd: string;
+  /** Legacy CLI string path. Worker calls `parseCommands(cmd)` on it. */
+  cmd?: string;
+  /** Pre-parsed command path (PR-4b). Skips the worker-side CLI parser
+   *  entirely — eliminates a class of escaping bugs and lets ops build
+   *  commands as structured objects. Mutually exclusive with `cmd`. */
+  commands?: ParsedCommandWire[];
   packed: any;
   inputFiles?: Record<string, Uint8Array | string>;
+}
+
+/**
+ * Wire-format ParsedCommand. Mirrors `mapshaper.internal.parseCommands(...)`
+ * output: `{ name: kebab-case, options: snake_case key/values }`. Plain
+ * data, structured-clone friendly.
+ */
+export interface ParsedCommandWire {
+  name: string;
+  options: Record<string, unknown>;
 }
 
 type ResponseMessage =
@@ -111,11 +126,11 @@ export class MapshaperWorkerPool {
    * in-flight requests don't cross wires.
    */
   run(
-    cmd: string,
+    cmdOrCommands: string | ParsedCommandWire[],
     packed: any,
     inputFiles?: Record<string, Uint8Array | string>,
   ): Promise<any> {
-    return this.runWithId(cmd, packed, inputFiles).promise;
+    return this.runWithId(cmdOrCommands, packed, inputFiles).promise;
   }
 
   /**
@@ -130,12 +145,12 @@ export class MapshaperWorkerPool {
    * `workerjobend` without aliasing.
    */
   runWithId(
-    cmd: string,
+    cmdOrCommands: string | ParsedCommandWire[],
     packed: any,
     inputFiles?: Record<string, Uint8Array | string>,
   ): { id: number; promise: Promise<any> } {
     const id = this.reserveId();
-    return { id, promise: this.dispatchWithId(id, cmd, packed, inputFiles) };
+    return { id, promise: this.dispatchWithId(id, cmdOrCommands, packed, inputFiles) };
   }
 
   /**
@@ -155,7 +170,7 @@ export class MapshaperWorkerPool {
    */
   dispatchWithId(
     id: number,
-    cmd: string,
+    cmdOrCommands: string | ParsedCommandWire[],
     packed: any,
     inputFiles?: Record<string, Uint8Array | string>,
     /**
@@ -191,7 +206,12 @@ export class MapshaperWorkerPool {
     slot.pendingCount++;
     return new Promise<any>((resolve, reject) => {
       this._pending.set(id, { resolve, reject, workerIndex, epoch });
-      const msg: RunMessage = { id, type: 'run', cmd, packed };
+      const msg: RunMessage = { id, type: 'run', packed };
+      if (typeof cmdOrCommands === 'string') {
+        msg.cmd = cmdOrCommands;
+      } else {
+        msg.commands = cmdOrCommands;
+      }
       if (inputFiles) msg.inputFiles = inputFiles;
       if (transferList && transferList.length > 0) {
         worker.postMessage(msg, transferList);

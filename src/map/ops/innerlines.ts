@@ -4,7 +4,6 @@
 // separately-stylable line layer alongside the original polygons.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { InnerlinesOptions } from '../types';
 import type { OpContext } from './_context';
@@ -22,18 +21,17 @@ export async function innerlinesLayer(
     return Err.expressionDisabled('innerlinesLayer');
   }
 
-  const parts: string[] = [
-    `-target ${quoteCliArg(opts.target)}`,
-    `-innerlines`,
-  ];
-  if (opts.where && opts.where.trim()) {
-    parts.push(`where=${quoteCliArg(opts.where)}`);
-  }
-  if (opts.name && opts.name.trim()) {
-    parts.push(`name=${quoteCliArg(opts.name)}`);
-  }
-  if (opts.noReplace) {
-    parts.push('no-replace');
-  }
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Innerlines ${opts.target}`);
+  const innerOpts: Record<string, unknown> = {};
+  if (opts.where && opts.where.trim()) innerOpts.where = opts.where;
+  if (opts.name && opts.name.trim()) innerOpts.name = opts.name;
+  if (opts.noReplace) innerOpts.no_replace = true;
+
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'innerlines', options: innerOpts },
+    ],
+    `Innerlines ${opts.target}`,
+  );
 }

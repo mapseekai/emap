@@ -4,7 +4,6 @@
 // polylines, or multipoint clusters into individually-pickable features.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { ExplodeOptions } from '../types';
 import type { OpContext } from './_context';
@@ -15,6 +14,12 @@ export async function explodeLayer(ctx: OpContext, opts: ExplodeOptions): Promis
   const dataset = source.getDataset();
   if (!dataset) return Err.notFound('source', opts.source);
   if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
-  const cmd = `-target ${quoteCliArg(opts.target)} -explode`;
-  return ctx.runDatasetCommand(opts.source, cmd, `Explode ${opts.target}`);
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'explode', options: {} },
+    ],
+    `Explode ${opts.target}`,
+  );
 }

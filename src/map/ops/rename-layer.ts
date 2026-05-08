@@ -4,7 +4,6 @@
 // in the same dataset.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { RenameLayerOptions } from '../types';
 import type { OpContext } from './_context';
@@ -31,6 +30,12 @@ export async function renameLayer(
     );
     if (collision) return Err.validation('name', `another layer already named '${newName}'`);
   }
-  const cmd = `-target ${quoteCliArg(opts.target)} -rename-layers ${quoteCliArg(newName)}`;
-  return ctx.runDatasetCommand(opts.source, cmd, `Rename ${opts.target} → ${newName}`);
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'rename-layers', options: { names: [newName] } },
+    ],
+    `Rename ${opts.target} → ${newName}`,
+  );
 }

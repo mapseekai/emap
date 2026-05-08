@@ -3,11 +3,11 @@
 // merged-feature output via mapshaper's `-dissolve` pipeline.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { DissolveOptions } from '../types';
 import type { MapshaperLayer } from '../../types/mapshaper-types';
 import type { OpContext } from './_context';
+import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
 
 /** Internal field name used by `mergeSelected`'s discriminator pass. */
 const MERGE_SELECTED_FIELD = '__emap_merge';
@@ -36,23 +36,15 @@ export async function dissolveLayer(ctx: OpContext, opts: DissolveOptions): Prom
     return Err.expressionDisabled('dissolveLayer');
   }
 
-  // Build the positional group-by token (single-field convenience or
-  // multi-field array). When neither is set, dissolve collapses every
+  // Group-by fields. When neither is set, dissolve collapses every
   // feature into one (mapshaper's default for -dissolve with no key).
-  let groupToken = '';
+  const dissolveOpts: Record<string, unknown> = {};
   if (opts.field) {
-    groupToken = ` ${quoteCliArg(opts.field)}`;
+    dissolveOpts.fields = [opts.field];
   } else if (hasFields) {
     const safeFields = opts.fields!.filter((f) => typeof f === 'string' && !f.includes(','));
-    if (safeFields.length > 0) {
-      groupToken = ` ${quoteCliArg(safeFields.join(','))}`;
-    }
+    if (safeFields.length > 0) dissolveOpts.fields = safeFields;
   }
-
-  const parts: string[] = [
-    `-target ${quoteCliArg(opts.target)}`,
-    `-dissolve${groupToken}`,
-  ];
 
   const safeFieldList = (list?: string[]) =>
     Array.isArray(list)
@@ -60,24 +52,25 @@ export async function dissolveLayer(ctx: OpContext, opts: DissolveOptions): Prom
       : [];
 
   const sumFields = safeFieldList(opts.sumFields);
-  if (sumFields.length > 0) parts.push(`sum-fields=${sumFields.join(',')}`);
+  if (sumFields.length > 0) dissolveOpts.sum_fields = sumFields;
 
   const copyFields = safeFieldList(opts.copyFields);
-  if (copyFields.length > 0) parts.push(`copy-fields=${copyFields.join(',')}`);
+  if (copyFields.length > 0) dissolveOpts.copy_fields = copyFields;
 
-  if (opts.calc && opts.calc.trim()) {
-    parts.push(`calc=${quoteCliArg(opts.calc)}`);
-  }
-  if (opts.where && opts.where.trim()) {
-    parts.push(`where=${quoteCliArg(opts.where)}`);
-  }
-  if (opts.multipart) parts.push('multipart');
-  if (opts.name && opts.name.trim()) {
-    parts.push(`name=${quoteCliArg(opts.name)}`);
-  }
-  if (opts.noReplace) parts.push('no-replace');
+  if (opts.calc && opts.calc.trim()) dissolveOpts.calc = opts.calc;
+  if (opts.where && opts.where.trim()) dissolveOpts.where = opts.where;
+  if (opts.multipart) dissolveOpts.multipart = true;
+  if (opts.name && opts.name.trim()) dissolveOpts.name = opts.name;
+  if (opts.noReplace) dissolveOpts.no_replace = true;
 
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Dissolve ${opts.target}`);
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'dissolve', options: dissolveOpts },
+    ],
+    `Dissolve ${opts.target}`,
+  );
 }
 
 /**
@@ -118,9 +111,9 @@ export async function mergeSelected(ctx: OpContext): Promise<OpResult> {
     return Err.validation('layer', 'layer has no data table; cannot stamp discriminator');
   }
 
-  const cmd = buildMergeDissolveCommand(layerId, layer);
+  const commands = buildMergeDissolveCommands(layerId, layer);
   const label = `Merge ${refs.length} feature${refs.length > 1 ? 's' : ''}`;
-  const result = await ctx.runDatasetCommand(sourceId, cmd, label);
+  const result = await ctx.runDatasetCommandParsed(sourceId, commands, label);
   if (!result.ok) {
     // Pre-stamp mutated the live records. Roll back so the caller's view
     // isn't polluted with our internal field.
@@ -149,24 +142,19 @@ function unstampMergeDiscriminator(layer: MapshaperLayer): void {
   }
 }
 
-function buildMergeDissolveCommand(layerName: string, layer: MapshaperLayer): string {
-  // Build copy-fields= from the layer's data table when one exists.
-  // Field names with commas are intentionally rejected (mapshaper's
-  // copy-fields= is comma-delimited and does not quote individual entries).
-  let copyFieldsArg = '';
+function buildMergeDissolveCommands(layerName: string, layer: MapshaperLayer): ParsedCommand[] {
+  const dissolveOpts: Record<string, unknown> = { fields: [MERGE_SELECTED_FIELD] };
   const fields = layer.data?.getFields?.();
   if (fields && fields.length > 0) {
     const safeFields = fields.filter(
       (f) => f !== MERGE_SELECTED_FIELD && !f.includes(','),
     );
-    if (safeFields.length > 0) {
-      copyFieldsArg = ` copy-fields=${safeFields.join(',')}`;
-    }
+    if (safeFields.length > 0) dissolveOpts.copy_fields = safeFields;
   }
 
   return [
-    `-target ${quoteCliArg(layerName)}`,
-    `-dissolve ${quoteCliArg(MERGE_SELECTED_FIELD)}${copyFieldsArg}`,
-    `-filter-fields ${MERGE_SELECTED_FIELD} invert`,
-  ].join(' ');
+    { name: 'target', options: { target: layerName } },
+    { name: 'dissolve', options: dissolveOpts },
+    { name: 'filter-fields', options: { fields: [MERGE_SELECTED_FIELD], invert: true } },
+  ];
 }

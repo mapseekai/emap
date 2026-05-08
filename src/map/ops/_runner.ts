@@ -18,8 +18,8 @@ import { DatasetReplaceCommand } from '../../edit/commands/dataset-replace';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import type { EmapHostInternal } from '../emap-host';
 import { Err, OK, type OpResult } from '../op-result';
-import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
-import { parseCommandHeads, shouldUseWorker } from '../worker-routing';
+import { getDefaultMapshaperAdapter, type ParsedCommand } from '../../adapter/mapshaper-adapter';
+import { parseCommandHeads, shouldUseWorker, shouldUseWorkerForHeads } from '../worker-routing';
 
 /**
  * What a dataset-replace op CHANGES about the dataset. Drives the
@@ -69,6 +69,9 @@ const COMMAND_EFFECTS: Readonly<Record<string, OpEffect>> = {
   lines: 'shape-count',
   polygons: 'shape-count',
   innerlines: 'shape-count',
+  // mapshaper's CLI is `-split` and parseCommands canonicalises to
+  // `split`; the older entry `split-layer` was a dead key.
+  split: 'shape-count',
   'split-layer': 'shape-count',
   uniq: 'shape-count',
   buffer: 'shape-count',
@@ -85,6 +88,7 @@ const COMMAND_EFFECTS: Readonly<Record<string, OpEffect>> = {
   'rename-fields': 'attribute-only',
   'rename-layers': 'attribute-only',
   'filter-fields': 'attribute-only',
+  'filter-slivers': 'attribute-only',
   sort: 'attribute-only',
   // crs-only: project + reproject
   proj: 'crs-only',
@@ -98,14 +102,21 @@ const COMMAND_EFFECTS: Readonly<Record<string, OpEffect>> = {
  * `target` (a no-op selector head) is ignored.
  */
 export function inferEffect(cmd: string): OpEffect {
-  const heads = parseCommandHeads(cmd);
+  return inferEffectForHeads(parseCommandHeads(cmd));
+}
+
+/**
+ * Same as {@link inferEffect} but consuming a pre-extracted heads array.
+ * Used by the parsed-command runner so we don't reconstruct then re-parse
+ * a CLI string just to classify the effect.
+ */
+export function inferEffectForHeads(heads: string[]): OpEffect {
   let strongest: OpEffect = 'attribute-only';
   let sawAny = false;
   for (const head of heads) {
     if (head === 'target') continue;
     const effect = COMMAND_EFFECTS[head];
     if (effect === undefined) {
-      // Unknown command → conservative.
       return 'unknown';
     }
     sawAny = true;
@@ -199,6 +210,113 @@ export async function _runDatasetCommand(
   if (host._removed) return Err.hostRemoved();
 
   return _applyDatasetReplace(host, sourceId, before, after, label, inferEffect(cmd));
+}
+
+/**
+ * PR-4b parsed-command path. Same dataset-replace pipeline as
+ * {@link _runDatasetCommand} but consumes a pre-built `ParsedCommand[]`
+ * instead of a CLI string. Eliminates the escape/re-parse round-trip
+ * and the class of bugs that come with it.
+ */
+export async function _runDatasetCommandParsed(
+  host: EmapHostInternal,
+  sourceId: string,
+  commands: ParsedCommand[],
+  label: string,
+  inputFiles?: Record<string, Uint8Array | string>,
+): Promise<OpResult> {
+  if (host._removed) return Err.hostRemoved();
+
+  const source = host._sources.get(sourceId);
+  if (!source) return Err.notFound('source', sourceId);
+  const original = source.getDataset();
+  if (!original) return Err.notFound('source', sourceId);
+
+  const before: MapshaperDataset = getDefaultMapshaperAdapter().copyDataset(original);
+
+  const heads = commands.map((c) => c.name);
+  let useWorker = false;
+  if (host._workerPool) {
+    const vertexCount = original.arcs?.getPointCount?.() ?? 0;
+    const defaultDecision = shouldUseWorkerForHeads(
+      heads,
+      vertexCount,
+      host._workerMode,
+      host._workerThreshold,
+    );
+    const routing = host._workerRouting;
+    useWorker = routing
+      ? routing({
+        // The routing hook's `cmd` field is documented as a CLI string;
+        // synthesize a debug-only summary from heads. Hooks that key on
+        // exact options must use the `heads` field instead.
+        cmd: heads.map((h) => `-${h}`).join(' '),
+        heads,
+        vertexCount,
+        mode: host._workerMode,
+        threshold: host._workerThreshold,
+        defaultDecision,
+      })
+      : defaultDecision;
+  }
+
+  let after: MapshaperDataset;
+  try {
+    if (useWorker) {
+      after = await _runViaWorkerParsed(host, original, commands, label, inputFiles);
+    } else {
+      after = await getDefaultMapshaperAdapter().runOnDatasetParsed(commands, original, inputFiles);
+    }
+  } catch (err) {
+    if (host._removed) return Err.hostRemoved();
+    host.fire('error', { error: err });
+    return Err.mapshaper(err, { operation: label });
+  }
+
+  if (host._removed) return Err.hostRemoved();
+  return _applyDatasetReplace(host, sourceId, before, after, label, inferEffectForHeads(heads));
+}
+
+async function _runViaWorkerParsed(
+  host: EmapHostInternal,
+  dataset: MapshaperDataset,
+  commands: ParsedCommand[],
+  label: string,
+  inputFiles?: Record<string, Uint8Array | string>,
+): Promise<MapshaperDataset> {
+  if (!host._workerPool) {
+    throw new Error('_runViaWorkerParsed: worker pool not available');
+  }
+  const id = host._workerPool.reserveId();
+  const datasetVertexCount = dataset.arcs?.getPointCount?.() ?? 0;
+  const startedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  // Synthesize a heads-only debug string for `workerjobstart`'s `cmd`
+  // field — listeners use it for telemetry, not parsing.
+  const cmdSummary = commands.map((c) => `-${c.name}`).join(' ');
+  host.fire('workerjobstart', { id, cmd: cmdSummary, label, datasetVertexCount });
+
+  try {
+    const packed = await getDefaultMapshaperAdapter().exportDatasetsToPack([dataset], { compact: false });
+    const transferList = collectTransferables(packed);
+    const promise = host._workerPool.dispatchWithId(id, commands, packed, inputFiles, transferList);
+    const resultPacked = await promise;
+    const restored = await getDefaultMapshaperAdapter().restoreSessionData(resultPacked);
+    if (!restored.datasets || restored.datasets.length === 0) {
+      throw new Error('worker: no dataset in response');
+    }
+    const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+    host.fire('workerjobend', { id, ok: true, durationMs });
+    return restored.datasets[0];
+  } catch (err: any) {
+    const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+    host.fire('workerjobend', {
+      id,
+      ok: false,
+      durationMs,
+      errorMessage: err?.message ?? String(err),
+    });
+    throw err;
+  }
 }
 
 /**

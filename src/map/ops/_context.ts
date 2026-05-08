@@ -10,6 +10,7 @@
 import type { EmapHostInternal } from '../emap-host';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import type { OpResult } from '../op-result';
+import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
 
 /**
  * Run a CLI-style mapshaper command against a source's dataset, snapshotting
@@ -20,6 +21,19 @@ import type { OpResult } from '../op-result';
 export type RunDatasetCommand = (
   sourceId: string,
   cmd: string,
+  label: string,
+  inputFiles?: Record<string, Uint8Array | string>,
+) => Promise<OpResult>;
+
+/**
+ * PR-4b parsed-command runner. Same dataset-replace pipeline as
+ * {@link RunDatasetCommand} but accepts pre-built `ParsedCommand[]`. New
+ * ops should prefer this — it skips the CLI parser, eliminating an entire
+ * class of escaping bugs.
+ */
+export type RunDatasetCommandParsed = (
+  sourceId: string,
+  commands: ParsedCommand[],
   label: string,
   inputFiles?: Record<string, Uint8Array | string>,
 ) => Promise<OpResult>;
@@ -48,6 +62,8 @@ export interface OpContext {
   host: EmapHostInternal;
   /** Shared CLI-command runner; see {@link RunDatasetCommand}. */
   runDatasetCommand: RunDatasetCommand;
+  /** Parsed-command runner (PR-4b); see {@link RunDatasetCommandParsed}. */
+  runDatasetCommandParsed: RunDatasetCommandParsed;
   /** Direct dataset-replace path; see {@link ApplyDatasetReplace}. */
   applyDatasetReplace: ApplyDatasetReplace;
 }

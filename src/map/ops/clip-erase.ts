@@ -3,7 +3,6 @@
 // `-erase` pipelines.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { ClipEraseOptions } from '../types';
 import type { OpContext } from './_context';
@@ -31,6 +30,12 @@ async function _runClipErase(
   if (!resolveLayerInList(dataset.layers, opts.mask)) return Err.notFound('mask', opts.mask);
 
   const verb = op === 'clip' ? 'Clip' : 'Erase';
-  const cmd = `-target ${quoteCliArg(opts.target)} -${op} source=${quoteCliArg(opts.mask)}`;
-  return ctx.runDatasetCommand(opts.source, cmd, `${verb} ${opts.target}`);
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: op, options: { source: opts.mask } },
+    ],
+    `${verb} ${opts.target}`,
+  );
 }

@@ -4,7 +4,6 @@
 // attributes (subset by `fields` when supplied).
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { DivideOptions } from '../types';
 import type { OpContext } from './_context';
@@ -25,14 +24,19 @@ export async function divideLayer(ctx: OpContext, opts: DivideOptions): Promise<
     return Err.validation('divider', `expected polygon layer, got ${dividerLayer.geometry_type ?? 'unknown'}`);
   }
 
-  const parts: string[] = [
-    `-target ${quoteCliArg(opts.target)}`,
-    `-divide source=${quoteCliArg(opts.divider)}`,
-  ];
+  const divideOpts: Record<string, unknown> = { source: opts.divider };
   if (opts.fields && opts.fields.length > 0) {
     const safe = opts.fields.filter((f) => !f.includes(','));
-    if (safe.length > 0) parts.push(`fields=${safe.join(',')}`);
+    if (safe.length > 0) divideOpts.fields = safe;
   }
-  if (opts.force) parts.push('force');
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Divide ${opts.target}`);
+  if (opts.force) divideOpts.force = true;
+
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'divide', options: divideOpts },
+    ],
+    `Divide ${opts.target}`,
+  );
 }

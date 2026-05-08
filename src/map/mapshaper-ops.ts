@@ -13,7 +13,11 @@
 import type { EmapHostInternal } from './emap-host';
 import type { OpResult } from './op-result';
 import type { OpContext } from './ops/_context';
-import { _runDatasetCommand as _runDatasetCommandShared, _applyDatasetReplace } from './ops/_runner';
+import {
+  _runDatasetCommand as _runDatasetCommandShared,
+  _runDatasetCommandParsed as _runDatasetCommandParsedShared,
+  _applyDatasetReplace,
+} from './ops/_runner';
 import type {
   ApplyExpressionOptions,
   BufferOptions,
@@ -95,6 +99,8 @@ export class MapshaperOps {
       host: this._emap,
       runDatasetCommand: (sourceId, cmd, label, inputFiles) =>
         _runDatasetCommandShared(this._emap, sourceId, cmd, label, inputFiles),
+      runDatasetCommandParsed: (sourceId, commands, label, inputFiles) =>
+        _runDatasetCommandParsedShared(this._emap, sourceId, commands, label, inputFiles),
       applyDatasetReplace: (sourceId, before, after, label) =>
         _applyDatasetReplace(this._emap, sourceId, before, after, label),
     };

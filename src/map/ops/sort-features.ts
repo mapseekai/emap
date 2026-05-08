@@ -3,7 +3,6 @@
 // ascending; pass `descending: true` for the reverse.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { SortFeaturesOptions } from '../types';
 import type { OpContext } from './_context';
@@ -23,10 +22,15 @@ export async function sortFeatures(
     return Err.expressionDisabled('sortFeatures');
   }
 
-  const parts: string[] = [
-    `-target ${quoteCliArg(opts.target)}`,
-    `-sort ${quoteCliArg(expr)}`,
-  ];
-  if (opts.descending) parts.push('descending');
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Sort ${opts.target}`);
+  const sortOpts: Record<string, unknown> = { expression: expr };
+  if (opts.descending) sortOpts.descending = true;
+
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'sort', options: sortOpts },
+    ],
+    `Sort ${opts.target}`,
+  );
 }

@@ -3,7 +3,6 @@
 // they share expression-policy gating + similar option shape.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { ApplyExpressionOptions, FilterOptions } from '../types';
 import type { OpContext } from './_context';
@@ -24,11 +23,17 @@ export async function applyExpression(
     return Err.expressionDisabled('applyExpression');
   }
 
-  const whereArg = opts.where && opts.where.trim()
-    ? ` where=${quoteCliArg(opts.where)}`
-    : '';
-  const cmd = `-target ${quoteCliArg(opts.target)} -each ${quoteCliArg(opts.expression)}${whereArg}`;
-  return ctx.runDatasetCommand(opts.source, cmd, `Update ${opts.target}`);
+  const eachOpts: Record<string, unknown> = { expression: opts.expression };
+  if (opts.where && opts.where.trim()) eachOpts.where = opts.where;
+
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'each', options: eachOpts },
+    ],
+    `Update ${opts.target}`,
+  );
 }
 
 export async function filterFeatures(ctx: OpContext, opts: FilterOptions): Promise<OpResult> {
@@ -46,14 +51,17 @@ export async function filterFeatures(ctx: OpContext, opts: FilterOptions): Promi
     return Err.expressionDisabled('filterFeatures');
   }
 
-  const parts: string[] = [
-    `-target ${quoteCliArg(opts.target)}`,
-    `-filter`,
-  ];
-  if (hasExpr) {
-    parts.push(quoteCliArg(opts.expression!));
-  }
-  if (opts.invert) parts.push('invert');
-  if (opts.removeEmpty) parts.push('remove-empty');
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Filter ${opts.target}`);
+  const filterOpts: Record<string, unknown> = {};
+  if (hasExpr) filterOpts.expression = opts.expression!;
+  if (opts.invert) filterOpts.invert = true;
+  if (opts.removeEmpty) filterOpts.remove_empty = true;
+
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'filter', options: filterOpts },
+    ],
+    `Filter ${opts.target}`,
+  );
 }

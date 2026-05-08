@@ -55,6 +55,26 @@ export interface MapshaperBBox {
   ymax: number;
 }
 
+/**
+ * One entry in a parsed mapshaper command pipeline. Equivalent to what
+ * `parseCommands('-clip source=mask')` returns: a `name` (kebab-case op
+ * name like `'clip'`, `'rename-layers'`, `'filter-fields'`) plus an
+ * `options` bag whose keys match mapshaper's snake_case internal naming
+ * (e.g. `cap_style`, `gap_fill_area`, `no_replace`).
+ *
+ * Hand-built ParsedCommands skip mapshaper's CLI parser entirely, which
+ * removes the quoting / escaping concern that drove PR-4 phase 1: option
+ * values are typed JS values (`string`, `number`, `boolean`, `string[]`)
+ * rather than tokens interpolated into a shell-like grammar.
+ *
+ * Op modules under `src/map/ops/` build these directly via
+ * `OpContext.runDatasetCommand(commands, ...)`.
+ */
+export interface ParsedCommand {
+  name: string;
+  options: Record<string, unknown>;
+}
+
 /** Files injected onto a `-i` command's `input` option. */
 export type RunnerInputFiles = Record<string, Uint8Array | string>;
 
@@ -292,11 +312,27 @@ export interface MapshaperAdapter {
    * Run a CLI-style command (sans `-i`) against an existing dataset and
    * resolve with the resulting dataset. `inputFiles` is forwarded to every
    * parsed command's `options.input` so `-join FILE` / similar can resolve
-   * relative names. Resolves with the original `dataset` reference if
-   * mapshaper produced no default target (no-op command).
+   * relative names. Rejects if mapshaper produced no default target
+   * (no-op command — see PR-21 / L1).
    */
   runOnDataset(
     cmd: string,
+    dataset: MapshaperDataset,
+    inputFiles?: RunnerInputFiles,
+  ): Promise<MapshaperDataset>;
+
+  /**
+   * Variant of {@link runOnDataset} that accepts a pre-parsed
+   * `ParsedCommand[]` and skips the CLI parser entirely. Op modules
+   * use this so option values flow as typed JS (numbers / arrays /
+   * booleans) rather than as tokens interpolated into a shell-like
+   * grammar — eliminates the entire quoting / escaping concern.
+   *
+   * `inputFiles` is wired onto every command's `options.input` exactly
+   * like the string variant, so `-join FILE` works the same way.
+   */
+  runOnDatasetParsed(
+    commands: ParsedCommand[],
     dataset: MapshaperDataset,
     inputFiles?: RunnerInputFiles,
   ): Promise<MapshaperDataset>;
@@ -524,6 +560,34 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
           // dataset reference, which let no-op commands pollute history
           // with empty `DatasetReplaceCommand`s. Surface as an error so
           // `_runDatasetCommand` records `Err.mapshaper` instead.
+          reject(new Error('mapshaper command completed but produced no default target'));
+          return;
+        }
+        resolve(targets[0].dataset);
+      });
+    });
+  }
+
+  runOnDatasetParsed(
+    commands: ParsedCommand[],
+    dataset: MapshaperDataset,
+    inputFiles?: RunnerInputFiles,
+  ): Promise<MapshaperDataset> {
+    return new Promise((resolve, reject) => {
+      const job = new mapshaper.internal.Job();
+      job.catalog.addDataset(dataset);
+      if (inputFiles) {
+        for (const c of commands) {
+          if (c.options) (c.options as Record<string, unknown>).input = inputFiles;
+        }
+      }
+      mapshaper.internal.runParsedCommands(commands as any[], job, (err: any, finished: any) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        const targets = finished.catalog.getDefaultTargets();
+        if (targets.length === 0) {
           reject(new Error('mapshaper command completed but produced no default target'));
           return;
         }

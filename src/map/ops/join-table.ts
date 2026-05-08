@@ -14,7 +14,6 @@
 //                                       cache injection.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { JoinTableOptions } from '../types';
 import type { OpContext } from './_context';
@@ -68,26 +67,27 @@ export async function joinTable(ctx: OpContext, opts: JoinTableOptions): Promise
     return Err.expressionDisabled('joinTable');
   }
 
-  const parts: string[] = [
-    `-target ${quoteCliArg(opts.target)}`,
-    `-join ${quoteCliArg(joinSource)}`,
-    `keys=${quoteCliArg(`${targetKey},${sourceKey}`)}`,
-  ];
+  const joinOpts: Record<string, unknown> = {
+    source: joinSource,
+    keys: [targetKey, sourceKey],
+  };
   if (opts.fields && opts.fields.length > 0) {
     const safe = opts.fields.filter((f) => typeof f === 'string' && !f.includes(','));
-    if (safe.length > 0) parts.push(`fields=${safe.join(',')}`);
+    if (safe.length > 0) joinOpts.fields = safe;
   }
-  if (opts.prefix && opts.prefix.length > 0) {
-    parts.push(`prefix=${quoteCliArg(opts.prefix)}`);
-  }
-  if (opts.where && opts.where.trim().length > 0) {
-    parts.push(`where=${quoteCliArg(opts.where)}`);
-  }
-  if (opts.calc && opts.calc.trim().length > 0) {
-    parts.push(`calc=${quoteCliArg(opts.calc)}`);
-  }
-  if (opts.unjoined) parts.push('unjoined');
-  if (opts.unmatched) parts.push('unmatched');
+  if (opts.prefix && opts.prefix.length > 0) joinOpts.prefix = opts.prefix;
+  if (opts.where && opts.where.trim().length > 0) joinOpts.where = opts.where;
+  if (opts.calc && opts.calc.trim().length > 0) joinOpts.calc = opts.calc;
+  if (opts.unjoined) joinOpts.unjoined = true;
+  if (opts.unmatched) joinOpts.unmatched = true;
 
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Join ${opts.target}`, inputFiles);
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'join', options: joinOpts },
+    ],
+    `Join ${opts.target}`,
+    inputFiles,
+  );
 }

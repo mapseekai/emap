@@ -4,7 +4,6 @@
 // `,` / `=`.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { RenameFieldsOptions } from '../types';
 import type { OpContext } from './_context';
@@ -35,7 +34,12 @@ export async function renameFields(
     }
     pairs.push(`${o}=${n}`);
   }
-  const list = pairs.join(',');
-  const cmd = `-target ${quoteCliArg(opts.target)} -rename-fields ${quoteCliArg(list)}`;
-  return ctx.runDatasetCommand(opts.source, cmd, `Rename fields ${opts.target}`);
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'rename-fields', options: { fields: pairs } },
+    ],
+    `Rename fields ${opts.target}`,
+  );
 }

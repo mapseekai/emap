@@ -7,7 +7,6 @@
 // mapshaper throw an opaque mid-pipeline error.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { MergeLayersOptions } from '../types';
 import type { OpContext } from './_context';
@@ -47,14 +46,17 @@ export async function mergeLayers(
   }
 
   const targetList = opts.targets.join(',');
-  const parts: string[] = [
-    `-target ${quoteCliArg(targetList)}`,
-    '-merge-layers',
-  ];
-  if (opts.name && opts.name.trim()) {
-    parts.push(`name=${quoteCliArg(opts.name)}`);
-  }
-  if (opts.force) parts.push('force');
-  if (opts.flatten) parts.push('flatten');
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Merge ${targetList}`);
+  const mergeOpts: Record<string, unknown> = {};
+  if (opts.name && opts.name.trim()) mergeOpts.name = opts.name;
+  if (opts.force) mergeOpts.force = true;
+  if (opts.flatten) mergeOpts.flatten = true;
+
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: targetList } },
+      { name: 'merge-layers', options: mergeOpts },
+    ],
+    `Merge ${targetList}`,
+  );
 }

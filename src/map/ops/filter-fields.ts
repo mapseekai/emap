@@ -3,7 +3,6 @@
 // keep the rest.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { FilterFieldsOptions } from '../types';
 import type { OpContext } from './_context';
@@ -29,11 +28,15 @@ export async function filterFields(
     }
   }
 
-  const list = opts.fields.join(',');
-  const parts: string[] = [
-    `-target ${quoteCliArg(opts.target)}`,
-    `-filter-fields ${quoteCliArg(list)}`,
-  ];
-  if (opts.invert) parts.push('invert');
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Filter fields ${opts.target}`);
+  const ffOpts: Record<string, unknown> = { fields: opts.fields.slice() };
+  if (opts.invert) ffOpts.invert = true;
+
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'filter-fields', options: ffOpts },
+    ],
+    `Filter fields ${opts.target}`,
+  );
 }

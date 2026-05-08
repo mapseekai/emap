@@ -9,7 +9,6 @@
 //   - `vertices` / `endpoints` — extract path vertices (polygon or polyline)
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { PointsOptions } from '../types';
 import type { OpContext } from './_context';
@@ -49,16 +48,20 @@ export async function pointsLayer(ctx: OpContext, opts: PointsOptions): Promise<
     return Err.validation('interval', 'interpolated points require a positive interval');
   }
 
-  const parts: string[] = [
-    `-target ${quoteCliArg(opts.target)}`,
-    `-points ${opts.type}`,
-  ];
-  if (opts.type === 'interpolated') {
-    parts.push(`interval=${opts.interval}`);
-  }
-  if (opts.name && opts.name.trim()) {
-    parts.push(`name=${quoteCliArg(opts.name)}`);
-  }
-  if (opts.noReplace) parts.push('no-replace');
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Points ${opts.target}`);
+  // `-points TYPE` becomes options[TYPE]=true (centroid / inner / midpoints
+  // / interpolated / vertices / endpoints are mutually-exclusive boolean
+  // flags in mapshaper's parsed form).
+  const pointsOpts: Record<string, unknown> = { [opts.type]: true };
+  if (opts.type === 'interpolated') pointsOpts.interval = String(opts.interval);
+  if (opts.name && opts.name.trim()) pointsOpts.name = opts.name;
+  if (opts.noReplace) pointsOpts.no_replace = true;
+
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'points', options: pointsOpts },
+    ],
+    `Points ${opts.target}`,
+  );
 }

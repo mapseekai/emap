@@ -4,9 +4,13 @@
  *
  * Wire protocol (see `MapshaperWorkerPool` for the matching main-thread side):
  *
- *   main → worker:  { id: number, type: 'run', cmd: string, packed: PackedSession, inputFiles?: object }
+ *   main → worker:  { id, type: 'run', packed, inputFiles?, cmd?: string, commands?: ParsedCommandWire[] }
  *   worker → main:  { id, type: 'ok', packed: PackedSession }
  *                |  { id, type: 'error', message: string }
+ *
+ * `cmd` and `commands` are mutually exclusive: legacy callers send a CLI
+ * string and the worker parses it; PR-4b callers send pre-built parsed
+ * commands and skip the parser entirely.
  *
  * `PackedSession` is the plain-object form produced by
  * `mapshaper.internal.exportDatasetsToPack(datasets, { compact: false })`
@@ -18,21 +22,35 @@ import '../shim';
 import 'mapshaper';
 import mapshaper from 'mapshaper';
 
+interface ParsedCommandWire {
+  name: string;
+  options: Record<string, unknown>;
+}
+
 interface RunRequest {
   id: number;
   type: 'run';
-  cmd: string;
+  cmd?: string;
+  commands?: ParsedCommandWire[];
   packed: any;
   inputFiles?: Record<string, Uint8Array | string>;
 }
 
 async function handleRun(req: RunRequest): Promise<void> {
   try {
-    const { id, cmd, packed, inputFiles } = req;
+    const { id, cmd, commands: parsed, packed, inputFiles } = req;
 
     // Parse first — fail fast on malformed commands without paying the cost
-    // of restoring a potentially-large dataset.
-    const commands = mapshaper.internal.parseCommands(cmd);
+    // of restoring a potentially-large dataset. PR-4b: skip the parser when
+    // the caller already handed us structured commands.
+    let commands: any[];
+    if (parsed && parsed.length > 0) {
+      commands = parsed as any[];
+    } else if (typeof cmd === 'string') {
+      commands = mapshaper.internal.parseCommands(cmd);
+    } else {
+      throw new Error('worker: request missing both cmd and commands');
+    }
     if (inputFiles) {
       for (const c of commands) {
         if (c.options) c.options.input = inputFiles;

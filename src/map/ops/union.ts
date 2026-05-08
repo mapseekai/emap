@@ -5,7 +5,6 @@
 // layer list, so we join `targets` with commas inside one quoted arg.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { UnionOptions } from '../types';
 import type { OpContext } from './_context';
@@ -29,19 +28,20 @@ export async function unionLayers(ctx: OpContext, opts: UnionOptions): Promise<O
   }
 
   const targetList = opts.targets.join(',');
-  const parts: string[] = [
-    `-target ${quoteCliArg(targetList)}`,
-    `-union`,
-  ];
+  const unionOpts: Record<string, unknown> = {};
   if (opts.fields && opts.fields.length > 0) {
     const safe = opts.fields.filter((f) => !f.includes(','));
-    if (safe.length > 0) parts.push(`fields=${safe.join(',')}`);
+    if (safe.length > 0) unionOpts.fields = safe;
   }
-  if (opts.name && opts.name.trim()) {
-    parts.push(`name=${quoteCliArg(opts.name)}`);
-  }
-  if (opts.noReplace) {
-    parts.push('no-replace');
-  }
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Union ${targetList}`);
+  if (opts.name && opts.name.trim()) unionOpts.name = opts.name;
+  if (opts.noReplace) unionOpts.no_replace = true;
+
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: targetList } },
+      { name: 'union', options: unionOpts },
+    ],
+    `Union ${targetList}`,
+  );
 }

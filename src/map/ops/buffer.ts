@@ -3,7 +3,6 @@
 // number or a per-record expression string.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { BufferOptions } from '../types';
 import type { OpContext } from './_context';
@@ -30,11 +29,15 @@ export async function bufferLayer(ctx: OpContext, opts: BufferOptions): Promise<
     return Err.expressionDisabled('bufferLayer');
   }
 
-  // Numbers go in bare; expression strings are quoted so the shell-style
-  // command parser keeps them intact.
-  const radiusArg =
-    typeof opts.radius === 'number' ? String(opts.radius) : quoteCliArg(opts.radius);
-  const capArg = opts.capStyle ? ` cap-style=${opts.capStyle}` : '';
-  const cmd = `-target ${quoteCliArg(opts.target)} -buffer ${radiusArg}${capArg}`;
-  return ctx.runDatasetCommand(opts.source, cmd, `Buffer ${opts.target}`);
+  const bufferOptions: Record<string, unknown> = { radius: String(opts.radius) };
+  if (opts.capStyle) bufferOptions.cap_style = opts.capStyle;
+
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'buffer', options: bufferOptions },
+    ],
+    `Buffer ${opts.target}`,
+  );
 }

@@ -10,10 +10,10 @@
 // `await projectLayer(...)` to recentre.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { ProjectOptions } from '../types';
 import type { OpContext } from './_context';
+import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
 
 export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
@@ -26,14 +26,16 @@ export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promis
   const crs = (opts.crs ?? '').trim();
   if (crs.length === 0) return Err.validation('crs', 'must be a non-empty CRS string');
 
-  const parts: string[] = [];
-  if (opts.target) parts.push(`-target ${quoteCliArg(opts.target)}`);
-  parts.push(`-proj ${quoteCliArg(crs)}`);
-  if (opts.init && opts.init.trim()) {
-    parts.push(`init=${quoteCliArg(opts.init)}`);
-  }
-  if (opts.densify) parts.push('densify');
+  const projOpts: Record<string, unknown> = { crs };
+  if (opts.init && opts.init.trim()) projOpts.init = opts.init;
+  if (opts.densify) projOpts.densify = true;
+
+  const commands: ParsedCommand[] = [];
+  if (opts.target) commands.push({ name: 'target', options: { target: opts.target } });
+  // mapshaper exposes the command as `-proj` but parseCommands canonicalises
+  // its name to `proj`; emit that form directly.
+  commands.push({ name: 'proj', options: projOpts });
 
   const label = `Project ${opts.target ?? opts.source}`;
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), label);
+  return ctx.runDatasetCommandParsed(opts.source, commands, label);
 }

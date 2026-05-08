@@ -4,7 +4,6 @@
 // the input is known to be a layer of closed paths.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { PolygonsOptions } from '../types';
 import type { OpContext } from './_context';
@@ -20,13 +19,18 @@ export async function polygonsLayer(ctx: OpContext, opts: PolygonsOptions): Prom
     return Err.validation('target', `expected polyline layer, got ${layer.geometry_type ?? 'unknown'}`);
   }
 
-  const parts: string[] = [
-    `-target ${quoteCliArg(opts.target)}`,
-    '-polygons',
-  ];
+  const polyOpts: Record<string, unknown> = {};
   if (typeof opts.gapTolerance === 'number' && opts.gapTolerance > 0) {
-    parts.push(`gap-tolerance=${opts.gapTolerance}`);
+    polyOpts.gap_tolerance = String(opts.gapTolerance);
   }
-  if (opts.fromRings) parts.push('from-rings');
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Polygons ${opts.target}`);
+  if (opts.fromRings) polyOpts.from_rings = true;
+
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'polygons', options: polyOpts },
+    ],
+    `Polygons ${opts.target}`,
+  );
 }

@@ -5,7 +5,6 @@
 // bare comma-joined token (no `fields=` prefix) to match the CLI norm.
 
 import { resolveLayerInList } from '../layer-registry';
-import { quoteCliArg } from '../command-args';
 import { Err, type OpResult } from '../op-result';
 import type { LinesOptions } from '../types';
 import type { OpContext } from './_context';
@@ -21,18 +20,18 @@ export async function linesLayer(ctx: OpContext, opts: LinesOptions): Promise<Op
     return Err.validation('target', `expected polygon layer, got ${layer.geometry_type ?? 'unknown'}`);
   }
 
+  const linesOpts: Record<string, unknown> = {};
   const safeFields = opts.fields?.filter((f) => typeof f === 'string' && !f.includes(','));
-  const linesToken = safeFields && safeFields.length > 0
-    ? `-lines ${safeFields.join(',')}`
-    : '-lines';
+  if (safeFields && safeFields.length > 0) linesOpts.fields = safeFields;
+  if (opts.name && opts.name.trim()) linesOpts.name = opts.name;
+  if (opts.noReplace) linesOpts.no_replace = true;
 
-  const parts: string[] = [
-    `-target ${quoteCliArg(opts.target)}`,
-    linesToken,
-  ];
-  if (opts.name && opts.name.trim()) {
-    parts.push(`name=${quoteCliArg(opts.name)}`);
-  }
-  if (opts.noReplace) parts.push('no-replace');
-  return ctx.runDatasetCommand(opts.source, parts.join(' '), `Lines ${opts.target}`);
+  return ctx.runDatasetCommandParsed(
+    opts.source,
+    [
+      { name: 'target', options: { target: opts.target } },
+      { name: 'lines', options: linesOpts },
+    ],
+    `Lines ${opts.target}`,
+  );
 }
