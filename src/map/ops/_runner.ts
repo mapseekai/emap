@@ -21,6 +21,115 @@ import { Err, OK, type OpResult } from '../op-result';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import { parseCommandHeads, shouldUseWorker } from '../worker-routing';
 
+/**
+ * What a dataset-replace op CHANGES about the dataset. Drives the
+ * selection-preservation policy in `_applyDatasetReplace`:
+ *
+ *   - `shape-count`     — features added / removed / reordered. Selection
+ *                         refs by feature id are stale; clear.
+ *   - `topology-only`   — arc storage rebuilt (clean / snap / simplify /
+ *                         rebuildTopology / mosaic). Feature ids may
+ *                         shift; clear conservatively.
+ *   - `attribute-only`  — only data-table fields changed (each / join /
+ *                         rename-fields / filter-fields / sort / etc.).
+ *                         Feature ids stay; preserve selection.
+ *   - `crs-only`        — coords reprojected, ids unchanged. Preserve.
+ *   - `unknown`         — no information — fall back to clearing for
+ *                         safety. Treated identically to `shape-count`.
+ */
+export type OpEffect =
+  | 'shape-count'
+  | 'topology-only'
+  | 'attribute-only'
+  | 'crs-only'
+  | 'unknown';
+
+/**
+ * Mapshaper command head → effect classification. Heads not in the table
+ * get treated as `unknown` (= clear selection) by `inferEffect`.
+ *
+ * Categories:
+ *   - shape-count: changes the number / order of features
+ *   - topology-only: changes arcs but not feature count
+ *   - attribute-only: changes only data-table fields
+ *   - crs-only: changes coordinates only (reprojection)
+ */
+const COMMAND_EFFECTS: Readonly<Record<string, OpEffect>> = {
+  // shape-count: change feature count / membership
+  clip: 'shape-count',
+  erase: 'shape-count',
+  dissolve: 'shape-count',
+  explode: 'shape-count',
+  filter: 'shape-count',
+  'merge-layers': 'shape-count',
+  mosaic: 'shape-count',
+  union: 'shape-count',
+  divide: 'shape-count',
+  points: 'shape-count',
+  lines: 'shape-count',
+  polygons: 'shape-count',
+  innerlines: 'shape-count',
+  'split-layer': 'shape-count',
+  uniq: 'shape-count',
+  buffer: 'shape-count',
+  drop: 'shape-count',
+  'intersection-points': 'shape-count',
+  // topology-only: rebuild arcs but feature ids stay
+  clean: 'topology-only',
+  snap: 'topology-only',
+  simplify: 'topology-only',
+  'rebuild-topology': 'topology-only',
+  // attribute-only: only data-table fields change
+  each: 'attribute-only',
+  join: 'attribute-only',
+  'rename-fields': 'attribute-only',
+  'rename-layers': 'attribute-only',
+  'filter-fields': 'attribute-only',
+  sort: 'attribute-only',
+  // crs-only: project + reproject
+  proj: 'crs-only',
+  project: 'crs-only',
+};
+
+/**
+ * Infer the effect category of a CLI command. Considers every `-NAME`
+ * head in the command string and returns the **strongest** effect (in
+ * the order `shape-count` > `topology-only` > `crs-only` > `attribute-only`).
+ * `target` (a no-op selector head) is ignored.
+ */
+export function inferEffect(cmd: string): OpEffect {
+  const heads = parseCommandHeads(cmd);
+  let strongest: OpEffect = 'attribute-only';
+  let sawAny = false;
+  for (const head of heads) {
+    if (head === 'target') continue;
+    const effect = COMMAND_EFFECTS[head];
+    if (effect === undefined) {
+      // Unknown command → conservative.
+      return 'unknown';
+    }
+    sawAny = true;
+    strongest = strongerEffect(strongest, effect);
+  }
+  return sawAny ? strongest : 'unknown';
+}
+
+const EFFECT_RANK: Readonly<Record<OpEffect, number>> = {
+  'attribute-only': 0,
+  'crs-only': 1,
+  'topology-only': 2,
+  'shape-count': 3,
+  unknown: 3,
+};
+function strongerEffect(a: OpEffect, b: OpEffect): OpEffect {
+  return EFFECT_RANK[a] >= EFFECT_RANK[b] ? a : b;
+}
+
+/** True iff this effect type invalidates a selection keyed by feature id. */
+function effectInvalidatesSelection(effect: OpEffect): boolean {
+  return effect === 'shape-count' || effect === 'topology-only' || effect === 'unknown';
+}
+
 export async function _runDatasetCommand(
   host: EmapHostInternal,
   sourceId: string,
@@ -89,15 +198,20 @@ export async function _runDatasetCommand(
   // now would either crash or resurrect freed state.
   if (host._removed) return Err.hostRemoved();
 
-  return _applyDatasetReplace(host, sourceId, before, after, label);
+  return _applyDatasetReplace(host, sourceId, before, after, label, inferEffect(cmd));
 }
 
 /**
  * Stage C in isolation: swap the source dataset, push the
- * DatasetReplaceCommand (which flags prior commands stale), clear
- * selection, schedule a render. Used directly by ops that produce an
- * `after` dataset via mapshaper internal primitives instead of the CLI
- * runner — `intersectionPointsLayer`, `rebuildTopology`.
+ * DatasetReplaceCommand (which flags prior commands stale), conditionally
+ * clear selection (PR-10 — depends on `effect`), schedule a render. Used
+ * directly by ops that produce an `after` dataset via mapshaper internal
+ * primitives instead of the CLI runner — `intersectionPointsLayer`,
+ * `rebuildTopology`.
+ *
+ * `effect` defaults to `'unknown'` (= clear selection) for safety. Ops
+ * that know they only changed attributes / CRS should pass the more
+ * specific value so the UI's selection survives the operation.
  */
 export function _applyDatasetReplace(
   host: EmapHostInternal,
@@ -105,6 +219,7 @@ export function _applyDatasetReplace(
   before: MapshaperDataset,
   after: MapshaperDataset,
   label: string,
+  effect: OpEffect = 'unknown',
 ): OpResult {
   const source = host._sources.get(sourceId);
   if (!source) return Err.notFound('source', sourceId);
@@ -115,9 +230,11 @@ export function _applyDatasetReplace(
   // for visibility, but `EditHistory.undo` skips them.
   host._history.push(new DatasetReplaceCommand({ source, before, after, label }));
   host._fireHistoryChange();
-  // Selection refs are by feature id and may now point at different
-  // features. Clear conservatively.
-  host._fireSelectionChange(host._selection.clear());
+  if (effectInvalidatesSelection(effect)) {
+    // Selection refs are by feature id and may now point at different
+    // features. Clear conservatively.
+    host._fireSelectionChange(host._selection.clear());
+  }
   host._scheduleRender();
   return OK;
 }
