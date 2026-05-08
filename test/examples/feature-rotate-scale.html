@@ -19,7 +19,7 @@
     <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
     <span id="status">加载数据</span>
     <span class="hint">
-      在要素上按住鼠标左键拖动 → 松开落位。空白处按下走平移地图。
+      点击要素选中 → 鼠标移动跟随变换 → 再次单击落位。
       <kbd>R</kbd> 进入旋转 · <kbd>S</kbd> 进入缩放 · <kbd>T</kbd>(默认) 平移 · <kbd>Esc</kbd>/右键取消。
       旋转: 鼠标绕枢轴旋转的角度即为变换。 缩放: 鼠标到枢轴的距离比即为缩放因子。
       平移仍可用 <kbd>←</kbd>/<kbd>→</kbd>/<kbd>↑</kbd>/<kbd>↓</kbd>(空闲时), <kbd>[</kbd>/<kbd>]</kbd>±5° 步进, <kbd>+</kbd>/<kbd>-</kbd> ×1.1/×0.9。
@@ -67,18 +67,16 @@
       reader.readAsArrayBuffer(file);
     });
 
-    // Press-and-hold drag in the current mode (translate / rotate / scale).
-    // mousedown on a hit feature opens the matching session AND disables
-    // the built-in pan handler so the map doesn't pan along with the
-    // gesture; mouseup commits and re-enables pan. Esc / right-click
-    // cancels. Mode switch (R/S/T) is only allowed while idle.
+    // Cursor-follow drag: 1st click selects + opens a session in the current
+    // mode (translate / rotate / scale), mousemove streams deltas, 2nd click
+    // commits, Esc / right-click cancels. Use R/S/T to switch mode while idle.
     let mode = 't';                  // 't' = translate, 'r' = rotate, 's' = scale
     let translateSession = null;
     let affineSession = null;        // rotate or scale session
     let lastMapCoord = null;         // for translate
+    let initialMapCoord = null;      // for rotate / scale (drag start)
     let prevAngle = 0;               // last delta-rotation reference angle
     let prevDist = 0;                // last delta-scale reference distance
-    let dragging = false;
 
     function pixelToMap(e) {
       const rect = mapContainer.getBoundingClientRect();
@@ -98,69 +96,55 @@
         if (commit) {
           const [adx, ady] = translateSession.getAccumulated();
           if (translateSession.commit()) status.textContent = `已落位 (${adx.toFixed(2)}, ${ady.toFixed(2)})。`;
-          else status.textContent = '未移动,选择保留。';
+          else status.textContent = '已取消(零位移)。';
         } else { translateSession.cancel(); status.textContent = '已取消本次拖动。'; }
         translateSession = null;
         lastMapCoord = null;
       } else if (affineSession) {
         if (commit) {
           if (affineSession.commit()) status.textContent = `已落位(${modeLabel()})。`;
-          else status.textContent = '未变换,选择保留。';
+          else status.textContent = '已取消(零变换)。';
         } else { affineSession.cancel(); status.textContent = '已取消本次拖动。'; }
         affineSession = null;
+        initialMapCoord = null;
       }
-      dragging = false;
-      // Always re-enable pan when the gesture ends, regardless of how.
-      map.setDragPanEnabled(true);
     }
 
-    mapContainer.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
+    mapContainer.addEventListener('click', (e) => {
+      // 2nd click commits whatever session is active.
+      if (inSession()) { endSession(true); return; }
+
       const rect = mapContainer.getBoundingClientRect();
       const point = [e.clientX - rect.left, e.clientY - rect.top];
       const features = map.queryFeatures(point);
       if (!features.length) {
-        // Empty space → let pan handler proceed.
+        if (!e.shiftKey && !e.ctrlKey && !e.metaKey) map.clearSelection();
         return;
       }
-
       const selMode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
       map.select(features, { mode: selMode });
       document.getElementById('map').focus();
-
-      // Modifier-clicks are selection-only — no drag.
-      if (e.shiftKey || e.ctrlKey || e.metaKey) return;
-
-      // Lock pan for the duration of this gesture; setEnabled(false)
-      // also aborts an in-progress pan synchronously.
-      map.setDragPanEnabled(false);
 
       // Open a session matching current mode.
       if (mode === 't') {
         translateSession = map.editSession.beginTranslateSession();
         if (translateSession) {
           lastMapCoord = pixelToMap(e);
-          dragging = true;
-          status.textContent = '平移中… 松开鼠标落位,Esc / 右键取消。';
+          status.textContent = '平移: 拖动鼠标,再次单击落位,Esc 取消。';
         }
       } else {
         affineSession = map.editSession.beginAffineSession();
         if (affineSession) {
-          const cur = pixelToMap(e);
+          initialMapCoord = pixelToMap(e);
           const [ox, oy] = affineSession.origin;
-          prevAngle = Math.atan2(cur[1] - oy, cur[0] - ox);
-          prevDist = Math.hypot(cur[0] - ox, cur[1] - oy) || 1;
-          dragging = true;
-          status.textContent = `${modeLabel()}中… 松开鼠标落位,Esc / 右键取消。`;
+          prevAngle = Math.atan2(initialMapCoord[1] - oy, initialMapCoord[0] - ox);
+          prevDist = Math.hypot(initialMapCoord[0] - ox, initialMapCoord[1] - oy) || 1;
+          status.textContent = `${modeLabel()}: 拖动鼠标,再次单击落位,Esc 取消。`;
         }
       }
-      // Couldn't open a session (e.g. selection empty) → unlock pan so
-      // the next click works normally.
-      if (!dragging) map.setDragPanEnabled(true);
     });
 
-    window.addEventListener('mousemove', (e) => {
-      if (!dragging) return;
+    mapContainer.addEventListener('mousemove', (e) => {
       const cur = pixelToMap(e);
       if (translateSession) {
         if (lastMapCoord) translateSession.move(cur[0] - lastMapCoord[0], cur[1] - lastMapCoord[1]);
@@ -181,23 +165,6 @@
       }
     });
 
-    window.addEventListener('mouseup', (e) => {
-      if (!dragging) return;
-      if (e.button !== 0) return;
-      endSession(true);
-    });
-
-    // Empty-space click clears the selection.
-    mapContainer.addEventListener('click', (e) => {
-      if (dragging || inSession()) return;
-      const rect = mapContainer.getBoundingClientRect();
-      const point = [e.clientX - rect.left, e.clientY - rect.top];
-      const features = map.queryFeatures(point);
-      if (!features.length && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-        map.clearSelection();
-      }
-    });
-
     mapContainer.addEventListener('contextmenu', (e) => {
       if (inSession()) { e.preventDefault(); endSession(false); }
     });
@@ -206,9 +173,9 @@
       if (e.key === 'Escape' && inSession()) { e.preventDefault(); endSession(false); return; }
       // Mode switch only while idle — switching mid-drag would invalidate state.
       if (inSession()) return;
-      if (e.key === 't' || e.key === 'T') { mode = 't'; status.textContent = '模式: 平移(在要素上按住拖动)。'; }
-      else if (e.key === 'r' || e.key === 'R') { mode = 'r'; status.textContent = '模式: 旋转(在要素上按住绕中心拖动)。'; }
-      else if (e.key === 's' || e.key === 'S') { mode = 's'; status.textContent = '模式: 缩放(在要素上按住远离/靠近中心拖动)。'; }
+      if (e.key === 't' || e.key === 'T') { mode = 't'; status.textContent = '模式: 平移(点击要素后拖动)。'; }
+      else if (e.key === 'r' || e.key === 'R') { mode = 'r'; status.textContent = '模式: 旋转(点击要素后绕中心拖动)。'; }
+      else if (e.key === 's' || e.key === 'S') { mode = 's'; status.textContent = '模式: 缩放(点击要素后远离/靠近中心拖动)。'; }
     });
 
     // Keyboard step nudge stays available while idle.
