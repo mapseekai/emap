@@ -308,24 +308,6 @@ export class Emap extends EventDispatcher {
     return this._canvasContainer;
   }
 
-  /**
-   * Toggle the built-in drag-to-pan handler. Apps that implement custom
-   * drag interactions (feature translation, vertex move, lasso) should
-   * call `setDragPanEnabled(false)` for the duration of their gesture
-   * so the map doesn't pan along with the feature, then
-   * `setDragPanEnabled(true)` on release.
-   *
-   * Idempotent. Aborts any in-progress pan when disabling.
-   */
-  public setDragPanEnabled(enabled: boolean): void {
-    this._dragPan?.setEnabled(enabled);
-  }
-
-  /** True iff the built-in drag-to-pan handler is currently enabled. */
-  public isDragPanEnabled(): boolean {
-    return this._dragPan?.isEnabled() ?? false;
-  }
-
   public getEditMode(): EditMode {
     return this._editState.mode;
   }
