@@ -22,24 +22,26 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ## Project Context (`emap`)
 
-`emap` is a modern, topology-oriented map rendering and editing engine built around `mapshaper` data structures and `Canvas`.
+`emap` is a topology-oriented map rendering and editing engine built around `mapshaper` data structures and Canvas. Browser-only TypeScript library.
 
-**Core Technical Stack**:
+**Read `CLAUDE.md` for the authoritative architecture guide** — repo structure, key patterns (MapshaperAdapter isolation, ParsedCommand[] dispatch, OpResult error model, memento commands, effect-aware dataset replace), and where each kind of change goes. The pointers below are an index into it.
 
-- Renderers: Direct HTML5 API (`CanvasPainter`) and WASM Skia (`CanvasKitPainter`).
-- Data Parser / Projector: `mapshaper`, `fflate` for unzipping shapefiles.
-- Build System: Rollup with Typescript configuration. Bundle is output to `dist/emap.js` and `dist/emap-dev.js`.
+**Where to make changes (quick index)**:
 
-**Project Structure**:
+| Task | Entry point |
+|---|---|
+| New mapshaper data op | `src/map/ops/<op>.ts` (+ delegate in `mapshaper-ops.ts`, option type in `types.ts`) |
+| New edit command | `src/edit/commands/<cmd>.ts` (use `vertex-move.ts` as template) |
+| New UI control | `src/ui/<control>.ts`, implement `Control` interface, export from `src/index.ts` |
+| Data loading / format | `src/source/topology-source.ts` |
+| CRS / projection | `src/geo/crs-resolver.ts`, `src/geo/projection.ts`, `src/geo/viewport.ts` |
+| Mapshaper internals | `src/adapter/mapshaper-adapter.ts` only — do not touch `mapshaper.internal.*` elsewhere |
+| Worker routing | `src/map/worker-routing.ts` |
 
-- `src/map/map.ts`: The `Emap` core engine which manages multiple sources, interactive events, UI controls, and triggers render loops.
-- `src/source/`: Data loading layer (e.g. `TopologySource.fromUrl()`) which handles GeoJSON, TopoJSON, and ZIP Shapefile downloads, simplification, caching.
-- `src/renderer/`: Hardware/software drawing execution using specific painters.
-- `src/core/` / `src/geo/`: Interactive modules (Wheel, Drag) and spatial projection/viewport calculations.
-- `src/ui/`: Built-in map overlays and UI control abstractions.
-- `test/examples/`: Quick HTML playgrounds covering vertex-editing, GeoJSON loading features to manually test build results.
+**Hard rules**:
 
-**Guidance for AI changes**:
-
-- Changes to map data loading or projections usually lie in `src/source/topology-source.ts` and `src/geo/projection.ts`.
-- Changes to user interactions (panning, modifying points) interact tightly with `map.ts` (EventDispatcher), `src/core/*`, and `src/renderer/` methods. Let rendering run in the `render()` loop and defer DOM updates logically.
+- Use the `EventDispatcher` (`on` / `fire`) for internal communication, never raw DOM events.
+- Coordinate math goes through `AffineTransform`, never ad-hoc matrices.
+- Layer resolution goes through `LayerRegistry.resolve(...)`, never inline `layers.find(...)`.
+- Render-loop side effects (DOM updates, state changes) must defer via `requestAnimationFrame` or tween callbacks — not inline in `render()`.
+- New ops must classify their effect (`shape-count` / `topology-only` / `attribute-only` / `crs-only`) in `src/map/ops/_runner.ts`'s `COMMAND_EFFECTS` table — selection-preservation depends on it.
