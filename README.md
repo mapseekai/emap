@@ -120,6 +120,21 @@ await map.ops.mergeSelected();
 
 A full list of ops + their option types lives in `src/index.ts` (search for `*Options`).
 
+### Transactions
+
+Stage multiple ops as one atomic edit — commit collapses them into a single undo entry, rollback restores every touched source's dataset (and the selection) to the pre-transaction state.
+
+```ts
+const tx = map.beginTransaction();
+const r1 = await map.ops.clipLayer({ source, target, mask });
+if (!r1.ok)        { tx.rollback(); return; }
+const r2 = await map.ops.dissolveLayer({ source, target, field: 'STATE' });
+if (!r2.ok)        { tx.rollback(); return; }
+await tx.commit('Process boundaries');
+```
+
+Nesting is not supported — opening a transaction while one is active throws.
+
 ### Undo / redo
 
 ```ts
@@ -133,6 +148,42 @@ map.on('historychange', (e) => {
 ```
 
 Vertex drags / feature translates within a session merge into one undo step. Dataset-replace ops (clip, dissolve, …) keep prior commands in the stack but flag them as `stale` for the UI to render appropriately — there's no destructive `clear`.
+
+### Validation hooks
+
+Register validators that run after every committed edit. Failures fire `validationfailed` — the engine doesn't auto-undo, the app decides.
+
+```ts
+import { topologyValidator } from 'emap';
+
+const unregister = map.validators.register(topologyValidator({
+  sources: ['china'],
+}));
+
+map.on('validationfailed', (e) => {
+  console.warn(e.results);    // [{ validator, report }, ...]
+  // Optionally: map.undo();
+});
+```
+
+Custom validators implement `Validator { name, phase: 'after-commit', run(host, change) }` and return `{ ok, issues: [{ severity, message, ref? }] }`.
+
+### Feature accessor
+
+Read one feature (or iterate a layer) without indexing into raw `layer.shapes` / `layer.data.getRecords()`:
+
+```ts
+const f = map.features.get({ source: 'us', layer: 'states', id: 12 });
+if (f) console.log(f.properties.NAME, f.geometry);
+
+for (const f of map.features.iter('us', 'states')) {
+  /* … */
+}
+
+map.features.count('us', 'states'); // O(1)
+```
+
+`f.properties` is `Object.freeze`d so accidental mutation can't leak back into the dataset.
 
 ### Selection
 

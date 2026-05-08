@@ -1,15 +1,19 @@
 /**
- * An undoable edit operation.
+ * An undoable edit memento. NOT to be confused with a mapshaper
+ * "operation" (`emap.ops.*`) — those wrap a CLI / parsed-command run
+ * against a dataset and internally push a `DatasetReplaceCommand` to
+ * history. `EditCommand` is the lower-level abstraction that lives on
+ * the undo / redo stack.
  *
  * Lifecycle (memento pattern):
  * - The caller mutates the data, then constructs the command and calls
- *   `Emap.pushCommand(cmd)`. The command stores any state needed to reverse
- *   the operation. `pushCommand` does NOT call `do()`.
+ *   `Emap.pushCommand(cmd)`. The command stores any state needed to
+ *   reverse the change. `pushCommand` does NOT call `do()`.
  * - On undo, `EditHistory` invokes `cmd.undo()` to restore the prior state.
- * - On redo, `EditHistory` invokes `cmd.do()` to re-apply the operation.
+ * - On redo, `EditHistory` invokes `cmd.do()` to re-apply the change.
  *
- * Implementations must capture enough state in their constructor that both
- * `do()` and `undo()` can run multiple times without diverging.
+ * Implementations must capture enough state in their constructor that
+ * both `do()` and `undo()` can run multiple times without diverging.
  */
 export interface EditCommand {
   /** Re-apply the operation. Called by `EditHistory.redo()`. */

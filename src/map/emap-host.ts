@@ -10,9 +10,11 @@
 import type { TopologySource } from '../source/source';
 import type { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import type { EditHistory } from '../edit/edit-history';
+import type { TransactionInternal } from '../edit/transaction';
 import type { Selection } from './selection';
 import type { MapshaperLayer } from '../types/mapshaper-types';
 import type { LayerRegistry } from './layer-registry';
+import type { ValidatorRegistry } from '../validation/registry';
 
 /**
  * Sentinel returned by `_runDatasetCommand` callers when the host has
@@ -31,6 +33,22 @@ export interface EmapHostInternal {
   readonly _sources: globalThis.Map<string, TopologySource>;
   readonly _history: EditHistory;
   readonly _selection: Selection;
+  /**
+   * Currently active {@link Transaction}, or `null`. Set by
+   * `Transaction`'s constructor and cleared on commit / rollback. The
+   * runner consults this in `_applyDatasetReplace` to record per-source
+   * first-touch snapshots — kept on the host (rather than threaded
+   * through `OpContext`) so existing op signatures don't have to learn
+   * about transactions.
+   */
+  _activeTransaction: TransactionInternal | null;
+  /**
+   * Validator registry — owns the set of post-commit validators (e.g.
+   * topology checks, attribute schemas). The Emap instance listens to
+   * its own `historychange` event and asks the registry to run every
+   * `'after-commit'` validator; failures fire `validationfailed`.
+   */
+  readonly _validators: ValidatorRegistry;
   readonly _workerPool: MapshaperWorkerPool | null;
   readonly _workerMode: boolean | 'auto';
   readonly _workerThreshold: number;
@@ -67,5 +85,9 @@ export interface EmapHostInternal {
   fire(
     type: 'workerjobend',
     payload: { id: number; ok: boolean; durationMs: number; errorMessage?: string },
+  ): void;
+  fire(
+    type: 'validationfailed',
+    payload: { results: import('../validation/validator').ValidatorResult[]; label: string },
   ): void;
 }

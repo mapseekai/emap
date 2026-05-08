@@ -17,11 +17,14 @@ import { MouseWheel } from '../core/interactions';
 import { DragPanHandler } from '../core/drag-pan-handler';
 import { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import { FeatureQuery } from './feature-query';
+import { FeatureAccessor } from './feature-accessor';
+import { ValidatorRegistry } from '../validation/registry';
 import { HighlightManager } from './highlight-manager';
 import { Selection, SelectMode, SelectionDiff } from './selection';
 import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
 import type { EditCommand } from '../edit/edit-command';
 import { CompositeCommand } from '../edit/commands/composite';
+import { Transaction, type TransactionInternal } from '../edit/transaction';
 import { BulkFeatureDeleteCommand, type BulkFeatureDeleteCommandOptions } from '../edit/commands/feature-delete';
 // `MapshaperOps`, `EditSessions`, `AttributeOps` are composed onto `Emap`
 // via the `ops` / `editSession` / `attributes` getters below.
@@ -101,8 +104,37 @@ export class Emap extends EventDispatcher {
   // managers via `EmapHostInternal`; the rest stay private.
   private _highlightManager: HighlightManager = new HighlightManager();
   private _featureQuery: FeatureQuery;
+  /**
+   * Read-side feature accessor — `engine.features.get(ref)` returns one
+   * feature's geometry + frozen properties; `iter(sourceId, layerId)`
+   * walks a layer; `count(...)` is O(1). Constructed lazily in the
+   * Emap constructor so test paths that bypass it via
+   * `Object.create(Emap.prototype)` still see a working accessor once
+   * they wire up the host.
+   */
+  public features!: FeatureAccessor;
   _selection: Selection = new Selection();
   _history: EditHistory = new EditHistory();
+  /**
+   * Currently active transaction, or `null`. Mutated by
+   * `Transaction`'s constructor / commit / rollback. Exposed via the
+   * `EmapHostInternal` contract so the runner can record per-source
+   * snapshots without threading a transaction param through every op
+   * signature.
+   */
+  _activeTransaction: TransactionInternal | null = null;
+  /**
+   * Post-commit validator registry. Validators registered here run
+   * after every `historychange` event; failures surface via
+   * `validationfailed` (no auto-undo — apps decide how to react).
+   *
+   * Public-facing alias is `engine.validators` (see initialiser below).
+   */
+  readonly _validators: ValidatorRegistry = new ValidatorRegistry();
+  /** Public alias for the validator registry. */
+  public get validators(): ValidatorRegistry {
+    return this._validators;
+  }
   private _historyShortcutUnbind: (() => void) | null = null;
 
   // Composed feature managers — each wraps a slice of behaviour that used
@@ -203,12 +235,20 @@ export class Emap extends EventDispatcher {
       () => ({ width: this._viewport.width, height: this._viewport.height }),
       () => this._viewport.initialMX,
     );
+    this.features = new FeatureAccessor(this);
 
     this._attachEventListeners();
 
     this.on('move', () => this._scheduleRender());
     this.on('resize', () => this._scheduleRender());
     this.on('reset', () => this.reset());
+    // Validation hook: every committed history step (whether from an op,
+    // an edit-session commit, or a transaction commit) reaches us via
+    // `historychange`. Asks the registry to fan out every
+    // `'after-commit'` validator in parallel and surfaces any failures
+    // through the `validationfailed` event. The registry no-ops when
+    // empty so the only cost in the common case is one `size` check.
+    this.on('historychange', () => this._runAfterCommitValidators());
 
     // Set up the worker pool eagerly when requested. Construction is cheap;
     // the underlying Worker is lazy-spawned on first run().
@@ -1281,6 +1321,27 @@ export class Emap extends EventDispatcher {
   }
 
   /**
+   * Begin an atomic multi-step edit. Every op or edit command pushed
+   * during the returned transaction's lifetime is staged; on
+   * `commit(label)` they collapse into a single undo entry, on
+   * `rollback()` every touched source's dataset is restored to its
+   * pre-transaction state and the selection is reverted.
+   *
+   * Throws if a transaction is already active — nesting isn't supported.
+   *
+   * @example
+   * const tx = engine.beginTransaction();
+   * const r1 = await engine.ops.clipLayer({ source, target, mask });
+   * if (!r1.ok) { tx.rollback(); return; }
+   * const r2 = await engine.ops.dissolveLayer({ source, target, field: 'STATE' });
+   * if (!r2.ok) { tx.rollback(); return; }
+   * await tx.commit('Process boundaries');
+   */
+  public beginTransaction(): Transaction {
+    return new Transaction(this);
+  }
+
+  /**
    * Bind Ctrl/Cmd+Z (undo) and Ctrl/Cmd+Shift+Z / Ctrl+Y (redo) on the given
    * element (default: the canvas container). Returns an unbind function. Calls
    * to this method are idempotent — subsequent calls unbind the prior binding.
@@ -1316,6 +1377,29 @@ export class Emap extends EventDispatcher {
   _fireHistoryChange(): void {
     const snap: HistoryStateSnapshot = this._history.snapshot();
     this.fire('historychange', snap);
+  }
+
+  /**
+   * Internal — fan out every `'after-commit'` validator and fire
+   * `validationfailed` for the subset whose report is `!ok`. Skipped
+   * cheaply when no validators are registered (no microtask, no
+   * allocations).
+   *
+   * Ignored when the host has been removed mid-flight; the validator
+   * may have started against a dataset that's no longer the current
+   * one but its result is irrelevant once the host is gone.
+   */
+  private _runAfterCommitValidators(): void {
+    if (this._validators.size === 0) return;
+    const top = this._history.snapshot();
+    const change = { label: top.label ?? '' };
+    void this._validators.runFor('after-commit', this, change).then((results) => {
+      if (this._removed) return;
+      const failed = results.filter((r) => !r.report.ok);
+      if (failed.length > 0) {
+        this.fire('validationfailed', { results: failed, label: change.label });
+      }
+    });
   }
 
   // ---------------------------------------------------------------------------

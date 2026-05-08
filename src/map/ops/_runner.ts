@@ -341,6 +341,13 @@ export function _applyDatasetReplace(
 ): OpResult {
   const source = host._sources.get(sourceId);
   if (!source) return Err.notFound('source', sourceId);
+  // Transaction-aware: register the FIRST-touch snapshot for this source
+  // so a later rollback can restore the dataset to the pre-transaction
+  // state regardless of how many ops swap it. Subsequent ops within the
+  // transaction overwrite the live dataset but the snapshot is unchanged.
+  if (host._activeTransaction) {
+    host._activeTransaction._captureFirstTouch(sourceId, before);
+  }
   source.setDataset(after);
   // Push the dataset-replace; it self-flags every prior undoStack entry
   // as `stale` (its captured refs target the now-discarded dataset

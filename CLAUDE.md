@@ -185,6 +185,20 @@ UI components implement the `Control` interface (`src/ui/control.ts`):
 ### LayerRegistry (sole layer resolver)
 `src/map/layer-registry.ts` is the only entry point for `resolve(sourceId, layerId) → MapshaperLayer | null`. Do not write inline `layers.find(l => l.name === id)` — go through the registry so the cache stays consistent.
 
+### Transaction (atomic multi-step edit)
+`src/edit/transaction.ts` stages every command pushed during its lifetime via `EditHistory.beginCapture()` / `endCapture()`. `commit(label)` collapses the captured children into a single `CompositeCommand`; `rollback()` restores per-source first-touch snapshots and the selection. The runner records snapshots on the active transaction in `_applyDatasetReplace` — ops themselves are transaction-unaware. **Nesting is not supported.**
+
+### Validation hooks (post-edit constraints)
+`src/validation/registry.ts` owns the registered `Validator[]`. `Emap` listens to its own `historychange` event and asks the registry to fan out every `'after-commit'` validator in parallel. Failures fire `validationfailed` — the engine never auto-undoes, the app decides. Cost is one `size` check when no validators are registered (the common case). Built-in: `topologyValidator(opts)` in `src/validation/builtin/topology.ts`.
+
+### FeatureAccessor (read-side feature lookups)
+`src/map/feature-accessor.ts` exposed via `Emap.features`: `get(ref) → Feature | null`, `iter(sourceId, layerId) → IterableIterator<Feature>`, `count(sourceId, layerId) → number`. Returns `null` (not throws) for any failed lookup; `properties` are `Object.freeze`d. Mutations still go through `attribute-ops` / edit commands so they participate in undo.
+
+### Operation vs Command (terminology)
+- **Operation** ("op") — a mapshaper-driven dataset op (`emap.ops.clipLayer`, etc.). Implemented under `src/map/ops/<op>.ts`. Returns `Promise<OpResult>`. Internally pushes a `DatasetReplaceCommand` to history.
+- **Command** — an undoable edit memento (`EditCommand` in `src/edit/edit-command.ts`). Has `do()` / `undo()`. Stored on the `EditHistory` undo stack. Includes vertex / feature / dataset-replace / composite variants.
+- **Task** — not used in this codebase.
+
 ---
 
 ## Code Conventions

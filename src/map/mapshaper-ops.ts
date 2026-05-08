@@ -1,7 +1,14 @@
-// Mapshaper command facade. Each method is a 1-line delegation to a free
-// function under `src/map/ops/<op>.ts`. The real work lives there; this
-// file's only job is to keep the `emap.ops.<method>(...)` surface stable
-// and to construct the shared `OpContext` exactly once per call.
+// Mapshaper operation facade — `emap.ops.*`. Each method is a 1-line
+// delegation to a free function under `src/map/ops/<op>.ts`. The real
+// work lives there; this file's only job is to keep the
+// `emap.ops.<name>(...)` surface stable and to construct the shared
+// `OpContext` exactly once per call.
+//
+// Terminology note: in this project, "operation" = a mapshaper-driven
+// dataset op (clip / dissolve / buffer / …), and "command" = an
+// undoable edit memento (`EditCommand` in `src/edit/`). The two are
+// related — every dataset-replace operation pushes a
+// `DatasetReplaceCommand` to history — but they are not the same thing.
 //
 // History: this used to be a 1700-line class with every op body inline.
 // PR-7 moved each op out into its own file behind the `OpContext`

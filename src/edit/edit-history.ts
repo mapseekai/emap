@@ -55,6 +55,14 @@ export class EditHistory {
    * non-stale traversal or on `clear()`.
    */
   private _lastSkippedStale = false;
+  /**
+   * Active capture buffer for the {@link beginCapture} protocol used by
+   * `Transaction`. While non-null, every `push(cmd)` diverts into this
+   * buffer instead of mutating the undo stack. `endCapture()` returns
+   * the collected commands and unsets this. Nested captures are not
+   * supported — a second `beginCapture()` while one is active throws.
+   */
+  private _captureBuffer: EditCommand[] | null = null;
 
   constructor(options: EditHistoryOptions = {}) {
     this._maxSize = options.maxSize ?? 200;
@@ -79,6 +87,14 @@ export class EditHistory {
    * stale — it remains undoable as the boundary itself.
    */
   push(cmd: EditCommand): void {
+    // Capture mode (Transaction): divert without touching undo / redo
+    // stacks. Merge / barrier / eviction logic is NOT applied here — the
+    // captured commands are folded into a single CompositeCommand on
+    // commit, which then goes through this method normally.
+    if (this._captureBuffer) {
+      this._captureBuffer.push(cmd);
+      return;
+    }
     // Merge attempt comes BEFORE the barrier check so the merged command
     // (still on top) keeps its non-stale status. A barrier never tries
     // to merge — it's not a vertex/translate operation.
@@ -101,6 +117,40 @@ export class EditHistory {
     if (this._undoStack.length > this._maxSize) {
       this._undoStack.shift();
     }
+  }
+
+  /**
+   * Begin a transaction-style capture session. While active, `push(cmd)`
+   * routes every command into an internal buffer instead of mutating the
+   * undo stack, so a multi-step transaction can batch its child commands
+   * and present them as a single undo entry on commit.
+   *
+   * Throws if a capture is already in progress — nested transactions are
+   * not supported. Pair with {@link endCapture}; for safety, transaction
+   * code should call `endCapture()` from a `finally`-style path so an
+   * error in the middle doesn't leave the history stuck in capture mode.
+   */
+  beginCapture(): void {
+    if (this._captureBuffer) {
+      throw new Error('EditHistory: nested capture not supported');
+    }
+    this._captureBuffer = [];
+  }
+
+  /**
+   * End the active capture session and return the collected commands in
+   * push order. No-op (returns `[]`) if no capture is active. After this
+   * call, subsequent `push()` calls resume normal undo-stack behaviour.
+   */
+  endCapture(): EditCommand[] {
+    const buf = this._captureBuffer;
+    this._captureBuffer = null;
+    return buf ?? [];
+  }
+
+  /** True iff a {@link beginCapture} session is currently active. */
+  isCapturing(): boolean {
+    return this._captureBuffer !== null;
   }
 
   /**

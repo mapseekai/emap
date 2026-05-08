@@ -14,6 +14,13 @@ export interface SelectionDiff {
 }
 
 /**
+ * Opaque snapshot returned by {@link Selection.snapshot} and consumed by
+ * {@link Selection.restore}. Implementation detail — do not depend on
+ * the concrete shape.
+ */
+export type SelectionSnapshot = ReadonlySet<string>;
+
+/**
  * Persistent multi-source / multi-layer feature selection.
  *
  * Storage shape mirrors `HighlightManager`: `Map<source, Map<layer, Set<id>>>`.
@@ -115,6 +122,32 @@ export class Selection {
     return { added: [], removed, changed: removed.length > 0 };
   }
 
+  /**
+   * Capture the current selection as an opaque snapshot. The returned
+   * value is meant to be handed back to {@link restore} later — its
+   * shape (currently `Set<string>` of encoded refs) is an implementation
+   * detail and may change.
+   *
+   * Used by `Transaction` for rollback so a transaction-internal
+   * operation that clears the selection can be reverted.
+   */
+  snapshot(): SelectionSnapshot {
+    return this._refSetSnapshot();
+  }
+
+  /**
+   * Replace the current selection with the contents of a previously
+   * captured snapshot. Returns the diff between the old state and the
+   * restored state so callers can fire a single `selectionchange` event.
+   */
+  restore(snap: SelectionSnapshot): SelectionDiff {
+    const before = this._refSetSnapshot();
+    this._byKey.clear();
+    this._size = 0;
+    for (const k of snap) this._addOne(parseRefKey(k));
+    return diffSnapshots(before, snap);
+  }
+
   // --- internals --------------------------------------------------------
 
   private _addOne(ref: FeatureRef): boolean {
@@ -169,7 +202,7 @@ function parseRefKey(key: string): FeatureRef {
   return { source, layer, id };
 }
 
-function diffSnapshots(before: Set<string>, after: Set<string>): SelectionDiff {
+function diffSnapshots(before: ReadonlySet<string>, after: ReadonlySet<string>): SelectionDiff {
   const added: FeatureRef[] = [];
   const removed: FeatureRef[] = [];
   for (const k of after) if (!before.has(k)) added.push(parseRefKey(k));
