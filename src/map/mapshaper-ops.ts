@@ -36,7 +36,10 @@ import type {
   DissolveOptions,
   ExplodeOptions,
   FilterFieldsOptions,
+  FilterGeomOptions,
+  FilterIslandsOptions,
   FilterOptions,
+  FilterSliversOptions,
   GeometryCheckReport,
   InnerlinesOptions,
   IntersectionPointsLayerOptions,
@@ -85,6 +88,9 @@ import { renameFields } from './ops/rename-fields';
 import { checkGeometry } from './ops/check-geometry';
 import { intersectionPointsLayer } from './ops/intersection-points';
 import { joinTable } from './ops/join-table';
+import { filterIslands } from './ops/filter-islands';
+import { filterSlivers } from './ops/filter-slivers';
+import { filterGeom } from './ops/filter-geom';
 
 /**
  * Mapshaper command manager. Owned by Emap and exposed as `emap.ops`.
@@ -121,6 +127,9 @@ export class MapshaperOps {
   bufferLayer(opts: BufferOptions): Promise<OpResult> { return bufferLayer(this._ctx, opts); }
   applyExpression(opts: ApplyExpressionOptions): Promise<OpResult> { return applyExpression(this._ctx, opts); }
   filterFeatures(opts: FilterOptions): Promise<OpResult> { return filterFeatures(this._ctx, opts); }
+  filterIslands(opts: FilterIslandsOptions): Promise<OpResult> { return filterIslands(this._ctx, opts); }
+  filterSlivers(opts: FilterSliversOptions): Promise<OpResult> { return filterSlivers(this._ctx, opts); }
+  filterGeom(opts: FilterGeomOptions): Promise<OpResult> { return filterGeom(this._ctx, opts); }
   explodeLayer(opts: ExplodeOptions): Promise<OpResult> { return explodeLayer(this._ctx, opts); }
   innerlinesLayer(opts: InnerlinesOptions): Promise<OpResult> { return innerlinesLayer(this._ctx, opts); }
   snapLayer(opts: SnapOptions): Promise<OpResult> { return snapLayer(this._ctx, opts); }

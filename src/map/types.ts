@@ -502,6 +502,71 @@ export interface FilterFieldsOptions {
   invert?: boolean;
 }
 
+/**
+ * Options for `Emap.filterIslands` — drop tiny disconnected polygon
+ * parts (e.g. cartographic cleanup of digitisation noise). Wraps
+ * mapshaper's `-filter-islands`.
+ *
+ * Supply at least one of `minArea` / `minVertices` — mapshaper requires
+ * a threshold or it's a no-op.
+ */
+export interface FilterIslandsOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the polygon layer to clean. */
+  target: string;
+  /** Drop islands smaller than this area (source-CRS units²). */
+  minArea?: number;
+  /** Drop islands with fewer than this many vertices (after dedup). */
+  minVertices?: number;
+  /**
+   * After dropping islands, also drop features whose shape array becomes
+   * empty (mapshaper's `remove-empty`). Defaults to keeping empties.
+   */
+  removeEmpty?: boolean;
+}
+
+/**
+ * Options for `Emap.filterSlivers` — drop sliver polygons (tiny
+ * polygons left over from clip / erase / dissolve operations). Wraps
+ * mapshaper's `-filter-slivers`.
+ */
+export interface FilterSliversOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the polygon layer to clean. */
+  target: string;
+  /**
+   * Drop polygons whose area falls below this threshold (source-CRS
+   * units²). Required — mapshaper has no implicit default.
+   */
+  minArea: number;
+  /**
+   * Use a perimeter-weighted area metric (mapshaper's `weighted` flag).
+   * Better for elongated slivers where bare area undershoots the
+   * "looks like a sliver" intuition.
+   */
+  weighted?: boolean;
+}
+
+/**
+ * Options for `Emap.filterGeom` — geometric (vs attribute) filter.
+ * Currently mapshaper's `-filter-geom` only supports a single bbox
+ * predicate, so the option is required. Use `filterFeatures` for
+ * attribute predicates (`expression`).
+ */
+export interface FilterGeomOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) to filter in place. */
+  target: string;
+  /**
+   * Bounding box `[xmin, ymin, xmax, ymax]` in source coords. Features
+   * whose geometry intersects this box are kept; the rest are dropped.
+   */
+  bbox: [number, number, number, number];
+}
+
 /** Options for `Emap.checkGeometry`. Read-only topology validation. */
 export interface CheckGeometryOptions {
   /** Source ID whose dataset will be inspected. */
