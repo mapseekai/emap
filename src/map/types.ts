@@ -186,12 +186,33 @@ export type HighlightFeatureRef = FeatureRef;
  * masks require a future explicit merge step.
  */
 export interface ClipEraseOptions {
-  /** Source ID containing both layers. */
+  /** Source ID containing the target layer (and optionally the mask layer). */
   source: string;
   /** Layer name (or id) of the target to be clipped/erased. */
   target: string;
-  /** Layer name (or id) of the polygon mask. */
-  mask: string;
+  /**
+   * Layer name (or id) of the polygon mask living in the same source.
+   * Mutually exclusive with {@link bbox} — supply exactly one.
+   */
+  mask?: string;
+  /**
+   * Rectangular clip / erase region as `[xmin, ymin, xmax, ymax]` in
+   * source-data coordinates. Convenient when no full mask layer exists
+   * (e.g. crop to viewport, drop everything outside a bounding box).
+   * Mutually exclusive with {@link mask}.
+   */
+  bbox?: [number, number, number, number];
+  /**
+   * Run mapshaper's `cleanup` step after clip / erase to fix sliver
+   * polygons / unclosed rings. Recommended when the mask geometry is
+   * coarse or the target has overlapping shapes.
+   */
+  cleanup?: boolean;
+  /**
+   * Drop sliver polygons produced by the clip / erase. Implies a
+   * post-step similar to `filter-slivers`.
+   */
+  removeSlivers?: boolean;
 }
 
 /**
