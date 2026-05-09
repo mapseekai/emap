@@ -34,6 +34,8 @@ export type {
   FilterIslandsOptions,
   FilterSliversOptions,
   FilterGeomOptions,
+  AffineLayerOptions,
+  DataFillOptions,
   SnapOptions,
   MosaicOptions,
   UnionOptions,

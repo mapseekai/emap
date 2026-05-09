@@ -567,6 +567,71 @@ export interface FilterGeomOptions {
   bbox: [number, number, number, number];
 }
 
+/**
+ * Options for `Emap.affineLayer` — apply an affine transform to every
+ * vertex in a layer (or the whole dataset if `target` is omitted).
+ * Wraps mapshaper's `-affine`.
+ *
+ * Distinct from `editSession.beginAffineSession()`: that one is
+ * selection-driven (transform only the selected features and split
+ * shared arcs first); this op transforms an entire layer in one shot
+ * with no shared-arc handling.
+ */
+export interface AffineLayerOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id). When omitted, the whole dataset is transformed. */
+  target?: string;
+  /** Translate by `[dx, dy]` in source coords. */
+  shift?: [number, number];
+  /** Rotate by this many degrees (positive = counter-clockwise). */
+  rotate?: number;
+  /**
+   * Scale factor. A single number scales uniformly; a `[sx, sy]` pair
+   * scales each axis independently.
+   */
+  scale?: number | [number, number];
+  /**
+   * Anchor `[x, y]` for rotation / scale. Defaults to the layer's
+   * bbox centre when omitted.
+   */
+  anchor?: [number, number];
+  /**
+   * Optional JS predicate — only features matching `where` are
+   * transformed. Subject to `expressionPolicy` gating.
+   */
+  where?: string;
+}
+
+/**
+ * Options for `Emap.dataFill` — fill missing attribute values from
+ * adjacent features. Useful for cleaning gappy administrative-region
+ * datasets where some polygons lack a code/name field.
+ *
+ * Wraps mapshaper's `-data-fill`. Currently scoped to a single field
+ * per call (mapshaper's API limit).
+ */
+export interface DataFillOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id). */
+  target: string;
+  /** Field name whose null/empty values should be back-filled. */
+  field: string;
+  /**
+   * Optional weighting field — when filling from multiple eligible
+   * neighbours, prefer the one with the largest value of this field
+   * (e.g. weight by `area` so big neighbours dominate).
+   */
+  weightField?: string;
+  /**
+   * Restrict fills so a contiguous block of features can only adopt
+   * one value (mapshaper's `contiguous` flag). Without it, isolated
+   * pockets within a region can pick up different fill values.
+   */
+  contiguous?: boolean;
+}
+
 /** Options for `Emap.checkGeometry`. Read-only topology validation. */
 export interface CheckGeometryOptions {
   /** Source ID whose dataset will be inspected. */

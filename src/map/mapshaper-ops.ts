@@ -26,11 +26,13 @@ import {
   _applyDatasetReplace,
 } from './ops/_runner';
 import type {
+  AffineLayerOptions,
   ApplyExpressionOptions,
   BufferOptions,
   CleanOptions,
   CheckGeometryOptions,
   ClipEraseOptions,
+  DataFillOptions,
   DivideOptions,
   DropLayerOptions,
   DissolveOptions,
@@ -91,6 +93,8 @@ import { joinTable } from './ops/join-table';
 import { filterIslands } from './ops/filter-islands';
 import { filterSlivers } from './ops/filter-slivers';
 import { filterGeom } from './ops/filter-geom';
+import { affineLayer } from './ops/affine';
+import { dataFill } from './ops/data-fill';
 
 /**
  * Mapshaper command manager. Owned by Emap and exposed as `emap.ops`.
@@ -142,6 +146,7 @@ export class MapshaperOps {
   polygonsLayer(opts: PolygonsOptions): Promise<OpResult> { return polygonsLayer(this._ctx, opts); }
   simplifyLayer(opts: SimplifyOptions): Promise<OpResult> { return simplifyLayer(this._ctx, opts); }
   projectLayer(opts: ProjectOptions): Promise<OpResult> { return projectLayer(this._ctx, opts); }
+  affineLayer(opts: AffineLayerOptions): Promise<OpResult> { return affineLayer(this._ctx, opts); }
 
   // -- Layer management --------------------------------------------------
 
@@ -157,6 +162,7 @@ export class MapshaperOps {
   filterFields(opts: FilterFieldsOptions): Promise<OpResult> { return filterFields(this._ctx, opts); }
   renameFields(opts: RenameFieldsOptions): Promise<OpResult> { return renameFields(this._ctx, opts); }
   joinTable(opts: JoinTableOptions): Promise<OpResult> { return joinTable(this._ctx, opts); }
+  dataFill(opts: DataFillOptions): Promise<OpResult> { return dataFill(this._ctx, opts); }
 
   // -- Topology repair / inspection -------------------------------------
 
