@@ -26,17 +26,22 @@ import {
   _applyDatasetReplace,
 } from './ops/_runner';
 import type {
+  AffineLayerOptions,
   ApplyExpressionOptions,
   BufferOptions,
   CleanOptions,
   CheckGeometryOptions,
   ClipEraseOptions,
+  DataFillOptions,
   DivideOptions,
   DropLayerOptions,
   DissolveOptions,
   ExplodeOptions,
   FilterFieldsOptions,
+  FilterGeomOptions,
+  FilterIslandsOptions,
   FilterOptions,
+  FilterSliversOptions,
   GeometryCheckReport,
   InnerlinesOptions,
   IntersectionPointsLayerOptions,
@@ -85,6 +90,11 @@ import { renameFields } from './ops/rename-fields';
 import { checkGeometry } from './ops/check-geometry';
 import { intersectionPointsLayer } from './ops/intersection-points';
 import { joinTable } from './ops/join-table';
+import { filterIslands } from './ops/filter-islands';
+import { filterSlivers } from './ops/filter-slivers';
+import { filterGeom } from './ops/filter-geom';
+import { affineLayer } from './ops/affine';
+import { dataFill } from './ops/data-fill';
 
 /**
  * Mapshaper command manager. Owned by Emap and exposed as `emap.ops`.
@@ -121,6 +131,9 @@ export class MapshaperOps {
   bufferLayer(opts: BufferOptions): Promise<OpResult> { return bufferLayer(this._ctx, opts); }
   applyExpression(opts: ApplyExpressionOptions): Promise<OpResult> { return applyExpression(this._ctx, opts); }
   filterFeatures(opts: FilterOptions): Promise<OpResult> { return filterFeatures(this._ctx, opts); }
+  filterIslands(opts: FilterIslandsOptions): Promise<OpResult> { return filterIslands(this._ctx, opts); }
+  filterSlivers(opts: FilterSliversOptions): Promise<OpResult> { return filterSlivers(this._ctx, opts); }
+  filterGeom(opts: FilterGeomOptions): Promise<OpResult> { return filterGeom(this._ctx, opts); }
   explodeLayer(opts: ExplodeOptions): Promise<OpResult> { return explodeLayer(this._ctx, opts); }
   innerlinesLayer(opts: InnerlinesOptions): Promise<OpResult> { return innerlinesLayer(this._ctx, opts); }
   snapLayer(opts: SnapOptions): Promise<OpResult> { return snapLayer(this._ctx, opts); }
@@ -133,6 +146,7 @@ export class MapshaperOps {
   polygonsLayer(opts: PolygonsOptions): Promise<OpResult> { return polygonsLayer(this._ctx, opts); }
   simplifyLayer(opts: SimplifyOptions): Promise<OpResult> { return simplifyLayer(this._ctx, opts); }
   projectLayer(opts: ProjectOptions): Promise<OpResult> { return projectLayer(this._ctx, opts); }
+  affineLayer(opts: AffineLayerOptions): Promise<OpResult> { return affineLayer(this._ctx, opts); }
 
   // -- Layer management --------------------------------------------------
 
@@ -148,6 +162,7 @@ export class MapshaperOps {
   filterFields(opts: FilterFieldsOptions): Promise<OpResult> { return filterFields(this._ctx, opts); }
   renameFields(opts: RenameFieldsOptions): Promise<OpResult> { return renameFields(this._ctx, opts); }
   joinTable(opts: JoinTableOptions): Promise<OpResult> { return joinTable(this._ctx, opts); }
+  dataFill(opts: DataFillOptions): Promise<OpResult> { return dataFill(this._ctx, opts); }
 
   // -- Topology repair / inspection -------------------------------------
 

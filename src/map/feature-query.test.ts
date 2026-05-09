@@ -234,3 +234,83 @@ describe('FeatureQuery.clear', () => {
     expect(cacheSize()).toBe(3);
   });
 });
+
+// ===========================================================================
+// Regression: editVersion-keyed cache invalidation
+//
+// Bug history (commit b40493d): vertex-edit-control mutated arcs in place
+// (via adapter.snapVertices) without bumping `dataset.editVersion`. The
+// spatial-index cache key includes editVersion, so the cache stayed valid
+// against the OLD bbox. Hovering into the newly-expanded area produced no
+// hit because Flatbush.search prefiltered the polygon out by stale bbox.
+//
+// These tests pin the cache-key invalidation contract in isolation:
+//   - same dataset shape + arcs.size + layer.shapes.length
+//   - editVersion bump → fresh index with current arc bboxes
+// so a future refactor that loses the editVersion path fails loudly.
+// ===========================================================================
+
+describe('FeatureQuery editVersion cache invalidation (regression)', () => {
+  it('rebuilds the index when editVersion changes (same shape/arc counts)', () => {
+    const fq = makeFeatureQuery();
+    // Mutable arcs holder so we can change bbox between queries.
+    const arcBboxes = [[0, 0, 10, 10]];
+    const arcs = makeMockArcs(arcBboxes);
+    const layer = {
+      geometry_type: 'polygon',
+      shapes: [[[0]]], // one polygon using one arc
+    };
+
+    // First build at editVersion=0
+    const dataset0 = { editVersion: 0 };
+    const indexed0 = callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs, dataset0);
+    expect(indexed0.index.search(2, 2, 8, 8).sort()).toEqual([0]);
+    // Probe outside the original bbox — should miss
+    expect(indexed0.index.search(50, 50, 60, 60)).toEqual([]);
+
+    // Simulate vertex drag expanding the arc's bbox in place (what
+    // `adapter.snapVertices` does live during a drag).
+    arcBboxes[0] = [0, 0, 100, 100];
+
+    // Without editVersion bump, the cache returns the OLD index — the
+    // bug we're guarding against.
+    const indexedStale = callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs, dataset0);
+    expect(indexedStale).toBe(indexed0); // same reference, no rebuild
+    expect(indexedStale.index.search(50, 50, 60, 60)).toEqual([]); // still miss
+
+    // With editVersion bump, the index rebuilds and now sees (50,50).
+    const dataset1 = { editVersion: 1 };
+    const indexed1 = callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs, dataset1);
+    expect(indexed1).not.toBe(indexed0);
+    expect(indexed1.index.search(50, 50, 60, 60).sort()).toEqual([0]);
+  });
+
+  it('drops stale entries (other editVersions for same source/layer) on rebuild', () => {
+    const fq = makeFeatureQuery();
+    const arcBboxes = [[0, 0, 10, 10]];
+    const arcs = makeMockArcs(arcBboxes);
+    const layer = { geometry_type: 'polygon', shapes: [[[0]]] };
+
+    // Build at v=0, then v=1, then v=2. Each rebuild should evict the
+    // previous (sourceId, layerIndex) entries so the cache doesn't grow
+    // without bound across many in-place edits.
+    callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs, { editVersion: 0 });
+    callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs, { editVersion: 1 });
+    callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs, { editVersion: 2 });
+    const cache: Map<string, unknown> = Reflect.get(fq, '_indexCache') as any;
+    // Only the latest entry should remain for this (source,layer) pair.
+    let count = 0;
+    for (const k of cache.keys()) if (k.startsWith('src1|0|')) count++;
+    expect(count).toBe(1);
+  });
+
+  it('treats undefined editVersion as 0 (back-compat path)', () => {
+    const fq = makeFeatureQuery();
+    const arcs = makeMockArcs([[0, 0, 10, 10]]);
+    const layer = { geometry_type: 'polygon', shapes: [[[0]]] };
+
+    const a = callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs, undefined);
+    const b = callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs, { /* no editVersion */ });
+    expect(a).toBe(b); // same cache key
+  });
+});

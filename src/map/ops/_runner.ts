@@ -61,6 +61,9 @@ const COMMAND_EFFECTS: Readonly<Record<string, OpEffect>> = {
   dissolve: 'shape-count',
   explode: 'shape-count',
   filter: 'shape-count',
+  'filter-geom': 'shape-count',
+  'filter-islands': 'shape-count',
+  'filter-slivers': 'shape-count',
   'merge-layers': 'shape-count',
   mosaic: 'shape-count',
   union: 'shape-count',
@@ -88,11 +91,13 @@ const COMMAND_EFFECTS: Readonly<Record<string, OpEffect>> = {
   'rename-fields': 'attribute-only',
   'rename-layers': 'attribute-only',
   'filter-fields': 'attribute-only',
-  'filter-slivers': 'attribute-only',
+  'data-fill': 'attribute-only',
   sort: 'attribute-only',
-  // crs-only: project + reproject
+  // crs-only: project + reproject + whole-layer affine (coords change,
+  // shape / arc / feature ids unchanged)
   proj: 'crs-only',
   project: 'crs-only',
+  affine: 'crs-only',
 };
 
 /**

@@ -186,12 +186,33 @@ export type HighlightFeatureRef = FeatureRef;
  * masks require a future explicit merge step.
  */
 export interface ClipEraseOptions {
-  /** Source ID containing both layers. */
+  /** Source ID containing the target layer (and optionally the mask layer). */
   source: string;
   /** Layer name (or id) of the target to be clipped/erased. */
   target: string;
-  /** Layer name (or id) of the polygon mask. */
-  mask: string;
+  /**
+   * Layer name (or id) of the polygon mask living in the same source.
+   * Mutually exclusive with {@link bbox} — supply exactly one.
+   */
+  mask?: string;
+  /**
+   * Rectangular clip / erase region as `[xmin, ymin, xmax, ymax]` in
+   * source-data coordinates. Convenient when no full mask layer exists
+   * (e.g. crop to viewport, drop everything outside a bounding box).
+   * Mutually exclusive with {@link mask}.
+   */
+  bbox?: [number, number, number, number];
+  /**
+   * Run mapshaper's `cleanup` step after clip / erase to fix sliver
+   * polygons / unclosed rings. Recommended when the mask geometry is
+   * coarse or the target has overlapping shapes.
+   */
+  cleanup?: boolean;
+  /**
+   * Drop sliver polygons produced by the clip / erase. Implies a
+   * post-step similar to `filter-slivers`.
+   */
+  removeSlivers?: boolean;
 }
 
 /**
@@ -479,6 +500,136 @@ export interface FilterFieldsOptions {
   fields: string[];
   /** Drop the listed fields and keep the rest (mapshaper's `invert` flag). */
   invert?: boolean;
+}
+
+/**
+ * Options for `Emap.filterIslands` — drop tiny disconnected polygon
+ * parts (e.g. cartographic cleanup of digitisation noise). Wraps
+ * mapshaper's `-filter-islands`.
+ *
+ * Supply at least one of `minArea` / `minVertices` — mapshaper requires
+ * a threshold or it's a no-op.
+ */
+export interface FilterIslandsOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the polygon layer to clean. */
+  target: string;
+  /** Drop islands smaller than this area (source-CRS units²). */
+  minArea?: number;
+  /** Drop islands with fewer than this many vertices (after dedup). */
+  minVertices?: number;
+  /**
+   * After dropping islands, also drop features whose shape array becomes
+   * empty (mapshaper's `remove-empty`). Defaults to keeping empties.
+   */
+  removeEmpty?: boolean;
+}
+
+/**
+ * Options for `Emap.filterSlivers` — drop sliver polygons (tiny
+ * polygons left over from clip / erase / dissolve operations). Wraps
+ * mapshaper's `-filter-slivers`.
+ */
+export interface FilterSliversOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) of the polygon layer to clean. */
+  target: string;
+  /**
+   * Drop polygons whose area falls below this threshold (source-CRS
+   * units²). Required — mapshaper has no implicit default.
+   */
+  minArea: number;
+  /**
+   * Use a perimeter-weighted area metric (mapshaper's `weighted` flag).
+   * Better for elongated slivers where bare area undershoots the
+   * "looks like a sliver" intuition.
+   */
+  weighted?: boolean;
+}
+
+/**
+ * Options for `Emap.filterGeom` — geometric (vs attribute) filter.
+ * Currently mapshaper's `-filter-geom` only supports a single bbox
+ * predicate, so the option is required. Use `filterFeatures` for
+ * attribute predicates (`expression`).
+ */
+export interface FilterGeomOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id) to filter in place. */
+  target: string;
+  /**
+   * Bounding box `[xmin, ymin, xmax, ymax]` in source coords. Features
+   * whose geometry intersects this box are kept; the rest are dropped.
+   */
+  bbox: [number, number, number, number];
+}
+
+/**
+ * Options for `Emap.affineLayer` — apply an affine transform to every
+ * vertex in a layer (or the whole dataset if `target` is omitted).
+ * Wraps mapshaper's `-affine`.
+ *
+ * Distinct from `editSession.beginAffineSession()`: that one is
+ * selection-driven (transform only the selected features and split
+ * shared arcs first); this op transforms an entire layer in one shot
+ * with no shared-arc handling.
+ */
+export interface AffineLayerOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id). When omitted, the whole dataset is transformed. */
+  target?: string;
+  /** Translate by `[dx, dy]` in source coords. */
+  shift?: [number, number];
+  /** Rotate by this many degrees (positive = counter-clockwise). */
+  rotate?: number;
+  /**
+   * Scale factor. A single number scales uniformly; a `[sx, sy]` pair
+   * scales each axis independently.
+   */
+  scale?: number | [number, number];
+  /**
+   * Anchor `[x, y]` for rotation / scale. Defaults to the layer's
+   * bbox centre when omitted.
+   */
+  anchor?: [number, number];
+  /**
+   * Optional JS predicate — only features matching `where` are
+   * transformed. Subject to `expressionPolicy` gating.
+   */
+  where?: string;
+}
+
+/**
+ * Options for `Emap.dataFill` — fill missing attribute values from
+ * adjacent features. Useful for cleaning gappy administrative-region
+ * datasets where some polygons lack a code/name field.
+ *
+ * Wraps mapshaper's `-data-fill`. Currently scoped to a single field
+ * per call (mapshaper's API limit).
+ */
+export interface DataFillOptions {
+  /** Source ID containing the target layer. */
+  source: string;
+  /** Layer name (or id). */
+  target: string;
+  /** Field name whose null/empty values should be back-filled. */
+  field: string;
+  /**
+   * Optional weighting field — when filling from multiple eligible
+   * neighbours, prefer the one with the largest value of this field
+   * (e.g. weight by `area` so big neighbours dominate).
+   */
+  weightField?: string;
+  /**
+   * Restrict fills so a contiguous block of features can only adopt
+   * one value (mapshaper's `contiguous` flag). Without it, isolated
+   * pockets within a region can pick up different fill values.
+   */
+  contiguous?: boolean;
 }
 
 /** Options for `Emap.checkGeometry`. Read-only topology validation. */
