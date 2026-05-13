@@ -122,3 +122,34 @@ describe('bufferLayer — mergeFirst', () => {
     expect(calls[0].cmds.map((c) => c.name)).toEqual(['target', 'buffer']);
   });
 });
+
+describe('bufferLayer — validation', () => {
+  it.each([
+    ['type', { type: 'sideways' as any }],
+    ['vertices', { vertices: 0 }],
+    ['vertices', { vertices: 1.5 }],
+    ['arcQuality', { arcQuality: -1 }],
+    ['tolerance', { tolerance: -0.1 }],
+    ['sliceLength', { sliceLength: 0 }],
+    ['backtrack', { backtrack: 1.2 }],
+  ])('rejects %s with bad value and does not dispatch', async (field, override) => {
+    const { ctx, calls } = makeStubCtx();
+    const r = await bufferLayer(ctx, {
+      source: 's1', target: 'parks', radius: 50,
+      ...(override as Partial<import('../types').BufferOptions>),
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe('validation');
+      expect(r.error.field).toBe(field);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it('does not include unset optional keys in the ParsedCommand options', async () => {
+    const { ctx, calls } = makeStubCtx();
+    await bufferLayer(ctx, { source: 's1', target: 'parks', radius: 50 });
+    const bufferCmd = calls[0].cmds.find((c) => c.name === 'buffer')!;
+    expect(bufferCmd.options).toEqual({ radius: '50' });
+  });
+});
