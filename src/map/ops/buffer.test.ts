@@ -144,9 +144,10 @@ describe('bufferLayer — validation', () => {
       ...(override as Partial<import('../types').BufferOptions>),
     });
     expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.kind).toBe('validation');
+    if (!r.ok && r.error.kind === 'validation') {
       expect(r.error.field).toBe(field);
+    } else {
+      throw new Error(`expected validation error, got ${JSON.stringify(r)}`);
     }
     expect(calls).toHaveLength(0);
   });
