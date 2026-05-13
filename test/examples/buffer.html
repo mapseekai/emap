@@ -67,7 +67,8 @@
     <button id="buffer-btn" disabled>生成缓冲区</button>
     <span id="status">加载数据</span>
     <small style="flex-basis:100%; opacity:0.85; padding-top:4px;">
-      单位: 点 buffer 半径 = <strong>米</strong>（勾选 planar 则为源 CRS 单位）；线/面 buffer 半径 = 源 CRS 单位（lat/lng 数据为度）。
+      单位: 点 buffer 半径 = <strong>米</strong>（勾选 planar 则改为源 CRS 单位）；线/面 buffer 半径 = 源 CRS 单位（lat/lng 数据为<strong>度</strong>）。
+      参考: 国境尺度点 buffer 建议 <code>50000</code>（50 km）起；lat/lng 线/面建议 <code>0.05</code>~<code>1</code>；投影到米后线/面再用米值。
     </small>
   </div>
   <div id="map" tabindex="0"></div>
