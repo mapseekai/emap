@@ -148,8 +148,15 @@
       status.textContent = `正在对 ${target} 生成半径 ${raw} 的缓冲区...`;
       bufBtn.disabled = true;
       try {
-        const ok = await map.ops.bufferLayer(opts);
-        status.textContent = ok ? `已生成 ${target} 的缓冲区,Ctrl+Z 撤销。` : '生成失败。';
+        const result = await map.ops.bufferLayer(opts);
+        console.log('bufferLayer result:', result);
+        if (result.ok) {
+          status.textContent = `已生成 ${target} 的缓冲区,Ctrl+Z 撤销。`;
+        } else {
+          const e = result.error;
+          status.textContent = `生成失败: ${e.kind}${e.field ? ' field=' + e.field : ''}${e.reason ? ' (' + e.reason + ')' : ''}${e.cause ? ' cause=' + (e.cause.message || e.cause) : ''}`;
+          console.error('bufferLayer error:', e);
+        }
         const src = map.getSource(SOURCE_ID);
         if (src) populate(src);
       } catch (err) {
