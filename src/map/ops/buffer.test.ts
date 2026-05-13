@@ -132,6 +132,11 @@ describe('bufferLayer — validation', () => {
     ['tolerance', { tolerance: -0.1 }],
     ['sliceLength', { sliceLength: 0 }],
     ['backtrack', { backtrack: 1.2 }],
+    ['radius', { radius: 0 }],
+    ['radius', { radius: -1 }],
+    ['radius', { radius: Infinity }],
+    ['radius', { radius: '' }],
+    ['capStyle', { capStyle: 'square' as any }],
   ])('rejects %s with bad value and does not dispatch', async (field, override) => {
     const { ctx, calls } = makeStubCtx();
     const r = await bufferLayer(ctx, {
@@ -143,6 +148,15 @@ describe('bufferLayer — validation', () => {
       expect(r.error.kind).toBe('validation');
       expect(r.error.field).toBe(field);
     }
+    expect(calls).toHaveLength(0);
+  });
+
+  it('returns expression-disabled when radius is a string and eval is off', async () => {
+    const { ctx, calls } = makeStubCtx();
+    (ctx.host as any)._allowExpressionEvaluation = () => false;
+    const r = await bufferLayer(ctx, { source: 's1', target: 'parks', radius: 'this.x' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.kind).toBe('expression-disabled');
     expect(calls).toHaveLength(0);
   });
 

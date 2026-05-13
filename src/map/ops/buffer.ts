@@ -12,6 +12,7 @@ import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
 import type { OpContext } from './_context';
 
 const VALID_TYPES = new Set(['left', 'right', 'outer', 'inner']);
+const VALID_CAP_STYLES = new Set(['flat', 'round']);
 
 function isPositiveInt(v: unknown): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v > 0;
@@ -60,6 +61,9 @@ export async function bufferLayer(ctx: OpContext, opts: BufferOptions): Promise<
   if (opts.type !== undefined && !VALID_TYPES.has(opts.type)) {
     return Err.validation('type', `must be one of: left, right, outer, inner`);
   }
+  if (opts.capStyle !== undefined && !VALID_CAP_STYLES.has(opts.capStyle)) {
+    return Err.validation('capStyle', 'must be one of: flat, round');
+  }
 
   // mergeFirst applies only to polygon layers. Anything else: warn + ignore.
   let mergeFirstApplies = false;
@@ -75,7 +79,7 @@ export async function bufferLayer(ctx: OpContext, opts: BufferOptions): Promise<
 
   // Assemble snake_case option bag. Only include keys the caller actually set.
   const bufferOptions: Record<string, unknown> = { radius: String(opts.radius) };
-  if (opts.capStyle) bufferOptions.cap_style = opts.capStyle;
+  if (opts.capStyle !== undefined) bufferOptions.cap_style = opts.capStyle;
   if (opts.vertices !== undefined) bufferOptions.vertices = opts.vertices;
   if (opts.arcQuality !== undefined) bufferOptions.arc_quality = opts.arcQuality;
   if (opts.tolerance !== undefined) bufferOptions.tolerance = opts.tolerance;
