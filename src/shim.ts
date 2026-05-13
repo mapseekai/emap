@@ -1,6 +1,7 @@
 import * as mproj from 'mproj';
 import Flatbush from 'flatbush';
 import KDBush from 'kdbush';
+import * as geographiclib from 'geographiclib-geodesic';
 
 // mapshaper's polyfill resolution is `typeof window == 'object' && window.modules`
 // (mapshaper.js around line 142), and `runningInBrowser()` is
@@ -21,3 +22,4 @@ const modules = (g.window!.modules = g.window!.modules || {});
 modules['mproj'] = mproj;
 modules['flatbush'] = Flatbush;
 modules['kdbush'] = KDBush;
+modules['geographiclib-geodesic'] = geographiclib;
