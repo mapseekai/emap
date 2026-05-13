@@ -1,0 +1,86 @@
+{
+  "type": "FeatureCollection",
+  "name": "lines",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "G6 Jingzang Expressway", "kind": "expressway", "length_km": 2540 },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [116.4074, 39.9042],
+          [115.0000, 40.2000],
+          [112.5000, 40.8000],
+          [109.0000, 40.7000],
+          [105.7000, 38.5000],
+          [101.7000, 36.6200]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "G4 Jinggang'ao Expressway", "kind": "expressway", "length_km": 2272 },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [116.4074, 39.9042],
+          [114.5149, 38.0428],
+          [114.3055, 30.5928],
+          [113.2644, 23.1291]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Yangtze segment", "kind": "river", "length_km": 980 },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [104.0668, 30.5728],
+          [108.0000, 30.3000],
+          [111.2900, 30.7000],
+          [114.3055, 30.5928],
+          [118.7969, 32.0603],
+          [121.4737, 31.2304]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Beijing Ring Road system", "kind": "multiline" },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [116.30, 39.95],
+            [116.30, 39.85],
+            [116.50, 39.85],
+            [116.50, 39.95],
+            [116.30, 39.95]
+          ],
+          [
+            [116.25, 40.00],
+            [116.25, 39.80],
+            [116.55, 39.80],
+            [116.55, 40.00],
+            [116.25, 40.00]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Trans-Siberia stub", "kind": "rail" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [87.6168, 43.8256],
+          [95.0000, 47.0000],
+          [104.0000, 50.0000],
+          [113.0000, 52.0000],
+          [126.5349, 45.8038]
+        ]
+      }
+    }
+  ]
+}

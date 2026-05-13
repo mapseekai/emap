@@ -1,0 +1,53 @@
+{
+  "type": "FeatureCollection",
+  "name": "points",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Beijing", "pop": 21893000, "kind": "capital" },
+      "geometry": { "type": "Point", "coordinates": [116.4074, 39.9042] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Shanghai", "pop": 24870000, "kind": "city" },
+      "geometry": { "type": "Point", "coordinates": [121.4737, 31.2304] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Guangzhou", "pop": 18676000, "kind": "city" },
+      "geometry": { "type": "Point", "coordinates": [113.2644, 23.1291] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Chengdu", "pop": 20937000, "kind": "city" },
+      "geometry": { "type": "Point", "coordinates": [104.0668, 30.5728] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Xian", "pop": 12953000, "kind": "city" },
+      "geometry": { "type": "Point", "coordinates": [108.9398, 34.3416] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Harbin", "pop": 10093000, "kind": "city" },
+      "geometry": { "type": "Point", "coordinates": [126.5349, 45.8038] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Kunming", "pop": 8460000, "kind": "city" },
+      "geometry": { "type": "Point", "coordinates": [102.7123, 25.0406] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Urumqi-cluster", "pop": 3550000, "kind": "multipoint" },
+      "geometry": {
+        "type": "MultiPoint",
+        "coordinates": [
+          [87.6168, 43.8256],
+          [88.0000, 44.0000],
+          [87.3000, 43.5000]
+        ]
+      }
+    }
+  ]
+}
