@@ -87,3 +87,38 @@ describe('bufferLayer — parameter passthrough', () => {
     });
   });
 });
+
+describe('bufferLayer — mergeFirst', () => {
+  it('inserts dissolve2 before buffer for polygon layers', async () => {
+    const { ctx, calls } = makeStubCtx([{ name: 'parks', geometry_type: 'polygon' }]);
+    const r = await bufferLayer(ctx, {
+      source: 's1', target: 'parks', radius: 50, mergeFirst: true,
+    });
+    expect(r.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    const names = calls[0].cmds.map((c) => c.name);
+    expect(names).toEqual(['target', 'dissolve2', 'buffer']);
+    expect(calls[0].label).toBe('Buffer (merged) parks');
+  });
+
+  it('skips dissolve2 and warns for non-polygon layers', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { ctx, calls } = makeStubCtx([{ name: 'roads', geometry_type: 'polyline' }]);
+    const r = await bufferLayer(ctx, {
+      source: 's1', target: 'roads', radius: 50, mergeFirst: true,
+    });
+    expect(r.ok).toBe(true);
+    const names = calls[0].cmds.map((c) => c.name);
+    expect(names).toEqual(['target', 'buffer']);
+    expect(calls[0].label).toBe('Buffer roads');
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0][0]).toMatch(/mergeFirst ignored.*polyline/);
+    warn.mockRestore();
+  });
+
+  it('omits dissolve2 when mergeFirst is undefined / false', async () => {
+    const { ctx, calls } = makeStubCtx();
+    await bufferLayer(ctx, { source: 's1', target: 'parks', radius: 50 });
+    expect(calls[0].cmds.map((c) => c.name)).toEqual(['target', 'buffer']);
+  });
+});
