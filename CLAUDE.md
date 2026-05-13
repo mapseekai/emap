@@ -233,6 +233,7 @@ Tests use `Reflect` to access private properties/methods. This is an accepted pa
 | Map orchestration | `src/map/map.ts` |
 | Feature hit-testing / spatial index | `src/map/feature-query.ts` |
 | New mapshaper data op | New file `src/map/ops/<op>.ts` + 1-line delegate in `src/map/mapshaper-ops.ts` + option type in `src/map/types.ts` |
+| Buffer parameter mapping (camelCase ↔ snake_case) | `src/map/ops/buffer.ts` — full `-buffer` option surface |
 | New edit command | New file `src/edit/commands/<cmd>.ts` implementing `EditCommand` (see `vertex-move.ts` for the canonical template) |
 | Worker routing decision | `src/map/worker-routing.ts` (CHEAP / EXPENSIVE sets) |
 | Mapshaper internals access | `src/adapter/mapshaper-adapter.ts` only — never touch `mapshaper.internal.*` from outside the adapter |
