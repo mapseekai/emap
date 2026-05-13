@@ -46,14 +46,29 @@
   <div id="header">
     <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
     <label>目标图层: <select id="target"></select></label>
-    <label>半径: <input id="radius" type="text" value="0.01" placeholder="数字或表达式"/></label>
+    <label>半径: <input id="radius" type="text" value="1000" placeholder="数字或表达式"/></label>
     <label>端点样式: <select id="cap">
       <option value="">圆形 (默认)</option>
       <option value="round">圆形</option>
       <option value="flat">平直</option>
     </select></label>
+    <label>vertices: <input id="vertices" type="number" min="3" step="1" placeholder="72"/></label>
+    <label>arc-quality: <input id="arc-quality" type="number" min="1" step="1" placeholder=""/></label>
+    <label>type: <select id="type">
+      <option value="">全 (默认)</option>
+      <option value="left">left</option>
+      <option value="right">right</option>
+      <option value="outer">outer</option>
+      <option value="inner">inner</option>
+    </select></label>
+    <label><input id="planar" type="checkbox"/> planar</label>
+    <label><input id="v2" type="checkbox"/> v2</label>
+    <label><input id="merge-first" type="checkbox"/> 整层合并后再 buffer (面)</label>
     <button id="buffer-btn" disabled>生成缓冲区</button>
     <span id="status">加载数据</span>
+    <small style="flex-basis:100%; opacity:0.85; padding-top:4px;">
+      单位: 点 buffer 半径 = <strong>米</strong>（勾选 planar 则为源 CRS 单位）；线/面 buffer 半径 = 源 CRS 单位（lat/lng 数据为度）。
+    </small>
   </div>
   <div id="map" tabindex="0"></div>
 
@@ -105,15 +120,30 @@
       reader.readAsArrayBuffer(file);
     });
 
+    function readNumber(id) {
+      const raw = document.getElementById(id).value.trim();
+      if (!raw) return undefined;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : undefined;
+    }
+
     bufBtn.addEventListener('click', async () => {
       const target = targetSel.value;
       if (!target) return;
       const raw = radiusInput.value.trim();
       if (!raw) return;
-      // 纯数字按数字传,其他视为 mapshaper 表达式
       const radius = /^-?\d+(\.\d+)?$/.test(raw) ? Number(raw) : raw;
       const opts = { source: SOURCE_ID, target, radius };
       if (capSel.value) opts.capStyle = capSel.value;
+      const vertices = readNumber('vertices');
+      if (vertices !== undefined) opts.vertices = vertices;
+      const arcQuality = readNumber('arc-quality');
+      if (arcQuality !== undefined) opts.arcQuality = arcQuality;
+      const typeVal = document.getElementById('type').value;
+      if (typeVal) opts.type = typeVal;
+      if (document.getElementById('planar').checked) opts.planar = true;
+      if (document.getElementById('v2').checked) opts.v2 = true;
+      if (document.getElementById('merge-first').checked) opts.mergeFirst = true;
       status.textContent = `正在对 ${target} 生成半径 ${raw} 的缓冲区...`;
       bufBtn.disabled = true;
       try {
