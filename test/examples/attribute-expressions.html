@@ -36,6 +36,54 @@
     #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
     #map { flex: 1; background: #ffffff; position: relative; outline: none; }
     .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    #panel {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      bottom: 12px;
+      width: 380px;
+      box-sizing: border-box;
+      overflow: auto;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid #d0d0d0;
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      z-index: 20;
+    }
+    #panel h3 { margin: 0 0 8px 0; font-size: 13px; }
+    #panel pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+    .panel-section + .panel-section {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #e3e7ea;
+    }
+    .reference-list {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+    }
+    .reference-list div {
+      display: grid;
+      grid-template-columns: minmax(120px, max-content) 1fr;
+      gap: 8px;
+      align-items: start;
+    }
+    #panel code {
+      color: #1f5f8b;
+      font-family: Consolas, Monaco, monospace;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .reference-list span,
+    .reference-note {
+      color: #4a5560;
+      line-height: 1.45;
+    }
+    .reference-note {
+      margin: 6px 0 0;
+    }
   </style>
 </head>
 
@@ -43,17 +91,79 @@
   <div id="header">
     <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
     <label>目标图层: <select id="target"></select></label>
-    <label>表达式: <input id="expr" type="text" value="this.density = this.pop / this.area" /></label>
+    <label>表达式: <input id="expr" type="text" value="density = pop / area" /></label>
     <label>where 过滤: <input id="where" type="text" placeholder="可选" /></label>
     <button id="apply-btn" disabled>执行</button>
     <span id="status">加载数据</span>
     <span class="hint">
-      示例 — <code>this.density = this.pop / this.area</code> &middot;
-      <code>this.name = this.name.toUpperCase()</code> &middot;
-      <code>this.STATE = this.CNTY_FIPS.substr(0, 2)</code>
+      示例 — <code>density = pop / area</code> &middot;
+      <code>name = name.toUpperCase()</code> &middot;
+      <code>STATE = CNTY_FIPS.substr(0, 2)</code>
     </span>
   </div>
-  <div id="map" tabindex="0"></div>
+  <div id="map" tabindex="0">
+    <div id="panel">
+      <div class="panel-section">
+        <h3>属性</h3>
+        <pre id="attributes">(click a feature)</pre>
+      </div>
+      <div class="panel-section">
+        <h3>支持写法</h3>
+        <div class="reference-list">
+          <div><code>newField = oldField</code><span>新增或更新字段</span></div>
+          <div><code>d.name</code><span>读取当前要素属性对象</span></div>
+          <div><code>$.area</code><span>读取当前要素内置几何值</span></div>
+          <div><code>$.properties.name</code><span>通过要素代理读取属性</span></div>
+          <div><code>where: area > 0</code><span>where 过滤需要返回 true / false</span></div>
+          <div><code>_.round(value, 2)</code><span>字段名与函数同名时使用 _ 访问上下文函数</span></div>
+        </div>
+        <p class="reference-note"><code>$</code> 是当前要素代理；支持 <code>$.area</code>，不支持 <code>$area</code> 这种变量名写法。</p>
+      </div>
+      <div class="panel-section">
+        <h3>内置字段</h3>
+        <div class="reference-list">
+          <div><code>id</code><span>当前要素序号</span></div>
+          <div><code>layer_name</code><span>当前图层名称</span></div>
+          <div><code>layer</code><span>图层代理，含 name / type / size / bbox 等</span></div>
+          <div><code>properties</code><span>当前要素属性对象</span></div>
+          <div><code>d</code><span>当前要素属性对象别名</span></div>
+          <div><code>partCount</code><span>当前要素部件数量</span></div>
+          <div><code>isNull</code><span>当前几何是否为空</span></div>
+          <div><code>bbox / bounds</code><span>当前要素范围 [xmin, ymin, xmax, ymax]</span></div>
+          <div><code>width / height</code><span>当前要素范围宽高</span></div>
+          <div><code>length</code><span>线图层长度</span></div>
+          <div><code>area</code><span>面图层面积</span></div>
+          <div><code>perimeter</code><span>面图层周长</span></div>
+          <div><code>compactness</code><span>面图层紧凑度</span></div>
+          <div><code>planarArea</code><span>面图层平面面积</span></div>
+          <div><code>originalArea</code><span>面图层原始面积</span></div>
+          <div><code>innerPct</code><span>面内点质量比例</span></div>
+          <div><code>centroidX / centroidY</code><span>面质心坐标</span></div>
+          <div><code>innerX / innerY</code><span>面内部点坐标</span></div>
+          <div><code>x / y</code><span>点图层坐标</span></div>
+          <div><code>coordinates</code><span>点图层坐标数组</span></div>
+        </div>
+      </div>
+      <div class="panel-section">
+        <h3>内置函数</h3>
+        <div class="reference-list">
+          <div><code>round(n, d)</code><span>按小数位四舍五入</span></div>
+          <div><code>sprintf(fmt, ...)</code><span>格式化字符串</span></div>
+          <div><code>blend(c1, w1, c2, w2)</code><span>按权重混合颜色</span></div>
+          <div><code>format_dms(value, fmt)</code><span>十进制度转 DMS 文本</span></div>
+          <div><code>parse_dms(text, fmt)</code><span>DMS 文本转十进制度</span></div>
+          <div><code>int_median(counts, breaks)</code><span>按分组计数估算中位数</span></div>
+          <div><code>bboxContainsPoint(x, y)</code><span>当前要素 bbox 是否包含点</span></div>
+          <div><code>bboxIntersectsRectangle(a,b,c,d)</code><span>当前要素 bbox 是否与矩形相交</span></div>
+          <div><code>bboxContainsRectangle(a,b,c,d)</code><span>当前要素 bbox 是否包含矩形</span></div>
+          <div><code>bboxContainedByRectangle(a,b,c,d)</code><span>当前要素 bbox 是否被矩形包含</span></div>
+          <div><code>layer.field_exists(name)</code><span>图层是否存在字段</span></div>
+          <div><code>layer.field_type(name)</code><span>读取字段类型</span></div>
+          <div><code>layer.field_includes(name, value)</code><span>字段是否包含某个值</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <link rel="stylesheet" href="../../src/ui/controls.css" />
   <script src="../../dist/mapshaper-vendor.js"></script>
@@ -75,6 +185,8 @@
     const whereInput = document.getElementById('where');
     const applyBtn = document.getElementById('apply-btn');
     const status = document.getElementById('status');
+    const attributes = document.getElementById('attributes');
+    const mapContainer = map.getCanvasContainer();
 
     function populate(source) {
       targetSel.innerHTML = '';
@@ -89,6 +201,8 @@
       const file = e.target.files[0];
       if (!file) return;
       status.textContent = `正在加载 ${file.name}...`;
+      attributes.textContent = '(click a feature)';
+      map.clearHighlightedFeatures();
       const reader = new FileReader();
       reader.onload = (ev) => {
         const content = new Uint8Array(ev.target.result);
@@ -125,6 +239,24 @@
       } finally {
         applyBtn.disabled = false;
       }
+    });
+
+    mapContainer.addEventListener('click', (e) => {
+      const rect = mapContainer.getBoundingClientRect();
+      const point = [e.clientX - rect.left, e.clientY - rect.top];
+      const layers = targetSel.value ? [targetSel.value] : undefined;
+      const features = map.queryFeatures(point, layers ? { layers } : undefined);
+
+      if (!features.length) {
+        attributes.textContent = '(no feature hit)';
+        map.clearHighlightedFeatures();
+        return;
+      }
+
+      map.setHighlightedFeatures(features, { color: '#1e88e5', width: 3, radius: 6, fill: true });
+      attributes.textContent =
+        `hit ${features.length} feature(s)\n${features[0].layer}#${features[0].id}\n\n` +
+        JSON.stringify(features[0].properties, null, 2);
     });
   </script>
 </body>
