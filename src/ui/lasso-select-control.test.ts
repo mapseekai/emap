@@ -2,8 +2,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
   LassoSelectControl,
+  featureMatchesLasso,
   pointInPolygon,
-  featureRepresentativePixel,
 } from './lasso-select-control';
 
 interface FakeMap {
@@ -47,6 +47,31 @@ function dispatch(el: EventTarget, type: string, opts: {
   el.dispatchEvent(e);
 }
 
+function makePathSource(layer: { name: string; geometry_type: 'polyline' | 'polygon'; shapes: any[] }, paths: Record<number, Array<[number, number]>>) {
+  return {
+    getDataset: () => ({ layers: [layer] }),
+    getArcs: () => ({
+      getShapeIter: (part: number[]) => {
+        const points = paths[part[0]] ?? [];
+        let i = -1;
+        return {
+          x: 0,
+          y: 0,
+          hasNext() {
+            i++;
+            const p = points[i];
+            if (!p) return false;
+            this.x = p[0];
+            this.y = p[1];
+            return true;
+          },
+        };
+      },
+      getArcIter: vi.fn(),
+    }),
+  };
+}
+
 describe('pointInPolygon', () => {
   // Unit square 0..10 in both dims.
   const square: Array<[number, number]> = [
@@ -80,63 +105,49 @@ describe('pointInPolygon', () => {
   });
 });
 
-describe('featureRepresentativePixel', () => {
-  it('returns the projected first vertex for a path feature', () => {
-    const arcIter = (() => {
-      let n = 0;
-      return {
-        x: 0, y: 0,
-        hasNext() {
-          if (n === 0) { this.x = 12.5; this.y = 34.5; n++; return true; }
-          return false;
-        },
-      };
-    })();
+describe('featureMatchesLasso', () => {
+  const lasso: Array<[number, number]> = [
+    [100, 100], [200, 100], [200, 200], [100, 200], [100, 100],
+  ];
+
+  it('matches a polyline that crosses the lasso when intersecting is enabled', () => {
     const map: any = {
-      project: vi.fn((x: number, y: number) => [x * 2, y * 2]),
-      getSource: vi.fn(() => ({
-        getDataset: () => ({
-          layers: [{ name: 'states', geometry_type: 'polygon', shapes: [
-            [[0, 1, 2]], // shape 0: one part with three arc ids
-          ] }],
-        }),
-        getArcs: () => ({
-          getArcIter: vi.fn(() => arcIter),
-        }),
-      })),
+      project: vi.fn((x: number, y: number) => [x, y]),
+      getSource: vi.fn(() => makePathSource(
+        { name: 'l', geometry_type: 'polyline', shapes: [[[0]]] },
+        { 0: [[50, 150], [250, 150]] },
+      )),
     };
-    const px = featureRepresentativePixel(map, { source: 's', layer: 'states', id: 0 });
-    expect(px).toEqual([25, 69]);
+    expect(featureMatchesLasso(map, { source: 's', layer: 'l', id: 0 }, lasso, true)).toBe(true);
+    expect(featureMatchesLasso(map, { source: 's', layer: 'l', id: 0 }, lasso, false)).toBe(false);
   });
 
-  it('returns the first point for a point feature', () => {
+  it('matches a polygon that fully covers the lasso in intersecting mode', () => {
     const map: any = {
-      project: vi.fn((x: number, y: number) => [x * 2, y * 2]),
+      project: vi.fn((x: number, y: number) => [x, y]),
+      getSource: vi.fn(() => makePathSource(
+        { name: 'l', geometry_type: 'polygon', shapes: [[[0]]] },
+        { 0: [[0, 0], [300, 0], [300, 300], [0, 300], [0, 0]] },
+      )),
+    };
+    expect(featureMatchesLasso(map, { source: 's', layer: 'l', id: 0 }, lasso, true)).toBe(true);
+    expect(featureMatchesLasso(map, { source: 's', layer: 'l', id: 0 }, lasso, false)).toBe(false);
+  });
+
+  it('requires every point in a multi-point feature to be inside in containment mode', () => {
+    const map: any = {
+      project: vi.fn((x: number, y: number) => [x, y]),
       getSource: vi.fn(() => ({
         getDataset: () => ({
-          layers: [{ name: 'cities', geometry_type: 'point', shapes: [
-            [[7, 8]],
+          layers: [{ name: 'l', geometry_type: 'point', shapes: [
+            [[150, 150], [250, 250]],
           ] }],
         }),
         getArcs: () => undefined,
       })),
     };
-    const px = featureRepresentativePixel(map, { source: 's', layer: 'cities', id: 0 });
-    expect(px).toEqual([14, 16]);
-  });
-
-  it('returns null when source / layer / shape is missing', () => {
-    const map: any = {
-      project: vi.fn(),
-      getSource: vi.fn(() => undefined),
-    };
-    expect(featureRepresentativePixel(map, { source: 'x', layer: 'l', id: 0 })).toBeNull();
-
-    map.getSource = vi.fn(() => ({ getDataset: () => undefined }));
-    expect(featureRepresentativePixel(map, { source: 'x', layer: 'l', id: 0 })).toBeNull();
-
-    map.getSource = vi.fn(() => ({ getDataset: () => ({ layers: [] }) }));
-    expect(featureRepresentativePixel(map, { source: 'x', layer: 'missing', id: 0 })).toBeNull();
+    expect(featureMatchesLasso(map, { source: 's', layer: 'l', id: 0 }, lasso, true)).toBe(true);
+    expect(featureMatchesLasso(map, { source: 's', layer: 'l', id: 0 }, lasso, false)).toBe(false);
   });
 });
 
@@ -173,9 +184,8 @@ describe('LassoSelectControl', () => {
     dispatch(window, 'mouseup', { ...opts, clientX: points[points.length - 1][0], clientY: points[points.length - 1][1] });
   }
 
-  it('shift-drag along a polygon path selects features whose first-vertex is inside (replace mode)', () => {
-    // Two candidates returned by queryFeatures — only id=1's
-    // representative pixel lands inside the lasso polygon.
+  it('shift-drag along a polygon path selects point features inside (replace mode)', () => {
+    // Two candidates returned by queryFeatures; only id=1 is inside.
     map.queryFeatures.mockReturnValueOnce([
       { source: 's', layer: 'l', id: 1, geometryType: 'polygon', properties: {} },
       { source: 's', layer: 'l', id: 2, geometryType: 'polygon', properties: {} },
@@ -191,8 +201,7 @@ describe('LassoSelectControl', () => {
       getArcs: () => undefined,
     }));
 
-    // Triangle bounded by (100,100)-(200,100)-(150,200) — id=1's point
-    // (150,150) is inside; id=2's (500,500) is outside.
+    // Triangle bounded by (100,100)-(200,100)-(150,200).
     drawLasso([[100, 100], [200, 100], [150, 200]]);
 
     expect(map.queryFeatures).toHaveBeenCalledTimes(1);
@@ -201,6 +210,39 @@ describe('LassoSelectControl', () => {
       { source: 's', layer: 'l', id: 1 },
     ]);
     expect(map.select.mock.calls[0][1]).toEqual({ mode: 'replace' });
+  });
+
+  it('default mode selects path features that intersect the lasso even when endpoints are outside', () => {
+    map.queryFeatures.mockReturnValueOnce([
+      { source: 's', layer: 'l', id: 0, geometryType: 'polyline', properties: {} },
+    ]);
+    map.getSource.mockImplementation(() => makePathSource(
+      { name: 'l', geometry_type: 'polyline', shapes: [[[0]]] },
+      { 0: [[50, 150], [250, 150]] },
+    ));
+
+    drawLasso([[100, 100], [200, 100], [200, 200], [100, 200]]);
+
+    expect(map.select.mock.calls[0][0]).toEqual([
+      { source: 's', layer: 'l', id: 0 },
+    ]);
+  });
+
+  it('includeIntersecting=false excludes partially crossing path features', () => {
+    control.onRemove();
+    control = new LassoSelectControl({ includeIntersecting: false });
+    document.body.appendChild(control.onAdd(map as any));
+    map.queryFeatures.mockReturnValueOnce([
+      { source: 's', layer: 'l', id: 0, geometryType: 'polyline', properties: {} },
+    ]);
+    map.getSource.mockImplementation(() => makePathSource(
+      { name: 'l', geometry_type: 'polyline', shapes: [[[0]]] },
+      { 0: [[50, 150], [250, 150]] },
+    ));
+
+    drawLasso([[100, 100], [200, 100], [200, 200], [100, 200]]);
+
+    expect(map.select.mock.calls[0][0]).toEqual([]);
   });
 
   it('plain (non-shift) mousedown is left for the pan handler', () => {
@@ -224,7 +266,7 @@ describe('LassoSelectControl', () => {
 
   it('shift+ctrl → add mode', () => {
     map.queryFeatures.mockReturnValueOnce([
-      { source: 's', layer: 'l', id: 1, geometryType: 'polygon', properties: {} },
+      { source: 's', layer: 'l', id: 0, geometryType: 'polygon', properties: {} },
     ]);
     map.getSource.mockImplementation(() => ({
       getDataset: () => ({
@@ -232,9 +274,6 @@ describe('LassoSelectControl', () => {
       }),
     }));
     drawLasso([[100, 100], [200, 100], [150, 200]], { ctrlKey: true });
-    // The shape index used in this test starts at 0 — the candidate id=1
-    // would index into shapes[1] which is undefined; let's adjust the
-    // candidate id to 0 to match.
     expect(map.select).toHaveBeenCalled();
     expect(map.select.mock.calls[0][1]).toEqual({ mode: 'add' });
   });

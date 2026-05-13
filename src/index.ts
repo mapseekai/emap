@@ -284,6 +284,6 @@ export type { BoxSelectControlOptions, BoxSelectStyle } from './ui/box-select-co
 export {
   LassoSelectControl,
   pointInPolygon,
-  featureRepresentativePixel,
+  featureMatchesLasso,
 } from './ui/lasso-select-control';
 export type { LassoSelectControlOptions, LassoSelectStyle } from './ui/lasso-select-control';

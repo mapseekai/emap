@@ -1,6 +1,11 @@
 import type { Control } from './control';
 import type { Emap, FeatureRef } from '../map/map';
-import { normalizePointShape } from '../source/layer-utils';
+import { getLayerId, normalizePointShape } from '../source/layer-utils';
+import type {
+  ArcCollection,
+  MapshaperLayer,
+  PathShape,
+} from '../types/mapshaper-types';
 
 /** Visual style for the rubber-band lasso path. */
 export interface LassoSelectStyle {
@@ -27,6 +32,11 @@ export interface LassoSelectControlOptions {
    * Default `4`.
    */
   dragThreshold?: number;
+  /**
+   * Select features that intersect the lasso boundary or interior, not only
+   * features fully contained by it. Default `true`, matching box-select.
+   */
+  includeIntersecting?: boolean;
 }
 
 /**
@@ -36,8 +46,7 @@ export interface LassoSelectControlOptions {
  *
  * The lasso path is recorded in pixel coordinates as the user drags. On
  * release, the closed polygon is used to test each candidate feature's
- * representative pixel via even-odd ray-casting; survivors are passed to
- * `Emap.select`.
+ * geometry; survivors are passed to `Emap.select`.
  *
  * Modifier-key conventions (layered on top of shift):
  * - shift only → mode `'replace'`
@@ -48,10 +57,9 @@ export interface LassoSelectControlOptions {
  * or install both and switch between them at runtime via `enable()` /
  * `disable()`.
  *
- * Hit-test caveat: the representative pixel is each feature's first vertex
- * (or for points, the point itself). Long thin features whose first vertex
- * sits outside the lasso polygon may be missed even if their body is
- * inside. Document this for users.
+ * Hit-test semantics: by default, features are selected when their geometry
+ * intersects or is contained by the lasso, matching box-select's inclusive
+ * feel. Set `includeIntersecting: false` for strict containment.
  */
 export class LassoSelectControl implements Control {
   private _options: LassoSelectControlOptions;
@@ -208,15 +216,14 @@ export class LassoSelectControl implements Control {
       this._options.layers ? { layers: this._options.layers } : undefined,
     );
 
-    // Stage 2 — point-in-polygon refinement on each candidate's first vertex.
+    // Stage 2: geometry refinement against the lasso polygon.
     const refs: FeatureRef[] = [];
     const seen = new Set<string>();
+    const includeIntersecting = this._options.includeIntersecting !== false;
     for (const f of candidates) {
       const key = `${f.source}|${f.layer}|${f.id}`;
       if (seen.has(key)) continue;
-      const px = featureRepresentativePixel(this._map, f);
-      if (!px) continue;
-      if (!pointInPolygon(px, closed)) continue;
+      if (!featureMatchesLasso(this._map, f, closed, includeIntersecting)) continue;
       seen.add(key);
       refs.push({ source: f.source, layer: f.layer, id: f.id });
     }
@@ -283,47 +290,185 @@ function pathBBox(path: Array<[number, number]>): [number, number, number, numbe
   return [xmin, ymin, xmax, ymax];
 }
 
-/** Convert a `QueriedFeature` ref to a representative pixel:
- *  the first vertex of the first arc (path features) or the point itself
- *  (point features). Returns null if the feature can't be resolved. */
-export function featureRepresentativePixel(
+export function featureMatchesLasso(
   map: Emap,
-  ref: { source: string; layer: string; id: number },
-): [number, number] | null {
-  const source = map.getSource(ref.source);
-  if (!source) return null;
-  const dataset = source.getDataset?.();
-  if (!dataset) return null;
-  const layer = dataset.layers.find((l: any) => l?.name === ref.layer);
-  if (!layer) return null;
-  const shape = layer.shapes?.[ref.id];
-  if (!shape) return null;
+  ref: { source: string; layer: string; id: number; geometryType?: string },
+  lasso: Array<[number, number]>,
+  includeIntersecting: boolean,
+): boolean {
+  const resolved = resolveFeatureShape(map, ref);
+  if (!resolved) return false;
 
-  if (layer.geometry_type === 'point') {
-    // Multi-point shape: shape is [[x, y], ...]. Use first point. Tolerate
-    // legacy bare `[x, y]` form via normalizePointShape.
-    const points = normalizePointShape(shape);
-    const first = points[0];
-    if (!first || first.length < 2) return null;
-    return map.project(first[0], first[1]);
+  if (resolved.layer.geometry_type === 'point') {
+    const points = normalizePointShape(resolved.shape);
+    if (points.length === 0) return false;
+    const pixelPoints = points.map(([x, y]) => map.project(x, y) as [number, number]);
+    return includeIntersecting
+      ? pixelPoints.some((p) => pointInPolygonOrOnBoundary(p, lasso))
+      : pixelPoints.every((p) => pointInPolygonOrOnBoundary(p, lasso));
   }
 
-  // Path feature: shape is [[arcId, ...], ...]. First arc, first vertex.
-  const arcs = source.getArcs?.();
-  if (!arcs) return null;
-  const pathShape = shape as import('../types/mapshaper-types').PathShape;
-  const part = pathShape[0];
-  if (!part || part.length === 0) return null;
-  const rawArcId = part[0];
-  if (typeof rawArcId !== 'number') return null;
-  const arcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
-  const iter = arcs.getArcIter(arcId);
-  // mapshaper's ArcIterator advances on `hasNext()`; the FIRST call moves to
-  // vertex 0 and returns true. Subsequent calls advance further. We only
-  // need the first vertex, so call once.
-  if (!iter.hasNext()) return null;
-  return map.project(iter.x, iter.y);
+  if (!resolved.arcs) return false;
+  const parts = pathShapeToPixelParts(map, resolved.shape as PathShape, resolved.arcs);
+  if (parts.length === 0) return false;
+  const isPolygonFeature = resolved.layer.geometry_type === 'polygon';
+  return includeIntersecting
+    ? pathIntersectsPolygon(parts, lasso, isPolygonFeature)
+    : pathContainedByPolygon(parts, lasso, isPolygonFeature);
 }
+
+function resolveFeatureShape(
+  map: Emap,
+  ref: { source: string; layer: string; id: number },
+): { layer: MapshaperLayer; shape: unknown; arcs?: ArcCollection } | null {
+  const source = map.getSource(ref.source);
+  if (!source) return null;
+
+  let layer = map.layers?.resolve(ref.source, ref.layer) as MapshaperLayer | null | undefined;
+  if (!layer) {
+    const dataset = source.getDataset?.();
+    layer = dataset?.layers.find((l: MapshaperLayer, i: number) =>
+      getLayerId(l, i) === ref.layer || l?.name === ref.layer || l?.id === ref.layer,
+    );
+  }
+  if (!layer?.shapes) return null;
+  const shape = layer.shapes?.[ref.id];
+  if (!shape) return null;
+  return { layer, shape, arcs: source.getArcs?.() };
+}
+
+function pathShapeToPixelParts(map: Emap, shape: PathShape, arcs: ArcCollection): Array<Array<[number, number]>> {
+  const parts: Array<Array<[number, number]>> = [];
+  for (const part of shape) {
+    const points: Array<[number, number]> = [];
+    const iter = arcs.getShapeIter?.(part);
+    if (iter) {
+      while (iter.hasNext()) points.push(map.project(iter.x, iter.y) as [number, number]);
+    } else {
+      for (const rawArcId of part) {
+        const arcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
+        const arcIter = arcs.getArcIter(arcId);
+        while (arcIter.hasNext()) points.push(map.project(arcIter.x, arcIter.y) as [number, number]);
+      }
+    }
+    if (points.length > 0) parts.push(points);
+  }
+  return parts;
+}
+
+function pathIntersectsPolygon(
+  parts: Array<Array<[number, number]>>,
+  polygon: Array<[number, number]>,
+  isPolygonFeature: boolean,
+): boolean {
+  for (const part of parts) {
+    if (part.some((p) => pointInPolygonOrOnBoundary(p, polygon))) return true;
+    if (partSegmentsIntersectPolygon(part, polygon, isPolygonFeature)) return true;
+  }
+  if (isPolygonFeature && polygon.some((p) => pointInMultiPolygon(p, parts))) return true;
+  return false;
+}
+
+function pathContainedByPolygon(
+  parts: Array<Array<[number, number]>>,
+  polygon: Array<[number, number]>,
+  closeParts: boolean,
+): boolean {
+  for (const part of parts) {
+    if (!part.every((p) => pointInPolygonOrOnBoundary(p, polygon))) return false;
+    if (partSegmentsIntersectPolygon(part, polygon, closeParts)) return false;
+  }
+  return true;
+}
+
+function partSegmentsIntersectPolygon(
+  part: Array<[number, number]>,
+  polygon: Array<[number, number]>,
+  closePart: boolean,
+): boolean {
+  const partClosed = closePart ? closePath(part) : part;
+  const polyClosed = closePath(polygon);
+  for (let i = 0; i < partClosed.length - 1; i++) {
+    const a = partClosed[i];
+    const b = partClosed[i + 1];
+    for (let j = 0; j < polyClosed.length - 1; j++) {
+      const c = polyClosed[j];
+      const d = polyClosed[j + 1];
+      if (segmentsIntersect(a, b, c, d)) return true;
+    }
+  }
+  return false;
+}
+
+function pointInMultiPolygon(point: [number, number], parts: Array<Array<[number, number]>>): boolean {
+  let inside = false;
+  for (const part of parts) {
+    if (pointOnPolygonBoundary(point, part)) return true;
+    if (pointInPolygon(point, part)) inside = !inside;
+  }
+  return inside;
+}
+
+function pointInPolygonOrOnBoundary(point: [number, number], polygon: Array<[number, number]>): boolean {
+  return pointOnPolygonBoundary(point, polygon) || pointInPolygon(point, polygon);
+}
+
+function pointOnPolygonBoundary(point: [number, number], polygon: Array<[number, number]>): boolean {
+  const closed = closePath(polygon);
+  for (let i = 0; i < closed.length - 1; i++) {
+    if (pointOnSegment(point, closed[i], closed[i + 1])) return true;
+  }
+  return false;
+}
+
+function closePath(path: Array<[number, number]>): Array<[number, number]> {
+  if (path.length < 2) return path;
+  const first = path[0];
+  const last = path[path.length - 1];
+  if (samePoint(first, last)) return path;
+  return [...path, first];
+}
+
+function segmentsIntersect(
+  a: [number, number],
+  b: [number, number],
+  c: [number, number],
+  d: [number, number],
+): boolean {
+  const abC = cross(a, b, c);
+  const abD = cross(a, b, d);
+  const cdA = cross(c, d, a);
+  const cdB = cross(c, d, b);
+
+  if (isZero(abC) && pointOnSegment(c, a, b)) return true;
+  if (isZero(abD) && pointOnSegment(d, a, b)) return true;
+  if (isZero(cdA) && pointOnSegment(a, c, d)) return true;
+  if (isZero(cdB) && pointOnSegment(b, c, d)) return true;
+
+  return (abC > 0) !== (abD > 0) && (cdA > 0) !== (cdB > 0);
+}
+
+function pointOnSegment(p: [number, number], a: [number, number], b: [number, number]): boolean {
+  if (!isZero(cross(a, b, p))) return false;
+  return p[0] >= Math.min(a[0], b[0]) - EPSILON &&
+    p[0] <= Math.max(a[0], b[0]) + EPSILON &&
+    p[1] >= Math.min(a[1], b[1]) - EPSILON &&
+    p[1] <= Math.max(a[1], b[1]) + EPSILON;
+}
+
+function cross(a: [number, number], b: [number, number], c: [number, number]): number {
+  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+function samePoint(a: [number, number], b: [number, number]): boolean {
+  return Math.abs(a[0] - b[0]) <= EPSILON && Math.abs(a[1] - b[1]) <= EPSILON;
+}
+
+function isZero(n: number): boolean {
+  return Math.abs(n) <= EPSILON;
+}
+
+const EPSILON = 1e-9;
 
 /** Translate an event's modifiers into a select mode. */
 function modeFromEvent(e: MouseEvent): 'replace' | 'add' | 'toggle' {
