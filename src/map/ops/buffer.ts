@@ -1,23 +1,35 @@
-// bufferLayer — generate buffer polygons for a layer via mapshaper's
-// `-buffer` pipeline. Radius is in source-CRS units; either a constant
-// number or a per-record expression string.
+// bufferLayer — generate buffer polygons via mapshaper's `-buffer`
+// pipeline. Forwards every supported mapshaper option. When
+// `mergeFirst` is true on a polygon layer, prepends a `-dissolve2`
+// command so the whole layer collapses to a single outer outline
+// before buffering (eliminates "inner lines" from non-topologically
+// adjacent features).
 
 import { resolveLayerInList } from '../layer-registry';
 import { Err, type OpResult } from '../op-result';
 import type { BufferOptions } from '../types';
+import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
 import type { OpContext } from './_context';
+
+const VALID_TYPES = new Set(['left', 'right', 'outer', 'inner']);
+
+function isPositiveInt(v: unknown): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v > 0;
+}
+
+function isPositiveFinite(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0;
+}
 
 export async function bufferLayer(ctx: OpContext, opts: BufferOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
   if (!source) return Err.notFound('source', opts.source);
   const dataset = source.getDataset();
   if (!dataset) return Err.notFound('source', opts.source);
-  if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
+  const layer = resolveLayerInList(dataset.layers, opts.target);
+  if (!layer) return Err.notFound('layer', opts.target);
 
-  // Validate numeric radius up-front: 0 silently produces empty buffers,
-  // negative values throw inside mapshaper. Expression-string radii are
-  // forwarded as-is — mapshaper evaluates per-feature and there's no
-  // sound way to validate them without parsing JS.
+  // radius — required, positive finite number OR non-empty expression.
   if (typeof opts.radius === 'number') {
     if (!Number.isFinite(opts.radius) || opts.radius <= 0) {
       return Err.validation('radius', 'must be a positive finite number');
@@ -29,15 +41,58 @@ export async function bufferLayer(ctx: OpContext, opts: BufferOptions): Promise<
     return Err.expressionDisabled('bufferLayer');
   }
 
+  // Numeric performance/quality knobs — all optional, all positive.
+  if (opts.vertices !== undefined && !isPositiveInt(opts.vertices)) {
+    return Err.validation('vertices', 'must be a positive integer');
+  }
+  if (opts.arcQuality !== undefined && !isPositiveInt(opts.arcQuality)) {
+    return Err.validation('arcQuality', 'must be a positive integer');
+  }
+  if (opts.sliceLength !== undefined && !isPositiveInt(opts.sliceLength)) {
+    return Err.validation('sliceLength', 'must be a positive integer');
+  }
+  if (opts.backtrack !== undefined && !isPositiveInt(opts.backtrack)) {
+    return Err.validation('backtrack', 'must be a positive integer');
+  }
+  if (opts.tolerance !== undefined && !isPositiveFinite(opts.tolerance)) {
+    return Err.validation('tolerance', 'must be a positive finite number');
+  }
+  if (opts.type !== undefined && !VALID_TYPES.has(opts.type)) {
+    return Err.validation('type', `must be one of: left, right, outer, inner`);
+  }
+
+  // mergeFirst applies only to polygon layers. Anything else: warn + ignore.
+  let mergeFirstApplies = false;
+  if (opts.mergeFirst === true) {
+    if (layer.geometry_type === 'polygon') {
+      mergeFirstApplies = true;
+    } else {
+      console.warn(
+        `bufferLayer: mergeFirst ignored for non-polygon layer "${opts.target}" (geometry=${layer.geometry_type}).`,
+      );
+    }
+  }
+
+  // Assemble snake_case option bag. Only include keys the caller actually set.
   const bufferOptions: Record<string, unknown> = { radius: String(opts.radius) };
   if (opts.capStyle) bufferOptions.cap_style = opts.capStyle;
+  if (opts.vertices !== undefined) bufferOptions.vertices = opts.vertices;
+  if (opts.arcQuality !== undefined) bufferOptions.arc_quality = opts.arcQuality;
+  if (opts.tolerance !== undefined) bufferOptions.tolerance = opts.tolerance;
+  if (opts.type !== undefined) bufferOptions.type = opts.type;
+  if (opts.planar === true) bufferOptions.planar = true;
+  if (opts.v2 === true) bufferOptions.v2 = true;
+  if (opts.sliceLength !== undefined) bufferOptions.slice_length = opts.sliceLength;
+  if (opts.backtrack !== undefined) bufferOptions.backtrack = opts.backtrack;
 
-  return ctx.runDatasetCommandParsed(
-    opts.source,
-    [
-      { name: 'target', options: { target: opts.target } },
-      { name: 'buffer', options: bufferOptions },
-    ],
-    `Buffer ${opts.target}`,
-  );
+  const commands: ParsedCommand[] = [
+    { name: 'target', options: { target: opts.target } },
+  ];
+  if (mergeFirstApplies) {
+    commands.push({ name: 'dissolve2', options: {} });
+  }
+  commands.push({ name: 'buffer', options: bufferOptions });
+
+  const label = mergeFirstApplies ? `Buffer (merged) ${opts.target}` : `Buffer ${opts.target}`;
+  return ctx.runDatasetCommandParsed(opts.source, commands, label);
 }
