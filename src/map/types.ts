@@ -280,13 +280,44 @@ export interface BufferOptions {
   /** Layer name (or id) of the layer to buffer. */
   target: string;
   /**
-   * Buffer radius in source-CRS units (e.g., degrees for EPSG:4326, metres
-   * for projected CRSes). Accepts either a constant `number` or a mapshaper
-   * expression string evaluated per record (e.g. `"pop / 1000"`).
+   * Buffer radius. Either a positive finite `number` or a mapshaper
+   * expression string (evaluated per record).
+   *
+   * Unit semantics:
+   *  - **point** layers — always **metres** (mapshaper does geodetic
+   *    circles via `getGeodeticSegmentFunction`), unless {@link planar}
+   *    is `true`, in which case it's source-CRS units.
+   *  - **polyline / polygon** layers — source-CRS units (degrees for
+   *    EPSG:4326, metres for a projected CRS).
    */
   radius: number | string;
-  /** Buffer cap style (mapshaper's `cap-style=` option). Default is `round`. */
+  /** Buffer cap style. Default is `round`. Mainly affects polyline output. */
   capStyle?: 'flat' | 'round';
+  /** Vertices used to approximate a point-buffer circle. Positive integer. */
+  vertices?: number;
+  /** Segments per quarter-circle in joins and caps. Positive integer. */
+  arcQuality?: number;
+  /** Curve-approximation tolerance. Positive finite number. */
+  tolerance?: number;
+  /** Single-sided buffer; meaningful for polyline layers. */
+  type?: 'left' | 'right' | 'outer' | 'inner';
+  /** Force planar (Cartesian) computation even for lat/lng data. */
+  planar?: boolean;
+  /** Enable the v2 buffering algorithm. */
+  v2?: boolean;
+  /** Max path segments per buffer slice. Performance knob. Positive int. */
+  sliceLength?: number;
+  /** Backtrack distance, mapshaper-internal performance knob. Positive int. */
+  backtrack?: number;
+  /**
+   * Before buffering, run `-dissolve2` on the target layer so that the
+   * whole layer collapses to a single outer outline. Eliminates "inner
+   * lines" that appear when adjacent polygons aren't topologically
+   * connected. **Only honoured for polygon layers** — silently ignored
+   * with a `console.warn` for other geometry types. Default `false`.
+   * Note: feature-level properties are lost (`dissolve2` merges them).
+   */
+  mergeFirst?: boolean;
 }
 
 /**
