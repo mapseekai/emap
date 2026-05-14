@@ -309,15 +309,6 @@ export interface BufferOptions {
   sliceLength?: number;
   /** Backtrack distance, mapshaper-internal performance knob. Positive int. */
   backtrack?: number;
-  /**
-   * Before buffering, run `-dissolve2` on the target layer so that the
-   * whole layer collapses to a single outer outline. Eliminates "inner
-   * lines" that appear when adjacent polygons aren't topologically
-   * connected. **Only honoured for polygon layers** — silently ignored
-   * with a `console.warn` for other geometry types. Default `false`.
-   * Note: feature-level properties are lost (`dissolve2` merges them).
-   */
-  mergeFirst?: boolean;
 }
 
 /**

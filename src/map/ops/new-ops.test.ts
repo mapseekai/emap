@@ -18,53 +18,7 @@ import { filterSlivers } from './filter-slivers';
 import { filterGeom } from './filter-geom';
 import { affineLayer } from './affine';
 import { dataFill } from './data-fill';
-import { OK } from '../op-result';
-import type { OpContext } from './_context';
-import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
-import type { MapshaperLayer, MapshaperDataset } from '../../types/mapshaper-types';
-
-function makeStubCtx(layers: Array<{ name: string; geometry_type?: string }> = [{ name: 'parks' }]) {
-  const layerObjs: MapshaperLayer[] = layers.map((l) => ({
-    name: l.name,
-    geometry_type: (l.geometry_type ?? 'polygon') as any,
-    shapes: [[[0]]],
-  } as MapshaperLayer));
-  const dataset: MapshaperDataset = { layers: layerObjs, info: {} } as MapshaperDataset;
-
-  const calls: Array<{ sourceId: string; cmds: ParsedCommand[]; label: string }> = [];
-  const ctx: OpContext = {
-    host: {
-      _removed: false,
-      _sources: new globalThis.Map([['s1', {
-        getDataset: () => dataset,
-        setDataset: () => undefined,
-      } as any]]),
-      _history: null as any,
-      _selection: null as any,
-      _activeTransaction: null,
-      _validators: null as any,
-      _workerPool: null,
-      _workerMode: false,
-      _workerThreshold: 1e9,
-      layers: { resolve: () => null } as any,
-      _resolveLayer: () => null,
-      _scheduleRender: () => undefined,
-      _fireHistoryChange: () => undefined,
-      _fireSelectionChange: () => undefined,
-      _invalidateShapeCachesForSources: () => undefined,
-      _clearSpatialIndexesForSources: () => undefined,
-      _allowExpressionEvaluation: () => true,
-      fire: () => undefined,
-    } as any,
-    runDatasetCommand: (() => Promise.resolve(OK)) as any,
-    runDatasetCommandParsed: (sourceId, cmds, label) => {
-      calls.push({ sourceId, cmds, label });
-      return Promise.resolve(OK);
-    },
-    applyDatasetReplace: (() => OK) as any,
-  };
-  return { ctx, calls };
-}
+import { makeStubCtx } from './_test-helpers';
 
 // =========================================================================
 // clip / erase — bbox path

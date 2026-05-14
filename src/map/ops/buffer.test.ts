@@ -1,60 +1,15 @@
-// Unit tests for bufferLayer — parameter passthrough, mergeFirst
-// command-chain shape, and validation rejects.
+// Unit tests for bufferLayer — parameter passthrough, polygon-type
+// warning, and validation rejects.
 
 import { describe, expect, it, vi } from 'vitest';
 import { bufferLayer } from './buffer';
-import { OK } from '../op-result';
-import type { OpContext } from './_context';
-import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
-import type { MapshaperLayer, MapshaperDataset } from '../../types/mapshaper-types';
-
-function makeStubCtx(layers: Array<{ name: string; geometry_type?: string }> = [
-  { name: 'parks', geometry_type: 'polygon' },
-]) {
-  const layerObjs: MapshaperLayer[] = layers.map((l) => ({
-    name: l.name,
-    geometry_type: (l.geometry_type ?? 'polygon') as any,
-    shapes: [[[0]]],
-  } as MapshaperLayer));
-  const dataset: MapshaperDataset = { layers: layerObjs, info: {} } as MapshaperDataset;
-
-  const calls: Array<{ sourceId: string; cmds: ParsedCommand[]; label: string }> = [];
-  const ctx: OpContext = {
-    host: {
-      _removed: false,
-      _sources: new globalThis.Map([['s1', {
-        getDataset: () => dataset,
-        setDataset: () => undefined,
-      } as any]]),
-      _history: null as any,
-      _selection: null as any,
-      _activeTransaction: null,
-      _validators: null as any,
-      _workerPool: null,
-      _workerMode: false,
-      _workerThreshold: 1e9,
-      layers: { resolve: () => null } as any,
-      _resolveLayer: () => null,
-      _scheduleRender: () => undefined,
-      _fireHistoryChange: () => undefined,
-      _fireSelectionChange: () => undefined,
-      _invalidateShapeCachesForSources: () => undefined,
-      _clearSpatialIndexesForSources: () => undefined,
-      _allowExpressionEvaluation: () => true,
-      fire: () => undefined,
-    } as any,
-    runDatasetCommand: (() => Promise.resolve(OK)) as any,
-    runDatasetCommandParsed: (sourceId, cmds, label) => {
-      calls.push({ sourceId, cmds, label });
-      return Promise.resolve(OK);
-    },
-    applyDatasetReplace: (() => OK) as any,
-  };
-  return { ctx, calls };
-}
+import { makeStubCtx } from './_test-helpers';
 
 describe('bufferLayer — parameter passthrough', () => {
   it('forwards every new option as snake_case keys', async () => {
+    // type=outer on the default polygon layer triggers a polyline-only warn;
+    // silence it since this test is about passthrough, not warning behaviour.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { ctx, calls } = makeStubCtx();
     const r = await bufferLayer(ctx, {
       source: 's1',
@@ -85,58 +40,67 @@ describe('bufferLayer — parameter passthrough', () => {
       slice_length: 1024,
       backtrack: 8,
     });
-  });
-});
-
-describe('bufferLayer — mergeFirst', () => {
-  it('inserts dissolve2 before buffer for polygon layers', async () => {
-    const { ctx, calls } = makeStubCtx([{ name: 'parks', geometry_type: 'polygon' }]);
-    const r = await bufferLayer(ctx, {
-      source: 's1', target: 'parks', radius: 50, mergeFirst: true,
-    });
-    expect(r.ok).toBe(true);
-    expect(calls).toHaveLength(1);
-    const names = calls[0].cmds.map((c) => c.name);
-    expect(names).toEqual(['target', 'dissolve2', 'buffer']);
-    expect(calls[0].label).toBe('Buffer (merged) parks');
-  });
-
-  it('skips dissolve2 and warns for non-polygon layers', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const { ctx, calls } = makeStubCtx([{ name: 'roads', geometry_type: 'polyline' }]);
-    const r = await bufferLayer(ctx, {
-      source: 's1', target: 'roads', radius: 50, mergeFirst: true,
-    });
-    expect(r.ok).toBe(true);
-    const names = calls[0].cmds.map((c) => c.name);
-    expect(names).toEqual(['target', 'buffer']);
-    expect(calls[0].label).toBe('Buffer roads');
-    expect(warn).toHaveBeenCalledOnce();
-    expect(warn.mock.calls[0][0]).toMatch(/mergeFirst ignored.*polyline/);
     warn.mockRestore();
   });
 
-  it('omits dissolve2 when mergeFirst is undefined / false', async () => {
+  it('emits exactly target + buffer (no dissolve2)', async () => {
     const { ctx, calls } = makeStubCtx();
     await bufferLayer(ctx, { source: 's1', target: 'parks', radius: 50 });
     expect(calls[0].cmds.map((c) => c.name)).toEqual(['target', 'buffer']);
+    expect(calls[0].label).toBe('Buffer parks');
+  });
+});
+
+describe('bufferLayer — type warning on polygon', () => {
+  it('warns (but does not reject) when type is set on a polygon layer', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { ctx, calls } = makeStubCtx([{ name: 'parks', geometry_type: 'polygon' }]);
+    const r = await bufferLayer(ctx, {
+      source: 's1', target: 'parks', radius: 50, type: 'outer',
+    });
+    expect(r.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0][0]).toMatch(/type="outer".*polyline.*polygon layer "parks"/);
+    warn.mockRestore();
+  });
+
+  it('does not warn when type is set on a polyline layer', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { ctx } = makeStubCtx([{ name: 'roads', geometry_type: 'polyline' }]);
+    const r = await bufferLayer(ctx, {
+      source: 's1', target: 'roads', radius: 50, type: 'outer',
+    });
+    expect(r.ok).toBe(true);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('does not warn when type is omitted', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { ctx } = makeStubCtx();
+    await bufferLayer(ctx, { source: 's1', target: 'parks', radius: 50 });
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 
 describe('bufferLayer — validation', () => {
   it.each([
+    ['radius', { radius: 0 }],
+    ['radius', { radius: -1 }],
+    ['radius', { radius: Infinity }],
+    ['radius', { radius: '' }],
+    ['radius', { radius: '0' }],
+    ['radius', { radius: '-5' }],
     ['type', { type: 'sideways' as any }],
+    ['capStyle', { capStyle: 'square' as any }],
     ['vertices', { vertices: 0 }],
     ['vertices', { vertices: 1.5 }],
     ['arcQuality', { arcQuality: -1 }],
     ['tolerance', { tolerance: -0.1 }],
     ['sliceLength', { sliceLength: 0 }],
     ['backtrack', { backtrack: 1.2 }],
-    ['radius', { radius: 0 }],
-    ['radius', { radius: -1 }],
-    ['radius', { radius: Infinity }],
-    ['radius', { radius: '' }],
-    ['capStyle', { capStyle: 'square' as any }],
   ])('rejects %s with bad value and does not dispatch', async (field, override) => {
     const { ctx, calls } = makeStubCtx();
     const r = await bufferLayer(ctx, {

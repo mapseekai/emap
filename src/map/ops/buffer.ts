@@ -1,9 +1,5 @@
 // bufferLayer — generate buffer polygons via mapshaper's `-buffer`
-// pipeline. Forwards every supported mapshaper option. When
-// `mergeFirst` is true on a polygon layer, prepends a `-dissolve2`
-// command so the whole layer collapses to a single outer outline
-// before buffering (eliminates "inner lines" from non-topologically
-// adjacent features).
+// pipeline. Forwards every supported mapshaper option.
 
 import { resolveLayerInList } from '../layer-registry';
 import { Err, type OpResult } from '../op-result';
@@ -13,6 +9,7 @@ import type { OpContext } from './_context';
 
 const VALID_TYPES = new Set(['left', 'right', 'outer', 'inner']);
 const VALID_CAP_STYLES = new Set(['flat', 'round']);
+const NUMERIC_STRING_RE = /^-?\d+(\.\d+)?$/;
 
 function isPositiveInt(v: unknown): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v > 0;
@@ -31,12 +28,16 @@ export async function bufferLayer(ctx: OpContext, opts: BufferOptions): Promise<
   if (!layer) return Err.notFound('layer', opts.target);
 
   // radius — required, positive finite number OR non-empty expression.
+  // Numeric strings ("5", "-3.2") are also bounds-checked since mapshaper
+  // would otherwise accept them and produce empty or undefined buffers.
   if (typeof opts.radius === 'number') {
     if (!Number.isFinite(opts.radius) || opts.radius <= 0) {
       return Err.validation('radius', 'must be a positive finite number');
     }
   } else if (typeof opts.radius !== 'string' || opts.radius.trim().length === 0) {
     return Err.validation('radius', 'must be a positive number or non-empty expression');
+  } else if (NUMERIC_STRING_RE.test(opts.radius) && Number(opts.radius) <= 0) {
+    return Err.validation('radius', 'numeric string must be a positive number');
   }
   if (typeof opts.radius === 'string' && !ctx.host._allowExpressionEvaluation([opts.radius], 'bufferLayer')) {
     return Err.expressionDisabled('bufferLayer');
@@ -65,16 +66,14 @@ export async function bufferLayer(ctx: OpContext, opts: BufferOptions): Promise<
     return Err.validation('capStyle', 'must be one of: flat, round');
   }
 
-  // mergeFirst applies only to polygon layers. Anything else: warn + ignore.
-  let mergeFirstApplies = false;
-  if (opts.mergeFirst === true) {
-    if (layer.geometry_type === 'polygon') {
-      mergeFirstApplies = true;
-    } else {
-      console.warn(
-        `bufferLayer: mergeFirst ignored for non-polygon layer "${opts.target}" (geometry=${layer.geometry_type}).`,
-      );
-    }
+  // `type` (left/right/outer/inner) is documented as polyline-only. Warn
+  // (don't reject) when used on polygon — mapshaper still accepts it but
+  // the output is rarely what the caller wanted.
+  if (opts.type !== undefined && layer.geometry_type === 'polygon') {
+    console.warn(
+      `bufferLayer: type="${opts.type}" is intended for polyline layers; ` +
+      `applying to polygon layer "${opts.target}" may produce unexpected output.`,
+    );
   }
 
   // Assemble snake_case option bag. Only include keys the caller actually set.
@@ -91,12 +90,7 @@ export async function bufferLayer(ctx: OpContext, opts: BufferOptions): Promise<
 
   const commands: ParsedCommand[] = [
     { name: 'target', options: { target: opts.target } },
+    { name: 'buffer', options: bufferOptions },
   ];
-  if (mergeFirstApplies) {
-    commands.push({ name: 'dissolve2', options: {} });
-  }
-  commands.push({ name: 'buffer', options: bufferOptions });
-
-  const label = mergeFirstApplies ? `Buffer (merged) ${opts.target}` : `Buffer ${opts.target}`;
-  return ctx.runDatasetCommandParsed(opts.source, commands, label);
+  return ctx.runDatasetCommandParsed(opts.source, commands, `Buffer ${opts.target}`);
 }

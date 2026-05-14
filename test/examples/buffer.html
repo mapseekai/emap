@@ -63,7 +63,6 @@
     </select></label>
     <label><input id="planar" type="checkbox"/> planar</label>
     <label><input id="v2" type="checkbox"/> v2</label>
-    <label><input id="merge-first" type="checkbox"/> 整层合并后再 buffer (面)</label>
     <button id="buffer-btn" disabled>生成缓冲区</button>
     <span id="status">加载数据</span>
     <small style="flex-basis:100%; opacity:0.85; padding-top:4px;">
@@ -144,7 +143,6 @@
       if (typeVal) opts.type = typeVal;
       if (document.getElementById('planar').checked) opts.planar = true;
       if (document.getElementById('v2').checked) opts.v2 = true;
-      if (document.getElementById('merge-first').checked) opts.mergeFirst = true;
       status.textContent = `正在对 ${target} 生成半径 ${raw} 的缓冲区...`;
       bufBtn.disabled = true;
       try {
