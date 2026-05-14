@@ -19,7 +19,7 @@
     "renderer",
     "canvas"
   ],
-  "author": "",
+  "author": "zwishing",
   "license": "MPL-2.0",
   "devDependencies": {
     "@rollup/plugin-alias": "^6.0.0",
@@ -39,6 +39,7 @@
   "dependencies": {
     "fflate": "^0.8.2",
     "flatbush": "^4.5.0",
+    "geographiclib-geodesic": "^2.2.0",
     "kdbush": "^4.0.2",
     "maplibre-gl": "^5.17.0",
     "mapshaper": "^0.6.113",
