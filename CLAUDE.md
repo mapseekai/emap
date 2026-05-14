@@ -16,7 +16,7 @@ This file provides authoritative context for AI assistants working in this repos
 - Off-thread execution via a `MapshaperWorkerPool` with command-family-aware routing
 - Undo/redo with command coalescing, dataset-replace barriers, and structured `OpResult` errors
 - Selection model + snapshot pack/unpack
-- Multiple rendering backends: Canvas 2D (default) and Skia WASM (experimental)
+- HTML5 Canvas 2D rendering with batched-stroke optimization for large topology datasets
 - Geographic projections (EPSG / WKT / Proj.4 / mproj)
 
 ---
@@ -76,8 +76,7 @@ emap/
 │   │   └── mapshaper-worker.ts   # Off-thread mapshaper entry
 │   ├── renderer/
 │   │   ├── painter.ts            # Painter interface
-│   │   ├── canvas-painter.ts     # HTML5 Canvas 2D (default, fast)
-│   │   └── canvaskit-painter.ts  # Skia WASM (experimental)
+│   │   └── canvas-painter.ts     # HTML5 Canvas 2D, batched-stroke
 │   ├── types/                    # Central mapshaper / mproj type definitions
 │   └── shim.ts                   # Browser polyfills for Node modules referenced by mapshaper
 ├── test/
@@ -104,7 +103,7 @@ emap/
 | Build | Rollup 4.x (IIFE bundle) |
 | Test | Vitest 1.x |
 | Core data | mapshaper v0.6 |
-| Rendering | HTML5 Canvas 2D / canvaskit-wasm (Skia) |
+| Rendering | HTML5 Canvas 2D |
 | Basemap tiles | maplibre-gl v5 |
 | Projections | mproj |
 | Spatial index | flatbush, kdbush |
@@ -297,5 +296,4 @@ npm test
 - **Mapshaper internals are isolated**: `src/adapter/mapshaper-adapter.ts` is the single bridge to `mapshaper.internal.*`. The runtime path no longer touches it from anywhere else. mapshaper version upgrades route through one file. (The worker entry `src/worker/mapshaper-worker.ts` is the only other module that imports `mapshaper` directly — kept narrow because the worker is its own bundle.)
 - **No CLI string-build path**: Ops emit `ParsedCommand[]` structures, not shell-style strings. `quoteCliArg` is retained as defense-in-depth but should not be needed for new code.
 - **Expression evaluation is gated**: `MapOptions.expressionPolicy` defaults to `'disabled'`. Ops that accept JS expression strings (`applyExpression`, `filterFeatures`, `where=` / `calc=` everywhere) refuse to run when an expression is supplied unless the policy is flipped to `'trusted'`. See `SECURITY.md`.
-- **CanvasKit is experimental**: Do not make CanvasKit the default renderer without profiling. It is slower than Canvas 2D for large topology datasets.
 - **iconv-lite shim**: `rollup.config.mjs` aliases `iconv-lite` → `src/types/iconv-shim.ts` for browser compatibility. Do not remove this alias.

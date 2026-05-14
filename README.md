@@ -12,7 +12,7 @@ A topology-oriented geographic map rendering and editing engine built around [Ma
 - **Undo / redo** with command coalescing, dataset-replace barriers, and structured `OpResult` errors
 - **Selection model** — single / multi / box / lasso, with attribute-only ops preserving feature ids
 - **Snapshots** — pack / unpack a full session (datasets + history) to a compact binary blob
-- **Multiple renderers** — `CanvasPainter` (fast 2D, default) and `CanvasKitPainter` (Skia WASM, experimental)
+- **HTML5 Canvas 2D rendering** — `CanvasPainter` with batched-stroke optimization for large topology datasets
 - **Built-in controls** — navigation, status, basemap, vertex edit, feature draw, history, box / lasso selection
 
 ## Install
@@ -251,7 +251,7 @@ src/
 ├── source/               # TopologySource, DisplayArcs (LOD)
 ├── core/                 # EventDispatcher, MapshaperWorkerPool, drag/wheel
 ├── geo/                  # Viewport, Projection, Bounds, AffineTransform, CRS resolver
-├── renderer/             # CanvasPainter (default), CanvasKitPainter (experimental)
+├── renderer/             # CanvasPainter (HTML5 Canvas 2D)
 ├── edit/                 # EditHistory + per-command memento classes
 ├── ui/                   # Control implementations + controls.css
 ├── worker/               # off-thread mapshaper entry

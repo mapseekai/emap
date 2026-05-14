@@ -1,6 +1,6 @@
 # emap 功能总览
 
-`emap` 是一个**纯浏览器、框架无关的 TypeScript 地图渲染与编辑引擎**，核心数据结构基于 [Mapshaper](https://github.com/mbloch/mapshaper) 的拓扑模型，渲染走 HTML5 Canvas（默认）或 Skia WASM（实验）。无服务端依赖，全部 `fetch()` 客户端加载。
+`emap` 是一个**纯浏览器、框架无关的 TypeScript 地图渲染与编辑引擎**，核心数据结构基于 [Mapshaper](https://github.com/mbloch/mapshaper) 的拓扑模型，渲染走 HTML5 Canvas 2D。无服务端依赖，全部 `fetch()` 客户端加载。
 
 > 本文档罗列当前实现的所有能力，按"使用场景"分组。每节末尾给出对应 `test/examples/*.html` 的 playground 路径，可直接打开试用。
 
@@ -263,12 +263,9 @@ emap.features.count(source, layer)             // → number
 
 ## 8. 渲染
 
-### 后端
+### 渲染管线
 
-| Painter | 何时用 | 注意 |
-|---|---|---|
-| `CanvasPainter`（默认） | 99% 场景 | 批量分组 25 shapes/stroke，大数据集优化 |
-| `CanvaskitPainter` | 试验 | Skia WASM，加载慢；大数据反而比 Canvas2D 慢 |
+`CanvasPainter` 走 HTML5 Canvas 2D，批量分组 25 shapes / `stroke()` 调用，针对大拓扑数据集优化（winding-rule 填充 vs 直线 stroke 的成本差是关键考量）。
 
 ### LOD（Level of Detail）
 
@@ -374,7 +371,6 @@ npm test            # vitest
 
 - **浏览器专属**：无 Node.js 运行时 API（除测试与构建工具）
 - **无服务端**：所有数据通过 `fetch()` 客户端加载
-- **CanvasKit 是试验性**：默认不建议切换，大数据集慢于 Canvas 2D
 - **mapshaper 内部仅经 `MapshaperAdapter` 桥接**：版本升级只动一个文件
 - **表达式默认禁用**：调用 `applyExpression` 等需显式 `expressionPolicy='trusted'`
 - **Web Worker 单文件**：worker bundle 独立（`emap-worker.js`），需与主 bundle 同源部署
