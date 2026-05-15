@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - SimplifyControl 工具条按钮</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header {
+      padding: 10px; background: #2c3e50; color: white;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px;
+    }
+    #header input[type="file"] { font-size: 13px; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <span id="status">加载一个含面或线的数据文件 (推荐 tiny.geojson 或 china 边界数据)</span>
+    <span class="hint">
+      载入后地图左上会出现 <strong>≈</strong> 按钮，点开调出滑块和方法选择，点 "Apply" 应用一次简化。
+      Ctrl+Z 撤销。多次 Apply 等同于覆盖之前的阈值。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/mapshaper-vendor.js"></script>
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl, SimplifyControl } = emap;
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'simplify-source';
+    const status = document.getElementById('status');
+    let simplifyCtrl = null;
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `正在加载 ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        source.on('data', ({ reason }) => {
+          if (reason === 'load') {
+            map.setExtent(source.getExtent());
+            // Mount the SimplifyControl on first load. Reusing the same control
+            // instance across reloads is fine, but easiest is to recreate.
+            if (simplifyCtrl) map.removeControl(simplifyCtrl);
+            simplifyCtrl = new SimplifyControl({
+              source: SOURCE_ID,
+              initialPercentage: 10,
+            });
+            map.addControl(simplifyCtrl, 'top-left');
+            status.textContent = `已加载 ${file.name}。点击地图上的 ≈ 按钮开始简化。`;
+          }
+        });
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        source.setData({ filename: file.name, content });
+        map.addSource(SOURCE_ID, source);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  </script>
+</body>
+
+</html>

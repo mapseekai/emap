@@ -138,6 +138,18 @@
   z-index: 5;
 }
 
+/* Simplify control */
+.emap-ctrl-simplify-wrap {
+  position: relative;
+}
+.emap-ctrl-simplify {
+  font-size: 16px;
+}
+.emap-ctrl-simplify.active {
+  background-color: #0078ff !important;
+  color: #fff;
+}
+
 /* Lasso Select free-form polygon overlay. Same z-index as BoxSelect — they
    are mutually exclusive (only one is enabled at a time). */
 .emap-lasso-select {

@@ -255,6 +255,7 @@ emap.features.count(source, layer)             // → number
 | `BoxSelectControl` | 框选 | `box-select.html` |
 | `LassoSelectControl` | 套索选 | `lasso-select.html` |
 | `DrawFeatureControl` | 绘制点/线/面 | `draw-snap-edge.html` |
+| `SimplifyControl` | 点开弹窗，滑块控制简化百分比 + 方法 + flag，Apply 应用一次 | `simplify-control.html` |
 | `EditToolbar` | 综合编辑工具栏 | — |
 
 自定义 control 实现 `onAdd(map): HTMLElement` + `onRemove()` 即可。

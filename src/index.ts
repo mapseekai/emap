@@ -287,3 +287,5 @@ export {
   featureMatchesLasso,
 } from './ui/lasso-select-control';
 export type { LassoSelectControlOptions, LassoSelectStyle } from './ui/lasso-select-control';
+export { SimplifyControl } from './ui/simplify-control';
+export type { SimplifyControlOptions } from './ui/simplify-control';
