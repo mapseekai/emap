@@ -78,6 +78,19 @@ export default [
     },
     plugins: [...commonPlugins(), copyControlsCss()],
   },
+  // ESM vendor — same browser mapshaper build as the IIFE vendor, but a real
+  // ES module with `export default`. Imported by dist/emap.mjs (which marks
+  // `mapshaper` external and rewrites the specifier to ./mapshaper-vendor.mjs).
+  {
+    input: 'src/vendor/mapshaper-vendor-esm.ts',
+    external: ['maplibre-gl'],
+    output: {
+      file: 'dist/mapshaper-vendor.mjs',
+      format: 'es',
+      sourcemap: shouldWriteSourcemap,
+    },
+    plugins: commonPlugins(),
+  },
   // Main IIFE bundle exposing the `emap` global. Mapshaper is external here
   // because script-tag users load `mapshaper-vendor.js` first.
   {
