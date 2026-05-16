@@ -48,7 +48,7 @@ function commonPlugins() {
       preferBuiltins: false
     }),
     commonjs({
-      ignoreDynamicRequires: false
+      ignoreDynamicRequires: true
     }),
     json(),
     postcss({
