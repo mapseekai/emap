@@ -7,13 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-05-16
+
 ### Fixed
 
 - `import "@zwishing/emap"` is now self-contained in any browser bundler.
   mapshaper is no longer routed through CommonJS in the ESM build (which could
   emit a dead `require("adm-zip")` and a runtime-throwing `iconv-lite` helper);
-  it ships as a sibling ES module `dist/mapshaper-vendor.mjs`. Consumers can
-  remove any `mapshaper`->browser alias, `Buffer` polyfill, or band-aid tests.
+  it ships as a sibling ES module `dist/mapshaper-vendor.mjs` that `dist/emap.mjs`
+  imports by relative path. This **supersedes the 0.1.1 inlining approach** —
+  consumers can remove any `mapshaper`->browser alias, `Buffer` polyfill, or
+  band-aid tests.
 
 ## [0.1.1] - 2026-05-16
 
@@ -27,7 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Bundled mapshaper into the browser ESM entry so Vite/esbuild consumers no
-  longer need an app-level `Buffer` polyfill for local file parsing.
+  longer need an app-level `Buffer` polyfill for local file parsing. _(Interim
+  approach — superseded in 0.1.2 by an externalized sibling ESM vendor.)_
 - Changed `BasemapControl` to load MapLibre on demand instead of pulling it
   into the root entry at import time.
 - Corrected README package names and worker option examples.
