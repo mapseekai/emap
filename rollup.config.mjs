@@ -6,8 +6,23 @@ import terser from '@rollup/plugin-terser';
 import alias from '@rollup/plugin-alias';
 import json from '@rollup/plugin-json';
 import postcss from 'rollup-plugin-postcss';
+import { copyFileSync } from 'node:fs';
+
+// `src/ui/controls.css` is a hand-maintained standalone stylesheet — it is
+// NOT imported by any TS module, so postcss never sees it. Ship it as a
+// first-class dist asset (`dist/emap.css`) so consumers can `import
+// '@zwishing/emap/style.css'` instead of reaching into the unpublished src tree.
+function copyControlsCss() {
+  return {
+    name: 'copy-controls-css',
+    writeBundle() {
+      copyFileSync('src/ui/controls.css', 'dist/emap.css');
+    },
+  };
+}
 
 const isProduction = process.env.BUILD === 'production';
+const shouldWriteSourcemap = !isProduction;
 const mainOutput = isProduction ? 'dist/emap.js' : 'dist/emap-dev.js';
 const moduleOutput = 'dist/emap.mjs';
 // Worker file is always called emap-worker.js so consumers don't have to
@@ -16,20 +31,27 @@ const workerOutput = 'dist/emap-worker.js';
 // Vendor bundle filename is fixed too — referenced by URL from the worker
 // banner and by users' page <script> tags.
 const vendorOutput = 'dist/mapshaper-vendor.js';
+const mapshaperGlobal = {
+  mapshaper: 'mapshaper',
+};
 
 function commonPlugins() {
   return [
     alias({
       entries: [
-        { find: 'iconv-lite', replacement: 'src/types/iconv-shim.ts' }
+        { find: 'iconv-lite', replacement: 'src/types/iconv-shim.ts' },
+        { find: 'adm-zip', replacement: 'src/types/adm-zip-shim.ts' }
       ]
     }),
     nodeResolve({
       browser: true,
-      preferBuiltins: false
+      preferBuiltins: false,
+      alias: {
+        'adm-zip': 'src/types/adm-zip-shim.ts'
+      }
     }),
     commonjs({
-      ignoreDynamicRequires: true
+      ignoreDynamicRequires: false
     }),
     json(),
     postcss({
@@ -55,31 +77,37 @@ export default [
     output: {
       file: vendorOutput,
       format: 'iife',
-      sourcemap: true,
+      sourcemap: shouldWriteSourcemap,
     },
-    plugins: commonPlugins(),
+    plugins: [...commonPlugins(), copyControlsCss()],
   },
-  // Main IIFE bundle exposing the `emap` global. Mapshaper is `external`
-  // — the bundle expects `globalThis.mapshaper` set by the vendor file.
+  // Main IIFE bundle exposing the `emap` global. Mapshaper is external here
+  // because script-tag users load `mapshaper-vendor.js` first.
   {
     input: 'src/index.ts',
     external: ['mapshaper'],
-    output: [
-      {
-        file: mainOutput,
-        format: 'iife',
-        name: 'emap',
-        sourcemap: true,
-        globals: {
-          mapshaper: 'mapshaper',
-        },
-      },
-      {
-        file: moduleOutput,
-        format: 'es',
-        sourcemap: true,
-      },
-    ],
+    output: {
+      file: mainOutput,
+      format: 'iife',
+      name: 'emap',
+      sourcemap: shouldWriteSourcemap,
+      inlineDynamicImports: true,
+      globals: mapshaperGlobal,
+    },
+    plugins: commonPlugins(),
+  },
+  // Browser ESM bundle for Vite/Webpack/Bun consumers. Do NOT externalize
+  // mapshaper here: its npm entry is Node-oriented CJS and can hit dynamic
+  // `require("buffer")` in browsers. Bundling it with our browser polyfills
+  // keeps the package self-contained for normal ESM imports.
+  {
+    input: 'src/index.ts',
+    external: ['maplibre-gl'],
+    output: {
+      file: moduleOutput,
+      format: 'es',
+      sourcemap: shouldWriteSourcemap,
+    },
     plugins: commonPlugins(),
   },
   // Worker bundle. Same external/global treatment, plus a banner that
@@ -93,11 +121,9 @@ export default [
     output: {
       file: workerOutput,
       format: 'iife',
-      sourcemap: true,
+      sourcemap: shouldWriteSourcemap,
       banner: "importScripts('mapshaper-vendor.js');",
-      globals: {
-        mapshaper: 'mapshaper',
-      },
+      globals: mapshaperGlobal,
     },
     plugins: commonPlugins(),
   },
