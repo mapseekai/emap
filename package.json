@@ -20,7 +20,8 @@
   },
   "sideEffects": [
     "*.css",
-    "./dist/mapshaper-vendor.js"
+    "./dist/mapshaper-vendor.js",
+    "./dist/mapshaper-vendor.mjs"
   ],
   "files": [
     "dist/emap.js",
