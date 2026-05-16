@@ -1,7 +1,9 @@
-import * as maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import { Control } from './control';
 import { Emap } from '../map/map';
+
+type MapLibreModule = typeof import('maplibre-gl');
+type MapLibreMap = import('maplibre-gl').Map;
+type MapLibreStyle = import('maplibre-gl').StyleSpecification | string;
 
 export interface BasemapStyle {
   name: string;
@@ -40,7 +42,8 @@ export class BasemapControl implements Control {
   private _map: Emap | null = null;
   private _container: HTMLElement | null = null;
   private _basemapContainer: HTMLElement | null = null;
-  private _maplibreMap: maplibregl.Map | null = null;
+  private _maplibre: MapLibreModule | null = null;
+  private _maplibreMap: MapLibreMap | null = null;
   private _styles: BasemapStyle[];
   private _activeStyle: BasemapStyle | null = null;
   private _isOn: boolean = false;
@@ -135,6 +138,7 @@ export class BasemapControl implements Control {
   private async _initMapLibre(style: BasemapStyle): Promise<void> {
     if (!this._basemapContainer || !this._map) return;
 
+    const maplibregl = await this._loadMapLibre();
     const maplibreStyle = this._createMapLibreStyle(style);
 
     this._maplibreMap = new maplibregl.Map({
@@ -154,13 +158,20 @@ export class BasemapControl implements Control {
     });
   }
 
+  private async _loadMapLibre(): Promise<MapLibreModule> {
+    if (!this._maplibre) {
+      this._maplibre = await import('maplibre-gl');
+    }
+    return this._maplibre;
+  }
+
   private _setStyle(style: BasemapStyle): void {
     if (!this._maplibreMap) return;
     const maplibreStyle = this._createMapLibreStyle(style);
     this._maplibreMap.setStyle(maplibreStyle);
   }
 
-  private _createMapLibreStyle(style: BasemapStyle): maplibregl.StyleSpecification | string {
+  private _createMapLibreStyle(style: BasemapStyle): MapLibreStyle {
     if (style.type === 'raster' || style.url.includes('{z}')) {
       // Raster tile style
       return {

@@ -18,9 +18,9 @@ A topology-oriented geographic map rendering and editing engine built around [Ma
 ## Install
 
 ```bash
-pnpm install emap
+pnpm add @zwishing/emap
 # or
-npm install emap
+npm install @zwishing/emap
 ```
 
 ## Hello map
@@ -29,13 +29,13 @@ npm install emap
 <!DOCTYPE html>
 <html>
   <head>
-    <link rel="stylesheet" href="node_modules/emap/src/ui/controls.css" />
+    <link rel="stylesheet" href="node_modules/@zwishing/emap/dist/emap.css" />
     <style>#map { width: 100vw; height: 100vh; margin: 0; }</style>
   </head>
   <body>
     <div id="map"></div>
-    <script src="node_modules/emap/dist/mapshaper-vendor.js"></script>
-    <script src="node_modules/emap/dist/emap.js"></script>
+    <script src="node_modules/@zwishing/emap/dist/mapshaper-vendor.js"></script>
+    <script src="node_modules/@zwishing/emap/dist/emap.js"></script>
     <script>
       const { Emap, TopologySource, NavigationControl, EditToolbar } = emap;
 
@@ -54,6 +54,26 @@ npm install emap
     </script>
   </body>
 </html>
+```
+
+### Bundlers
+
+```ts
+import { Emap, TopologySource, type MapOptions } from '@zwishing/emap';
+import '@zwishing/emap/style.css';
+
+const options: MapOptions = { container: 'map' };
+const map = new Emap(options);
+```
+
+The ESM build is browser-ready and bundles the mapshaper runtime it needs, so
+Vite/Webpack/Bun consumers should not need to add a `Buffer` polyfill.
+
+`BasemapControl` loads MapLibre only when a basemap is first enabled. If you use
+that control, also include MapLibre's stylesheet in your app:
+
+```ts
+import 'maplibre-gl/dist/maplibre-gl.css';
 ```
 
 Live demos in `test/examples/*.html` cover every feature area below.
@@ -77,7 +97,9 @@ map.on('click', (e) => { /* … */ });
 
 ```ts
 const source = await TopologySource.fromUrl('id', url);     // GeoJSON / TopoJSON / ZIP
-const source2 = await TopologySource.fromBytes('id', buf);  // ArrayBuffer / Uint8Array
+const source2 = await TopologySource.fromBytes('id', buf, {
+  filename: 'local.geojson',
+});  // ArrayBuffer / Uint8Array
 source.getExtent();
 source.getLayers();
 ```
@@ -154,7 +176,7 @@ Vertex drags / feature translates within a session merge into one undo step. Dat
 Register validators that run after every committed edit. Failures fire `validationfailed` — the engine doesn't auto-undo, the app decides.
 
 ```ts
-import { topologyValidator } from 'emap';
+import { topologyValidator } from '@zwishing/emap';
 
 const unregister = map.validators.register(topologyValidator({
   sources: ['china'],
@@ -205,7 +227,7 @@ Attribute-only ops (each / join / rename-fields / sort) preserve the selection a
 const map = new Emap({
   container: 'map',
   workerUrl: '/emap-worker.js',     // built alongside dist/emap.js
-  workerMode: 'auto',                // 'auto' | true | false
+  useWorker: 'auto',                // 'auto' | true | false
   workerThreshold: 200_000,          // vertex count
   workerPoolSize: 2,                 // multiple workers (PR-22a)
 });
@@ -215,6 +237,26 @@ map.on('workerjobend',   (e) => console.log('end',   e.durationMs));
 ```
 
 The router classifies each op as cheap / expensive and overrides the threshold accordingly. Override the decision globally with `MapOptions.workerRouting?: (info) => boolean`.
+
+When worker offloading is enabled, serve both `emap-worker.js` and
+`mapshaper-vendor.js` from the same directory. The worker loads the vendor file
+with `importScripts('mapshaper-vendor.js')`.
+
+```ts
+const map = new Emap({
+  container: 'map',
+  useWorker: 'auto',
+  workerUrl: '/vendor/emap/emap-worker.js',
+});
+```
+
+For bundler projects, copy these package files to that served directory during
+your app build:
+
+```text
+node_modules/@zwishing/emap/dist/emap-worker.js
+node_modules/@zwishing/emap/dist/mapshaper-vendor.js
+```
 
 ### Snapshots
 

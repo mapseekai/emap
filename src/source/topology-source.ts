@@ -87,6 +87,15 @@ export interface TopologySourceOptions {
   mapshaperRunner?: MapshaperRunner;
 }
 
+export interface TopologySourceFromBytesOptions extends Omit<TopologySourceOptions, 'data'> {
+  /**
+   * Filename handed to mapshaper's importer. The extension is significant:
+   * use `.geojson`, `.topojson`, `.json`, `.zip`, `.shp`, `.kml`, or `.msx`
+   * so mapshaper can choose the right parser.
+   */
+  filename?: string;
+}
+
 export class TopologySource extends EventDispatcher implements ITopologySource {
   public id: string;
   public type: 'topology' = 'topology';
@@ -152,6 +161,41 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       source.on('data', onData);
       source.on('error', onError);
       source.setData(url);
+    });
+    return source;
+  }
+
+  /**
+   * Convenience loader for in-memory bytes, e.g. files selected through an
+   * `<input type="file">`. Resolves after the import succeeds and rejects on
+   * the first load error.
+   */
+  static async fromBytes(
+    id: string,
+    bytes: Uint8Array | ArrayBuffer,
+    options?: TopologySourceFromBytesOptions,
+  ): Promise<TopologySource> {
+    const { filename = `${id}.geojson`, ...sourceOptions } = options ?? {};
+    const content = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    const source = new TopologySource(id, sourceOptions);
+    await new Promise<void>((resolve, reject) => {
+      let onData: () => void;
+      let onError: (event: { error?: unknown }) => void;
+      const cleanup = () => {
+        source.off('data', onData);
+        source.off('error', onError);
+      };
+      onData = () => {
+        cleanup();
+        resolve();
+      };
+      onError = (event) => {
+        cleanup();
+        reject(event?.error ?? event);
+      };
+      source.on('data', onData);
+      source.on('error', onError);
+      source.setData({ filename, content });
     });
     return source;
   }

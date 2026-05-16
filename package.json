@@ -1,16 +1,49 @@
 {
-  "name": "emap",
-  "version": "0.1.0",
+  "name": "@zwishing/emap",
+  "version": "0.1.1",
   "description": "A modern, decoupled rendering engine for mapshaper data",
-  "main": "dist/emap.js",
+  "main": "dist/emap.mjs",
   "module": "dist/emap.mjs",
+  "browser": "dist/emap.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/emap.mjs"
+    },
+    "./style.css": "./dist/emap.css",
+    "./dist/emap-worker.js": "./dist/emap-worker.js",
+    "./dist/mapshaper-vendor.js": "./dist/mapshaper-vendor.js",
+    "./dist/emap.js": "./dist/emap.js",
+    "./package.json": "./package.json"
+  },
+  "sideEffects": [
+    "*.css",
+    "./dist/mapshaper-vendor.js"
+  ],
+  "files": [
+    "dist/emap.js",
+    "dist/emap.mjs",
+    "dist/emap-worker.js",
+    "dist/mapshaper-vendor.js",
+    "dist/emap.css",
+    "dist/**/*.d.ts",
+    "README.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "rollup -c --environment BUILD:development -w",
     "dev-build": "rollup -c --environment BUILD:development",
     "build": "rollup -c --environment BUILD:production && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "vitest"
+    "test": "vitest",
+    "test:run": "vitest run",
+    "prepublishOnly": "npm run typecheck && npm run test:run && npm run build"
   },
   "keywords": [
     "mapshaper",
@@ -21,6 +54,17 @@
   ],
   "author": "zwishing",
   "license": "MPL-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zwishing/emap.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zwishing/emap/issues"
+  },
+  "homepage": "https://github.com/zwishing/emap#readme",
   "devDependencies": {
     "@rollup/plugin-alias": "^6.0.0",
     "@rollup/plugin-commonjs": "^25.0.0",

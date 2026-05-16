@@ -305,6 +305,26 @@ describe('TopologySource.setData multi-file', () => {
     expect(source.getDataset()?.info?._injected['data.geojson']).toEqual(bytes);
   });
 
+  it('fromBytes resolves after loading an in-memory dataset', async () => {
+    const content = new Uint8Array([9, 8, 7]);
+
+    const source = await TopologySource.fromBytes('bytes-source', content, {
+      filename: 'upload.topojson',
+    });
+
+    expect(source.id).toBe('bytes-source');
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-i "upload.topojson"');
+    expect(source.getDataset()?.info?._injected['upload.topojson']).toEqual(content);
+  });
+
+  it('fromBytes defaults to a geojson filename based on the source id', async () => {
+    await TopologySource.fromBytes('local-layer', new ArrayBuffer(4));
+
+    expect(parseCommandsSpy.mock.calls[0][0]).toBe('-i "local-layer.geojson"');
+    const passedCommands = runParsedCommandsSpy.mock.calls[0][0] as any[];
+    expect(passedCommands[0].options.input['local-layer.geojson']).toBeInstanceOf(Uint8Array);
+  });
+
   it('emits one -i command listing every primary file when given an array', async () => {
     const source = new TopologySource('test');
     source.setData([

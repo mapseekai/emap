@@ -11,6 +11,7 @@ import 'mapshaper';
 // ===========================================================================
 export { Emap } from './map/map';
 export type {
+  MapOptions,
   // map options + view
   ExpressionEvaluationPolicy,
   // queries
@@ -154,6 +155,7 @@ export type {
   TopologySourceData,
   TopologySourceInput,
   TopologySourceOptions,
+  TopologySourceFromBytesOptions,
   ZipExtractionLimits,
 } from './source/topology-source';
 export type { TopologySource as ITopologySource, ExportFormat, ExportOptions } from './source/source';
