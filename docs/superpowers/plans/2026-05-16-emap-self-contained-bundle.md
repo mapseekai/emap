@@ -1,86 +1,147 @@
-# Self-Contained Browser Bundle (#8) Implementation Plan
+# Self-Contained Browser Bundle (#8) — Plan A Implementation Plan (v2)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development. Steps use `- [ ]` syntax.
 
-**Goal:** Eliminate the last unresolved Node dynamic require (`adm-zip`) from every shipped browser bundle and add a CI guardrail so `import "@zwishing/emap"` works zero-config in any browser bundler and never silently regresses.
+**Goal:** Stop routing mapshaper through `@rollup/plugin-commonjs` in the `emap.mjs` build. Ship a sibling ESM mapshaper vendor (`dist/mapshaper-vendor.mjs`) and have `emap.mjs` import it as an external, so `import "@zwishing/emap"` is zero-config and runtime-correct in any browser bundler, structurally eliminating the commonjs-fragility class.
 
-**Architecture:** Add a browser stub for `adm-zip` aliased at Rollup build time (identical mechanism to the existing `iconv-lite` → `iconv-shim.ts` alias). Add a Vitest test that statically scans the built bundles for unresolved requires and behaviorally exercises `TopologySource.setData` against GeoJSON + a `.dbf` shapefile ZIP. Reorder `prepublishOnly` so the test runs against fresh artifacts. No public API, `package.json` exports, or `MapshaperAdapter` changes.
+**Architecture:** New ESM vendor output (browser mapshaper + `export default`). The ESM build marks `mapshaper` external and uses Rollup `output.paths` to rewrite the specifier to `./mapshaper-vendor.mjs`. `ignoreDynamicRequires: true` stays everywhere (known runtime-good). Vestigial adm-zip shim/alias removed. Regression test revised: zero requires in `emap.*`, only documented-dead `require("adm-zip")` tolerated in `mapshaper-vendor.*`, plus a behavioral jsdom guard with a valid fixture.
 
-**Tech Stack:** TypeScript 5, Rollup 4 (`@rollup/plugin-alias`), Vitest 1, fflate, jsdom.
+**Tech Stack:** TypeScript 5, Rollup 4, Vitest 1 (jsdom), fflate.
+
+**Branch:** `fix/self-contained-bundle` (already checked out). History so far: `ac3fd9a` adm-zip shim, `81152cc` alias, `56849cf`/`0b79c46` config experiments (ended at known-good `ignoreDynamicRequires: true`), `3cb6794` release-prep WIP (separate), `3bfa1e8` regression test (to be revised).
 
 ---
 
-### Task 1: Add the `adm-zip` browser shim
+### Task A1: ESM vendor artifact
 
 **Files:**
-- Create: `src/types/adm-zip-shim.ts`
-- Test: `src/types/adm-zip-shim.test.ts`
+- Create: `src/vendor/mapshaper-vendor-esm.ts`
+- Modify: `rollup.config.mjs` (add a 5th output)
 
-- [ ] **Step 1: Write the failing test**
-
-```typescript
-// src/types/adm-zip-shim.test.ts
-import { describe, expect, it } from 'vitest';
-import AdmZipStub from './adm-zip-shim';
-
-describe('adm-zip-shim', () => {
-  it('throws an emap-branded error when instantiated', () => {
-    expect(() => new (AdmZipStub as any)()).toThrowError(
-      /adm-zip is Node-only.*fflate.*unreachable in a browser build/,
-    );
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run src/types/adm-zip-shim.test.ts`
-Expected: FAIL — `Cannot find module './adm-zip-shim'`.
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 1: Create the ESM vendor entry**
 
 ```typescript
-// src/types/adm-zip-shim.ts
-// Browser stub for adm-zip. mapshaper's zip path is `qc() ? <fflate> :
-// new require('adm-zip')()`; in a browser qc() is truthy so this branch is
-// dead. Aliased in at build time (rollup.config.mjs) the same way iconv-lite
-// is, purely to remove the unresolved `require("adm-zip")` from the bundle.
-// If a future mapshaper change ever reaches it, fail loud and clear instead
-// of esbuild's opaque "Dynamic require of …".
-class AdmZipBrowserStub {
-  constructor() {
-    throw new Error(
-      'adm-zip is Node-only; the browser ZIP path uses fflate — ' +
-        'this code path should be unreachable in a browser build',
-    );
-  }
-}
+// src/vendor/mapshaper-vendor-esm.ts
+// ESM sibling of mapshaper-vendor.ts. The IIFE vendor registers
+// globalThis.mapshaper for script-tag/worker consumers; this one is a real
+// ES module with a default export, imported by dist/emap.mjs (mapshaper is
+// marked external there). `import '../shim'` first: idempotent, guarded; it
+// also runs via src/index.ts before this module evaluates, kept here so the
+// vendor is self-sufficient if imported standalone.
+import '../shim';
+import mapshaper from 'mapshaper';
 
-export default AdmZipBrowserStub;
+export default mapshaper;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Add the Rollup output** in `rollup.config.mjs`. Add this object to the exported array (after the IIFE vendor block, before the main IIFE block):
 
-Run: `npx vitest run src/types/adm-zip-shim.test.ts`
-Expected: PASS.
+```javascript
+  // ESM vendor — same browser mapshaper build as the IIFE vendor, but a real
+  // ES module with `export default`. Imported by dist/emap.mjs (which marks
+  // `mapshaper` external and rewrites the specifier to ./mapshaper-vendor.mjs).
+  {
+    input: 'src/vendor/mapshaper-vendor-esm.ts',
+    external: ['maplibre-gl'],
+    output: {
+      file: 'dist/mapshaper-vendor.mjs',
+      format: 'es',
+      sourcemap: shouldWriteSourcemap,
+    },
+    plugins: commonPlugins(),
+  },
+```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Build and verify the artifact exists and has a default export**
+
+Run: `npm run build && node -e "import('./dist/mapshaper-vendor.mjs').then(m=>console.log('default keys:', Object.keys(m.default).slice(0,5)))"`
+Expected: build OK; prints mapshaper API keys (e.g. `internal`, `runCommands`, …) — confirms `export default` works.
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add src/types/adm-zip-shim.ts src/types/adm-zip-shim.test.ts
-git commit -m "feat: add browser stub for adm-zip"
+git add src/vendor/mapshaper-vendor-esm.ts rollup.config.mjs
+git commit -m "feat: emit dist/mapshaper-vendor.mjs (ESM mapshaper vendor with default export)"
 ```
 
 ---
 
-### Task 2: Alias `adm-zip` to the shim in the Rollup build
+### Task A2: Externalize mapshaper in the ESM build
 
-**Files:**
-- Modify: `rollup.config.mjs` (the `alias({ entries: [...] })` call inside `commonPlugins()`)
+**Files:** Modify `rollup.config.mjs` — the `moduleOutput` (Browser ESM) config block only.
 
-- [ ] **Step 1: Add the alias entry**
+- [ ] **Step 1: Change the ESM block.** Locate the block with the comment `// Browser ESM bundle for Vite/Webpack/Bun consumers.` Replace its `external` and `output` so it reads:
 
-In `rollup.config.mjs`, locate the existing alias block inside `commonPlugins()`:
+```javascript
+  // Browser ESM bundle for Vite/Webpack/Bun consumers. mapshaper is EXTERNAL
+  // here and rewritten to the sibling ESM vendor — it must NOT go through
+  // @rollup/plugin-commonjs (that path produced the Friction #8 fragility:
+  // dead require("adm-zip") and a runtime-throwing iconv-lite helper).
+  {
+    input: 'src/index.ts',
+    external: ['maplibre-gl', 'mapshaper'],
+    output: {
+      file: moduleOutput,
+      format: 'es',
+      sourcemap: shouldWriteSourcemap,
+      paths: { mapshaper: './mapshaper-vendor.mjs' },
+    },
+    plugins: commonPlugins(),
+  },
+```
+
+- [ ] **Step 2: Build**
+
+Run: `npm run build`
+Expected: builds with no errors.
+
+- [ ] **Step 3: Verify emap.mjs is mapshaper-free and imports the sibling**
+
+Run: `grep -c "mapshaper-vendor.mjs" dist/emap.mjs; grep -oE "require\$?1?\(['\"][^'\"]+['\"]\)" dist/emap.mjs | sort -u; echo "requires-exit=$?"; grep -c "mapshaper.internal" dist/emap.mjs || echo "0 inlined mapshaper internals"`
+Expected: `dist/emap.mjs` contains `from"./mapshaper-vendor.mjs"` (count ≥1); zero `require(...)` matches (exit 1); no inlined `mapshaper.internal` body (the only references are via the imported binding, not bundled source).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add rollup.config.mjs
+git commit -m "fix: externalize mapshaper in ESM build, rewrite to ./mapshaper-vendor.mjs (Plan A)"
+```
+
+---
+
+### Task A3: Packaging — ship the sibling
+
+**Files:** Modify `package.json` (`files`, `exports`).
+
+- [ ] **Step 1: Add to `files`.** In the `files` array add the entry `"dist/mapshaper-vendor.mjs"` (place it next to `"dist/mapshaper-vendor.js"`).
+
+- [ ] **Step 2: Add to `exports`.** In the `exports` map add, after the `"./dist/mapshaper-vendor.js"` line:
+
+```json
+    "./dist/mapshaper-vendor.mjs": "./dist/mapshaper-vendor.mjs",
+```
+
+- [ ] **Step 3: Validate JSON + packed contents**
+
+Run: `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8'))" && npm pack --dry-run 2>&1 | grep mapshaper-vendor`
+Expected: no JSON error; pack listing includes both `dist/mapshaper-vendor.js` and `dist/mapshaper-vendor.mjs`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add package.json
+git commit -m "build: ship dist/mapshaper-vendor.mjs in package files + exports"
+```
+
+---
+
+### Task A4: Remove vestigial adm-zip shim + alias
+
+**Files:** Delete `src/types/adm-zip-shim.ts`, `src/types/adm-zip-shim.test.ts`; modify `rollup.config.mjs` (remove the adm-zip alias entry).
+
+Rationale: under `ignoreDynamicRequires: true` + Plan A the adm-zip alias never fires (empirically proven) and the shim is unreferenced. Leaving them is misleading dead config.
+
+- [ ] **Step 1: Remove the alias entry.** In `rollup.config.mjs` `commonPlugins()`, change the alias block back to a single entry:
 
 ```javascript
     alias({
@@ -90,83 +151,92 @@ In `rollup.config.mjs`, locate the existing alias block inside `commonPlugins()`
     }),
 ```
 
-Replace it with:
+(Keep `iconv-lite` — it is load-bearing. Also remove the `nodeResolve({ ... alias: { 'adm-zip': ... } })` sub-key if still present, restoring `nodeResolve({ browser: true, preferBuiltins: false })`.)
 
-```javascript
-    alias({
-      entries: [
-        { find: 'iconv-lite', replacement: 'src/types/iconv-shim.ts' },
-        { find: 'adm-zip', replacement: 'src/types/adm-zip-shim.ts' }
-      ]
-    }),
+- [ ] **Step 2: Delete the shim + its test**
+
+```bash
+git rm src/types/adm-zip-shim.ts src/types/adm-zip-shim.test.ts
 ```
 
-- [ ] **Step 2: Production build**
+- [ ] **Step 3: Build + confirm no behavioral change**
 
-Run: `npm run build`
-Expected: build completes with no errors; `dist/emap.mjs`, `dist/emap.js`, `dist/mapshaper-vendor.js`, `dist/emap-worker.js` regenerated.
-
-- [ ] **Step 3: Verify zero unresolved requires (manual gate, automated in Task 3)**
-
-Run: `grep -oE "require\$?1?\(['\"][^'\"]+['\"]\)" dist/emap.mjs dist/emap.js dist/mapshaper-vendor.js dist/emap-worker.js`
-Expected: no output (exit code 1, no matches).
+Run: `npm run build && grep -oE 'require\$?1?\(["'"'"'][^"'"'"']+["'"'"']\)' dist/mapshaper-vendor.mjs | sort -u`
+Expected: build OK; the only match is `require("adm-zip")` (unchanged dead code — proving the shim/alias were no-ops).
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add rollup.config.mjs
-git commit -m "fix: alias adm-zip to browser stub to remove last Node dynamic require"
+git commit -m "refactor: drop vestigial adm-zip shim + alias (no-op under ignoreDynamicRequires:true + Plan A)"
 ```
 
 ---
 
-### Task 3: Build self-containment regression test
+### Task A5: Revise the regression test
 
-**Files:**
-- Create: `src/build/bundle-self-contained.test.ts`
+**Files:** Modify `src/build/bundle-self-contained.test.ts` (created in `3bfa1e8`).
 
-- [ ] **Step 1: Write the test**
+- [ ] **Step 1: Rewrite the test** to the following (jsdom env; zero-tolerance for `emap.*`; only documented-dead `adm-zip` allowed in `mapshaper-vendor.*`; behavioral guard with a VALID GeoJSON fixture; event-bridge wait since `setData` is sync). Use the Vitest-injected `__dirname` and `pathToFileURL` dynamic import (proven necessary in `3bfa1e8`).
 
 ```typescript
-// src/build/bundle-self-contained.test.ts
+// @vitest-environment jsdom
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const DIST = resolve(__dirname, '../../dist');
-const BUNDLES = ['emap.mjs', 'emap.js', 'mapshaper-vendor.js', 'emap-worker.js'];
+const STRICT = ['emap.mjs', 'emap.js', 'emap-worker.js'];
+const VENDOR = ['mapshaper-vendor.js', 'mapshaper-vendor.mjs'];
+const ALL = [...STRICT, ...VENDOR];
 const REQUIRE_RE = /require\$?1?\(\s*['"][^'"]+['"]\s*\)/g;
 
-const distPresent = BUNDLES.every((f) => existsSync(resolve(DIST, f)));
-const describeIfBuilt = distPresent ? describe : describe.skip;
+const distPresent = ALL.every((f) => existsSync(resolve(DIST, f)));
+const d = distPresent ? describe : describe.skip;
 
-describeIfBuilt('shipped bundles are self-contained (no Node dynamic requires)', () => {
-  it.each(BUNDLES)('%s contains zero unresolved require(...) calls', (file) => {
-    const src = readFileSync(resolve(DIST, file), 'utf8');
-    const matches = src.match(REQUIRE_RE) ?? [];
-    expect(matches, `unexpected Node requires in dist/${file}: ${matches.join(', ')}`).toEqual([]);
+async function loadEmap() {
+  return import(/* @vite-ignore */ pathToFileURL(resolve(DIST, 'emap.mjs')).href);
+}
+
+// setData is synchronous; success/failure surface via 'data'/'error' events
+// (see src/source/topology-source.ts — mirrors the fromBytes static).
+function waitForLoad(src: any, input: any): Promise<void> {
+  return new Promise((res, rej) => {
+    const ok = () => { cleanup(); res(); };
+    const bad = (e: any) => { cleanup(); rej(e?.error ?? e); };
+    const cleanup = () => { src.off('data', ok); src.off('error', bad); };
+    src.on('data', ok); src.on('error', bad);
+    src.setData(input);
+  });
+}
+
+d('shipped bundles are self-contained', () => {
+  it.each(STRICT)('%s has zero require(...) calls', (f) => {
+    const m = readFileSync(resolve(DIST, f), 'utf8').match(REQUIRE_RE) ?? [];
+    expect(m, `unexpected requires in dist/${f}: ${m.join(', ')}`).toEqual([]);
   });
 
-  it('TopologySource.setData parses GeoJSON without a Dynamic require error', async () => {
-    const { TopologySource } = await import(resolve(DIST, 'emap.mjs'));
-    const geojson = JSON.stringify({
-      type: 'FeatureCollection',
-      features: [
-        { type: 'Feature', properties: { name: 'a' }, geometry: { type: 'Point', coordinates: [0, 0] } },
-      ],
-    });
+  it.each(VENDOR)('%s has only the documented-dead require("adm-zip")', (f) => {
+    const m = readFileSync(resolve(DIST, f), 'utf8').match(REQUIRE_RE) ?? [];
+    const others = [...new Set(m)].filter((r) => r !== 'require("adm-zip")');
+    expect(others, `unexpected non-adm-zip requires in dist/${f}: ${others.join(', ')}`).toEqual([]);
+  });
+
+  it('loads valid GeoJSON with no dynamic-require failure', async () => {
+    const { TopologySource } = await loadEmap();
+    const geojson =
+      '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"id":1},' +
+      '"geometry":{"type":"Polygon","coordinates":[[[0,0],[0,1],[1,1],[1,0],[0,0]]]}}]}';
     const src = new TopologySource('t');
     await expect(
-      src.setData({ filename: 'x.geojson', content: new TextEncoder().encode(geojson) }),
-    ).resolves.not.toThrow();
+      waitForLoad(src, { filename: 't.geojson', content: new TextEncoder().encode(geojson) }),
+    ).resolves.toBeUndefined();
   });
 
-  it('TopologySource.setData parses a .dbf-bearing shapefile ZIP without a Dynamic require error', async () => {
-    const { TopologySource } = await import(resolve(DIST, 'emap.mjs'));
+  it('a .dbf shapefile ZIP does not cause a dynamic-require crash', async () => {
+    const { TopologySource } = await loadEmap();
     const { zipSync, strToU8 } = await import('fflate');
-    // Minimal valid-ish shapefile triple. The point of this test is the
-    // iconv-lite/.dbf decode path: it must not throw "Dynamic require of …".
-    // A mapshaper parse error is acceptable; a Dynamic-require crash is not.
     const zip = zipSync({
       'm.shp': new Uint8Array([0, 0, 39, 10]),
       'm.shx': new Uint8Array([0, 0, 39, 10]),
@@ -174,150 +244,119 @@ describeIfBuilt('shipped bundles are self-contained (no Node dynamic requires)',
     });
     const src = new TopologySource('t2');
     try {
-      await src.setData({ filename: 'm.zip', content: zip });
+      await waitForLoad(src, { filename: 'm.zip', content: zip });
     } catch (err) {
-      expect(String(err)).not.toMatch(/Dynamic require of/);
+      expect(String(err)).not.toMatch(/Dynamic require of|Could not dynamically require/);
     }
   });
 });
 ```
 
-- [ ] **Step 2: Run test against current artifacts**
+- [ ] **Step 2: Build + run**
 
 Run: `npm run build && npx vitest run src/build/bundle-self-contained.test.ts`
-Expected: all cases PASS (Task 2 already removed the last require; the `.dbf` case asserts only the absence of a Dynamic-require crash).
+Expected: all cases PASS (3 strict static + 2 vendor static + 2 behavioral). If the GeoJSON case fails with `Unknown JSON format`, the fixture or the content type is wrong — fix the fixture (it must be valid GeoJSON mapshaper accepts) until it genuinely loads; do NOT weaken the assertion.
 
-- [ ] **Step 3: Verify graceful skip without artifacts**
+- [ ] **Step 3: Verify graceful skip**
 
-Run: `rm -rf dist && npx vitest run src/build/bundle-self-contained.test.ts`
-Expected: suite SKIPPED (0 failures). Then restore: `npm run build`.
+Run: `mv dist /tmp/dist.bak && npx vitest run src/build/bundle-self-contained.test.ts; mv /tmp/dist.bak dist`
+Expected: suite skipped, 0 failures; dist restored.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add src/build/bundle-self-contained.test.ts
-git commit -m "test: guard browser bundle self-containment against regression"
+git commit -m "test: revise self-containment guard for Plan A (strict emap.*, dead-adm-zip vendor allowance, valid fixture)"
 ```
 
 ---
 
-### Task 4: Make the regression test a publish gate
+### Task A6: Publish gate + docs
 
-**Files:**
-- Modify: `package.json:46` (`prepublishOnly` script)
+**Files:** Modify `package.json` (`prepublishOnly`), `README.md`, `CHANGELOG.md`.
 
-- [ ] **Step 1: Reorder `prepublishOnly` so the test runs against fresh artifacts**
-
-Current:
-
-```json
-    "prepublishOnly": "npm run typecheck && npm run test:run && npm run build"
-```
-
-Replace with (build before test so `bundle-self-contained.test.ts` sees `dist/`):
+- [ ] **Step 1: Reorder `prepublishOnly`** so the bundle test sees fresh artifacts:
 
 ```json
     "prepublishOnly": "npm run typecheck && npm run build && npm run test:run"
 ```
 
-- [ ] **Step 2: Verify the gate end to end**
-
-Run: `npm run prepublishOnly`
-Expected: typecheck passes, build produces `dist/`, full test run passes including `bundle-self-contained.test.ts` (now non-skipped).
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add package.json
-git commit -m "build: run test suite after build in prepublishOnly so bundle gate sees dist"
-```
-
----
-
-### Task 5: Documentation — README + CHANGELOG
-
-**Files:**
-- Modify: `README.md` (add a bundler section)
-- Modify: `CHANGELOG.md` (add a fix entry under the unreleased/next version)
-
-- [ ] **Step 1: Add the README bundler section**
-
-Add this section to `README.md` (place it near existing install/usage content; keep heading level consistent with neighbours):
+- [ ] **Step 2: README bundler section.** Add to `README.md` (near install/usage):
 
 ```markdown
 ## Browser bundlers (Vite / webpack / esbuild / Bun)
 
-`import "@zwishing/emap"` works out of the box. The published `dist/emap.mjs`
-inlines a browser build of mapshaper with **zero** unresolved Node `require`
-calls — you do **not** need a `resolve.alias`, a `Buffer` polyfill, or any
-bundler configuration.
+`import "@zwishing/emap"` works out of the box — no `resolve.alias`, no
+`Buffer` polyfill, no bundler config. mapshaper is shipped as a sibling ES
+module (`dist/mapshaper-vendor.mjs`) that `dist/emap.mjs` imports by relative
+path; your bundler resolves it automatically from
+`node_modules/@zwishing/emap/dist/`.
 
 ```ts
 import { Emap, TopologySource } from "@zwishing/emap";
 import "@zwishing/emap/style.css";
 ```
 
-The Web Worker is only needed if you opt into off-thread ops via
-`workerUrl`. When you do, deploy `dist/emap-worker.js` and
-`dist/mapshaper-vendor.js` as static assets in the **same directory** and pass
-`workerUrl: '/emap-worker.js'`.
+The Web Worker is only needed if you opt into off-thread ops via `workerUrl`;
+deploy `dist/emap-worker.js` and `dist/mapshaper-vendor.js` as same-directory
+static assets then.
 ```
 
-- [ ] **Step 2: Add the CHANGELOG entry**
-
-Add under the top (unreleased / next) section of `CHANGELOG.md`:
+- [ ] **Step 3: CHANGELOG entry.** Add under the top section of `CHANGELOG.md`:
 
 ```markdown
 ### Fixed
 
-- Removed the last Node-only dynamic `require("adm-zip")` from the shipped
-  browser bundles. `import "@zwishing/emap"` is now fully self-contained in any
-  browser bundler with no alias, `Buffer` polyfill, or bundler config. A CI
-  guardrail (`bundle-self-contained.test.ts`) prevents regressions. Consumers
-  that added a `mapshaper`→browser alias, a `Buffer` polyfill, or band-aid
-  tests as a workaround can remove them.
+- `import "@zwishing/emap"` is now self-contained in any browser bundler.
+  mapshaper is no longer routed through CommonJS in the ESM build (which could
+  emit a dead `require("adm-zip")` and a runtime-throwing `iconv-lite` helper);
+  it ships as a sibling ES module `dist/mapshaper-vendor.mjs`. Consumers can
+  remove any `mapshaper`→browser alias, `Buffer` polyfill, or band-aid tests.
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Verify gate**
+
+Run: `npm run prepublishOnly`
+Expected: typecheck → build → full test run, all green (bundle test non-skipped).
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add README.md CHANGELOG.md
-git commit -m "docs: document zero-config browser bundler usage; changelog for adm-zip fix"
+git add package.json README.md CHANGELOG.md
+git commit -m "build: prepublish gate ordering + document zero-config bundler usage"
 ```
 
 ---
 
-### Task 6: Final verification
+### Task A7: Final verification
 
 - [ ] **Step 1: Clean build + full suite**
 
 Run: `npm run typecheck && npm run build && npm run test:run`
-Expected: typecheck clean, build clean, all tests pass including the four-bundle static scan and both `TopologySource.setData` behavioral cases.
+Expected: all green.
 
-- [ ] **Step 2: Manual acceptance grep (matches the spec's acceptance criterion)**
+- [ ] **Step 2: Acceptance greps**
 
-Run: `grep -oE "require\$?1?\(['\"][^'\"]+['\"]\)" dist/emap.mjs dist/emap.js dist/mapshaper-vendor.js dist/emap-worker.js; echo "exit=$?"`
-Expected: no matches, `exit=1`.
+Run:
+```bash
+grep -c 'from"./mapshaper-vendor.mjs"\|from "./mapshaper-vendor.mjs"' dist/emap.mjs
+grep -oE 'require\$?1?\(["'"'"'][^"'"'"']+["'"'"']\)' dist/emap.mjs dist/emap.js dist/emap-worker.js; echo "strict-exit=$?"
+```
+Expected: emap.mjs imports the sibling (count ≥1); strict bundles have zero requires (exit 1).
 
-- [ ] **Step 3: Confirm no public surface drift**
+- [ ] **Step 3: No public surface drift**
 
-Run: `git diff --stat HEAD~6 -- dist/index.d.ts package.json`
-Expected: `dist/index.d.ts` unchanged; `package.json` shows only the `prepublishOnly` script reorder (no `exports`/`browser` changes).
+Run: `git diff 3cb6794 -- dist/index.d.ts; node -e "const e=require('./package.json').exports; if(e['.'].import!=='./dist/emap.mjs')process.exit(1)"`
+Expected: no `dist/index.d.ts` diff; `.` export still `./dist/emap.mjs`.
 
 ---
 
 ## Self-Review
 
-**Spec coverage:**
-- §1 Build-layer fix → Tasks 1, 2.
-- §2 Regression guardrail (static + jsdom behavioral, skips without dist) → Task 3; publish gate → Task 4.
-- §3 Trust & documentation (README, CHANGELOG) → Task 5.
-- §4 Architecture boundary (no adapter/index/exports changes) → enforced by Task 6 Step 3.
-- Acceptance criteria (grep empty; test passes & skips; no d.ts/exports diff; README+CHANGELOG) → Tasks 3, 5, 6.
-- Deferred items: explicitly out of scope, no tasks — correct.
+**Spec coverage:** §1 ESM vendor → A1. §2 externalize+paths → A2. §3 packaging → A3. §4 remove vestigial adm-zip → A4. §5 revised guardrail → A5. §6 prepublish+docs → A6. Acceptance criteria → A2/A5/A7.
 
-**Placeholder scan:** No TBD/TODO; all code blocks complete; commands have expected output.
+**Placeholder scan:** none — every step has concrete code/commands and expected output.
 
-**Type consistency:** `AdmZipBrowserStub` default export used consistently (Task 1 defines, no other task references its internals). `TopologySource.setData({filename, content})` signature matches the integration report and `src/source/topology-source.ts`. `BUNDLES` array consistent across Task 3 cases. `prepublishOnly` final form consistent between Tasks 4 and referenced in spec.
+**Type consistency:** `mapshaper-vendor-esm.ts` default export consumed by A2's `paths` rewrite; `STRICT`/`VENDOR`/`ALL` arrays consistent within A5; `prepublishOnly` final string identical in A6 and spec.
 
-Note: the `.dbf` ZIP in Task 3 is intentionally minimal — the assertion is strictly "no Dynamic-require crash", not a successful parse, so a mapshaper-level parse rejection does not fail the test (handled by the try/catch asserting only on the error string).
+**Risk note:** Rollup `output.paths` rewrites the external `mapshaper` specifier to `./mapshaper-vendor.mjs` for ALL imports of `mapshaper` in `src/index.ts`, `src/adapter/mapshaper-adapter.ts`, `src/map/feature-query.ts`. The IIFE/worker builds still use `external:['mapshaper'] + globals` (unchanged). `import '../shim'` runs in both index.ts (bundled in emap.mjs) and the ESM vendor — shim is idempotent (guarded), benign double-eval. If A2 Step 3 shows mapshaper still inlined, the `external` array is the lever to check first.

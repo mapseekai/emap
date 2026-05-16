@@ -1,124 +1,90 @@
-# Design: Self-Contained Browser Bundle (#8)
+# Design: Self-Contained Browser Bundle (#8) — Plan A (ESM vendor + externalize)
 
 **Date:** 2026-05-16
-**Status:** Approved (brainstorming) — pending implementation plan
-**Scope:** Issue #8 only from the third-party integration report. Bundle-size /
-slim variant, `TopologySource.fromBytes`, worker-routed load, and the `'literal'`
-expression policy are deliberately deferred to separate OpenSpec changes.
+**Status:** Revised during execution (v2) — supersedes the original "keep inlined, plug gap" design after empirical findings invalidated its core assumption. Pending re-approval.
+**Scope:** Issue #8 only. Bundle-size/slim variant, `'literal'` expression policy still deferred. (`TopologySource.fromBytes` + `MapOptions` export turned out to already be implemented in pre-existing release-prep WIP, now committed separately as `3cb6794` — no longer in scope here.)
 
 ## Problem
 
-A third-party consumer integrating `@zwishing/emap` via Vite/esbuild reported a
-blocking failure: `import "@zwishing/emap"` crashed on first file parse with
-`Dynamic require of "buffer" is not supported`, followed by `iconv-lite` and
-~18 other Node built-in requires. The consumer worked around it with a Vite
-`resolve.alias`, a `buffer` global polyfill, and band-aid tests.
+A third-party consumer integrating `@zwishing/emap` via Vite/esbuild reported a blocking failure: `import "@zwishing/emap"` crashed on first file parse with `Dynamic require of "buffer"` then `iconv-lite` and ~18 other Node requires (probed against v0.1.0).
 
-## Current State (verified against source, not the stale report)
+## Findings During Execution (why this design was revised)
 
-The report was probed against **v0.1.0**. Current **v0.1.1** already fixed the
-bulk of #8 unintentionally: `dist/emap.mjs` now inlines the browser-resolved
-mapshaper (via the existing `rollup.config.mjs` `nodeResolve({browser:true})` +
-`nodePolyfills()` + `iconv-lite` alias). The ~20 Node requires are gone.
+The original v1 design assumed v0.1.1 had already fixed most of #8 and only a single static `require("adm-zip")` remained, removable via one `@rollup/plugin-alias` entry. Empirical testing (using a behavioral Vitest oracle) disproved this:
 
-Exactly **one** unresolved dynamic require remains in every shipped artifact
-(`dist/emap.mjs`, `dist/emap.js`, `dist/mapshaper-vendor.js`):
+1. **v0.1.1 baseline (`ignoreDynamicRequires: true`) is already runtime-correct.** mapshaper loads and runs in jsdom; `iconv-lite` resolves; no dynamic-require crash. The consumer's *live* #8 bug is already gone in 0.1.1.
+2. **The lone `require("adm-zip")` is dead code in browsers** (mapshaper's `qc()` selects the fflate path). It never crashed the consumer; it is only a static-scan blemish + latent risk.
+3. **`@rollup/plugin-alias` does not resolve the `adm-zip` reference** under `ignoreDynamicRequires: true` (mapshaper calls it via a different callee than `iconv-lite`).
+4. **Flipping `ignoreDynamicRequires: false` is actively harmful**: it makes `@rollup/plugin-commonjs` wrap `require$1('iconv-lite')` into a minified runtime-throwing helper (`s("iconv-lite")`) that the static grep cannot see — re-introducing Friction #8's *second* crash point. Net worse than baseline.
 
-```
-require("adm-zip")
-```
-
-It sits in a mapshaper runtime branch: `qc() ? <fflate browser path> : new require("adm-zip")()`.
-In a browser `qc()` is truthy, so the `adm-zip` branch is dead code and v0.1.1
-works in practice. But esbuild statically wraps `require("adm-zip")` in a
-throwing shim regardless — a latent landmine if any future mapshaper code path
-reaches it, it fails the report's "grep must return nothing" acceptance check,
-and bundlers may warn.
+Conclusion: the inlined-mapshaper-through-commonjs path in the `emap.mjs` build is structurally fragile. Adopt the integration report's primary recommendation (Plan A): stop routing mapshaper through commonjs in the JS bundles entirely.
 
 ## Goals
 
-Make `import "@zwishing/emap"` work zero-config in any browser bundler, and make
-that property **verifiable and regression-proof**.
+`import "@zwishing/emap"` works zero-config in any browser bundler, is runtime-correct (no dynamic-require crash on GeoJSON or shapefile/.dbf import), is regression-guarded, and the mapshaper-through-commonjs fragility class is structurally eliminated.
 
-**Non-goals:** bundle-size reduction, slim/core subpath, `package.json`
-`exports`/`browser` changes, worker-routed load, any public API change.
+**Non-goals:** slim/core variant, worker-routed load, `'literal'` policy, removing the dead `adm-zip` from the vendor build (it is documented dead code, not a live bug).
 
-## Decision: keep mapshaper inlined, plug the gap
+## Decision: Plan A / variant A1 — ESM vendor + externalize
 
-Chosen over splitting mapshaper into a sibling ESM module. Smallest change,
-lowest risk, fully closes #8. The slim variant (which needs the split seam) is a
-separate follow-up change and will introduce that seam deliberately.
+Chosen by the user during execution, overriding the earlier "keep inlined" decision, because the evidence shows inlining-via-commonjs is the fragility source. emap already externalizes `mapshaper` for the IIFE (`emap.js`) and worker builds (they rely on the vendor global). Only the ESM (`emap.mjs`) build inlines it. A1 makes the ESM build also external, importing a sibling ESM vendor.
 
 ## Design
 
-### 1. Build-layer fix
+### 1. ESM vendor artifact
 
-- New file `src/types/adm-zip-shim.ts`, structurally mirroring the existing
-  `src/types/iconv-shim.ts`. Default export is a constructor that **throws an
-  emap-branded error when instantiated**:
-  `"adm-zip is Node-only; the browser ZIP path uses fflate — this code path
-  should be unreachable in a browser build"`.
-  Rationale: the branch is dead in browsers so the stub never executes; if a
-  future mapshaper change ever reaches it, the consumer gets a clear emap error
-  instead of esbuild's opaque `Dynamic require of …`.
-- In `rollup.config.mjs` `commonPlugins()`, add one alias entry alongside the
-  existing `iconv-lite` one: `{ find: 'adm-zip', replacement: 'src/types/adm-zip-shim.ts' }`.
-- Result: all four outputs (`emap.mjs`, `emap.js`, `mapshaper-vendor.js`,
-  `emap-worker.js`) contain zero unresolved Node requires.
+Add a Rollup output producing `dist/mapshaper-vendor.mjs`: a browser build of mapshaper with a real `export default`. New entry `src/vendor/mapshaper-vendor-esm.ts`:
 
-### 2. Regression guardrail
+```typescript
+import '../shim';
+import mapshaper from 'mapshaper';
+export default mapshaper;
+```
 
-New Vitest test `src/build/bundle-self-contained.test.ts`:
+Built `format: 'es'` → `dist/mapshaper-vendor.mjs`, through the same `commonPlugins()` (browser-resolved, `ignoreDynamicRequires: true`). It carries the same documented-dead `require("adm-zip")` as the IIFE vendor — runtime-correct, never executed in browsers. The existing IIFE `dist/mapshaper-vendor.js` (global side-effect, used by the worker via `importScripts`) is unchanged.
 
-1. **Static check:** read `dist/emap.mjs`, `dist/emap.js`,
-   `dist/mapshaper-vendor.js`; assert the regex
-   `require\$?1?\(['"][^'"]+['"]\)` matches zero times (no browser-safe
-   allowlist needed — expected count is 0). This turns the report's manual grep
-   acceptance into a CI red line.
-2. **Behavioral check (jsdom):** import the built `dist/emap.mjs`, run
-   `TopologySource.setData(...)` on (a) GeoJSON bytes and (b) a shapefile ZIP
-   containing a `.dbf`. Assert neither throws `Dynamic require of …`. The `.dbf`
-   case specifically covers the historical second crash point (`iconv-lite`).
+### 2. Externalize mapshaper in the ESM build + rewrite specifier to the sibling
 
-The test **skips when `dist/` is absent** so it never blocks pure unit runs. It
-becomes a publish gate via `prepublishOnly` (already chains `test:run` +
-`build`); adjust `prepublishOnly` ordering to build → test so the test sees
-artifacts.
+In `rollup.config.mjs`, the ESM (`moduleOutput`) config:
+- `external: ['maplibre-gl', 'mapshaper']`
+- `output.paths: { mapshaper: './mapshaper-vendor.mjs' }`
 
-### 3. Trust & documentation
+Rollup keeps `mapshaper` external and rewrites every `import … from 'mapshaper'` / `import 'mapshaper'` (in `src/index.ts:7`, `src/adapter/mapshaper-adapter.ts`, `src/map/feature-query.ts`) to `from "./mapshaper-vendor.mjs"`. The default export satisfies the default imports; the side-effect import is satisfied too. Result: `emap.mjs` contains **zero** mapshaper code and **zero** Node requires; mapshaper lives only in the sibling, loaded via a relative import the consumer's bundler resolves inside `node_modules/@zwishing/emap/dist/`.
 
-- README: new "Browser bundlers (Vite/webpack/esbuild/Bun)" section stating
-  `import "@zwishing/emap"` works out of the box with **no** alias / Buffer
-  polyfill / bundler config; note the worker only needs `dist/emap-worker.js` +
-  `dist/mapshaper-vendor.js` deployed as same-directory static assets when
-  `workerUrl` is enabled.
-- CHANGELOG: a `fix` entry — eliminated the last Node dynamic require
-  (`adm-zip`), bundle self-contained with a CI guardrail; consumers may delete
-  their `mapshaper→browser` alias, Buffer polyfill, and band-aid tests.
+### 3. Packaging
 
-### 4. Architecture boundary confirmation
+- `package.json` `files`: add `dist/mapshaper-vendor.mjs`.
+- `package.json` `exports`: add `"./dist/mapshaper-vendor.mjs": "./dist/mapshaper-vendor.mjs"` (explicitness; the relative sibling import does not strictly require it).
+- No change to the `.` entry, `browser` field, IIFE, or worker outputs.
 
-All changes stay within existing isolation points: the alias mechanism is an
-established `rollup.config.mjs` pattern; the shim is co-located with and
-structurally identical to `iconv-shim.ts`; `MapshaperAdapter` and the
-`src/index.ts` `import 'mapshaper'` side-effect (the vendor global-registration
-contract) are untouched. No public API or OpenSpec capability surface changes —
-this is "fix restoring documented browser-only behavior".
+### 4. Remove vestigial adm-zip artifacts
+
+The adm-zip shim (`src/types/adm-zip-shim.ts` + test, commit `ac3fd9a`) and the `@rollup/plugin-alias` adm-zip entry (`81152cc`) are proven no-ops under `ignoreDynamicRequires: true` and Plan A. Remove them (new commits, no history rewrite) so no misleading dead config remains. `iconv-lite` alias stays (it is load-bearing).
+
+### 5. Regression guardrail
+
+`src/build/bundle-self-contained.test.ts` (already created, commit `3bfa1e8`) revised:
+- **Static scan, zero-tolerance:** `emap.mjs`, `emap.js`, `emap-worker.js` must contain zero `require(...)`/`require$1(...)` matches. (After A1 `emap.mjs` has no mapshaper at all → trivially clean; this locks it.)
+- **Documented-dead allowance:** `mapshaper-vendor.js` and `mapshaper-vendor.mjs` may contain *only* `require("adm-zip")` (asserted exactly — any other require fails).
+- **Behavioral (jsdom), the real guard:** `import` built `dist/emap.mjs` (which pulls the sibling vendor), run `TopologySource` load of a **valid** minimal GeoJSON and a `.dbf`-bearing shapefile ZIP via the event-bridge (`setData` is sync + `'data'`/`'error'` events). Assert no thrown error matches `/Dynamic require of|Could not dynamically require/`. The v1 plan's fixture was rejected by mapshaper ("Unknown JSON format") — use a genuinely valid GeoJSON string fixture.
+- Whole suite skips when `dist/` absent.
+
+### 6. Publish gate + docs
+
+- `package.json` `prepublishOnly`: reorder to `typecheck && build && test:run` so the bundle test runs against fresh artifacts.
+- README: zero-config browser-bundler section; note `dist/mapshaper-vendor.mjs` ships alongside `emap.mjs` and is resolved automatically.
+- CHANGELOG: `fix` entry describing Plan A and that consumers may delete alias/polyfill workarounds.
 
 ## Acceptance Criteria
 
-- `grep -oE "require\$?1?\(['\"][^'\"]+['\"]\)" dist/emap.mjs dist/emap.js dist/mapshaper-vendor.js`
-  returns nothing after a production build.
-- `bundle-self-contained.test.ts` passes against built artifacts and skips
-  gracefully without them.
-- No diff to `dist/index.d.ts`, `package.json` `exports`/`browser`, or any
-  runtime public API.
-- README + CHANGELOG updated.
+- Production build emits `dist/mapshaper-vendor.mjs`; `dist/emap.mjs` imports `./mapshaper-vendor.mjs` and contains zero requires and zero inlined mapshaper.
+- `bundle-self-contained.test.ts`: all static + both behavioral cases pass against built artifacts; suite skips without them.
+- No `Dynamic require of` / `Could not dynamically require` at runtime for GeoJSON and shapefile/.dbf import (behavioral test green).
+- No vestigial adm-zip shim/alias remains; `iconv-lite` alias retained.
+- `dist/index.d.ts` and the `.` export unchanged.
 
 ## Deferred (separate changes)
 
-1. Bundle-size / slim variant (core subpath, mapshaper optional peer).
-2. `TopologySource.fromBytes` first-class loader; confirm `MapOptions`
-   re-export (already present at `src/index.ts:14` in 0.1.1 — verify only).
-3. Worker-routed `TopologySource.setData`/import (report Plan B).
-4. `'literal'` / sandboxed `ExpressionEvaluationPolicy` enum value.
+1. Bundle-size / slim variant (the ESM-vendor seam from this change enables it).
+2. Worker-routed `TopologySource.setData`/import (report Plan B).
+3. `'literal'` / sandboxed `ExpressionEvaluationPolicy`.
