@@ -39,8 +39,7 @@ function commonPlugins() {
   return [
     alias({
       entries: [
-        { find: 'iconv-lite', replacement: 'src/types/iconv-shim.ts' },
-        { find: 'adm-zip', replacement: 'src/types/adm-zip-shim.ts' }
+        { find: 'iconv-lite', replacement: 'src/types/iconv-shim.ts' }
       ]
     }),
     nodeResolve({
