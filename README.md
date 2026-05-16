@@ -78,6 +78,23 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 
 Live demos in `test/examples/*.html` cover every feature area below.
 
+## Browser bundlers (Vite / webpack / esbuild / Bun)
+
+`import "@zwishing/emap"` works out of the box — no `resolve.alias`, no
+`Buffer` polyfill, no bundler config. mapshaper is shipped as a sibling ES
+module (`dist/mapshaper-vendor.mjs`) that `dist/emap.mjs` imports by relative
+path; your bundler resolves it automatically from
+`node_modules/@zwishing/emap/dist/`.
+
+```ts
+import { Emap, TopologySource } from "@zwishing/emap";
+import "@zwishing/emap/style.css";
+```
+
+The Web Worker is only needed if you opt into off-thread ops via `workerUrl`;
+deploy `dist/emap-worker.js` and `dist/mapshaper-vendor.js` as same-directory
+static assets then.
+
 ## API tour
 
 ### Core map
