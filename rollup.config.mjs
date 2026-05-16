@@ -106,17 +106,18 @@ export default [
     },
     plugins: commonPlugins(),
   },
-  // Browser ESM bundle for Vite/Webpack/Bun consumers. Do NOT externalize
-  // mapshaper here: its npm entry is Node-oriented CJS and can hit dynamic
-  // `require("buffer")` in browsers. Bundling it with our browser polyfills
-  // keeps the package self-contained for normal ESM imports.
+  // Browser ESM bundle for Vite/Webpack/Bun consumers. mapshaper is EXTERNAL
+  // here and rewritten to the sibling ESM vendor — it must NOT go through
+  // @rollup/plugin-commonjs (that path produced the Friction #8 fragility:
+  // dead require("adm-zip") and a runtime-throwing iconv-lite helper).
   {
     input: 'src/index.ts',
-    external: ['maplibre-gl'],
+    external: ['maplibre-gl', 'mapshaper'],
     output: {
       file: moduleOutput,
       format: 'es',
       sourcemap: shouldWriteSourcemap,
+      paths: { mapshaper: './mapshaper-vendor.mjs' },
     },
     plugins: commonPlugins(),
   },
