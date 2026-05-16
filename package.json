@@ -14,6 +14,7 @@
     "./style.css": "./dist/emap.css",
     "./dist/emap-worker.js": "./dist/emap-worker.js",
     "./dist/mapshaper-vendor.js": "./dist/mapshaper-vendor.js",
+    "./dist/mapshaper-vendor.mjs": "./dist/mapshaper-vendor.mjs",
     "./dist/emap.js": "./dist/emap.js",
     "./package.json": "./package.json"
   },
@@ -26,6 +27,7 @@
     "dist/emap.mjs",
     "dist/emap-worker.js",
     "dist/mapshaper-vendor.js",
+    "dist/mapshaper-vendor.mjs",
     "dist/emap.css",
     "dist/**/*.d.ts",
     "README.md",
