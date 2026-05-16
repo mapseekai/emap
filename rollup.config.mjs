@@ -45,10 +45,7 @@ function commonPlugins() {
     }),
     nodeResolve({
       browser: true,
-      preferBuiltins: false,
-      alias: {
-        'adm-zip': 'src/types/adm-zip-shim.ts'
-      }
+      preferBuiltins: false
     }),
     commonjs({
       ignoreDynamicRequires: false
