@@ -141,8 +141,20 @@ control forwards its constructor option to `map.vertexEdit.setOptions(...)`.
 - `HandlerManager` unit test: `contextmenu` is normalized + dispatched
   through the priority loop (not the sink, not exclusive); a registered
   passthrough handler sees it; existing P1/P2a/P2b/P3 tests unaffected.
-- `vertex-edit-control.test.ts`: behavior byte-identical after thin-shell
-  (same assertions pass; logic now delegates).
+- `vertex-edit-control.test.ts` is **white-box** (uses `Reflect` to set
+  private state `_hoverVertexIds`/`_hoveredFeature`/`_map` and invoke
+  private methods `_handleDrag`/`_onMouseUp` directly). After thin-shell
+  those internals live on `VertexEditHandler`, not the control. Decision:
+  **move** these white-box cases verbatim into the handler's test file,
+  re-pointing `new VertexEditControl()` → `new VertexEditHandler(stubMap)`
+  and keeping the SAME private names (the port preserves method seams:
+  `_handleDrag`, `_onMouseUp`/`_finishDrag`, `_hoverVertexIds`, …), so the
+  assertions are unchanged — only the construction target changes. The
+  thin-shell control gets a NEW small behavior test (button click →
+  `map.vertexEdit.enable()/disable()`; `active` class tracks handler
+  state). Net test count unchanged (cases moved, not added/removed) plus
+  the new thin-shell control test. This mirrors the P2b Task-2 geometry
+  test move.
 - Gate: `tsc --noEmit` 0, full `vitest run` green, `npm run build` 0,
   `map.test.ts` edit-mode/pan/zoom suites byte-identical.
 
