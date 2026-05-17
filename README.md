@@ -117,6 +117,11 @@ const source = await TopologySource.fromUrl('id', url);     // GeoJSON / TopoJSO
 const source2 = await TopologySource.fromBytes('id', buf, {
   filename: 'local.geojson',
 });  // ArrayBuffer / Uint8Array
+
+// Re-importing an existing source: setData is awaitable — it resolves
+// once the dataset is ready, so getLayers()/getExtent() are safe after it.
+// The `data` / `error` events still fire for event-driven consumers.
+await source.setData({ filename: 'next.geojson', content: bytes });
 source.getExtent();
 source.getLayers();
 ```

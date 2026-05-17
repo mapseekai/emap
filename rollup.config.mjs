@@ -34,8 +34,21 @@ function preferBrowserMapshaperModules() {
       to: '"object"==typeof window&&window.modules?function($1){return window.modules[$1]}:"function"==typeof require?require:function(){}',
     },
     {
-      from: /"function" == typeof require \? require : "object" == typeof window && window\.modules \? function \((\w+)\) \{\s*return window\.modules\[\1\];\s*\} : function \(\) \{\}/g,
-      to: '"object" == typeof window && window.modules ? function ($1) { return window.modules[$1]; } : "function" == typeof require ? require : function () {}',
+      // Unminified (dev) vendor: mapshaper emits the loader as an
+      // if / else-if / else block, not a ternary (terser never runs in dev
+      // to collapse it). Match the block and reorder it to prefer
+      // `window.modules` over `require` — same intent as the minified
+      // pattern above.
+      from: /if \(typeof require == 'function'\) \{[\s\S]*?f = require;[\s\S]*?\} else if \(typeof window == 'object' && window\.modules\) \{[\s\S]*?f = function\s*\((\w+)\) \{\s*return window\.modules\[\1\];\s*\};[\s\S]*?\} else \{[\s\S]*?f = function\s*\(\) \{\};?[\s\S]*?\}/g,
+      to: [
+        "if (typeof window == 'object' && window.modules) {",
+        '        f = function ($1) { return window.modules[$1]; };',
+        "      } else if (typeof require == 'function') {",
+        '        f = require;',
+        '      } else {',
+        '        f = function () {};',
+        '      }',
+      ].join('\n'),
     },
   ];
 
