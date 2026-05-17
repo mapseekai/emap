@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-05-17
+
+### Fixed
+
+- Made the browser mapshaper vendor loader prefer `window.modules` before any
+  bundler-injected `require` shim. This closes the remaining Vite dev
+  dep-optimizer failure where esbuild could make `require` truthy and trigger
+  `Dynamic require of "iconv-lite" is not supported` on file upload.
+- Added an esbuild pre-bundle smoke test for the shipped ESM entry so this
+  Vite dev failure mode is covered in CI.
+
 ## [0.1.2] - 2026-05-16
 
 ### Fixed
@@ -64,6 +75,8 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@zwishing/emap/style.css`).
 
-[Unreleased]: https://github.com/zwishing/emap/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/zwishing/emap/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/zwishing/emap/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/zwishing/emap/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/zwishing/emap/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/zwishing/emap/releases/tag/v0.1.0

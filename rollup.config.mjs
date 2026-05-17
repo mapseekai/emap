@@ -21,6 +21,43 @@ function copyControlsCss() {
   };
 }
 
+// mapshaper's CJS browser fallback chooses `require` before `window.modules`.
+// That is safe in Rollup production output, but Vite dev pre-bundling runs
+// through esbuild, which injects a callable `__require` shim. If that shim wins,
+// mapshaper tries `__require("iconv-lite")` at module evaluation time and
+// crashes in the browser. The vendor bundle is browser-targeted, so prefer the
+// browser module registry and keep require only as a non-browser fallback.
+function preferBrowserMapshaperModules() {
+  const patterns = [
+    {
+      from: /"function"==typeof require\?require:"object"==typeof window&&window\.modules\?function\((\w+)\)\{return window\.modules\[\1\]\}:function\(\)\{\}/g,
+      to: '"object"==typeof window&&window.modules?function($1){return window.modules[$1]}:"function"==typeof require?require:function(){}',
+    },
+    {
+      from: /"function" == typeof require \? require : "object" == typeof window && window\.modules \? function \((\w+)\) \{\s*return window\.modules\[\1\];\s*\} : function \(\) \{\}/g,
+      to: '"object" == typeof window && window.modules ? function ($1) { return window.modules[$1]; } : "function" == typeof require ? require : function () {}',
+    },
+  ];
+
+  return {
+    name: 'prefer-browser-mapshaper-modules',
+    generateBundle(_opts, bundle) {
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type !== 'chunk' || !chunk.fileName.startsWith('mapshaper-vendor.')) continue;
+
+        let code = chunk.code;
+        for (const { from, to } of patterns) {
+          code = code.replace(from, to);
+        }
+        if (code === chunk.code) {
+          this.error(`Unable to patch mapshaper module loader in ${chunk.fileName}`);
+        }
+        chunk.code = code;
+      }
+    },
+  };
+}
+
 const isProduction = process.env.BUILD === 'production';
 const shouldWriteSourcemap = !isProduction;
 const mainOutput = isProduction ? 'dist/emap.js' : 'dist/emap-dev.js';
@@ -75,7 +112,7 @@ export default [
       format: 'iife',
       sourcemap: shouldWriteSourcemap,
     },
-    plugins: [...commonPlugins(), copyControlsCss()],
+    plugins: [...commonPlugins(), preferBrowserMapshaperModules(), copyControlsCss()],
   },
   // ESM vendor — same browser mapshaper build as the IIFE vendor, but a real
   // ES module with `export default`. Imported by dist/emap.mjs (which marks
@@ -88,7 +125,7 @@ export default [
       format: 'es',
       sourcemap: shouldWriteSourcemap,
     },
-    plugins: commonPlugins(),
+    plugins: [...commonPlugins(), preferBrowserMapshaperModules()],
   },
   // Main IIFE bundle exposing the `emap` global. Mapshaper is external here
   // because script-tag users load `mapshaper-vendor.js` first.

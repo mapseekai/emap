@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
 const DIST = resolve(__dirname, '../../dist');
@@ -39,6 +42,37 @@ d('shipped bundles are self-contained', () => {
     const m = readFileSync(resolve(DIST, f), 'utf8').match(REQUIRE_RE) ?? [];
     const others = [...new Set(m)].filter((r) => r !== 'require("adm-zip")');
     expect(others, `unexpected non-adm-zip requires in dist/${f}: ${others.join(', ')}`).toEqual([]);
+  });
+
+  it('survives esbuild browser pre-bundling with a require shim present', () => {
+    const dir = mkdtempSync(resolve(tmpdir(), 'emap-esbuild-'));
+    const entry = resolve(dir, 'entry.mjs');
+    const bundle = resolve(dir, 'bundle.mjs');
+    writeFileSync(
+      entry,
+      `import { TopologySource } from ${JSON.stringify(resolve(DIST, 'emap.mjs'))};\n` +
+        'globalThis.__emapTopologySource = TopologySource;\n',
+    );
+
+    execFileSync(
+      resolve(__dirname, '../../node_modules/.bin/esbuild'),
+      [entry, '--bundle', '--format=esm', '--platform=browser', `--outfile=${bundle}`, '--log-level=warning'],
+      { stdio: 'pipe' },
+    );
+    const bundled = readFileSync(bundle, 'utf8');
+    expect(bundled).toContain('__require');
+
+    execFileSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `globalThis.window = globalThis.window || {};\n` +
+          `globalThis.window.document = globalThis.window.document || {};\n` +
+          `await import(${JSON.stringify(pathToFileURL(bundle).href)});\n`,
+      ],
+      { stdio: 'pipe' },
+    );
   });
 
   it('loads valid GeoJSON with no dynamic-require failure', async () => {
