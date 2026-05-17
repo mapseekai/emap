@@ -1,56 +1,50 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import { DragPanHandler } from './drag-pan';
+import type { NormalizedPointerEvent } from '../handler';
 
-function makeEl() { return document.createElement('div'); }
+function ev(kind: NormalizedPointerEvent['kind'], x: number, y: number, shift = false): NormalizedPointerEvent {
+  return {
+    kind, point: { x, y },
+    modifiers: { shift, ctrl: false, alt: false, meta: false },
+    button: 0, originalEvent: new MouseEvent(kind === 'down' ? 'pointerdown' : 'pointermove'),
+  };
+}
 
-describe('DragPanHandler', () => {
-  it('is enabled by default and exposes name "dragPan"', () => {
-    const h = new DragPanHandler(makeEl());
+describe('DragPanHandler (arbitrated)', () => {
+  it('name + enabled-by-default + handlePointer passthrough when disabled', () => {
+    const h = new DragPanHandler();
     expect(h.name).toBe('dragPan');
     expect(h.isEnabled()).toBe(true);
-    h.destroy();
-  });
-
-  it('disable() stops pan events; enable() restores them', () => {
-    const el = makeEl();
-    const h = new DragPanHandler(el);
-    const onPan = vi.fn();
-    h.on('pan', onPan);
-
     h.disable();
-    el.dispatchEvent(new MouseEvent('mousedown', { clientX: 0, clientY: 0 }));
-    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 10, clientY: 0 }));
-    expect(onPan).not.toHaveBeenCalled();
-
-    h.enable();
-    el.dispatchEvent(new MouseEvent('mousedown', { clientX: 0, clientY: 0 }));
-    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 10, clientY: 0 }));
-    expect(onPan).toHaveBeenCalledWith(expect.objectContaining({ dx: 10, dy: 0 }));
-    h.destroy();
+    expect(h.handlePointer(ev('down', 0, 0))).toBe('passthrough');
   });
 
-  it('re-emits panstart on mousedown and panend on mouseup', () => {
-    const el = makeEl();
-    const h = new DragPanHandler(el);
-    const onStart = vi.fn();
-    const onEnd = vi.fn();
-    h.on('panstart', onStart);
-    h.on('panend', onEnd);
-    el.dispatchEvent(new MouseEvent('mousedown', { clientX: 0, clientY: 0 }));
-    expect(onStart).toHaveBeenCalledTimes(1);
-    window.dispatchEvent(new MouseEvent('mouseup', { clientX: 0, clientY: 0 }));
-    expect(onEnd).toHaveBeenCalledTimes(1);
-    h.destroy();
+  it('down (no shift) → exclusive + panstart; move → pan {dx,dy}; up → panend + releases', () => {
+    const h = new DragPanHandler();
+    const start = vi.fn(); const pan = vi.fn(); const end = vi.fn();
+    h.on('panstart', start); h.on('pan', pan); h.on('panend', end);
+
+    expect(h.handlePointer(ev('down', 10, 10))).toBe('exclusive');
+    expect(start).toHaveBeenCalledTimes(1);
+
+    expect(h.handlePointer(ev('move', 25, 18))).toBe('exclusive');
+    expect(pan).toHaveBeenCalledWith(expect.objectContaining({ dx: 15, dy: 8 }));
+
+    expect(h.handlePointer(ev('up', 25, 18))).toBe('passthrough');
+    expect(end).toHaveBeenCalledTimes(1);
   });
 
-  it('handlePointer is a no-op passthrough in Phase 1 (DOM-driven)', () => {
-    const h = new DragPanHandler(makeEl());
-    expect(h.handlePointer({
-      kind: 'down', point: { x: 0, y: 0 },
-      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
-      button: 0, originalEvent: new MouseEvent('mousedown'),
-    })).toBe('passthrough');
-    h.destroy();
+  it('skipShiftDrag (default true): shift+down is passthrough, no gesture', () => {
+    const h = new DragPanHandler();
+    const start = vi.fn(); h.on('panstart', start);
+    expect(h.handlePointer(ev('down', 0, 0, true))).toBe('passthrough');
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('setOptions({skipShiftDrag:false}) lets shift+drag pan', () => {
+    const h = new DragPanHandler();
+    h.setOptions({ skipShiftDrag: false });
+    expect(h.handlePointer(ev('down', 0, 0, true))).toBe('exclusive');
   });
 });

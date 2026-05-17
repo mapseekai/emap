@@ -1,47 +1,67 @@
 import { EventDispatcher } from '../events';
-import { DragPanHandler as PanGestureSource } from '../drag-pan-handler';
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
 
 export interface DragPanOptions {
-  /** Reserve shift+drag for higher-level handlers. Default true. */
+  /** Reserve shift+drag for higher-level handlers (P2b selection). Default true. */
   skipShiftDrag: boolean;
 }
 
 const DEFAULTS: DragPanOptions = { skipShiftDrag: true };
 
 /**
- * Named `dragPan` handler. Phase 1: adapts the existing PanGestureSource DOM
- * primitive and re-emits its 'pan'/'panstart'/'panend' events, so Emap's
- * existing wiring is unchanged. handlePointer() is a passthrough no-op until
- * Phase 2 introduces the single-DOM arbitration layer.
+ * Named `dragPan` handler. Phase 2a: pan logic lives in `handlePointer`,
+ * driven by HandlerManager's single pointer-listener arbiter — the handler
+ * owns no DOM listeners. Emits `panstart` / `pan {dx,dy}` / `panend` exactly
+ * as before so Emap's viewport wiring is unchanged.
  */
 export class DragPanHandler extends EventDispatcher implements Handler<DragPanOptions> {
   readonly name = 'dragPan';
   private _opts: DragPanOptions;
-  private _src: PanGestureSource;
   private _enabled = true;
+  private _dragging = false;
+  private _last: { x: number; y: number } = { x: 0, y: 0 };
 
-  constructor(element: HTMLElement, opts?: Partial<DragPanOptions>) {
+  constructor(elementOrOpts?: HTMLElement | Partial<DragPanOptions>, opts?: Partial<DragPanOptions>) {
     super();
-    this._opts = { ...DEFAULTS, ...opts };
-    this._src = new PanGestureSource(element, { skipShiftDrag: this._opts.skipShiftDrag });
-    this._src.on('pan', (e: { dx: number; dy: number }) => this.fire('pan', e));
-    this._src.on('panstart', () => this.fire('panstart'));
-    this._src.on('panend', () => this.fire('panend'));
+    const resolvedOpts: Partial<DragPanOptions> =
+      elementOrOpts instanceof HTMLElement ? (opts ?? {}) : (elementOrOpts ?? {});
+    this._opts = { ...DEFAULTS, ...resolvedOpts };
   }
 
-  enable(): void { this._enabled = true; this._src.setEnabled(true); }
-  disable(): void { this._enabled = false; this._src.setEnabled(false); }
+  /** No-op: Phase 2a owns no DOM listeners; retained for API compatibility. */
+  destroy(): void {}
+
+  enable(): void { this._enabled = true; }
+  disable(): void {
+    this._enabled = false;
+    if (this._dragging) { this._dragging = false; this.fire('panend'); }
+  }
   isEnabled(): boolean { return this._enabled; }
-
-  setOptions(opts: Partial<DragPanOptions>): void {
-    this._opts = { ...this._opts, ...opts };
-    // skipShiftDrag is fixed at construction in the underlying primitive;
-    // Phase 2's arbitration layer makes this dynamic. Documented limitation.
-  }
+  setOptions(opts: Partial<DragPanOptions>): void { this._opts = { ...this._opts, ...opts }; }
   getOptions(): Readonly<DragPanOptions> { return this._opts; }
 
-  handlePointer(_ev: NormalizedPointerEvent): HandlerResult { return 'passthrough'; }
-
-  destroy(): void { this._src.destroy(); }
+  handlePointer(ev: NormalizedPointerEvent): HandlerResult {
+    if (!this._enabled) return 'passthrough';
+    if (ev.kind === 'down') {
+      if (ev.button !== 0) return 'passthrough';
+      if (this._opts.skipShiftDrag && ev.modifiers.shift) return 'passthrough';
+      this._dragging = true;
+      this._last = { x: ev.point.x, y: ev.point.y };
+      this.fire('panstart');
+      return 'exclusive';
+    }
+    if (ev.kind === 'move' && this._dragging) {
+      const dx = ev.point.x - this._last.x;
+      const dy = ev.point.y - this._last.y;
+      this._last = { x: ev.point.x, y: ev.point.y };
+      this.fire('pan', { dx, dy });
+      return 'exclusive';
+    }
+    if (ev.kind === 'up' && this._dragging) {
+      this._dragging = false;
+      this.fire('panend');
+      return 'passthrough';
+    }
+    return 'passthrough';
+  }
 }
