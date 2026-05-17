@@ -253,7 +253,7 @@ export class Emap extends EventDispatcher {
     // Set up the worker pool eagerly when requested. Construction is cheap;
     // the underlying Worker is lazy-spawned on first run().
     this._expressionPolicy = options.expressionPolicy ?? 'disabled';
-    this._workerMode = options.useWorker ?? false;
+    this._workerMode = options.useWorker ?? options.workerMode ?? false;
     if (typeof options.workerThreshold === 'number' && options.workerThreshold >= 0) {
       this._workerThreshold = options.workerThreshold;
     }
@@ -1536,4 +1536,3 @@ function _looksLikeMsxBytes(bytes: Uint8Array): boolean {
     || b === 0xdf // map32
   );
 }
-

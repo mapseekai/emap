@@ -254,6 +254,7 @@ map.on('workerjobend',   (e) => console.log('end',   e.durationMs));
 ```
 
 The router classifies each op as cheap / expensive and overrides the threshold accordingly. Override the decision globally with `MapOptions.workerRouting?: (info) => boolean`.
+`workerMode` is also accepted as a compatibility alias for `useWorker`; prefer `useWorker` in new code.
 
 When worker offloading is enabled, serve both `emap-worker.js` and
 `mapshaper-vendor.js` from the same directory. The worker loads the vendor file

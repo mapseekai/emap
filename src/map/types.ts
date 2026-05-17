@@ -52,6 +52,11 @@ export interface MapOptions {
    */
   useWorker?: boolean | 'auto';
   /**
+   * Compatibility alias for {@link useWorker}. If both are supplied,
+   * `useWorker` wins.
+   */
+  workerMode?: boolean | 'auto';
+  /**
    * Vertex-count threshold for `useWorker: 'auto'`. Datasets whose
    * `arcs.getPointCount()` is at least this large route through the
    * worker; smaller datasets stay on the main thread. Default `50000`.

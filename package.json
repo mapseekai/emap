@@ -11,7 +11,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/emap.mjs"
     },
-    "./style.css": "./dist/emap.css",
+    "./style.css": {
+      "types": "./style.css.d.ts",
+      "default": "./dist/emap.css"
+    },
     "./dist/emap-worker.js": "./dist/emap-worker.js",
     "./dist/mapshaper-vendor.js": "./dist/mapshaper-vendor.js",
     "./dist/mapshaper-vendor.mjs": "./dist/mapshaper-vendor.mjs",
@@ -30,6 +33,7 @@
     "dist/mapshaper-vendor.js",
     "dist/mapshaper-vendor.mjs",
     "dist/emap.css",
+    "style.css.d.ts",
     "dist/**/*.d.ts",
     "README.md",
     "SECURITY.md",
