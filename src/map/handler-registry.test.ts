@@ -1,0 +1,47 @@
+// @vitest-environment jsdom
+import { describe, it, expect, beforeAll } from 'vitest';
+import { Emap } from './map';
+
+// jsdom does not implement CanvasRenderingContext2D; stub getContext so
+// CanvasPainter construction succeeds.
+beforeAll(() => {
+  HTMLCanvasElement.prototype.getContext = () => ({
+    scale: () => {}, clearRect: () => {}, fillRect: () => {},
+    strokeRect: () => {}, beginPath: () => {}, moveTo: () => {},
+    lineTo: () => {}, stroke: () => {}, fill: () => {},
+    arc: () => {}, save: () => {}, restore: () => {},
+    translate: () => {}, setTransform: () => {}, drawImage: () => {},
+    measureText: () => ({ width: 0 }),
+  } as any);
+});
+
+function container(): HTMLElement {
+  const el = document.createElement('div');
+  Object.defineProperty(el, 'clientWidth', { value: 800 });
+  Object.defineProperty(el, 'clientHeight', { value: 600 });
+  document.body.appendChild(el);
+  return el;
+}
+
+describe('Emap handler registry (Phase 1)', () => {
+  it('exposes dragPan and scrollZoom handlers, enabled by default', () => {
+    const map = new Emap({ container: container() });
+    expect(map.dragPan.name).toBe('dragPan');
+    expect(map.scrollZoom.name).toBe('scrollZoom');
+    expect(map.dragPan.isEnabled()).toBe(true);
+    expect(map.scrollZoom.isEnabled()).toBe(true);
+  });
+
+  it('interactive:false disables both handlers (legacy behavior preserved)', () => {
+    const map = new Emap({ container: container(), interactive: false });
+    expect(map.dragPan.isEnabled()).toBe(false);
+    expect(map.scrollZoom.isEnabled()).toBe(false);
+  });
+
+  it('map.scrollZoom.disable() leaves dragPan enabled (selective toggle)', () => {
+    const map = new Emap({ container: container() });
+    map.scrollZoom.disable();
+    expect(map.scrollZoom.isEnabled()).toBe(false);
+    expect(map.dragPan.isEnabled()).toBe(true);
+  });
+});
