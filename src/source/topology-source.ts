@@ -322,28 +322,38 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       this._simplifyFloor = this._dataset?.arcs?.getRetainedInterval?.() ?? 0;
 
       this.fire('data', { reason: 'load' });
-      this._settlePending(version, null);
+      this._resolvePending(version);
     } catch (err: any) {
       // Stale chain (either superseded by a newer setData, or its fetch was
       // aborted by us). Either way, the new chain owns the next event.
       if (version !== this._loadVersion) return;
       if (err?.name === 'AbortError') return;
       this.fire('error', { error: err });
-      this._settlePending(version, err ?? new Error('setData import failed'));
+      this._rejectPending(version, err ?? new Error('setData import failed'));
     }
   }
 
   /**
-   * Settle the {@link setData} deferred for the given load version. Ignored
+   * Resolve the {@link setData} deferred for the given load version. Ignored
    * if a newer call has already replaced it (the superseding `setData`
    * resolved the old deferred early).
    */
-  private _settlePending(version: number, error: unknown | null): void {
+  private _resolvePending(version: number): void {
     if (this._pending?.version !== version) return;
     const pending = this._pending;
     this._pending = null;
-    if (error === null) pending.resolve(this);
-    else pending.reject(error);
+    pending.resolve(this);
+  }
+
+  /**
+   * Reject the {@link setData} deferred for the given load version. Ignored
+   * if a newer call has already replaced it.
+   */
+  private _rejectPending(version: number, error: unknown): void {
+    if (this._pending?.version !== version) return;
+    const pending = this._pending;
+    this._pending = null;
+    pending.reject(error);
   }
 
   private _hasSupportedExtension(filename: string): boolean {
