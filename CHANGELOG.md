@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- DX Phase 1 (toward 0.3.0): `Handler` interface + `HandlerManager`; the pan
+  and wheel interactions are now named handlers `map.dragPan` /
+  `map.scrollZoom` with `enable()/disable()/isEnabled()/setOptions()`.
+  Enables selective interaction toggling (e.g. disable wheel, keep pan)
+  without reaching into private internals. No behavior change: defaults and
+  `interactive` semantics are byte-identical; the underlying pan/wheel
+  primitives are unchanged. See
+  `docs/superpowers/specs/2026-05-17-emap-maplibre-dx-design.md`.
+
 ### Documentation
 
 - Documented the explicit 0.2.0 loading contract: `setData()` resolves only
