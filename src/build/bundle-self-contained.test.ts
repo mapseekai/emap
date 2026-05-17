@@ -5,16 +5,41 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
-const DIST = resolve(__dirname, '../../dist');
+const REPO = resolve(__dirname, '../..');
+const DIST = resolve(REPO, 'dist');
 const STRICT = ['emap.mjs', 'emap.js', 'emap-worker.js'];
 const VENDOR = ['mapshaper-vendor.js', 'mapshaper-vendor.mjs'];
-const ALL = [...STRICT, ...VENDOR];
 const REQUIRE_RE = /require\$?1?\(\s*['"][^'"]+['"]\s*\)/g;
 
-const distPresent = ALL.every((f) => existsSync(resolve(DIST, f)));
-const d = distPresent ? describe : describe.skip;
+// This suite validates the *published* bundles, which only exist as the
+// production build output. A prior `npm run dev-build` leaves unminified
+// artifacts in dist/ that legitimately contain require(...) and would
+// false-fail these assertions — the source of an implicit, order-dependent
+// dist/ coupling.
+//
+// Fix: make the suite self-validating. `distIsSelfContained()` applies the
+// exact same require(...) rules the `it`s assert. The build is triggered
+// ONLY when the current dist/ already violates the invariant (dev build,
+// dirty, or missing) — so a clean prod dist (CI / right after
+// `npm run build`) costs nothing, while a dev/dirty dist self-heals
+// deterministically. No build-mode sniffing; the gate IS the invariant.
+function fileRequires(file: string): string[] {
+  const p = resolve(DIST, file);
+  if (!existsSync(p)) return ['<missing>'];
+  return [...new Set(readFileSync(p, 'utf8').match(REQUIRE_RE) ?? [])];
+}
+
+function distIsSelfContained(): boolean {
+  const strictClean = STRICT.every((f) => fileRequires(f).length === 0);
+  const vendorClean = VENDOR.every((f) =>
+    fileRequires(f).filter((r) => r !== 'require("adm-zip")').length === 0,
+  );
+  return strictClean && vendorClean;
+}
+
+const d = describe;
 
 async function loadEmap() {
   return import(/* @vite-ignore */ pathToFileURL(resolve(DIST, 'emap.mjs')).href);
@@ -33,6 +58,18 @@ function waitForLoad(src: any, input: any): Promise<void> {
 }
 
 d('shipped bundles are self-contained', () => {
+  beforeAll(() => {
+    if (distIsSelfContained()) return; // clean prod dist — no rebuild needed
+    // Production rollup bundles only — skip the `tsc -p tsconfig.build.json`
+    // .d.ts emit from `npm run build`; declarations are irrelevant to a
+    // require(...) scan.
+    execFileSync(
+      resolve(REPO, 'node_modules/.bin/rollup'),
+      ['-c', '--environment', 'BUILD:production'],
+      { cwd: REPO, stdio: 'pipe' },
+    );
+  }, 180_000);
+
   it.each(STRICT)('%s has zero require(...) calls', (f) => {
     const m = readFileSync(resolve(DIST, f), 'utf8').match(REQUIRE_RE) ?? [];
     expect(m, `unexpected requires in dist/${f}: ${m.join(', ')}`).toEqual([]);
