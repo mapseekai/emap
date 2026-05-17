@@ -38,6 +38,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on). Disabled by default → `new Emap()` behavior is unchanged; the
   legacy `BoxSelectControl`/`LassoSelectControl` keep working unchanged
   (thin-shell rewrite is Phase 2c).
+- DX Phase 3 (toward 0.3.0): delegated feature events —
+  `map.on('feature:click'|'feature:hover'|'feature:enter'|'feature:leave',
+  { source?, layers? }?, cb)`. Fed by the Phase-2a pointer arbiter, hit-test
+  reuses the existing `FeatureQuery` (no new path), decoupled from
+  selection. Zero cost when no `feature:*` listener is registered (the
+  pointer sink is installed lazily). Canonical highlight recipe:
+  `map.on('feature:enter', {}, e => map.setHighlightedFeatures([e.ref]));
+  map.on('feature:leave', {}, () => map.clearHighlightedFeatures());` —
+  replaces the manual mousemove-poll + highlight-sync boilerplate.
 
 ### Documentation
 

@@ -23,6 +23,8 @@ import { LassoSelectHandler, type LassoSelectHandlerOptions } from '../core/hand
 import type { Handler } from '../core/handler';
 import { HandlerManager } from '../core/handler-manager';
 import { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
+import { FeatureEventDispatcher, type FeatureEvent, type FeatureEventFilter } from '../core/feature-event-dispatcher';
+import { type EventListener } from '../core/events';
 import { FeatureQuery } from './feature-query';
 import { FeatureAccessor } from './feature-accessor';
 import { ValidatorRegistry } from '../validation/registry';
@@ -92,6 +94,7 @@ export class Emap extends EventDispatcher {
 
   // Interactions (delegated)
   private _handlers: HandlerManager;
+  private _featureEvents!: FeatureEventDispatcher;
   private _scrollZoom: ScrollZoomHandler;
   private _dragPan: DragPanHandler;
   private _clickSelect: ClickSelectHandler;
@@ -261,6 +264,13 @@ export class Emap extends EventDispatcher {
       () => this._viewport.initialMX,
     );
     this.features = new FeatureAccessor(this);
+    const _self = this;
+    this._featureEvents = new FeatureEventDispatcher({
+      queryFeatures: (g, o) => _self.queryFeatures(g, o) as Array<{ source: string; layer: string; id: number }>,
+      unproject: (x, y) => _self.unproject(x, y),
+      get features() { return _self.features; },
+    });
+    this._featureEvents.setOnChange(() => this._syncFeatureSink());
 
     this._attachEventListeners();
 
@@ -328,6 +338,66 @@ export class Emap extends EventDispatcher {
     return false;
   }
 
+
+  // Overload 1: generic 2-arg form — preserves the base class API for non-feature events
+  // (e.g. `map.on<HistoryStateSnapshot>('historychange', cb)`)
+  on<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
+  // Overload 2: typed 2-arg feature-event form (no filter)
+  on(type: string, listener: (e: FeatureEvent) => void): this;
+  // Overload 3: 3-arg feature-event form with filter
+  on(type: string, filter: FeatureEventFilter, listener: (e: FeatureEvent) => void): this;
+  // Implementation
+  on(type: string, filterOrListener: unknown, listener?: unknown): this {
+    if (type.startsWith('feature:')) {
+      const cb = (listener ?? filterOrListener) as (e: FeatureEvent) => void;
+      const filter = (listener ? filterOrListener : undefined) as FeatureEventFilter | undefined;
+      this._featureEvents.on(type, filter, cb);
+      // onChange callback drives _syncFeatureSink(); no explicit call needed here.
+      return this;
+    }
+    return super.on(type, filterOrListener as EventListener);
+  }
+
+  // Overload: generic 2-arg form for non-feature events
+  off<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
+  // Overload: feature-event form
+  off(type: string, listener: (e: FeatureEvent) => void): this;
+  // Implementation
+  off(type: string, listener: unknown): this {
+    if (type.startsWith('feature:')) {
+      this._featureEvents.off(type, listener as (e: FeatureEvent) => void);
+      // onChange callback drives _syncFeatureSink(); no explicit call needed here.
+      return this;
+    }
+    return super.off(type, listener as EventListener);
+  }
+
+  // Overload 1: generic 2-arg form for non-feature events
+  once<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
+  // Overload 2: typed 2-arg feature-event form (no filter)
+  once(type: string, listener: (e: FeatureEvent) => void): this;
+  // Overload 3: 3-arg feature-event form with filter
+  once(type: string, filter: FeatureEventFilter, listener: (e: FeatureEvent) => void): this;
+  // Implementation
+  once(type: string, filterOrListener: unknown, listener?: unknown): this {
+    if (type.startsWith('feature:')) {
+      const cb = (listener ?? filterOrListener) as (e: FeatureEvent) => void;
+      const filter = (listener ? filterOrListener : undefined) as FeatureEventFilter | undefined;
+      this._featureEvents.once(type, filter, cb);
+      // onChange callback drives _syncFeatureSink(); no explicit call needed here.
+      return this;
+    }
+    return super.once(type, filterOrListener as EventListener);
+  }
+
+  /** Install the HandlerManager sink only while ≥1 feature listener exists. */
+  private _syncFeatureSink(): void {
+    if (this._featureEvents.hasListeners()) {
+      this._handlers.setPointerSink((ev) => this._featureEvents.dispatch(ev));
+    } else {
+      this._handlers.setPointerSink(null);
+    }
+  }
 
   public getCanvasContainer(): HTMLElement {
     return this._canvasContainer;

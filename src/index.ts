@@ -200,6 +200,7 @@ export { LassoSelectHandler } from './core/handlers/lasso-select';
 export type { LassoSelectHandlerOptions, LassoStyle } from './core/handlers/lasso-select';
 export { resolveMode } from './core/handlers/select-mode';
 export type { ModifierCombo } from './core/handlers/select-mode';
+export type { FeatureEvent, FeatureEventFilter } from './core/feature-event-dispatcher';
 
 // ===========================================================================
 // Edit history + commands

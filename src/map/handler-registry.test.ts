@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { Emap } from './map';
 
 // jsdom does not implement CanvasRenderingContext2D; stub getContext so
@@ -79,5 +79,89 @@ describe('Emap handler registry (Phase 1)', () => {
     window.dispatchEvent(new PointerEvent('pointermove', { clientX: 200, clientY: 200, button: 0, shiftKey: true }));
     window.dispatchEvent(new PointerEvent('pointerup', { clientX: 200, clientY: 200, button: 0, shiftKey: true }));
     expect(map.getCenter()[0]).toBe(before[0]);
+  });
+
+  it('map.on("feature:click", filter, cb) fires for the hit feature via the arbiter', () => {
+    const map = new Emap({ container: container() });
+    const canvas = map.getCanvasContainer();
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    const hit = { source: 's', layer: 'l', id: 1 };
+    (map as any).queryFeatures = () => [hit];
+    (map as any).features = { get: (r: any) => ({ ref: r, geometry: null, properties: Object.freeze({}) }) };
+    const cb = vi.fn();
+    map.on('feature:click', { layers: ['l'] }, cb);
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 10, clientY: 10, button: 0 }));
+    canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 10, clientY: 10, button: 0 }));
+    canvas.dispatchEvent(new MouseEvent('click', { clientX: 10, clientY: 10 }));
+    expect(cb).toHaveBeenCalledTimes(1);
+    expect(cb.mock.calls[0][0]).toMatchObject({ type: 'feature:click', ref: hit });
+  });
+
+  it('map.once("feature:click", cb) fires once then a second click does nothing', () => {
+    const map = new Emap({ container: container() });
+    const canvas = map.getCanvasContainer();
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    const hit = { source: 's', layer: 'l', id: 1 };
+    (map as any).queryFeatures = () => [hit];
+    (map as any).features = { get: (r: any) => ({ ref: r, geometry: null, properties: Object.freeze({}) }) };
+    const cb = vi.fn();
+    map.once('feature:click', cb);
+    // First click fires cb
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 10, clientY: 10, button: 0 }));
+    canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 10, clientY: 10, button: 0 }));
+    canvas.dispatchEvent(new MouseEvent('click', { clientX: 10, clientY: 10 }));
+    expect(cb).toHaveBeenCalledTimes(1);
+    // Second click — cb must NOT fire again
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 10, clientY: 10, button: 0 }));
+    canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 10, clientY: 10, button: 0 }));
+    canvas.dispatchEvent(new MouseEvent('click', { clientX: 10, clientY: 10 }));
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('map.once("feature:click", cb) then map.off("feature:click", cb) → cb never called and sink is null', () => {
+    const map = new Emap({ container: container() });
+    const canvas = map.getCanvasContainer();
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    const hit = { source: 's', layer: 'l', id: 1 };
+    (map as any).queryFeatures = () => [hit];
+    (map as any).features = { get: (r: any) => ({ ref: r, geometry: null, properties: Object.freeze({}) }) };
+    const cb = vi.fn();
+    map.once('feature:click', cb);
+    map.off('feature:click', cb);
+    // Sink should be re-synced to null (no listeners remain)
+    expect((map as any)._handlers._pointerSink).toBeNull();
+    // Click should not invoke cb
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 10, clientY: 10, button: 0 }));
+    canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 10, clientY: 10, button: 0 }));
+    canvas.dispatchEvent(new MouseEvent('click', { clientX: 10, clientY: 10 }));
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('typed 2-arg feature on/off compile smoke (Bug 2 fix)', () => {
+    const map = new Emap({ container: container() });
+    // This must compile: proves the typed 2-arg overload exists for feature events.
+    const cb = (e: import('../core/feature-event-dispatcher').FeatureEvent) => { void e.ref; };
+    map.on('feature:hover', cb);
+    map.off('feature:hover', cb);
+    // No runtime assertion needed — the test passing without tsc errors proves the fix.
+  });
+
+  it('non-feature map.on still works (super delegation unaffected)', () => {
+    const map = new Emap({ container: container() });
+    const cb = vi.fn();
+    map.on('move', cb);
+    map.fire('move', { foo: 1 });
+    expect(cb).toHaveBeenCalled();
+  });
+
+  it('no feature:* listener ⇒ no pointer sink installed (zero cost)', () => {
+    const map = new Emap({ container: container() });
+    const hm = (map as any)._handlers;
+    expect((hm as any)._pointerSink).toBeNull();
+    const cb = () => {};
+    map.on('feature:hover', cb);
+    expect((hm as any)._pointerSink).not.toBeNull();
+    map.off('feature:hover', cb);
+    expect((hm as any)._pointerSink).toBeNull();
   });
 });

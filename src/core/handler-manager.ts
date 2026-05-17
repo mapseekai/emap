@@ -14,6 +14,7 @@ export class HandlerManager {
   private _handlers = new Map<string, Handler>();
   private _element: HTMLElement | null = null;
   private _exclusive: Handler | null = null;
+  private _pointerSink: ((ev: NormalizedPointerEvent) => void) | null = null;
   private _onDown = (e: PointerEvent) => this._dispatch(this._norm(e, 'down'));
   private _onMove = (e: PointerEvent) => this._dispatch(this._norm(e, 'move'));
   private _onUp = (e: PointerEvent) => this._dispatch(this._norm(e, 'up'));
@@ -67,6 +68,12 @@ export class HandlerManager {
     this._element.removeEventListener('click', this._onClick);
     this._element = null;
     this._exclusive = null;
+    this._pointerSink = null;
+  }
+
+  /** Install (or clear with `null`) a passive observer fed click + non-gesture move. */
+  setPointerSink(sink: ((ev: NormalizedPointerEvent) => void) | null): void {
+    this._pointerSink = sink;
   }
 
   private _norm(e: PointerEvent | MouseEvent, kind: NormalizedPointerEvent['kind']): NormalizedPointerEvent {
@@ -90,6 +97,11 @@ export class HandlerManager {
   }
 
   private _dispatch(ev: NormalizedPointerEvent): void {
+    if (this._pointerSink) {
+      if (ev.kind === 'click' || (ev.kind === 'move' && !this._exclusive)) {
+        this._pointerSink(ev);
+      }
+    }
     if (this._exclusive && (ev.kind === 'move' || ev.kind === 'up')) {
       const r = this._exclusive.handlePointer(ev);
       if (r !== 'exclusive') this._exclusive = null;
