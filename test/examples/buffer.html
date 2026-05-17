@@ -105,17 +105,21 @@
       if (!file) return;
       status.textContent = `正在加载 ${file.name}...`;
       const reader = new FileReader();
-      reader.onload = (ev) => {
+      reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        source.on('data', ({ reason }) => {
-          if (reason === 'load') map.setExtent(source.getExtent());
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        // Canonical 0.2.0 recipe: await setData (resolves once the dataset
+        // is ready), then addSource (order-independent) + setExtent.
+        try {
+          await source.setData({ filename: file.name, content });
+          map.addSource(SOURCE_ID, source);
+          map.setExtent(source.getExtent());
           populate(source);
           status.textContent = `已加载 ${file.name}。选择目标图层与半径,再点击 "生成缓冲区"。`;
-        });
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        source.setData({ filename: file.name, content });
-        map.addSource(SOURCE_ID, source);
+        } catch (err) {
+          console.error(err);
+        }
       };
       reader.readAsArrayBuffer(file);
     });

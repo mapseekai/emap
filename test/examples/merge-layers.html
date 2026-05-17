@@ -116,18 +116,19 @@
       status.textContent = `加载 ${uploaded.size} 个文件中...`;
       const entries = Array.from(uploaded, ([filename, content]) => ({ filename, content }));
       const source = new TopologySource(SOURCE_ID);
-      source.on('data', ({ reason }) => {
-        if (reason === 'load') map.setExtent(source.getExtent());
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      // Canonical 0.2.0 recipe: await setData (resolves once the dataset
+      // is ready), then addSource (order-independent) + setExtent.
+      try {
+        await source.setData(entries);
+        map.addSource(SOURCE_ID, source);
+        map.setExtent(source.getExtent());
         refreshLayerList(source);
         status.textContent = `已加载 ${uploaded.size} 个文件。勾选 ≥ 2 个图层后点击 "合并"。`;
-      });
-      source.on('error', (e) => {
+      } catch (e) {
         console.error(e);
         status.textContent = `加载失败: ${e.error?.message ?? e}`;
-      });
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      source.setData(entries);
-      map.addSource(SOURCE_ID, source);
+      }
     }
 
     fileInput.addEventListener('change', async (e) => {

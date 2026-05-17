@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   indicates a stale install, not an emap defect (a reopened Friction #9
   report was root-caused to this; the published 0.2.0 runtime was verified
   to settle the promise after the data event).
+- Modernized all 41 `test/examples/*.html` to the canonical awaitable
+  recipe (`await source.setData(...)` → `map.addSource(...)` →
+  `map.setExtent(...)` in a `try/catch`), replacing the older event-driven
+  `source.on('data'/'error')` load pattern. Examples now match the README
+  "Loading contract" verbatim, removing the example/doc divergence that
+  contributed to the reopened #9 misdiagnosis. Per-file status text,
+  post-load logic, and multi-file/Promise-wrapper variants preserved.
 
 ### Tested
 

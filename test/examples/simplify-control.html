@@ -48,26 +48,29 @@
       if (!file) return;
       status.textContent = `正在加载 ${file.name}...`;
       const reader = new FileReader();
-      reader.onload = (ev) => {
+      reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
-        source.on('data', ({ reason }) => {
-          if (reason === 'load') {
-            map.setExtent(source.getExtent());
-            // Mount the SimplifyControl on first load. Reusing the same control
-            // instance across reloads is fine, but easiest is to recreate.
-            if (simplifyCtrl) map.removeControl(simplifyCtrl);
-            simplifyCtrl = new SimplifyControl({
-              source: SOURCE_ID,
-              initialPercentage: 10,
-            });
-            map.addControl(simplifyCtrl, 'top-left');
-            status.textContent = `已加载 ${file.name}。点击地图上的 ≈ 按钮开始简化。`;
-          }
-        });
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        source.setData({ filename: file.name, content });
-        map.addSource(SOURCE_ID, source);
+        // Canonical 0.2.0 recipe: await setData (resolves once the dataset
+        // is ready), then addSource (order-independent) + setExtent.
+        try {
+          await source.setData({ filename: file.name, content });
+          map.addSource(SOURCE_ID, source);
+          map.setExtent(source.getExtent());
+          // Mount the SimplifyControl on first load. Reusing the same control
+          // instance across reloads is fine, but easiest is to recreate.
+          if (simplifyCtrl) map.removeControl(simplifyCtrl);
+          simplifyCtrl = new SimplifyControl({
+            source: SOURCE_ID,
+            initialPercentage: 10,
+          });
+          map.addControl(simplifyCtrl, 'top-left');
+          status.textContent = `已加载 ${file.name}。点击地图上的 ≈ 按钮开始简化。`;
+        } catch (err) {
+          console.error(err);
+          status.textContent = `错误: ${err?.message ?? err}`;
+        }
       };
       reader.readAsArrayBuffer(file);
     });

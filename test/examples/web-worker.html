@@ -173,21 +173,26 @@
       stats.textContent = `layers: ${ds.layers.length}, arcs: ${arcCount}, vertices: ${vertCount.toLocaleString()}`;
     }
 
-    function reloadCurrentFile() {
+    async function reloadCurrentFile() {
       if (!lastFile || !lastFileBytes) {
         for (const b of allOpsBtns) b.disabled = true;
         refreshStats();
         return;
       }
       const source = new TopologySource(SOURCE_ID);
-      source.on('data', ({ reason }) => {
-        if (reason === 'load') map.setExtent(source.getExtent());
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      // Canonical 0.2.0 recipe: await setData (resolves once the dataset
+      // is ready), then addSource (order-independent) + setExtent.
+      try {
+        await source.setData({ filename: lastFile.name, content: lastFileBytes });
+        map.addSource(SOURCE_ID, source);
+        map.setExtent(source.getExtent());
         for (const b of allOpsBtns) b.disabled = false;
         refreshStats();
-      });
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      source.setData({ filename: lastFile.name, content: lastFileBytes });
-      map.addSource(SOURCE_ID, source);
+      } catch (err) {
+        console.error(err);
+        logEvent(`<span class="err">[error]</span> ${err?.message ?? err}`);
+      }
     }
 
     buildMap();

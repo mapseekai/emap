@@ -125,18 +125,14 @@
           const baseId = file.name.replace(/\.[^.]+$/, '') || 'source';
           const id = uniqueSourceId(baseId);
           status.textContent = `加载 ${file.name} 为源 "${id}"...`;
-          await new Promise((resolve, reject) => {
-            const source = new TopologySource(id);
-            source.on('data', ({ reason }) => {
-              sourceIds.add(id);
-              refreshSourceList();
-              fitFirstSource();
-              resolve();
-            });
-            source.on('error', (ev) => reject(ev.error || ev));
-            source.setData({ filename: file.name, content });
-            map.addSource(id, source);
-          });
+          const source = new TopologySource(id);
+          // Canonical 0.2.0 recipe: await setData (resolves once the dataset
+          // is ready), then addSource (order-independent).
+          await source.setData({ filename: file.name, content });
+          map.addSource(id, source);
+          sourceIds.add(id);
+          refreshSourceList();
+          fitFirstSource();
         } catch (err) {
           console.error(err);
           status.textContent = `加载 ${file.name} 失败: ${err?.message ?? err}`;

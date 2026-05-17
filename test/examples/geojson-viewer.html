@@ -79,26 +79,21 @@
           const content = new Uint8Array(event.target.result);
           const source = new TopologySource("test-source");
 
-          source.on('data', ({ reason }) => {
-            if (reason === 'load') map.setExtent(source.getExtent());
-            status.textContent = `当前: ${file.name}`;
-          });
-
-          source.on('error', (e) => {
-            console.error(e);
-            status.textContent = "处理文件出错";
-          });
-
           if (map.getSource("test-source")) {
             map.removeSource("test-source");
           }
 
-          source.setData({
-            filename: file.name,
-            content: content,
-          });
-
-          map.addSource("test-source", source);
+          // Canonical 0.2.0 recipe: await setData (resolves once the dataset
+          // is ready), then addSource (order-independent) + setExtent.
+          try {
+            await source.setData({ filename: file.name, content });
+            map.addSource("test-source", source);
+            map.setExtent(source.getExtent());
+            status.textContent = `当前: ${file.name}`;
+          } catch (err) {
+            console.error(err);
+            status.textContent = "处理文件出错";
+          }
         };
         reader.readAsArrayBuffer(file);
       } catch (err) {

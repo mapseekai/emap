@@ -142,20 +142,21 @@
       status.textContent = `加载 ${uploaded.size} 个文件中...`;
       const entries = Array.from(uploaded, ([filename, content]) => ({ filename, content }));
       const source = new TopologySource(SOURCE_ID);
-      source.on('data', ({ reason }) => {
-        if (reason === 'load') map.setExtent(source.getExtent());
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      // Canonical 0.2.0 recipe: await setData (resolves once the dataset
+      // is ready), then addSource (order-independent) + setExtent.
+      // 数组形式 → 调用扩展后的 setData,内部走 mapshaper `-i FILE1 FILE2 ...` 多文件导入
+      try {
+        await source.setData(entries);
+        map.addSource(SOURCE_ID, source);
+        map.setExtent(source.getExtent());
         populateLayerOptions(source);
         const names = entries.map((e) => e.filename).join(', ');
         status.textContent = `已加载: ${names}。选择目标图层与蒙版,点击裁剪或擦除。`;
-      });
-      source.on('error', (e) => {
+      } catch (e) {
         console.error(e);
-        status.textContent = `加载失败: ${e.error?.message ?? e}`;
-      });
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      // 数组形式 → 调用扩展后的 setData,内部走 mapshaper `-i FILE1 FILE2 ...` 多文件导入
-      source.setData(entries);
-      map.addSource(SOURCE_ID, source);
+        status.textContent = `加载失败: ${e?.message ?? e}`;
+      }
     }
 
     fileInput.addEventListener('change', async (e) => {

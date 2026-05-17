@@ -137,17 +137,18 @@
       );
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
       const source = new TopologySource(SOURCE_ID);
-      source.on('data', ({ reason }) => {
-        if (reason === 'load') map.setExtent(source.getExtent());
+      // Canonical 0.2.0 recipe: await setData (resolves once the dataset
+      // is ready), then addSource (order-independent) + setExtent.
+      try {
+        await source.setData(entries);
+        map.addSource(SOURCE_ID, source);
+        map.setExtent(source.getExtent());
         const layerNames = source.getLayers().map((l) => l.name).join(', ');
         status.textContent = `已加载图层: ${layerNames}`;
         refreshButtons();
-      });
-      source.on('error', (e) => {
+      } catch (e) {
         log(`数据加载失败: ${e.error?.message ?? e}`, 'rollback');
-      });
-      source.setData(entries);
-      map.addSource(SOURCE_ID, source);
+      }
     });
 
     map.on('historychange', () => refreshButtons());
