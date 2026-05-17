@@ -1,7 +1,14 @@
 # emap — Unified MapLibre-style Interaction & Theming DX (0.3.0)
 
-- **Status:** Approved design (brainstormed 2026-05-17), pending implementation plan
+- **Status:** Approved design (brainstormed 2026-05-17). Phase 1 implemented &
+  merged to `master` (2026-05-17). Phases 2–4 pending.
 - **Target release:** 0.3.0 (breaking)
+- **Release policy (decided 2026-05-17):** Do NOT cut/tag/publish 0.3.0
+  incrementally. All phase work accumulates in `CHANGELOG [Unreleased]`
+  (including the already-merged Phase-1 breaking `DragPanHandler` export
+  repoint). 0.3.0 is cut as ONE coherent release only after Phase 2 lands at
+  minimum (ideally all of P2–P4). `package.json` stays `0.2.0` until then —
+  do not bump it on a per-phase basis.
 - **Scope:** Architectural spine only — named interaction handlers + delegated
   feature events + CSS-variable theme. Out of scope (separate follow-ups):
   `addGeoJSON` sugar, UI-state snapshot, operation-progress events.
