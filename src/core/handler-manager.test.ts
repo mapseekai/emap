@@ -108,3 +108,65 @@ describe('HandlerManager pointer arbitration', () => {
     m.detach();
   });
 });
+
+describe('HandlerManager pointer sink', () => {
+  function passHandler(name = 'dragPan') {
+    return { name, enable() {}, disable() {}, isEnabled: () => true,
+      setOptions() {}, getOptions: () => ({}), handlePointer: () => 'passthrough' as const };
+  }
+  function exclHandler(name = 'dragPan') {
+    let on = false;
+    return { name, enable() {}, disable() {}, isEnabled: () => true,
+      setOptions() {}, getOptions: () => ({}),
+      handlePointer: (e: any) => { if (e.kind === 'down') { on = true; return 'exclusive' as const; }
+        if (e.kind === 'up') { on = false; return 'passthrough' as const; }
+        return on ? 'exclusive' as const : 'passthrough' as const; } };
+  }
+  function norm(kind: any) {
+    return { kind, point: { x: 1, y: 2 }, modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+      button: 0, originalEvent: new Event(kind) };
+  }
+  function mgrWith(h: any) {
+    const el = document.createElement('div');
+    el.getBoundingClientRect = () => ({ left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} }) as any;
+    const m = new HandlerManager();
+    m.register(h);
+    m.attach(el);
+    return { m, el };
+  }
+
+  it('sink receives click and move (no exclusive); not down/up', () => {
+    const seen: string[] = [];
+    const { m } = mgrWith(passHandler());
+    m.setPointerSink((e) => seen.push(e.kind));
+    (m as any)._dispatch(norm('down'));
+    (m as any)._dispatch(norm('move'));
+    (m as any)._dispatch(norm('up'));
+    (m as any)._dispatch(norm('click'));
+    expect(seen).toEqual(['move', 'click']);
+    m.detach();
+  });
+
+  it('sink does NOT get move while an exclusive gesture is active; still gets click', () => {
+    const seen: string[] = [];
+    const { m } = mgrWith(exclHandler());
+    m.setPointerSink((e) => seen.push(e.kind));
+    (m as any)._dispatch(norm('down'));
+    (m as any)._dispatch(norm('move'));
+    (m as any)._dispatch(norm('up'));
+    (m as any)._dispatch(norm('move'));
+    (m as any)._dispatch(norm('click'));
+    expect(seen).toEqual(['move', 'click']);
+    m.detach();
+  });
+
+  it('setPointerSink(null) removes the sink', () => {
+    const seen: string[] = [];
+    const { m } = mgrWith(passHandler());
+    m.setPointerSink((e) => seen.push(e.kind));
+    m.setPointerSink(null);
+    (m as any)._dispatch(norm('click'));
+    expect(seen).toEqual([]);
+    m.detach();
+  });
+});
