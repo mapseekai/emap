@@ -52,3 +52,25 @@ describe('DragPanHandler', () => {
     expect(handler.isDragging()).toBe(false);
   });
 });
+
+describe('PanGestureSource skipShiftDrag option', () => {
+  it('skips shift+drag by default (unchanged behavior)', () => {
+    const el = document.createElement('div');
+    const src = new DragPanHandler(el);
+    const onStart = vi.fn();
+    src.on('panstart', onStart);
+    el.dispatchEvent(new MouseEvent('mousedown', { shiftKey: true, clientX: 0, clientY: 0 }));
+    expect(onStart).not.toHaveBeenCalled();
+    src.destroy();
+  });
+
+  it('pans on shift+drag when skipShiftDrag=false', () => {
+    const el = document.createElement('div');
+    const src = new DragPanHandler(el, { skipShiftDrag: false });
+    const onStart = vi.fn();
+    src.on('panstart', onStart);
+    el.dispatchEvent(new MouseEvent('mousedown', { shiftKey: true, clientX: 0, clientY: 0 }));
+    expect(onStart).toHaveBeenCalledTimes(1);
+    src.destroy();
+  });
+});

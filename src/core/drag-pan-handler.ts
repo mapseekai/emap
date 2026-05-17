@@ -14,14 +14,16 @@ export class DragPanHandler extends EventDispatcher {
   private _isDragging: boolean = false;
   private _lastMousePos: [number, number] = [0, 0];
   private _enabled: boolean = true;
+  private _skipShiftDrag: boolean;
 
   private _onMouseDownBound: (e: MouseEvent) => void;
   private _onMouseMoveBound: (e: MouseEvent) => void;
   private _onMouseUpBound: (e: MouseEvent) => void;
 
-  constructor(element: HTMLElement) {
+  constructor(element: HTMLElement, opts?: { skipShiftDrag?: boolean }) {
     super();
     this._element = element;
+    this._skipShiftDrag = opts?.skipShiftDrag ?? true;
     this._onMouseDownBound = this._onMouseDown.bind(this);
     this._onMouseMoveBound = this._onMouseMove.bind(this);
     this._onMouseUpBound = this._onMouseUp.bind(this);
@@ -56,9 +58,9 @@ export class DragPanHandler extends EventDispatcher {
 
   private _onMouseDown(e: MouseEvent): void {
     if (!this._enabled) return;
-    // Reserve shift+drag for higher-level controls (e.g. box-select). Plain
-    // panning continues to fire on left/middle drag without modifiers.
-    if (e.shiftKey) return;
+    // Shift+drag is reserved for higher-level handlers (e.g. box-select)
+    // unless the owner opts out. Default-on preserves legacy behavior.
+    if (this._skipShiftDrag && e.shiftKey) return;
     this._isDragging = true;
     this._lastMousePos = [e.clientX, e.clientY];
     this.fire('panstart');

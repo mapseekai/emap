@@ -13,8 +13,12 @@ import { EditStateStore, type EditMode } from './edit-state-store';
 import { LayerRegistry } from './layer-registry';
 import { TopologySource } from '../source/source';
 import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
-import { MouseWheel } from '../core/interactions';
-import { DragPanHandler } from '../core/drag-pan-handler';
+import { ScrollZoomHandler } from '../core/handlers/scroll-zoom';
+import type { ScrollZoomOptions } from '../core/handlers/scroll-zoom';
+import { DragPanHandler } from '../core/handlers/drag-pan';
+import type { DragPanOptions } from '../core/handlers/drag-pan';
+import type { Handler } from '../core/handler';
+import { HandlerManager } from '../core/handler-manager';
 import { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import { FeatureQuery } from './feature-query';
 import { FeatureAccessor } from './feature-accessor';
@@ -84,7 +88,8 @@ export class Emap extends EventDispatcher {
   private _layerArcFlagsCache: globalThis.Map<string, Uint8Array> = new globalThis.Map();
 
   // Interactions (delegated)
-  private _mouseWheel: MouseWheel;
+  private _handlers: HandlerManager;
+  private _scrollZoom: ScrollZoomHandler;
   private _dragPan: DragPanHandler;
 
   // Rendering
@@ -164,7 +169,7 @@ export class Emap extends EventDispatcher {
   // here to (re)render and emit `editmodechange`.
   private _editState: EditStateStore = new EditStateStore((change) => {
     if (change.modeChanged) {
-      this._dragPan?.setEnabled(change.current.mode === 'none');
+      if (change.current.mode === 'none') this._dragPan?.enable(); else this._dragPan?.disable();
       this.fire('editmodechange', { mode: change.current.mode });
     }
     this._scheduleRender();
@@ -225,8 +230,15 @@ export class Emap extends EventDispatcher {
     this._viewport.initZoomTween();
 
     // Interactions — both use EventDispatcher pattern
-    this._mouseWheel = new MouseWheel(this._canvasContainer);
+    this._handlers = new HandlerManager();
+    this._scrollZoom = new ScrollZoomHandler(this._canvasContainer);
     this._dragPan = new DragPanHandler(this._canvasContainer);
+    this._handlers.register(this._dragPan);
+    this._handlers.register(this._scrollZoom);
+
+    if (options.interactive === false) {
+      this._handlers.applyInteractive(false);
+    }
 
     // Feature query (delegated)
     this._featureQuery = new FeatureQuery(
@@ -341,7 +353,7 @@ export class Emap extends EventDispatcher {
       this._viewport.cancelZoomAnimation();
     });
 
-    this._mouseWheel.on('mousewheel', (e: { direction: number; multiplier: number; x: number; y: number }) => {
+    this._scrollZoom.on('mousewheel', (e: { direction: number; multiplier: number; x: number; y: number }) => {
       this._viewport.applyWheelZoom(e.direction, e.multiplier, e.x, e.y);
       this.fire('move');
     });
@@ -821,6 +833,11 @@ export class Emap extends EventDispatcher {
   public getZoom(): number {
     return this._projection.getZoom(Math.abs(this._viewport.transform.mx));
   }
+
+  /** The drag-to-pan interaction handler. */
+  get dragPan(): Handler<DragPanOptions> { return this._dragPan; }
+  /** The scroll-wheel zoom interaction handler. */
+  get scrollZoom(): Handler<ScrollZoomOptions> { return this._scrollZoom; }
 
   public getTransform(): AffineTransform {
     return this._viewport.transform;
@@ -1462,8 +1479,8 @@ export class Emap extends EventDispatcher {
     this._pendingRender = 0;
 
     // Interaction handlers
-    this._dragPan.destroy();
-    this._mouseWheel.destroy();
+    this._dragPan?.destroy();
+    this._scrollZoom?.destroy();
     this._historyShortcutUnbind?.();
     this._historyShortcutUnbind = null;
 

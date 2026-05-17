@@ -155,3 +155,26 @@ above with a one-line redirect ("→ landed in PR-22b, commit
 `<sha>`") and copy the commit message into the matching plan
 section. Don't delete the rationale from history — the "why now"
 text is useful when re-evaluating.
+
+---
+
+## DX Phase 1 follow-up — `interactive:false` not sticky vs edit-mode
+
+**Found:** 2026-05-17 final review of `feat/dx-phase1-handler-registry`.
+
+`Emap`'s edit-state callback (`src/map/map.ts`, the `editmodechange`
+listener) calls `this._dragPan?.enable()` whenever edit mode returns to
+`'none'`. On a map constructed with `interactive: false`, an edit-mode
+round-trip therefore re-enables pan, overriding the user's intent.
+
+- **Not a regression** vs. pre-Phase-1 master (where `interactive` was a
+  dead no-op, so pan was never disabled at all). Impact is near-zero
+  (`interactive:false` maps rarely enter edit mode).
+- **Trigger to re-evaluate:** Phase 2 introduces the single-DOM
+  arbitration layer + selection handlers. That layer should own a single
+  source of truth for "is interaction X currently permitted" so transient
+  consumers (edit mode, vertex editing) can suspend/restore without
+  clobbering the user's construct-time `interactive:false` choice.
+- **Fix shape (Phase 2):** edit-mode should request a *scoped* pan
+  suspend/restore, not unconditional `enable()`, honoring the base
+  enabled-state the handler was configured with.
