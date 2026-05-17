@@ -1,5 +1,5 @@
 import { EventDispatcher } from '../core/events';
-import type { ArcCollection, MapshaperDataset } from '../types/mapshaper-types';
+import type { ArcCollection, MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import type { DisplayArcs } from './display-arcs';
 import type { Bounds } from '../geo/bounds';
 
@@ -20,7 +20,7 @@ export interface ExportOptions {
 export interface TopologySource extends Source {
   type: 'topology';
   getArcs(): ArcCollection | undefined;
-  getLayers(): any[];
+  getLayers(): MapshaperLayer[];
   /**
    * Returns the live mapshaper dataset reference owned by this source.
    *

@@ -3,7 +3,7 @@ import { Emap, EditVertexShape, EditVertexArcs } from '../map/map';
 import { VertexMoveCommand } from '../edit/commands/vertex-move';
 import { VertexInsertCommand } from '../edit/commands/vertex-insert';
 import { VertexDeleteCommand } from '../edit/commands/vertex-delete';
-import { bumpEditVersion, type ArcCollection } from '../types/mapshaper-types';
+import { bumpEditVersion, isPathLayer, type ArcCollection } from '../types/mapshaper-types';
 import type { TopologySource } from '../source/source';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 
@@ -363,7 +363,7 @@ export class VertexEditControl implements Control {
 
     let shape: EditVertexShape | null = null;
     for (const layer of layers) {
-      if (layer.shapes && layer.shapes[hit.id]) {
+      if (isPathLayer(layer) && layer.shapes && layer.shapes[hit.id]) {
         shape = layer.shapes[hit.id];
         break;
       }
