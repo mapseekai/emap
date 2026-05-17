@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-17
+
+### Changed
+
+- **BREAKING:** `TopologySource.setData()` now returns
+  `Promise<TopologySource>` instead of `this`. It resolves once the import
+  completes and rejects if it fails, so `await source.setData(...)` is now the
+  canonical way to wait for the dataset (previously `await` resolved on the
+  next microtask, before the data existed — a silent footgun that left the
+  map blank). The `data` / `error` events still fire unchanged for
+  event-driven consumers, and last-write-wins semantics are preserved (a
+  superseded call's promise resolves early so awaiting it never hangs).
+  Fluent chaining off the return value (`source.setData(x).getLayers()`) no
+  longer works — `await` first. `fromUrl` / `fromBytes` now delegate to the
+  awaitable `setData` internally.
+- `TopologySource.getLayers()` is now typed `MapshaperLayer[]` instead of
+  `any[]`, so `name` / `geometry_type` are reachable without an `any` cast at
+  every consumer. Runtime behavior is unchanged (additive type only).
+
+### Fixed
+
+- Corrected `test/examples/*.html` (`box-select`, `draw-snap-edge`,
+  `lasso-select`, `polygon-fill`) that passed the camelCase `sourceLayer` key
+  to `addLayer` specs. The `LayerSpecification` only reads the canonical
+  MapLibre-style `'source-layer'`, so the camelCase key was silently ignored
+  and resolution fell back to the first layer — a real bug in `polygon-fill`,
+  which targets a specific layer. Examples now use `'source-layer'`.
+- `npm run dev-build` was broken: the `prefer-browser-mapshaper-modules`
+  Rollup plugin only matched the terser-minified ternary form of mapshaper's
+  module loader, so it patched the production vendor but threw `Unable to
+  patch mapshaper module loader` on the unminified dev vendor (terser does
+  not run in dev). `dist/emap-dev.js` — referenced by every
+  `test/examples/*.html` — could not be built at all. Added a second pattern
+  matching the unminified `if / else-if / else` loader block and reordering
+  it to prefer `window.modules` over `require` (same intent as the minified
+  path). Dev and prod builds now both patch the vendor correctly.
+
 ## [0.1.3] - 2026-05-17
 
 ### Fixed
@@ -75,7 +112,8 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@zwishing/emap/style.css`).
 
-[Unreleased]: https://github.com/zwishing/emap/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/zwishing/emap/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/zwishing/emap/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/zwishing/emap/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/zwishing/emap/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/zwishing/emap/compare/v0.1.0...v0.1.1

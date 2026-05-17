@@ -4,7 +4,7 @@ import { Bounds } from '../geo/bounds';
 import { unzip, strFromU8, zipSync } from 'fflate';
 import type { UnzipFileInfo, Unzipped } from 'fflate';
 import { DisplayArcs } from './display-arcs';
-import type { MapshaperDataset } from '../types/mapshaper-types';
+import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import type { ExportFormat, ExportOptions } from './source';
 import {
   getDefaultMapshaperRunner,
@@ -106,6 +106,15 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   private _loadVersion: number = 0;
   private _abortController: AbortController | null = null;
   /**
+   * Deferred backing the {@link setData} promise. Settled by the matching
+   * `_loadVersion`'s `_updateData` run (resolve on `data`, reject on `error`).
+   * A superseding `setData` resolves it early — last-write-wins, the newer
+   * call owns the next outcome.
+   */
+  private _pending:
+    | { version: number; resolve: (s: TopologySource) => void; reject: (e: unknown) => void }
+    | null = null;
+  /**
    * Sticky simplification floor. mapshaper's `-simplify` writes a
    * `retainedInterval` into the resulting `ArcCollection`; we cache that
    * value here so the render loop's per-frame zoom-LOD doesn't stomp it.
@@ -143,25 +152,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     options?: Omit<TopologySourceOptions, 'data'>,
   ): Promise<TopologySource> {
     const source = new TopologySource(id, options);
-    await new Promise<void>((resolve, reject) => {
-      let onData: () => void;
-      let onError: (event: { error?: unknown }) => void;
-      const cleanup = () => {
-        source.off('data', onData);
-        source.off('error', onError);
-      };
-      onData = () => {
-        cleanup();
-        resolve();
-      };
-      onError = (event) => {
-        cleanup();
-        reject(event?.error ?? event);
-      };
-      source.on('data', onData);
-      source.on('error', onError);
-      source.setData(url);
-    });
+    await source.setData(url);
     return source;
   }
 
@@ -178,25 +169,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     const { filename = `${id}.geojson`, ...sourceOptions } = options ?? {};
     const content = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
     const source = new TopologySource(id, sourceOptions);
-    await new Promise<void>((resolve, reject) => {
-      let onData: () => void;
-      let onError: (event: { error?: unknown }) => void;
-      const cleanup = () => {
-        source.off('data', onData);
-        source.off('error', onError);
-      };
-      onData = () => {
-        cleanup();
-        resolve();
-      };
-      onError = (event) => {
-        cleanup();
-        reject(event?.error ?? event);
-      };
-      source.on('data', onData);
-      source.on('error', onError);
-      source.setData({ filename, content });
-    });
+    await source.setData({ filename, content });
     return source;
   }
 
@@ -208,17 +181,38 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * layer in one dataset — same behaviour as mapshaper's
    * `-i FILE1 FILE2 ...` CLI invocation).
    *
+   * Returns a promise that resolves with the source once the import
+   * completes and rejects if it fails — `await source.setData(...)` is the
+   * canonical way to wait for the dataset. The `data` / `error` events still
+   * fire for event-driven consumers.
+   *
    * Last-write-wins: rapid back-to-back calls supersede each other. Only the
    * latest call's outcome fires `data` / `error`; in-flight URL fetches from
-   * superseded calls are aborted.
+   * superseded calls are aborted. A superseded call's promise resolves early
+   * (the newer call owns the next outcome) so awaiting it never hangs.
    */
-  setData(data: TopologySourceInput): this {
+  setData(data: TopologySourceInput): Promise<TopologySource> {
     this._loadVersion++;
+    const version = this._loadVersion;
     this._abortController?.abort();
     this._abortController = null;
     this._data = data;
-    this._updateData();
-    return this;
+
+    // A newer call supersedes any in-flight one: settle it now so awaiters
+    // don't hang on a chain that will never fire its own data/error.
+    this._pending?.resolve(this);
+
+    const promise = new Promise<TopologySource>((resolve, reject) => {
+      this._pending = { version, resolve, reject };
+    });
+    // Legacy fire-and-forget callers never consume this promise; a no-op
+    // handler keeps an import failure from surfacing as an unhandled
+    // rejection. Explicit `await`ers still observe the rejection via their
+    // own handler.
+    promise.catch(() => {});
+
+    void this._updateData();
+    return promise;
   }
 
   private async _updateData(): Promise<void> {
@@ -328,13 +322,28 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       this._simplifyFloor = this._dataset?.arcs?.getRetainedInterval?.() ?? 0;
 
       this.fire('data', { reason: 'load' });
+      this._settlePending(version, null);
     } catch (err: any) {
       // Stale chain (either superseded by a newer setData, or its fetch was
       // aborted by us). Either way, the new chain owns the next event.
       if (version !== this._loadVersion) return;
       if (err?.name === 'AbortError') return;
       this.fire('error', { error: err });
+      this._settlePending(version, err ?? new Error('setData import failed'));
     }
+  }
+
+  /**
+   * Settle the {@link setData} deferred for the given load version. Ignored
+   * if a newer call has already replaced it (the superseding `setData`
+   * resolved the old deferred early).
+   */
+  private _settlePending(version: number, error: unknown | null): void {
+    if (this._pending?.version !== version) return;
+    const pending = this._pending;
+    this._pending = null;
+    if (error === null) pending.resolve(this);
+    else pending.reject(error);
   }
 
   private _hasSupportedExtension(filename: string): boolean {
@@ -523,7 +532,12 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     return new Blob([toBlobPart(files[0].content)], { type: EXPORT_MIME[format] });
   }
 
-  getLayers(): any[] {
+  /**
+   * The dataset's layers, or `[]` before the first successful import.
+   * Each entry is a {@link MapshaperLayer} (`name`, optional `geometry_type`
+   * — `'polygon' | 'polyline' | 'point'`, absent for data-only layers).
+   */
+  getLayers(): MapshaperLayer[] {
     return this._dataset?.layers || [];
   }
 

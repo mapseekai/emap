@@ -511,3 +511,69 @@ describe('TopologySource.setData — race versioning', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// setData awaitable contract (Friction #9)
+// ---------------------------------------------------------------------------
+
+describe('TopologySource.setData — awaitable', () => {
+  const originalParseCommands = Reflect.get(mapshaper.internal as object, 'parseCommands');
+  const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
+
+  afterEach(() => {
+    Reflect.set(mapshaper.internal as object, 'parseCommands', originalParseCommands);
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', originalRunParsedCommands);
+  });
+
+  it('resolves to the source only after the import completes', async () => {
+    Reflect.set(mapshaper.internal as object, 'parseCommands', vi.fn(() => [{ name: 'i', options: {} }]));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any[], _j: any, cb: any) => {
+      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: { layers: [{ name: 'L' }], info: {} } }] } });
+    }));
+
+    const source = new TopologySource('await-ok');
+    const ret = await source.setData({ filename: 'a.geojson', content: new Uint8Array([1]) });
+
+    expect(ret).toBe(source);
+    const layers = source.getLayers();
+    expect(layers).toHaveLength(1);
+    // getLayers() is typed MapshaperLayer[] — `.name` is reachable without
+    // an `any` cast (compile-time guarantee + runtime shape check).
+    expect(layers[0].name).toBe('L');
+  });
+
+  it('rejects when the import fails', async () => {
+    Reflect.set(mapshaper.internal as object, 'parseCommands', vi.fn(() => [{ name: 'i', options: {} }]));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any[], _j: any, cb: any) => {
+      cb(new Error('boom'));
+    }));
+
+    const source = new TopologySource('await-fail');
+    await expect(
+      source.setData({ filename: 'b.geojson', content: new Uint8Array([1]) }),
+    ).rejects.toThrow('boom');
+  });
+
+  it('superseded call resolves early; the winner owns the loaded data', async () => {
+    let firstResolve: ((dataset: any) => void) | null = null;
+    Reflect.set(mapshaper.internal as object, 'parseCommands', vi.fn(() => [{ name: 'i', options: {} }]));
+    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any[], _j: any, cb: any) => {
+      if (!firstResolve) {
+        firstResolve = (dataset: any) => cb(null, { catalog: { getDefaultTargets: () => [{ dataset }] } });
+      } else {
+        cb(null, { catalog: { getDefaultTargets: () => [{ dataset: { layers: [], info: { winner: 'B' } } }] } });
+      }
+    }));
+
+    const source = new TopologySource('await-race');
+    const p1 = source.setData({ filename: 'a.geojson', content: new Uint8Array([1]) });
+    const p2 = source.setData({ filename: 'b.geojson', content: new Uint8Array([2]) });
+
+    await expect(p1).resolves.toBe(source); // superseded → resolves early, no throw
+    await expect(p2).resolves.toBe(source);
+
+    firstResolve?.({ layers: [], info: { winner: 'A' } });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(source.getDataset()?.info?.winner).toBe('B'); // stale chain never overwrote
+  });
+});
