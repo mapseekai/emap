@@ -185,7 +185,13 @@ export { EditOverlayRenderer } from './renderer/edit-overlay-renderer';
 // ===========================================================================
 export { EventDispatcher } from './core/events';
 export type { EventListener } from './core/events';
-export { DragPanHandler } from './core/drag-pan-handler';
+export { HandlerManager } from './core/handler-manager';
+export { isHandler } from './core/handler';
+export type { Handler, HandlerResult, NormalizedPointerEvent, PointerModifiers } from './core/handler';
+export { DragPanHandler } from './core/handlers/drag-pan';
+export type { DragPanOptions } from './core/handlers/drag-pan';
+export { ScrollZoomHandler } from './core/handlers/scroll-zoom';
+export type { ScrollZoomOptions } from './core/handlers/scroll-zoom';
 
 // ===========================================================================
 // Edit history + commands
