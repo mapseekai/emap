@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 交互 Handler (dragPan / scrollZoom)</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header label { display: flex; align-items: center; gap: 5px; }
+    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    code { background: rgba(255,255,255,.15); padding: 1px 4px; border-radius: 3px; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <label><input id="toggle-pan" type="checkbox" checked /> map.dragPan</label>
+    <label><input id="toggle-zoom" type="checkbox" checked /> map.scrollZoom</label>
+    <label><input id="toggle-shift" type="checkbox" checked /> dragPan.skipShiftDrag</label>
+    <button id="btn-stop">全部禁用 (interactive:false 等价)</button>
+    <button id="btn-go">全部启用</button>
+    <span id="status">加载一个数据文件,然后用上面的开关切换交互</span>
+    <span class="hint">
+      0.3.0 起每个交互都是 map 上一个具名 <code>Handler</code>:<code>map.dragPan</code> /
+      <code>map.scrollZoom</code>,各有 <code>enable() / disable() / isEnabled() / setOptions()</code>。
+      可单独关滚轮保留拖拽,无需碰私有内部。构造期 <code>new Emap({ scrollZoom:false })</code> 或
+      <code>interactive:false</code>(等价于全部禁用)亦可。
+      <code>skipShiftDrag</code> 为 Phase-1 已知限制:可经 setOptions 存值,运行时生效留待后续阶段。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <script src="../../dist/mapshaper-vendor.js"></script>
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+
+    const SOURCE_ID = 'handlers-source';
+    const status = document.getElementById('status');
+    const togglePan = document.getElementById('toggle-pan');
+    const toggleZoom = document.getElementById('toggle-zoom');
+    const toggleShift = document.getElementById('toggle-shift');
+
+    function refreshStatus() {
+      // isEnabled() reads the live handler state — no private access.
+      status.textContent =
+        `dragPan: ${map.dragPan.isEnabled() ? '启用' : '禁用'} · ` +
+        `scrollZoom: ${map.scrollZoom.isEnabled() ? '启用' : '禁用'} · ` +
+        `skipShiftDrag: ${map.dragPan.getOptions().skipShiftDrag}`;
+    }
+
+    togglePan.addEventListener('change', () => {
+      togglePan.checked ? map.dragPan.enable() : map.dragPan.disable();
+      refreshStatus();
+    });
+    toggleZoom.addEventListener('change', () => {
+      toggleZoom.checked ? map.scrollZoom.enable() : map.scrollZoom.disable();
+      refreshStatus();
+    });
+    toggleShift.addEventListener('change', () => {
+      // setOptions is part of the unified Handler contract. NOTE: in this
+      // Phase-1 release skipShiftDrag is fixed at construction in the
+      // underlying primitive — setOptions stores it (getOptions reflects it)
+      // but it takes runtime effect from a later phase's arbitration layer.
+      map.dragPan.setOptions({ skipShiftDrag: toggleShift.checked });
+      refreshStatus();
+    });
+
+    document.getElementById('btn-stop').addEventListener('click', () => {
+      map.dragPan.disable();
+      map.scrollZoom.disable();
+      togglePan.checked = false;
+      toggleZoom.checked = false;
+      refreshStatus();
+    });
+    document.getElementById('btn-go').addEventListener('click', () => {
+      map.dragPan.enable();
+      map.scrollZoom.enable();
+      togglePan.checked = true;
+      toggleZoom.checked = true;
+      refreshStatus();
+    });
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `正在加载 ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        // Canonical 0.2.0 recipe: await setData (resolves once the dataset
+        // is ready), then addSource (order-independent) + setExtent.
+        try {
+          await source.setData({ filename: file.name, content });
+          map.addSource(SOURCE_ID, source);
+          map.setExtent(source.getExtent());
+          refreshStatus();
+        } catch (err) {
+          console.error(err);
+          status.textContent = '处理文件出错';
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    refreshStatus();
+
+    window.addEventListener('resize', () => map.resize());
+  </script>
+</body>
+
+</html>
