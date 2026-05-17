@@ -44,4 +44,17 @@ describe('Emap handler registry (Phase 1)', () => {
     expect(map.scrollZoom.isEnabled()).toBe(false);
     expect(map.dragPan.isEnabled()).toBe(true);
   });
+
+  it('dragging the canvas pans the viewport through the arbiter', () => {
+    const el = container();
+    const map = new Emap({ container: el });
+    const canvas = map.getCanvasContainer();
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    const before = map.getCenter();
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 100, clientY: 100, button: 0 }));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 160, clientY: 100, button: 0 }));
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 160, clientY: 100, button: 0 }));
+    const after = map.getCenter();
+    expect(after[0]).not.toBe(before[0]); // longitude changed → pan happened
+  });
 });

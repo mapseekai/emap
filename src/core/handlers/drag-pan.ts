@@ -21,15 +21,10 @@ export class DragPanHandler extends EventDispatcher implements Handler<DragPanOp
   private _dragging = false;
   private _last: { x: number; y: number } = { x: 0, y: 0 };
 
-  constructor(elementOrOpts?: HTMLElement | Partial<DragPanOptions>, opts?: Partial<DragPanOptions>) {
+  constructor(opts?: Partial<DragPanOptions>) {
     super();
-    const resolvedOpts: Partial<DragPanOptions> =
-      elementOrOpts instanceof HTMLElement ? (opts ?? {}) : (elementOrOpts ?? {});
-    this._opts = { ...DEFAULTS, ...resolvedOpts };
+    this._opts = { ...DEFAULTS, ...opts };
   }
-
-  /** No-op: Phase 2a owns no DOM listeners; retained for API compatibility. */
-  destroy(): void {}
 
   enable(): void { this._enabled = true; }
   disable(): void {

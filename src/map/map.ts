@@ -232,9 +232,10 @@ export class Emap extends EventDispatcher {
     // Interactions — both use EventDispatcher pattern
     this._handlers = new HandlerManager();
     this._scrollZoom = new ScrollZoomHandler(this._canvasContainer);
-    this._dragPan = new DragPanHandler(this._canvasContainer);
+    this._dragPan = new DragPanHandler();
     this._handlers.register(this._dragPan);
     this._handlers.register(this._scrollZoom);
+    this._handlers.attach(this._canvasContainer);
 
     if (options.interactive === false) {
       this._handlers.applyInteractive(false);
@@ -1479,7 +1480,7 @@ export class Emap extends EventDispatcher {
     this._pendingRender = 0;
 
     // Interaction handlers
-    this._dragPan?.destroy();
+    this._handlers?.detach();
     this._scrollZoom?.destroy();
     this._historyShortcutUnbind?.();
     this._historyShortcutUnbind = null;
