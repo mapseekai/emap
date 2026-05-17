@@ -41,11 +41,14 @@ export function resolveMode(
   activator?: ModifierCombo,
 ): SelectMode {
   const strip = activator ? keysOf(activator) : new Set<Key>();
+  const rawCtrl = modifiers.ctrl && !strip.has('ctrl');
+  const rawMeta = modifiers.meta && !strip.has('meta');
   const effective = {
     shift: modifiers.shift && !strip.has('shift'),
-    ctrl: modifiers.ctrl && !strip.has('ctrl'),
+    // meta≡ctrl (Cmd on macOS ≡ Ctrl): mirrors legacy _modeFromEvent's `ctrlKey || metaKey`.
+    ctrl: rawCtrl || rawMeta,
     alt: modifiers.alt && !strip.has('alt'),
-    meta: modifiers.meta && !strip.has('meta'),
+    meta: false,
   };
   const combo = comboOf(effective);
   for (const mode of ['replace', 'add', 'toggle'] as const) {

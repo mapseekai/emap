@@ -21,7 +21,7 @@ describe('resolveMode', () => {
     expect(resolveMode(mods(true), BOX_TABLE, 'shift')).toBe('replace');
     expect(resolveMode(mods(true, true), BOX_TABLE, 'shift')).toBe('add');
     expect(resolveMode(mods(true, false, true), BOX_TABLE, 'shift')).toBe('toggle');
-    expect(resolveMode(mods(true, false, false, true), BOX_TABLE, 'shift')).toBe('replace');
+    expect(resolveMode(mods(true, false, false, true), BOX_TABLE, 'shift')).toBe('add'); // shift+meta ≡ shift+ctrl (legacy ctrlKey||metaKey)
   });
 
   it('unmatched combo falls back to replace', () => {
