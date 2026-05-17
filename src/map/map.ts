@@ -17,6 +17,9 @@ import { ScrollZoomHandler } from '../core/handlers/scroll-zoom';
 import type { ScrollZoomOptions } from '../core/handlers/scroll-zoom';
 import { DragPanHandler } from '../core/handlers/drag-pan';
 import type { DragPanOptions } from '../core/handlers/drag-pan';
+import { ClickSelectHandler, type SelectHandlerOptions } from '../core/handlers/click-select';
+import { BoxSelectHandler, type BoxSelectHandlerOptions } from '../core/handlers/box-select';
+import { LassoSelectHandler, type LassoSelectHandlerOptions } from '../core/handlers/lasso-select';
 import type { Handler } from '../core/handler';
 import { HandlerManager } from '../core/handler-manager';
 import { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
@@ -91,6 +94,9 @@ export class Emap extends EventDispatcher {
   private _handlers: HandlerManager;
   private _scrollZoom: ScrollZoomHandler;
   private _dragPan: DragPanHandler;
+  private _clickSelect: ClickSelectHandler;
+  private _boxSelect: BoxSelectHandler;
+  private _lassoSelect: LassoSelectHandler;
 
   // Rendering
   private _pendingRender = 0;
@@ -235,6 +241,12 @@ export class Emap extends EventDispatcher {
     this._dragPan = new DragPanHandler();
     this._handlers.register(this._dragPan);
     this._handlers.register(this._scrollZoom);
+    this._clickSelect = new ClickSelectHandler(this);
+    this._boxSelect = new BoxSelectHandler(this);
+    this._lassoSelect = new LassoSelectHandler(this);
+    this._handlers.register(this._clickSelect);
+    this._handlers.register(this._boxSelect);
+    this._handlers.register(this._lassoSelect);
     this._handlers.attach(this._canvasContainer);
 
     if (options.interactive === false) {
@@ -839,6 +851,12 @@ export class Emap extends EventDispatcher {
   get dragPan(): Handler<DragPanOptions> { return this._dragPan; }
   /** The scroll-wheel zoom interaction handler. */
   get scrollZoom(): Handler<ScrollZoomOptions> { return this._scrollZoom; }
+  /** The click-to-select interaction handler (disabled by default). */
+  get clickSelect(): Handler<SelectHandlerOptions> { return this._clickSelect; }
+  /** The box-select interaction handler (disabled by default). */
+  get boxSelect(): Handler<BoxSelectHandlerOptions> { return this._boxSelect; }
+  /** The lasso-select interaction handler (disabled by default). */
+  get lassoSelect(): Handler<LassoSelectHandlerOptions> { return this._lassoSelect; }
 
   public getTransform(): AffineTransform {
     return this._viewport.transform;
