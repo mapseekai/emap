@@ -37,10 +37,17 @@ export class BoxSelectHandler extends EventDispatcher implements Handler<BoxSele
   private _opts: BoxSelectHandlerOptions = {};
   private _start: { x: number; y: number } | null = null;
   private _overlay: HTMLDivElement | null = null;
+  /** Set by HandlerManager.register. */
+  _manager?: { isEnabledByName(name: string): boolean };
 
   constructor(private _map: Emap) { super(); }
 
-  enable(): void { this._enabled = true; }
+  enable(): void {
+    if (this._manager?.isEnabledByName('lassoSelect')) {
+      throw new Error('cannot enable boxSelect: lassoSelect is enabled (both consume shift+drag); disable it first');
+    }
+    this._enabled = true;
+  }
   disable(): void {
     this._enabled = false;
     if (this._start) this._cancel();

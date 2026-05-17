@@ -36,10 +36,17 @@ export class LassoSelectHandler extends EventDispatcher implements Handler<Lasso
   private _path: Array<[number, number]> | null = null;
   private _svg: SVGSVGElement | null = null;
   private _poly: SVGPolylineElement | null = null;
+  /** Set by HandlerManager.register. */
+  _manager?: { isEnabledByName(name: string): boolean };
 
   constructor(private _map: Emap) { super(); }
 
-  enable(): void { this._enabled = true; }
+  enable(): void {
+    if (this._manager?.isEnabledByName('boxSelect')) {
+      throw new Error('cannot enable lassoSelect: boxSelect is enabled (both consume shift+drag); disable it first');
+    }
+    this._enabled = true;
+  }
   disable(): void {
     this._enabled = false;
     if (this._path) this._cancel();

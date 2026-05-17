@@ -25,6 +25,13 @@ export class HandlerManager {
       throw new Error(`HandlerManager.register: argument is not a valid Handler`);
     }
     this._handlers.set(handler.name, handler);
+    (handler as unknown as { _manager?: HandlerManager })._manager = this;
+  }
+
+  /** Is a sibling handler currently registered AND enabled? */
+  isEnabledByName(name: string): boolean {
+    const h = this._handlers.get(name);
+    return !!h && h.isEnabled();
   }
 
   get(name: string): Handler | undefined {
