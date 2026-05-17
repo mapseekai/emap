@@ -57,4 +57,27 @@ describe('Emap handler registry (Phase 1)', () => {
     const after = map.getCenter();
     expect(after[0]).not.toBe(before[0]); // longitude changed → pan happened
   });
+
+  it('exposes disabled-by-default selection handlers', () => {
+    const map = new Emap({ container: container() });
+    expect(map.clickSelect.name).toBe('clickSelect');
+    expect(map.boxSelect.name).toBe('boxSelect');
+    expect(map.lassoSelect.name).toBe('lassoSelect');
+    expect(map.clickSelect.isEnabled()).toBe(false);
+    expect(map.boxSelect.isEnabled()).toBe(false);
+    expect(map.lassoSelect.isEnabled()).toBe(false);
+  });
+
+  it('shift+drag with boxSelect enabled selects via the arbiter (not pan)', () => {
+    const el = container();
+    const map = new Emap({ container: el });
+    const canvas = map.getCanvasContainer();
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    map.boxSelect.enable();
+    const before = map.getCenter();
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 50, clientY: 50, button: 0, shiftKey: true }));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 200, clientY: 200, button: 0, shiftKey: true }));
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 200, clientY: 200, button: 0, shiftKey: true }));
+    expect(map.getCenter()[0]).toBe(before[0]);
+  });
 });

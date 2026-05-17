@@ -1,5 +1,6 @@
 import type { Control } from './control';
-import type { Emap, FeatureRef } from '../map/map';
+import type { Emap } from '../map/map';
+import { dedupeRefs } from '../core/handlers/select-geometry';
 
 /** Visual style for the rubber-band rectangle. */
 export interface BoxSelectStyle {
@@ -233,16 +234,3 @@ export class BoxSelectControl implements Control {
   }
 }
 
-/** Dedupe `(source, layer, id)` triples — same feature can show up under
- *  multiple visible layers when a source has e.g. fill + line styling. */
-function dedupeRefs(features: ReadonlyArray<{ source: string; layer: string; id: number }>): FeatureRef[] {
-  const seen = new Set<string>();
-  const out: FeatureRef[] = [];
-  for (const f of features) {
-    const key = `${f.source}|${f.layer}|${f.id}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({ source: f.source, layer: f.layer, id: f.id });
-  }
-  return out;
-}
