@@ -270,6 +270,7 @@ export class Emap extends EventDispatcher {
       unproject: (x, y) => _self.unproject(x, y),
       get features() { return _self.features; },
     });
+    this._featureEvents.setOnChange(() => this._syncFeatureSink());
 
     this._attachEventListeners();
 
@@ -341,7 +342,9 @@ export class Emap extends EventDispatcher {
   // Overload 1: generic 2-arg form — preserves the base class API for non-feature events
   // (e.g. `map.on<HistoryStateSnapshot>('historychange', cb)`)
   on<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
-  // Overload 2: 3-arg feature-event form with optional filter
+  // Overload 2: typed 2-arg feature-event form (no filter)
+  on(type: string, listener: (e: FeatureEvent) => void): this;
+  // Overload 3: 3-arg feature-event form with filter
   on(type: string, filter: FeatureEventFilter, listener: (e: FeatureEvent) => void): this;
   // Implementation
   on(type: string, filterOrListener: unknown, listener?: unknown): this {
@@ -349,7 +352,7 @@ export class Emap extends EventDispatcher {
       const cb = (listener ?? filterOrListener) as (e: FeatureEvent) => void;
       const filter = (listener ? filterOrListener : undefined) as FeatureEventFilter | undefined;
       this._featureEvents.on(type, filter, cb);
-      this._syncFeatureSink();
+      // onChange callback drives _syncFeatureSink(); no explicit call needed here.
       return this;
     }
     return super.on(type, filterOrListener as EventListener);
@@ -363,7 +366,7 @@ export class Emap extends EventDispatcher {
   off(type: string, listener: unknown): this {
     if (type.startsWith('feature:')) {
       this._featureEvents.off(type, listener as (e: FeatureEvent) => void);
-      this._syncFeatureSink();
+      // onChange callback drives _syncFeatureSink(); no explicit call needed here.
       return this;
     }
     return super.off(type, listener as EventListener);
@@ -371,16 +374,17 @@ export class Emap extends EventDispatcher {
 
   // Overload 1: generic 2-arg form for non-feature events
   once<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
-  // Overload 2: 3-arg feature-event form with optional filter
+  // Overload 2: typed 2-arg feature-event form (no filter)
+  once(type: string, listener: (e: FeatureEvent) => void): this;
+  // Overload 3: 3-arg feature-event form with filter
   once(type: string, filter: FeatureEventFilter, listener: (e: FeatureEvent) => void): this;
   // Implementation
   once(type: string, filterOrListener: unknown, listener?: unknown): this {
     if (type.startsWith('feature:')) {
       const cb = (listener ?? filterOrListener) as (e: FeatureEvent) => void;
       const filter = (listener ? filterOrListener : undefined) as FeatureEventFilter | undefined;
-      const wrap = (e: FeatureEvent) => { this._featureEvents.off(type, wrap); this._syncFeatureSink(); cb(e); };
-      this._featureEvents.on(type, filter, wrap);
-      this._syncFeatureSink();
+      this._featureEvents.once(type, filter, cb);
+      // onChange callback drives _syncFeatureSink(); no explicit call needed here.
       return this;
     }
     return super.once(type, filterOrListener as EventListener);

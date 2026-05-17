@@ -58,8 +58,16 @@ export class FeatureEventDispatcher {
   };
   private _lastKey: string | null = null;
   private _lastRef: FeatureRef | null = null;
+  /** Maps user-supplied cb → its once-wrapper so `off(type, userCb)` can resolve the wrap. */
+  private _onceWrap = new Map<Cb, Cb>();
+  private _onChange?: () => void;
 
   constructor(private _host: FeatureEventMapHost) {}
+
+  /** Install a callback invoked whenever the registry changes (on/off/once auto-fire). */
+  setOnChange(fn: () => void): void {
+    this._onChange = fn;
+  }
 
   hasListeners(): boolean {
     return TYPES.some((t) => this._reg[t].length > 0);
@@ -69,11 +77,28 @@ export class FeatureEventDispatcher {
   on(type: string, filter: FeatureEventFilter | undefined, cb: Cb): void {
     if (!isFeatureType(type)) return;
     this._reg[type].push({ filter, cb });
+    this._onChange?.();
+  }
+
+  /** Register a one-time listener. Cancellable via `off(type, cb)` using the original `cb`. */
+  once(type: string, filter: FeatureEventFilter | undefined, cb: Cb): void {
+    if (!isFeatureType(type)) return;
+    const wrap: Cb = (e) => {
+      this.off(type, cb);
+      cb(e);
+      // onChange already fired inside off(); no second call needed.
+    };
+    this._onceWrap.set(cb, wrap);
+    this._reg[type].push({ filter, cb: wrap });
+    this._onChange?.();
   }
 
   off(type: string, cb: Cb): void {
     if (!isFeatureType(type)) return;
-    this._reg[type] = this._reg[type].filter((e) => e.cb !== cb);
+    const wrap = this._onceWrap.get(cb);
+    this._reg[type] = this._reg[type].filter((e) => e.cb !== cb && (wrap === undefined || e.cb !== wrap));
+    this._onceWrap.delete(cb);
+    this._onChange?.();
   }
 
   /** Topmost hit at a point, restricted to the union of all registered filters' layers. */

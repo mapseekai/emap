@@ -90,4 +90,62 @@ describe('FeatureEventDispatcher', () => {
     d.dispatch(ev('move', 0, 0));
     expect(map.queryFeatures).not.toHaveBeenCalled();
   });
+
+  describe('once', () => {
+    it('fires exactly once then auto-removes (dispatch twice → cb called once)', () => {
+      const map = stubMap([
+        [{ source: 's', layer: 'l', id: 1 }],
+        [{ source: 's', layer: 'l', id: 1 }],
+      ]);
+      const d = new FeatureEventDispatcher(map as any);
+      const cb = vi.fn();
+      d.once('feature:click', undefined, cb);
+      d.dispatch(ev('click', 0, 0));
+      d.dispatch(ev('click', 0, 0));
+      expect(cb).toHaveBeenCalledTimes(1);
+      expect(d.hasListeners()).toBe(false);
+    });
+
+    it('off(type, cb) cancels a once(type, undefined, cb) before it fires', () => {
+      const map = stubMap([[{ source: 's', layer: 'l', id: 1 }]]);
+      const d = new FeatureEventDispatcher(map as any);
+      const cb = vi.fn();
+      d.once('feature:click', undefined, cb);
+      d.off('feature:click', cb);
+      d.dispatch(ev('click', 0, 0));
+      expect(cb).not.toHaveBeenCalled();
+      expect(d.hasListeners()).toBe(false);
+    });
+
+    it('setOnChange is invoked on on(), on off(), and after a once auto-fires', () => {
+      const map = stubMap([
+        [{ source: 's', layer: 'l', id: 1 }],
+        [{ source: 's', layer: 'l', id: 1 }],
+      ]);
+      const d = new FeatureEventDispatcher(map as any);
+      let changes = 0;
+      d.setOnChange(() => { changes++; });
+
+      // on() triggers onChange
+      d.on('feature:click', undefined, () => {});
+      expect(changes).toBe(1);
+
+      // off() triggers onChange
+      const cb2 = () => {};
+      d.on('feature:click', undefined, cb2);
+      changes = 0;
+      d.off('feature:click', cb2);
+      expect(changes).toBe(1);
+
+      // once auto-fire triggers onChange (via off inside wrap)
+      changes = 0;
+      const onceCb = vi.fn();
+      d.once('feature:click', undefined, onceCb);
+      expect(changes).toBe(1); // once registration
+      changes = 0;
+      d.dispatch(ev('click', 0, 0));
+      expect(onceCb).toHaveBeenCalledTimes(1);
+      expect(changes).toBe(1); // auto-off after firing
+    });
+  });
 });
