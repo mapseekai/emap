@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   declared-but-unwired no-op — it is now functional and disables pan+zoom
   as the option always implied. See
   `docs/superpowers/specs/2026-05-17-emap-maplibre-dx-design.md`.
+- DX Phase 2a (toward 0.3.0): `HandlerManager` is now the single
+  pointer-event arbiter (`attach`/`detach`, normalized `NormalizedPointerEvent`,
+  priority-ordered dispatch with exclusive-gesture locking). `dragPan` pans
+  via `handlePointer` and owns no DOM listeners; the old internal pan
+  primitive (`src/core/drag-pan-handler.ts`) is removed. No pan behavior
+  change; this is the seam P2b's selection handlers slot into.
 
 ### Documentation
 
