@@ -126,6 +126,43 @@ source.getExtent();
 source.getLayers();
 ```
 
+#### Loading contract (since 0.2.0)
+
+`setData()` returns `Promise<TopologySource>` that resolves **after** the
+dataset is populated and the `data` (`{reason:'load'}`) event has fired, and
+rejects on load error. All three of these are valid and equivalent — pick one:
+
+```ts
+// 1. await (canonical)
+await source.setData(input);
+map.addSource('id', source);          // order-independent — see below
+map.setExtent(source.getExtent());
+
+// 2. await, addSource first
+map.addSource('id', source);
+await source.setData(input);
+map.setExtent(source.getExtent());
+
+// 3. event-driven (no await)
+source.on('data', ({ reason }) => { if (reason === 'load') map.setExtent(source.getExtent()); });
+source.setData(input);
+map.addSource('id', source);
+```
+
+`map.addSource()` is **order-independent**: if the source is already loaded
+it back-fills and renders immediately; if not, it renders on the next `data`
+event. There is no addSource/setData ordering requirement.
+
+> **Upgrading to 0.2.0 and the map renders blank with no error?** That is the
+> *pre-0.2.0* symptom: in ≤0.1.x `setData()` returned `this`, so `await`
+> resolved on the next microtask **before** the import finished and
+> `getExtent()` read an empty dataset. If you see this on "0.2.0", you are
+> running a **stale install**. Verify
+> `node_modules/@zwishing/emap/package.json` is actually `0.2.0`
+> (`grep -m1 '"setData"' node_modules/@zwishing/emap/dist/emap.mjs` must show
+> `new Promise`, not `return this`), then clear bundler caches
+> (`rm -rf node_modules/.vite node_modules/.cache`) and reinstall.
+
 ### Editing operations (`emap.ops`)
 
 All ops return `Promise<OpResult>` — a discriminated `{ ok: true, value? } | { ok: false, error: OpError }`. Errors are typed (`not-found`, `validation`, `expression-disabled`, `mapshaper`, `host-removed`).

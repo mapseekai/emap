@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Documented the explicit 0.2.0 loading contract: `setData()` resolves only
+  after the dataset is populated and `data{reason:'load'}` has fired, and
+  `map.addSource()` is order-independent (back-fills an already-loaded
+  source). Added a troubleshooting note — a blank map with no error after
+  "upgrading to 0.2.0" is the *pre-0.2.0* fire-and-forget symptom and
+  indicates a stale install, not an emap defect (a reopened Friction #9
+  report was root-caused to this; the published 0.2.0 runtime was verified
+  to settle the promise after the data event).
+
+### Tested
+
+- Added `src/map/setdata-addsource-ordering.test.ts`: end-to-end regression
+  proving both `addSource`→`await setData` and `await setData`→`addSource`
+  populate the dataset before the promise resolves and schedule a render
+  (guards the loading contract against regression).
+
 ## [0.2.0] - 2026-05-17
 
 ### Changed
