@@ -13,9 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and wheel interactions are now named handlers `map.dragPan` /
   `map.scrollZoom` with `enable()/disable()/isEnabled()/setOptions()`.
   Enables selective interaction toggling (e.g. disable wheel, keep pan)
-  without reaching into private internals. No behavior change: defaults and
-  `interactive` semantics are byte-identical; the underlying pan/wheel
-  primitives are unchanged. See
+  without reaching into private internals. No behavior change for the
+  default path (`interactive` unset/true): the underlying pan/wheel
+  primitives are unchanged and all existing tests pass byte-identically.
+  One intentional fix: `MapOptions.interactive: false` was previously a
+  declared-but-unwired no-op — it is now functional and disables pan+zoom
+  as the option always implied. See
   `docs/superpowers/specs/2026-05-17-emap-maplibre-dx-design.md`.
 
 ### Documentation
