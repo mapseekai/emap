@@ -20,6 +20,7 @@ import type { DragPanOptions } from '../core/handlers/drag-pan';
 import { ClickSelectHandler, type SelectHandlerOptions } from '../core/handlers/click-select';
 import { BoxSelectHandler, type BoxSelectHandlerOptions } from '../core/handlers/box-select';
 import { LassoSelectHandler, type LassoSelectHandlerOptions } from '../core/handlers/lasso-select';
+import { VertexEditHandler, type VertexEditOptions } from '../core/handlers/vertex-edit';
 import type { Handler } from '../core/handler';
 import { HandlerManager } from '../core/handler-manager';
 import { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
@@ -100,6 +101,7 @@ export class Emap extends EventDispatcher {
   private _clickSelect: ClickSelectHandler;
   private _boxSelect: BoxSelectHandler;
   private _lassoSelect: LassoSelectHandler;
+  private _vertexEdit!: VertexEditHandler;
 
   // Rendering
   private _pendingRender = 0;
@@ -250,6 +252,8 @@ export class Emap extends EventDispatcher {
     this._handlers.register(this._clickSelect);
     this._handlers.register(this._boxSelect);
     this._handlers.register(this._lassoSelect);
+    this._vertexEdit = new VertexEditHandler(this);
+    this._handlers.register(this._vertexEdit);
     this._handlers.attach(this._canvasContainer);
 
     if (options.interactive === false) {
@@ -927,6 +931,8 @@ export class Emap extends EventDispatcher {
   get boxSelect(): Handler<BoxSelectHandlerOptions> { return this._boxSelect; }
   /** The lasso-select interaction handler (disabled by default). */
   get lassoSelect(): Handler<LassoSelectHandlerOptions> { return this._lassoSelect; }
+  /** The vertex-edit interaction handler (disabled by default). */
+  get vertexEdit(): Handler<VertexEditOptions> { return this._vertexEdit; }
 
   public getTransform(): AffineTransform {
     return this._viewport.transform;
