@@ -26,6 +26,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   via `handlePointer` and owns no DOM listeners; the old internal pan
   primitive (`src/core/drag-pan-handler.ts`) is removed. No pan behavior
   change; this is the seam P2b's selection handlers slot into.
+- DX Phase 2b (toward 0.3.0): three opt-in named selection handlers —
+  `map.clickSelect`, `map.boxSelect`, `map.lassoSelect` (each a `Handler`
+  with `enable/disable/isEnabled/setOptions/getOptions`). Driven by the
+  Phase-2a pointer arbiter; `box`/`lasso` sit above `dragPan` so
+  `shift`+drag selects (when enabled) instead of panning, with no
+  `addControl` needed. Shared pure `resolveMode` (configurable
+  modifier→`SelectMode` table) and a shared `select-geometry` module
+  replace the duplicated private `_modeFromEvent`. `boxSelect` and
+  `lassoSelect` are mutually exclusive (`enable()` throws if the other is
+  on). Disabled by default → `new Emap()` behavior is unchanged; the
+  legacy `BoxSelectControl`/`LassoSelectControl` keep working unchanged
+  (thin-shell rewrite is Phase 2c).
 
 ### Documentation
 
