@@ -170,3 +170,52 @@ describe('HandlerManager pointer sink', () => {
     m.detach();
   });
 });
+
+describe('HandlerManager contextmenu kind', () => {
+  function recordHandler() {
+    const calls: any[] = [];
+    return { calls, h: { name: 'dragPan', enable() {}, disable() {}, isEnabled: () => true,
+      setOptions() {}, getOptions: () => ({}),
+      handlePointer: (e: any) => { calls.push(e.kind); return 'passthrough' as const; } } };
+  }
+  function el() {
+    const e = document.createElement('div');
+    e.getBoundingClientRect = () => ({ left: 5, top: 7, width: 0, height: 0, right: 0, bottom: 0, x: 5, y: 7, toJSON() {} }) as any;
+    return e;
+  }
+
+  it('normalizes a contextmenu DOM event and dispatches it through the priority loop', () => {
+    const { h, calls } = recordHandler();
+    const m = new HandlerManager();
+    m.register(h);
+    const element = el();
+    m.attach(element);
+    element.dispatchEvent(new MouseEvent('contextmenu', { clientX: 25, clientY: 27, button: 2, cancelable: true }));
+    expect(calls).toEqual(['contextmenu']);
+    m.detach();
+  });
+
+  it('contextmenu is NOT fed to the P3 pointer sink', () => {
+    const { h } = recordHandler();
+    const m = new HandlerManager();
+    m.register(h);
+    const sink: string[] = [];
+    m.setPointerSink((e) => sink.push(e.kind));
+    const element = el();
+    m.attach(element);
+    element.dispatchEvent(new MouseEvent('contextmenu', { clientX: 1, clientY: 1, button: 2 }));
+    expect(sink).toEqual([]);
+    m.detach();
+  });
+
+  it('detach() removes the contextmenu listener', () => {
+    const { h, calls } = recordHandler();
+    const m = new HandlerManager();
+    m.register(h);
+    const element = el();
+    m.attach(element);
+    m.detach();
+    element.dispatchEvent(new MouseEvent('contextmenu', { clientX: 1, clientY: 1, button: 2 }));
+    expect(calls).toEqual([]);
+  });
+});

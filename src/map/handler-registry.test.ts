@@ -164,4 +164,23 @@ describe('Emap handler registry (Phase 1)', () => {
     map.off('feature:hover', cb);
     expect((hm as any)._pointerSink).toBeNull();
   });
+
+  it('exposes a disabled-by-default vertexEdit handler', () => {
+    const map = new Emap({ container: container() });
+    expect(map.vertexEdit.name).toBe('vertexEdit');
+    expect(map.vertexEdit.isEnabled()).toBe(false);
+  });
+
+  it('vertexEdit.enable() enters vertex edit mode (editmodechange) and disables dragPan', () => {
+    const map = new Emap({ container: container() });
+    const modes: string[] = [];
+    map.on('editmodechange', (e: any) => modes.push(e.mode));
+    map.vertexEdit.enable();
+    expect(map.getEditMode()).toBe('vertex');
+    expect(map.dragPan.isEnabled()).toBe(false);
+    map.vertexEdit.disable();
+    expect(map.getEditMode()).toBe('none');
+    expect(map.dragPan.isEnabled()).toBe(true);
+    expect(modes).toEqual(['vertex', 'none']);
+  });
 });

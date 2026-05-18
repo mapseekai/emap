@@ -2,7 +2,7 @@ import { type Handler, isHandler, type NormalizedPointerEvent } from './handler'
 
 // Highest → lowest. Only registered+enabled handlers participate. The
 // selection handlers (Phase 2b) slot in ahead of dragPan.
-const PRIORITY = ['lassoSelect', 'boxSelect', 'clickSelect', 'dragPan'] as const;
+const PRIORITY = ['lassoSelect', 'boxSelect', 'clickSelect', 'vertexEdit', 'dragPan'] as const;
 
 /**
  * Registry of named interaction handlers owned by Emap. Owns the
@@ -19,6 +19,7 @@ export class HandlerManager {
   private _onMove = (e: PointerEvent) => this._dispatch(this._norm(e, 'move'));
   private _onUp = (e: PointerEvent) => this._dispatch(this._norm(e, 'up'));
   private _onClick = (e: MouseEvent) => this._dispatch(this._norm(e, 'click'));
+  private _onContextMenu = (e: MouseEvent) => this._dispatch(this._norm(e, 'contextmenu'));
 
   /** Register a handler; re-registering the same `name` replaces the prior one. */
   register(handler: Handler): void {
@@ -57,6 +58,7 @@ export class HandlerManager {
     window.addEventListener('pointermove', this._onMove);
     window.addEventListener('pointerup', this._onUp);
     element.addEventListener('click', this._onClick);
+    element.addEventListener('contextmenu', this._onContextMenu);
   }
 
   /** Remove all listeners and clear any active exclusive gesture. */
@@ -66,6 +68,7 @@ export class HandlerManager {
     window.removeEventListener('pointermove', this._onMove);
     window.removeEventListener('pointerup', this._onUp);
     this._element.removeEventListener('click', this._onClick);
+    this._element.removeEventListener('contextmenu', this._onContextMenu);
     this._element = null;
     this._exclusive = null;
     this._pointerSink = null;
