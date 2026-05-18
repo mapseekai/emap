@@ -47,6 +47,8 @@ export interface CameraHost {
   requestRender(): void;
 }
 
+const DEFAULT_DURATION = 1000;
+
 function isFinitePair(p: [number, number]): boolean {
   return Number.isFinite(p[0]) && Number.isFinite(p[1]);
 }
@@ -112,6 +114,70 @@ export class Camera {
     if (zoomChanged) this._host.fire('zoom', p);
     this._host.fire('moveend', p);
     if (zoomChanged) this._host.fire('zoomend', p);
+  }
+
+  /**
+   * Animated move. Lerps centre linearly and scale in log space over
+   * `duration` ms with `easing`. `animate:false`/`duration:0` ⇒ jump.
+   * Last-call-wins: supersedes any running animation (its terminal
+   * events fire first, via `_cancel`).
+   */
+  easeTo(o: CameraOptions & AnimationOptions): void {
+    if (o.animate === false || o.duration === 0) {
+      this.jumpTo(o); // jumpTo resolves + validates; no need to pre-resolve here
+      return;
+    }
+    const target = this._resolve(o);
+    const duration = o.duration ?? DEFAULT_DURATION;
+    if (!Number.isFinite(duration) || duration < 0) {
+      throw new Error('camera: duration must be a finite non-negative number');
+    }
+    const ease = o.easing ?? Tween.sineInOut;
+
+    this._cancel();
+    const from = this._host.getCameraState();
+    const zoomChanged = target.scale !== from.scale;
+    const logFrom = Math.log(from.scale);
+    const logTo = Math.log(target.scale);
+    const startP = this._payload(from);
+    this._host.fire('movestart', startP);
+    if (zoomChanged) this._host.fire('zoomstart', startP);
+
+    let lastState: CameraState = from;
+    const emitEnd = () => {
+      const endP = this._payload(lastState);
+      this._host.fire('moveend', endP);
+      if (zoomChanged) this._host.fire('zoomend', endP);
+    };
+    this._activeEnd = emitEnd;
+
+    const tween = new Tween(ease);
+    this._tween = tween;
+    tween.on('change', (e: { value: number }) => {
+      const t = e.value; // Tween already eased; lerps 0→1
+      if (t >= 1) {
+        // Snap to the exact target BEFORE the final move fires so `move`
+        // and the following `moveend` agree (no end-of-animation jitter).
+        lastState = target;
+      } else {
+        const cx = from.center[0] + (target.center[0] - from.center[0]) * t;
+        const cy = from.center[1] + (target.center[1] - from.center[1]) * t;
+        // log-space scale lerp: keeps perceived zoom rate constant.
+        const scale = Math.exp(logFrom + (logTo - logFrom) * t);
+        lastState = { center: [cx, cy], scale };
+      }
+      this._host.applyCameraState(lastState.center, lastState.scale);
+      this._host.requestRender();
+      const p = this._payload(lastState);
+      this._host.fire('move', p);
+      if (zoomChanged) this._host.fire('zoom', p);
+      if (t >= 1) {
+        this._tween = null;
+        this._activeEnd = null;
+        emitEnd();
+      }
+    });
+    tween.start(0, 1, duration);
   }
 
   /** Cancel a running animation, firing its terminal events at the current state. */
