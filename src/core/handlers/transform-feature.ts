@@ -16,11 +16,12 @@ export interface TransformFeatureOptions {
 
 /**
  * Named `transformFeature` handler. Modal (`enable()`→`setEditMode
- * ('transform')`). On pointerdown over a feature it selects it (replace,
- * if not already selected) and opens the matching editSession; pointermove
- * streams the per-frame delta (translate dx/dy, or rotate/scale matrix vs
- * the session origin); pointerup commits (one undo entry); Escape cancels.
- * Absorbs the boilerplate previously hand-wired in the transform examples.
+ * ('transform')`). On pointerdown over an **already-selected** feature it
+ * opens the matching editSession (selection itself is delegated to the
+ * modifier-aware `clickSelect`/`boxSelect`); pointermove streams the
+ * per-frame delta (translate dx/dy, or rotate/scale matrix vs the session
+ * origin); pointerup commits (one undo entry); Escape cancels. Absorbs the
+ * boilerplate previously hand-wired in the transform examples.
  */
 export class TransformFeatureHandler implements Handler<TransformFeatureOptions> {
   readonly name = 'transformFeature';
@@ -103,13 +104,14 @@ export class TransformFeatureHandler implements Handler<TransformFeatureOptions>
 
     if (ev.kind === 'down') {
       if (ev.button !== 0) return 'passthrough';
-      const point: [number, number] = [ev.point.x, ev.point.y];
-      const hits = this._map.queryFeatures(point);
-      if (!hits.length) return 'passthrough';
-      // Spec §15.4: only replace-select the top hit when it is NOT already
-      // selected, so a pre-selected multi-feature set survives the gesture
-      // and the session transforms the whole batch.
-      if (!this._map.isSelected(hits[0])) this._map.select([hits[0]], { mode: 'replace' });
+      const hits = this._map.queryFeatures([ev.point.x, ev.point.y]);
+      // Option A (spec §15.11): transformFeature only drags an ALREADY-
+      // selected feature and owns no selection logic. No hit, or a hit
+      // that is not already selected → passthrough so the modifier-aware
+      // clickSelect/boxSelect own selection (click=replace, shift+click=
+      // add, click-empty=clear). The user selects first, then press-drags
+      // to move the whole selection.
+      if (!hits.length || !this._map.isSelected(hits[0])) return 'passthrough';
       const cur = this._map.unproject(ev.point.x, ev.point.y);
       if (this._mode === 'translate') {
         this._translate = this._map.editSession.beginTranslateSession(this._opts.session);

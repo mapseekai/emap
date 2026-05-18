@@ -70,8 +70,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - DX Phase 7 (toward 0.3.0): feature transform is now the arbiter-driven
   modal `map.transformFeature` handler (`setOptions({ mode:
   'translate'|'rotate'|'scale' })`, `enable/disable/isEnabled/getOptions`).
-  pointerdown over a feature selects + opens the matching `editSession`;
-  drag streams the delta; pointerup commits one undo entry; `Escape`
+  Selection is delegated to `clickSelect` (click = replace, shift+click =
+  add, click on empty space = clear); `transformFeature` owns no
+  selection logic — it press-drags an already-selected feature:
+  pointerdown over a selected feature opens the matching `editSession`,
+  drag streams the delta, pointerup commits one undo entry, `Escape`
   cancels. `EditMode` gained `'transform'` (enters the modal pan-disable +
   `editmodechange` like vertex/draw; cross-deactivates with
   vertexEdit/drawFeature). The headless `map.editSession` API is unchanged

@@ -99,6 +99,7 @@ describe('TransformFeatureHandler', () => {
 
   it('disable() cancels session, sets none, removes keydown, isEnabled false', () => {
     const { map, translateStub } = makeMap();
+    map.isSelected.mockReturnValue(true);
     const h = new TransformFeatureHandler(map as any);
     h.enable();
     h.handlePointer(pointer('down', 10, 10));
@@ -109,21 +110,19 @@ describe('TransformFeatureHandler', () => {
     expect(h.isEnabled()).toBe(false);
   });
 
-  it('down(button0) on a hit selects (replace) + begins translate session + returns exclusive', () => {
+  it('down on an UNSELECTED hit passes through — no session, no select (selection is clickSelect\'s job)', () => {
     const { map, translateStub } = makeMap();
+    // isSelected default false → not already selected.
     const h = new TransformFeatureHandler(map as any);
     h.enable();
     const r = h.handlePointer(pointer('down', 30, 40));
-    expect(map.select).toHaveBeenCalledWith(
-      [{ source: 's', layer: 'l', id: 1 }],
-      { mode: 'replace' },
-    );
-    expect(map.editSession.beginTranslateSession).toHaveBeenCalled();
+    expect(r).toBe('passthrough');
+    expect(map.select).not.toHaveBeenCalled();
+    expect(map.editSession.beginTranslateSession).not.toHaveBeenCalled();
     expect(translateStub.cancel).not.toHaveBeenCalled();
-    expect(r).toBe('exclusive');
   });
 
-  it('down on an already-selected feature does NOT re-select (preserves a multi-feature selection) but still begins the session', () => {
+  it('down on an ALREADY-selected feature (Option A): no select, begins the session, returns exclusive', () => {
     const { map } = makeMap();
     map.isSelected.mockReturnValue(true);
     const h = new TransformFeatureHandler(map as any);
@@ -154,6 +153,7 @@ describe('TransformFeatureHandler', () => {
 
   it('translate move streams expected (dx, dy) into the session', () => {
     const { map, translateStub } = makeMap();
+    map.isSelected.mockReturnValue(true);
     const h = new TransformFeatureHandler(map as any);
     h.enable();
     // unproject(x,y) = [x/10, y/10]. down at (100,100) → last = [10,10].
@@ -166,6 +166,7 @@ describe('TransformFeatureHandler', () => {
 
   it('up commits the translate session; subsequent move passes through', () => {
     const { map, translateStub } = makeMap();
+    map.isSelected.mockReturnValue(true);
     const h = new TransformFeatureHandler(map as any);
     h.enable();
     h.handlePointer(pointer('down', 100, 100));
@@ -177,6 +178,7 @@ describe('TransformFeatureHandler', () => {
 
   it('rotate mode: down begins affine session, move applies a delta', () => {
     const { map, affineStub } = makeMap();
+    map.isSelected.mockReturnValue(true);
     const h = new TransformFeatureHandler(map as any);
     h.setOptions({ mode: 'rotate' });
     h.enable();
@@ -188,6 +190,7 @@ describe('TransformFeatureHandler', () => {
 
   it('scale mode: move applies a scale delta', () => {
     const { map, affineStub } = makeMap();
+    map.isSelected.mockReturnValue(true);
     const h = new TransformFeatureHandler(map as any);
     h.setOptions({ mode: 'scale' });
     h.enable();
@@ -200,6 +203,7 @@ describe('TransformFeatureHandler', () => {
 
   it('Escape mid-session cancels and clears the session', () => {
     const { map, translateStub } = makeMap();
+    map.isSelected.mockReturnValue(true);
     const h = new TransformFeatureHandler(map as any);
     h.enable();
     h.handlePointer(pointer('down', 100, 100));
@@ -211,6 +215,7 @@ describe('TransformFeatureHandler', () => {
 
   it('cross-mode editmodechange quiet-disables (cancel + isEnabled false, no extra setEditMode)', () => {
     const { map, translateStub, fireEditMode } = makeMap();
+    map.isSelected.mockReturnValue(true);
     const h = new TransformFeatureHandler(map as any);
     h.enable();
     h.handlePointer(pointer('down', 100, 100));

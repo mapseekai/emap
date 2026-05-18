@@ -45,7 +45,7 @@
       文件:
       <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
     </label>
-    <span class="hint">在要素上按住鼠标左键拖动 → 松开落位。空白处按下走平移地图。共享边界自动复制,相邻未选要素保持原位。Esc 取消拖动。方向键步进(不复制共享边)。Ctrl+Z 撤销。</span>
+    <span class="hint">单击要素选中,Shift+单击多选,空白处单击清除。然后在已选要素上按住鼠标左键拖动 → 松开落位整个选区。共享边界自动复制,相邻未选要素保持原位。Esc 取消拖动。方向键步进(Shift+方向键 ×10 加速,不复制共享边)。Ctrl+Z 撤销。</span>
     <span id="status">加载数据</span>
   </div>
   <div id="map" tabindex="0"></div>
@@ -64,7 +64,6 @@
     const SOURCE_ID = 'translate-source';
     const fileInput = document.getElementById('file-input');
     const status = document.getElementById('status');
-    const mapContainer = map.getCanvasContainer();
 
     map.on('selectionchange', (e) => {
       if (e.selected.length === 0) {
@@ -91,9 +90,10 @@
           map.setExtent(source.getExtent());
           // Enable the transform handler only AFTER the map/data is ready
           // (mirrors how the vertexEdit/drawFeature examples enable theirs).
+          map.clickSelect.enable();
           map.transformFeature.setOptions({ mode: 'translate' });
           map.transformFeature.enable();
-          status.textContent = `已加载 ${file.name}。在要素上按住拖动平移,方向键步进。`;
+          status.textContent = `已加载 ${file.name}。单击选中,在已选要素上按住拖动平移,方向键步进。`;
           // 聚焦 map 容器,让方向键事件被它接收
           document.getElementById('map').focus();
         } catch (err) {
@@ -106,29 +106,24 @@
 
     // ── Migration note ────────────────────────────────────────────────
     // The old hand-wired recipe (pixelToMap + window capture-phase
-    // mousedown/move/up + beginTranslateSession + manual Esc/right-click
-    // cancel) is now the single modal handler `map.transformFeature`.
-    // Enabling it (above, after data is ready) is the whole interaction:
+    // mousedown/move/up + beginTranslateSession + manual selection /
+    // Esc/right-click cancel) is now TWO modal-coexisting handlers
+    // (spec §15.11 "Option A"):
     //
-    //   map.transformFeature.setOptions({ mode: 'translate' });
+    //   map.clickSelect.enable();                                // selection
+    //   map.transformFeature.setOptions({ mode: 'translate' });  // drag
     //   map.transformFeature.enable();
     //
-    // pointerdown over a feature selects it + opens the translate
-    // session; drag streams the delta; pointerup commits one undo entry;
-    // Escape cancels. No manual mousedown/move/up — the handler (and the
-    // pointer arbiter) own pan-suppression and the session lifecycle.
+    // clickSelect owns selection: click = replace, shift+click = add,
+    // click on empty space = clear. transformFeature owns NO selection
+    // logic — it press-drags an ALREADY-selected feature: pointerdown
+    // over a selected feature opens the translate session, drag streams
+    // the delta, pointerup commits one undo entry, Escape cancels. So the
+    // flow is: click to select, then press-drag a selected feature to
+    // move the whole selection. No manual mousedown/move/up or
+    // empty-space-clear listener — the handlers + pointer arbiter own
+    // pan-suppression and the session lifecycle.
     // ──────────────────────────────────────────────────────────────────
-
-    // Empty-space click still clears the selection (the handler passes
-    // through pointerdown on empty space, so pan + this click run).
-    mapContainer.addEventListener('click', (e) => {
-      const rect = mapContainer.getBoundingClientRect();
-      const point = [e.clientX - rect.left, e.clientY - rect.top];
-      const features = map.queryFeatures(point);
-      if (!features.length && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-        map.clearSelection();
-      }
-    });
 
     // Arrow-key step nudge still works (headless editSession API,
     // unchanged by the handler).

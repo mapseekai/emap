@@ -19,7 +19,7 @@
     <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
     <span id="status">加载数据</span>
     <span class="hint">
-      在要素上按住鼠标左键拖动 → 松开落位。空白处按下走平移地图。
+      单击要素选中,Shift+单击多选,空白处单击清除。然后在已选要素上按住鼠标左键拖动 → 松开落位整个选区。
       <kbd>R</kbd> 进入旋转 · <kbd>S</kbd> 进入缩放 · <kbd>T</kbd>(默认) 平移 · <kbd>Esc</kbd> 取消。
       旋转: 鼠标绕枢轴旋转的角度即为变换。 缩放: 鼠标到枢轴的距离比即为缩放因子。
       平移仍可用 <kbd>←</kbd>/<kbd>→</kbd>/<kbd>↑</kbd>/<kbd>↓</kbd>(空闲时), <kbd>[</kbd>/<kbd>]</kbd>±5° 步进, <kbd>+</kbd>/<kbd>-</kbd> ×1.1/×0.9。
@@ -40,7 +40,6 @@
 
     const SOURCE_ID = 'rotscale-source';
     const status = document.getElementById('status');
-    const mapContainer = map.getCanvasContainer();
 
     map.on('selectionchange', (e) => {
       if (e.selected.length === 0) map.clearHighlightedFeatures();
@@ -65,9 +64,10 @@
           map.setExtent(source.getExtent());
           // Enable the transform handler only AFTER the map/data is ready
           // (mirrors how the vertexEdit/drawFeature examples enable theirs).
+          map.clickSelect.enable();
           map.transformFeature.enable();
           setMode('t');
-          status.textContent = `已加载 ${file.name}。在要素上按住拖动变换,T/R/S 切换模式。`;
+          status.textContent = `已加载 ${file.name}。单击选中,在已选要素上按住拖动变换,T/R/S 切换模式。`;
           document.getElementById('map').focus();
         } catch (err) {
           console.error(err);
@@ -80,19 +80,24 @@
     // ── Migration note ────────────────────────────────────────────────
     // The old hand-wired recipe (pixelToMap + window capture-phase
     // mousedown/move/up + beginTranslateSession/beginAffineSession +
-    // rotateMatrix/scaleMatrix delta math + manual Esc/right-click
-    // cancel) is now the single modal handler `map.transformFeature`.
-    // The whole interaction collapses to enable() + setOptions({ mode }):
+    // rotateMatrix/scaleMatrix delta math + manual selection /
+    // Esc/right-click cancel) is now TWO modal-coexisting handlers
+    // (spec §15.11 "Option A"):
     //
-    //   map.transformFeature.enable();
+    //   map.clickSelect.enable();                              // selection
     //   map.transformFeature.setOptions({ mode: 'rotate' });   // or 'translate' | 'scale'
+    //   map.transformFeature.enable();                         // drag
     //
-    // pointerdown over a feature selects it + opens the matching
-    // editSession; drag streams the delta (translate dx/dy, or
-    // rotate/scale matrix vs the session origin); pointerup commits one
-    // undo entry; Escape cancels. The T/R/S switcher below is now just a
-    // call to setOptions — no session bookkeeping. The headless
-    // map.editSession step-nudge API is unchanged.
+    // clickSelect owns selection: click = replace, shift+click = add,
+    // click on empty space = clear. transformFeature owns NO selection
+    // logic — it press-drags an ALREADY-selected feature: pointerdown
+    // over a selected feature opens the matching editSession; drag
+    // streams the delta (translate dx/dy, or rotate/scale matrix vs the
+    // session origin); pointerup commits one undo entry; Escape cancels.
+    // So the flow is: click to select, then press-drag a selected
+    // feature to transform the whole selection. The T/R/S switcher below
+    // is just a call to setOptions — no session bookkeeping. The
+    // headless map.editSession step-nudge API is unchanged.
     // ──────────────────────────────────────────────────────────────────
 
     let mode = 't';   // 't' = translate, 'r' = rotate, 's' = scale (for UI/status)
@@ -109,17 +114,6 @@
       });
       status.textContent = `模式: ${modeLabel()}(在要素上按住拖动,Esc 取消)。`;
     }
-
-    // Empty-space click still clears the selection (the handler passes
-    // through pointerdown on empty space, so pan + this click run).
-    mapContainer.addEventListener('click', (e) => {
-      const rect = mapContainer.getBoundingClientRect();
-      const point = [e.clientX - rect.left, e.clientY - rect.top];
-      const features = map.queryFeatures(point);
-      if (!features.length && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-        map.clearSelection();
-      }
-    });
 
     // T/R/S mode switcher (same keys/labels as before — only the handler
     // wiring changed: each key now just calls setMode()).
