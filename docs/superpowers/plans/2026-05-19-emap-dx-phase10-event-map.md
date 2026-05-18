@@ -69,8 +69,11 @@ export interface EmapEventMap {
   move: Partial<CameraEvent>;
 
   // Lifecycle / data
-  crschange: Record<string, never>;
-  resize: Record<string, never>;
+  // No payload. `Record<never, never>` (NOT `Record<string, never>`): a
+  // `[string]: never` index signature would reject the `{ type }` object
+  // `EventDispatcher.fire` produces, poisoning `{ type: K } & EmapEventMap[K]`.
+  crschange: Record<never, never>;
+  resize: Record<never, never>;
   data: { sourceId?: string; reason?: 'edit' | 'load' | 'replace' | 'reproject' };
   editmodechange: { mode: EditMode };
   error: { error: Error };

@@ -73,8 +73,12 @@ export interface EmapEventMap {
   move: Partial<CameraEvent>;
 
   // Lifecycle / data
-  crschange: Record<string, never>; // no payload
-  resize: Record<string, never>; // no payload
+  // No payload. `Record<never, never>` (NOT `Record<string, never>`): a
+  // `[string]: never` index signature would reject the `{ type }` object
+  // `EventDispatcher.fire` produces, poisoning the keyed-overload
+  // intersection `{ type: K } & EmapEventMap[K]`.
+  crschange: Record<never, never>;
+  resize: Record<never, never>;
   data: { sourceId?: string; reason?: 'edit' | 'load' | 'replace' | 'reproject' };
   editmodechange: { mode: EditMode }; // 'none'|'vertex'|'draw'|'transform'
   error: { error: Error };
@@ -100,6 +104,13 @@ export interface EmapEventMap {
 | `resize` | `map.ts:1220` bare | no payload |
 | `selectionchange` | `map.ts:1342` | `{selected,added,removed: FeatureRef[]}` |
 | `validationfailed` | `map.ts:1603` | `{results: ValidatorResult[], label: string}` |
+
+**Why `Partial<>` and not `T | undefined`** for `move`/`historychange`:
+`EventDispatcher.fire` emits `{ type, ...data }` and the keyed overload
+delivers `{ type: K } & EmapEventMap[K]`. A `CameraEvent | undefined`
+member would intersect to *force* every field present even on a bare pan
+`fire('move')`, falsely promising `center`/`zoom`. `Partial<>` makes the
+sometimes-absent fields optional — matching what actually arrives. (Empirically verified with `tsc`.)
 
 ## §3 Overload mechanics, escape hatch & back-compat
 
