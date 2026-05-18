@@ -146,6 +146,25 @@ describe('Emap handler registry (Phase 1)', () => {
     // No runtime assertion needed — the test passing without tsc errors proves the fix.
   });
 
+  it('typed mousemove inline-arrow inference compile smoke (overload precedence)', () => {
+    const map = new Emap({ container: container() });
+    // Inline arrow with NO annotation must infer PointerMoveEvent — proves
+    // the 'mousemove' literal overload precedes the generic on<T>. If the
+    // generic shadowed it, `e` would be Record<string,unknown> and the
+    // tuple assignment below would not type-check.
+    map.on('mousemove', (e) => {
+      const c: [number, number] = e.mapCoord;
+      const p: { x: number; y: number } = e.point;
+      void c; void p;
+    });
+    const cb = (e: import('../core/pointer-event-dispatcher').PointerMoveEvent) => { void e.mapCoord; };
+    map.on('mousemove', cb);
+    map.off('mousemove', cb);
+    map.once('mousemove', cb);
+    map.off('mousemove', cb);
+    // Passing without tsc errors proves the typed overload wins for 'mousemove'.
+  });
+
   it('non-feature map.on still works (super delegation unaffected)', () => {
     const map = new Emap({ container: container() });
     const cb = vi.fn();
@@ -259,5 +278,62 @@ describe('Emap handler registry (Phase 1)', () => {
     map.drawFeature.enable();                // setEditMode('draw') → editmodechange
     expect(map.transformFeature.isEnabled()).toBe(false);
     expect(map.getEditMode()).toBe('draw');
+  });
+
+  it('map.on(mousemove) installs the combined sink and delivers PointerMoveEvent; off clears it', () => {
+    const map = new Emap({ container: container() });
+    const mgr = (map as any)._handlers;
+    expect(mgr._pointerSink).toBeNull();
+    const cb = vi.fn();
+    map.on('mousemove', cb);
+    expect(typeof mgr._pointerSink).toBe('function');
+    // Drive a normalized move through the sink:
+    mgr._pointerSink({
+      kind: 'move',
+      point: { x: 20, y: 30 },
+      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+      button: 0,
+      originalEvent: new Event('pointermove'),
+    });
+    expect(cb).toHaveBeenCalledTimes(1);
+    const e = cb.mock.calls[0][0];
+    expect(e.point).toEqual({ x: 20, y: 30 });
+    expect(Array.isArray(e.mapCoord)).toBe(true);
+    expect(e.mapCoord).toHaveLength(2);
+    map.off('mousemove', cb);
+    expect(mgr._pointerSink).toBeNull();
+  });
+
+  it('sink-install matrix: feature-only / pointer-only / both / neither', () => {
+    const map = new Emap({ container: container() });
+    const mgr = (map as any)._handlers;
+    const fcb = vi.fn();
+    const pcb = vi.fn();
+    expect(mgr._pointerSink).toBeNull();                 // neither
+    map.on('feature:hover', {}, fcb);
+    expect(typeof mgr._pointerSink).toBe('function');    // feature-only
+    map.on('mousemove', pcb);
+    expect(typeof mgr._pointerSink).toBe('function');    // both
+    map.off('feature:hover', fcb);
+    expect(typeof mgr._pointerSink).toBe('function');    // pointer-only
+    map.off('mousemove', pcb);
+    expect(mgr._pointerSink).toBeNull();                 // neither
+  });
+
+  it('combined sink fans out: one move reaches BOTH feature hover and mousemove', () => {
+    const map = new Emap({ container: container() });
+    const mgr = (map as any)._handlers;
+    const fcb = vi.fn();
+    const pcb = vi.fn();
+    map.on('feature:hover', {}, fcb);   // no data loaded → hover may not fire, but must not throw
+    map.on('mousemove', pcb);
+    mgr._pointerSink({
+      kind: 'move',
+      point: { x: 5, y: 5 },
+      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+      button: 0,
+      originalEvent: new Event('pointermove'),
+    });
+    expect(pcb).toHaveBeenCalledTimes(1);   // pointer-move always delivered
   });
 });

@@ -27,6 +27,7 @@ import type { Handler } from '../core/handler';
 import { HandlerManager } from '../core/handler-manager';
 import { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import { FeatureEventDispatcher, type FeatureEvent, type FeatureEventFilter } from '../core/feature-event-dispatcher';
+import { PointerEventDispatcher, type PointerMoveEvent } from '../core/pointer-event-dispatcher';
 import { type EventListener } from '../core/events';
 import { FeatureQuery } from './feature-query';
 import { FeatureAccessor } from './feature-accessor';
@@ -98,6 +99,7 @@ export class Emap extends EventDispatcher {
   // Interactions (delegated)
   private _handlers: HandlerManager;
   private _featureEvents!: FeatureEventDispatcher;
+  private _pointerEvents!: PointerEventDispatcher;
   private _scrollZoom: ScrollZoomHandler;
   private _dragPan: DragPanHandler;
   private _clickSelect: ClickSelectHandler;
@@ -282,7 +284,11 @@ export class Emap extends EventDispatcher {
       unproject: (x, y) => _self.unproject(x, y),
       get features() { return _self.features; },
     });
-    this._featureEvents.setOnChange(() => this._syncFeatureSink());
+    this._pointerEvents = new PointerEventDispatcher({
+      unproject: (x, y) => _self.unproject(x, y),
+    });
+    this._featureEvents.setOnChange(() => this._syncPointerSink());
+    this._pointerEvents.setOnChange(() => this._syncPointerSink());
 
     this._attachEventListeners();
 
@@ -351,61 +357,94 @@ export class Emap extends EventDispatcher {
   }
 
 
-  // Overload 1: generic 2-arg form — preserves the base class API for non-feature events
+  // Overload 1: typed pointer-move form. The `'mousemove'` literal MUST
+  // precede the generic `string` overload — `EventListener<T>` defaults T
+  // to `Record<string, unknown>` (an index signature), so the generic form
+  // otherwise swallows `map.on('mousemove', e => …)` and `e` loses its
+  // `PointerMoveEvent` narrowing.
+  on(type: 'mousemove', listener: (e: PointerMoveEvent) => void): this;
+  // Overload 2: generic 2-arg form — preserves the base class API for non-feature events
   // (e.g. `map.on<HistoryStateSnapshot>('historychange', cb)`)
   on<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
-  // Overload 2: typed 2-arg feature-event form (no filter)
+  // Overload 3: typed 2-arg feature-event form (no filter)
   on(type: string, listener: (e: FeatureEvent) => void): this;
-  // Overload 3: 3-arg feature-event form with filter
+  // Overload 4: 3-arg feature-event form with filter
   on(type: string, filter: FeatureEventFilter, listener: (e: FeatureEvent) => void): this;
   // Implementation
   on(type: string, filterOrListener: unknown, listener?: unknown): this {
+    if (type === 'mousemove') {
+      this._pointerEvents.on(type, filterOrListener as (e: PointerMoveEvent) => void);
+      // onChange callback drives _syncPointerSink(); no explicit call needed here.
+      return this;
+    }
     if (type.startsWith('feature:')) {
       const cb = (listener ?? filterOrListener) as (e: FeatureEvent) => void;
       const filter = (listener ? filterOrListener : undefined) as FeatureEventFilter | undefined;
       this._featureEvents.on(type, filter, cb);
-      // onChange callback drives _syncFeatureSink(); no explicit call needed here.
+      // onChange callback drives _syncPointerSink(); no explicit call needed here.
       return this;
     }
     return super.on(type, filterOrListener as EventListener);
   }
 
+  // Overload: typed pointer-move form (literal — must precede the generic string overload)
+  off(type: 'mousemove', listener: (e: PointerMoveEvent) => void): this;
   // Overload: generic 2-arg form for non-feature events
   off<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
   // Overload: feature-event form
   off(type: string, listener: (e: FeatureEvent) => void): this;
   // Implementation
   off(type: string, listener: unknown): this {
+    if (type === 'mousemove') {
+      this._pointerEvents.off(type, listener as (e: PointerMoveEvent) => void);
+      // onChange callback drives _syncPointerSink(); no explicit call needed here.
+      return this;
+    }
     if (type.startsWith('feature:')) {
       this._featureEvents.off(type, listener as (e: FeatureEvent) => void);
-      // onChange callback drives _syncFeatureSink(); no explicit call needed here.
+      // onChange callback drives _syncPointerSink(); no explicit call needed here.
       return this;
     }
     return super.off(type, listener as EventListener);
   }
 
-  // Overload 1: generic 2-arg form for non-feature events
+  // Overload 1: typed pointer-move form (literal — must precede the generic string overload)
+  once(type: 'mousemove', listener: (e: PointerMoveEvent) => void): this;
+  // Overload 2: generic 2-arg form for non-feature events
   once<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
-  // Overload 2: typed 2-arg feature-event form (no filter)
+  // Overload 3: typed 2-arg feature-event form (no filter)
   once(type: string, listener: (e: FeatureEvent) => void): this;
-  // Overload 3: 3-arg feature-event form with filter
+  // Overload 4: 3-arg feature-event form with filter
   once(type: string, filter: FeatureEventFilter, listener: (e: FeatureEvent) => void): this;
   // Implementation
   once(type: string, filterOrListener: unknown, listener?: unknown): this {
+    if (type === 'mousemove') {
+      this._pointerEvents.once(type, filterOrListener as (e: PointerMoveEvent) => void);
+      // onChange callback drives _syncPointerSink(); no explicit call needed here.
+      return this;
+    }
     if (type.startsWith('feature:')) {
       const cb = (listener ?? filterOrListener) as (e: FeatureEvent) => void;
       const filter = (listener ? filterOrListener : undefined) as FeatureEventFilter | undefined;
       this._featureEvents.once(type, filter, cb);
-      // onChange callback drives _syncFeatureSink(); no explicit call needed here.
+      // onChange callback drives _syncPointerSink(); no explicit call needed here.
       return this;
     }
     return super.once(type, filterOrListener as EventListener);
   }
 
-  /** Install the HandlerManager sink only while ≥1 feature listener exists. */
-  private _syncFeatureSink(): void {
-    if (this._featureEvents.hasListeners()) {
-      this._handlers.setPointerSink((ev) => this._featureEvents.dispatch(ev));
+  /**
+   * Install ONE HandlerManager sink while ≥1 feature OR pointer listener
+   * exists; it fans out to both dispatchers (feature events first, then
+   * pointer-move — independent, order fixed for determinism). Cleared when
+   * neither has listeners, so default `new Emap()` pays nothing.
+   */
+  private _syncPointerSink(): void {
+    if (this._featureEvents.hasListeners() || this._pointerEvents.hasListeners()) {
+      this._handlers.setPointerSink((ev) => {
+        this._featureEvents.dispatch(ev);
+        this._pointerEvents.dispatch(ev);
+      });
     } else {
       this._handlers.setPointerSink(null);
     }

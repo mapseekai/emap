@@ -202,6 +202,7 @@ export type { LassoSelectHandlerOptions, LassoStyle } from './core/handlers/lass
 export { resolveMode } from './core/handlers/select-mode';
 export type { ModifierCombo } from './core/handlers/select-mode';
 export type { FeatureEvent, FeatureEventFilter } from './core/feature-event-dispatcher';
+export type { PointerMoveEvent } from './core/pointer-event-dispatcher';
 export { VertexEditHandler } from './core/handlers/vertex-edit';
 export type { VertexEditOptions } from './core/handlers/vertex-edit';
 export { DrawFeatureHandler } from './core/handlers/draw-feature';
