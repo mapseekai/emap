@@ -34,6 +34,15 @@ export interface Handler<Opts = unknown> {
   getOptions(): Readonly<Opts>;
   /** Process one normalized event; report whether it was consumed. */
   handlePointer(ev: NormalizedPointerEvent): HandlerResult;
+  /**
+   * CSS cursor this handler wants for its CURRENT state, or `null` =
+   * no opinion (HandlerManager falls through to lower-priority handlers,
+   * then the page/CSS default). Optional — absent ⇒ no opinion.
+   * An empty string `''` is treated the same as `null` (no opinion);
+   * to clear to the page/CSS default, simply have no enabled handler
+   * with an opinion (HandlerManager writes `''` itself in that case).
+   */
+  getCursor?(): string | null;
 }
 
 /** Runtime guard — used by HandlerManager.register and by consumers. */

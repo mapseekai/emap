@@ -73,6 +73,7 @@ export class HandlerManager {
     this._element.removeEventListener('click', this._onClick);
     this._element.removeEventListener('contextmenu', this._onContextMenu);
     this._element.removeEventListener('dblclick', this._onDblClick);
+    this._element.style.cursor = '';
     this._element = null;
     this._exclusive = null;
     this._pointerSink = null;
@@ -104,6 +105,11 @@ export class HandlerManager {
   }
 
   private _dispatch(ev: NormalizedPointerEvent): void {
+    this._dispatchInner(ev);
+    this._applyCursor();
+  }
+
+  private _dispatchInner(ev: NormalizedPointerEvent): void {
     if (this._pointerSink) {
       if (ev.kind === 'click' || (ev.kind === 'move' && !this._exclusive)) {
         this._pointerSink(ev);
@@ -119,5 +125,39 @@ export class HandlerManager {
       if (r === 'exclusive') { this._exclusive = h; return; }
       if (r === 'consumed') return;
     }
+  }
+
+  /**
+   * Resolve the effective cursor and write it to the attached element.
+   * Order: active exclusive handler's cursor → first enabled handler in
+   * PRIORITY with a non-empty cursor → '' (clear → CSS/page default).
+   * Idempotent: only writes when the value changes.
+   */
+  private _applyCursor(): void {
+    if (!this._element) return;
+    let next: string | null = null;
+    const ex = this._exclusive;
+    if (ex && ex.isEnabled()) {
+      next = ex.getCursor?.() ?? null;
+    }
+    if (!next) {
+      for (const h of this._orderedEnabled()) {
+        const c = h.getCursor?.();
+        if (c) { next = c; break; }
+      }
+    }
+    const value = next ?? '';
+    if (this._element.style.cursor !== value) {
+      this._element.style.cursor = value;
+    }
+  }
+
+  /**
+   * Recompute the effective cursor. Call after a handler changes
+   * cursor-relevant state OUTSIDE a pointer event (e.g. enable()/disable()
+   * flipping a mode). No-op when not attached.
+   */
+  refreshCursor(): void {
+    this._applyCursor();
   }
 }

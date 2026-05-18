@@ -268,3 +268,89 @@ describe('HandlerManager dblclick kind', () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe('HandlerManager cursor arbitration (DX P11)', () => {
+  function stub(name: string, cursor: string | null, enabled = true) {
+    return {
+      name,
+      _enabled: enabled,
+      enable() { this._enabled = true; },
+      disable() { this._enabled = false; },
+      isEnabled() { return this._enabled; },
+      setOptions() {},
+      getOptions() { return {}; },
+      handlePointer() { return 'passthrough' as const; },
+      getCursor() { return this._enabled ? cursor : null; },
+    };
+  }
+  function el(): HTMLElement {
+    return document.createElement('div');
+  }
+
+  it('writes the highest-priority enabled non-null cursor to the element', () => {
+    const m = new HandlerManager();
+    const e = el();
+    m.register(stub('dragPan', 'grab') as any);
+    m.register(stub('drawFeature', 'crosshair') as any);
+    m.attach(e);
+    m.refreshCursor();
+    expect(e.style.cursor).toBe('crosshair');
+  });
+
+  it('falls through null cursors to a lower-priority handler', () => {
+    const m = new HandlerManager();
+    const e = el();
+    m.register(stub('drawFeature', null) as any);
+    m.register(stub('dragPan', 'grab') as any);
+    m.attach(e);
+    m.refreshCursor();
+    expect(e.style.cursor).toBe('grab');
+  });
+
+  it('clears the cursor when no enabled handler has an opinion', () => {
+    const m = new HandlerManager();
+    const e = el();
+    e.style.cursor = 'grab';
+    m.register(stub('dragPan', null) as any);
+    m.attach(e);
+    m.refreshCursor();
+    expect(e.style.cursor).toBe('');
+  });
+
+  it('refreshCursor recomputes after an out-of-band disable', () => {
+    const m = new HandlerManager();
+    const e = el();
+    const dp = stub('dragPan', 'grab');
+    m.register(dp as any);
+    m.attach(e);
+    m.refreshCursor();
+    expect(e.style.cursor).toBe('grab');
+    dp.disable();
+    m.refreshCursor();
+    expect(e.style.cursor).toBe('');
+  });
+
+  it('detach() resets the element cursor and is safe with no element', () => {
+    const m = new HandlerManager();
+    const e = el();
+    e.style.cursor = 'crosshair';
+    m.register(stub('dragPan', 'grab') as any);
+    m.attach(e);
+    m.detach();
+    expect(e.style.cursor).toBe('');
+    expect(() => m.detach()).not.toThrow();
+  });
+
+  it('exclusive handler cursor overrides higher-priority handlers', () => {
+    const m = new HandlerManager();
+    const e = el();
+    // drawFeature has higher PRIORITY than dragPan
+    m.register(stub('drawFeature', 'crosshair') as any);
+    m.register(stub('dragPan', 'grab') as any);
+    m.attach(e);
+    // Simulate dragPan having won the gesture (exclusive lock)
+    (m as unknown as { _exclusive: unknown })._exclusive = m.get('dragPan');
+    m.refreshCursor();
+    expect(e.style.cursor).toBe('grab'); // exclusive wins despite lower PRIORITY
+  });
+});
