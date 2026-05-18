@@ -2,6 +2,7 @@ import { EventDispatcher } from '../core/events';
 import { Bounds } from '../geo/bounds';
 import { AffineTransform } from '../geo/transform';
 import { Viewport } from '../geo/viewport';
+import { Camera, type CameraOptions, type AnimationOptions, type FlyToOptions, type FitBoundsOptions } from '../geo/camera';
 import { Projection } from '../geo/projection';
 import { Painter } from '../renderer/painter';
 import { CanvasPainter } from '../renderer/canvas-painter';
@@ -73,6 +74,7 @@ export class Emap extends EventDispatcher {
   private _editOverlay: EditOverlayRenderer;
   private _viewport: Viewport = new Viewport();
   private _projection: Projection = new Projection();
+  private _camera!: Camera;
   // Accessed by composed managers via `EmapHostInternal`. Treat as
   // read-only outside this class.
   _sources: globalThis.Map<string, TopologySource> =
@@ -246,10 +248,22 @@ export class Emap extends EventDispatcher {
     this._viewport.onViewChange = () => this.fire('move');
     this._viewport.initZoomTween();
 
+    // Camera (DX P9) — constructed before the gesture handlers so the
+    // stop-on-gesture callback can reference `this._camera` without a
+    // late-bind guard. Projection/viewport are ready at this point.
+    this._camera = new Camera({
+      getCameraState: () => this._viewport.getCameraState(),
+      applyCameraState: (c, s) => this._viewport.applyCameraState(c, s),
+      scaleFromZoom: (z) => this._projection.getScale(z),
+      getViewportSize: () => ({ width: this._viewport.width, height: this._viewport.height }),
+      fire: (type, e) => this.fire(type, e),
+      requestRender: () => this._scheduleRender(),
+    });
+
     // Interactions — both use EventDispatcher pattern
     this._handlers = new HandlerManager();
-    this._scrollZoom = new ScrollZoomHandler(this._canvasContainer);
-    this._dragPan = new DragPanHandler();
+    this._scrollZoom = new ScrollZoomHandler(this._canvasContainer, () => this.stop());
+    this._dragPan = new DragPanHandler(undefined, () => this.stop());
     this._handlers.register(this._dragPan);
     this._handlers.register(this._scrollZoom);
     this._clickSelect = new ClickSelectHandler(this);
@@ -484,6 +498,9 @@ export class Emap extends EventDispatcher {
       this.fire('move');
     });
     this._dragPan.on('panstart', () => {
+      // Cancels the viewport's kinetic wheel/zoomIn-zoomOut tween. The Camera's
+      // own easeTo/flyTo animation is stopped separately via the dragPan
+      // onGestureStart → map.stop() wiring; these are two independent systems.
       this._viewport.cancelZoomAnimation();
     });
 
@@ -1025,6 +1042,28 @@ export class Emap extends EventDispatcher {
   public zoomOut(): void {
     this._viewport.zoomOut();
   }
+
+  // ── Camera (DX P9) ───────────────────────────────────────────────
+  /** Instant camera move. Fires movestart/move/moveend (+zoom*). */
+  public jumpTo(o: CameraOptions): this { this._camera.jumpTo(o); return this; }
+  /** Set centre (projected/data coords) instantly. */
+  public setCenter(center: [number, number]): this { this._camera.setCenter(center); return this; }
+  /** Set zoom (WebMercator) instantly. */
+  public setZoom(zoom: number): this { this._camera.setZoom(zoom); return this; }
+  /** Animated move (centre+zoom/scale). */
+  public easeTo(o: CameraOptions & AnimationOptions): this { this._camera.easeTo(o); return this; }
+  /** Animated pan to a centre. */
+  public panTo(center: [number, number], o: AnimationOptions = {}): this { this._camera.panTo(center, o); return this; }
+  /** Animated pan by a pixel offset. */
+  public panBy(offset: [number, number], o: AnimationOptions = {}): this { this._camera.panBy(offset, o); return this; }
+  /** Animated zoom to a level. */
+  public zoomTo(zoom: number, o: AnimationOptions = {}): this { this._camera.zoomTo(zoom, o); return this; }
+  /** van-Wijk parabolic flight. */
+  public flyTo(o: FlyToOptions): this { this._camera.flyTo(o); return this; }
+  /** Fit a Bounds into the viewport with optional padding. */
+  public fitBounds(b: import('../geo/bounds').Bounds, o: FitBoundsOptions = {}): this { this._camera.fitBounds(b, o); return this; }
+  /** Cancel any running camera animation (no-op when idle). */
+  public stop(): this { this._camera.stop(); return this; }
 
   _scheduleRender(): void {
     if (this._removed) return;

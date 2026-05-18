@@ -186,6 +186,7 @@ export { EditOverlayRenderer } from './renderer/edit-overlay-renderer';
 // ===========================================================================
 export { EventDispatcher } from './core/events';
 export type { EventListener } from './core/events';
+export type { CameraOptions, AnimationOptions, FlyToOptions, FitBoundsOptions } from './geo/camera';
 export { HandlerManager } from './core/handler-manager';
 export { isHandler } from './core/handler';
 export type { Handler, HandlerResult, NormalizedPointerEvent, PointerModifiers } from './core/handler';

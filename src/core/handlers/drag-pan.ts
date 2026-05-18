@@ -20,10 +20,12 @@ export class DragPanHandler extends EventDispatcher implements Handler<DragPanOp
   private _enabled = true;
   private _dragging = false;
   private _last: { x: number; y: number } = { x: 0, y: 0 };
+  private _onGestureStart?: () => void;
 
-  constructor(opts?: Partial<DragPanOptions>) {
+  constructor(opts?: Partial<DragPanOptions>, onGestureStart?: () => void) {
     super();
     this._opts = { ...DEFAULTS, ...opts };
+    this._onGestureStart = onGestureStart;
   }
 
   enable(): void { this._enabled = true; }
@@ -40,6 +42,10 @@ export class DragPanHandler extends EventDispatcher implements Handler<DragPanOp
     if (ev.kind === 'down') {
       if (ev.button !== 0) return 'passthrough';
       if (this._opts.skipShiftDrag && ev.modifiers.shift) return 'passthrough';
+      // Only interrupt a running camera animation once this is committed to a
+      // pan — shift+drag passes through to box/lasso-select and must not abort
+      // a fly the camera was never asked to give up.
+      this._onGestureStart?.();
       this._dragging = true;
       this._last = { x: ev.point.x, y: ev.point.y };
       this.fire('panstart');

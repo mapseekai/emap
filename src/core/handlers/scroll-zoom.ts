@@ -17,11 +17,14 @@ export class ScrollZoomHandler extends EventDispatcher implements Handler<Scroll
   readonly name = 'scrollZoom';
   private _wheel: MouseWheel;
   private _enabled = true;
+  private _onGestureStart?: () => void;
 
-  constructor(element: HTMLElement) {
+  constructor(element: HTMLElement, onGestureStart?: () => void) {
     super();
+    this._onGestureStart = onGestureStart;
     this._wheel = new MouseWheel(element);
     this._wheel.on('mousewheel', (e: WheelPayload) => {
+      this._onGestureStart?.();
       if (this._enabled) this.fire('mousewheel', e);
     });
   }

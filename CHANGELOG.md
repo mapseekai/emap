@@ -93,6 +93,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gesture (consistent with `feature:hover`) and resumes on release.
   Disabled-by-default cost model unchanged → `new Emap()` behavior
   identical.
+- DX Phase 9 (toward 0.3.0): MapLibre-parity camera API — `map.jumpTo`,
+  `setCenter`, `setZoom`, `easeTo`, `panTo`, `panBy`, `zoomTo`, `flyTo`
+  (van-Wijk parabolic), `fitBounds`, `stop` (all chainable, return
+  `this`), built on the existing `Tween`/`Viewport`. Fires a
+  `movestart`/`move`/`moveend` + `zoomstart`/`zoom`/`zoomend` lifecycle.
+  Camera state is `{ center (projected/data coords, = the Phase-8
+  `mapCoord` space), scale }`; `zoom` is an optional Web-Mercator
+  convenience (`Projection.getScale` inverse) — non-Web-Mercator CRSs
+  pass `{ scale }`. 2D only (no bearing/pitch). A new camera call (or a
+  user pan/wheel) interrupts a running animation; the interrupted move
+  still fires its `moveend`. `getCenter`/`getZoom`/`setExtent`/`reset`/
+  `zoomIn`/`zoomOut` are byte-identical; default `new Emap()` behaviour
+  unchanged (no animation runs until a camera method is called).
 
 ### Documentation
 
