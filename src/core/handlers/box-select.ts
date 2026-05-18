@@ -56,6 +56,10 @@ export class BoxSelectHandler extends EventDispatcher implements Handler<BoxSele
   setOptions(opts: Partial<BoxSelectHandlerOptions>): void { this._opts = { ...this._opts, ...opts }; }
   getOptions(): Readonly<BoxSelectHandlerOptions> { return this._opts; }
 
+  getCursor(): string | null {
+    return this._enabled ? 'crosshair' : null;
+  }
+
   private get _threshold(): number { return this._opts.dragThreshold ?? 4; }
   private get _activator(): ModifierCombo { return this._opts.dragActivator ?? 'shift'; }
 

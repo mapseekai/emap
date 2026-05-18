@@ -624,6 +624,17 @@ describe('DrawFeatureHandler', () => {
       expect(handler.isEnabled()).toBe(false);
     });
 
+    it('getCursor: crosshair when enabled, null when disabled (DX P11)', () => {
+      const map = createMockMap();
+      const handler = new DrawFeatureHandler(map as any);
+      expect(handler.getCursor()).toBeNull();
+      handler.setOptions({ source: 'src1', type: 'polygon' });
+      handler.enable();
+      expect(handler.getCursor()).toBe('crosshair');
+      handler.disable();
+      expect(handler.getCursor()).toBeNull();
+    });
+
     it('editmodechange with non-draw mode calls _quietDisable (isEnabled false, setEditMode NOT called again)', () => {
       const map = createMockMap();
       const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'polygon' });

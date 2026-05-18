@@ -37,6 +37,11 @@ export class DragPanHandler extends EventDispatcher implements Handler<DragPanOp
   setOptions(opts: Partial<DragPanOptions>): void { this._opts = { ...this._opts, ...opts }; }
   getOptions(): Readonly<DragPanOptions> { return this._opts; }
 
+  getCursor(): string | null {
+    if (!this._enabled) return null;
+    return this._dragging ? 'grabbing' : 'grab';
+  }
+
   handlePointer(ev: NormalizedPointerEvent): HandlerResult {
     if (!this._enabled) return 'passthrough';
     if (ev.kind === 'down') {

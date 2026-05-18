@@ -44,6 +44,8 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
   private readonly _map: Emap;
   private _enabled = false;
   private _opts: DrawFeatureOptions;
+  /** Injected by HandlerManager.register (cursor recompute on mode flips). */
+  _manager?: { refreshCursor(): void };
 
   // Drawing state
   private _vertices: [number, number][] = [];
@@ -72,6 +74,10 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     if (o.snapThreshold !== undefined) this._snapThreshold = o.snapThreshold;
   }
 
+  getCursor(): string | null {
+    return this._enabled ? 'crosshair' : null;
+  }
+
   getOptions(): Readonly<DrawFeatureOptions> {
     return { ...this._opts };
   }
@@ -85,6 +91,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     this._map.setEditMode('draw');
     window.addEventListener('keydown', this._onKeyDownBound);
     this._map.on('move', this._onMapMoveBound);
+    this._manager?.refreshCursor();
   }
 
   disable(): void {
@@ -95,6 +102,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     this._map.off('move', this._onMapMoveBound);
     this._map.setEditMode('none');
     this._map.clearEditDrawState();
+    this._manager?.refreshCursor();
     this._map.render();
   }
 
@@ -103,6 +111,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     window.removeEventListener('keydown', this._onKeyDownBound);
     this._map.off('move', this._onMapMoveBound);
     this._map.clearEditDrawState();
+    this._manager?.refreshCursor();
     this._map.render();
   }
 

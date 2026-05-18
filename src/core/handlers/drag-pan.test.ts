@@ -48,3 +48,14 @@ describe('DragPanHandler (arbitrated)', () => {
     expect(h.handlePointer(ev('down', 0, 0, true))).toBe('exclusive');
   });
 });
+
+describe('DragPanHandler.getCursor (DX P11)', () => {
+  it('returns grab when enabled & idle, grabbing while dragging, null when disabled', () => {
+    const h = new DragPanHandler();
+    expect(h.getCursor()).toBe('grab');
+    h.handlePointer(ev('down', 0, 0));
+    expect(h.getCursor()).toBe('grabbing');
+    h.disable();
+    expect(h.getCursor()).toBeNull();
+  });
+});
