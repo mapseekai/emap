@@ -186,6 +186,59 @@ remaining P2c (selection controls thin-shell + `SelectMode`/`BoxSelectStyle`/
 `DrawGeometryType` type consolidation) and P4 (CSS variables) are separate,
 unaffected. A `TransformControl` is a possible future phase, out of scope.
 
+## 15.11 Revision — Option A: select/transform separation (supersedes §15.4 down-row & §15.7)
+
+> **Status:** Approved (post-ship revision, user-approved 2026-05-18).
+> Reason: the as-shipped §15.4 coupled "select" into transformFeature's
+> `down` (replace-select the hit, then open a session), with NO modifier
+> awareness. This breaks the real-GIS workflow *click→select, shift+click→
+> add, press-drag a selected feature→move the whole selection*: a `down`
+> over any feature replace-clobbered a multi-selection and ignored `shift`,
+> and the modal `'exclusive'`-on-down prevented the modifier-aware
+> `clickSelect` from ever doing add-select. This is the Mapbox GL Draw
+> `simple_select` / QGIS / Felt convention.
+
+**Decision (Option A):** transformFeature **only drags an already-selected
+feature**; it owns *no* selection logic. Selection (replace / `shift`=add /
+click-empty=clear) is delegated to the modifier-aware `clickSelect` (and
+`boxSelect`/`lassoSelect`), exactly as P2b/§15.4 Decision #4 always
+intended — now actually realized.
+
+- **`down` (button 0) new behavior:** hit-test `map.queryFeatures(point)`.
+  If there is **no hit OR the top hit is NOT already selected** →
+  `'passthrough'` (no `select`, no session — selection is clickSelect's
+  job; `select first, then press-drag to move`). If the top hit **is
+  already selected** → begin the session for the active `mode` and return
+  `'exclusive'`. The `map.select(...)` call is **removed entirely** from
+  the handler. `move`/`up`/`Escape` unchanged.
+- This supersedes the §15.4 `down` row and the post-ship §15.4
+  conditional-select fix (commit `412d847`) — that conditional is replaced
+  by "no select; passthrough unless already selected".
+- **Canonical recipe (supersedes §15.7):** the examples enable **both**
+  `map.clickSelect.enable()` (default mods `{replace:'none', add:'shift'}`
+  → click=replace, shift+click=add, click-empty=clear) **and**
+  `map.transformFeature.enable()` (+ the rotate/scale mode switcher). The
+  hand-wired empty-space-click-clear / select wiring is removed — clickSelect
+  owns it. `clickSelect` is non-modal (no `setEditMode`), so it coexists
+  with transform mode and is not cross-deactivated by `editmodechange`.
+- **Coexistence is sound:** for `down`, `clickSelect` only handles
+  `kind:'click'` → `'passthrough'`, so transformFeature still decides the
+  press-drag; the native `click` (a no-drag tap) is later dispatched to the
+  higher-priority `clickSelect` which performs the modifier-resolved
+  select. An empty / unselected-feature `down` → transformFeature
+  `'passthrough'`; pan is disabled by transform mode anyway; the trailing
+  click → clickSelect select/clear. No new arbiter change; PRIORITY
+  unchanged.
+- **Deferred enhancement (out of this revision):** an ArcGIS-style
+  "no-modifier `down` on an *unselected* feature → replace-select **and**
+  move in the same gesture" convenience may be added later behind an
+  option; `shift`/`ctrl` `down` must always remain selection-only (no
+  drag). Not in scope now (pure Option A only).
+- **Back-compat:** still disabled by default; `map.editSession` byte-
+  identical; no new always-on listener; no new arbiter event kind; default
+  `new Emap()` unchanged. The only behavior change is *within* an opted-in
+  `transformFeature` session and is the intended fix.
+
 ## 16. OpenSpec note
 
 Per `CLAUDE.md` this is a new capability + public-surface addition + a
