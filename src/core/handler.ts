@@ -10,7 +10,7 @@ export interface PointerModifiers {
 
 /** A DOM pointer/wheel event normalized to element-local coords + modifiers. */
 export interface NormalizedPointerEvent {
-  kind: 'down' | 'move' | 'up' | 'wheel' | 'click' | 'contextmenu';
+  kind: 'down' | 'move' | 'up' | 'wheel' | 'click' | 'contextmenu' | 'dblclick';
   /** Element-local pixel position. */
   point: { x: number; y: number };
   modifiers: PointerModifiers;
