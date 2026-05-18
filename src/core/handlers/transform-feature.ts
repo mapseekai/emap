@@ -106,7 +106,10 @@ export class TransformFeatureHandler implements Handler<TransformFeatureOptions>
       const point: [number, number] = [ev.point.x, ev.point.y];
       const hits = this._map.queryFeatures(point);
       if (!hits.length) return 'passthrough';
-      this._map.select(hits, { mode: 'replace' });
+      // Spec §15.4: only replace-select the top hit when it is NOT already
+      // selected, so a pre-selected multi-feature set survives the gesture
+      // and the session transforms the whole batch.
+      if (!this._map.isSelected(hits[0])) this._map.select([hits[0]], { mode: 'replace' });
       const cur = this._map.unproject(ev.point.x, ev.point.y);
       if (this._mode === 'translate') {
         this._translate = this._map.editSession.beginTranslateSession(this._opts.session);

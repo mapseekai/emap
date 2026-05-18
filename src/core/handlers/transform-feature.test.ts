@@ -29,6 +29,7 @@ function makeMap() {
   let editModeCb: ((e: { mode: string }) => void) | null = null;
   const map = {
     queryFeatures: vi.fn((_p: [number, number]) => [{ source: 's', layer: 'l', id: 1 }]),
+    isSelected: vi.fn(() => false),
     select: vi.fn(),
     unproject: vi.fn((x: number, y: number): [number, number] => [x / 10, y / 10]),
     setEditMode: vi.fn(),
@@ -119,6 +120,17 @@ describe('TransformFeatureHandler', () => {
     );
     expect(map.editSession.beginTranslateSession).toHaveBeenCalled();
     expect(translateStub.cancel).not.toHaveBeenCalled();
+    expect(r).toBe('exclusive');
+  });
+
+  it('down on an already-selected feature does NOT re-select (preserves a multi-feature selection) but still begins the session', () => {
+    const { map } = makeMap();
+    map.isSelected.mockReturnValue(true);
+    const h = new TransformFeatureHandler(map as any);
+    h.enable();
+    const r = h.handlePointer(pointer('down', 30, 40));
+    expect(map.select).not.toHaveBeenCalled();
+    expect(map.editSession.beginTranslateSession).toHaveBeenCalled();
     expect(r).toBe('exclusive');
   });
 

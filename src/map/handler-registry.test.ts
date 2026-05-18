@@ -246,4 +246,18 @@ describe('Emap handler registry (Phase 1)', () => {
     expect(map.transformFeature.isEnabled()).toBe(false);
     expect(map.getEditMode()).toBe('vertex');
   });
+
+  it('transformFeature ↔ drawFeature cross-deactivate each other', () => {
+    const map = new Emap({ container: container() });
+    map.drawFeature.setOptions({ source: 's', type: 'polygon' });
+    // drawFeature active → enabling transformFeature deactivates it.
+    map.drawFeature.enable();
+    map.transformFeature.enable();           // setEditMode('transform') → editmodechange
+    expect(map.drawFeature.isEnabled()).toBe(false);
+    expect(map.getEditMode()).toBe('transform');
+    // transformFeature active → enabling drawFeature deactivates it.
+    map.drawFeature.enable();                // setEditMode('draw') → editmodechange
+    expect(map.transformFeature.isEnabled()).toBe(false);
+    expect(map.getEditMode()).toBe('draw');
+  });
 });

@@ -23,6 +23,7 @@ export type {
   // edit sessions
   FeatureTranslateSession,
   FeatureAffineSession,
+  DragSessionOptions,
   // mapshaper-op option records
   ClipEraseOptions,
   DissolveOptions,
