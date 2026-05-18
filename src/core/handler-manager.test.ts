@@ -219,3 +219,52 @@ describe('HandlerManager contextmenu kind', () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe('HandlerManager dblclick kind', () => {
+  function recordHandler() {
+    const calls: any[] = [];
+    return { calls, h: { name: 'dragPan', enable() {}, disable() {}, isEnabled: () => true,
+      setOptions() {}, getOptions: () => ({}),
+      handlePointer: (e: any) => { calls.push(e.kind); return 'passthrough' as const; } } };
+  }
+  function el() {
+    const e = document.createElement('div');
+    e.getBoundingClientRect = () => ({ left: 4, top: 6, width: 0, height: 0, right: 0, bottom: 0, x: 4, y: 6, toJSON() {} }) as any;
+    return e;
+  }
+
+  it('normalizes a dblclick DOM event and dispatches via the priority loop', () => {
+    const { h, calls } = recordHandler();
+    const m = new HandlerManager();
+    m.register(h);
+    const element = el();
+    m.attach(element);
+    element.dispatchEvent(new MouseEvent('dblclick', { clientX: 24, clientY: 26, button: 0 }));
+    expect(calls).toEqual(['dblclick']);
+    m.detach();
+  });
+
+  it('dblclick is NOT fed to the P3 pointer sink', () => {
+    const { h } = recordHandler();
+    const m = new HandlerManager();
+    m.register(h);
+    const sink: string[] = [];
+    m.setPointerSink((e) => sink.push(e.kind));
+    const element = el();
+    m.attach(element);
+    element.dispatchEvent(new MouseEvent('dblclick', { clientX: 1, clientY: 1, button: 0 }));
+    expect(sink).toEqual([]);
+    m.detach();
+  });
+
+  it('detach() removes the dblclick listener', () => {
+    const { h, calls } = recordHandler();
+    const m = new HandlerManager();
+    m.register(h);
+    const element = el();
+    m.attach(element);
+    m.detach();
+    element.dispatchEvent(new MouseEvent('dblclick', { clientX: 1, clientY: 1, button: 0 }));
+    expect(calls).toEqual([]);
+  });
+});
