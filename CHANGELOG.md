@@ -81,6 +81,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   — this only absorbs the pointer→session boilerplate. Disabled by default
   → `new Emap()` behavior unchanged. The `feature-translate` /
   `feature-rotate-scale` examples are rewritten to the one-line recipe.
+- DX Phase 8 (toward 0.3.0): delegated `map.on('mousemove', cb)` event
+  (payload `{ point, mapCoord, originalEvent }`), fed by the Phase-2a
+  pointer arbiter via the same sink mechanism as the Phase-3 `feature:*`
+  events — exported `PointerMoveEvent` type. `StatusControl` no longer
+  hand-wires a raw canvas `mousemove`; it subscribes the delegated event
+  (public class/options/DOM/coordinate-string unchanged). Zero cost when
+  no `mousemove`/`feature:*` listener is registered (the pointer sink is
+  installed lazily and shared). One intentional, documented behavior
+  change: the coordinate readout pauses during an exclusive pan/drag
+  gesture (consistent with `feature:hover`) and resumes on release.
+  Disabled-by-default cost model unchanged → `new Emap()` behavior
+  identical.
 
 ### Documentation
 
