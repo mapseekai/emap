@@ -57,6 +57,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `vertex_moved` event are byte-identical. Disabled by default →
   `new Emap()` behavior unchanged. (P4 will migrate the context-menu
   inline styles to CSS tokens.)
+- DX Phase 6 (toward 0.3.0): feature drawing is now the arbiter-driven
+  `map.drawFeature` handler (`enable/disable/isEnabled/setOptions/
+  getOptions`) — usable without `addControl`. The arbiter gained a
+  `dblclick` event kind (finish polyline/polygon); `Escape`-to-cancel is a
+  handler-owned key listener. `enable()` throws if `source`/`type` are
+  unset. `DrawFeatureControl` is now a button-only thin shell over
+  `map.drawFeature`; its public class, constructor options (incl. `icon`),
+  button DOM, `feature_created` event, `FeatureCreateCommand`, and the
+  cross-mode auto-deactivate are byte-identical. Disabled (and
+  unconfigured) by default → `new Emap()` behavior unchanged.
 
 ### Documentation
 
