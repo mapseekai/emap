@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import { Camera } from './camera';
+import { Bounds } from './bounds';
 
 /** Minimal viewport-host stub: in-memory camera state + spy. */
 function hostStub() {
@@ -13,6 +14,7 @@ function hostStub() {
       scaleFromZoom: (z: number) => Math.pow(2, z),     // pretend WebMercator-ish
       fire: (type: string, e: any) => fired.push({ type, e }),
       requestRender: vi.fn(),
+      getViewportSize: () => ({ width: 0, height: 0 }),
     },
     fired,
     state: () => st,
@@ -115,6 +117,67 @@ describe('Camera.easeTo', () => {
     const n = fired.length;
     cam.stop();                                // idle → no-op
     expect(fired.length).toBe(n);
+    vi.useRealTimers();
+  });
+});
+
+describe('Camera wrappers / fitBounds / flyTo', () => {
+  it('setCenter/setZoom/zoomTo/panTo/panBy delegate correctly', () => {
+    const { host, state } = hostStub();
+    const cam = new Camera(host as any);
+    cam.setCenter([3, 4]);
+    expect(state().center).toEqual([3, 4]);
+    cam.setZoom(2);                         // scale 2^2=4
+    expect(state().scale).toBe(4);
+    cam.zoomTo(3, { duration: 0 });         // scale 8
+    expect(state().scale).toBe(8);
+    cam.panTo([10, 10], { duration: 0 });
+    expect(state().center).toEqual([10, 10]);
+    expect(state().scale).toBe(8);          // pan keeps scale
+  });
+
+  it('panBy shifts the centre by a pixel delta converted through current scale', () => {
+    const { host, state } = hostStub();
+    const cam = new Camera(host as any);
+    cam.jumpTo({ center: [0, 0], scale: 2 }); // 1 data unit = 2 px
+    cam.panBy([20, 10], { duration: 0 });     // → +10 data x, ∓ y (flipY)
+    expect(state().center[0]).toBeCloseTo(10, 6);
+    expect(Math.abs(state().center[1])).toBeCloseTo(5, 6);
+  });
+
+  it('fitBounds centres on the bounds and never exceeds maxScale; zero-area → maxScale/current', () => {
+    const { host, state } = hostStub();
+    const cam = new Camera(host as any);
+    // host stub has no width/height; fitBounds needs viewport size — extend stub:
+    (host as any).getViewportSize = () => ({ width: 800, height: 600 });
+    cam.fitBounds(new Bounds(0, 0, 100, 50), { padding: 0, duration: 0 });
+    expect(state().center).toEqual([50, 25]); // bounds centre
+    expect(state().scale).toBeGreaterThan(0);
+    cam.fitBounds(new Bounds(10, 10, 10, 10), { duration: 0, maxScale: 7 });
+    expect(state().center).toEqual([10, 10]);
+    expect(state().scale).toBeLessThanOrEqual(7);
+  });
+
+  it('flyTo lands exactly on target and (for a far jump) zoom is non-monotonic', () => {
+    vi.useFakeTimers();
+    const { host } = hostStub();
+    (host as any).getViewportSize = () => ({ width: 800, height: 600 });
+    const cam = new Camera(host as any);
+    cam.jumpTo({ center: [0, 0], scale: 8 });
+    const scales: number[] = [];
+    let lastC: [number, number] = [0, 0];
+    let lastS = 0;
+    (host as any).applyCameraState = (c: [number, number], s: number) => {
+      scales.push(s);
+      lastC = c;
+      lastS = s;
+    };
+    cam.flyTo({ center: [10000, 10000], scale: 8, duration: 200, easing: (t) => t });
+    vi.advanceTimersByTime(400);
+    expect(scales.some((s) => s < 8)).toBe(true); // zoomed out mid-flight
+    expect(lastC[0]).toBeCloseTo(10000, 3);
+    expect(lastC[1]).toBeCloseTo(10000, 3);
+    expect(lastS).toBeCloseTo(8, 6); // lands exactly on target
     vi.useRealTimers();
   });
 });

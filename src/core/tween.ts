@@ -1,8 +1,17 @@
 import { EventDispatcher } from './events';
 
-function getTimerFunction() {
-  return typeof requestAnimationFrame === 'function' ?
-    requestAnimationFrame : (cb: FrameRequestCallback) => setTimeout(cb, 25);
+function scheduleFrame(cb: FrameRequestCallback): number {
+  return typeof requestAnimationFrame === 'function'
+    ? requestAnimationFrame(cb)
+    : (setTimeout(cb, 25) as unknown as number);
+}
+
+function cancelFrame(handle: number): void {
+  if (typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(handle);
+  } else {
+    clearTimeout(handle);
+  }
 }
 
 export class Timer extends EventDispatcher {
@@ -11,6 +20,7 @@ export class Timer extends EventDispatcher {
   private _tickTime: number = 0;
   private _startTime: number = 0;
   private _duration: number = Infinity;
+  private _frame: number | null = null;
 
   constructor() {
     super();
@@ -26,12 +36,24 @@ export class Timer extends EventDispatcher {
 
   stop(): void {
     this._running = false;
+    // Cancel any pending frame so a stopped timer leaves no orphaned
+    // callback. An orphaned jsdom rAF callback that outlives a
+    // useRealTimers()/useFakeTimers() boundary desyncs the rAF pump and
+    // silently starves later timers (observed cross-test in vitest+jsdom).
+    if (this._frame !== null) {
+      cancelFrame(this._frame);
+      this._frame = null;
+    }
+    this._busy = false;
   }
 
   private _startTick(now: number): void {
     this._busy = true;
     this._tickTime = now;
-    getTimerFunction()(() => this._onTick());
+    this._frame = scheduleFrame(() => {
+      this._frame = null;
+      this._onTick();
+    });
   }
 
   private _onTick(): void {
