@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DrawFeatureHandler, projectPointOnSegment } from './draw-feature';
-import type { DrawFeatureOptions } from './draw-feature';
 
 function setPrivate(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
@@ -397,7 +396,10 @@ describe('DrawFeatureHandler', () => {
         [10, 10] as [number, number],
       ]);
 
-      callPrivate(handler, '_onDblClick', 0, 0);
+      callPrivate(handler, '_onDblClick', {
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as MouseEvent);
 
       expect(map.fire).toHaveBeenCalledWith(
         'feature_created',
@@ -420,7 +422,10 @@ describe('DrawFeatureHandler', () => {
         [10, 0] as [number, number],
       ]);
 
-      callPrivate(handler, '_onDblClick', 0, 0);
+      callPrivate(handler, '_onDblClick', {
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as MouseEvent);
 
       expect(map.fire).not.toHaveBeenCalledWith('feature_created', expect.anything());
     });
@@ -445,7 +450,10 @@ describe('DrawFeatureHandler', () => {
         [10, 10] as [number, number],
       ]);
 
-      callPrivate(handler, '_onDblClick', 0, 0);
+      callPrivate(handler, '_onDblClick', {
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as MouseEvent);
 
       expect(map.fire).toHaveBeenCalledWith(
         'feature_created',

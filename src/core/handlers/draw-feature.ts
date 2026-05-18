@@ -111,7 +111,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     const px = ev.point.x, py = ev.point.y;
     if (ev.kind === 'move') { this._onMouseMove(px, py); return 'passthrough'; }
     if (ev.kind === 'click') { if (ev.button !== 0) return 'passthrough'; this._onClick(px, py); return 'consumed'; }
-    if (ev.kind === 'dblclick') { this._onDblClick(px, py); return 'consumed'; }
+    if (ev.kind === 'dblclick') { this._onDblClick(ev.originalEvent as MouseEvent); return 'consumed'; }
     return 'passthrough';
   }
 
@@ -164,7 +164,10 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     this._map.render();
   }
 
-  private _onDblClick(_px: number, _py: number): void {
+  private _onDblClick(e: MouseEvent): void {
+    e.preventDefault();
+    e.stopPropagation();
+
     if (this._opts.type === 'point') return;
 
     if (this._opts.type === 'polyline' && this._vertices.length >= 2) {
