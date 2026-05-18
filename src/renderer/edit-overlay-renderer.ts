@@ -1,6 +1,7 @@
 import type { EditPainter } from './painter';
 import type { ArcCollection } from '../types/mapshaper-types';
 import type { EditVertexState, EditDrawState } from '../map/types';
+import type { EditMode } from '../map/edit-state-store';
 
 /**
  * Draws edit-mode-only decorations on top of the regular layer pass:
@@ -20,7 +21,7 @@ export class EditOverlayRenderer {
    * `editMode === 'none'` or the relevant state object is `null`.
    */
   render(
-    editMode: 'none' | 'vertex' | 'draw',
+    editMode: EditMode,
     vertexState: EditVertexState | null,
     drawState: EditDrawState | null,
   ): void {

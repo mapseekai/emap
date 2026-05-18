@@ -5,7 +5,7 @@
 
 import type { EditVertexState, EditDrawState } from './types';
 
-export type EditMode = 'none' | 'vertex' | 'draw';
+export type EditMode = 'none' | 'vertex' | 'draw' | 'transform';
 
 export interface EditStateSnapshot {
   mode: EditMode;

@@ -89,3 +89,18 @@ describe('EditStateStore', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+describe('EditStateStore — transform mode', () => {
+  it("setMode('transform') drops vertex/draw sub-state and fires one change", () => {
+    const { store, onChange } = makeStore();
+    store.setMode('vertex');
+    store.setVertex(dummyVertex);
+    onChange.mockClear();
+    store.setMode('transform');
+    expect(store.mode).toBe('transform');
+    expect(store.vertex).toBeNull();
+    expect(store.draw).toBeNull();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toMatchObject({ modeChanged: true, current: { mode: 'transform' } });
+  });
+});
