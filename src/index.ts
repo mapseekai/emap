@@ -205,6 +205,8 @@ export { VertexEditHandler } from './core/handlers/vertex-edit';
 export type { VertexEditOptions } from './core/handlers/vertex-edit';
 export { DrawFeatureHandler } from './core/handlers/draw-feature';
 export type { DrawFeatureOptions } from './core/handlers/draw-feature';
+export { TransformFeatureHandler } from './core/handlers/transform-feature';
+export type { TransformFeatureOptions } from './core/handlers/transform-feature';
 
 // ===========================================================================
 // Edit history + commands

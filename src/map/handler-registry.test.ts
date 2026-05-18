@@ -222,4 +222,28 @@ describe('Emap handler registry (Phase 1)', () => {
     expect(map.drawFeature.isEnabled()).toBe(false);
     expect(map.getEditMode()).toBe('vertex');
   });
+
+  it('exposes a disabled-by-default transformFeature handler', () => {
+    const map = new Emap({ container: container() });
+    expect(map.transformFeature.name).toBe('transformFeature');
+    expect(map.transformFeature.isEnabled()).toBe(false);
+  });
+
+  it('transformFeature.enable() enters transform mode (pan disabled); disable() restores', () => {
+    const map = new Emap({ container: container() });
+    map.transformFeature.enable();
+    expect(map.getEditMode()).toBe('transform');
+    expect(map.dragPan.isEnabled()).toBe(false);
+    map.transformFeature.disable();
+    expect(map.getEditMode()).toBe('none');
+    expect(map.dragPan.isEnabled()).toBe(true);
+  });
+
+  it('enabling vertexEdit cross-deactivates an active transformFeature', () => {
+    const map = new Emap({ container: container() });
+    map.transformFeature.enable();
+    map.vertexEdit.enable();                 // setEditMode('vertex') → editmodechange
+    expect(map.transformFeature.isEnabled()).toBe(false);
+    expect(map.getEditMode()).toBe('vertex');
+  });
 });

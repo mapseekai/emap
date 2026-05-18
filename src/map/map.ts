@@ -22,6 +22,7 @@ import { BoxSelectHandler, type BoxSelectHandlerOptions } from '../core/handlers
 import { LassoSelectHandler, type LassoSelectHandlerOptions } from '../core/handlers/lasso-select';
 import { VertexEditHandler, type VertexEditOptions } from '../core/handlers/vertex-edit';
 import { DrawFeatureHandler, type DrawFeatureOptions } from '../core/handlers/draw-feature';
+import { TransformFeatureHandler, type TransformFeatureOptions } from '../core/handlers/transform-feature';
 import type { Handler } from '../core/handler';
 import { HandlerManager } from '../core/handler-manager';
 import { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
@@ -104,6 +105,7 @@ export class Emap extends EventDispatcher {
   private _lassoSelect: LassoSelectHandler;
   private _vertexEdit!: VertexEditHandler;
   private _drawFeature!: DrawFeatureHandler;
+  private _transformFeature!: TransformFeatureHandler;
 
   // Rendering
   private _pendingRender = 0;
@@ -258,6 +260,8 @@ export class Emap extends EventDispatcher {
     this._handlers.register(this._vertexEdit);
     this._drawFeature = new DrawFeatureHandler(this);
     this._handlers.register(this._drawFeature);
+    this._transformFeature = new TransformFeatureHandler(this);
+    this._handlers.register(this._transformFeature);
     this._handlers.attach(this._canvasContainer);
 
     if (options.interactive === false) {
@@ -939,6 +943,8 @@ export class Emap extends EventDispatcher {
   get vertexEdit(): Handler<VertexEditOptions> { return this._vertexEdit; }
   /** The draw-feature interaction handler (disabled by default). */
   get drawFeature(): Handler<DrawFeatureOptions> { return this._drawFeature; }
+  /** The transform-feature interaction handler (disabled by default). */
+  get transformFeature(): Handler<TransformFeatureOptions> { return this._transformFeature; }
 
   public getTransform(): AffineTransform {
     return this._viewport.transform;
