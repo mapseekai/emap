@@ -47,6 +47,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `map.on('feature:enter', {}, e => map.setHighlightedFeatures([e.ref]));
   map.on('feature:leave', {}, () => map.clearHighlightedFeatures());` —
   replaces the manual mousemove-poll + highlight-sync boilerplate.
+- DX Phase 5 (toward 0.3.0): vertex editing is now the arbiter-driven
+  `map.vertexEdit` handler (`enable/disable/isEnabled/setOptions/
+  getOptions`), consistent with the other handlers — usable without
+  `addControl`. The arbiter gained a `contextmenu` event kind (right-click
+  vertex delete). `VertexEditControl` is now a button-only thin shell over
+  `map.vertexEdit`; its public class, constructor options, button DOM,
+  `editmodechange`/edit-mode behavior, undo commands, and the
+  `vertex_moved` event are byte-identical. Disabled by default →
+  `new Emap()` behavior unchanged. (P4 will migrate the context-menu
+  inline styles to CSS tokens.)
 
 ### Documentation
 
