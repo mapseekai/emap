@@ -40,6 +40,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
   readonly name = 'vertexEdit';
   private readonly _map: Emap;
   private _enabled = false;
+  /** Injected by HandlerManager.register (cursor recompute on mode flips). */
+  _manager?: { refreshCursor(): void };
   private _polygonFillColor: string | null;
 
   // Hover / drag state
@@ -69,8 +71,12 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     if (this._enabled) return;
     this._enabled = true;
     this._map.setEditMode('vertex');
-    this._map.getCanvasContainer().classList.add('emap-edit-active');
     this._map.on('move', this._onMapMoveBound);
+    this._manager?.refreshCursor();
+  }
+
+  getCursor(): string | null {
+    return this._enabled ? 'crosshair' : null;
   }
 
   disable(): void {
@@ -85,8 +91,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     this._dragging = false;
     this._map.setEditMode('none');
     this._map.clearEditVertexState();
-    this._map.getCanvasContainer().classList.remove('emap-edit-active');
     this._map.off('move', this._onMapMoveBound);
+    this._manager?.refreshCursor();
     this._map.render();
   }
 

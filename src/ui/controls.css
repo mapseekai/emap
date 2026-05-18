@@ -114,10 +114,6 @@
   color: #fff;
 }
 
-.emap-edit-active {
-  cursor: crosshair;
-}
-
 /* Draw Feature Controls */
 .emap-ctrl-draw {
   font-size: 14px;
@@ -126,10 +122,6 @@
 .emap-ctrl-draw.active {
   background-color: #0078ff !important;
   color: #fff;
-}
-
-.emap-draw-active {
-  cursor: crosshair;
 }
 
 /* Box Select rubber-band rectangle. Defaults are inlined by BoxSelectControl

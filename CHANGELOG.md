@@ -115,6 +115,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   augmentable `interface` (`declare module` to register custom events);
   unknown event names still compile (escape hatch preserved). Compile-time
   only — zero runtime change. Exported: `EmapEventMap`, `CameraEvent`.
+- DX Phase 11 (toward 0.3.0): per-handler cursor — each `Handler` may
+  implement `getCursor(): string | null`; `HandlerManager` arbitrates one
+  effective cursor (active gesture > priority order > default) and writes
+  it to the map element via `refreshCursor()` / on every dispatch. Adds
+  the previously-absent `grab`/`grabbing` pan cursors and the draw
+  crosshair (the old `.emap-draw-active` CSS rule was dead); the ad-hoc
+  `.emap-edit-active`/`.emap-draw-active` CSS-class mechanism is removed
+  (single source of truth). No dispatch/priority behaviour change.
 
 ### Documentation
 

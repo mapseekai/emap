@@ -129,11 +129,9 @@ describe('VertexEditHandler', () => {
   it('enable() activates edit mode and isEnabled() returns true', () => {
     const setEditModeSpy = vi.fn();
     const onSpy = vi.fn();
-    const classListAdd = vi.fn();
     const mapMock = {
       setEditMode: setEditModeSpy,
       on: onSpy,
-      getCanvasContainer: () => ({ classList: { add: classListAdd, remove: vi.fn() } }),
     };
 
     const handler = new VertexEditHandler(mapMock as any);
@@ -142,7 +140,7 @@ describe('VertexEditHandler', () => {
     expect(handler.isEnabled()).toBe(true);
     expect(setEditModeSpy).toHaveBeenCalledWith('vertex');
     expect(onSpy).toHaveBeenCalledWith('move', expect.any(Function));
-    expect(classListAdd).toHaveBeenCalledWith('emap-edit-active');
+    expect(handler.getCursor()).toBe('crosshair');
   });
 
   it('disable() deactivates edit mode, resets _dragging, and isEnabled() returns false', () => {
@@ -151,15 +149,12 @@ describe('VertexEditHandler', () => {
     const offSpy = vi.fn();
     const onSpy = vi.fn();
     const renderSpy = vi.fn();
-    const classListAdd = vi.fn();
-    const classListRemove = vi.fn();
     const mapMock = {
       setEditMode: setEditModeSpy,
       clearEditVertexState,
       on: onSpy,
       off: offSpy,
       render: renderSpy,
-      getCanvasContainer: () => ({ classList: { add: classListAdd, remove: classListRemove } }),
     };
 
     const handler = new VertexEditHandler(mapMock as any);
