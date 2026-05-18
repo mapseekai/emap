@@ -30,6 +30,7 @@ import { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import { FeatureEventDispatcher, type FeatureEvent, type FeatureEventFilter } from '../core/feature-event-dispatcher';
 import { PointerEventDispatcher, type PointerMoveEvent } from '../core/pointer-event-dispatcher';
 import { type EventListener } from '../core/events';
+import type { EmapEventMap } from '../core/event-map';
 import { FeatureQuery } from './feature-query';
 import { FeatureAccessor } from './feature-accessor';
 import { ValidatorRegistry } from '../validation/registry';
@@ -378,6 +379,13 @@ export class Emap extends EventDispatcher {
   // otherwise swallows `map.on('mousemove', e => …)` and `e` loses its
   // `PointerMoveEvent` narrowing.
   on(type: 'mousemove', listener: (e: PointerMoveEvent) => void): this;
+  // Overload 1b (P10): typed known events — autocomplete + payload inference.
+  // MUST sit after the 'mousemove' literal and before the generic string
+  // fallback so known names infer and unknown names fall through.
+  on<K extends keyof EmapEventMap>(
+    type: K,
+    listener: (e: { type: K } & EmapEventMap[K]) => void,
+  ): this;
   // Overload 2: generic 2-arg form — preserves the base class API for non-feature events
   // (e.g. `map.on<HistoryStateSnapshot>('historychange', cb)`)
   on<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
@@ -404,6 +412,11 @@ export class Emap extends EventDispatcher {
 
   // Overload: typed pointer-move form (literal — must precede the generic string overload)
   off(type: 'mousemove', listener: (e: PointerMoveEvent) => void): this;
+  // Overload 1b (P10): typed known events
+  off<K extends keyof EmapEventMap>(
+    type: K,
+    listener: (e: { type: K } & EmapEventMap[K]) => void,
+  ): this;
   // Overload: generic 2-arg form for non-feature events
   off<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
   // Overload: feature-event form
@@ -425,6 +438,11 @@ export class Emap extends EventDispatcher {
 
   // Overload 1: typed pointer-move form (literal — must precede the generic string overload)
   once(type: 'mousemove', listener: (e: PointerMoveEvent) => void): this;
+  // Overload 1b (P10): typed known events
+  once<K extends keyof EmapEventMap>(
+    type: K,
+    listener: (e: { type: K } & EmapEventMap[K]) => void,
+  ): this;
   // Overload 2: generic 2-arg form for non-feature events
   once<T = Record<string, unknown>>(type: string, listener: EventListener<T>): this;
   // Overload 3: typed 2-arg feature-event form (no filter)
