@@ -91,6 +91,35 @@ export class Viewport {
     }
   }
 
+  /**
+   * Current camera state in projected/data coordinates. `center` is the
+   * data point at the viewport centre (same space as `unproject` and
+   * `getExtent`, before any CRS/geographic mapping). `scale` is `|mx|`.
+   */
+  getCameraState(): { center: [number, number]; scale: number } {
+    const t = this._transform;
+    const cx = (this._width / 2 - t.bx) / t.mx;
+    const cy = (this._height / 2 - t.by) / t.my;
+    return { center: [cx, cy], scale: Math.abs(t.mx) };
+  }
+
+  /**
+   * Set the transform so `center` (data coords) sits at the viewport
+   * centre at `scale` (= |mx|), preserving the existing flipY (my<0)
+   * convention, then re-apply pan/zoom constraints. Additive primitive
+   * for the Camera; does not touch `setExtent`/`reset` state. Callers own
+   * the render / `onViewChange` trigger after this call (the Camera fires
+   * the move/zoom lifecycle itself).
+   */
+  applyCameraState(center: [number, number], scale: number): void {
+    const mx = scale;
+    const my = -scale; // flipY convention (Viewport builds transforms with flipY=true)
+    const bx = this._width / 2 - mx * center[0];
+    const by = this._height / 2 - my * center[1];
+    this._transform = new AffineTransform(mx, my, bx, by);
+    this._applyConstraints();
+  }
+
   clearInitialState(): void {
     this._initialExtent = null;
     this._initialMX = 0;

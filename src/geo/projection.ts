@@ -41,7 +41,8 @@ export class Projection {
 
   /**
    * Compute a zoom level from the scale factor.
-   * Only meaningful for Web Mercator.
+   * Only meaningful for Web Mercator — returns `0` for other CRS
+   * (not a sentinel; prefer the {@link getScale} round-trip to detect CRS).
    */
   getZoom(mx: number): number {
     const crs = this._crs.toLowerCase();
@@ -49,6 +50,19 @@ export class Projection {
       return Math.log2((mx * EARTH_CIRCUMFERENCE_WEB_MERCATOR) / 512);
     }
     return 0;
+  }
+
+  /**
+   * Inverse of `getZoom`: the scale factor (|mx|) for a given zoom.
+   * Only meaningful for Web Mercator — returns `NaN` otherwise so callers
+   * can detect "zoom not applicable for this CRS" and fall back to scale.
+   */
+  getScale(zoom: number): number {
+    const crs = this._crs.toLowerCase();
+    if (crs === 'epsg:3857' || crs === 'webmercator') {
+      return (Math.pow(2, zoom) * 512) / EARTH_CIRCUMFERENCE_WEB_MERCATOR;
+    }
+    return NaN;
   }
 
   /**
