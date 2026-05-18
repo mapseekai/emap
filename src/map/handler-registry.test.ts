@@ -183,4 +183,31 @@ describe('Emap handler registry (Phase 1)', () => {
     expect(map.dragPan.isEnabled()).toBe(true);
     expect(modes).toEqual(['vertex', 'none']);
   });
+
+  it('exposes a disabled-by-default drawFeature handler', () => {
+    const map = new Emap({ container: container() });
+    expect(map.drawFeature.name).toBe('drawFeature');
+    expect(map.drawFeature.isEnabled()).toBe(false);
+  });
+
+  it('drawFeature.enable() without source/type throws; configured enters draw mode', () => {
+    const map = new Emap({ container: container() });
+    expect(() => map.drawFeature.enable()).toThrow(/source\+type required/i);
+    map.drawFeature.setOptions({ source: 's', type: 'polygon' });
+    map.drawFeature.enable();
+    expect(map.getEditMode()).toBe('draw');
+    expect(map.dragPan.isEnabled()).toBe(false);
+    map.drawFeature.disable();
+    expect(map.getEditMode()).toBe('none');
+    expect(map.dragPan.isEnabled()).toBe(true);
+  });
+
+  it('enabling vertexEdit cross-deactivates an active drawFeature', () => {
+    const map = new Emap({ container: container() });
+    map.drawFeature.setOptions({ source: 's', type: 'polygon' });
+    map.drawFeature.enable();
+    map.vertexEdit.enable();
+    expect(map.drawFeature.isEnabled()).toBe(false);
+    expect(map.getEditMode()).toBe('vertex');
+  });
 });

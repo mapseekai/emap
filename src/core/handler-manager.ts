@@ -2,7 +2,7 @@ import { type Handler, isHandler, type NormalizedPointerEvent } from './handler'
 
 // Highest → lowest. Only registered+enabled handlers participate. The
 // selection handlers (Phase 2b) slot in ahead of dragPan.
-const PRIORITY = ['lassoSelect', 'boxSelect', 'clickSelect', 'vertexEdit', 'dragPan'] as const;
+const PRIORITY = ['lassoSelect', 'boxSelect', 'clickSelect', 'drawFeature', 'vertexEdit', 'dragPan'] as const;
 
 /**
  * Registry of named interaction handlers owned by Emap. Owns the
