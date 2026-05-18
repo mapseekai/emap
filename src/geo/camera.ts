@@ -46,6 +46,14 @@ export interface CameraHost {
   getViewportSize(): { width: number; height: number };
   fire(type: string, e: { center: [number, number]; zoom: number; originalEvent: null }): void;
   requestRender(): void;
+  /**
+   * Stop the viewport's kinetic zoomIn/zoomOut tween, if any. Optional so
+   * host stubs (and CRS-agnostic tests) need not implement it; the real
+   * Emap host wires it to `Viewport.cancelZoomAnimation`. Without this a
+   * `zoomIn()` tween still running when a camera method fires would keep
+   * overwriting the transform and fight the camera destination.
+   */
+  cancelZoomAnimation?(): void;
 }
 
 const DEFAULT_DURATION = 1000;
@@ -230,9 +238,12 @@ export class Camera {
   flyTo(o: FlyToOptions): void {
     const target = this._resolve(o);
     if (o.animate === false || o.duration === 0) { this.jumpTo(o); return; }
-    const duration = o.duration ?? DEFAULT_DURATION;
+    let duration = o.duration ?? DEFAULT_DURATION;
     if (!Number.isFinite(duration) || duration < 0) {
       throw new Error('camera: duration must be a finite non-negative number');
+    }
+    if (o.speed != null && (!Number.isFinite(o.speed) || o.speed <= 0)) {
+      throw new Error('camera: speed must be a finite positive number');
     }
     const ease = o.easing ?? Tween.sineInOut;
     const rho = o.curve ?? RHO_DEFAULT;
@@ -261,6 +272,9 @@ export class Camera {
     const r1 = rCoeff(w1, -1);
     const S =
       u1 < FLY_DEGENERATE_U ? Math.abs(Math.log(w1 / w0)) / rho : (r1 - r0) / rho;
+    // `speed` (screenfuls/sec, van-Wijk) overrides duration when set —
+    // MapLibre parity: duration = 1000 * S / speed.
+    if (o.speed != null) duration = (1000 * S) / o.speed;
     const startP = this._payload(from);
     this._host.fire('movestart', startP);
     if (zoomChanged) this._host.fire('zoomstart', startP);
@@ -313,6 +327,9 @@ export class Camera {
 
   /** Cancel a running animation, firing its terminal events at the current state. */
   private _cancel(): void {
+    // Also kill the viewport's separate kinetic zoom tween so a
+    // zoomIn()/zoomOut() in flight cannot overwrite the camera transform.
+    this._host.cancelZoomAnimation?.();
     if (this._tween) {
       this._tween.stop();
       this._tween = null;

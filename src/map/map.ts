@@ -258,6 +258,7 @@ export class Emap extends EventDispatcher {
       getViewportSize: () => ({ width: this._viewport.width, height: this._viewport.height }),
       fire: (type, e) => this.fire(type, e),
       requestRender: () => this._scheduleRender(),
+      cancelZoomAnimation: () => this._viewport.cancelZoomAnimation(),
     });
 
     // Interactions — both use EventDispatcher pattern

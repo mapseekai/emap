@@ -180,4 +180,29 @@ describe('Camera wrappers / fitBounds / flyTo', () => {
     expect(lastS).toBeCloseTo(8, 6); // lands exactly on target
     vi.useRealTimers();
   });
+
+  it('flyTo speed overrides duration (MapLibre parity) and still lands exactly', () => {
+    vi.useFakeTimers();
+    const { host, state } = hostStub();
+    (host as any).getViewportSize = () => ({ width: 800, height: 600 });
+    const cam = new Camera(host as any);
+    cam.jumpTo({ center: [0, 0], scale: 8 });
+    // duration is ignored when speed is set; a high speed completes fast.
+    cam.flyTo({ center: [4000, 0], scale: 8, speed: 50, duration: 999999, easing: (t) => t });
+    expect(cam.isMoving()).toBe(true);
+    vi.advanceTimersByTime(2000); // far less than the bogus 999999ms duration
+    expect(cam.isMoving()).toBe(false);
+    expect(state().center[0]).toBeCloseTo(4000, 3);
+    expect(state().scale).toBeCloseTo(8, 6);
+    vi.useRealTimers();
+  });
+
+  it('flyTo throws on non-positive / non-finite speed', () => {
+    const { host } = hostStub();
+    (host as any).getViewportSize = () => ({ width: 800, height: 600 });
+    const cam = new Camera(host as any);
+    expect(() => cam.flyTo({ center: [1, 1], speed: 0 })).toThrow(/speed/);
+    expect(() => cam.flyTo({ center: [1, 1], speed: -2 })).toThrow(/speed/);
+    expect(() => cam.flyTo({ center: [1, 1], speed: Infinity })).toThrow(/speed|finite/);
+  });
 });
