@@ -106,6 +106,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still fires its `moveend`. `getCenter`/`getZoom`/`setExtent`/`reset`/
   `zoomIn`/`zoomOut` are byte-identical; default `new Emap()` behaviour
   unchanged (no animation runs until a camera method is called).
+- DX Phase 10 (toward 0.3.0): typed `EmapEventMap` — `map.on` / `off` /
+  `once` now give
+  event-name autocomplete and payload inference for the camera lifecycle
+  (`movestart`/`move`/`moveend`/`zoomstart`/`zoom`/`zoomend`) and the
+  `data`/`error`/`selectionchange`/`historychange`/`editmodechange`/
+  `crschange`/`resize`/`validationfailed` events. `EmapEventMap` is an
+  augmentable `interface` (`declare module` to register custom events);
+  unknown event names still compile (escape hatch preserved). Compile-time
+  only — zero runtime change. Exported: `EmapEventMap`, `CameraEvent`.
 
 ### Documentation
 
