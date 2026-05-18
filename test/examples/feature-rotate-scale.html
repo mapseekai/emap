@@ -20,7 +20,7 @@
     <span id="status">加载数据</span>
     <span class="hint">
       在要素上按住鼠标左键拖动 → 松开落位。空白处按下走平移地图。
-      <kbd>R</kbd> 进入旋转 · <kbd>S</kbd> 进入缩放 · <kbd>T</kbd>(默认) 平移 · <kbd>Esc</kbd>/右键取消。
+      <kbd>R</kbd> 进入旋转 · <kbd>S</kbd> 进入缩放 · <kbd>T</kbd>(默认) 平移 · <kbd>Esc</kbd> 取消。
       旋转: 鼠标绕枢轴旋转的角度即为变换。 缩放: 鼠标到枢轴的距离比即为缩放因子。
       平移仍可用 <kbd>←</kbd>/<kbd>→</kbd>/<kbd>↑</kbd>/<kbd>↓</kbd>(空闲时), <kbd>[</kbd>/<kbd>]</kbd>±5° 步进, <kbd>+</kbd>/<kbd>-</kbd> ×1.1/×0.9。
       <kbd>Ctrl+Z</kbd> 撤销。
@@ -32,7 +32,7 @@
   <script src="../../dist/mapshaper-vendor.js"></script>
   <script src="../../dist/emap-dev.js"></script>
   <script>
-    const { Emap, TopologySource, NavigationControl, HistoryControl, rotateMatrix, scaleMatrix } = emap;
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
     const map = new Emap({ container: 'map' });
     map.addControl(new NavigationControl(), 'top-left');
     map.addControl(new HistoryControl(), 'top-left');
@@ -47,7 +47,8 @@
       else map.setHighlightedFeatures(e.selected, { color: '#1e88e5', width: 3 });
     });
 
-    document.getElementById('file-input').addEventListener('change', (e) => {
+    const fileInput = document.getElementById('file-input');
+    fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
       status.textContent = `正在加载 ${file.name}...`;
@@ -62,7 +63,11 @@
           await source.setData({ filename: file.name, content });
           map.addSource(SOURCE_ID, source);
           map.setExtent(source.getExtent());
-          status.textContent = `已加载 ${file.name}。点击要素选中,按键变换。`;
+          // Enable the transform handler only AFTER the map/data is ready
+          // (mirrors how the vertexEdit/drawFeature examples enable theirs).
+          map.transformFeature.enable();
+          setMode('t');
+          status.textContent = `已加载 ${file.name}。在要素上按住拖动变换,T/R/S 切换模式。`;
           document.getElementById('map').focus();
         } catch (err) {
           console.error(err);
@@ -72,132 +77,42 @@
       reader.readAsArrayBuffer(file);
     });
 
-    // Press-and-hold drag in the current mode (translate / rotate / scale).
-    // Mousedown is registered on `window` with `{ capture: true }` so it
-    // fires BEFORE the map container's bubble-phase pan handler. On a
-    // feature-hit it calls `stopImmediatePropagation` to suppress pan
-    // for that gesture; on empty space it returns early and pan proceeds
-    // normally. mousemove / mouseup live on `window` so a drag that
-    // leaves the canvas still tracks correctly. Mode switch (R/S/T)
-    // only allowed while idle.
-    let mode = 't';                  // 't' = translate, 'r' = rotate, 's' = scale
-    let translateSession = null;
-    let affineSession = null;        // rotate or scale session
-    let lastMapCoord = null;         // for translate
-    let prevAngle = 0;               // last delta-rotation reference angle
-    let prevDist = 0;                // last delta-scale reference distance
-    let dragging = false;
+    // ── Migration note ────────────────────────────────────────────────
+    // The old hand-wired recipe (pixelToMap + window capture-phase
+    // mousedown/move/up + beginTranslateSession/beginAffineSession +
+    // rotateMatrix/scaleMatrix delta math + manual Esc/right-click
+    // cancel) is now the single modal handler `map.transformFeature`.
+    // The whole interaction collapses to enable() + setOptions({ mode }):
+    //
+    //   map.transformFeature.enable();
+    //   map.transformFeature.setOptions({ mode: 'rotate' });   // or 'translate' | 'scale'
+    //
+    // pointerdown over a feature selects it + opens the matching
+    // editSession; drag streams the delta (translate dx/dy, or
+    // rotate/scale matrix vs the session origin); pointerup commits one
+    // undo entry; Escape cancels. The T/R/S switcher below is now just a
+    // call to setOptions — no session bookkeeping. The headless
+    // map.editSession step-nudge API is unchanged.
+    // ──────────────────────────────────────────────────────────────────
 
-    function pixelToMap(e) {
-      const rect = mapContainer.getBoundingClientRect();
-      return map.unproject(e.clientX - rect.left, e.clientY - rect.top);
-    }
+    let mode = 't';   // 't' = translate, 'r' = rotate, 's' = scale (for UI/status)
 
     function modeLabel() {
       return mode === 'r' ? '旋转' : mode === 's' ? '缩放' : '平移';
     }
 
-    function inSession() {
-      return translateSession !== null || affineSession !== null;
+    // Single switcher: maps the t/r/s UI state onto the handler's mode.
+    function setMode(m) { // 't' | 'r' | 's'
+      mode = m;
+      map.transformFeature.setOptions({
+        mode: m === 't' ? 'translate' : m === 'r' ? 'rotate' : 'scale',
+      });
+      status.textContent = `模式: ${modeLabel()}(在要素上按住拖动,Esc 取消)。`;
     }
 
-    function endSession(commit) {
-      if (translateSession) {
-        if (commit) {
-          const [adx, ady] = translateSession.getAccumulated();
-          if (translateSession.commit()) status.textContent = `已落位 (${adx.toFixed(2)}, ${ady.toFixed(2)})。`;
-          else status.textContent = '未移动,选择保留。';
-        } else { translateSession.cancel(); status.textContent = '已取消本次拖动。'; }
-        translateSession = null;
-        lastMapCoord = null;
-      } else if (affineSession) {
-        if (commit) {
-          if (affineSession.commit()) status.textContent = `已落位(${modeLabel()})。`;
-          else status.textContent = '未变换,选择保留。';
-        } else { affineSession.cancel(); status.textContent = '已取消本次拖动。'; }
-        affineSession = null;
-      }
-      dragging = false;
-    }
-
-    // Capture-phase on window so we run BEFORE the map-container's pan
-    // handler. Only intercept when the target is inside the map.
-    window.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return; // left-button only
-      if (!mapContainer.contains(e.target)) return;
-
-      const rect = mapContainer.getBoundingClientRect();
-      const point = [e.clientX - rect.left, e.clientY - rect.top];
-      const features = map.queryFeatures(point);
-      if (!features.length) {
-        // Empty space → let pan handler proceed (no stopPropagation).
-        return;
-      }
-      // Hit a feature. Suppress the pan handler for this gesture and
-      // open a drag session.
-      e.stopImmediatePropagation();
-      e.preventDefault();
-
-      const selMode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
-      map.select(features, { mode: selMode });
-      document.getElementById('map').focus();
-
-      // Modifier-clicks are selection-only — no drag.
-      if (e.shiftKey || e.ctrlKey || e.metaKey) return;
-
-      // Open a session matching current mode.
-      if (mode === 't') {
-        translateSession = map.editSession.beginTranslateSession();
-        if (translateSession) {
-          lastMapCoord = pixelToMap(e);
-          dragging = true;
-          status.textContent = '平移中… 松开鼠标落位,Esc / 右键取消。';
-        }
-      } else {
-        affineSession = map.editSession.beginAffineSession();
-        if (affineSession) {
-          const cur = pixelToMap(e);
-          const [ox, oy] = affineSession.origin;
-          prevAngle = Math.atan2(cur[1] - oy, cur[0] - ox);
-          prevDist = Math.hypot(cur[0] - ox, cur[1] - oy) || 1;
-          dragging = true;
-          status.textContent = `${modeLabel()}中… 松开鼠标落位,Esc / 右键取消。`;
-        }
-      }
-    }, { capture: true });
-
-    window.addEventListener('mousemove', (e) => {
-      if (!dragging) return;
-      const cur = pixelToMap(e);
-      if (translateSession) {
-        if (lastMapCoord) translateSession.move(cur[0] - lastMapCoord[0], cur[1] - lastMapCoord[1]);
-        lastMapCoord = cur;
-      } else if (affineSession) {
-        const [ox, oy] = affineSession.origin;
-        if (mode === 'r') {
-          const ang = Math.atan2(cur[1] - oy, cur[0] - ox);
-          const delta = ang - prevAngle;
-          if (delta !== 0) affineSession.applyDelta(rotateMatrix(delta, ox, oy));
-          prevAngle = ang;
-        } else if (mode === 's') {
-          const dist = Math.hypot(cur[0] - ox, cur[1] - oy) || 1;
-          const factor = dist / prevDist;
-          if (factor !== 1) affineSession.applyDelta(scaleMatrix(factor, factor, ox, oy));
-          prevDist = dist;
-        }
-      }
-    });
-
-    window.addEventListener('mouseup', (e) => {
-      if (!dragging) return;
-      if (e.button !== 0) return;
-      endSession(true);
-    });
-
-    // Empty-space click clears the selection (mousedown on empty space
-    // doesn't stop pan; the click that follows runs once).
+    // Empty-space click still clears the selection (the handler passes
+    // through pointerdown on empty space, so pan + this click run).
     mapContainer.addEventListener('click', (e) => {
-      if (dragging || inSession()) return;
       const rect = mapContainer.getBoundingClientRect();
       const point = [e.clientX - rect.left, e.clientY - rect.top];
       const features = map.queryFeatures(point);
@@ -206,22 +121,17 @@
       }
     });
 
-    mapContainer.addEventListener('contextmenu', (e) => {
-      if (inSession()) { e.preventDefault(); endSession(false); }
-    });
-
+    // T/R/S mode switcher (same keys/labels as before — only the handler
+    // wiring changed: each key now just calls setMode()).
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && inSession()) { e.preventDefault(); endSession(false); return; }
-      // Mode switch only while idle — switching mid-drag would invalidate state.
-      if (inSession()) return;
-      if (e.key === 't' || e.key === 'T') { mode = 't'; status.textContent = '模式: 平移(在要素上按住拖动)。'; }
-      else if (e.key === 'r' || e.key === 'R') { mode = 'r'; status.textContent = '模式: 旋转(在要素上按住绕中心拖动)。'; }
-      else if (e.key === 's' || e.key === 'S') { mode = 's'; status.textContent = '模式: 缩放(在要素上按住远离/靠近中心拖动)。'; }
+      if (e.key === 't' || e.key === 'T') setMode('t');
+      else if (e.key === 'r' || e.key === 'R') setMode('r');
+      else if (e.key === 's' || e.key === 'S') setMode('s');
     });
 
-    // Keyboard step nudge stays available while idle.
+    // Keyboard step nudge stays available (headless editSession API,
+    // unchanged by the handler).
     document.getElementById('map').addEventListener('keydown', (e) => {
-      if (inSession()) return;
       const fine = e.shiftKey;
       const stride = fine ? 1 : 10;
       const angle = fine ? 1 : 5;

@@ -45,7 +45,7 @@
       文件:
       <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
     </label>
-    <span class="hint">在要素上按住鼠标左键拖动 → 松开落位。空白处按下走平移地图。共享边界自动复制,相邻未选要素保持原位。右键或 Esc 取消拖动。方向键步进(不复制共享边)。Ctrl+Z 撤销。</span>
+    <span class="hint">在要素上按住鼠标左键拖动 → 松开落位。空白处按下走平移地图。共享边界自动复制,相邻未选要素保持原位。Esc 取消拖动。方向键步进(不复制共享边)。Ctrl+Z 撤销。</span>
     <span id="status">加载数据</span>
   </div>
   <div id="map" tabindex="0"></div>
@@ -89,7 +89,11 @@
           await source.setData({ filename: file.name, content });
           map.addSource(SOURCE_ID, source);
           map.setExtent(source.getExtent());
-          status.textContent = `已加载 ${file.name}。点击要素选中,方向键平移。`;
+          // Enable the transform handler only AFTER the map/data is ready
+          // (mirrors how the vertexEdit/drawFeature examples enable theirs).
+          map.transformFeature.setOptions({ mode: 'translate' });
+          map.transformFeature.enable();
+          status.textContent = `已加载 ${file.name}。在要素上按住拖动平移,方向键步进。`;
           // 聚焦 map 容器,让方向键事件被它接收
           document.getElementById('map').focus();
         } catch (err) {
@@ -100,95 +104,24 @@
       reader.readAsArrayBuffer(file);
     });
 
-    // Press-and-hold drag: mousedown on a feature opens a translate
-    // session (and suppresses the map pan handler for THIS gesture by
-    // calling stopImmediatePropagation in the window capture phase —
-    // capture-phase listeners on `window` fire before bubble-phase
-    // listeners on inner elements, so the pan handler never sees the
-    // mousedown). mousemove streams (dx, dy) into the session in
-    // source-data coords. mouseup commits one cumulative undo entry.
-    // Esc / right-click cancels.
-    let session = null;
-    let lastMapCoord = null;
-    let dragging = false;
+    // ── Migration note ────────────────────────────────────────────────
+    // The old hand-wired recipe (pixelToMap + window capture-phase
+    // mousedown/move/up + beginTranslateSession + manual Esc/right-click
+    // cancel) is now the single modal handler `map.transformFeature`.
+    // Enabling it (above, after data is ready) is the whole interaction:
+    //
+    //   map.transformFeature.setOptions({ mode: 'translate' });
+    //   map.transformFeature.enable();
+    //
+    // pointerdown over a feature selects it + opens the translate
+    // session; drag streams the delta; pointerup commits one undo entry;
+    // Escape cancels. No manual mousedown/move/up — the handler (and the
+    // pointer arbiter) own pan-suppression and the session lifecycle.
+    // ──────────────────────────────────────────────────────────────────
 
-    function pixelToMap(e) {
-      const rect = mapContainer.getBoundingClientRect();
-      return map.unproject(e.clientX - rect.left, e.clientY - rect.top);
-    }
-
-    function endSession(commit) {
-      if (!session) return;
-      if (commit) {
-        const [adx, ady] = session.getAccumulated();
-        const pushed = session.commit();
-        status.textContent = pushed
-          ? `已落位 (${adx.toFixed(2)}, ${ady.toFixed(2)})。Ctrl+Z 撤销。`
-          : '未移动,选择保留。';
-      } else {
-        session.cancel();
-        status.textContent = '已取消本次拖动。';
-      }
-      session = null;
-      lastMapCoord = null;
-      dragging = false;
-    }
-
-    // Capture-phase on window so we run BEFORE the map-container's pan
-    // handler. Only intercept when the target is inside the map.
-    window.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return; // left-button only
-      if (!mapContainer.contains(e.target)) return;
-      // Modifier-clicks belong to selection helpers (shift = add, ctrl/meta = toggle).
-      // Let those go through as normal clicks (no drag).
-      const rect = mapContainer.getBoundingClientRect();
-      const point = [e.clientX - rect.left, e.clientY - rect.top];
-      const features = map.queryFeatures(point);
-      if (!features.length) {
-        // Empty space → let pan handler proceed (no stopPropagation).
-        return;
-      }
-      // Hit a feature. Suppress the pan handler for this gesture and
-      // open a drag session.
-      e.stopImmediatePropagation();
-      e.preventDefault();
-
-      const mode = e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey) ? 'toggle' : 'replace';
-      map.select(features, { mode });
-      document.getElementById('map').focus();
-
-      // Modifier-clicks are selection-only — don't start a drag (so a
-      // shift-click adds to the selection without inadvertently
-      // translating).
-      if (e.shiftKey || e.ctrlKey || e.metaKey) return;
-
-      session = map.editSession.beginTranslateSession();
-      if (session) {
-        lastMapCoord = pixelToMap(e);
-        dragging = true;
-        status.textContent = '拖动中… 松开鼠标落位,Esc / 右键取消。';
-      }
-    }, { capture: true });
-
-    window.addEventListener('mousemove', (e) => {
-      if (!dragging || !session) return;
-      const cur = pixelToMap(e);
-      if (lastMapCoord) {
-        session.move(cur[0] - lastMapCoord[0], cur[1] - lastMapCoord[1]);
-      }
-      lastMapCoord = cur;
-    });
-
-    window.addEventListener('mouseup', (e) => {
-      if (!dragging || !session) return;
-      if (e.button !== 0) return;
-      endSession(true);
-    });
-
-    // Empty-space click clears the selection (mousedown on empty space
-    // doesn't stop pan; the click that follows runs once).
+    // Empty-space click still clears the selection (the handler passes
+    // through pointerdown on empty space, so pan + this click run).
     mapContainer.addEventListener('click', (e) => {
-      if (dragging || session) return; // we already handled it via mouseup
       const rect = mapContainer.getBoundingClientRect();
       const point = [e.clientX - rect.left, e.clientY - rect.top];
       const features = map.queryFeatures(point);
@@ -197,23 +130,9 @@
       }
     });
 
-    mapContainer.addEventListener('contextmenu', (e) => {
-      if (!session) return;
-      e.preventDefault();
-      endSession(false);
-    });
-
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && session) {
-        e.preventDefault();
-        endSession(false);
-        return;
-      }
-    });
-
-    // Arrow-key step nudge still works when no session is active.
+    // Arrow-key step nudge still works (headless editSession API,
+    // unchanged by the handler).
     document.getElementById('map').addEventListener('keydown', (e) => {
-      if (session) return; // drag in progress — let mouse own the movement
       const stride = e.shiftKey ? 10 : 1;
       let dx = 0, dy = 0;
       if (e.key === 'ArrowLeft') dx = -stride;
