@@ -90,6 +90,7 @@ export class LassoSelectHandler extends EventDispatcher implements Handler<Lasso
     poly.setAttribute('fill', s.fill ?? 'rgba(0, 120, 255, 0.1)');
     poly.setAttribute('stroke', s.stroke ?? '#0078ff');
     poly.setAttribute('stroke-width', String(s.strokeWidth ?? 1.5));
+    poly.setAttribute('stroke-dasharray', s.strokeDasharray ?? '4 3');
     poly.setAttribute('points', '');
     svg.appendChild(poly);
     this._map.getCanvasContainer().appendChild(svg);

@@ -62,3 +62,28 @@ describe('LassoSelectHandler', () => {
     expect(map.select).not.toHaveBeenCalled();
   });
 });
+
+describe('LassoSelectHandler stroke-dasharray (DX P2c)', () => {
+  it('default strokeDasharray: polyline has "4 3"', () => {
+    const map = fakeMap();
+    const h = new LassoSelectHandler(map as any);
+    h.enable();
+    h.handlePointer(ev('down', 0, 0, true));
+    const container = map.getCanvasContainer();
+    const poly = container.querySelector('polyline');
+    expect(poly).not.toBeNull();
+    expect(poly?.getAttribute('stroke-dasharray')).toBe('4 3');
+  });
+
+  it('custom strokeDasharray via setOptions: polyline uses custom value', () => {
+    const map = fakeMap();
+    const h = new LassoSelectHandler(map as any);
+    h.setOptions({ style: { strokeDasharray: '8 2' } });
+    h.enable();
+    h.handlePointer(ev('down', 0, 0, true));
+    const container = map.getCanvasContainer();
+    const poly = container.querySelector('polyline');
+    expect(poly).not.toBeNull();
+    expect(poly?.getAttribute('stroke-dasharray')).toBe('8 2');
+  });
+});
