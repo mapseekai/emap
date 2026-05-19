@@ -1,20 +1,11 @@
 import type { Control } from './control';
 import type { Emap, FeatureRef } from '../map/map';
 import { pathBBox, featureMatchesLasso } from '../core/handlers/select-geometry';
+import type { LassoSelectStyle } from '../core/handlers/lasso-select';
 
 export { pointInPolygon, featureMatchesLasso } from '../core/handlers/select-geometry';
 
-/** Visual style for the rubber-band lasso path. */
-export interface LassoSelectStyle {
-  /** Stroke color. Default `'#0078ff'`. */
-  stroke?: string;
-  /** Stroke width in CSS pixels. Default `1.5`. */
-  strokeWidth?: number;
-  /** Fill color of the closed shape preview. Default `'rgba(0, 120, 255, 0.1)'`. */
-  fill?: string;
-  /** SVG `stroke-dasharray` value. Default `'4 3'` (subtly dashed). */
-  strokeDasharray?: string;
-}
+export type { LassoSelectStyle } from '../core/handlers/lasso-select';
 
 export interface LassoSelectControlOptions {
   /**

@@ -1,7 +1,10 @@
 import type { FeatureRef } from './map';
+import type { SelectMode } from '../core/handlers/select-mode';
 
-/** Mutation modes for {@link Selection.apply}. */
-export type SelectMode = 'replace' | 'add' | 'toggle';
+/** Mutation modes for {@link Selection.apply}. Canonical declaration lives
+ *  in `core/handlers/select-mode.ts`; re-exported here for back-compat
+ *  (the public `@/map/selection` path is unchanged). */
+export type { SelectMode } from '../core/handlers/select-mode';
 
 /** Diff produced by every selection mutation. */
 export interface SelectionDiff {

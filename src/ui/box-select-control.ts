@@ -1,16 +1,9 @@
 import type { Control } from './control';
 import type { Emap } from '../map/map';
 import { dedupeRefs } from '../core/handlers/select-geometry';
+import type { BoxSelectStyle } from '../core/handlers/box-select';
 
-/** Visual style for the rubber-band rectangle. */
-export interface BoxSelectStyle {
-  /** Stroke color. Default `'#0078ff'`. */
-  stroke?: string;
-  /** Stroke width in CSS pixels. Default `1.5`. */
-  strokeWidth?: number;
-  /** Fill color. Default `'rgba(0, 120, 255, 0.1)'`. */
-  fill?: string;
-}
+export type { BoxSelectStyle } from '../core/handlers/box-select';
 
 export interface BoxSelectControlOptions {
   /**

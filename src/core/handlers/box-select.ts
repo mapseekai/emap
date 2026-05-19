@@ -5,7 +5,15 @@ import { dedupeRefs } from './select-geometry';
 import type { SelectHandlerOptions } from './click-select';
 import type { Emap } from '../../map/map';
 
-export interface BoxSelectStyle { stroke?: string; strokeWidth?: number; fill?: string; }
+/** Visual style for the rubber-band rectangle. */
+export interface BoxSelectStyle {
+  /** Stroke color. Default `'#0078ff'`. */
+  stroke?: string;
+  /** Stroke width in CSS pixels. Default `1.5`. */
+  strokeWidth?: number;
+  /** Fill color. Default `'rgba(0, 120, 255, 0.1)'`. */
+  fill?: string;
+}
 export interface BoxSelectHandlerOptions extends SelectHandlerOptions {
   /** Min drag diagonal (px) before a release counts as a box. Default 4. */
   dragThreshold?: number;

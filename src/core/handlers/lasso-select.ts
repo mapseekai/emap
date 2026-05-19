@@ -5,13 +5,25 @@ import { featureMatchesLasso, pathBBox } from './select-geometry';
 import type { SelectHandlerOptions } from './click-select';
 import type { Emap, FeatureRef } from '../../map/map';
 
-export interface LassoStyle { stroke?: string; strokeWidth?: number; fill?: string; }
+/** Visual style for the rubber-band lasso path. */
+export interface LassoSelectStyle {
+  /** Stroke color. Default `'#0078ff'`. */
+  stroke?: string;
+  /** Stroke width in CSS pixels. Default `1.5`. */
+  strokeWidth?: number;
+  /** Fill color of the closed shape preview. Default `'rgba(0, 120, 255, 0.1)'`. */
+  fill?: string;
+  /** SVG `stroke-dasharray`. Default `'4 3'` (subtly dashed). */
+  strokeDasharray?: string;
+}
+/** Back-compat alias — historically the handler-side name. */
+export type LassoStyle = LassoSelectStyle;
 export interface LassoSelectHandlerOptions extends SelectHandlerOptions {
   dragThreshold?: number;
   dragActivator?: ModifierCombo;
   /** Loose hit (any part inside) vs strict containment. Default true. */
   includeIntersecting?: boolean;
-  style?: LassoStyle;
+  style?: LassoSelectStyle;
 }
 
 const LASSO_DEFAULT_MODS = { replace: 'none', add: 'ctrl', toggle: 'alt' } as const;

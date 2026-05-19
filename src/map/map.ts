@@ -35,7 +35,7 @@ import { FeatureQuery } from './feature-query';
 import { FeatureAccessor } from './feature-accessor';
 import { ValidatorRegistry } from '../validation/registry';
 import { HighlightManager } from './highlight-manager';
-import { Selection, SelectMode, SelectionDiff } from './selection';
+import { Selection, type SelectMode, SelectionDiff } from './selection';
 import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
 import type { EditCommand } from '../edit/edit-command';
 import { CompositeCommand } from '../edit/commands/composite';
