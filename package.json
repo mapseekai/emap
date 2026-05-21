@@ -1,6 +1,6 @@
 {
   "name": "@zwishing/emap",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A modern, decoupled rendering engine for mapshaper data",
   "main": "dist/emap.mjs",
   "module": "dist/emap.mjs",
@@ -36,6 +36,7 @@
     "style.css.d.ts",
     "dist/**/*.d.ts",
     "README.md",
+    "FEATURES.md",
     "SECURITY.md",
     "CHANGELOG.md",
     "LICENSE"
@@ -44,8 +45,10 @@
     "node": ">=18"
   },
   "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "dev": "rollup -c --environment BUILD:development -w",
     "dev-build": "rollup -c --environment BUILD:development",
+    "prebuild": "npm run clean",
     "build": "rollup -c --environment BUILD:production && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
@@ -79,6 +82,7 @@
     "@rollup/plugin-node-resolve": "^15.0.0",
     "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^11.0.0",
+    "esbuild": "^0.21.5",
     "jsdom": "^29.1.0",
     "rollup": "^4.0.0",
     "rollup-plugin-polyfill-node": "^0.13.0",

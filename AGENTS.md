@@ -1,32 +1,15 @@
-<!-- OPENSPEC:START -->
-
-# OpenSpec Instructions
-
-These instructions are for AI assistants working in this project.
-
-Always open `@/openspec/AGENTS.md` when the request:
-
-- Mentions planning or proposals (words like proposal, spec, change, plan)
-- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
-- Sounds ambiguous and you need the authoritative spec before coding
-
-Use `@/openspec/AGENTS.md` to learn:
-
-- How to create and apply change proposals
-- Spec format and conventions
-- Project structure and guidelines
-
-Keep this managed block so 'openspec update' can refresh the instructions.
-
-<!-- OPENSPEC:END -->
-
 ## Project Context (`emap`)
 
-`emap` is a topology-oriented map rendering and editing engine built around `mapshaper` data structures and Canvas. Browser-only TypeScript library.
+`emap` is a topology-oriented map rendering and editing engine built around
+`mapshaper` data structures and Canvas. It is a browser-only TypeScript
+library.
 
-**Read `CLAUDE.md` for the authoritative architecture guide** — repo structure, key patterns (MapshaperAdapter isolation, ParsedCommand[] dispatch, OpResult error model, memento commands, effect-aware dataset replace), and where each kind of change goes. The pointers below are an index into it.
+Read `CLAUDE.md` for the architecture guide: repo structure, key patterns
+(`MapshaperAdapter` isolation, `ParsedCommand[]` dispatch, `OpResult` error
+model, memento commands, effect-aware dataset replace), and where each kind of
+change goes.
 
-**Where to make changes (quick index)**:
+## Where to make changes
 
 | Task | Entry point |
 |---|---|
@@ -35,13 +18,20 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 | New UI control | `src/ui/<control>.ts`, implement `Control` interface, export from `src/index.ts` |
 | Data loading / format | `src/source/topology-source.ts` |
 | CRS / projection | `src/geo/crs-resolver.ts`, `src/geo/projection.ts`, `src/geo/viewport.ts` |
-| Mapshaper internals | `src/adapter/mapshaper-adapter.ts` only — do not touch `mapshaper.internal.*` elsewhere |
+| Mapshaper internals | `src/adapter/mapshaper-adapter.ts` only |
 | Worker routing | `src/map/worker-routing.ts` |
+| Handler behavior | `src/core/handlers/*`, `src/core/handler-manager.ts` |
+| Public exports | `src/index.ts` |
 
-**Hard rules**:
+## Hard rules
 
-- Use the `EventDispatcher` (`on` / `fire`) for internal communication, never raw DOM events.
+- Use `EventDispatcher` (`on` / `fire`) for internal communication, never raw
+  DOM events for engine-level signals.
 - Coordinate math goes through `AffineTransform`, never ad-hoc matrices.
-- Layer resolution goes through `LayerRegistry.resolve(...)`, never inline `layers.find(...)`.
-- Render-loop side effects (DOM updates, state changes) must defer via `requestAnimationFrame` or tween callbacks — not inline in `render()`.
-- New ops must classify their effect (`shape-count` / `topology-only` / `attribute-only` / `crs-only`) in `src/map/ops/_runner.ts`'s `COMMAND_EFFECTS` table — selection-preservation depends on it.
+- Layer resolution goes through `LayerRegistry.resolve(...)`, never inline
+  `layers.find(...)`.
+- Render-loop side effects (DOM updates, state changes) must defer via
+  `requestAnimationFrame` or tween callbacks, not inline in `render()`.
+- New ops must classify their effect (`shape-count` / `topology-only` /
+  `attribute-only` / `crs-only`) in `src/map/ops/_runner.ts`'s
+  `COMMAND_EFFECTS` table because selection preservation depends on it.

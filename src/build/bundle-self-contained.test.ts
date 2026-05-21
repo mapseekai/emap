@@ -12,6 +12,14 @@ const DIST = resolve(REPO, 'dist');
 const STRICT = ['emap.mjs', 'emap.js', 'emap-worker.js'];
 const VENDOR = ['mapshaper-vendor.js', 'mapshaper-vendor.mjs'];
 const REQUIRE_RE = /require\$?1?\(\s*['"][^'"]+['"]\s*\)/g;
+const bin = (name: string) =>
+  resolve(REPO, 'node_modules/.bin', process.platform === 'win32' ? `${name}.cmd` : name);
+const runBin = (name: string, args: string[]) => {
+  if (process.platform === 'win32') {
+    return execFileSync('cmd', ['/c', bin(name), ...args], { stdio: 'pipe' });
+  }
+  return execFileSync(bin(name), args, { stdio: 'pipe' });
+};
 
 // This suite validates the *published* bundles, which only exist as the
 // production build output. A prior `npm run dev-build` leaves unminified
@@ -63,11 +71,7 @@ d('shipped bundles are self-contained', () => {
     // Production rollup bundles only — skip the `tsc -p tsconfig.build.json`
     // .d.ts emit from `npm run build`; declarations are irrelevant to a
     // require(...) scan.
-    execFileSync(
-      resolve(REPO, 'node_modules/.bin/rollup'),
-      ['-c', '--environment', 'BUILD:production'],
-      { cwd: REPO, stdio: 'pipe' },
-    );
+    runBin('rollup', ['-c', '--environment', 'BUILD:production']);
   }, 180_000);
 
   it.each(STRICT)('%s has zero require(...) calls', (f) => {
@@ -91,11 +95,7 @@ d('shipped bundles are self-contained', () => {
         'globalThis.__emapTopologySource = TopologySource;\n',
     );
 
-    execFileSync(
-      resolve(__dirname, '../../node_modules/.bin/esbuild'),
-      [entry, '--bundle', '--format=esm', '--platform=browser', `--outfile=${bundle}`, '--log-level=warning'],
-      { stdio: 'pipe' },
-    );
+    runBin('esbuild', [entry, '--bundle', '--format=esm', '--platform=browser', `--outfile=${bundle}`, '--log-level=warning']);
     const bundled = readFileSync(bundle, 'utf8');
     expect(bundled).toContain('__require');
 
@@ -129,7 +129,7 @@ d('shipped bundles are self-contained', () => {
     await expect(
       waitForLoad(src, { filename: 't.geojson', content }),
     ).resolves.toBeUndefined();
-  });
+  }, 30_000);
 
   it('a .dbf shapefile ZIP does not cause a dynamic-require crash', async () => {
     const { TopologySource } = await loadEmap();

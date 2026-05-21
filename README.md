@@ -1,60 +1,121 @@
 # emap
 
-A topology-oriented geographic map rendering and editing engine built around [Mapshaper](https://github.com/mbloch/mapshaper) data structures and HTML5 Canvas. Browser-only, framework-agnostic TypeScript.
+`emap` is a browser-only TypeScript map rendering and editing engine built on
+Mapshaper topology data structures and HTML5 Canvas 2D. It is designed for
+framework-agnostic GIS applications that need client-side loading, rendering,
+selection, topology-aware editing, data operations, undo/redo, and custom UI
+integration without a backend service.
 
-## What you get
+## Project Status
 
-- **Topology rendering** — draws shared-arc datasets directly without re-tessellating per layer
-- **Loaders** — GeoJSON, TopoJSON, ZIP Shapefile (with per-archive resource limits)
-- **Editing** — pan / wheel-zoom / hover, plus vertex, feature, and topology-aware editing
-- **30+ data ops** under `emap.ops.*` — clip, erase, dissolve, buffer, simplify, project, snap, clean, mosaic, union, divide, points / lines / polygons conversions, join-table, filter, sort, uniq, split, merge, rename, …
-- **Worker pool** — expensive ops dispatch to off-thread workers automatically based on dataset size + command family
-- **Undo / redo** with command coalescing, dataset-replace barriers, and structured `OpResult` errors
-- **Selection model** — single / multi / box / lasso, with attribute-only ops preserving feature ids
-- **Snapshots** — pack / unpack a full session (datasets + history) to a compact binary blob
-- **HTML5 Canvas 2D rendering** — `CanvasPainter` with batched-stroke optimization for large topology datasets
-- **Built-in controls** — navigation, status, basemap, vertex edit, feature draw, history, box / lasso selection
+`emap` is an AI-driven development project and is still evolving quickly. The
+API, behavior, and implementation details may change without the compatibility
+guarantees expected from a mature GIS engine. It is not recommended for
+production environments yet; evaluate it in prototypes, demos, research tools,
+or controlled internal workflows first.
 
-## What's new since 0.2.0
+## Highlights
 
-The 0.3.0 line is a DX batch with no shape-shift to the data path. Highlights:
+- Topology-first rendering for Mapshaper datasets, with shared-arc reuse and LOD.
+- GeoJSON, TopoJSON, ZIP Shapefile, and Mapshaper snapshot loading.
+- MapLibre-style layer specs: `fill`, `line`, and `circle`.
+- Named interaction handlers: `dragPan`, `scrollZoom`, `clickSelect`,
+  `boxSelect`, `lassoSelect`, `vertexEdit`, `drawFeature`, and
+  `transformFeature`.
+- Handler-driven customization: use built-in interactions without the bundled UI
+  controls, or build your own toolbar around the same handlers.
+- Delegated feature events: `feature:click`, `feature:hover`, `feature:enter`,
+  and `feature:leave`.
+- MapLibre-parity camera methods: `jumpTo`, `easeTo`, `flyTo`, `fitBounds`,
+  `panBy`, `panTo`, `zoomTo`, and `stop`.
+- 30+ `map.ops.*` data operations backed by Mapshaper commands.
+- Undo/redo, transactions, validators, feature accessors, highlighting, and
+  full-session snapshots.
+- Optional Web Worker offloading for expensive dataset-replace operations.
+- CSS design tokens for theming built-in UI surfaces.
 
-- **MapLibre-parity camera** — `map.jumpTo`, `setCenter`, `setZoom`, `panTo`, `panBy`, `zoomTo`, `easeTo`, `flyTo` (van-Wijk parabolic), `fitBounds`, `stop` — all chainable; fires `movestart`/`move`/`moveend` + `zoomstart`/`zoom`/`zoomend`.
-- **Typed events** — `map.on` / `off` / `once` now autocomplete event names and infer payloads for the camera lifecycle + `data`/`error`/`selectionchange`/`historychange`/`editmodechange`/`crschange`/`resize`/`validationfailed`. `EmapEventMap` is augmentable via `declare module`; unknown names still compile.
-- **Handler-direct selection** — `map.boxSelect.enable()` / `map.lassoSelect.enable()` activates shift+drag selection without `addControl`. The `BoxSelectControl` / `LassoSelectControl` remain as toolbar-button surfaces (thin shells over the handlers).
-- **Delegated feature events** — `map.on('feature:click' | 'feature:hover' | 'feature:enter' | 'feature:leave', { layers? }, cb)` replaces manual `mousemove` poll + hit-test boilerplate; lazy pointer sink means zero cost when nobody listens.
-- **Named interaction handlers** — `map.dragPan`, `map.scrollZoom`, `map.vertexEdit`, `map.drawFeature`, `map.transformFeature`, `map.clickSelect`, `map.boxSelect`, `map.lassoSelect` — uniform `enable/disable/isEnabled/setOptions/getOptions` surface, arbitrated by `HandlerManager`.
-- **Per-handler cursor** — drag-pan now shows `grab`/`grabbing`; draw / vertex / box / lasso show `crosshair`. `Handler.getCursor()` is the contract; `HandlerManager.refreshCursor()` and the arbiter write `style.cursor` exactly once per dispatch.
-- **CSS design tokens** — `--emap-accent` / `--emap-surface-bg` / `--emap-surface-shadow` / `--emap-hover-bg` / `--emap-danger` / `--emap-font` / etc. on `:root` (defaults match the legacy literals). Override on `:root` (or any ancestor) to theme; the vertex-edit context menu is the first consumer.
-- **Behavior changes** (additive / surfaced previously-silent conflicts): `LassoStyle` widens with optional `strokeDasharray`; adding both `BoxSelectControl` and `LassoSelectControl` now throws (call `disable()` on the other first). See CHANGELOG `[Unreleased] → ### Changed`.
+For the full capability matrix, see [FEATURES.md](FEATURES.md).
 
 ## Install
 
 ```bash
-pnpm add @zwishing/emap
-# or
 npm install @zwishing/emap
+# or
+pnpm add @zwishing/emap
 ```
 
-## Hello map
+## Quick Start
+
+### Bundlers
+
+```ts
+import {
+  Emap,
+  TopologySource,
+  NavigationControl,
+  HistoryControl,
+} from '@zwishing/emap';
+import '@zwishing/emap/style.css';
+
+const map = new Emap({ container: 'map' });
+map.addControl(new NavigationControl(), 'top-left');
+map.addControl(new HistoryControl(), 'top-left');
+
+const source = await TopologySource.fromUrl(
+  'china',
+  'https://geojson.cn/api/china/1.6.3/china.topo.json',
+);
+
+map.addSource('china', source);
+map.setExtent(source.getExtent());
+```
+
+The ESM build is browser-ready. Mapshaper is shipped as a sibling ES module
+resolved from `node_modules/@zwishing/emap/dist/`, so Vite, webpack, esbuild,
+and Bun consumers should not need a `Buffer` polyfill or a custom alias.
+
+### Static Assets
+
+Some runtime files are loaded by URL instead of being inlined into your
+application bundle:
+
+| Asset | When it is needed |
+|---|---|
+| `dist/emap.css` | Built-in controls, context menus, and default UI styling |
+| `dist/mapshaper-vendor.js` | IIFE script usage and worker bootstrapping |
+| `dist/emap-worker.js` | `useWorker: true` or `useWorker: 'auto'` |
+
+For bundlers, prefer:
+
+```ts
+import '@zwishing/emap/style.css';
+```
+
+For script-tag or static-host deployments, copy the files from
+`node_modules/@zwishing/emap/dist/` into your public assets directory. When
+using the worker, keep `emap-worker.js` and `mapshaper-vendor.js` in the same
+directory unless you build your own worker bundle; the worker imports the vendor
+file with a relative `importScripts('mapshaper-vendor.js')` call.
+
+### IIFE Script
 
 ```html
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <link rel="stylesheet" href="node_modules/@zwishing/emap/dist/emap.css" />
-    <style>#map { width: 100vw; height: 100vh; margin: 0; }</style>
+    <style>
+      html, body, #map { width: 100%; height: 100%; margin: 0; }
+    </style>
   </head>
   <body>
     <div id="map"></div>
     <script src="node_modules/@zwishing/emap/dist/mapshaper-vendor.js"></script>
     <script src="node_modules/@zwishing/emap/dist/emap.js"></script>
     <script>
-      const { Emap, TopologySource, NavigationControl, EditToolbar } = emap;
-
+      const { Emap, TopologySource, NavigationControl } = emap;
       const map = new Emap({ container: 'map' });
       map.addControl(new NavigationControl(), 'top-left');
-      map.addControl(new EditToolbar(), 'top-left');
 
       (async () => {
         const source = await TopologySource.fromUrl(
@@ -69,412 +130,434 @@ npm install @zwishing/emap
 </html>
 ```
 
-### Bundlers
+## Loading Data
 
 ```ts
-import { Emap, TopologySource, type MapOptions } from '@zwishing/emap';
-import '@zwishing/emap/style.css';
-
-const options: MapOptions = { container: 'map' };
-const map = new Emap(options);
-```
-
-The ESM build is browser-ready and bundles the mapshaper runtime it needs, so
-Vite/Webpack/Bun consumers should not need to add a `Buffer` polyfill.
-
-`BasemapControl` loads MapLibre only when a basemap is first enabled. If you use
-that control, also include MapLibre's stylesheet in your app:
-
-```ts
-import 'maplibre-gl/dist/maplibre-gl.css';
-```
-
-Live demos in `test/examples/*.html` cover every feature area below.
-
-## Browser bundlers (Vite / webpack / esbuild / Bun)
-
-`import "@zwishing/emap"` works out of the box — no `resolve.alias`, no
-`Buffer` polyfill, no bundler config. mapshaper is shipped as a sibling ES
-module (`dist/mapshaper-vendor.mjs`) that `dist/emap.mjs` imports by relative
-path; your bundler resolves it automatically from
-`node_modules/@zwishing/emap/dist/`.
-
-```ts
-import { Emap, TopologySource } from "@zwishing/emap";
-import "@zwishing/emap/style.css";
-```
-
-The Web Worker is only needed if you opt into off-thread ops via `workerUrl`;
-deploy `dist/emap-worker.js` and `dist/mapshaper-vendor.js` as same-directory
-static assets then.
-
-## API tour
-
-### Core map
-
-```ts
-const map = new Emap({ container: 'map' });
-
-map.addSource(id, source);
-map.addLayer({ id, source: 'china', type: 'fill', paint: { 'fill-color': '#eee' } });
+const source = await TopologySource.fromUrl('roads', '/data/roads.geojson');
+map.addSource('roads', source);
 map.setExtent(source.getExtent());
 
-map.queryFeatures(point, { layers: ['borders'] });
-map.on('feature:click', { layers: ['borders'] }, (e) => {
-  // e.feature / e.ref / e.point / e.lngLat / e.modifiers
+const local = new TopologySource('local');
+await local.setData({ filename: 'upload.zip', content: bytes });
+map.addSource('local', local);
+```
+
+`TopologySource.setData()` is awaitable. It resolves after the dataset is
+populated and the `data` event has fired. `map.addSource()` is order-independent:
+you can add a loaded source or add the source first and load it later.
+
+Supported inputs:
+
+- GeoJSON and TopoJSON.
+- ZIP Shapefile archives containing `.shp`, `.dbf`, `.shx`, and optional `.prj`.
+- Mapshaper `.msx` snapshots via `map.loadSnapshot()`.
+
+## Layers and Rendering
+
+```ts
+map.addLayer({
+  id: 'roads-line',
+  source: 'roads',
+  type: 'line',
+  paint: {
+    'line-color': '#4a5568',
+    'line-width': 1,
+  },
+});
+
+map.addLayer({
+  id: 'district-fill',
+  source: 'districts',
+  type: 'fill',
+  paint: {
+    'fill-color': 'rgba(66, 153, 225, 0.25)',
+    'line-width': 0,
+  },
 });
 ```
 
-### Sources
+When no user layers are added, `emap` creates default display layers from the
+source geometry type. Polygon defaults are outline-only for large-data browsing;
+add an explicit `fill` layer when you want area fills.
+
+## Interactions Without Built-In Controls
+
+Most editing and selection tools are exposed as named handlers. You can use
+them directly from your own UI instead of adding `BoxSelectControl`,
+`DrawFeatureControl`, `VertexEditControl`, or `EditToolbar`.
 
 ```ts
-const source = await TopologySource.fromUrl('id', url);     // GeoJSON / TopoJSON / ZIP
-const source2 = await TopologySource.fromBytes('id', buf, {
-  filename: 'local.geojson',
-});  // ArrayBuffer / Uint8Array
+map.boxSelect.setOptions({
+  layers: ['district-fill'],
+  dragActivator: 'shift',
+  dragThreshold: 4,
+});
+map.boxSelect.enable();
 
-// Re-importing an existing source: setData is awaitable — it resolves
-// once the dataset is ready, so getLayers()/getExtent() are safe after it.
-// The `data` / `error` events still fire for event-driven consumers.
-await source.setData({ filename: 'next.geojson', content: bytes });
-source.getExtent();
-source.getLayers();
+map.lassoSelect.setOptions({ layers: ['district-fill'] });
+map.lassoSelect.enable();
+
+map.drawFeature.setOptions({
+  source: 'editing',
+  sourceLayer: 'areas',
+  type: 'polygon',
+  snapSources: ['editing', 'reference'],
+});
+map.drawFeature.enable();
+
+map.vertexEdit.enable();
+
+map.clickSelect.enable();
+map.transformFeature.setOptions({ mode: 'translate' });
+map.transformFeature.enable();
 ```
 
-#### Loading contract (since 0.2.0)
-
-`setData()` returns `Promise<TopologySource>` that resolves **after** the
-dataset is populated and the `data` (`{reason:'load'}`) event has fired, and
-rejects on load error. All three of these are valid and equivalent — pick one:
+All handlers expose the same basic surface:
 
 ```ts
-// 1. await (canonical)
-await source.setData(input);
-map.addSource('id', source);          // order-independent — see below
-map.setExtent(source.getExtent());
-
-// 2. await, addSource first
-map.addSource('id', source);
-await source.setData(input);
-map.setExtent(source.getExtent());
-
-// 3. event-driven (no await)
-source.on('data', ({ reason }) => { if (reason === 'load') map.setExtent(source.getExtent()); });
-source.setData(input);
-map.addSource('id', source);
+handler.enable();
+handler.disable();
+handler.isEnabled();
+handler.setOptions({...});
+handler.getOptions();
 ```
 
-`map.addSource()` is **order-independent**: if the source is already loaded
-it back-fills and renders immediately; if not, it renders on the next `data`
-event. There is no addSource/setData ordering requirement.
+Available named handlers:
 
-> **Upgrading to 0.2.0 and the map renders blank with no error?** That is the
-> *pre-0.2.0* symptom: in ≤0.1.x `setData()` returned `this`, so `await`
-> resolved on the next microtask **before** the import finished and
-> `getExtent()` read an empty dataset. If you see this on "0.2.0", you are
-> running a **stale install**. Verify
-> `node_modules/@zwishing/emap/package.json` is actually `0.2.0`
-> (`grep -m1 '"setData"' node_modules/@zwishing/emap/dist/emap.mjs` must show
-> `new Promise`, not `return this`), then clear bundler caches
-> (`rm -rf node_modules/.vite node_modules/.cache`) and reinstall.
+| Handler | Purpose |
+|---|---|
+| `map.dragPan` | Pointer drag map panning |
+| `map.scrollZoom` | Wheel zoom |
+| `map.clickSelect` | Click selection |
+| `map.boxSelect` | Shift-drag rectangular selection |
+| `map.lassoSelect` | Free-form lasso selection |
+| `map.vertexEdit` | Topology-aware vertex editing |
+| `map.drawFeature` | Point, polyline, and polygon drawing |
+| `map.transformFeature` | Translate, rotate, or scale selected features |
 
-### Editing operations (`emap.ops`)
+## Building Your Own UI
 
-All ops return `Promise<OpResult>` — a discriminated `{ ok: true, value? } | { ok: false, error: OpError }`. Errors are typed (`not-found`, `validation`, `expression-disabled`, `mapshaper`, `host-removed`).
+Built-in controls are optional. A custom toolbar can call the public map API and
+handlers directly:
 
 ```ts
-// Whole-dataset CLI ops
-await map.ops.clipLayer({ source: 'roads', target: 'streets', mask: 'park' });
-await map.ops.dissolveLayer({ source: 'us', target: 'counties', field: 'STATE' });
-await map.ops.bufferLayer({ source: 'roads', target: 'streets', radius: 50 });
-await map.ops.simplifyLayer({ source: 'world', percentage: 10 });
-await map.ops.projectLayer({ source: 'world', crs: 'EPSG:3857' });
+toolbar.querySelector('[data-tool="box"]').onclick = () => {
+  map.lassoSelect.disable();
+  map.boxSelect.enable();
+};
 
-// Layer management
-await map.ops.renameLayer({ source: 's', target: 'old', name: 'new' });
-await map.ops.mergeLayers({ source: 's', targets: ['a', 'b'], name: 'combined' });
-await map.ops.splitLayer({ source: 's', target: 'us', expression: 'STATE' });
-await map.ops.dropLayer({ source: 's', target: 'tmp' });
+toolbar.querySelector('[data-tool="undo"]').onclick = () => map.undo();
+toolbar.querySelector('[data-tool="redo"]').onclick = () => map.redo();
 
-// Attribute / data
-await map.ops.applyExpression({ source: 's', target: 'l', expression: 'this.area = $.area' });
-await map.ops.filterFeatures({ source: 's', target: 'l', expression: 'this.pop > 1e6' });
-await map.ops.joinTable({
-  source: 's', target: 'states',
-  data: { csv: csvBytes }, keys: ['STATE_FIPS', 'fips'],
+map.on('historychange', (e) => {
+  undoButton.disabled = !e.canUndo;
+  redoButton.disabled = !e.canRedo;
+});
+```
+
+For a custom control that still plugs into the corner layout, implement:
+
+```ts
+const control = {
+  onAdd(map) {
+    const el = document.createElement('div');
+    el.textContent = 'My tool';
+    return el;
+  },
+  onRemove() {},
+};
+
+map.addControl(control, 'top-right');
+```
+
+### Custom Box Selection
+
+If you want your own rectangular selection UI instead of `BoxSelectControl`, use
+the built-in handler as the gesture engine and keep your buttons outside
+`emap`:
+
+```ts
+const boxButton = document.querySelector<HTMLButtonElement>('[data-tool="box"]')!;
+const clearButton = document.querySelector<HTMLButtonElement>('[data-tool="clear"]')!;
+
+map.boxSelect.setOptions({
+  layers: ['district-fill'],
+  dragActivator: 'shift',
+  dragThreshold: 4,
+  mode: 'replace',
 });
 
-// Topology repair / inspection
-await map.ops.cleanLayer({ source: 's', target: 'l' });
-await map.ops.snapLayer({ source: 's', target: 'l', interval: 0.001 });
-const report = await map.ops.checkGeometry({ source: 's' });
-//  → { ok: true, value: { ok, intersections: [...], intersectionCount } }
+function activateBoxSelect() {
+  map.lassoSelect.disable();
+  map.vertexEdit.disable();
+  map.drawFeature.disable();
+  map.transformFeature.disable();
+  map.boxSelect.enable();
+  boxButton.dataset.active = 'true';
+}
 
-// Selection-driven
-await map.ops.mergeSelected();
+function deactivateBoxSelect() {
+  map.boxSelect.disable();
+  delete boxButton.dataset.active;
+}
+
+boxButton.onclick = () => {
+  if (map.boxSelect.isEnabled()) deactivateBoxSelect();
+  else activateBoxSelect();
+};
+
+clearButton.onclick = () => map.clearSelection();
+
+map.on('selectionchange', (e) => {
+  selectionCount.textContent = String(e.selected.length);
+});
 ```
 
-A full list of ops + their option types lives in `src/index.ts` (search for `*Options`).
+The handler owns pointer capture, hit testing, selection mode resolution, and
+its overlay drawing. Your application owns toolbar state, mode switching, and
+whether selection is allowed for the current workflow.
 
-### Transactions
+## Feature Events and Highlighting
 
-Stage multiple ops as one atomic edit — commit collapses them into a single undo entry, rollback restores every touched source's dataset (and the selection) to the pre-transaction state.
+```ts
+map.on('feature:click', { layers: ['district-fill'] }, (e) => {
+  console.log(e.ref, e.feature.properties);
+  map.select([e.ref]);
+});
+
+map.on('feature:enter', { layers: ['district-fill'] }, (e) => {
+  map.setHighlightedFeatures([e.ref], { color: '#1677ff', width: 2, fill: true });
+});
+
+map.on('feature:leave', () => {
+  map.clearHighlightedFeatures();
+});
+
+map.on('mousemove', (e) => {
+  status.textContent = `${e.mapCoord[0].toFixed(4)}, ${e.mapCoord[1].toFixed(4)}`;
+});
+```
+
+Feature and pointer events are delegated through the same pointer arbiter as the
+handlers. The pointer sink is installed lazily, so there is no hit-test overhead
+when no listener is registered.
+
+## Data Operations
+
+All operations return `Promise<OpResult<T>>`:
+
+```ts
+const result = await map.ops.bufferLayer({
+  source: 'roads',
+  target: 'roads',
+  radius: 50,
+});
+
+if (!result.ok) {
+  console.error(result.error.kind, result.error.message);
+}
+```
+
+Common operation groups:
+
+- Geometry operations: `clipLayer`, `eraseLayer`, `dissolveLayer`,
+  `bufferLayer`, `simplifyLayer`, `projectLayer`, `cleanLayer`, `snapLayer`.
+- Conversion operations: `pointsLayer`, `linesLayer`, `polygonsLayer`,
+  `innerlinesLayer`, `explodeLayer`.
+- Layer operations: `renameLayer`, `mergeLayers`, `splitLayer`, `dropLayer`.
+- Attribute operations: `applyExpression`, `filterFeatures`, `joinTable`,
+  `sortFeatures`, `uniqueFeatures`, `filterFields`, `renameFields`,
+  `dataFill`.
+- Inspection and repair: `checkGeometry`, `rebuildTopology`,
+  `intersectionPointsLayer`.
+- Selection-driven operation: `mergeSelected`.
+
+Expression-bearing APIs are disabled by default for safety:
+
+```ts
+const map = new Emap({ container: 'map', expressionPolicy: 'trusted' });
+```
+
+Use `'trusted'` only for application-owned expressions and trusted data.
+
+## Transactions, Undo, and Validation
 
 ```ts
 const tx = map.beginTransaction();
-const r1 = await map.ops.clipLayer({ source, target, mask });
-if (!r1.ok)        { tx.rollback(); return; }
-const r2 = await map.ops.dissolveLayer({ source, target, field: 'STATE' });
-if (!r2.ok)        { tx.rollback(); return; }
-await tx.commit('Process boundaries');
-```
 
-Nesting is not supported — opening a transaction while one is active throws.
+const clipped = await map.ops.clipLayer({ source: 's', target: 'parcels', mask: 'clip' });
+if (!clipped.ok) {
+  tx.rollback();
+} else {
+  await tx.commit('Clip parcels');
+}
 
-### Undo / redo
-
-```ts
 map.undo();
 map.redo();
-map.clearHistory();
 
-map.on('historychange', (e) => {
-  console.log(e.canUndo, e.canRedo, e.label);
+map.on('selectionchange', (e) => {
+  console.log(e.selected, e.added, e.removed);
 });
 ```
 
-Vertex drags / feature translates within a session merge into one undo step. Dataset-replace ops (clip, dissolve, …) keep prior commands in the stack but flag them as `stale` for the UI to render appropriately — there's no destructive `clear`.
-
-### Validation hooks
-
-Register validators that run after every committed edit. Failures fire `validationfailed` — the engine doesn't auto-undo, the app decides.
+Register validators for post-commit checks:
 
 ```ts
 import { topologyValidator } from '@zwishing/emap';
 
 const unregister = map.validators.register(topologyValidator({
-  sources: ['china'],
+  sources: ['editing'],
 }));
 
 map.on('validationfailed', (e) => {
-  console.warn(e.results);    // [{ validator, report }, ...]
-  // Optionally: map.undo();
+  console.warn(e.results);
 });
 ```
 
-Custom validators implement `Validator { name, phase: 'after-commit', run(host, change) }` and return `{ ok, issues: [{ severity, message, ref? }] }`.
+The engine reports validation failures; it does not auto-undo. The application
+decides whether to warn, block save, or call `map.undo()`.
 
-### Feature accessor
-
-Read one feature (or iterate a layer) without indexing into raw `layer.shapes` / `layer.data.getRecords()`:
-
-```ts
-const f = map.features.get({ source: 'us', layer: 'states', id: 12 });
-if (f) console.log(f.properties.NAME, f.geometry);
-
-for (const f of map.features.iter('us', 'states')) {
-  /* … */
-}
-
-map.features.count('us', 'states'); // O(1)
-```
-
-`f.properties` is `Object.freeze`d so accidental mutation can't leak back into the dataset.
-
-### Selection
+## Camera
 
 ```ts
-map.selection.add({ source: 'us', layer: 'counties', id: 42 });
-map.selection.toggle(ref);
-map.selection.clear();
-
-map.on('selectionchange', (e) => {
-  console.log(e.added, e.removed, e.current);
-});
-```
-
-Attribute-only ops (each / join / rename-fields / sort) preserve the selection across the operation. Shape-changing or topology-rebuilding ops clear it.
-
-**Drag-to-select without a control** — `map.boxSelect` and `map.lassoSelect` are named handlers; enable one to opt in to shift+drag:
-
-```ts
-map.boxSelect.enable();   // shift+drag = rect; shift+ctrl = add, shift+alt = toggle
-// later:
-map.boxSelect.disable();
-map.lassoSelect.enable(); // free-form polygon; mutually exclusive with boxSelect
-```
-
-For a toolbar-button surface, use `addControl(new BoxSelectControl())` / `new LassoSelectControl()` (thin shells over the handlers; same behavior). The two handlers are mutually exclusive — `enable()` throws if the sibling is on; call `.disable()` first.
-
-### Camera
-
-All methods return `this` (chainable). Pass `{ scale }` directly or `{ zoom }` (Web-Mercator only; non-WebMercator CRSs use scale).
-
-```ts
-map.jumpTo({ center: [120, 30], zoom: 6 });        // instant
+map.jumpTo({ center: [120, 30], zoom: 6 });
 map.easeTo({ center: [120, 30], zoom: 8, duration: 600 });
-map.flyTo({ center: [120, 30], zoom: 10, duration: 1500 }); // van-Wijk parabolic
-map.fitBounds(bounds, { padding: 40, duration: 600 });
-map.panBy([100, 0]);                                // pixels
-map.stop();                                         // cancel any running animation
+map.flyTo({ center: [120, 30], zoom: 10, duration: 1500 });
+map.fitBounds(source.getExtent(), { padding: 40, duration: 600 });
+map.panBy([120, 0]);
+map.stop();
 ```
 
-Lifecycle: `movestart` → `move`* → `moveend` and `zoomstart` → `zoom`* → `zoomend`. A new camera call (or a user pan/wheel) interrupts a running animation; the interrupted move still fires its `moveend`. State is `{ center: [dataX, dataY], scale }` — see `getCameraState()`.
+Camera methods are chainable and fire `movestart`, `move`, `moveend`,
+`zoomstart`, `zoom`, and `zoomend` events.
 
-### Events
-
-`map.on` / `off` / `once` are typed via the augmentable `EmapEventMap` interface — known event names autocomplete and the listener's `e` is inferred:
-
-```ts
-map.on('moveend', (e) => {
-  // e.center is [number, number]; e.zoom is number; e.originalEvent is MouseEvent | null
-});
-map.on('selectionchange', (e) => {
-  // e.selected / e.added / e.removed are FeatureRef[]
-});
-map.on('error', (e) => console.error(e.error));
-
-// Module augmentation — register custom events you fire yourself:
-declare module '@zwishing/emap' {
-  interface EmapEventMap { myAppEvent: { detail: string } }
-}
-map.on('myAppEvent', (e) => console.log(e.detail));
-```
-
-Unknown event names still compile (escape hatch). The bespoke `'mousemove'` (`PointerMoveEvent` — element-local `point` + projected `mapCoord`) and `'feature:click' | 'feature:hover' | 'feature:enter' | 'feature:leave'` (`FeatureEvent` — `feature` / `ref` / `point` / `lngLat` / `modifiers`) overloads are also typed; `feature:*` accepts an optional `{ source?, layers? }` filter.
-
-### Cursor & theming
-
-Each interaction handler declares the CSS cursor it wants — `dragPan` returns `'grab'` / `'grabbing'`, `drawFeature` / `vertexEdit` / `boxSelect` / `lassoSelect` return `'crosshair'`. `HandlerManager` arbitrates one effective cursor (active exclusive gesture > priority order > default) and writes `style.cursor` once per dispatch.
-
-UI surfaces consume CSS design tokens declared on `:root` in `controls.css`:
-
-```css
-:root {
-  --emap-accent: #0078ff;
-  --emap-accent-soft: rgba(0, 120, 255, 0.1);
-  --emap-surface-bg: #fff;
-  --emap-surface-border: #ccc;
-  --emap-surface-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
-  --emap-radius: 4px;
-  --emap-hover-bg: #f5f5f5;
-  --emap-danger: #d32;
-  --emap-font: 13px/1.5 system-ui, sans-serif;
-}
-```
-
-Override on `:root` (or any ancestor selector) to theme. The vertex-edit right-click menu is the first consumer (`.emap-ctx-menu` / `.emap-ctx-menu-item`); other controls keep their literal values for now.
-
-### Worker offloading
-
-```ts
-const map = new Emap({
-  container: 'map',
-  workerUrl: '/emap-worker.js',     // built alongside dist/emap.js
-  useWorker: 'auto',                // 'auto' | true | false
-  workerThreshold: 200_000,          // vertex count
-  workerPoolSize: 2,                 // multiple workers (PR-22a)
-});
-
-map.on('workerjobstart', (e) => console.log('start', e.label));
-map.on('workerjobend',   (e) => console.log('end',   e.durationMs));
-```
-
-The router classifies each op as cheap / expensive and overrides the threshold accordingly. Override the decision globally with `MapOptions.workerRouting?: (info) => boolean`.
-`workerMode` is also accepted as a compatibility alias for `useWorker`; prefer `useWorker` in new code.
-
-When worker offloading is enabled, serve both `emap-worker.js` and
-`mapshaper-vendor.js` from the same directory. The worker loads the vendor file
-with `importScripts('mapshaper-vendor.js')`.
+## Worker Offloading
 
 ```ts
 const map = new Emap({
   container: 'map',
   useWorker: 'auto',
+  workerThreshold: 200_000,
   workerUrl: '/vendor/emap/emap-worker.js',
+  workerPoolSize: 2,
 });
 ```
 
-For bundler projects, copy these package files to that served directory during
-your app build:
+When workers are enabled, serve these files from the same directory:
 
 ```text
 node_modules/@zwishing/emap/dist/emap-worker.js
 node_modules/@zwishing/emap/dist/mapshaper-vendor.js
 ```
 
-### Snapshots
+`workerRouting` can override the built-in cheap/expensive operation routing.
+
+Workers only cover dataset-replace style operations such as clip, dissolve,
+union, simplify, project, and similar `map.ops.*` commands. Pointer
+interactions, selection transforms, vertex edits, and drawing sessions stay on
+the main thread because their per-frame state is UI-bound and usually cheaper
+than worker round trips.
+
+## Theming
+
+Import the default CSS once:
 
 ```ts
-const blob = await map.exportSnapshot();           // → Uint8Array
-await map.loadSnapshot(blob);                       // restore datasets + history
+import '@zwishing/emap/style.css';
 ```
 
-The export is a mapshaper-pack with magic-byte validation on load.
+Override CSS tokens at `:root` or an app-specific container:
 
-### Controls
+```css
+:root {
+  --emap-accent: #1677ff;
+  --emap-accent-soft: rgba(22, 119, 255, 0.12);
+  --emap-surface-bg: #fff;
+  --emap-surface-border: #d9d9d9;
+  --emap-surface-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  --emap-radius: 4px;
+  --emap-hover-bg: #f5f5f5;
+  --emap-danger: #d32f2f;
+  --emap-font: 13px/1.5 system-ui, sans-serif;
+}
+```
+
+## Built-In Controls
 
 | Control | Purpose |
 |---|---|
-| `NavigationControl` | Zoom in/out + reset |
-| `StatusControl` | Cursor coordinates + EPSG |
+| `NavigationControl` | Zoom in, zoom out, reset |
+| `StatusControl` | Pointer coordinates and CRS |
 | `BasemapControl` | MapLibre raster basemap toggle |
-| `EditToolbar` | Mode switcher (vertex / feature / draw) |
-| `VertexEditControl` | Topology-aware vertex dragging |
-| `DrawFeatureControl` | Polygon / polyline / point drawing with edge snapping |
-| `HistoryControl` | Visual undo/redo stack with stale-entry markers |
-| `BoxSelectControl` | Drag-to-select bounding box |
-| `LassoSelectControl` | Free-form selection lasso |
+| `HistoryControl` | Undo/redo buttons |
+| `EditToolbar` | Combined edit toolbar |
+| `VertexEditControl` | Button shell over `map.vertexEdit` |
+| `DrawFeatureControl` | Button shell over `map.drawFeature` |
+| `BoxSelectControl` | Thin shell over `map.boxSelect` |
+| `LassoSelectControl` | Thin shell over `map.lassoSelect` |
+| `SimplifyControl` | Simplification UI |
 
-All controls implement `onAdd(map)` / `onRemove()` and accept `'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'`.
+## Known Limitations
 
-## Architecture
-
-```
-src/
-├── map/                  # Emap orchestrator, ops facade, selection, history
-│   └── ops/              # one file per data op (clip, dissolve, buffer, …)
-├── adapter/              # MapshaperAdapter — sole bridge to mapshaper.internal.*
-├── source/               # TopologySource, DisplayArcs (LOD)
-├── core/                 # EventDispatcher, MapshaperWorkerPool, drag/wheel
-├── geo/                  # Viewport, Projection, Bounds, AffineTransform, CRS resolver
-├── renderer/             # CanvasPainter (HTML5 Canvas 2D)
-├── edit/                 # EditHistory + per-command memento classes
-├── ui/                   # Control implementations + controls.css
-├── worker/               # off-thread mapshaper entry
-└── types/                # central mapshaper type definitions
-```
-
-Design pillars:
-
-- **One adapter, no leaks.** `MapshaperAdapter` is the only place `mapshaper.internal.*` is touched. Tests stub it; future mapshaper upgrades reroute through it.
-- **Structured commands, no string-build.** Ops emit `ParsedCommand[]` directly — there is no CLI string between the op and mapshaper, on either thread.
-- **Memento commands.** Every edit captures enough state to round-trip do/undo without referencing live dataset internals.
-- **Effect-aware dataset replace.** Each op declares whether it changes shape / topology / attributes / CRS; selection is preserved or cleared accordingly.
-- **Affine coordinate math everywhere.** All viewport conversions pass through `AffineTransform`, never ad-hoc matrix math.
-- **Batch rendering.** `CanvasPainter` groups 25 paths per `stroke()` — measured optimization for large topology datasets.
+- The project is AI-driven and still moving quickly; avoid depending on
+  undocumented internals in production applications.
+- `fill` rendering is heavier than `line` rendering for large polygon datasets
+  because area fills require full polygon path materialization and fill rules.
+  For large-data browsing, keep polygon layers outline-first and enable fills
+  only at suitable scales or for filtered subsets.
+- Rendering is Canvas 2D only. There is no WebGL renderer, symbol placement
+  engine, tiled vector source, or server-side tile pipeline.
+- CRS support follows the bundled Mapshaper/projection path and common browser
+  data workflows. Validate project-specific CRS definitions before building
+  user-facing editing workflows around them.
+- Expression-bearing operations are disabled by default. Set
+  `expressionPolicy: 'trusted'` only for first-party expressions and trusted
+  data.
+- Worker offloading requires the host app to deploy worker/vendor assets
+  correctly and does not make every interaction asynchronous.
 
 ## Development
 
 ```bash
 pnpm install
-npm run dev          # watch + sourcemaps
-npm run dev-build    # one-shot dev build
-npm run build        # production (minified) + .d.ts
-npm test             # vitest, ~760 unit tests
-npm run typecheck    # strict tsc
+cmd /c npm run typecheck
+cmd /c npm run test:run
+cmd /c npm run build
 ```
 
-Build outputs in `dist/`:
+Build outputs:
 
-- `emap.js` — production IIFE bundle
-- `emap.mjs` — ES module
-- `emap-dev.js` — dev bundle with sourcemaps
-- `emap-worker.js` — worker entry
-- `mapshaper-vendor.js` — mapshaper vendor bundle (load before `emap.js` in IIFE mode)
-- `index.d.ts` — TypeScript declarations
+- `dist/emap.js` - IIFE bundle.
+- `dist/emap.mjs` - ES module.
+- `dist/emap-worker.js` - worker bundle.
+- `dist/mapshaper-vendor.js` and `dist/mapshaper-vendor.mjs` - Mapshaper vendor bundles.
+- `dist/emap.css` - control styles.
+- `dist/index.d.ts` - TypeScript declarations.
 
-Manual testing: open any `test/examples/*.html` after building.
+Manual examples live in `test/examples/*.html`.
+
+## Release Checklist
+
+Before publishing a version:
+
+```bash
+cmd /c npm ci
+cmd /c npm run typecheck
+cmd /c npm run test:run
+cmd /c npm run build
+cmd /c npm pack --dry-run
+```
+
+Then check:
+
+- `package.json` version matches the release section in `CHANGELOG.md`.
+- `README.md`, `FEATURES.md`, `SECURITY.md`, and `CHANGELOG.md` describe the
+  same public API.
+- The dry-run package contains only current `dist` files, docs, license, and
+  package metadata.
+- A fresh consumer project can import `@zwishing/emap`, import
+  `@zwishing/emap/style.css`, and resolve `dist/emap-worker.js` if worker
+  mode is documented for the release.
 
 ## License
 

@@ -1,299 +1,277 @@
-# CLAUDE.md — AI Assistant Guide for `emap`
+# CLAUDE.md - AI Assistant Guide for `emap`
 
-This file provides authoritative context for AI assistants working in this repository.
-
----
+This file provides architecture and maintenance context for AI assistants
+working in this repository.
 
 ## Project Overview
 
-`emap` is a topology-oriented geographic map rendering and editing engine built around [Mapshaper](https://github.com/mbloch/mapshaper) data structures and HTML5 Canvas. It is a **browser-only, framework-agnostic TypeScript library** with no backend server requirements.
+`emap` is a topology-oriented geographic map rendering and editing engine built
+around Mapshaper data structures and HTML5 Canvas. It is a browser-only,
+framework-agnostic TypeScript library with no backend server requirement.
 
-**Core capabilities:**
-- Topology-based rendering (Mapshaper datasets → Canvas) with shared-arc reuse and LOD
-- Multi-format data loading: GeoJSON, TopoJSON, ZIP Shapefiles
-- Interactive editing: pan, wheel-zoom, vertex / feature / topology editing
-- 30+ data ops under `emap.ops.*` (clip, dissolve, buffer, simplify, project, snap, clean, …)
-- Off-thread execution via a `MapshaperWorkerPool` with command-family-aware routing
-- Undo/redo with command coalescing, dataset-replace barriers, and structured `OpResult` errors
-- Selection model + snapshot pack/unpack
-- HTML5 Canvas 2D rendering with batched-stroke optimization for large topology datasets
-- Geographic projections (EPSG / WKT / Proj.4 / mproj)
+Core capabilities:
 
----
+- Topology-based rendering with shared-arc reuse and LOD.
+- GeoJSON, TopoJSON, ZIP Shapefile, and Mapshaper snapshot loading.
+- Interactive handlers for pan, zoom, click selection, box/lasso selection,
+  vertex editing, feature drawing, and feature transform.
+- 30+ data ops under `map.ops.*`.
+- Off-thread execution through `MapshaperWorkerPool`.
+- Undo/redo with command coalescing, dataset-replace barriers, transactions,
+  and structured `OpResult` errors.
+- Selection, feature events, feature accessors, highlighting, and validators.
+- MapLibre-style camera methods and layer specifications.
 
 ## Repository Structure
 
-```
+```text
 emap/
 ├── src/
-│   ├── index.ts                  # Public entry point (explicit named exports only)
-│   ├── map/                      # Orchestration + ops + selection + history glue
-│   │   ├── map.ts                # Emap class — orchestrates sources, render, controls
-│   │   ├── mapshaper-ops.ts      # `emap.ops` facade — 1-line delegations to src/map/ops/
-│   │   ├── ops/                  # One file per data op (clip, dissolve, buffer, …)
-│   │   │   ├── _context.ts       # OpContext handed to every op function
-│   │   │   ├── _runner.ts        # Shared dataset-replace pipeline + worker routing
-│   │   │   └── <op>.ts           # 30 individual op implementations
-│   │   ├── op-result.ts          # OpResult discriminated union + helpers
-│   │   ├── selection.ts          # Selection model (single/multi/diff)
-│   │   ├── feature-query.ts      # Hit-testing via Flatbush spatial index
-│   │   ├── highlight-manager.ts  # Hover/selection highlight state
-│   │   ├── layer.ts              # LayerSpecification + paint resolution
-│   │   ├── layer-registry.ts     # Sole resolve(sourceId, layerId) entry point
-│   │   ├── attribute-ops.ts      # set/add/remove/rename property + field commands
-│   │   ├── edit-sessions.ts      # FeatureTranslateSession / FeatureAffineSession
-│   │   ├── edit-state-store.ts   # Per-session ephemeral edit state
-│   │   ├── emap-host.ts          # Internal host contract for managers
-│   │   ├── command-args.ts       # quoteCliArg + isValidLayerName / isValidFieldName
-│   │   ├── worker-routing.ts     # Command-family-aware worker decision tree
-│   │   └── types.ts              # Op option records (ClipEraseOptions, …)
+│   ├── index.ts                 # Public entry point, explicit named exports
+│   ├── map/                     # Emap orchestrator, ops, selection, history
+│   │   ├── map.ts               # Main Emap class
+│   │   ├── mapshaper-ops.ts     # map.ops facade
+│   │   ├── ops/                 # One file per data op
+│   │   ├── op-result.ts         # OpResult and OpError helpers
+│   │   ├── selection.ts         # Selection model
+│   │   ├── feature-query.ts     # Hit testing and Flatbush indexes
+│   │   ├── feature-accessor.ts  # Read-side feature lookup API
+│   │   ├── highlight-manager.ts # Highlight state and rendering
+│   │   ├── layer.ts             # LayerSpecification and paint resolution
+│   │   ├── layer-registry.ts    # Layer resolution surface
+│   │   ├── edit-sessions.ts     # Translate/affine edit sessions
+│   │   ├── edit-state-store.ts  # Edit mode state
+│   │   ├── attribute-ops.ts     # Attribute and field commands
+│   │   ├── worker-routing.ts    # Worker decision tree
+│   │   └── types.ts             # Public map option and op option types
 │   ├── adapter/
-│   │   └── mapshaper-adapter.ts  # SOLE bridge to mapshaper.internal.* — see below
-│   ├── edit/                     # Memento-pattern edit commands + undo stack
-│   │   ├── edit-history.ts       # Undo/redo, coalescing, stale flag
-│   │   ├── edit-command.ts       # Command interface
-│   │   └── commands/             # vertex / feature / dataset-replace / attribute
-│   ├── source/
-│   │   ├── topology-source.ts    # Data loading: GeoJSON/TopoJSON/ZIP + resource limits
-│   │   ├── display-arcs.ts       # Level-of-Detail simplified arc storage
-│   │   ├── source.ts             # Source interface
-│   │   ├── mapshaper-runner.ts   # @deprecated — delegates to MapshaperAdapter
-│   │   └── layer-utils.ts        # getLayerId fallback resolution
-│   ├── geo/
-│   │   ├── viewport.ts           # View transforms and zoom animations
-│   │   ├── projection.ts         # CRS application + mproj wiring
-│   │   ├── crs-resolver.ts       # EPSG / WKT / mproj heuristics → canonical CRS
-│   │   ├── bounds.ts             # Bounding box operations
-│   │   └── transform.ts          # 2D affine transforms (mx, my, bx, by)
+│   │   └── mapshaper-adapter.ts # Sole runtime bridge to mapshaper internals
 │   ├── core/
-│   │   ├── events.ts             # EventDispatcher base class
-│   │   ├── interactions.ts       # Mouse wheel zoom
-│   │   ├── drag-pan-handler.ts   # Drag-to-pan
-│   │   ├── mapshaper-worker-pool.ts  # N-worker pool with epoch isolation
-│   │   └── tween.ts              # Animation tweening
-│   ├── ui/                       # Control implementations (see "Built-in controls")
-│   ├── worker/
-│   │   └── mapshaper-worker.ts   # Off-thread mapshaper entry
+│   │   ├── events.ts            # EventDispatcher
+│   │   ├── event-map.ts         # Typed Emap events
+│   │   ├── handler.ts           # Handler contract
+│   │   ├── handler-manager.ts   # Pointer arbitration and cursor resolution
+│   │   ├── handlers/            # Built-in interaction handlers
+│   │   ├── feature-event-dispatcher.ts
+│   │   ├── pointer-event-dispatcher.ts
+│   │   ├── mapshaper-worker-pool.ts
+│   │   └── tween.ts
+│   ├── edit/
+│   │   ├── edit-history.ts
+│   │   ├── edit-command.ts
+│   │   ├── transaction.ts
+│   │   └── commands/
+│   ├── source/
+│   │   ├── topology-source.ts
+│   │   ├── display-arcs.ts
+│   │   ├── source.ts
+│   │   └── layer-utils.ts
+│   ├── geo/
+│   │   ├── viewport.ts
+│   │   ├── camera.ts
+│   │   ├── projection.ts
+│   │   ├── crs-resolver.ts
+│   │   ├── bounds.ts
+│   │   └── transform.ts
 │   ├── renderer/
-│   │   ├── painter.ts            # Painter interface
-│   │   └── canvas-painter.ts     # HTML5 Canvas 2D, batched-stroke
-│   ├── types/                    # Central mapshaper / mproj type definitions
-│   └── shim.ts                   # Browser polyfills for Node modules referenced by mapshaper
-├── test/
-│   └── examples/                 # 40 standalone HTML playgrounds, one per feature
-├── openspec/                     # Spec-driven development (see below)
-├── docs/
-│   └── backlog.md                # Deferred work + trigger conditions for re-evaluation
-├── dist/                         # Build outputs (gitignored)
-├── rollup.config.mjs
-├── tsconfig.json
+│   │   ├── painter.ts
+│   │   ├── canvas-painter.ts
+│   │   └── edit-overlay-renderer.ts
+│   ├── ui/
+│   │   ├── control.ts
+│   │   ├── controls.css
+│   │   └── *-control.ts
+│   ├── validation/
+│   ├── worker/
+│   ├── vendor/
+│   ├── types/
+│   └── shim.ts
+├── test/examples/               # Manual HTML examples
+├── docs/                        # Supporting notes and backlog
+├── dist/                        # Build outputs, gitignored
+├── README.md                    # User-facing quick start
+├── FEATURES.md                  # Capability matrix
+├── AGENTS.md                    # Short agent rules
+├── SECURITY.md
+├── CHANGELOG.md
 ├── package.json
-├── AGENTS.md                     # Short AI context + OpenSpec pointer
-├── SECURITY.md                   # Expression-evaluation policy + reporting flow
-└── README.md
+└── rollup.config.mjs
 ```
-
----
-
-## Tech Stack
-
-| Area | Technology |
-|---|---|
-| Language | TypeScript 5.0 (strict mode) |
-| Build | Rollup 4.x (IIFE bundle) |
-| Test | Vitest 1.x |
-| Core data | mapshaper v0.6 |
-| Rendering | HTML5 Canvas 2D |
-| Basemap tiles | maplibre-gl v5 |
-| Projections | mproj |
-| Spatial index | flatbush, kdbush |
-| ZIP/Shapefile | fflate |
-
----
 
 ## Development Commands
 
+Use `cmd /c npm ...` on this Windows workspace to avoid PowerShell shim issues.
+
 ```bash
-# Install dependencies
-pnpm install          # preferred
-npm install           # also works
-
-# Development (watch mode with sourcemaps)
-npm run dev
-
-# Single dev build
-npm run dev-build
-
-# Production build (minified)
-npm run build
-
-# Run tests
-npm test
+cmd /c npm install
+cmd /c npm run dev
+cmd /c npm run dev-build
+cmd /c npm run typecheck
+cmd /c npm run test:run
+cmd /c npm run build
 ```
 
-**Build outputs:**
-- `dist/emap-dev.js` — development bundle with sourcemaps
-- `dist/emap.js` — production minified bundle
-- `dist/emap.mjs` — ES module
-- `dist/emap.d.ts` — TypeScript declarations
-
-**Manual testing:** Open any file in `test/examples/*.html` directly in a browser after building.
-
----
+Manual testing: build first, then open `test/examples/*.html` directly in a
+browser.
 
 ## Key Architectural Patterns
 
-### MapshaperAdapter (sole bridge to mapshaper internals)
-`src/adapter/mapshaper-adapter.ts` is the **only** place `mapshaper.internal.*` is touched in the runtime path. Every op, command, and source goes through `getDefaultMapshaperAdapter()`. Tests stub it via `setDefaultMapshaperAdapter(mock)`. Do not import `mapshaper` directly outside the adapter, the worker entry, and `src/types/`.
+### MapshaperAdapter
 
-### ParsedCommand[] (no string-build path)
-Ops emit `ParsedCommand[]` (`{ name, options }` objects) directly to `runOnDatasetParsed` / the worker. There is no shell-style CLI string between an op and mapshaper. New ops go in `src/map/ops/<op>.ts` and call `ctx.runDatasetCommandParsed(...)` — never `ctx.runDatasetCommand(string)` for new code.
+`src/adapter/mapshaper-adapter.ts` is the only runtime bridge to
+`mapshaper.internal.*`. Ops, commands, and sources should go through
+`getDefaultMapshaperAdapter()`. Tests can stub it with
+`setDefaultMapshaperAdapter(mock)`.
 
-### OpResult error model
-Every op returns `Promise<OpResult<T>>` — a discriminated `{ ok: true, value? } | { ok: false, error: OpError }`. `OpError` is a `kind`-tagged union (`not-found` | `validation` | `expression-disabled` | `mapshaper` | `host-removed`). Use the `Err.*` / `OK` / `okValue` helpers in `src/map/op-result.ts`.
+Do not import `mapshaper` directly outside the adapter, worker entry, vendor
+modules, and type/shim boundaries.
 
-### Memento commands + EditHistory
-Every edit captures enough state in its constructor to round-trip `do()` / `undo()` without referencing live dataset internals. Dataset-replace commands (clip, dissolve, …) flag prior commands as `stale` rather than clearing the history. See `src/edit/commands/` for templates and `EditHistory.push` for the merge / coalesce protocol.
+### ParsedCommand[]
 
-### Effect-aware dataset replace
-Each op classifies its effect: `shape-count` | `topology-only` | `attribute-only` | `crs-only` | `unknown` (see `_runner.COMMAND_EFFECTS`). The runner uses this to decide whether to clear the selection — attribute-only and crs-only ops preserve it. Adding a new op? Add its head to the table.
+Ops emit parsed command objects:
 
-### Worker routing
-`shouldUseWorker(cmd, vertexCount, mode, threshold)` decides per-call whether to dispatch off-thread. Cheap commands stay on main even at large vertex counts; expensive ones (buffer, clean, dissolve) use a 0.5× threshold. `MapOptions.workerRouting` overrides the decision globally.
+```ts
+[{ name: 'buffer', options: { radius: 50 } }]
+```
+
+New ops should call the parsed-command runner path. Avoid shell-style command
+strings for new code.
+
+### OpResult
+
+Every op returns:
+
+```ts
+{ ok: true, value?: T } | { ok: false, error: OpError }
+```
+
+Use `Err.*`, `OK`, and `okValue` from `src/map/op-result.ts`.
+
+### Effect-Aware Dataset Replace
+
+Each dataset op must classify its effect in `COMMAND_EFFECTS` inside
+`src/map/ops/_runner.ts`:
+
+- `shape-count`
+- `topology-only`
+- `attribute-only`
+- `crs-only`
+- `unknown`
+
+Selection preservation depends on this table.
+
+### Memento Commands and EditHistory
+
+Every edit command must capture enough state to perform `do()` and `undo()`
+without depending on later live dataset state. Dataset-replace commands mark
+older commands as stale barriers rather than clearing history.
+
+### Transaction
+
+`src/edit/transaction.ts` stages commands pushed during its lifetime.
+`commit(label)` collapses captured commands into one `CompositeCommand`.
+`rollback()` restores first-touch source snapshots and selection. Nesting is not
+supported.
+
+### Handler Architecture
+
+All map interactions are represented as `Handler` implementations:
+
+- `dragPan`
+- `scrollZoom`
+- `clickSelect`
+- `boxSelect`
+- `lassoSelect`
+- `vertexEdit`
+- `drawFeature`
+- `transformFeature`
+
+`HandlerManager` owns pointer normalization, priority ordering, exclusive
+gesture locking, pointer sinks for delegated events, and cursor arbitration.
+
+Thin UI controls should forward to handlers instead of duplicating pointer
+logic.
 
 ### EventDispatcher
-`src/core/events.ts` provides the base class. Both `Emap` and interaction handlers extend it. Use `on()` / `fire()` — never raw DOM events for internal communication.
+
+Use `on()` and `fire()` for engine-level communication. Raw DOM events are
+limited to browser input boundaries, control DOM, and the handler manager.
 
 ### Rendering Loop
-The `render()` method in `src/map/map.ts` drives all drawing. Never trigger DOM updates or state changes directly in render. Queue via `requestAnimationFrame` or tween callbacks.
 
-### Affine Transforms
-All coordinate math uses `AffineTransform` from `src/geo/transform.ts`: `(x * mx + bx, y * my + by)`. The viewport converts between geo and pixel space via this transform.
+`Emap.render()` is the render driver. Avoid DOM updates or state changes inside
+render. Defer with `requestAnimationFrame`, event callbacks, or tween callbacks.
 
-### Control Lifecycle
-UI components implement the `Control` interface (`src/ui/control.ts`):
-- `onAdd(map): HTMLElement` — attach to map, return root element
-- `onRemove()` — clean up listeners and DOM
+### AffineTransform
 
-### LOD (Level of Detail)
-`src/source/display-arcs.ts` manages simplified geometry for datasets >500k points. The display arcs are marked dirty after edits and rebuilt lazily on the next `getScaledArcs(pixelSize)` call. Do not bypass LOD when rendering large datasets.
+All coordinate math uses `AffineTransform` and viewport projection helpers. Do
+not introduce ad-hoc matrix calculations.
 
-### Batch Rendering
-`CanvasPainter` groups 25 shapes per `canvas.stroke()` call. Do not change this pattern without profiling — it is a deliberate performance optimization for large topology datasets.
+### LayerRegistry
 
-### LayerRegistry (sole layer resolver)
-`src/map/layer-registry.ts` is the only entry point for `resolve(sourceId, layerId) → MapshaperLayer | null`. Do not write inline `layers.find(l => l.name === id)` — go through the registry so the cache stays consistent.
+Resolve source/layer pairs through `LayerRegistry.resolve(...)`. Do not inline
+`layers.find(...)` in new code.
 
-### Transaction (atomic multi-step edit)
-`src/edit/transaction.ts` stages every command pushed during its lifetime via `EditHistory.beginCapture()` / `endCapture()`. `commit(label)` collapses the captured children into a single `CompositeCommand`; `rollback()` restores per-source first-touch snapshots and the selection. The runner records snapshots on the active transaction in `_applyDatasetReplace` — ops themselves are transaction-unaware. **Nesting is not supported.**
+### LOD and Batch Rendering
 
-### Validation hooks (post-edit constraints)
-`src/validation/registry.ts` owns the registered `Validator[]`. `Emap` listens to its own `historychange` event and asks the registry to fan out every `'after-commit'` validator in parallel. Failures fire `validationfailed` — the engine never auto-undoes, the app decides. Cost is one `size` check when no validators are registered (the common case). Built-in: `topologyValidator(opts)` in `src/validation/builtin/topology.ts`.
+`DisplayArcs` manages zoom-dependent arc simplification for large datasets.
+`CanvasPainter` batches stroke rendering for performance. Do not bypass these
+paths for large topology rendering without profiling.
 
-### FeatureAccessor (read-side feature lookups)
-`src/map/feature-accessor.ts` exposed via `Emap.features`: `get(ref) → Feature | null`, `iter(sourceId, layerId) → IterableIterator<Feature>`, `count(sourceId, layerId) → number`. Returns `null` (not throws) for any failed lookup; `properties` are `Object.freeze`d. Mutations still go through `attribute-ops` / edit commands so they participate in undo.
+### Validation
 
-### Operation vs Command (terminology)
-- **Operation** ("op") — a mapshaper-driven dataset op (`emap.ops.clipLayer`, etc.). Implemented under `src/map/ops/<op>.ts`. Returns `Promise<OpResult>`. Internally pushes a `DatasetReplaceCommand` to history.
-- **Command** — an undoable edit memento (`EditCommand` in `src/edit/edit-command.ts`). Has `do()` / `undo()`. Stored on the `EditHistory` undo stack. Includes vertex / feature / dataset-replace / composite variants.
-- **Task** — not used in this codebase.
-
----
-
-## Code Conventions
-
-### Naming
-- Private members: `_camelCase` (e.g., `_viewport`, `_painter`)
-- Public API: `camelCase`
-- Interfaces and types: `PascalCase`
-- Constants inside functions/classes: `UPPER_CASE`
-- Test files colocate with source: `foo.ts` → `foo.test.ts`
-
-### TypeScript
-- Strict mode is enforced (`noUnusedLocals`, `noUnusedParameters`)
-- Path alias `@/*` maps to `src/*` (configured in tsconfig and rollup)
-- All Mapshaper types are centralized in `src/types/mapshaper-types.ts` — do not scatter inline `any` casts
-
-### Private access in tests
-Tests use `Reflect` to access private properties/methods. This is an accepted pattern here — do not change private members to public just for testing.
-
----
+`ValidatorRegistry` runs validators after committed history changes. Failures
+fire `validationfailed`; the engine does not auto-undo.
 
 ## Where to Make Changes
 
-| Task | Files to touch |
+| Task | Files |
 |---|---|
-| Data loading, format parsing | `src/source/topology-source.ts` |
-| Coordinate projection / CRS | `src/geo/projection.ts`, `src/geo/crs-resolver.ts`, `src/geo/viewport.ts` |
-| Rendering appearance | `src/renderer/canvas-painter.ts` |
-| Zoom / pan interactions | `src/core/interactions.ts`, `src/core/drag-pan-handler.ts` |
-| Vertex editing | `src/ui/vertex-edit-control.ts`, `src/edit/commands/vertex-*.ts` |
-| New UI control | Add to `src/ui/`, implement `Control` interface, export from `src/index.ts` |
-| Map orchestration | `src/map/map.ts` |
-| Feature hit-testing / spatial index | `src/map/feature-query.ts` |
-| New mapshaper data op | New file `src/map/ops/<op>.ts` + 1-line delegate in `src/map/mapshaper-ops.ts` + option type in `src/map/types.ts` |
-| Buffer parameter mapping (camelCase ↔ snake_case) | `src/map/ops/buffer.ts` — full `-buffer` option surface |
-| New edit command | New file `src/edit/commands/<cmd>.ts` implementing `EditCommand` (see `vertex-move.ts` for the canonical template) |
-| Worker routing decision | `src/map/worker-routing.ts` (CHEAP / EXPENSIVE sets) |
-| Mapshaper internals access | `src/adapter/mapshaper-adapter.ts` only — never touch `mapshaper.internal.*` from outside the adapter |
-| Layer resolution | `src/map/layer-registry.ts` only — do not inline `layers.find(...)` |
-| New public API | Export explicitly from `src/index.ts` (no `export *`) |
+| New mapshaper op | `src/map/ops/<op>.ts`, `src/map/mapshaper-ops.ts`, `src/map/types.ts`, `_runner.COMMAND_EFFECTS` |
+| New edit command | `src/edit/commands/<cmd>.ts` |
+| New handler | `src/core/handlers/<name>.ts`, `src/core/handler-manager.ts` if priority changes, `src/index.ts` |
+| New UI control | `src/ui/<control>.ts`, `src/ui/controls.css`, `src/index.ts` |
+| Source loading/export | `src/source/topology-source.ts` |
+| CRS/projection | `src/geo/crs-resolver.ts`, `src/geo/projection.ts`, `src/geo/viewport.ts` |
+| Rendering | `src/renderer/canvas-painter.ts`, `src/map/map.ts` |
+| Hit testing | `src/map/feature-query.ts` |
+| Worker routing | `src/map/worker-routing.ts`, `src/map/ops/_runner.ts` |
+| Public API | `src/index.ts` |
+| User docs | `README.md`, `FEATURES.md`, `CHANGELOG.md` |
 
----
+## Code Conventions
 
-## OpenSpec Workflow (Spec-Driven Development)
-
-This project uses **OpenSpec** for structured feature proposals. **Read `openspec/AGENTS.md` before planning significant work.**
-
-### When to create a proposal (do NOT code first):
-- Adding new capabilities or API surface
-- Breaking changes (API, schema, behavior)
-- Architecture or pattern changes
-- Performance work that changes behavior
-
-### When to skip proposals (fix directly):
-- Bug fixes restoring documented behavior
-- Typos, formatting, comments
-- Tests for existing behavior
-- Non-breaking dependency updates
-
-### Workflow summary:
-```bash
-openspec list                       # See active changes
-openspec list --specs               # See existing capabilities
-openspec show <item>                # View details
-openspec validate <change> --strict # Validate before submitting
-openspec archive <change-id> --yes  # Archive after deployment
-```
-
-Proposals live in `openspec/changes/<change-id>/` with:
-- `proposal.md` — why + what
-- `tasks.md` — implementation checklist
-- `design.md` — technical decisions (only when needed)
-- `specs/<capability>/spec.md` — delta spec using `## ADDED|MODIFIED|REMOVED Requirements`
-
----
+- Private members use `_camelCase`.
+- Public API uses `camelCase`.
+- Interfaces and types use `PascalCase`.
+- Constants inside functions/classes use `UPPER_CASE`.
+- Tests are colocated as `*.test.ts`.
+- Keep public exports explicit; do not use `export *` in `src/index.ts`.
+- Keep TypeScript strict-mode compatible.
+- Centralize Mapshaper runtime types in `src/types/mapshaper-types.ts`.
 
 ## Testing
 
-Framework: **Vitest** (`~760 unit tests across 30 files`).
+Framework: Vitest.
+
+Useful targeted checks:
 
 ```bash
-npm test
+cmd /c npm run typecheck
+cmd /c npx vitest run src\map\handler-registry.test.ts src\core\handler-manager.test.ts --reporter=dot
+cmd /c npx vitest run src\map\map.test.ts src\source\topology-source.test.ts --reporter=dot
+cmd /c npm run build
 ```
 
-- Test files: `src/**/*.test.ts` (colocated with source)
-- Mocking mapshaper: prefer `setDefaultMapshaperAdapter(mockAdapter)` — do not stub `mapshaper.internal.*` directly. Tests that pre-date the adapter still spy on `mapshaper.internal.runParsedCommands` via `Reflect.set`; new tests should not.
-- Private access: Use `Reflect.get(instance, '_prop')` pattern
-- Op-level tests: instantiate `Object.create(MapshaperOps.prototype)` with a stub host + stub `runDatasetCommand` — see `src/map/ops/_context.ts` for the contract. Do NOT spin up a full `Emap` for op-level coverage.
-
----
+Use private access through `Reflect` in tests when needed. Do not make private
+members public only for tests.
 
 ## Important Constraints
 
-- **Browser-only**: No Node.js runtime APIs at execution time. `src/shim.ts` polyfills any Node module references for the bundle.
-- **No server**: All data is fetched client-side via `fetch()`.
-- **Mapshaper internals are isolated**: `src/adapter/mapshaper-adapter.ts` is the single bridge to `mapshaper.internal.*`. The runtime path no longer touches it from anywhere else. mapshaper version upgrades route through one file. (The worker entry `src/worker/mapshaper-worker.ts` is the only other module that imports `mapshaper` directly — kept narrow because the worker is its own bundle.)
-- **No CLI string-build path**: Ops emit `ParsedCommand[]` structures, not shell-style strings. `quoteCliArg` is retained as defense-in-depth but should not be needed for new code.
-- **Expression evaluation is gated**: `MapOptions.expressionPolicy` defaults to `'disabled'`. Ops that accept JS expression strings (`applyExpression`, `filterFeatures`, `where=` / `calc=` everywhere) refuse to run when an expression is supplied unless the policy is flipped to `'trusted'`. See `SECURITY.md`.
-- **iconv-lite shim**: `rollup.config.mjs` aliases `iconv-lite` → `src/types/iconv-shim.ts` for browser compatibility. Do not remove this alias.
+- Browser-only runtime; no Node.js runtime APIs in shipped code.
+- No backend server requirement.
+- Expression evaluation defaults to disabled. Expression-bearing APIs require
+  `expressionPolicy: 'trusted'`.
+- Worker offloading requires the host app to serve `emap-worker.js` and
+  `mapshaper-vendor.js`.
+- Mapshaper internals must remain isolated behind `MapshaperAdapter`.

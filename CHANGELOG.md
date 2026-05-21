@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-21
+
 ### Added
 
 - DX Phase 1 (toward 0.3.0): `Handler` interface + `HandlerManager`; the pan
@@ -165,9 +167,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shells surface the conflict honestly. Install one, OR call
   `map.boxSelect.disable()` before enabling the other (see the updated
   `test/examples/lasso-select.html` for the canonical toggle recipe).
+- Release metadata now targets `0.3.0`, matching the handler-centric public API
+  documented in README/FEATURES.
+
+### Fixed
+
+- Made the bundle self-contained smoke test portable on Windows by resolving
+  local CLI shims through `cmd /c`, adding explicit `esbuild` dev dependency
+  coverage, and relaxing the GeoJSON bundle-load timeout for slower full-suite
+  runs.
 
 ### Documentation
 
+- Added third-party release guidance: static asset deployment, full custom
+  box-selection wiring without bundled controls, known limitations, API
+  stability boundaries, and a release checklist. The build now cleans `dist`
+  before production output so stale declaration files are not packed.
+- Refreshed the project documentation for the current handler-centric public
+  API: rewrote `README.md` around third-party integration, headless handler
+  usage, custom UI patterns, feature events, editing, worker setup, theming,
+  and built-in controls; moved `docs/FEATURES.md` to the package root as
+  `FEATURES.md` and updated it as the canonical capability matrix. Removed
+  the mandatory OpenSpec workflow instructions from `AGENTS.md` and
+  `CLAUDE.md`, keeping them focused on current project architecture and
+  contribution rules.
 - Documented the explicit 0.2.0 loading contract: `setData()` resolves only
   after the dataset is populated and `data{reason:'load'}` has fired, and
   `map.addSource()` is order-independent (back-fills an already-loaded
@@ -296,7 +319,8 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@zwishing/emap/style.css`).
 
-[Unreleased]: https://github.com/zwishing/emap/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/zwishing/emap/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/zwishing/emap/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/zwishing/emap/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/zwishing/emap/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/zwishing/emap/compare/v0.1.1...v0.1.2
