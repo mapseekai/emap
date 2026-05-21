@@ -189,7 +189,15 @@ export class Emap extends EventDispatcher {
   // here to (re)render and emit `editmodechange`.
   private _editState: EditStateStore = new EditStateStore((change) => {
     if (change.modeChanged) {
-      if (change.current.mode === 'none') this._dragPan?.enable(); else this._dragPan?.disable();
+      // Wholesale-disable pan only for modal editors that need full pointer
+      // ownership (`vertex`, `draw`) — their handlers don't claim `'exclusive'`
+      // on `'down'`, so they rely on this gate to keep `dragPan` from
+      // intercepting. `'transform'` is different: `transformFeature` returns
+      // `'exclusive'` on `'down'` when (and only when) the hit is an already-
+      // selected feature; for every other point the arbiter falls through to
+      // `dragPan` and pan should still work.
+      const blocksPan = change.current.mode === 'vertex' || change.current.mode === 'draw';
+      if (blocksPan) this._dragPan?.disable(); else this._dragPan?.enable();
       this.fire('editmodechange', { mode: change.current.mode });
     }
     this._scheduleRender();

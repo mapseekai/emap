@@ -221,16 +221,28 @@ describe('Emap handler registry (Phase 1)', () => {
     expect(map.dragPan.isEnabled()).toBe(true);
   });
 
-  it("setEditMode('transform') disables dragPan and fires editmodechange; 'none' re-enables", () => {
+  it("setEditMode('transform') leaves dragPan enabled (transformFeature claims exclusive on selected hit; arbiter handles the rest); fires editmodechange", () => {
     const map = new Emap({ container: container() });
     const modes: string[] = [];
     map.on('editmodechange', (e: any) => modes.push(e.mode));
     map.setEditMode('transform');
     expect(map.getEditMode()).toBe('transform');
-    expect(map.dragPan.isEnabled()).toBe(false);
+    expect(map.dragPan.isEnabled()).toBe(true);
     map.setEditMode('none');
     expect(map.dragPan.isEnabled()).toBe(true);
     expect(modes).toEqual(['transform', 'none']);
+  });
+
+  it("setEditMode('vertex'|'draw') still wholesale-disables dragPan (those handlers don't claim exclusive on 'down')", () => {
+    const map = new Emap({ container: container() });
+    map.setEditMode('vertex');
+    expect(map.dragPan.isEnabled()).toBe(false);
+    map.setEditMode('none');
+    expect(map.dragPan.isEnabled()).toBe(true);
+    map.setEditMode('draw');
+    expect(map.dragPan.isEnabled()).toBe(false);
+    map.setEditMode('none');
+    expect(map.dragPan.isEnabled()).toBe(true);
   });
 
   it('enabling vertexEdit cross-deactivates an active drawFeature', () => {
@@ -248,14 +260,29 @@ describe('Emap handler registry (Phase 1)', () => {
     expect(map.transformFeature.isEnabled()).toBe(false);
   });
 
-  it('transformFeature.enable() enters transform mode (pan disabled); disable() restores', () => {
+  it('transformFeature.enable() enters transform mode but leaves dragPan enabled; disable() restores mode', () => {
     const map = new Emap({ container: container() });
     map.transformFeature.enable();
     expect(map.getEditMode()).toBe('transform');
-    expect(map.dragPan.isEnabled()).toBe(false);
+    expect(map.dragPan.isEnabled()).toBe(true);
     map.transformFeature.disable();
     expect(map.getEditMode()).toBe('none');
     expect(map.dragPan.isEnabled()).toBe(true);
+  });
+
+  it('transformFeature shows move cursor over an already-selected feature (dragPan stays enabled; arbiter routes by priority)', () => {
+    const el = container();
+    const map = new Emap({ container: el });
+    const canvas = map.getCanvasContainer();
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    const hit = { source: 's', layer: 'l', id: 1 };
+    (map as any).queryFeatures = vi.fn(() => [hit]);
+    (map as any).isSelected = vi.fn(() => true);
+    map.transformFeature.setOptions({ mode: 'translate' });
+    map.transformFeature.enable();
+    expect(map.dragPan.isEnabled()).toBe(true);
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 50, clientY: 50, button: 0 }));
+    expect(canvas.style.cursor).toBe('move');
   });
 
   it('enabling vertexEdit cross-deactivates an active transformFeature', () => {
