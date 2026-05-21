@@ -123,6 +123,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   crosshair (the old `.emap-draw-active` CSS rule was dead); the ad-hoc
   `.emap-edit-active`/`.emap-draw-active` CSS-class mechanism is removed
   (single source of truth). No dispatch/priority behaviour change.
+- DX Phase 2c (toward 0.3.0): `BoxSelectControl` / `LassoSelectControl`
+  are now button-only thin shells over the P2b `map.boxSelect` /
+  `map.lassoSelect` handlers (the ~490 lines of duplicated
+  listener/overlay/hit-test/select logic deleted) — public class,
+  constructor options, 0×0 anchor DOM, selection behaviour, and the
+  dashed-lasso visual are byte-identical (the handler now honours
+  `strokeDasharray`, default `'4 3'`). Adding both controls now surfaces
+  the handlers' mutual-exclusivity error instead of silently conflicting.
+  Duplicated types consolidated to one declaration each with re-export
+  shims (every public import path unchanged): `SelectMode` →
+  `core/handlers/select-mode`, `BoxSelectStyle` →
+  `core/handlers/box-select`, `LassoSelectStyle`/`LassoStyle` →
+  `core/handlers/lasso-select` (`LassoStyle` widened additively to include
+  the optional `strokeDasharray`). No arbiter/dispatch change.
 
 ### Documentation
 
