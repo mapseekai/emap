@@ -1,200 +1,81 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { BoxSelectControl } from './box-select-control';
 
-interface FakeMap {
-  getCanvasContainer: () => HTMLElement;
-  queryFeatures: ReturnType<typeof vi.fn>;
-  select: ReturnType<typeof vi.fn>;
-}
-
-function makeFakeMap(canvasContainer: HTMLElement, hits: any[] = []): FakeMap {
-  return {
-    getCanvasContainer: () => canvasContainer,
-    queryFeatures: vi.fn(() => hits),
-    select: vi.fn(),
+/** Minimal stub of the Emap boxSelect handler + getter. */
+function makeMap() {
+  const handler = {
+    enable: vi.fn(),
+    disable: vi.fn(),
+    isEnabled: vi.fn(() => false),
+    setOptions: vi.fn(),
+    getOptions: vi.fn(() => ({})),
   };
+  const map = { get boxSelect() { return handler; } };
+  return { map, handler };
 }
 
-function dispatch(el: EventTarget, type: string, opts: {
-  shiftKey?: boolean;
-  ctrlKey?: boolean;
-  metaKey?: boolean;
-  altKey?: boolean;
-  button?: number;
-  clientX?: number;
-  clientY?: number;
-} = {}): void {
-  const e = new MouseEvent(type, {
-    bubbles: true,
-    cancelable: true,
-    button: opts.button ?? 0,
-    shiftKey: !!opts.shiftKey,
-    ctrlKey: !!opts.ctrlKey,
-    metaKey: !!opts.metaKey,
-    altKey: !!opts.altKey,
-    clientX: opts.clientX ?? 0,
-    clientY: opts.clientY ?? 0,
-  });
-  el.dispatchEvent(e);
-}
-
-describe('BoxSelectControl', () => {
-  let canvasContainer: HTMLElement;
-  let map: FakeMap;
-  let control: BoxSelectControl;
+describe('BoxSelectControl (thin shell, DX P2c)', () => {
+  let map: ReturnType<typeof makeMap>['map'];
+  let handler: ReturnType<typeof makeMap>['handler'];
 
   beforeEach(() => {
-    // Mount a canvas container with a stable bounding rect so pixel math is
-    // deterministic. JSDOM's getBoundingClientRect returns zeros by default.
-    canvasContainer = document.createElement('div');
-    canvasContainer.getBoundingClientRect = () => ({
-      x: 0, y: 0, top: 0, left: 0, right: 800, bottom: 600,
-      width: 800, height: 600, toJSON: () => ({}),
-    } as DOMRect);
-    document.body.appendChild(canvasContainer);
+    const m = makeMap();
+    map = m.map;
+    handler = m.handler;
+  });
 
-    map = makeFakeMap(canvasContainer);
-    control = new BoxSelectControl();
-    const anchor = control.onAdd(map as any);
+  it('onAdd forwards options to map.boxSelect.setOptions and enables it', () => {
+    const c = new BoxSelectControl({ layers: ['a'], dragThreshold: 7, style: { stroke: '#f00' } });
+    const anchor = c.onAdd(map as any);
+    expect(handler.setOptions).toHaveBeenCalledWith({
+      layers: ['a'], dragThreshold: 7, style: { stroke: '#f00' },
+    });
+    expect(handler.enable).toHaveBeenCalledTimes(1);
+    expect(anchor.className).toBe('emap-ctrl emap-box-select-anchor');
+    expect(anchor.style.width).toBe('0px');
+  });
+
+  it('onAdd with no options forwards an object with undefined fields, still enables', () => {
+    const c = new BoxSelectControl();
+    c.onAdd(map as any);
+    expect(handler.setOptions).toHaveBeenCalledWith({
+      layers: undefined, dragThreshold: undefined, style: undefined,
+    });
+    expect(handler.enable).toHaveBeenCalledTimes(1);
+  });
+
+  it('enable/disable/isEnabled proxy to the handler', () => {
+    const c = new BoxSelectControl();
+    c.onAdd(map as any);
+    c.disable();
+    expect(handler.disable).toHaveBeenCalledTimes(1);
+    c.enable();
+    expect(handler.enable).toHaveBeenCalledTimes(2); // once in onAdd, once here
+    handler.isEnabled.mockReturnValue(true);
+    expect(c.isEnabled()).toBe(true);
+  });
+
+  it('a disabled control does not enable the handler on onAdd', () => {
+    const c = new BoxSelectControl();
+    c.disable();
+    c.onAdd(map as any);
+    expect(handler.enable).not.toHaveBeenCalled();
+    expect(handler.setOptions).toHaveBeenCalledTimes(1);
+  });
+
+  it('onRemove disables the handler and removes the anchor', () => {
+    const c = new BoxSelectControl();
+    const anchor = c.onAdd(map as any);
     document.body.appendChild(anchor);
+    c.onRemove();
+    expect(handler.disable).toHaveBeenCalledTimes(1);
+    expect(anchor.parentNode).toBeNull();
   });
 
-  afterEach(() => {
-    control.onRemove();
-    canvasContainer.remove();
-  });
-
-  it('shift+drag selects with replace mode', () => {
-    map.queryFeatures.mockReturnValueOnce([
-      { source: 's', layer: 'l', id: 1, geometryType: 'polygon', properties: {} },
-      { source: 's', layer: 'l', id: 2, geometryType: 'polygon', properties: {} },
-    ]);
-
-    dispatch(canvasContainer, 'mousedown', { shiftKey: true, clientX: 100, clientY: 100 });
-    dispatch(window, 'mousemove', { shiftKey: true, clientX: 200, clientY: 200 });
-    dispatch(window, 'mouseup', { shiftKey: true, clientX: 200, clientY: 200 });
-
-    expect(map.queryFeatures).toHaveBeenCalledTimes(1);
-    const bbox = map.queryFeatures.mock.calls[0][0];
-    expect(bbox).toEqual([[100, 100], [200, 200]]);
-
-    expect(map.select).toHaveBeenCalledTimes(1);
-    const refs = map.select.mock.calls[0][0];
-    expect(refs).toEqual([
-      { source: 's', layer: 'l', id: 1 },
-      { source: 's', layer: 'l', id: 2 },
-    ]);
-    expect(map.select.mock.calls[0][1]).toEqual({ mode: 'replace' });
-  });
-
-  it('plain (non-shift) mousedown does NOT trigger box-select', () => {
-    dispatch(canvasContainer, 'mousedown', { clientX: 100, clientY: 100 });
-    dispatch(window, 'mousemove', { clientX: 200, clientY: 200 });
-    dispatch(window, 'mouseup', { clientX: 200, clientY: 200 });
-
-    expect(map.queryFeatures).not.toHaveBeenCalled();
-    expect(map.select).not.toHaveBeenCalled();
-  });
-
-  it('below-threshold drag is a no-op', () => {
-    dispatch(canvasContainer, 'mousedown', { shiftKey: true, clientX: 100, clientY: 100 });
-    dispatch(window, 'mousemove', { shiftKey: true, clientX: 102, clientY: 102 });
-    dispatch(window, 'mouseup', { shiftKey: true, clientX: 102, clientY: 102 });
-
-    expect(map.queryFeatures).not.toHaveBeenCalled();
-    expect(map.select).not.toHaveBeenCalled();
-  });
-
-  it('shift+ctrl+drag selects with add mode', () => {
-    map.queryFeatures.mockReturnValueOnce([
-      { source: 's', layer: 'l', id: 1, geometryType: 'polygon', properties: {} },
-    ]);
-    dispatch(canvasContainer, 'mousedown', { shiftKey: true, ctrlKey: true, clientX: 0, clientY: 0 });
-    dispatch(window, 'mousemove', { shiftKey: true, ctrlKey: true, clientX: 50, clientY: 50 });
-    dispatch(window, 'mouseup', { shiftKey: true, ctrlKey: true, clientX: 50, clientY: 50 });
-
-    expect(map.select).toHaveBeenCalledWith(
-      [{ source: 's', layer: 'l', id: 1 }],
-      { mode: 'add' },
-    );
-  });
-
-  it('shift+meta+drag selects with add mode (Mac)', () => {
-    map.queryFeatures.mockReturnValueOnce([
-      { source: 's', layer: 'l', id: 9, geometryType: 'polygon', properties: {} },
-    ]);
-    dispatch(canvasContainer, 'mousedown', { shiftKey: true, metaKey: true, clientX: 0, clientY: 0 });
-    dispatch(window, 'mousemove', { shiftKey: true, metaKey: true, clientX: 50, clientY: 50 });
-    dispatch(window, 'mouseup', { shiftKey: true, metaKey: true, clientX: 50, clientY: 50 });
-
-    expect(map.select.mock.calls[0][1]).toEqual({ mode: 'add' });
-  });
-
-  it('shift+alt+drag selects with toggle mode', () => {
-    map.queryFeatures.mockReturnValueOnce([
-      { source: 's', layer: 'l', id: 7, geometryType: 'polygon', properties: {} },
-    ]);
-    dispatch(canvasContainer, 'mousedown', { shiftKey: true, altKey: true, clientX: 0, clientY: 0 });
-    dispatch(window, 'mousemove', { shiftKey: true, altKey: true, clientX: 50, clientY: 50 });
-    dispatch(window, 'mouseup', { shiftKey: true, altKey: true, clientX: 50, clientY: 50 });
-
-    expect(map.select.mock.calls[0][1]).toEqual({ mode: 'toggle' });
-  });
-
-  it('dedupes refs across visible layers backed by same feature', () => {
-    map.queryFeatures.mockReturnValueOnce([
-      { source: 's', layer: 'fill', id: 1, geometryType: 'polygon', properties: {} },
-      { source: 's', layer: 'fill', id: 1, geometryType: 'polygon', properties: {} }, // dup of above
-      { source: 's', layer: 'line', id: 1, geometryType: 'polygon', properties: {} }, // different layer, kept
-    ]);
-    dispatch(canvasContainer, 'mousedown', { shiftKey: true, clientX: 0, clientY: 0 });
-    dispatch(window, 'mousemove', { shiftKey: true, clientX: 50, clientY: 50 });
-    dispatch(window, 'mouseup', { shiftKey: true, clientX: 50, clientY: 50 });
-
-    const refs = map.select.mock.calls[0][0];
-    expect(refs).toEqual([
-      { source: 's', layer: 'fill', id: 1 },
-      { source: 's', layer: 'line', id: 1 },
-    ]);
-  });
-
-  it('disable() makes shift+drag a no-op', () => {
-    control.disable();
-    expect(control.isEnabled()).toBe(false);
-    dispatch(canvasContainer, 'mousedown', { shiftKey: true, clientX: 0, clientY: 0 });
-    dispatch(window, 'mousemove', { shiftKey: true, clientX: 50, clientY: 50 });
-    dispatch(window, 'mouseup', { shiftKey: true, clientX: 50, clientY: 50 });
-    expect(map.queryFeatures).not.toHaveBeenCalled();
-    expect(map.select).not.toHaveBeenCalled();
-  });
-
-  it('forwards layers filter to queryFeatures', () => {
-    control.onRemove();
-    control = new BoxSelectControl({ layers: ['only-this'] });
-    const anchor = control.onAdd(map as any);
-    document.body.appendChild(anchor);
-    map.queryFeatures.mockReturnValueOnce([]);
-
-    dispatch(canvasContainer, 'mousedown', { shiftKey: true, clientX: 0, clientY: 0 });
-    dispatch(window, 'mousemove', { shiftKey: true, clientX: 50, clientY: 50 });
-    dispatch(window, 'mouseup', { shiftKey: true, clientX: 50, clientY: 50 });
-
-    expect(map.queryFeatures.mock.calls[0][1]).toEqual({ layers: ['only-this'] });
-  });
-
-  it('passes pixel bbox in canvas-container coordinates (subtracting boundingClientRect offset)', () => {
-    // Offset the canvas container so client coords differ from container coords.
-    canvasContainer.getBoundingClientRect = () => ({
-      x: 50, y: 30, top: 30, left: 50, right: 850, bottom: 630,
-      width: 800, height: 600, toJSON: () => ({}),
-    } as DOMRect);
-    map.queryFeatures.mockReturnValueOnce([]);
-
-    dispatch(canvasContainer, 'mousedown', { shiftKey: true, clientX: 150, clientY: 130 });
-    dispatch(window, 'mousemove', { shiftKey: true, clientX: 250, clientY: 230 });
-    dispatch(window, 'mouseup', { shiftKey: true, clientX: 250, clientY: 230 });
-
-    expect(map.queryFeatures.mock.calls[0][0]).toEqual([[100, 100], [200, 200]]);
+  it('propagates the handler mutual-exclusivity throw from enable()', () => {
+    handler.enable.mockImplementation(() => { throw new Error('cannot enable boxSelect: lassoSelect is enabled'); });
+    const c = new BoxSelectControl();
+    expect(() => c.onAdd(map as any)).toThrow(/lassoSelect is enabled/);
   });
 });
