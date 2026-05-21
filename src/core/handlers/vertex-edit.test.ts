@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mapshaper from 'mapshaper';
 import { VertexEditHandler } from './vertex-edit';
@@ -166,5 +167,44 @@ describe('VertexEditHandler', () => {
     expect(setEditModeSpy).toHaveBeenCalledWith('none');
     expect(clearEditVertexState).toHaveBeenCalled();
     expect(Reflect.get(handler, '_dragging')).toBe(false);
+  });
+});
+
+describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
+  it('_showContextMenu sets class-based DOM and only dynamic position inline', () => {
+    document.getElementById('emap-ctx-menu')?.remove();
+    const mapMock = { setEditMode: () => {}, on: () => {}, off: () => {}, render: () => {}, clearEditVertexState: () => {} } as any;
+    const handler = new VertexEditHandler(mapMock);
+    Reflect.get(handler, '_showContextMenu').call(handler, 123, 456, () => {});
+
+    const menu = document.getElementById('emap-ctx-menu') as HTMLDivElement;
+    expect(menu).toBeTruthy();
+    expect(menu.className).toBe('emap-ctx-menu');
+    expect(menu.style.left).toBe('123px');
+    expect(menu.style.top).toBe('456px');
+    expect(menu.style.background).toBe('');
+    expect(menu.style.boxShadow).toBe('');
+    expect(menu.style.font).toBe('');
+
+    const item = menu.firstElementChild as HTMLDivElement;
+    expect(item).toBeTruthy();
+    expect(item.className).toBe('emap-ctx-menu-item');
+    expect(item.textContent).toBe('删除节点');
+    item.dispatchEvent(new Event('mouseenter', { bubbles: true }));
+    expect(item.style.background).toBe('');
+
+    menu.remove();
+  });
+
+  it('_showContextMenu click handler invokes onDelete and removes the menu', () => {
+    document.getElementById('emap-ctx-menu')?.remove();
+    const mapMock = { setEditMode: () => {}, on: () => {}, off: () => {}, render: () => {}, clearEditVertexState: () => {} } as any;
+    const handler = new VertexEditHandler(mapMock);
+    let called = 0;
+    Reflect.get(handler, '_showContextMenu').call(handler, 10, 20, () => { called++; });
+    const item = document.querySelector('#emap-ctx-menu > div') as HTMLDivElement;
+    item.click();
+    expect(called).toBe(1);
+    expect(document.getElementById('emap-ctx-menu')).toBeNull();
   });
 });

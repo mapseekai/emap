@@ -233,37 +233,23 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
 
   /**
    * Show a minimal context menu at (x, y) in viewport coords.
-   * Auto-dismissed when user clicks anywhere else.
+   * Auto-dismissed when user clicks anywhere else. Static appearance lives
+   * in `src/ui/controls.css` as `.emap-ctx-menu` / `.emap-ctx-menu-item`
+   * (themable via `--emap-*` tokens on `:root`); only the dynamic
+   * `left`/`top` coords are set inline here.
    */
   private _showContextMenu(x: number, y: number, onDelete: () => void): void {
-    // Remove any existing menu
     document.getElementById('emap-ctx-menu')?.remove();
 
     const menu = document.createElement('div');
     menu.id = 'emap-ctx-menu';
-    Object.assign(menu.style, {
-      position: 'fixed',
-      left: `${x}px`,
-      top: `${y}px`,
-      background: '#fff',
-      border: '1px solid #ccc',
-      borderRadius: '4px',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
-      padding: '4px 0',
-      zIndex: '9999',
-      minWidth: '120px',
-      font: '13px/1.5 system-ui, sans-serif',
-    });
+    menu.className = 'emap-ctx-menu';
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
 
     const item = document.createElement('div');
+    item.className = 'emap-ctx-menu-item';
     item.textContent = '删除节点';
-    Object.assign(item.style, {
-      padding: '6px 16px',
-      cursor: 'pointer',
-      color: '#d32',
-    });
-    item.addEventListener('mouseenter', () => { item.style.background = '#f5f5f5'; });
-    item.addEventListener('mouseleave', () => { item.style.background = ''; });
     item.addEventListener('click', (e) => {
       e.stopPropagation();
       menu.remove();
@@ -273,12 +259,11 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     menu.appendChild(item);
     document.body.appendChild(menu);
 
-    // Dismiss on any click outside
     const dismiss = () => {
       menu.remove();
       document.removeEventListener('click', dismiss);
     };
-    // Use setTimeout so this listener doesn't fire immediately from the right-click
+    // Use setTimeout so this listener doesn't fire immediately from the right-click.
     setTimeout(() => document.addEventListener('click', dismiss), 0);
   }
 

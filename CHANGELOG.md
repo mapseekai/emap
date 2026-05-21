@@ -137,6 +137,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `core/handlers/box-select`, `LassoSelectStyle`/`LassoStyle` →
   `core/handlers/lasso-select` (`LassoStyle` widened additively to include
   the optional `strokeDasharray`). No arbiter/dispatch change.
+- DX Phase 4 (toward 0.3.0): opened the emap design-token namespace —
+  `controls.css` now declares 9 `--emap-*` custom properties on `:root`
+  (`accent`, `accent-soft`, `surface-bg`, `surface-border`,
+  `surface-shadow`, `radius`, `hover-bg`, `danger`, `font`) with the
+  current literal values as defaults. The vertex-edit right-click menu
+  ("删除节点") migrated off inline styles + JS `mouseenter`/`mouseleave`
+  hover toggle onto class-based rules (`.emap-ctx-menu` /
+  `.emap-ctx-menu-item` with `:hover`) consuming the tokens. Default
+  rendering is byte-identical; themers override `--emap-*` on `:root` (or
+  a parent) to restyle. Existing controls' literal values are unchanged
+  — namespace opened but not retro-applied (follow-up phases may opt in).
 
 ### Documentation
 

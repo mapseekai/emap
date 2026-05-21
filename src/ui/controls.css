@@ -1,3 +1,22 @@
+/* emap design tokens — defaults are the verbatim legacy literals so default
+ * rendering is byte-identical. Override on :root (or any ancestor selector)
+ * to theme. Introduced in DX P4 for the context menu; future phases may
+ * migrate existing controls to consume these tokens. */
+:root {
+  /* Accent (current usage: box-select stroke, lasso stroke, button-active bg). */
+  --emap-accent: #0078ff;
+  --emap-accent-soft: rgba(0, 120, 255, 0.1);
+  /* Surface — panels, menus, dropdowns. */
+  --emap-surface-bg: #fff;
+  --emap-surface-border: #ccc;
+  --emap-surface-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  /* Generic radius + hover/danger + font. */
+  --emap-radius: 4px;
+  --emap-hover-bg: #f5f5f5;
+  --emap-danger: #d32;
+  --emap-font: 13px/1.5 system-ui, sans-serif;
+}
+
 /* Navigation Controls */
 .emap-ctrl-group {
   background-color: #fff;
@@ -146,4 +165,27 @@
    are mutually exclusive (only one is enabled at a time). */
 .emap-lasso-select {
   z-index: 5;
+}
+
+/* Right-click context menu — opened on right-click over a selected vertex
+ * by VertexEditHandler. Dynamic position/left/top are set inline; every
+ * other property is tokenised here. */
+.emap-ctx-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 120px;
+  background: var(--emap-surface-bg);
+  border: 1px solid var(--emap-surface-border);
+  border-radius: var(--emap-radius);
+  box-shadow: var(--emap-surface-shadow);
+  padding: 4px 0;
+  font: var(--emap-font);
+}
+.emap-ctx-menu-item {
+  padding: 6px 16px;
+  cursor: pointer;
+  color: var(--emap-danger);
+}
+.emap-ctx-menu-item:hover {
+  background: var(--emap-hover-bg);
 }
