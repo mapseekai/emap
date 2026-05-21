@@ -49,19 +49,20 @@
   <script src="../../dist/mapshaper-vendor.js"></script>
   <script src="../../dist/emap-dev.js"></script>
   <script>
-    const { Emap, TopologySource, NavigationControl, HistoryControl, BoxSelectControl, LassoSelectControl } = emap;
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
 
     const map = new Emap({ container: 'map' });
     map.addControl(new NavigationControl(), 'top-left');
     map.addControl(new HistoryControl(), 'top-left');
     map.bindHistoryShortcuts();
 
-    // Both controls installed at once. Switching is via enable() / disable().
-    const boxSelect = new BoxSelectControl();
-    const lassoSelect = new LassoSelectControl();
-    map.addControl(boxSelect);
-    map.addControl(lassoSelect);
-    lassoSelect.disable();  // Start with rect active.
+    // Box + lasso are named handlers on the map (P2c). Switching is one
+    // disable-then-enable pair; the handlers are mutually exclusive
+    // (boxSelect.enable() throws if lassoSelect is enabled, and vice
+    // versa) — we always disable the other first.
+    // Alternative for toolbar-button surfaces:
+    //   map.addControl(new BoxSelectControl()) / new LassoSelectControl()
+    map.boxSelect.enable();   // Start with rect active.
 
     const SOURCE_ID = 'lasso-demo-source';
     const status = document.getElementById('status');
@@ -89,18 +90,24 @@
     map.on('selectionchange', refreshSelected);
 
     function pickTool(name) {
-      if (name === 'box') {
-        boxSelect.enable();
-        lassoSelect.disable();
-        toolBoxBtn.classList.add('active');
-        toolLassoBtn.classList.remove('active');
-        status.textContent = '矩形选择 — Shift+拖拽画矩形';
-      } else {
-        boxSelect.disable();
-        lassoSelect.enable();
-        toolBoxBtn.classList.remove('active');
-        toolLassoBtn.classList.add('active');
-        status.textContent = '套索选择 — Shift+拖拽画自由曲线';
+      try {
+        if (name === 'box') {
+          // Disable the OTHER first so boxSelect.enable() doesn't trip
+          // the mutual-exclusivity throw.
+          map.lassoSelect.disable();
+          map.boxSelect.enable();
+          toolBoxBtn.classList.add('active');
+          toolLassoBtn.classList.remove('active');
+          status.textContent = '矩形选择 — Shift+拖拽画矩形';
+        } else {
+          map.boxSelect.disable();
+          map.lassoSelect.enable();
+          toolBoxBtn.classList.remove('active');
+          toolLassoBtn.classList.add('active');
+          status.textContent = '套索选择 — Shift+拖拽画自由曲线';
+        }
+      } catch (err) {
+        status.textContent = '切换失败: ' + (err && err.message ? err.message : String(err));
       }
     }
 
