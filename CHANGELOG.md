@@ -176,6 +176,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   local CLI shims through `cmd /c`, adding explicit `esbuild` dev dependency
   coverage, and relaxing the GeoJSON bundle-load timeout for slower full-suite
   runs.
+- Completed the typed event surface: `EmapEventMap` now includes the delegated
+  `mousemove` and `feature:*` events, so facade authors can index the event map
+  for those 0.3.0 APIs instead of relying only on `map.on(...)` overloads.
 
 ### Documentation
 

@@ -2,6 +2,8 @@ import type { EditMode } from '../map/edit-state-store';
 import type { HistoryStateSnapshot } from '../edit/edit-history';
 import type { FeatureRef } from '../map/types';
 import type { ValidatorResult } from '../validation/validator';
+import type { FeatureEvent } from './feature-event-dispatcher';
+import type { PointerMoveEvent } from './pointer-event-dispatcher';
 
 /**
  * Camera lifecycle payload (P9). `zoom` is `log2(scale)` — meaningful for
@@ -55,4 +57,13 @@ export interface EmapEventMap {
   historychange: Partial<HistoryStateSnapshot>;
   selectionchange: { selected: FeatureRef[]; added: FeatureRef[]; removed: FeatureRef[] };
   validationfailed: { results: ValidatorResult[]; label: string };
+
+  // Delegated pointer / feature events (P3/P8). These are routed through
+  // Emap.on/off/once overloads rather than EventDispatcher.fire(), but they
+  // are still public Emap events and belong in the integration event map.
+  mousemove: PointerMoveEvent;
+  'feature:click': FeatureEvent;
+  'feature:hover': FeatureEvent;
+  'feature:enter': FeatureEvent;
+  'feature:leave': FeatureEvent;
 }

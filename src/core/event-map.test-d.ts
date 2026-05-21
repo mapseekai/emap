@@ -55,7 +55,24 @@ map.on('myAugmentedEvent', (e) => {
 });
 
 // --- bespoke overloads still work (regression guard) ---
-map.on('mousemove', (e) => { void e.mapCoord; });
+map.on('mousemove', (e) => {
+  const p: { x: number; y: number } = e.point;
+  const mc: [number, number] = e.mapCoord;
+  void p; void mc;
+});
+map.on('feature:click', { layers: ['district-fill'] }, (e) => {
+  const refId: number = e.ref.id;
+  const point: { x: number; y: number } = e.point;
+  void refId; void point;
+});
+
+// The event-map type is useful to facade authors too.
+type PointerMovePayload = import('./event-map').EmapEventMap['mousemove'];
+type FeatureClickPayload = import('./event-map').EmapEventMap['feature:click'];
+declare const pointerMovePayload: PointerMovePayload;
+declare const featureClickPayload: FeatureClickPayload;
+void pointerMovePayload.mapCoord;
+void featureClickPayload.ref.layer;
 
 // --- keyed overloads return `this` (chainable, documented guarantee) ---
 const chained: Emap = map
