@@ -1,6 +1,6 @@
 {
   "name": "@zwishing/emap",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A modern, decoupled rendering engine for mapshaper data",
   "main": "dist/emap.mjs",
   "module": "dist/emap.mjs",
