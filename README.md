@@ -15,6 +15,19 @@ A topology-oriented geographic map rendering and editing engine built around [Ma
 - **HTML5 Canvas 2D rendering** — `CanvasPainter` with batched-stroke optimization for large topology datasets
 - **Built-in controls** — navigation, status, basemap, vertex edit, feature draw, history, box / lasso selection
 
+## What's new since 0.2.0
+
+The 0.3.0 line is a DX batch with no shape-shift to the data path. Highlights:
+
+- **MapLibre-parity camera** — `map.jumpTo`, `setCenter`, `setZoom`, `panTo`, `panBy`, `zoomTo`, `easeTo`, `flyTo` (van-Wijk parabolic), `fitBounds`, `stop` — all chainable; fires `movestart`/`move`/`moveend` + `zoomstart`/`zoom`/`zoomend`.
+- **Typed events** — `map.on` / `off` / `once` now autocomplete event names and infer payloads for the camera lifecycle + `data`/`error`/`selectionchange`/`historychange`/`editmodechange`/`crschange`/`resize`/`validationfailed`. `EmapEventMap` is augmentable via `declare module`; unknown names still compile.
+- **Handler-direct selection** — `map.boxSelect.enable()` / `map.lassoSelect.enable()` activates shift+drag selection without `addControl`. The `BoxSelectControl` / `LassoSelectControl` remain as toolbar-button surfaces (thin shells over the handlers).
+- **Delegated feature events** — `map.on('feature:click' | 'feature:hover' | 'feature:enter' | 'feature:leave', { layers? }, cb)` replaces manual `mousemove` poll + hit-test boilerplate; lazy pointer sink means zero cost when nobody listens.
+- **Named interaction handlers** — `map.dragPan`, `map.scrollZoom`, `map.vertexEdit`, `map.drawFeature`, `map.transformFeature`, `map.clickSelect`, `map.boxSelect`, `map.lassoSelect` — uniform `enable/disable/isEnabled/setOptions/getOptions` surface, arbitrated by `HandlerManager`.
+- **Per-handler cursor** — drag-pan now shows `grab`/`grabbing`; draw / vertex / box / lasso show `crosshair`. `Handler.getCursor()` is the contract; `HandlerManager.refreshCursor()` and the arbiter write `style.cursor` exactly once per dispatch.
+- **CSS design tokens** — `--emap-accent` / `--emap-surface-bg` / `--emap-surface-shadow` / `--emap-hover-bg` / `--emap-danger` / `--emap-font` / etc. on `:root` (defaults match the legacy literals). Override on `:root` (or any ancestor) to theme; the vertex-edit context menu is the first consumer.
+- **Behavior changes** (additive / surfaced previously-silent conflicts): `LassoStyle` widens with optional `strokeDasharray`; adding both `BoxSelectControl` and `LassoSelectControl` now throws (call `disable()` on the other first). See CHANGELOG `[Unreleased] → ### Changed`.
+
 ## Install
 
 ```bash
@@ -107,7 +120,9 @@ map.addLayer({ id, source: 'china', type: 'fill', paint: { 'fill-color': '#eee' 
 map.setExtent(source.getExtent());
 
 map.queryFeatures(point, { layers: ['borders'] });
-map.on('click', (e) => { /* … */ });
+map.on('feature:click', { layers: ['borders'] }, (e) => {
+  // e.feature / e.ref / e.point / e.lngLat / e.modifiers
+});
 ```
 
 ### Sources
@@ -279,6 +294,76 @@ map.on('selectionchange', (e) => {
 ```
 
 Attribute-only ops (each / join / rename-fields / sort) preserve the selection across the operation. Shape-changing or topology-rebuilding ops clear it.
+
+**Drag-to-select without a control** — `map.boxSelect` and `map.lassoSelect` are named handlers; enable one to opt in to shift+drag:
+
+```ts
+map.boxSelect.enable();   // shift+drag = rect; shift+ctrl = add, shift+alt = toggle
+// later:
+map.boxSelect.disable();
+map.lassoSelect.enable(); // free-form polygon; mutually exclusive with boxSelect
+```
+
+For a toolbar-button surface, use `addControl(new BoxSelectControl())` / `new LassoSelectControl()` (thin shells over the handlers; same behavior). The two handlers are mutually exclusive — `enable()` throws if the sibling is on; call `.disable()` first.
+
+### Camera
+
+All methods return `this` (chainable). Pass `{ scale }` directly or `{ zoom }` (Web-Mercator only; non-WebMercator CRSs use scale).
+
+```ts
+map.jumpTo({ center: [120, 30], zoom: 6 });        // instant
+map.easeTo({ center: [120, 30], zoom: 8, duration: 600 });
+map.flyTo({ center: [120, 30], zoom: 10, duration: 1500 }); // van-Wijk parabolic
+map.fitBounds(bounds, { padding: 40, duration: 600 });
+map.panBy([100, 0]);                                // pixels
+map.stop();                                         // cancel any running animation
+```
+
+Lifecycle: `movestart` → `move`* → `moveend` and `zoomstart` → `zoom`* → `zoomend`. A new camera call (or a user pan/wheel) interrupts a running animation; the interrupted move still fires its `moveend`. State is `{ center: [dataX, dataY], scale }` — see `getCameraState()`.
+
+### Events
+
+`map.on` / `off` / `once` are typed via the augmentable `EmapEventMap` interface — known event names autocomplete and the listener's `e` is inferred:
+
+```ts
+map.on('moveend', (e) => {
+  // e.center is [number, number]; e.zoom is number; e.originalEvent is MouseEvent | null
+});
+map.on('selectionchange', (e) => {
+  // e.selected / e.added / e.removed are FeatureRef[]
+});
+map.on('error', (e) => console.error(e.error));
+
+// Module augmentation — register custom events you fire yourself:
+declare module '@zwishing/emap' {
+  interface EmapEventMap { myAppEvent: { detail: string } }
+}
+map.on('myAppEvent', (e) => console.log(e.detail));
+```
+
+Unknown event names still compile (escape hatch). The bespoke `'mousemove'` (`PointerMoveEvent` — element-local `point` + projected `mapCoord`) and `'feature:click' | 'feature:hover' | 'feature:enter' | 'feature:leave'` (`FeatureEvent` — `feature` / `ref` / `point` / `lngLat` / `modifiers`) overloads are also typed; `feature:*` accepts an optional `{ source?, layers? }` filter.
+
+### Cursor & theming
+
+Each interaction handler declares the CSS cursor it wants — `dragPan` returns `'grab'` / `'grabbing'`, `drawFeature` / `vertexEdit` / `boxSelect` / `lassoSelect` return `'crosshair'`. `HandlerManager` arbitrates one effective cursor (active exclusive gesture > priority order > default) and writes `style.cursor` once per dispatch.
+
+UI surfaces consume CSS design tokens declared on `:root` in `controls.css`:
+
+```css
+:root {
+  --emap-accent: #0078ff;
+  --emap-accent-soft: rgba(0, 120, 255, 0.1);
+  --emap-surface-bg: #fff;
+  --emap-surface-border: #ccc;
+  --emap-surface-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  --emap-radius: 4px;
+  --emap-hover-bg: #f5f5f5;
+  --emap-danger: #d32;
+  --emap-font: 13px/1.5 system-ui, sans-serif;
+}
+```
+
+Override on `:root` (or any ancestor selector) to theme. The vertex-edit right-click menu is the first consumer (`.emap-ctx-menu` / `.emap-ctx-menu-item`); other controls keep their literal values for now.
 
 ### Worker offloading
 

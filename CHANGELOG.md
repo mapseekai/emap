@@ -38,6 +38,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on). Disabled by default → `new Emap()` behavior is unchanged; the
   legacy `BoxSelectControl`/`LassoSelectControl` keep working unchanged
   (thin-shell rewrite is Phase 2c).
+- DX Phase 2c (toward 0.3.0): `BoxSelectControl` / `LassoSelectControl`
+  are now button-only thin shells over the P2b `map.boxSelect` /
+  `map.lassoSelect` handlers (the ~490 lines of duplicated
+  listener/overlay/hit-test/select logic deleted) — public class,
+  constructor options, 0×0 anchor DOM, selection behaviour, and the
+  dashed-lasso visual are byte-identical (the handler now honours
+  `strokeDasharray`, default `'4 3'`). Adding both controls now surfaces
+  the handlers' mutual-exclusivity error instead of silently conflicting.
+  Duplicated types consolidated to one declaration each with re-export
+  shims (every public import path unchanged): `SelectMode` →
+  `core/handlers/select-mode`, `BoxSelectStyle` →
+  `core/handlers/box-select`, `LassoSelectStyle`/`LassoStyle` →
+  `core/handlers/lasso-select` (`LassoStyle` widened additively to include
+  the optional `strokeDasharray`). No arbiter/dispatch change.
 - DX Phase 3 (toward 0.3.0): delegated feature events —
   `map.on('feature:click'|'feature:hover'|'feature:enter'|'feature:leave',
   { source?, layers? }?, cb)`. Fed by the Phase-2a pointer arbiter, hit-test
@@ -47,6 +61,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `map.on('feature:enter', {}, e => map.setHighlightedFeatures([e.ref]));
   map.on('feature:leave', {}, () => map.clearHighlightedFeatures());` —
   replaces the manual mousemove-poll + highlight-sync boilerplate.
+- DX Phase 4 (toward 0.3.0): opened the emap design-token namespace —
+  `controls.css` now declares 9 `--emap-*` custom properties on `:root`
+  (`accent`, `accent-soft`, `surface-bg`, `surface-border`,
+  `surface-shadow`, `radius`, `hover-bg`, `danger`, `font`) with the
+  current literal values as defaults. The vertex-edit right-click menu
+  ("删除节点") migrated off inline styles + JS `mouseenter`/`mouseleave`
+  hover toggle onto class-based rules (`.emap-ctx-menu` /
+  `.emap-ctx-menu-item` with `:hover`) consuming the tokens. Default
+  rendering is byte-identical; themers override `--emap-*` on `:root` (or
+  a parent) to restyle. Existing controls' literal values are unchanged
+  — namespace opened but not retro-applied (follow-up phases may opt in).
 - DX Phase 5 (toward 0.3.0): vertex editing is now the arbiter-driven
   `map.vertexEdit` handler (`enable/disable/isEnabled/setOptions/
   getOptions`), consistent with the other handlers — usable without
@@ -123,31 +148,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   crosshair (the old `.emap-draw-active` CSS rule was dead); the ad-hoc
   `.emap-edit-active`/`.emap-draw-active` CSS-class mechanism is removed
   (single source of truth). No dispatch/priority behaviour change.
-- DX Phase 2c (toward 0.3.0): `BoxSelectControl` / `LassoSelectControl`
-  are now button-only thin shells over the P2b `map.boxSelect` /
-  `map.lassoSelect` handlers (the ~490 lines of duplicated
-  listener/overlay/hit-test/select logic deleted) — public class,
-  constructor options, 0×0 anchor DOM, selection behaviour, and the
-  dashed-lasso visual are byte-identical (the handler now honours
-  `strokeDasharray`, default `'4 3'`). Adding both controls now surfaces
-  the handlers' mutual-exclusivity error instead of silently conflicting.
-  Duplicated types consolidated to one declaration each with re-export
-  shims (every public import path unchanged): `SelectMode` →
-  `core/handlers/select-mode`, `BoxSelectStyle` →
-  `core/handlers/box-select`, `LassoSelectStyle`/`LassoStyle` →
-  `core/handlers/lasso-select` (`LassoStyle` widened additively to include
-  the optional `strokeDasharray`). No arbiter/dispatch change.
-- DX Phase 4 (toward 0.3.0): opened the emap design-token namespace —
-  `controls.css` now declares 9 `--emap-*` custom properties on `:root`
-  (`accent`, `accent-soft`, `surface-bg`, `surface-border`,
-  `surface-shadow`, `radius`, `hover-bg`, `danger`, `font`) with the
-  current literal values as defaults. The vertex-edit right-click menu
-  ("删除节点") migrated off inline styles + JS `mouseenter`/`mouseleave`
-  hover toggle onto class-based rules (`.emap-ctx-menu` /
-  `.emap-ctx-menu-item` with `:hover`) consuming the tokens. Default
-  rendering is byte-identical; themers override `--emap-*` on `:root` (or
-  a parent) to restyle. Existing controls' literal values are unchanged
-  — namespace opened but not retro-applied (follow-up phases may opt in).
+
+### Changed
+
+- **`LassoStyle` widened (additive, back-compat):** the public
+  `LassoStyle` type (`@zwishing/emap` index, from
+  `core/handlers/lasso-select`) gained an optional `strokeDasharray?:
+  string` field (default `'4 3'`). Every existing 3-field value remains
+  assignable; consumers passing an extra `strokeDasharray` to a lasso
+  handler/control now see the dashed visual previously only possible via
+  the `LassoSelectControl` surface.
+- **Adding `BoxSelectControl` + `LassoSelectControl` together now
+  throws:** the P2b handlers are mutually exclusive (one of `enable()`
+  throws `cannot enable boxSelect: lassoSelect is enabled`). The legacy
+  controls silently coexisted with undefined behavior; the P2c thin
+  shells surface the conflict honestly. Install one, OR call
+  `map.boxSelect.disable()` before enabling the other (see the updated
+  `test/examples/lasso-select.html` for the canonical toggle recipe).
 
 ### Documentation
 
