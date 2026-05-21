@@ -29,13 +29,25 @@ describe('BoxSelectHandler', () => {
     expect(h.handlePointer(ev('down', 0, 0, true))).toBe('passthrough');
   });
 
-  it('without activator (no shift) down → passthrough (lets dragPan have it)', () => {
+  it('custom shift activator keeps plain drag as passthrough', () => {
     const h = new BoxSelectHandler(fakeMap() as any);
+    h.setOptions({ dragActivator: 'shift' });
     h.enable();
     expect(h.handlePointer(ev('down', 0, 0, false))).toBe('passthrough');
   });
 
-  it('shift+down → exclusive; move tracks; up past threshold → query+select(replace)', () => {
+  it('plain left-drag box-selects without shift by default', () => {
+    const map = fakeMap();
+    const h = new BoxSelectHandler(map as any);
+    h.enable();
+    expect(h.handlePointer(ev('down', 10, 10, false))).toBe('exclusive');
+    expect(h.handlePointer(ev('move', 60, 40, false))).toBe('exclusive');
+    expect(h.handlePointer(ev('up', 60, 40, false))).toBe('passthrough');
+    expect(map.queryFeatures).toHaveBeenCalledWith([[10, 10], [60, 40]], undefined);
+    expect(map.select).toHaveBeenCalledWith([{ source: 's', layer: 'l', id: 7 }], { mode: 'replace' });
+  });
+
+  it('shift+down → exclusive; move tracks; up past threshold → query+select(add)', () => {
     const map = fakeMap();
     const h = new BoxSelectHandler(map as any);
     h.enable();
@@ -43,7 +55,7 @@ describe('BoxSelectHandler', () => {
     expect(h.handlePointer(ev('move', 60, 40, true))).toBe('exclusive');
     expect(h.handlePointer(ev('up', 60, 40, true))).toBe('passthrough');
     expect(map.queryFeatures).toHaveBeenCalledWith([[10, 10], [60, 40]], undefined);
-    expect(map.select).toHaveBeenCalledWith([{ source: 's', layer: 'l', id: 7 }], { mode: 'replace' });
+    expect(map.select).toHaveBeenCalledWith([{ source: 's', layer: 'l', id: 7 }], { mode: 'add' });
   });
 
   it('shift+alt drag → toggle mode (strip-activator default table)', () => {

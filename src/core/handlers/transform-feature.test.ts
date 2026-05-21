@@ -120,6 +120,7 @@ describe('TransformFeatureHandler', () => {
     expect(map.select).not.toHaveBeenCalled();
     expect(map.editSession.beginTranslateSession).not.toHaveBeenCalled();
     expect(translateStub.cancel).not.toHaveBeenCalled();
+    expect(h.getCursor()).toBe('move');
   });
 
   it('down on an ALREADY-selected feature (Option A): no select, begins the session, returns exclusive', () => {
@@ -131,6 +132,33 @@ describe('TransformFeatureHandler', () => {
     expect(map.select).not.toHaveBeenCalled();
     expect(map.editSession.beginTranslateSession).toHaveBeenCalled();
     expect(r).toBe('exclusive');
+  });
+
+  it('translate mode returns move cursor while hovering an already-selected feature', () => {
+    const { map } = makeMap();
+    map.isSelected.mockReturnValue(true);
+    const h = new TransformFeatureHandler(map as any);
+    h.enable();
+    expect(h.handlePointer(pointer('move', 30, 40))).toBe('passthrough');
+    expect(h.getCursor()).toBe('move');
+  });
+
+  it('translate mode has no cursor opinion when hover is not selected', () => {
+    const { map } = makeMap();
+    map.isSelected.mockReturnValue(false);
+    const h = new TransformFeatureHandler(map as any);
+    h.enable();
+    h.handlePointer(pointer('move', 30, 40));
+    expect(h.getCursor()).toBeNull();
+  });
+
+  it('keeps move cursor during an active translate session', () => {
+    const { map } = makeMap();
+    map.isSelected.mockReturnValue(true);
+    const h = new TransformFeatureHandler(map as any);
+    h.enable();
+    h.handlePointer(pointer('down', 30, 40));
+    expect(h.getCursor()).toBe('move');
   });
 
   it('down on a miss passes through, no session, no select', () => {

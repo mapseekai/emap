@@ -26,10 +26,15 @@ describe('BoxSelectControl (thin shell, DX P2c)', () => {
   });
 
   it('onAdd forwards options to map.boxSelect.setOptions and enables it', () => {
-    const c = new BoxSelectControl({ layers: ['a'], dragThreshold: 7, style: { stroke: '#f00' } });
+    const c = new BoxSelectControl({
+      layers: ['a'],
+      dragThreshold: 7,
+      dragActivator: 'none',
+      style: { stroke: '#f00' },
+    });
     const anchor = c.onAdd(map as any);
     expect(handler.setOptions).toHaveBeenCalledWith({
-      layers: ['a'], dragThreshold: 7, style: { stroke: '#f00' },
+      layers: ['a'], dragThreshold: 7, dragActivator: 'none', style: { stroke: '#f00' },
     });
     expect(handler.enable).toHaveBeenCalledTimes(1);
     expect(anchor.className).toBe('emap-ctrl emap-box-select-anchor');
@@ -40,7 +45,7 @@ describe('BoxSelectControl (thin shell, DX P2c)', () => {
     const c = new BoxSelectControl();
     c.onAdd(map as any);
     expect(handler.setOptions).toHaveBeenCalledWith({
-      layers: undefined, dragThreshold: undefined, style: undefined,
+      layers: undefined, dragThreshold: undefined, dragActivator: undefined, style: undefined,
     });
     expect(handler.enable).toHaveBeenCalledTimes(1);
   });

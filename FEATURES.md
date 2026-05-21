@@ -134,7 +134,7 @@ these directly without using bundled UI controls.
 | `map.dragPan` | Pointer drag map panning |
 | `map.scrollZoom` | Wheel zoom |
 | `map.clickSelect` | Click selection |
-| `map.boxSelect` | Shift-drag rectangular selection |
+| `map.boxSelect` | Active-tool rectangular selection |
 | `map.lassoSelect` | Free-form lasso selection |
 | `map.vertexEdit` | Topology-aware vertex editing |
 | `map.drawFeature` | Point, polyline, and polygon drawing |

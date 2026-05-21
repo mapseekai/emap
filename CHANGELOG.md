@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `boxSelect` now behaves like an active selection tool by default: plain
+  left-drag starts a rectangular selection and replaces the previous selection,
+  while `Shift`+drag adds to the existing selection and `Shift`+`Alt`+drag
+  toggles matching features.
+- When pan or translate-transform mode is active and the pointer hovers an
+  already-selected feature, the canvas cursor now switches to `move`; active
+  map dragging still uses `grabbing`.
+
 ## [0.3.0] - 2026-05-21
 
 ### Added

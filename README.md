@@ -189,7 +189,6 @@ them directly from your own UI instead of adding `BoxSelectControl`,
 ```ts
 map.boxSelect.setOptions({
   layers: ['district-fill'],
-  dragActivator: 'shift',
   dragThreshold: 4,
 });
 map.boxSelect.enable();
@@ -229,7 +228,7 @@ Available named handlers:
 | `map.dragPan` | Pointer drag map panning |
 | `map.scrollZoom` | Wheel zoom |
 | `map.clickSelect` | Click selection |
-| `map.boxSelect` | Shift-drag rectangular selection |
+| `map.boxSelect` | Active-tool rectangular selection |
 | `map.lassoSelect` | Free-form lasso selection |
 | `map.vertexEdit` | Topology-aware vertex editing |
 | `map.drawFeature` | Point, polyline, and polygon drawing |
@@ -282,10 +281,11 @@ const clearButton = document.querySelector<HTMLButtonElement>('[data-tool="clear
 
 map.boxSelect.setOptions({
   layers: ['district-fill'],
-  dragActivator: 'shift',
   dragThreshold: 4,
-  mode: 'replace',
 });
+
+// Plain drag replaces the current selection. Shift+drag adds to it;
+// Shift+Alt+drag toggles matching features.
 
 function activateBoxSelect() {
   map.lassoSelect.disable();

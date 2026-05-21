@@ -273,7 +273,11 @@ export class Emap extends EventDispatcher {
     // Interactions — both use EventDispatcher pattern
     this._handlers = new HandlerManager();
     this._scrollZoom = new ScrollZoomHandler(this._canvasContainer, () => this.stop());
-    this._dragPan = new DragPanHandler(undefined, () => this.stop());
+    this._dragPan = new DragPanHandler(
+      undefined,
+      () => this.stop(),
+      (point) => this.queryFeatures([point.x, point.y]).some((feature) => this.isSelected(feature)),
+    );
     this._handlers.register(this._dragPan);
     this._handlers.register(this._scrollZoom);
     this._clickSelect = new ClickSelectHandler(this);
@@ -1370,6 +1374,7 @@ export class Emap extends EventDispatcher {
       added: diff.added,
       removed: diff.removed,
     });
+    this._handlers?.refreshCursor();
   }
 
   /**

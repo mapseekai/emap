@@ -58,4 +58,20 @@ describe('DragPanHandler.getCursor (DX P11)', () => {
     h.disable();
     expect(h.getCursor()).toBeNull();
   });
+
+  it('returns move when idle hover is over a selected feature', () => {
+    const isHoveringSelected = vi.fn(() => true);
+    const h = new DragPanHandler(undefined, undefined, isHoveringSelected);
+    expect(h.handlePointer(ev('move', 12, 34))).toBe('passthrough');
+    expect(h.getCursor()).toBe('move');
+    expect(isHoveringSelected).toHaveBeenCalledWith({ x: 12, y: 34 });
+  });
+
+  it('keeps grabbing during an active pan even if the pointer is over selection', () => {
+    const h = new DragPanHandler(undefined, undefined, () => true);
+    h.handlePointer(ev('move', 12, 34));
+    expect(h.getCursor()).toBe('move');
+    h.handlePointer(ev('down', 12, 34));
+    expect(h.getCursor()).toBe('grabbing');
+  });
 });

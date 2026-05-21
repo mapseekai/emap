@@ -68,17 +68,29 @@ describe('Emap handler registry (Phase 1)', () => {
     expect(map.lassoSelect.isEnabled()).toBe(false);
   });
 
-  it('shift+drag with boxSelect enabled selects via the arbiter (not pan)', () => {
+  it('plain drag with boxSelect enabled selects via the arbiter (not pan)', () => {
     const el = container();
     const map = new Emap({ container: el });
     const canvas = map.getCanvasContainer();
     canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
     map.boxSelect.enable();
     const before = map.getCenter();
-    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 50, clientY: 50, button: 0, shiftKey: true }));
-    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 200, clientY: 200, button: 0, shiftKey: true }));
-    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 200, clientY: 200, button: 0, shiftKey: true }));
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 50, clientY: 50, button: 0 }));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 200, clientY: 200, button: 0 }));
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 200, clientY: 200, button: 0 }));
     expect(map.getCenter()[0]).toBe(before[0]);
+  });
+
+  it('pan cursor becomes move when hovering an already-selected feature', () => {
+    const el = container();
+    const map = new Emap({ container: el });
+    const canvas = map.getCanvasContainer();
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    const hit = { source: 's', layer: 'l', id: 1 };
+    (map as any).queryFeatures = vi.fn(() => [hit]);
+    (map as any).isSelected = vi.fn(() => true);
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 50, clientY: 50, button: 0 }));
+    expect(canvas.style.cursor).toBe('move');
   });
 
   it('map.on("feature:click", filter, cb) fires for the hit feature via the arbiter', () => {

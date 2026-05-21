@@ -7,6 +7,7 @@ export interface DragPanOptions {
 }
 
 const DEFAULTS: DragPanOptions = { skipShiftDrag: true };
+type Point = { x: number; y: number };
 
 /**
  * Named `dragPan` handler. Phase 2a: pan logic lives in `handlePointer`,
@@ -20,12 +21,19 @@ export class DragPanHandler extends EventDispatcher implements Handler<DragPanOp
   private _enabled = true;
   private _dragging = false;
   private _last: { x: number; y: number } = { x: 0, y: 0 };
+  private _hoverPoint: Point | null = null;
   private _onGestureStart?: () => void;
+  private _isHoveringSelected?: (point: Point) => boolean;
 
-  constructor(opts?: Partial<DragPanOptions>, onGestureStart?: () => void) {
+  constructor(
+    opts?: Partial<DragPanOptions>,
+    onGestureStart?: () => void,
+    isHoveringSelected?: (point: Point) => boolean,
+  ) {
     super();
     this._opts = { ...DEFAULTS, ...opts };
     this._onGestureStart = onGestureStart;
+    this._isHoveringSelected = isHoveringSelected;
   }
 
   enable(): void { this._enabled = true; }
@@ -39,7 +47,9 @@ export class DragPanHandler extends EventDispatcher implements Handler<DragPanOp
 
   getCursor(): string | null {
     if (!this._enabled) return null;
-    return this._dragging ? 'grabbing' : 'grab';
+    if (this._dragging) return 'grabbing';
+    if (this._hoverPoint && this._isHoveringSelected?.(this._hoverPoint)) return 'move';
+    return 'grab';
   }
 
   handlePointer(ev: NormalizedPointerEvent): HandlerResult {
@@ -55,6 +65,10 @@ export class DragPanHandler extends EventDispatcher implements Handler<DragPanOp
       this._last = { x: ev.point.x, y: ev.point.y };
       this.fire('panstart');
       return 'exclusive';
+    }
+    if (ev.kind === 'move' && !this._dragging) {
+      this._hoverPoint = { x: ev.point.x, y: ev.point.y };
+      return 'passthrough';
     }
     if (ev.kind === 'move' && this._dragging) {
       const dx = ev.point.x - this._last.x;

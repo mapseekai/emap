@@ -17,12 +17,12 @@ export interface BoxSelectStyle {
 export interface BoxSelectHandlerOptions extends SelectHandlerOptions {
   /** Min drag diagonal (px) before a release counts as a box. Default 4. */
   dragThreshold?: number;
-  /** Combo that must be held at pointerdown to start. Default 'shift'. */
+  /** Combo that must be held at pointerdown to start. Default 'none'. */
   dragActivator?: ModifierCombo;
   style?: BoxSelectStyle;
 }
 
-const BOX_DEFAULT_MODS = { replace: 'none', add: 'ctrl', toggle: 'alt' } as const;
+const BOX_DEFAULT_MODS = { replace: 'none', add: 'shift', toggle: 'shift+alt' } as const;
 
 /** True iff every key of `combo` is held (extra held keys allowed). */
 function comboHeld(m: PointerModifiers, combo: ModifierCombo): boolean {
@@ -36,8 +36,7 @@ function comboHeld(m: PointerModifiers, combo: ModifierCombo): boolean {
  * `_canvasContainer`, and on release past `dragThreshold` runs
  * `queryFeatures(bbox)` → `select(mode)`. Mode is resolved by stripping the
  * activator then matching `modifiers` — reproducing the legacy
- * `BoxSelectControl` behavior exactly. Mutually exclusive with `lassoSelect`
- * (enforced in HandlerManager — a later task).
+ * active-tool selection behavior. Mutually exclusive with `lassoSelect`.
  */
 export class BoxSelectHandler extends EventDispatcher implements Handler<BoxSelectHandlerOptions> {
   readonly name = 'boxSelect';
@@ -52,7 +51,7 @@ export class BoxSelectHandler extends EventDispatcher implements Handler<BoxSele
 
   enable(): void {
     if (this._manager?.isEnabledByName('lassoSelect')) {
-      throw new Error('cannot enable boxSelect: lassoSelect is enabled (both consume shift+drag); disable it first');
+      throw new Error('cannot enable boxSelect: lassoSelect is enabled (both consume selection drag gestures); disable it first');
     }
     this._enabled = true;
   }
@@ -69,7 +68,7 @@ export class BoxSelectHandler extends EventDispatcher implements Handler<BoxSele
   }
 
   private get _threshold(): number { return this._opts.dragThreshold ?? 4; }
-  private get _activator(): ModifierCombo { return this._opts.dragActivator ?? 'shift'; }
+  private get _activator(): ModifierCombo { return this._opts.dragActivator ?? 'none'; }
 
   private _ensureOverlay(): HTMLDivElement {
     if (this._overlay) return this._overlay;

@@ -55,7 +55,7 @@ export class LassoSelectHandler extends EventDispatcher implements Handler<Lasso
 
   enable(): void {
     if (this._manager?.isEnabledByName('boxSelect')) {
-      throw new Error('cannot enable lassoSelect: boxSelect is enabled (both consume shift+drag); disable it first');
+      throw new Error('cannot enable lassoSelect: boxSelect is enabled (both consume selection drag gestures); disable it first');
     }
     this._enabled = true;
   }

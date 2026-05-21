@@ -30,6 +30,9 @@ export class TransformFeatureHandler implements Handler<TransformFeatureOptions>
   private _translate: FeatureTranslateSession | null = null;
   private _affine: FeatureAffineSession | null = null;
   private _lastMap: [number, number] | null = null;
+  private _hoveringSelected = false;
+  /** Injected by HandlerManager.register (cursor recompute on mode flips). */
+  _manager?: { refreshCursor(): void };
   // Affine reference state: (re)initialized at every affine-mode pointerdown
   // (see handlePointer 'down'); only read while `_affine` is non-null, so the
   // numeric defaults below are never observed. Kept numeric (not null) because
@@ -53,21 +56,26 @@ export class TransformFeatureHandler implements Handler<TransformFeatureOptions>
     this._enabled = true;
     this._map.setEditMode('transform');
     window.addEventListener('keydown', this._onKeyDownBound);
+    this._manager?.refreshCursor();
   }
 
   disable(): void {
     if (!this._enabled) return;
     this._enabled = false;
     this._cancelSession();
+    this._hoveringSelected = false;
     window.removeEventListener('keydown', this._onKeyDownBound);
     this._map.setEditMode('none');
+    this._manager?.refreshCursor();
     this._map.render();
   }
 
   private _quietDisable(): void {
     this._enabled = false;
     this._cancelSession();
+    this._hoveringSelected = false;
     window.removeEventListener('keydown', this._onKeyDownBound);
+    this._manager?.refreshCursor();
     this._map.render();
   }
 
@@ -81,6 +89,13 @@ export class TransformFeatureHandler implements Handler<TransformFeatureOptions>
 
   getOptions(): Readonly<TransformFeatureOptions> {
     return this._opts;
+  }
+
+  getCursor(): string | null {
+    if (!this._enabled) return null;
+    if (this._translate) return 'move';
+    if (this._mode === 'translate' && this._hoveringSelected) return 'move';
+    return null;
   }
 
   private _cancelSession(): void {
@@ -105,12 +120,15 @@ export class TransformFeatureHandler implements Handler<TransformFeatureOptions>
     if (ev.kind === 'down') {
       if (ev.button !== 0) return 'passthrough';
       const hits = this._map.queryFeatures([ev.point.x, ev.point.y]);
+      if (this._mode === 'translate') this._hoveringSelected = hits.length > 0;
       // Option A (spec §15.11): transformFeature only drags an ALREADY-
       // selected feature and owns no selection logic. No hit, or a hit
       // that is not already selected → passthrough so the modifier-aware
       // clickSelect/boxSelect own selection (click=replace, shift+click=
       // add, click-empty=clear). The user selects first, then press-drags
-      // to move the whole selection.
+      // to move the whole selection. A down on any feature still switches the
+      // cursor to `move`; clickSelect will complete the actual selection on
+      // the following click event.
       if (!hits.length || !this._map.isSelected(hits[0])) return 'passthrough';
       const cur = this._map.unproject(ev.point.x, ev.point.y);
       if (this._mode === 'translate') {
@@ -132,7 +150,11 @@ export class TransformFeatureHandler implements Handler<TransformFeatureOptions>
     }
 
     if (ev.kind === 'move') {
-      if (!this._translate && !this._affine) return 'passthrough';
+      if (!this._translate && !this._affine) {
+        const hits = this._map.queryFeatures([ev.point.x, ev.point.y]);
+        this._hoveringSelected = hits.some((hit) => this._map.isSelected(hit));
+        return 'passthrough';
+      }
       const cur = this._map.unproject(ev.point.x, ev.point.y);
       if (this._translate) {
         if (this._lastMap)
@@ -166,6 +188,7 @@ export class TransformFeatureHandler implements Handler<TransformFeatureOptions>
         this._affine = null;
       }
       this._lastMap = null;
+      this._hoveringSelected = false;
       return 'passthrough';
     }
 
