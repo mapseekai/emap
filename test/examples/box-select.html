@@ -40,11 +40,13 @@
   <script src="../../dist/mapshaper-vendor.js"></script>
   <script src="../../dist/emap-dev.js"></script>
   <script>
-    const { Emap, TopologySource, NavigationControl, HistoryControl, BoxSelectControl } = emap;
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
     const map = new Emap({ container: 'map' });
     map.addControl(new NavigationControl(), 'top-left');
     map.addControl(new HistoryControl(), 'top-left');
-    map.addControl(new BoxSelectControl());
+    // Activate shift+drag box selection via the named handler (P2c).
+    // Alternative: `map.addControl(new BoxSelectControl())` for a toolbar-button surface.
+    map.boxSelect.enable();
     map.bindHistoryShortcuts();
 
     const SOURCE_ID = 'box-select-source';
