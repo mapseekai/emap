@@ -7,6 +7,8 @@ import { Projection } from '../geo/projection';
 import { Painter } from '../renderer/painter';
 import { CanvasPainter } from '../renderer/canvas-painter';
 import { EditOverlayRenderer } from '../renderer/edit-overlay-renderer';
+import { RenderScheduler, type Snapshot } from '../renderer/render-scheduler';
+import type { RenderRequest, AffineDelta } from './types';
 import { MapshaperOps } from './mapshaper-ops';
 import { EditSessions } from './edit-sessions';
 import { AttributeOps } from './attribute-ops';
@@ -73,6 +75,9 @@ export class Emap extends EventDispatcher {
   private _canvas: HTMLCanvasElement;
   private _painter: Painter;
   private _editOverlay: EditOverlayRenderer;
+  // Frame router (mapshaper 0.7.19 parity, gui-layer-renderer.mjs). Decides
+  // per `RenderRequest` whether to do full redraw / overlay-only / fast-nav.
+  private _scheduler!: RenderScheduler;
   private _viewport: Viewport = new Viewport();
   private _projection: Projection = new Projection();
   private _camera!: Camera;
@@ -250,6 +255,16 @@ export class Emap extends EventDispatcher {
     this._painter = new CanvasPainter(this._canvas);
     this._painter.setPixelRatio(window.devicePixelRatio || 1);
     this._editOverlay = new EditOverlayRenderer(this._painter);
+
+    // Wire the scheduler now that the painter and canvas exist. The
+    // callbacks delegate back to private methods so the scheduler itself
+    // stays pure (no DOM/canvas/Painter knowledge — easier to test in
+    // isolation).
+    this._scheduler = new RenderScheduler({
+      fullRedraw: () => this._renderFull(),
+      overlayOnly: () => this._renderOverlayOnly(),
+      fastNav: (delta) => this._applyFastTransform(delta),
+    });
 
     this._updateSize();
 
@@ -523,9 +538,24 @@ export class Emap extends EventDispatcher {
     this._editState.clearDraw();
   }
 
+  // Accumulated nav delta during an active pan gesture. Used by fast-nav
+  // to CSS-transform the previous frame instead of re-rendering. Reset on
+  // panstart, accumulated on each pan event, cleared on panend.
+  private _gestureNavDelta: AffineDelta | null = null;
+
   private _attachEventListeners(): void {
     this._dragPan.on('pan', (e: { dx: number; dy: number }) => {
       this._viewport.pan(e.dx, e.dy);
+      if (this._gestureNavDelta) {
+        this._gestureNavDelta.tx += e.dx;
+        this._gestureNavDelta.ty += e.dy;
+      }
+      // Drive the render via 'move' as before, but mark the pending request
+      // as a 'nav' action carrying the accumulated delta — that's what lets
+      // the scheduler pick the fast-nav code path on slow frames.
+      if (this._gestureNavDelta) {
+        this._scheduleRender('nav', this._gestureNavDelta);
+      }
       this.fire('move');
     });
     this._dragPan.on('panstart', () => {
@@ -533,6 +563,15 @@ export class Emap extends EventDispatcher {
       // own easeTo/flyTo animation is stopped separately via the dragPan
       // onGestureStart → map.stop() wiring; these are two independent systems.
       this._viewport.cancelZoomAnimation();
+      this._gestureNavDelta = { tx: 0, ty: 0, sx: 1, sy: 1 };
+    });
+    this._dragPan.on('panend', () => {
+      // Settle: if scheduler was in fast-nav, this triggers an immediate
+      // real redraw so we don't leave the user staring at a stale CSS-
+      // transformed frame.
+      this._gestureNavDelta = null;
+      this._scheduler.notifyInteractionEnd();
+      this.fire('interactionend');
     });
 
     this._scrollZoom.on('mousewheel', (e: { direction: number; multiplier: number; x: number; y: number }) => {
@@ -1096,9 +1135,27 @@ export class Emap extends EventDispatcher {
   /** Cancel any running camera animation (no-op when idle). */
   public stop(): this { this._camera.stop(); return this; }
 
-  _scheduleRender(): void {
+  // Latest render request awaiting the next rAF tick. If several callers
+  // request renders in the same frame, the strongest action wins:
+  //   redraw > nav > hover
+  // ('redraw' invalidates everything; 'nav' is a transformed reuse; 'hover'
+  // is the cheapest overlay-only path.)
+  private _pendingAction: 'redraw' | 'nav' | 'hover' = 'redraw';
+  private _pendingNavDelta: AffineDelta | null = null;
+
+  _scheduleRender(action: 'redraw' | 'nav' | 'hover' = 'redraw', navDelta?: AffineDelta): void {
     if (this._removed) return;
     this._pendingRender++;
+    // Resolve action priority — never weaken a stronger pending request.
+    if (this._pendingAction === 'redraw' || action === 'redraw') {
+      this._pendingAction = 'redraw';
+      this._pendingNavDelta = null;
+    } else if (this._pendingAction === 'nav' || action === 'nav') {
+      this._pendingAction = 'nav';
+      if (navDelta) this._pendingNavDelta = { ...navDelta };
+    } else {
+      this._pendingAction = 'hover';
+    }
     if (this._rafId === 0) {
       this._rafId = requestAnimationFrame(() => this._doRender());
     }
@@ -1108,11 +1165,55 @@ export class Emap extends EventDispatcher {
     this._rafId = 0;
     if (this._pendingRender > 0) {
       this._pendingRender = 0;
-      this.render();
+      const action = this._pendingAction;
+      const navDelta = this._pendingNavDelta;
+      // Reset before render() so a re-entrant request during render starts fresh.
+      this._pendingAction = 'redraw';
+      this._pendingNavDelta = null;
+      const req: RenderRequest = { action };
+      if (navDelta) req.navDelta = navDelta;
+      this.render(req);
     }
   }
 
-  public render(): void {
+  public render(req?: RenderRequest): void {
+    // Route through the scheduler. With no `req` (legacy callers) this
+    // collapses to a full redraw — fully backward compatible.
+    this._scheduler.schedule(req ?? { action: 'redraw' });
+  }
+
+  /**
+   * Heavy path: clear, layers + highlight + edit overlay. Wrapped in a
+   * `performance.now` measurement so the scheduler can decide whether
+   * future nav actions should fast-path.
+   */
+  private _renderFull(): void {
+    this._clearFastTransform();
+    const t0 = performance.now();
+    this._renderImpl();
+    this._flushCanvas();
+    const ms = performance.now() - t0;
+    this._scheduler.recordFrame(ms, this._captureSnapshot());
+  }
+
+  /**
+   * Skip the main layer pass; only repaint the highlight + edit overlay.
+   * Today these still share the main canvas with the layers, so we have
+   * to redraw the layers underneath them — but we can skip everything
+   * outside that. A future PR may split overlays onto their own canvas;
+   * then this path will become "draw on overlay canvas only".
+   */
+  private _renderOverlayOnly(): void {
+    // Single-canvas architecture: overlays sit on top of layers, so
+    // we still must redraw layers underneath to keep the composition
+    // correct. Match `_renderImpl` body exactly (mapshaper-style
+    // "skip main on hover" requires a separate overlay canvas which
+    // emap does not yet have — see PR3 plan, deferred to later work).
+    this._renderImpl();
+  }
+
+  /** Common body used by both full and overlay-only paths. */
+  private _renderImpl(): void {
     const transform = this._viewport.transform;
     this._painter.setTransform(transform);
     this._painter.clear();
@@ -1127,6 +1228,49 @@ export class Emap extends EventDispatcher {
       this._editState.vertex,
       this._editState.draw,
     );
+  }
+
+  /**
+   * Force the browser to synchronously commit any queued canvas paint
+   * before returning. Without this, `performance.now()` only captures
+   * the JS work — actual GPU paint time is deferred and the scheduler
+   * would under-estimate the true frame cost. Aligned with mapshaper
+   * `gui-layer-renderer.mjs:182-188`.
+   */
+  private _flushCanvas(): void {
+    try {
+      const ctx = this._canvas.getContext('2d');
+      if (ctx) ctx.getImageData(0, 0, 1, 1);
+    } catch {
+      // Ignore (e.g. cross-origin-tainted canvas, won't happen here).
+    }
+  }
+
+  private _captureSnapshot(): Snapshot {
+    return {
+      canvasWidth: this._canvas.width,
+      canvasHeight: this._canvas.height,
+      pixRatio: window.devicePixelRatio || 1,
+    };
+  }
+
+  /**
+   * Apply a CSS transform to the main canvas reflecting a nav delta. The
+   * previous frame's pixels are reused; settle (next full redraw) will
+   * blow this away. Aligned with mapshaper `gui-layer-renderer.mjs:217-246`.
+   */
+  private _applyFastTransform(delta: AffineDelta): void {
+    const style = this._canvas.style;
+    style.transformOrigin = 'top left';
+    style.transform = `translate(${delta.tx}px,${delta.ty}px) scale(${delta.sx},${delta.sy})`;
+  }
+
+  private _clearFastTransform(): void {
+    const style = this._canvas.style;
+    if (style.transform) {
+      style.transform = '';
+      style.transformOrigin = '';
+    }
   }
 
   private _renderLayers(pixelSize: number, lineScale: number): void {
@@ -1305,18 +1449,22 @@ export class Emap extends EventDispatcher {
     style?: HighlightStyle,
   ): void {
     this._highlightManager.setHighlightedFeatures(features, style);
-    this._scheduleRender();
+    // Hover/selection highlight is a candidate for the overlay-only render
+    // path. Today emap shares one canvas so we still redraw layers under
+    // the highlight; once we split canvases the scheduler will let us
+    // truly skip the main layer pass here.
+    this._scheduleRender('hover');
   }
 
   public clearHighlightedFeatures(): void {
     if (this._highlightManager.clearHighlightedFeatures()) {
-      this._scheduleRender();
+      this._scheduleRender('hover');
     }
   }
 
   public setHighlightStyle(style: HighlightStyle): void {
     if (this._highlightManager.setHighlightStyle(style)) {
-      this._scheduleRender();
+      this._scheduleRender('hover');
     }
   }
 

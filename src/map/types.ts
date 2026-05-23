@@ -17,6 +17,41 @@ export type SnapKind = DrawOverlaySnapKind;
 
 export type ExpressionEvaluationPolicy = 'trusted' | 'disabled';
 
+// ----- Render request types (mapshaper 0.7.19 parity) ---------------------
+
+/**
+ * Coarse intent of a render call. The default 'redraw' triggers a full
+ * frame just like the legacy parameter-less `render()`. 'nav' is used by
+ * pan/zoom handlers and unlocks the fast-nav code path on slow frames.
+ * 'hover' lets the scheduler skip the heavy main layer pass when only
+ * hover/selection highlight needs to change.
+ *
+ * Aligned with mapshaper `gui-map.mjs:485` action values (empty/redraw,
+ * 'nav', 'hover').
+ */
+export type RenderAction = 'redraw' | 'nav' | 'hover';
+
+/**
+ * Delta describing a pan + uniform-scale change relative to the captured
+ * snapshot. Used by fast-nav to apply a CSS transform to the main canvas
+ * without re-drawing every layer.
+ */
+export interface AffineDelta {
+  tx: number;
+  ty: number;
+  sx: number;
+  sy: number;
+}
+
+/**
+ * Optional argument to `Emap.render`. Omitting it (or omitting any field)
+ * preserves the legacy behavior — the call collapses to a full 'redraw'.
+ */
+export interface RenderRequest {
+  action?: RenderAction;
+  navDelta?: AffineDelta;
+}
+
 export interface MapOptions {
   container: string | HTMLElement;
   interactive?: boolean;
