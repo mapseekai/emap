@@ -3,6 +3,49 @@ import { AffineTransform } from '../geo/transform';
 import { normalizePointShape } from '../source/layer-utils';
 import type { ArcCollection, StrokeStyle, PointStyle, VertexDotStyle } from '../types/mapshaper-types';
 
+// Minimal subset of CanvasRenderingContext2D used by getPixelColorFunction.
+// Splitting it out lets tests inject a mock without a real DOM.
+interface ColorParseCtx {
+  fillStyle: string | CanvasGradient | CanvasPattern;
+  clearRect(x: number, y: number, w: number, h: number): void;
+  fillRect(x: number, y: number, w: number, h: number): void;
+  getImageData(x: number, y: number, w: number, h: number): { data: Uint8ClampedArray };
+}
+
+/**
+ * Returns a memoized function that converts a CSS color string into the
+ * little-endian uint32 representation of one RGBA pixel. Lets fast-path
+ * dot rendering skip the color parser on subsequent calls with the same
+ * color. Equivalent to mapshaper `gui-canvas.mjs:115-130`.
+ *
+ * Optional `ctx` parameter is for tests; production usage creates an
+ * internal 1×1 canvas.
+ */
+export function getPixelColorFunction(ctx?: ColorParseCtx): (rgba: string) => number {
+  const cache = new Map<string, number>();
+  let cx: ColorParseCtx;
+  if (ctx) {
+    cx = ctx;
+  } else {
+    const cnv = document.createElement('canvas');
+    cnv.width = 1;
+    cnv.height = 1;
+    cx = cnv.getContext('2d')! as unknown as ColorParseCtx;
+  }
+  return (rgba: string): number => {
+    const cached = cache.get(rgba);
+    if (cached !== undefined) return cached;
+    cx.clearRect(0, 0, 1, 1);
+    cx.fillStyle = rgba;
+    cx.fillRect(0, 0, 1, 1);
+    const buf = cx.getImageData(0, 0, 1, 1).data;
+    // Little-endian read: bytes are R,G,B,A; uint32 is A<<24 | B<<16 | G<<8 | R
+    const v = (buf[3] << 24) | (buf[2] << 16) | (buf[1] << 8) | buf[0];
+    cache.set(rgba, v);
+    return v;
+  };
+}
+
 export class CanvasPainter implements Painter {
   private _ctx: CanvasRenderingContext2D;
   private _transform: AffineTransform = new AffineTransform();
@@ -161,6 +204,67 @@ export class CanvasPainter implements Painter {
     }
   }
 
+  // Lazily-built color memoizer shared across all painters. Sized cache is
+  // fine because realistic data uses a small palette.
+  private static _pixelColorFn: ((rgba: string) => number) | null = null;
+  private _getPixelColor(rgba: string): number {
+    if (!CanvasPainter._pixelColorFn) {
+      CanvasPainter._pixelColorFn = getPixelColorFunction();
+    }
+    return CanvasPainter._pixelColorFn(rgba);
+  }
+
+  /**
+   * Direct-pixel fast path for small opaque dots. Equivalent to mapshaper
+   * `gui-canvas.mjs:334-372 drawSquareDotsFaster`.
+   *
+   * - Reads the entire canvas via one `getImageData` (cost: one large allocation)
+   * - Stamps a `size × size` block at each point via `Uint32Array` writes
+   * - Pushes back with one `putImageData`
+   *
+   * Skipping the Canvas2D draw path beats the per-point overhead of
+   * `ctx.arc/fill` by an order of magnitude on big point clouds.
+   * Callers are responsible for the size/style preconditions
+   * (see `_canUseFastDotPath`).
+   */
+  private drawSquareDotsFaster(
+    points: Array<[number, number]>,
+    color: string,
+    size: number,
+    ctx: CanvasRenderingContext2D,
+  ): void {
+    if (points.length === 0) return;
+    const canvas = ctx.canvas;
+    const w = canvas.width;
+    const h = canvas.height;
+    if (w === 0 || h === 0) return;
+
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const pixels = new Uint32Array(imageData.data.buffer);
+    const colorInt = this._getPixelColor(color);
+    const half = Math.floor(size / 2);
+
+    for (let i = 0; i < points.length; i++) {
+      const px = points[i][0];
+      const py = points[i][1];
+      const cx = Math.round(px);
+      const cy = Math.round(py);
+      const x0 = cx - half < 0 ? 0 : cx - half;
+      const y0 = cy - half < 0 ? 0 : cy - half;
+      const x1 = cx + half >= w ? w - 1 : cx + half;
+      const y1 = cy + half >= h ? h - 1 : cy + half;
+      if (x1 < 0 || y1 < 0 || x0 >= w || y0 >= h) continue;
+      for (let y = y0; y <= y1; y++) {
+        const rowOffset = y * w;
+        for (let x = x0; x <= x1; x++) {
+          pixels[rowOffset + x] = colorInt;
+        }
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+  }
+
   drawPoints(_shapes: any[], _style: PointStyle): void {
     const ctx = this._ctx;
     const pr = this._pixelRatio;
@@ -171,6 +275,24 @@ export class CanvasPainter implements Painter {
     const radius = (Number(_style?.radius) || 4) * pr;
     const color = _style?.color || '#333';
     const fill = _style?.fill !== false;
+
+    // Fast path: opaque fill, integer-rounded small square dots written
+    // straight into the canvas backing buffer. Mapshaper `gui-canvas.mjs:306`
+    // takes this path whenever the resulting pixel size is ≤ 6 — for big
+    // point clouds it's 10–100× faster than `ctx.arc`.
+    if (this._canUseFastDotPath(_style, radius, fill)) {
+      const size = Math.max(1, Math.round(radius * 2));
+      const points: Array<[number, number]> = [];
+      _shapes.forEach(shape => {
+        if (!shape) return;
+        const pts = normalizePointShape(shape);
+        pts.forEach((p: number[]) => {
+          points.push([p[0] * mx + bx, p[1] * my + by]);
+        });
+      });
+      this.drawSquareDotsFaster(points, color, size, ctx);
+      return;
+    }
 
     ctx.beginPath();
     ctx.fillStyle = color;
@@ -192,6 +314,21 @@ export class CanvasPainter implements Painter {
     } else {
       ctx.stroke();
     }
+  }
+
+  /**
+   * Gating predicate for the direct-pixel dot fast path. Conditions match
+   * mapshaper `gui-canvas.mjs:306` plus emap-specific constraints:
+   *  - `fill` must be true (fast path can't draw a stroke ring)
+   *  - resulting pixel size must be a small integer (≤ 6, matches mapshaper)
+   *  - PointStyle has no opacity field, so we don't need to gate on it
+   */
+  private _canUseFastDotPath(_style: PointStyle, radius: number, fill: boolean): boolean {
+    if (!fill) return false;
+    const size = Math.round(radius * 2);
+    if (size <= 0) return false;
+    if (size > 6) return false;
+    return true;
   }
 
   /**
