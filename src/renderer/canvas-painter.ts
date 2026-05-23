@@ -55,6 +55,36 @@ export class CanvasPainter implements Painter {
     ctx.stroke();
   }
 
+  // Multi-style shape batching: groups items by composite style key before
+  // delegating to drawPaths. Equivalent to mapshaper's styleIndex pattern
+  // (gui-canvas.mjs:241-281 — drawStyledPaths). Saves redundant canvas state
+  // mutations when caller has heterogeneous styles (e.g., data-driven coloring).
+  drawPathsBatch(
+    items: Array<{ shape: any; style: StrokeStyle }>,
+    arcs: ArcCollection,
+  ): void {
+    if (items.length === 0) return;
+    const groups = new Map<string, { style: StrokeStyle; shapes: any[] }>();
+    for (const it of items) {
+      if (it.style.width === 0) continue;
+      const key = this._styleKey(it.style);
+      let g = groups.get(key);
+      if (!g) {
+        g = { style: it.style, shapes: [] };
+        groups.set(key, g);
+      }
+      g.shapes.push(it.shape);
+    }
+    for (const g of groups.values()) {
+      this.drawPaths(g.shapes, g.style, arcs);
+    }
+  }
+
+  private _styleKey(s: StrokeStyle): string {
+    const anyS = s as any;
+    return `${s.color || '#333'}|${s.width ?? 1}|${anyS.lineCap || 'round'}|${anyS.lineJoin || 'round'}|${anyS.opacity ?? 1}`;
+  }
+
   // Direct arc rendering for maximum performance (bypasses shape iteration)
   drawArcs(arcs: ArcCollection, style: StrokeStyle, filter?: (i: number) => boolean): void {
     if (style.width === 0) return;
