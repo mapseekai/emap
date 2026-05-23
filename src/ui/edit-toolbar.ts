@@ -4,6 +4,8 @@ import { VertexEditControl } from './vertex-edit-control';
 import { DrawFeatureControl } from './draw-feature-control';
 
 export interface EditToolbarOptions {
+  /** Explicit controls to render. When provided, default edit/draw buttons are not added. */
+  controls?: Control[];
   /** Source ID for draw tools. If not provided, draw buttons are not shown. */
   drawSource?: string;
   /** Source layer name for draw tools (optional, defaults to first matching layer). */
@@ -19,58 +21,52 @@ export interface EditToolbarOptions {
  *
  *   // With draw tools
  *   map.addControl(new EditToolbar({ drawSource: 'my-source' }), 'top-left');
+ *
+ *   // Custom composition
+ *   map.addControl(new EditToolbar({ controls: [new VertexEditControl()] }), 'top-left');
  */
 export class EditToolbar implements Control {
   private _container: HTMLElement | null = null;
-  private _vertexEditControl: VertexEditControl;
-  private _drawControls: DrawFeatureControl[] = [];
+  private _controls: Control[];
   private _options: EditToolbarOptions;
 
   constructor(options?: EditToolbarOptions) {
     this._options = options || {};
-    this._vertexEditControl = new VertexEditControl();
-
-    if (this._options.drawSource) {
-      this._drawControls = [
-        new DrawFeatureControl({
-          source: this._options.drawSource,
-          sourceLayer: this._options.drawSourceLayer,
-          type: 'polygon',
-        }),
-        new DrawFeatureControl({
-          source: this._options.drawSource,
-          sourceLayer: this._options.drawSourceLayer,
-          type: 'polyline',
-        }),
-        new DrawFeatureControl({
-          source: this._options.drawSource,
-          sourceLayer: this._options.drawSourceLayer,
-          type: 'point',
-        }),
-      ];
+    if (this._options.controls) {
+      this._controls = this._options.controls;
+    } else {
+      this._controls = [new VertexEditControl()];
+      if (this._options.drawSource) {
+        this._controls.push(
+          new DrawFeatureControl({
+            source: this._options.drawSource,
+            sourceLayer: this._options.drawSourceLayer,
+            type: 'polygon',
+          }),
+          new DrawFeatureControl({
+            source: this._options.drawSource,
+            sourceLayer: this._options.drawSourceLayer,
+            type: 'polyline',
+          }),
+          new DrawFeatureControl({
+            source: this._options.drawSource,
+            sourceLayer: this._options.drawSourceLayer,
+            type: 'point',
+          }),
+        );
+      }
     }
   }
 
   onAdd(map: Emap): HTMLElement {
-    // The vertex edit control returns its own element
-    const vertexEl = this._vertexEditControl.onAdd(map);
-
-    // Wrap in a toolbar container
     this._container = document.createElement('div');
     this._container.className = 'emap-ctrl emap-ctrl-group emap-edit-toolbar';
 
-    // Move the button from the vertex control's container into ours
-    const btn = vertexEl.querySelector('button');
-    if (btn) {
-      this._container.appendChild(btn);
-    }
-
-    // Add draw tool buttons
-    for (const drawCtrl of this._drawControls) {
-      const drawEl = drawCtrl.onAdd(map);
-      const drawBtn = drawEl.querySelector('button');
-      if (drawBtn) {
-        this._container.appendChild(drawBtn);
+    for (const control of this._controls) {
+      const controlEl = control.onAdd(map);
+      const buttons = controlEl.querySelectorAll('button');
+      for (const button of buttons) {
+        this._container.appendChild(button);
       }
     }
 
@@ -78,9 +74,8 @@ export class EditToolbar implements Control {
   }
 
   onRemove(): void {
-    this._vertexEditControl.onRemove();
-    for (const drawCtrl of this._drawControls) {
-      drawCtrl.onRemove();
+    for (const control of this._controls) {
+      control.onRemove();
     }
     if (this._container?.parentNode) {
       this._container.parentNode.removeChild(this._container);

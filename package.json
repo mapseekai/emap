@@ -1,6 +1,6 @@
 {
   "name": "@zwishing/emap",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "A modern, decoupled rendering engine for mapshaper data",
   "main": "dist/emap.mjs",
   "module": "dist/emap.mjs",
@@ -98,6 +98,6 @@
     "kdbush": "^4.0.2",
     "maplibre-gl": "^5.17.0",
     "mapshaper": "^0.6.113",
-    "mproj": "^0.0.40"
+    "mproj": "^0.1.2"
   }
 }

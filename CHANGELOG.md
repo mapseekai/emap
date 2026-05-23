@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-05-23
+
+### Added
+
+- `EditToolbar` now accepts explicit `controls`, allowing examples and apps to
+  compose toolbar buttons directly from existing UI controls.
+- Added `draw-snap-clear.html` to demonstrate that draw snapping markers clear
+  as soon as the cursor leaves the configured threshold.
+
+### Changed
+
+- Renamed the batch snapping example from `snap.html` to `snap-layer.html` to
+  make its `snapLayer` purpose explicit.
+- Upgraded the direct `mproj` dependency to `^0.1.2` while keeping the browser
+  bundle self-contained.
+
+### Fixed
+
+- Draw snapping now clears stale snap overlays when the cursor moves outside the
+  snap threshold before the first vertex is placed.
+- Vertex editing can snap dragged nodes to other features' vertices or edges,
+  controlled by `snapThreshold`, `snapToVertex`, and `snapToEdge`.
+- `DrawFeatureControl` reapplies its own handler options when switching between
+  draw buttons in a shared toolbar.
+- `projectLayer` normalizes common EPSG aliases (`EPSG:3857`, `EPSG:900913`,
+  `EPSG:102100`, `EPSG:4326`) to mapshaper's browser-safe CRS names.
+
 ## [0.3.1] - 2026-05-21
 
 ### Changed

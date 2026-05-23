@@ -197,6 +197,52 @@ describe('DrawFeatureHandler', () => {
       expect(snap).toBeNull();
     });
 
+    it('clears the snap overlay when the cursor leaves threshold before the first vertex', () => {
+      const source = createMockSource({
+        vertexData: {
+          xx: new Float64Array([100]),
+          yy: new Float64Array([100]),
+          nn: new Int32Array([1]),
+          ii: new Int32Array([0]),
+          zz: null,
+          bb: new Float64Array([100, 100, 100, 100]),
+        },
+      });
+      const map = createMockMap({ src1: source });
+      map.project.mockImplementation((x: number, y: number) => [x, y]);
+
+      const handler = new DrawFeatureHandler(map as any, {
+        source: 'src1',
+        type: 'polygon',
+        snapThreshold: 15,
+      });
+      setPrivate(handler, '_map', map);
+
+      callPrivate(handler, '_onMouseMove', 105, 105);
+      expect(map.setEditDrawState).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          cursorCoord: [100, 100],
+          snapCoord: [100, 100],
+          snapKind: 'vertex',
+        }),
+      );
+
+      map.setEditDrawState.mockClear();
+      map.render.mockClear();
+
+      callPrivate(handler, '_onMouseMove', 140, 140);
+
+      expect(map.setEditDrawState).toHaveBeenCalledTimes(1);
+      expect(map.setEditDrawState).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          cursorCoord: [140, 140],
+          snapCoord: null,
+          snapKind: null,
+        }),
+      );
+      expect(map.render).toHaveBeenCalledTimes(1);
+    });
+
     // -----------------------------------------------------------------------
     // Edge snap — perpendicular projection onto segments
     // -----------------------------------------------------------------------

@@ -27,6 +27,8 @@ function callPrivate(target: object, key: string, ...args: unknown[]): unknown {
 describe('VertexEditHandler', () => {
   const originalFindNearestVertices = Reflect.get(mapshaper.internal as object, 'findNearestVertices');
   const originalSnapVerticesToPoint = Reflect.get(mapshaper.internal as object, 'snapVerticesToPoint');
+  const originalForEachSegmentInShape = Reflect.get(mapshaper.internal as object, 'forEachSegmentInShape');
+  const originalFindClosestPointOnSeg = Reflect.get(mapshaper.internal as object, 'findClosestPointOnSeg');
 
   beforeEach(() => {
     Reflect.set(mapshaper.internal as object, 'findNearestVertices', vi.fn(() => []));
@@ -36,6 +38,8 @@ describe('VertexEditHandler', () => {
   afterEach(() => {
     Reflect.set(mapshaper.internal as object, 'findNearestVertices', originalFindNearestVertices);
     Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', originalSnapVerticesToPoint);
+    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', originalForEachSegmentInShape);
+    Reflect.set(mapshaper.internal as object, 'findClosestPointOnSeg', originalFindClosestPointOnSeg);
   });
 
   it('moves all shared vertices during drag', () => {
@@ -72,6 +76,88 @@ describe('VertexEditHandler', () => {
 
     expect(snapSpy).toHaveBeenCalledWith([4, 9, 11], [11, 22], expect.any(Object));
     expect(mapMock.render).toHaveBeenCalled();
+  });
+
+  it('snaps dragged vertices to other feature vertices when drag snap is enabled', () => {
+    const movingShape = [[0]];
+    const targetShape = [[1]];
+    const xx = new Float64Array([0, 0, 10, 20]);
+    const yy = new Float64Array([0, 0, 0, 0]);
+    const mapMock = {
+      unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
+      project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
+      getSource: vi.fn(() => ({
+        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] }],
+        getArcs: () => ({ getVertex2: () => [0, 0] }),
+      })),
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+    const snapSpy = vi.fn();
+    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
+    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', vi.fn((shape, _arcs, cb) => {
+      if (shape === targetShape) cb(2, 3, xx, yy);
+    }));
+
+    const handler = new VertexEditHandler(mapMock as any, { snapThreshold: 5, snapToEdge: false });
+    setPrivate(handler, '_map', mapMock);
+    setPrivate(handler, '_hoverVertexIds', [0]);
+    setPrivate(handler, '_hoveredFeature', {
+      id: 0,
+      source: 'src-a',
+      layer: 'roads',
+      shape: movingShape,
+      arcs: { getVertex2: () => [0, 0] },
+      geometryType: 'polyline',
+      allLayers: [],
+    });
+
+    callPrivate(handler, '_handleDrag', 11, 0);
+
+    expect(snapSpy).toHaveBeenCalledWith([0], [10, 0], expect.any(Object));
+  });
+
+  it('does not drag-snap when vertex and edge drag snapping are disabled', () => {
+    const movingShape = [[0]];
+    const targetShape = [[1]];
+    const xx = new Float64Array([0, 0, 10, 20]);
+    const yy = new Float64Array([0, 0, 0, 0]);
+    const mapMock = {
+      unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
+      project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
+      getSource: vi.fn(() => ({
+        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] }],
+        getArcs: () => ({ getVertex2: () => [0, 0] }),
+      })),
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+    const snapSpy = vi.fn();
+    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
+    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', vi.fn((shape, _arcs, cb) => {
+      if (shape === targetShape) cb(2, 3, xx, yy);
+    }));
+
+    const handler = new VertexEditHandler(mapMock as any, {
+      snapThreshold: 5,
+      snapToVertex: false,
+      snapToEdge: false,
+    });
+    setPrivate(handler, '_map', mapMock);
+    setPrivate(handler, '_hoverVertexIds', [0]);
+    setPrivate(handler, '_hoveredFeature', {
+      id: 0,
+      source: 'src-a',
+      layer: 'roads',
+      shape: movingShape,
+      arcs: { getVertex2: () => [0, 0] },
+      geometryType: 'polyline',
+      allLayers: [],
+    });
+
+    callPrivate(handler, '_handleDrag', 11, 0);
+
+    expect(snapSpy).toHaveBeenCalledWith([0], [11, 0], expect.any(Object));
   });
 
   it('fires vertex_moved with compatibility fields and refreshes arc bbox', () => {

@@ -56,6 +56,28 @@ describe('DrawFeatureControl (thin shell)', () => {
     expect(btn.classList.contains('active')).toBe(false);
   });
 
+  it('reapplies options and switches active draw buttons when used in a toolbar', () => {
+    const map = fakeMap();
+    const line = new DrawFeatureControl({ source: 's', type: 'polyline' });
+    const point = new DrawFeatureControl({ source: 's', type: 'point' });
+    const toolbar = document.createElement('div');
+    toolbar.className = 'emap-edit-toolbar';
+    const lineBtn = line.onAdd(map).querySelector('button') as HTMLButtonElement;
+    const pointBtn = point.onAdd(map).querySelector('button') as HTMLButtonElement;
+    toolbar.append(lineBtn, pointBtn);
+
+    lineBtn.click();
+    expect(map.drawFeature.setOptions).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'polyline' }));
+    expect(lineBtn.classList.contains('active')).toBe(true);
+
+    pointBtn.click();
+    expect(map.drawFeature.disable).toHaveBeenCalledTimes(1);
+    expect(map.drawFeature.enable).toHaveBeenCalledTimes(2);
+    expect(map.drawFeature.setOptions).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'point' }));
+    expect(lineBtn.classList.contains('active')).toBe(false);
+    expect(pointBtn.classList.contains('active')).toBe(true);
+  });
+
   it('onRemove disables if active', () => {
     const map = fakeMap();
     const c = new DrawFeatureControl({ source: 's', type: 'point' });

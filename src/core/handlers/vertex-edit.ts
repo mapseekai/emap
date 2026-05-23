@@ -6,6 +6,7 @@ import { VertexDeleteCommand } from '../../edit/commands/vertex-delete';
 import { bumpEditVersion, isPathLayer, type ArcCollection } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
+import { getLayerId } from '../../source/layer-utils';
 
 interface EditableArcs extends EditVertexArcs {
   getVertex2(vertexId: number): [number, number] | null;
@@ -34,6 +35,12 @@ const DEFAULT_POLYGON_FILL = 'rgba(0,0,0,0.15)';
 export interface VertexEditOptions {
   /** Polygon hover fill. Default 'rgba(0,0,0,0.15)'. */
   polygonFillColor?: string;
+  /** Pixel threshold for snapping a dragged vertex to another feature. Default 10. */
+  snapThreshold?: number;
+  /** Snap dragged vertices to other features' existing vertices. Default true. */
+  snapToVertex?: boolean;
+  /** Snap dragged vertices to other features' edges. Default true. */
+  snapToEdge?: boolean;
 }
 
 export class VertexEditHandler implements Handler<VertexEditOptions> {
@@ -55,6 +62,9 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
   private _neighborShapes: EditVertexShape[] = [];
   /** Coordinate of the dragged node before mouse-down, captured for VertexMoveCommand. */
   private _dragFromCoords: [number, number] | null = null;
+  private _snapThreshold: number;
+  private _snapToVertex: boolean;
+  private _snapToEdge: boolean;
 
   private _onMapMoveBound = () => this._onMapMove();
 
@@ -63,6 +73,9 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     this._polygonFillColor = opts.polygonFillColor !== undefined
       ? opts.polygonFillColor
       : DEFAULT_POLYGON_FILL;
+    this._snapThreshold = opts.snapThreshold ?? VERTEX_HIT_THRESHOLD;
+    this._snapToVertex = opts.snapToVertex !== false;
+    this._snapToEdge = opts.snapToEdge !== false;
   }
 
   isEnabled(): boolean { return this._enabled; }
@@ -100,10 +113,18 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     if (o.polygonFillColor !== undefined) {
       this._polygonFillColor = o.polygonFillColor;
     }
+    if (o.snapThreshold !== undefined) this._snapThreshold = o.snapThreshold;
+    if (o.snapToVertex !== undefined) this._snapToVertex = o.snapToVertex;
+    if (o.snapToEdge !== undefined) this._snapToEdge = o.snapToEdge;
   }
 
   getOptions(): Readonly<VertexEditOptions> {
-    return { polygonFillColor: this._polygonFillColor ?? undefined };
+    return {
+      polygonFillColor: this._polygonFillColor ?? undefined,
+      snapThreshold: this._snapThreshold,
+      snapToVertex: this._snapToVertex,
+      snapToEdge: this._snapToEdge,
+    };
   }
 
   handlePointer(ev: NormalizedPointerEvent): HandlerResult {
@@ -551,8 +572,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
   private _handleDrag(px: number, py: number): void {
     if (!this._hoveredFeature || this._hoverVertexIds.length === 0) return;
 
-    // Convert screen coords to data coords
-    const dataCoords = this._map.unproject(px, py);
+    const dataCoords = this._resolveDragCoords(px, py);
     const arcs = this._hoveredFeature.arcs;
 
     // Topology-aware: move ALL shared vertices to the new position
@@ -570,12 +590,79 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     this._map.render();
   }
 
+  private _resolveDragCoords(px: number, py: number): [number, number] {
+    return this._findDragSnapTarget(px, py) ?? this._map.unproject(px, py);
+  }
+
+  private _findDragSnapTarget(px: number, py: number): [number, number] | null {
+    if (!this._hoveredFeature || (!this._snapToVertex && !this._snapToEdge)) return null;
+
+    const source = this._map.getSource?.(this._hoveredFeature.source);
+    const layers = source?.getLayers?.();
+    const arcs = source?.getArcs?.() as EditableArcs | undefined;
+    if (!layers || !arcs) return null;
+
+    const adapter = getDefaultMapshaperAdapter();
+    const dataPoint = this._map.unproject(px, py);
+    const movingVertices = new Set(this._hoverVertexIds);
+    let bestDist = this._snapThreshold;
+    let bestCoord: [number, number] | null = null;
+    const seenVertices = new Set<number>();
+
+    const considerVertex = (vertexId: number, xx: Float64Array, yy: Float64Array) => {
+      if (!this._snapToVertex || movingVertices.has(vertexId) || seenVertices.has(vertexId)) return;
+      seenVertices.add(vertexId);
+      const projected = this._map.project(xx[vertexId], yy[vertexId]);
+      const dist = Math.hypot(projected[0] - px, projected[1] - py);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestCoord = [xx[vertexId], yy[vertexId]];
+      }
+    };
+
+    for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+      const layer = layers[layerIndex];
+      if (!isPathLayer(layer) || !layer.shapes) continue;
+      const layerId = getLayerId(layer, layerIndex);
+
+      for (let shapeIndex = 0; shapeIndex < layer.shapes.length; shapeIndex++) {
+        if (layerId === this._hoveredFeature.layer && shapeIndex === this._hoveredFeature.id) continue;
+        const shape = layer.shapes[shapeIndex];
+        if (!shape) continue;
+
+        adapter.forEachSegmentInShape(shape, arcs as unknown as ArcCollection, (i, j, xx, yy) => {
+          considerVertex(i, xx, yy);
+          considerVertex(j, xx, yy);
+
+          if (!this._snapToEdge) return;
+          const closest = adapter.findClosestPointOnSeg(dataPoint[0], dataPoint[1], xx[i], yy[i], xx[j], yy[j], 0);
+          const projected = this._map.project(closest[0], closest[1]);
+          const dist = Math.hypot(projected[0] - px, projected[1] - py);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestCoord = [closest[0], closest[1]];
+          }
+        });
+      }
+    }
+
+    return bestCoord;
+  }
+
   private _finishDrag(px: number, py: number): void {
     if (!this._dragging || !this._hoveredFeature) return;
     this._dragging = false;
 
-    const dataCoords = this._map.unproject(px, py);
+    const dataCoords = this._resolveDragCoords(px, py);
     const sourceId = this._hoveredFeature.source;
+    if (this._hoverVertexIds.length > 0) {
+      getDefaultMapshaperAdapter().snapVertices(
+        this._hoverVertexIds,
+        [dataCoords[0], dataCoords[1]],
+        this._hoveredFeature.arcs as unknown as ArcCollection,
+      );
+      this._hoverVertexCoords = [dataCoords[0], dataCoords[1]];
+    }
 
     // mapshaper's snapVerticesToPoint already updates per-arc bounds during the
     // drag (see paths/mapshaper-vertex-utils.mjs). transformPoints with a no-op

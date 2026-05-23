@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 绘制吸附清理</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #263238; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header button { padding: 5px 12px; background: #00897b; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #header button.secondary { background: #546e7a; }
+    #header input { width: 70px; padding: 4px 6px; font-size: 13px; border: 1px solid #607d8b; border-radius: 3px; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { flex-basis: 100%; opacity: 0.85; line-height: 1.45; }
+    .legend { display: inline-flex; gap: 8px; align-items: center; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <button id="draw-line">应用并开启绘制折线</button>
+    <button id="cancel" class="secondary">取消绘制</button>
+    <label>吸附阈值(px): <input id="threshold" type="number" value="18" min="1" /></label>
+    <span id="status">示例数据已内置。开启绘制后,先不要点击,把鼠标靠近/远离蓝色参考线观察吸附点清理。</span>
+    <span class="hint">
+      <span class="legend">红色圆环 = 顶点吸附,红色方框 = 边吸附。</span>
+      预期行为: 鼠标离开阈值后红色吸附标记应立即消失,不会滞留在上一次吸附的位置。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/mapshaper-vendor.js"></script>
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+
+    const SOURCE_ID = 'snap-clear-source';
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const sourceData = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { name: 'reference-line' },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0, 0],
+              [30, 20],
+              [65, 10],
+              [100, 38],
+            ],
+          },
+        },
+      ],
+    };
+
+    let sourceLayer = '';
+
+    async function loadExampleData() {
+      const source = new TopologySource(SOURCE_ID);
+      const content = new TextEncoder().encode(JSON.stringify(sourceData));
+      await source.setData({ filename: 'snap-clear.geojson', content });
+      map.addSource(SOURCE_ID, source);
+      map.setExtent(source.getExtent());
+
+      const layer = source.getLayers()[0];
+      sourceLayer = layer?.name || '';
+      map.addLayer({
+        id: 'reference-line',
+        type: 'line',
+        source: SOURCE_ID,
+        'source-layer': sourceLayer,
+        paint: { 'line-color': '#1e88e5', 'line-width': 3 },
+      });
+    }
+
+    function readThreshold() {
+      const threshold = Number(document.getElementById('threshold').value) || 18;
+      return Math.max(1, threshold);
+    }
+
+    function applyDrawOptions() {
+      map.drawFeature.setOptions({
+        source: SOURCE_ID,
+        sourceLayer,
+        type: 'polyline',
+        snapThreshold: readThreshold(),
+        snapToVertex: true,
+        snapToEdge: true,
+        drawColor: '#d81b60',
+      });
+    }
+
+    function enableDraw() {
+      applyDrawOptions();
+      map.drawFeature.enable();
+      document.getElementById('status').textContent =
+        `绘制已开启,当前吸附阈值 ${readThreshold()}px。靠近蓝色线会显示吸附标记,移远后标记应立即消失。`;
+      map.getCanvasContainer?.().focus?.();
+    }
+
+    document.getElementById('draw-line').addEventListener('click', enableDraw);
+    document.getElementById('threshold').addEventListener('input', () => {
+      applyDrawOptions();
+      document.getElementById('status').textContent =
+        `已应用吸附阈值 ${readThreshold()}px。继续移动鼠标即可观察新的吸附距离。`;
+    });
+    document.getElementById('cancel').addEventListener('click', () => {
+      map.drawFeature.disable();
+      document.getElementById('status').textContent = '绘制已取消。';
+    });
+
+    loadExampleData()
+      .then(enableDraw)
+      .catch((err) => {
+        console.error(err);
+        document.getElementById('status').textContent = '示例数据加载失败';
+      });
+  </script>
+</body>
+
+</html>

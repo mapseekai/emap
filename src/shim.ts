@@ -1,4 +1,4 @@
-import * as mproj from 'mproj';
+import mproj from 'mproj';
 import Flatbush from 'flatbush';
 import KDBush from 'kdbush';
 import * as geographiclib from 'geographiclib-geodesic';

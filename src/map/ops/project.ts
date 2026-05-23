@@ -23,11 +23,11 @@ export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promis
   if (opts.target !== undefined) {
     if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
   }
-  const crs = (opts.crs ?? '').trim();
+  const crs = normalizeProjectCrs(opts.crs ?? '');
   if (crs.length === 0) return Err.validation('crs', 'must be a non-empty CRS string');
 
   const projOpts: Record<string, unknown> = { crs };
-  if (opts.init && opts.init.trim()) projOpts.init = opts.init;
+  if (opts.init && opts.init.trim()) projOpts.init = normalizeProjectCrs(opts.init);
   if (opts.densify) projOpts.densify = true;
 
   const commands: ParsedCommand[] = [];
@@ -38,4 +38,16 @@ export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promis
 
   const label = `Project ${opts.target ?? opts.source}`;
   return ctx.runDatasetCommandParsed(opts.source, commands, label);
+}
+
+function normalizeProjectCrs(crs: string): string {
+  const trimmed = crs.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'epsg:3857' || lower === 'epsg:900913' || lower === 'epsg:102100') {
+    return 'webmercator';
+  }
+  if (lower === 'epsg:4326') {
+    return 'wgs84';
+  }
+  return trimmed;
 }

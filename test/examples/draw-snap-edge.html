@@ -29,11 +29,11 @@
       <label><input id="snap-edge" type="checkbox" checked /> 吸附边</label>
       <button id="apply-snap">应用吸附设置</button>
     </span>
-    <span id="status">加载数据后,工具栏选择"绘制折线 / 多边形",拖动鼠标观察吸附</span>
+    <span id="status">加载数据后,工具栏选择"编辑节点 / 绘制折线 / 多边形",拖动鼠标观察吸附</span>
     <span class="hint">
       <span style="color:#ff4444">红色圆环</span> = 顶点吸附 ·
       <span style="color:#ff4444">红色方框</span> = 边吸附(线段上的最近点)。
-      关闭"吸附边"会回到只吸附顶点的旧行为。
+      绘制时控制光标吸附;编辑节点时控制拖动节点到其它要素的吸附。
     </span>
   </div>
   <div id="map" tabindex="0"></div>
@@ -58,6 +58,7 @@
       const threshold = Number(document.getElementById('snap-threshold').value) || 12;
       const snapToVertex = document.getElementById('snap-vertex').checked;
       const snapToEdge = document.getElementById('snap-edge').checked;
+      map.vertexEdit.setOptions({ snapThreshold: threshold, snapToVertex, snapToEdge });
 
       // Tear down the previous toolbar (and via EditToolbar, its child
       // DrawFeatureControl instances). Skipping this leaves stale mouse

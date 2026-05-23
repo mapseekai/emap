@@ -51,9 +51,7 @@ export class DrawFeatureControl implements Control {
     this._btn.addEventListener('click', () => this._toggle());
     this._container.appendChild(this._btn);
 
-    // Forward handler options (minus icon) to the handler
-    const { icon: _icon, ...handlerOpts } = this._opts;
-    map.drawFeature.setOptions(handlerOpts);
+    this._applyOptions();
 
     map.on('editmodechange', (e: { mode: string }) => {
       if (e.mode !== 'draw') {
@@ -79,12 +77,28 @@ export class DrawFeatureControl implements Control {
   private _toggle(): void {
     if (!this._map) return;
     const df = this._map.drawFeature;
-    if (df.isEnabled()) {
+    if (df.isEnabled() && this._btn?.classList.contains('active')) {
       df.disable();
       this._btn?.classList.remove('active');
     } else {
+      if (df.isEnabled()) df.disable();
+      this._applyOptions();
       df.enable();
+      this._clearPeerActiveButtons();
       this._btn?.classList.add('active');
     }
+  }
+
+  private _applyOptions(): void {
+    if (!this._map) return;
+    const { icon: _icon, ...handlerOpts } = this._opts;
+    this._map.drawFeature.setOptions(handlerOpts);
+  }
+
+  private _clearPeerActiveButtons(): void {
+    const group = this._btn?.closest('.emap-edit-toolbar, .emap-ctrl-group');
+    group?.querySelectorAll('.emap-ctrl-draw.active').forEach((button) => {
+      if (button !== this._btn) button.classList.remove('active');
+    });
   }
 }

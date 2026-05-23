@@ -3061,12 +3061,12 @@ describe('Emap projectLayer', () => {
   it('builds the whole-source command (no target)', async () => {
     const ok = await map.ops.projectLayer({ source: 'src1', crs: 'EPSG:3857' });
     expect(ok.ok).toBe(true);
-    expectCli('-proj "EPSG:3857"', runParsedCommandsSpy.mock.calls[0][0]);
+    expectCli('-proj webmercator', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('builds the target-scoped command', async () => {
     await map.ops.projectLayer({ source: 'src1', target: 'states', crs: 'EPSG:3857' });
-    expectCli('-target "states" -proj "EPSG:3857"', runParsedCommandsSpy.mock.calls[0][0]);
+    expectCli('-target "states" -proj webmercator', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('quotes Proj.4 strings with spaces', async () => {
@@ -3076,7 +3076,7 @@ describe('Emap projectLayer', () => {
 
   it('appends quoted init=', async () => {
     await map.ops.projectLayer({ source: 'src1', crs: 'EPSG:3857', init: 'EPSG:4326' });
-    expectCli('-proj "EPSG:3857" init="EPSG:4326"', runParsedCommandsSpy.mock.calls[0][0]);
+    expectCli('-proj webmercator init=wgs84', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('appends densify', async () => {
@@ -3089,7 +3089,7 @@ describe('Emap projectLayer', () => {
       source: 'src1', target: 'states',
       crs: 'EPSG:3857', init: 'EPSG:4326', densify: true,
     });
-    expectCli('-target "states" -proj "EPSG:3857" init="EPSG:4326" densify', runParsedCommandsSpy.mock.calls[0][0]);
+    expectCli('-target "states" -proj webmercator init=wgs84 densify', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
   it('returns false when source is missing', async () => {

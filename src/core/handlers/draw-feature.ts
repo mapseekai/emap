@@ -136,11 +136,12 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     this._cursorCoord = [dataCoord[0], dataCoord[1]];
 
     // Snap detection — yields a coordinate AND its kind ('vertex' | 'edge')
+    const hadSnap = this._snapCoord !== null;
     const snap = this._findSnapTarget(px, py);
     this._snapCoord = snap?.coord ?? null;
     this._snapKind = snap?.kind ?? null;
 
-    if (this._vertices.length > 0 || this._snapCoord) {
+    if (this._vertices.length > 0 || this._snapCoord || hadSnap) {
       this._updateDrawState();
       this._map.render();
     }

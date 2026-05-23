@@ -71,6 +71,33 @@ function preferBrowserMapshaperModules() {
   };
 }
 
+// mproj@0.1.x ships ESM/CJS bundles, but its init-file fallback still embeds
+// Node-only require("fs") / require("path") calls for loading nad/epsg files.
+// emap browser bundles are self-contained; CRS library definitions must be
+// preloaded into mproj's libcache instead of read from disk at runtime.
+function browserSafeMprojInitFallback() {
+  const readLibPattern =
+    /function mproj_read_lib_anycase\(libFile\) \{[\s\S]*?return contents;\n\}/;
+  const replacement = [
+    'function mproj_read_lib_anycase(libFile) {',
+    "  fatal('unable to read from \\'init\\' file named ' + libFile);",
+    '}',
+  ].join('\n');
+
+  return {
+    name: 'browser-safe-mproj-init-fallback',
+    transform(code, id) {
+      if (!id.includes('/node_modules/mproj/dist/')) return null;
+      if (!code.includes('function mproj_read_lib_anycase')) return null;
+      const patched = code.replace(readLibPattern, replacement);
+      if (patched === code) {
+        this.error('Unable to patch mproj init-file fallback');
+      }
+      return { code: patched, map: null };
+    },
+  };
+}
+
 const isProduction = process.env.BUILD === 'production';
 const shouldWriteSourcemap = !isProduction;
 const mainOutput = isProduction ? 'dist/emap.js' : 'dist/emap-dev.js';
@@ -105,6 +132,7 @@ function commonPlugins() {
       minimize: isProduction,
     }),
     nodePolyfills(),
+    browserSafeMprojInitFallback(),
     typescript({
       tsconfig: './tsconfig.json'
     }),
