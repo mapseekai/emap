@@ -354,7 +354,15 @@ export class Emap extends EventDispatcher {
 
     this._attachEventListeners();
 
-    this.on('move', () => this._scheduleRender());
+    this.on('move', () => {
+      // During an active pan/wheel gesture, the handler already scheduled
+      // a 'nav' render with the right delta. Falling through to a generic
+      // 'redraw' here would clobber the pending 'nav' action (see
+      // `_scheduleRender`'s priority logic) and the scheduler would never
+      // get a chance to enter the fast-nav path.
+      if (this._navSnapshotTransform) return;
+      this._scheduleRender();
+    });
     this.on('resize', () => this._scheduleRender());
     this.on('reset', () => this.reset());
     // Validation hook: every committed history step (whether from an op,
@@ -557,24 +565,73 @@ export class Emap extends EventDispatcher {
     this._editState.clearDraw();
   }
 
-  // Accumulated nav delta during an active pan gesture. Used by fast-nav
-  // to CSS-transform the previous frame instead of re-rendering. Reset on
-  // panstart, accumulated on each pan event, cleared on panend.
-  private _gestureNavDelta: AffineDelta | null = null;
+  // Transform captured at the start of the current pan/zoom gesture. The
+  // nav delta is the affine mapping FROM this snapshot TO the live viewport
+  // transform — applying it as a CSS transform to the (still-old) main
+  // canvas pixels produces the correct visual for the new viewport,
+  // skipping a real redraw.
+  //
+  // Set on first pan/wheel event in a gesture, cleared on settle. While
+  // it's non-null, the generic `'move'` listener defers to the gesture
+  // handler instead of overwriting the pending 'nav' action with a
+  // 'redraw'.
+  private _navSnapshotTransform: { mx: number; my: number; bx: number; by: number } | null = null;
+
+  // Debounced settle timer for scroll-zoom (wheel events have no natural
+  // "end" event). Fires `interactionend` after idle.
+  private _wheelSettleTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly _WHEEL_SETTLE_MS = 250;
+
+  /**
+   * Take a transform snapshot if none is active. Idempotent — repeated
+   * calls in one gesture all use the first snapshot.
+   */
+  private _ensureNavSnapshot(): void {
+    if (this._navSnapshotTransform) return;
+    const t = this._viewport.transform;
+    this._navSnapshotTransform = { mx: t.mx, my: t.my, bx: t.bx, by: t.by };
+  }
+
+  /**
+   * Compute the affine delta that maps "snapshot screen positions" to
+   * "current screen positions". Applied as a CSS transform to the main
+   * canvas, this makes the still-old pixels appear at the new viewport.
+   *
+   * Derivation: world point w maps to screen via `p = mx*w + bx`. To map
+   * snapshot.p → current.p:
+   *   current.p = (current.mx / snap.mx) * (snap.p - snap.bx) + current.bx
+   *             = sx * snap.p + (current.bx - sx*snap.bx)
+   * So sx = mx_cur/mx_snap and tx = bx_cur - sx*bx_snap. Same for y.
+   */
+  private _computeNavDelta(): AffineDelta {
+    const snap = this._navSnapshotTransform;
+    if (!snap) return { tx: 0, ty: 0, sx: 1, sy: 1 };
+    const cur = this._viewport.transform;
+    const sx = cur.mx / snap.mx;
+    const sy = cur.my / snap.my;
+    return {
+      sx,
+      sy,
+      tx: cur.bx - sx * snap.bx,
+      ty: cur.by - sy * snap.by,
+    };
+  }
+
+  private _endNavGesture(): void {
+    this._navSnapshotTransform = null;
+    if (this._wheelSettleTimer !== null) {
+      clearTimeout(this._wheelSettleTimer);
+      this._wheelSettleTimer = null;
+    }
+    this._scheduler.notifyInteractionEnd();
+    this.fire('interactionend');
+  }
 
   private _attachEventListeners(): void {
     this._dragPan.on('pan', (e: { dx: number; dy: number }) => {
+      this._ensureNavSnapshot();
       this._viewport.pan(e.dx, e.dy);
-      if (this._gestureNavDelta) {
-        this._gestureNavDelta.tx += e.dx;
-        this._gestureNavDelta.ty += e.dy;
-      }
-      // Drive the render via 'move' as before, but mark the pending request
-      // as a 'nav' action carrying the accumulated delta — that's what lets
-      // the scheduler pick the fast-nav code path on slow frames.
-      if (this._gestureNavDelta) {
-        this._scheduleRender('nav', this._gestureNavDelta);
-      }
+      this._scheduleRender('nav', this._computeNavDelta());
       this.fire('move');
     });
     this._dragPan.on('panstart', () => {
@@ -582,20 +639,26 @@ export class Emap extends EventDispatcher {
       // own easeTo/flyTo animation is stopped separately via the dragPan
       // onGestureStart → map.stop() wiring; these are two independent systems.
       this._viewport.cancelZoomAnimation();
-      this._gestureNavDelta = { tx: 0, ty: 0, sx: 1, sy: 1 };
+      this._ensureNavSnapshot();
     });
     this._dragPan.on('panend', () => {
-      // Settle: if scheduler was in fast-nav, this triggers an immediate
-      // real redraw so we don't leave the user staring at a stale CSS-
-      // transformed frame.
-      this._gestureNavDelta = null;
-      this._scheduler.notifyInteractionEnd();
-      this.fire('interactionend');
+      this._endNavGesture();
     });
 
     this._scrollZoom.on('mousewheel', (e: { direction: number; multiplier: number; x: number; y: number }) => {
+      // Wheel zoom is a continuous gesture with no explicit end event —
+      // capture the snapshot on the first event, then debounce settle
+      // after the user stops scrolling.
+      this._ensureNavSnapshot();
       this._viewport.applyWheelZoom(e.direction, e.multiplier, e.x, e.y);
+      this._scheduleRender('nav', this._computeNavDelta());
       this.fire('move');
+
+      if (this._wheelSettleTimer !== null) clearTimeout(this._wheelSettleTimer);
+      this._wheelSettleTimer = setTimeout(() => {
+        this._wheelSettleTimer = null;
+        this._endNavGesture();
+      }, Emap._WHEEL_SETTLE_MS);
     });
   }
 
@@ -1393,12 +1456,17 @@ export class Emap extends EventDispatcher {
     const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
     const fillOpacity = fillPaint?.['fill-opacity'];
     const viewportFilter = this._viewport.getArcFilter(arcs);
+    const shapeIdxFilter = this._buildShapeBboxFilter(ml.shapes!, arcs);
     this._painter.drawPolygonFill(
       ml.shapes!,
       arcs,
       fillColor,
+      // Per-arc filter kept as fallback for arcs without `getMultiShapeBounds`.
+      // When `shapeIdxFilter` is non-null, drawPolygonFill ignores it entirely.
       viewportFilter,
       fillOpacity,
+      undefined,
+      shapeIdxFilter,
     );
     // Outline: stroke each topology arc exactly once via the same flag cache
     // the line layer uses. drawPaths(shapes,...) would re-walk every shape
@@ -1407,6 +1475,46 @@ export class Emap extends EventDispatcher {
     const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
     const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
     this._painter.drawArcs(arcs, style, this._combineArcFilters(flags, viewportFilter));
+  }
+
+  // Reused across calls within a single render to avoid allocations.
+  private _bboxScratch = new Bounds();
+
+  /**
+   * Build a fast per-shape visibility predicate using mapshaper's
+   * `arcs.getMultiShapeBounds` (gui-canvas.mjs:102-113 parity). One O(1)
+   * bbox-vs-viewport test per shape replaces the inner per-arc loop that
+   * previously dominated drawPolygonFill on large polygon datasets.
+   *
+   * Returns `null` when the fast path doesn't apply — callers fall back to
+   * the per-arc filter:
+   *  - `arcs.getMultiShapeBounds` unavailable (non-mapshaper arc impl)
+   *  - viewport unknown
+   *  - near-full-extent zoom (mapScale < 1.1): no filtering pays off
+   */
+  private _buildShapeBboxFilter(
+    shapes: any[],
+    arcs: import('../types/mapshaper-types').ArcCollection,
+  ): ((sIdx: number) => boolean) | null {
+    const getBounds = (arcs as any).getMultiShapeBounds;
+    if (typeof getBounds !== 'function') return null;
+    const initialMX = (this._viewport as any)._initialMX || 0;
+    if (initialMX <= 0) return null;
+    const mapScale = Math.abs(this._viewport.transform.mx) / initialMX;
+    if (mapScale < 1.1) return null;
+    const view = this._viewport.getViewBounds();
+    if (!view) return null;
+    const vx0 = view[0], vy0 = view[1], vx1 = view[2], vy1 = view[3];
+    const b = this._bboxScratch;
+    return (sIdx: number): boolean => {
+      const shp = shapes[sIdx];
+      if (!shp) return false;
+      b.empty();
+      getBounds.call(arcs, shp, b);
+      if (!b.hasBounds()) return false;
+      // Standard bbox intersect (mapshaper Bounds.intersects equivalent).
+      return !(b.xmin > vx1 || b.xmax < vx0 || b.ymin > vy1 || b.ymax < vy0);
+    };
   }
 
   private _combineArcFilters(

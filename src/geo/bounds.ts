@@ -41,6 +41,33 @@ export class Bounds {
     if (y > this.ymax) this.ymax = y;
   }
 
+  /**
+   * Reset to the "empty" state (infinite mins, negative-infinite maxes).
+   * Lets a `Bounds` instance be reused across many bbox computations
+   * without allocating. Required by mapshaper's `getMultiShapeBounds` /
+   * `mergeArcBounds` interop, which call `empty()` + `mergeBounds(...)`
+   * on whatever bounds-shaped object the caller passes in.
+   */
+  empty(): void {
+    this.xmin = Infinity;
+    this.ymin = Infinity;
+    this.xmax = -Infinity;
+    this.ymax = -Infinity;
+  }
+
+  /**
+   * Expand this bounds to include `(xmin, ymin)..(xmax, ymax)`. Mapshaper
+   * interop (see `arcs.mergeArcBounds` in `mapshaper-arcs.mjs`) calls this
+   * shape directly — adding it here lets us pass an emap `Bounds` into
+   * mapshaper internals.
+   */
+  mergeBounds(xmin: number, ymin: number, xmax: number, ymax: number): void {
+    if (xmin < this.xmin) this.xmin = xmin;
+    if (xmax > this.xmax) this.xmax = xmax;
+    if (ymin < this.ymin) this.ymin = ymin;
+    if (ymax > this.ymax) this.ymax = ymax;
+  }
+
   merge(other: Bounds): void {
     if (!other.hasBounds()) return;
     if (other.xmin < this.xmin) this.xmin = other.xmin;

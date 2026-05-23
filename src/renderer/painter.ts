@@ -41,6 +41,8 @@ export interface CorePainter {
     fillColor: string,
     filter?: (i: number) => boolean,
     opacity?: number,
+    fillRule?: 'nonzero' | 'evenodd',
+    shapeIdxFilter?: ((sIdx: number) => boolean) | null,
   ): void;
   clear(): void;
   resize(width: number, height: number): void;

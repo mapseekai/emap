@@ -429,6 +429,19 @@ export class CanvasPainter implements Painter {
      * when caller's data benefits from XOR-style hole/overlap handling.
      */
     fillRule: 'nonzero' | 'evenodd' = 'nonzero',
+    /**
+     * Fast shape-level visibility check. When supplied, replaces the
+     * expensive per-arc filter loop with an O(1)-per-shape predicate
+     * (typically a precomputed bbox-vs-viewport test). Aligned with
+     * mapshaper's `getShapeFilter` (gui-canvas.mjs:102-113).
+     *
+     * Caller responsibilities:
+     *  - Return `false` for shapes whose bounding box is fully outside the
+     *    viewport (they are guaranteed not to draw any pixel).
+     *  - Return `true` for shapes that may produce visible pixels — this
+     *    method still iterates their arcs to actually fill the polygon.
+     */
+    shapeIdxFilter?: ((sIdx: number) => boolean) | null,
   ): void {
     if (!arcs.getShapeIter) return; // guard: need shape-aware iterator
 
@@ -468,9 +481,14 @@ export class CanvasPainter implements Painter {
       const shape = shapes[sIdx];
       if (!shape) continue;
 
-      let isVisible = true;
-      if (filter) {
-        // Find if this shape shares any arc with the viewport
+      // Visibility decision — fastest available path:
+      //   1. shapeIdxFilter: O(1) per shape (precomputed bbox check)
+      //   2. per-arc filter: O(parts * arcs) per shape (legacy fallback)
+      //   3. no filter: always visible (e.g. full-extent zoom)
+      let isVisible: boolean;
+      if (shapeIdxFilter) {
+        isVisible = shapeIdxFilter(sIdx);
+      } else if (filter) {
         isVisible = false;
         for (const part of shape) {
           for (const arcId of part) {
@@ -482,6 +500,8 @@ export class CanvasPainter implements Painter {
           }
           if (isVisible) break;
         }
+      } else {
+        isVisible = true;
       }
 
       if (!isVisible) continue;
