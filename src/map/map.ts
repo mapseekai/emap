@@ -73,7 +73,14 @@ export class Emap extends EventDispatcher {
   private _container: HTMLElement;
   private _canvasContainer: HTMLElement;
   private _canvas: HTMLCanvasElement;
+  // Separate DOM canvas stacked on top of `_canvas` for hover/selection/edit
+  // overlays. Aligned with mapshaper 0.7.19's `_overlayCanv`
+  // (gui-layer-renderer.mjs:12). Lets `_renderOverlayOnly` truly skip the
+  // main layer pass, and lets fast-nav CSS-transform only the main canvas
+  // without dragging highlight pixels along for the ride.
+  private _overlayCanvas!: HTMLCanvasElement;
   private _painter: Painter;
+  private _overlayPainter!: CanvasPainter;
   private _editOverlay: EditOverlayRenderer;
   // Frame router (mapshaper 0.7.19 parity, gui-layer-renderer.mjs). Decides
   // per `RenderRequest` whether to do full redraw / overlay-only / fast-nav.
@@ -252,9 +259,21 @@ export class Emap extends EventDispatcher {
     this._canvas.style.left = '0';
     this._canvasContainer.appendChild(this._canvas);
 
+    // Overlay canvas: same dimensions/dpr as main, stacked on top via
+    // absolute positioning. `pointer-events: none` lets pointer events fall
+    // through to the main canvas (handlers expect a single event source).
+    this._overlayCanvas = document.createElement('canvas');
+    this._overlayCanvas.style.position = 'absolute';
+    this._overlayCanvas.style.top = '0';
+    this._overlayCanvas.style.left = '0';
+    this._overlayCanvas.style.pointerEvents = 'none';
+    this._canvasContainer.appendChild(this._overlayCanvas);
+
     this._painter = new CanvasPainter(this._canvas);
     this._painter.setPixelRatio(window.devicePixelRatio || 1);
-    this._editOverlay = new EditOverlayRenderer(this._painter);
+    this._overlayPainter = new CanvasPainter(this._overlayCanvas);
+    this._overlayPainter.setPixelRatio(window.devicePixelRatio || 1);
+    this._editOverlay = new EditOverlayRenderer(this._overlayPainter);
 
     // Wire the scheduler now that the painter and canvas exist. The
     // callbacks delegate back to private methods so the scheduler itself
@@ -638,6 +657,7 @@ export class Emap extends EventDispatcher {
     const height = this._container.clientHeight;
     this._viewport.updateSize(width, height);
     this._painter.resize(width, height);
+    this._overlayPainter.resize(width, height);
   }
 
 
@@ -1197,19 +1217,13 @@ export class Emap extends EventDispatcher {
   }
 
   /**
-   * Skip the main layer pass; only repaint the highlight + edit overlay.
-   * Today these still share the main canvas with the layers, so we have
-   * to redraw the layers underneath them — but we can skip everything
-   * outside that. A future PR may split overlays onto their own canvas;
-   * then this path will become "draw on overlay canvas only".
+   * Skip the main layer pass; only repaint the overlay canvas. The main
+   * canvas keeps its last frame's pixels — which is exactly the right
+   * thing for hover/selection changes since the underlying map content
+   * hasn't moved. Aligned with mapshaper `gui-layer-renderer.mjs:121-133`.
    */
   private _renderOverlayOnly(): void {
-    // Single-canvas architecture: overlays sit on top of layers, so
-    // we still must redraw layers underneath to keep the composition
-    // correct. Match `_renderImpl` body exactly (mapshaper-style
-    // "skip main on hover" requires a separate overlay canvas which
-    // emap does not yet have — see PR3 plan, deferred to later work).
-    this._renderImpl();
+    this._renderOverlayImpl();
   }
 
   /** Common body used by both full and overlay-only paths. */
@@ -1217,11 +1231,36 @@ export class Emap extends EventDispatcher {
     const transform = this._viewport.transform;
     this._painter.setTransform(transform);
     this._painter.clear();
+    // Overlay always cleared too — stale highlight pixels from the previous
+    // frame would otherwise sit at world coordinates that no longer match
+    // the new transform.
+    this._overlayPainter.clear();
 
     const lineScale = this._viewport.getLineScale();
     const pixelSize = 1 / Math.abs(transform.mx);
 
     this._renderLayers(pixelSize, lineScale);
+    this._renderHighlight(transform, lineScale);
+    this._editOverlay.render(
+      this._editState.mode,
+      this._editState.vertex,
+      this._editState.draw,
+    );
+  }
+
+  /**
+   * True overlay-only render — skips the main layer pass entirely. Only
+   * clears the overlay canvas (main canvas keeps its last frame's pixels)
+   * and redraws highlights + edit overlay. Mirrors mapshaper's hover
+   * path (`gui-layer-renderer.mjs:121-133`).
+   */
+  private _renderOverlayImpl(): void {
+    const transform = this._viewport.transform;
+    this._overlayPainter.setTransform(transform);
+    this._overlayPainter.clear();
+
+    const lineScale = this._viewport.getLineScale();
+
     this._renderHighlight(transform, lineScale);
     this._editOverlay.render(
       this._editState.mode,
@@ -1258,11 +1297,18 @@ export class Emap extends EventDispatcher {
    * Apply a CSS transform to the main canvas reflecting a nav delta. The
    * previous frame's pixels are reused; settle (next full redraw) will
    * blow this away. Aligned with mapshaper `gui-layer-renderer.mjs:217-246`.
+   *
+   * Overlay canvas is hidden during fast-nav rather than transformed:
+   * mapshaper does the same (`gui-layer-renderer.mjs:128 _overlayCanv.hide()`)
+   * because dragging stale highlight pixels along with the transform looks
+   * worse than briefly hiding them — and the next full redraw on settle
+   * will restore them at the new transform.
    */
   private _applyFastTransform(delta: AffineDelta): void {
     const style = this._canvas.style;
     style.transformOrigin = 'top left';
     style.transform = `translate(${delta.tx}px,${delta.ty}px) scale(${delta.sx},${delta.sy})`;
+    this._overlayCanvas.style.visibility = 'hidden';
   }
 
   private _clearFastTransform(): void {
@@ -1270,6 +1316,11 @@ export class Emap extends EventDispatcher {
     if (style.transform) {
       style.transform = '';
       style.transformOrigin = '';
+    }
+    // Always make sure the overlay is back to visible. Idempotent so callers
+    // (including the "no fast-nav was active" path) don't need a guard.
+    if (this._overlayCanvas.style.visibility === 'hidden') {
+      this._overlayCanvas.style.visibility = '';
     }
   }
 
@@ -1371,8 +1422,13 @@ export class Emap extends EventDispatcher {
 
   private _renderHighlight(transform: AffineTransform, lineScale: number): void {
     const visibleKeys = this._getVisibleLayerKeys();
+    // Highlights go on the overlay canvas (mapshaper `_overlayCanv` parity).
+    // Keeps hover/selection independent of the main canvas, which is what
+    // unlocks `_renderOverlayOnly` and prevents fast-nav from dragging
+    // highlight pixels along with the CSS transform.
+    this._overlayPainter.setTransform(transform);
     this._highlightManager.renderHighlights(
-      this._painter,
+      this._overlayPainter,
       this._sources,
       transform,
       lineScale,
