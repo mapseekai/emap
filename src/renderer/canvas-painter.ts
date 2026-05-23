@@ -286,6 +286,12 @@ export class CanvasPainter implements Painter {
      * `fill-opacity` semantics — independent of the colour's own alpha.
      */
     opacity?: number,
+    /**
+     * Fill rule for polygon coverage. Default `'nonzero'` matches mapshaper
+     * 0.7.19 (gui-canvas.mjs:688 `ctx.fill()` with no arg). Use `'evenodd'`
+     * when caller's data benefits from XOR-style hole/overlap handling.
+     */
+    fillRule: 'nonzero' | 'evenodd' = 'nonzero',
   ): void {
     if (!arcs.getShapeIter) return; // guard: need shape-aware iterator
 
@@ -305,10 +311,18 @@ export class CanvasPainter implements Painter {
       // with this style-level opacity.
       ctx.globalAlpha = prevAlpha * Math.max(0, Math.min(1, opacity!));
     }
-    
-    // Smaller batches keep each `fill('evenodd')` call's path object
-    // bounded — Canvas2D engines slow superlinearly with subpath count,
-    // so 100 polygons/flush is the sweet spot for big topology datasets.
+
+    // Single helper to apply the chosen rule. Branchless at the call site
+    // and a no-arg call when nonzero so behavior is byte-identical to
+    // mapshaper's default fill().
+    const flush = () => {
+      if (fillRule === 'evenodd') ctx.fill('evenodd');
+      else ctx.fill();
+    };
+
+    // Smaller batches keep each fill() call's path object bounded —
+    // Canvas2D engines slow superlinearly with subpath count, so 100
+    // polygons/flush is the sweet spot for big topology datasets.
     const batchSize = 100;
     let counts = 0;
 
@@ -316,7 +330,7 @@ export class CanvasPainter implements Painter {
     for (let sIdx = 0; sIdx < shapes.length; sIdx++) {
       const shape = shapes[sIdx];
       if (!shape) continue;
-      
+
       let isVisible = true;
       if (filter) {
         // Find if this shape shares any arc with the viewport
@@ -337,7 +351,7 @@ export class CanvasPainter implements Painter {
 
       // When batch limit reached, fill and start new path
       if (counts > 0 && counts >= batchSize) {
-        ctx.fill('evenodd');
+        flush();
         ctx.beginPath();
         counts = 0;
       }
@@ -346,31 +360,34 @@ export class CanvasPainter implements Painter {
         // getShapeIter respects arc direction (reversed arcs traversed backwards)
         const iter = arcs.getShapeIter!(part);
         if (!iter.hasNext()) continue;
-        
+
         let xp: number, yp: number;
-        // Use half-pixel snapping for consistency and to avoid floating point math overhead
-        let x = (iter.x * mx + bx) * 2 | 0;
-        let y = (iter.y * my + by) * 2 | 0;
-        ctx.moveTo(x / 2, y / 2);
-        
+        // Integer pixel snap for fills (mapshaper roundToPix). Stroked paths
+        // use half-pixel snap for crisp 1px lines, but fill regions look
+        // cleaner with integer-aligned edges (fewer seam shimmers between
+        // adjacent polygons).
+        let x = this._clampCoord(Math.round(iter.x * mx + bx));
+        let y = this._clampCoord(Math.round(iter.y * my + by));
+        ctx.moveTo(x, y);
+
         while (iter.hasNext()) {
           xp = x;
           yp = y;
-          x = (iter.x * mx + bx) * 2 | 0;
-          y = (iter.y * my + by) * 2 | 0;
-          
+          x = this._clampCoord(Math.round(iter.x * mx + bx));
+          y = this._clampCoord(Math.round(iter.y * my + by));
+
           if (x !== xp || y !== yp) {
-            ctx.lineTo(x / 2, y / 2);
+            ctx.lineTo(x, y);
           }
         }
         ctx.closePath();
       }
-      
+
       counts++;
     }
-    
+
     if (counts > 0) {
-      ctx.fill('evenodd');
+      flush();
     }
     if (overrideAlpha) ctx.globalAlpha = prevAlpha;
   }
