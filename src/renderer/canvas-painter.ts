@@ -83,6 +83,19 @@ export class CanvasPainter implements Painter {
     ctx.stroke();
   }
 
+  // Safety clamp on post-transform canvas coordinates. Browsers misbehave on
+  // very large magnitudes (lines vanish, paths jitter), and mapshaper's
+  // protectIterForDrawing (gui-canvas.mjs:626-639) clips the iterator to an
+  // expanded viewport at scale > 100. emap takes the equivalent precaution at
+  // the output side: any post-transform coord beyond ±MAX is clamped. Normal
+  // coords are untouched (well within the limit).
+  private static readonly _COORD_MAX = 1_000_000;
+
+  private _clampCoord(v: number): number {
+    const MAX = CanvasPainter._COORD_MAX;
+    return v > MAX ? MAX : v < -MAX ? -MAX : v;
+  }
+
   // Equivalent to mapshaper's drawPath2 with optimized rounding
   private drawPathSnapping(iter: any, ctx: CanvasRenderingContext2D): void {
     // Cache transform values in local variables (Chrome 80+ performance workaround)
@@ -96,15 +109,15 @@ export class CanvasPainter implements Painter {
     if (!iter.hasNext()) return;
 
     // Use half-pixel snapping for crisper 1px lines (Mapshaper's roundToHalfPix)
-    x = (iter.x * mx + bx) * 2 | 0;
-    y = (iter.y * my + by) * 2 | 0;
+    x = this._clampCoord((iter.x * mx + bx) * 2 | 0);
+    y = this._clampCoord((iter.y * my + by) * 2 | 0);
     ctx.moveTo(x / 2, y / 2);
 
     while (iter.hasNext()) {
       xp = x;
       yp = y;
-      x = (iter.x * mx + bx) * 2 | 0;
-      y = (iter.y * my + by) * 2 | 0;
+      x = this._clampCoord((iter.x * mx + bx) * 2 | 0);
+      y = this._clampCoord((iter.y * my + by) * 2 | 0);
 
       if (x !== xp || y !== yp) {
         ctx.lineTo(x / 2, y / 2);
