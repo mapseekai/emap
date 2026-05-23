@@ -18,8 +18,8 @@ const WEB_MERCATOR_Y_LIMIT = 18485274.7;
 /** Minimum floating point scale to prevent overflow */
 const MIN_PIXEL_SCALE = 1e-16;
 
-/** Minimum arc path length in pixels for filtering */
-const MIN_PATH_LEN = 0.1;
+/** Minimum arc path length in pixels for filtering — mapshaper 0.7.19 parity (gui-canvas.mjs:77) */
+const MIN_PATH_LEN = 0.35;
 
 // ---------------------------------------------------------------------------
 // Viewport — manages view transform, zoom, and constraints
@@ -209,9 +209,16 @@ export class Viewport {
   }
 
   getArcFilter(arcs: { arcIsSmaller?(i: number, minLen: number): boolean; arcIntersectsBBox?(i: number, bbox: number[]): boolean }): (i: number) => boolean {
+    const mapScale = this._initialMX > 0 ? Math.abs(this._transform.mx) / this._initialMX : 1;
+
+    // Mapshaper gui-canvas.mjs:103 — at near-full-extent zoom, the per-arc bbox
+    // and size checks cost more than they save. Pass everything through.
+    if (mapScale < 1.1) {
+      return (_i: number) => true;
+    }
+
     const pixelSize = 1 / Math.abs(this._transform.mx);
     const minPathLen = pixelSize * MIN_PATH_LEN;
-    const mapScale = this._initialMX > 0 ? Math.abs(this._transform.mx) / this._initialMX : 1;
     const adjustedMinLen = mapScale < 1 ? minPathLen * mapScale : minPathLen;
     const viewBBox = this._getViewBounds();
 
