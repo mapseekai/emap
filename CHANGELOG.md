@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-05-24
+
+### Performance
+
+- Slow pan/wheel navigation now reuses the previous rendered canvas frame via
+  CSS transform while a full redraw is deferred until interaction end. The
+  scheduler avoids synchronous canvas readback, preventing the zoom jank seen
+  with `getImageData()`-based frame timing.
+- Canvas stroke batching now flushes paths every 100 arcs/paths instead of 25,
+  matching mapshaper's lower-overhead draw cadence for large topology renders.
+- Viewport arc filtering skips per-arc checks near full extent and raises the
+  minimum visible path threshold to 0.35px, reducing redraw work without
+  changing zoomed-in detail.
+- `DrawFeatureHandler._findSnapTarget` now filters candidate vertices and arc
+  segments by a world-space bbox derived from the cursor's pixel `snapThreshold`,
+  skipping `project()`/`hypot()` on points that cannot win. Removes the per-frame
+  O(N) cost over the entire `xx/yy` arrays on large topologies, making snapping
+  responsive on datasets with hundreds of thousands of vertices.
+
 ## [0.3.2] - 2026-05-23
 
 ### Added
@@ -363,7 +382,10 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@zwishing/emap/style.css`).
 
-[Unreleased]: https://github.com/zwishing/emap/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/zwishing/emap/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/zwishing/emap/compare/v0.3.2...v0.3.3
+[0.3.2]: https://github.com/zwishing/emap/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/zwishing/emap/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/zwishing/emap/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/zwishing/emap/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/zwishing/emap/compare/v0.1.2...v0.1.3

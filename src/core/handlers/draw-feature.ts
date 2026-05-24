@@ -214,6 +214,19 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     let bestCoord: [number, number] | null = null;
     let bestKind: SnapKind = null;
 
+    // Build a world-space bbox of size +/-snapThreshold around the cursor so the
+    // inner loops can reject the 99% of vertices/segments that can't possibly
+    // win, without paying for project()/hypot() on each. Unproject two
+    // opposite corners and take min/max; this handles Y-flip and non-uniform
+    // scaling safely.
+    const T = this._snapThreshold;
+    const c0 = map.unproject(px - T, py - T);
+    const c1 = map.unproject(px + T, py + T);
+    const wMinX = Math.min(c0[0], c1[0]);
+    const wMaxX = Math.max(c0[0], c1[0]);
+    const wMinY = Math.min(c0[1], c1[1]);
+    const wMaxY = Math.max(c0[1], c1[1]);
+
     for (const sourceId of sources) {
       const src = map.getSource(sourceId);
       if (!src) continue;
@@ -226,11 +239,14 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
 
       if (snapToVertex) {
         for (let i = 0; i < xx.length; i++) {
-          const projected = map.project(xx[i], yy[i]);
+          const x = xx[i];
+          const y = yy[i];
+          if (x < wMinX || x > wMaxX || y < wMinY || y > wMaxY) continue;
+          const projected = map.project(x, y);
           const dist = Math.hypot(projected[0] - px, projected[1] - py);
           if (dist < bestDist) {
             bestDist = dist;
-            bestCoord = [xx[i], yy[i]];
+            bestCoord = [x, y];
             bestKind = 'vertex';
           }
         }
@@ -241,8 +257,16 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
         // index pairs (i, j) within an arc — never crosses arc boundaries,
         // so we don't accidentally treat unrelated arcs as connected.
         arcs.forEachSegment((i: number, j: number, arcXx: Float64Array, arcYy: Float64Array) => {
-          const a = map.project(arcXx[i], arcYy[i]);
-          const b = map.project(arcXx[j], arcYy[j]);
+          const ax = arcXx[i], ay = arcYy[i];
+          const bx = arcXx[j], by = arcYy[j];
+          // Segment AABB vs cursor bbox; reject if disjoint.
+          const sMinX = ax < bx ? ax : bx;
+          const sMaxX = ax < bx ? bx : ax;
+          const sMinY = ay < by ? ay : by;
+          const sMaxY = ay < by ? by : ay;
+          if (sMaxX < wMinX || sMinX > wMaxX || sMaxY < wMinY || sMinY > wMaxY) return;
+          const a = map.project(ax, ay);
+          const b = map.project(bx, by);
           const r = projectPointOnSegment([px, py], a, b);
           if (r.dist < bestDist) {
             bestDist = r.dist;
