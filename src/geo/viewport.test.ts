@@ -35,3 +35,40 @@ describe('Viewport camera-state primitives', () => {
     expect(py).toBeCloseTo(300, 6); // height/2
   });
 });
+
+describe('Viewport arc filtering', () => {
+  it('passes all arcs near full extent without running per-arc checks', () => {
+    const v = vp();
+    let smallerCalls = 0;
+    let bboxCalls = 0;
+    const filter = v.getArcFilter({
+      arcIsSmaller: () => {
+        smallerCalls++;
+        return true;
+      },
+      arcIntersectsBBox: () => {
+        bboxCalls++;
+        return false;
+      },
+    });
+
+    expect(filter(0)).toBe(true);
+    expect(smallerCalls).toBe(0);
+    expect(bboxCalls).toBe(0);
+  });
+
+  it('uses the 0.35 pixel path-length threshold once zoomed in', () => {
+    const v = vp();
+    v.applyCameraState([50, 50], Math.abs(v.transform.mx) * 2);
+    let minLen = 0;
+    const filter = v.getArcFilter({
+      arcIsSmaller: (_i, value) => {
+        minLen = value;
+        return false;
+      },
+    });
+
+    expect(filter(0)).toBe(true);
+    expect(minLen).toBeCloseTo((1 / Math.abs(v.transform.mx)) * 0.35, 12);
+  });
+});

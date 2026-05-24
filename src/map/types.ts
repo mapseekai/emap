@@ -17,6 +17,20 @@ export type SnapKind = DrawOverlaySnapKind;
 
 export type ExpressionEvaluationPolicy = 'trusted' | 'disabled';
 
+export type RenderAction = 'redraw' | 'nav';
+
+export interface AffineDelta {
+  tx: number;
+  ty: number;
+  sx: number;
+  sy: number;
+}
+
+export interface RenderRequest {
+  action?: RenderAction;
+  navDelta?: AffineDelta;
+}
+
 export interface MapOptions {
   container: string | HTMLElement;
   interactive?: boolean;

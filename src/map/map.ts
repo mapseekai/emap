@@ -7,6 +7,7 @@ import { Projection } from '../geo/projection';
 import { Painter } from '../renderer/painter';
 import { CanvasPainter } from '../renderer/canvas-painter';
 import { EditOverlayRenderer } from '../renderer/edit-overlay-renderer';
+import { RenderScheduler, type RenderSnapshot } from '../renderer/render-scheduler';
 import { MapshaperOps } from './mapshaper-ops';
 import { EditSessions } from './edit-sessions';
 import { AttributeOps } from './attribute-ops';
@@ -65,6 +66,9 @@ import {
   type HighlightStyle,
   type EditVertexState,
   type EditDrawState,
+  type RenderRequest,
+  type RenderAction,
+  type AffineDelta,
 } from './types';
 
 export class Emap extends EventDispatcher {
@@ -73,6 +77,7 @@ export class Emap extends EventDispatcher {
   private _canvas: HTMLCanvasElement;
   private _painter: Painter;
   private _editOverlay: EditOverlayRenderer;
+  private _scheduler!: RenderScheduler;
   private _viewport: Viewport = new Viewport();
   private _projection: Projection = new Projection();
   private _camera!: Camera;
@@ -115,6 +120,11 @@ export class Emap extends EventDispatcher {
   // Rendering
   private _pendingRender = 0;
   private _rafId = 0;
+  private _pendingAction: RenderAction = 'redraw';
+  private _pendingNavDelta: AffineDelta | null = null;
+  private _navSnapshotTransform: { mx: number; my: number; bx: number; by: number } | null = null;
+  private _wheelSettleTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly _WHEEL_SETTLE_MS = 250;
 
   // UI controls
   private _controlContainers: globalThis.Map<ControlPosition, HTMLElement> =
@@ -250,6 +260,11 @@ export class Emap extends EventDispatcher {
     this._painter = new CanvasPainter(this._canvas);
     this._painter.setPixelRatio(window.devicePixelRatio || 1);
     this._editOverlay = new EditOverlayRenderer(this._painter);
+    this._scheduler = new RenderScheduler({
+      fullRedraw: () => this._renderFull(),
+      fastNav: (delta) => this._applyFastTransform(delta),
+      getSnapshot: () => this._captureRenderSnapshot(),
+    });
 
     this._updateSize();
 
@@ -320,7 +335,10 @@ export class Emap extends EventDispatcher {
 
     this._attachEventListeners();
 
-    this.on('move', () => this._scheduleRender());
+    this.on('move', () => {
+      if (this._navSnapshotTransform) return;
+      this._scheduleRender();
+    });
     this.on('resize', () => this._scheduleRender());
     this.on('reset', () => this.reset());
     // Validation hook: every committed history step (whether from an op,
@@ -525,7 +543,9 @@ export class Emap extends EventDispatcher {
 
   private _attachEventListeners(): void {
     this._dragPan.on('pan', (e: { dx: number; dy: number }) => {
+      this._ensureNavSnapshot();
       this._viewport.pan(e.dx, e.dy);
+      this._scheduleRender('nav', this._computeNavDelta());
       this.fire('move');
     });
     this._dragPan.on('panstart', () => {
@@ -533,12 +553,54 @@ export class Emap extends EventDispatcher {
       // own easeTo/flyTo animation is stopped separately via the dragPan
       // onGestureStart → map.stop() wiring; these are two independent systems.
       this._viewport.cancelZoomAnimation();
+      this._ensureNavSnapshot();
+    });
+    this._dragPan.on('panend', () => {
+      this._endNavGesture();
     });
 
     this._scrollZoom.on('mousewheel', (e: { direction: number; multiplier: number; x: number; y: number }) => {
+      this._ensureNavSnapshot();
       this._viewport.applyWheelZoom(e.direction, e.multiplier, e.x, e.y);
+      this._scheduleRender('nav', this._computeNavDelta());
       this.fire('move');
+      if (this._wheelSettleTimer !== null) clearTimeout(this._wheelSettleTimer);
+      this._wheelSettleTimer = setTimeout(() => {
+        this._wheelSettleTimer = null;
+        this._endNavGesture();
+      }, Emap._WHEEL_SETTLE_MS);
     });
+  }
+
+  private _ensureNavSnapshot(): void {
+    if (this._navSnapshotTransform) return;
+    const t = this._viewport.transform;
+    this._navSnapshotTransform = { mx: t.mx, my: t.my, bx: t.bx, by: t.by };
+  }
+
+  private _computeNavDelta(): AffineDelta {
+    const snap = this._navSnapshotTransform;
+    if (!snap) return { tx: 0, ty: 0, sx: 1, sy: 1 };
+    const cur = this._viewport.transform;
+    const sx = cur.mx / snap.mx;
+    const sy = cur.my / snap.my;
+    return {
+      sx,
+      sy,
+      tx: cur.bx - sx * snap.bx,
+      ty: cur.by - sy * snap.by,
+    };
+  }
+
+  private _endNavGesture(): void {
+    const hasPendingNav = this._pendingAction === 'nav' && this._pendingRender > 0;
+    this._navSnapshotTransform = null;
+    if (this._wheelSettleTimer !== null) {
+      clearTimeout(this._wheelSettleTimer);
+      this._wheelSettleTimer = null;
+    }
+    this._scheduler.notifyInteractionEnd(hasPendingNav);
+    this.fire('interactionend');
   }
 
   private _createCanvasContainer(): HTMLElement {
@@ -1096,9 +1158,16 @@ export class Emap extends EventDispatcher {
   /** Cancel any running camera animation (no-op when idle). */
   public stop(): this { this._camera.stop(); return this; }
 
-  _scheduleRender(): void {
+  _scheduleRender(action: RenderAction = 'redraw', navDelta?: AffineDelta): void {
     if (this._removed) return;
     this._pendingRender++;
+    if (this._pendingAction === 'redraw' || action === 'redraw') {
+      this._pendingAction = 'redraw';
+      this._pendingNavDelta = null;
+    } else {
+      this._pendingAction = 'nav';
+      if (navDelta) this._pendingNavDelta = { ...navDelta };
+    }
     if (this._rafId === 0) {
       this._rafId = requestAnimationFrame(() => this._doRender());
     }
@@ -1108,11 +1177,26 @@ export class Emap extends EventDispatcher {
     this._rafId = 0;
     if (this._pendingRender > 0) {
       this._pendingRender = 0;
-      this.render();
+      const req: RenderRequest = { action: this._pendingAction };
+      if (this._pendingNavDelta) req.navDelta = this._pendingNavDelta;
+      this._pendingAction = 'redraw';
+      this._pendingNavDelta = null;
+      this.render(req);
     }
   }
 
-  public render(): void {
+  public render(req?: RenderRequest): void {
+    this._scheduler.schedule(req ?? { action: 'redraw' });
+  }
+
+  private _renderFull(): void {
+    this._clearFastTransform();
+    const t0 = performance.now();
+    this._renderImpl();
+    this._scheduler.recordFrame(performance.now() - t0, this._captureRenderSnapshot());
+  }
+
+  private _renderImpl(): void {
     const transform = this._viewport.transform;
     this._painter.setTransform(transform);
     this._painter.clear();
@@ -1127,6 +1211,25 @@ export class Emap extends EventDispatcher {
       this._editState.vertex,
       this._editState.draw,
     );
+  }
+
+  private _captureRenderSnapshot(): RenderSnapshot {
+    return {
+      canvasWidth: this._canvas.width,
+      canvasHeight: this._canvas.height,
+      pixelRatio: window.devicePixelRatio || 1,
+    };
+  }
+
+  private _applyFastTransform(delta: AffineDelta): void {
+    this._canvas.style.transformOrigin = 'top left';
+    this._canvas.style.transform = `translate(${delta.tx}px,${delta.ty}px) scale(${delta.sx},${delta.sy})`;
+  }
+
+  private _clearFastTransform(): void {
+    if (!this._canvas.style.transform) return;
+    this._canvas.style.transform = '';
+    this._canvas.style.transformOrigin = '';
   }
 
   private _renderLayers(pixelSize: number, lineScale: number): void {
@@ -1694,6 +1797,14 @@ export class Emap extends EventDispatcher {
       this._rafId = 0;
     }
     this._pendingRender = 0;
+    this._pendingAction = 'redraw';
+    this._pendingNavDelta = null;
+    this._navSnapshotTransform = null;
+    if (this._wheelSettleTimer !== null) {
+      clearTimeout(this._wheelSettleTimer);
+      this._wheelSettleTimer = null;
+    }
+    this._scheduler?.dispose();
 
     // Interaction handlers
     this._handlers?.detach();

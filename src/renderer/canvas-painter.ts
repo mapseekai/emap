@@ -27,7 +27,7 @@ export class CanvasPainter implements Painter {
     // to disable strokes (e.g. fill-only polygons) without paying any cost.
     if (style.width === 0) return;
     const ctx = this._ctx;
-    const batchSize = 25; // Mapshaper uses batch of 25 for optimal performance
+    const batchSize = 100;
 
     ctx.strokeStyle = style.color || '#333';
     ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
@@ -59,7 +59,7 @@ export class CanvasPainter implements Painter {
   drawArcs(arcs: ArcCollection, style: StrokeStyle, filter?: (i: number) => boolean): void {
     if (style.width === 0) return;
     const ctx = this._ctx;
-    const batchSize = 25;
+    const batchSize = 100;
     const n = arcs.size();
 
     ctx.strokeStyle = style.color || '#333';
