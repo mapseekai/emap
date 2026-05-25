@@ -1241,7 +1241,16 @@ export class Emap extends EventDispatcher {
     this._overlaySnapshot = null;
     const rect = this._getOverlayDirtyRect();
     const painter = this._painter;
-    if (rect && painter instanceof CanvasPainter) {
+    // Progressive rendering of the topmost heavy layer continues across rAF
+    // frames after _renderLayers returns. If we snapshot now, the saved
+    // ImageData captures transparent pixels for arcs not yet drawn — a
+    // later restoreRegion would overwrite the eventually-painted layer
+    // pixels with that transparent void, leaving the user-visible "blank
+    // rectangle around B" bug after select-A → zoom → select-B.
+    // Skip the snapshot while chunks are in flight; next overlay render
+    // sees `_overlaySnapshot === null` and naturally falls back to fullRedraw.
+    const chunksPending = this._progressiveRenderFrames.length > 0;
+    if (rect && painter instanceof CanvasPainter && !chunksPending) {
       const image = painter.saveRegion(rect);
       if (image) this._overlaySnapshot = { rect, image };
     }

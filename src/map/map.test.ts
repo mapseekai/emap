@@ -3,6 +3,7 @@ import mapshaper from 'mapshaper';
 import { Emap } from './map';
 import type { FeatureRef } from './map';
 import type { LayerSpecification } from './layer';
+import { CanvasPainter } from '../renderer/canvas-painter';
 import { Selection } from './selection';
 import { EditHistory } from '../edit/edit-history';
 import { CompositeCommand } from '../edit/commands/composite';
@@ -295,6 +296,30 @@ describe('Emap render scheduling', () => {
     }));
 
     expect(callPrivate(map, '_getWheelSettleMs')).toBe(2000);
+  });
+
+  it('skips overlay snapshot while progressive chunks are pending', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const saveRegion = vi.fn(() => ({ width: 10, height: 10 }));
+
+    setPrivate(map, '_overlaySnapshot', null);
+    // Pending chunks: a render is in flight; the canvas isn't fully painted yet.
+    setPrivate(map, '_progressiveRenderFrames', [1, 2, 3]);
+    setPrivate(map, '_getOverlayDirtyRect', () => ({ x: 0, y: 0, width: 10, height: 10 }));
+    setPrivate(map, '_renderHighlight', vi.fn());
+    setPrivate(map, '_editOverlay', { render: vi.fn() });
+    setPrivate(map, '_editState', { mode: 'none', vertex: null, draw: null });
+    setPrivate(map, '_painter', Object.assign(
+      Object.create(CanvasPainter.prototype),
+      { saveRegion },
+    ));
+
+    callPrivate(map, '_renderOverlaysWithSnapshot', {} as any, 1);
+
+    // Capturing now would freeze an incomplete canvas region; later restore
+    // would overwrite eventually-painted layer pixels with transparent ones.
+    expect(saveRegion).not.toHaveBeenCalled();
+    expect(getPrivate(map, '_overlaySnapshot')).toBeNull();
   });
 
   it('renders heavy point layers progressively across animation frames', () => {
