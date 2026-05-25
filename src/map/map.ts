@@ -1303,6 +1303,12 @@ export class Emap extends EventDispatcher {
       const ml = this._resolveSourceLayer(source, layer['source-layer']);
       const cacheKey = `${layer.source}:${layer['source-layer'] || 'default'}`;
 
+      // Progressive chunking is restricted to the topmost visible layer.
+      // Canvas has no per-layer z-order: a later rAF chunk would paint on top
+      // of layers drawn above this one, violating layer order. Heavy layers
+      // beneath an overlay must render synchronously — promote them in the
+      // layer stack or use a dedicated overlay canvas if responsiveness is
+      // required.
       const canProgress = i === lastVisibleLayerIndex;
       if (layer.type === 'line' && arcs) {
         this._renderLineLayer(layer, ml, arcs, cacheKey, lineScale, canProgress);
@@ -1326,20 +1332,11 @@ export class Emap extends EventDispatcher {
       return;
     }
 
-    const generation = this._renderGeneration;
-    let start = 0;
-    const drawNext = () => {
-      if (this._removed || generation !== this._renderGeneration) return;
-      const end = Math.min(start + Emap._PROGRESSIVE_POINT_BATCH, shapes.length);
-      painter.drawPointsRange!(shapes, style, start, end);
-      start = end;
-      if (start < shapes.length) {
-        const frame = requestAnimationFrame(drawNext);
-        this._progressiveRenderFrames.push(frame);
-      }
-    };
-
-    drawNext();
+    this._scheduleProgressiveChunks(
+      shapes.length,
+      (start) => start + Emap._PROGRESSIVE_POINT_BATCH,
+      (start, end) => painter.drawPointsRange!(shapes, style, start, end),
+    );
   }
 
   private _scheduleProgressiveChunks(
@@ -1532,13 +1529,15 @@ export class Emap extends EventDispatcher {
     // the dominant cost of fill mode.
     const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
     const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
-    const drawOutline = () => {
-      const totalArcs = arcs.size();
-      const outlineFilter = this._combineArcFilters(flags, viewportFilter);
-      const totalNodes = this._getArcsNodeCount(arcs, totalArcs, outlineFilter);
-      this._renderArcLayer(arcs, style, outlineFilter, totalArcs, totalNodes, canProgress);
-    };
-    this._renderPolygonFillLayer(ml.shapes!, arcs, fillColor, viewportFilter, fillOpacity, canProgress, drawOutline);
+    const totalArcs = arcs.size();
+    const outlineFilter = this._combineArcFilters(flags, viewportFilter);
+    const outlineNodes = this._getArcsNodeCount(arcs, totalArcs, outlineFilter);
+    // Kick fill and outline progressive schedulers off concurrently so the
+    // outline appears alongside fill chunks. Otherwise (outline as
+    // onComplete) the user sees several rAF frames of fills with no
+    // outlines on large datasets.
+    this._renderPolygonFillLayer(ml.shapes!, arcs, fillColor, viewportFilter, fillOpacity, canProgress);
+    this._renderArcLayer(arcs, style, outlineFilter, totalArcs, outlineNodes, canProgress);
   }
 
   private _renderPolygonFillLayer(
@@ -1548,7 +1547,6 @@ export class Emap extends EventDispatcher {
     filter: ((i: number) => boolean) | undefined,
     opacity: number | undefined,
     canProgress: boolean,
-    onComplete?: () => void,
   ): void {
     const painter = this._painter as Painter & {
       drawPolygonFillRange?: (
@@ -1562,15 +1560,11 @@ export class Emap extends EventDispatcher {
       ) => void;
     };
     const totalNodes = this._getShapesNodeCount(shapes, arcs, filter);
-    if (totalNodes === 0) {
-      onComplete?.();
-      return;
-    }
+    if (totalNodes === 0) return;
     if (!canProgress ||
       totalNodes < Emap._PROGRESSIVE_PATH_NODE_THRESHOLD ||
       typeof painter.drawPolygonFillRange !== 'function') {
       this._painter.drawPolygonFill(shapes, arcs, fillColor, filter, opacity);
-      onComplete?.();
       return;
     }
 
@@ -1578,7 +1572,7 @@ export class Emap extends EventDispatcher {
       return this._getShapeChunkEnd(shapes, arcs, start, shapes.length, Emap._PROGRESSIVE_PATH_NODE_BATCH, filter);
     }, (start, end) => {
       painter.drawPolygonFillRange!(shapes, arcs, fillColor, start, end, filter, opacity);
-    }, onComplete);
+    });
   }
 
   private _combineArcFilters(

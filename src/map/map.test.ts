@@ -345,7 +345,7 @@ describe('Emap render scheduling', () => {
     expect(drawArcsRange).not.toHaveBeenCalled();
   });
 
-  it('renders heavy fill layers progressively before drawing outlines', () => {
+  it('interleaves fill and outline chunks for heavy fill layers', () => {
     const map = Object.create(Emap.prototype) as Emap;
     const calls: string[] = [];
     const frames: FrameRequestCallback[] = [];
@@ -385,14 +385,16 @@ describe('Emap render scheduling', () => {
       };
       callPrivate(map, '_renderFillLayer', { type: 'fill', paint: {} }, { shapes }, arcs, 'src:default', 1, true);
 
-      expect(calls).toEqual(['fill:0-2']);
+      // Fill and outline schedulers run concurrently, so the first chunk of
+      // each draws synchronously and subsequent chunks interleave in rAF order.
+      expect(calls).toEqual(['fill:0-2', 'arc:0-2']);
       frames.shift()?.(16);
-      expect(calls).toEqual(['fill:0-2', 'fill:2-4', 'arc:0-2']);
+      expect(calls).toEqual(['fill:0-2', 'arc:0-2', 'fill:2-4']);
       frames.shift()?.(32);
       expect(calls).toEqual([
         'fill:0-2',
-        'fill:2-4',
         'arc:0-2',
+        'fill:2-4',
         'arc:2-4',
       ]);
     } finally {
