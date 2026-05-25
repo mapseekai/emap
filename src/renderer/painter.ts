@@ -57,6 +57,19 @@ export interface CorePainter {
   resize(width: number, height: number): void;
   setTransform(transform: AffineTransform): void;
   setPixelRatio(ratio: number): void;
+  /**
+   * Capture the current canvas pixels into an offscreen buffer so subsequent
+   * overlay-only renders can restore the layer pass without re-running it.
+   */
+  captureLayerSnapshot?(): void;
+  /**
+   * Blit the most recent layer snapshot back onto the canvas. Returns true
+   * when the snapshot was valid and applied, false when the caller must fall
+   * back to a full layer pass.
+   */
+  restoreLayerSnapshot?(): boolean;
+  /** Drop the cached layer snapshot (after resize, dataset/style change, etc). */
+  invalidateLayerSnapshot?(): void;
 }
 
 /**

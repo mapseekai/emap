@@ -17,7 +17,7 @@ export type SnapKind = DrawOverlaySnapKind;
 
 export type ExpressionEvaluationPolicy = 'trusted' | 'disabled';
 
-export type RenderAction = 'redraw' | 'nav';
+export type RenderAction = 'redraw' | 'nav' | 'overlay';
 
 export interface AffineDelta {
   tx: number;

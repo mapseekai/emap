@@ -6,11 +6,59 @@ export class CanvasPainter implements Painter {
   private _ctx: CanvasRenderingContext2D;
   private _transform: AffineTransform = new AffineTransform();
   private _pixelRatio: number = window.devicePixelRatio || 1;
+  private _layerSnapshot: HTMLCanvasElement | null = null;
+  private _layerSnapshotValid = false;
 
   constructor(private _canvas: HTMLCanvasElement) {
     const ctx = _canvas.getContext('2d');
     if (!ctx) throw new Error('Failed to get 2D context');
     this._ctx = ctx;
+  }
+
+  captureLayerSnapshot(): void {
+    const w = this._canvas.width;
+    const h = this._canvas.height;
+    if (w === 0 || h === 0) {
+      this._layerSnapshotValid = false;
+      return;
+    }
+    if (!this._layerSnapshot) {
+      this._layerSnapshot = document.createElement('canvas');
+    }
+    if (this._layerSnapshot.width !== w || this._layerSnapshot.height !== h) {
+      this._layerSnapshot.width = w;
+      this._layerSnapshot.height = h;
+    }
+    const snapCtx = this._layerSnapshot.getContext('2d');
+    if (!snapCtx) {
+      this._layerSnapshotValid = false;
+      return;
+    }
+    snapCtx.setTransform(1, 0, 0, 1, 0, 0);
+    snapCtx.clearRect(0, 0, w, h);
+    snapCtx.drawImage(this._canvas, 0, 0);
+    this._layerSnapshotValid = true;
+  }
+
+  restoreLayerSnapshot(): boolean {
+    if (!this._layerSnapshot || !this._layerSnapshotValid) return false;
+    const w = this._canvas.width;
+    const h = this._canvas.height;
+    if (this._layerSnapshot.width !== w || this._layerSnapshot.height !== h) {
+      this._layerSnapshotValid = false;
+      return false;
+    }
+    const ctx = this._ctx;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(this._layerSnapshot, 0, 0);
+    ctx.restore();
+    return true;
+  }
+
+  invalidateLayerSnapshot(): void {
+    this._layerSnapshotValid = false;
   }
 
   setTransform(transform: AffineTransform): void {
@@ -482,5 +530,6 @@ export class CanvasPainter implements Painter {
     this._canvas.height = height * pr;
     this._canvas.style.width = width + 'px';
     this._canvas.style.height = height + 'px';
+    this._layerSnapshotValid = false;
   }
 }

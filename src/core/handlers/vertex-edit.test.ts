@@ -75,7 +75,10 @@ describe('VertexEditHandler', () => {
     callPrivate(handler, '_handleDrag', 90, 100);
 
     expect(snapSpy).toHaveBeenCalledWith([4, 9, 11], [11, 22], expect.any(Object));
-    expect(mapMock.render).toHaveBeenCalled();
+    // Drag now relies on setEditVertexState to schedule an overlay-only render
+    // via the EditStateStore callback (instead of an explicit map.render() that
+    // forces a full layer redraw on every pointermove).
+    expect(mapMock.setEditVertexState).toHaveBeenCalled();
   });
 
   it('snaps dragged vertices to other feature vertices when drag snap is enabled', () => {
