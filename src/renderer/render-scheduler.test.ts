@@ -19,7 +19,7 @@ describe('RenderScheduler', () => {
     vi.useRealTimers();
   });
 
-  it('uses fast-nav after a slow full frame when the snapshot is still valid', () => {
+  it('uses fast-nav for nav frames when the snapshot is still valid', () => {
     const fullRedraw = vi.fn();
     const fastNav = vi.fn();
     const scheduler = new RenderScheduler({
@@ -28,25 +28,11 @@ describe('RenderScheduler', () => {
       getSnapshot: () => snapshot(),
     });
 
-    scheduler.recordFrame(101, snapshot());
+    scheduler.recordFrame(1, snapshot());
     scheduler.schedule({ action: 'nav', navDelta: { tx: 10, ty: 2, sx: 1, sy: 1 } });
 
     expect(fastNav).toHaveBeenCalledWith({ tx: 10, ty: 2, sx: 1, sy: 1 });
     expect(fullRedraw).not.toHaveBeenCalled();
-  });
-
-  it('falls back to a full redraw when the latest frame was fast', () => {
-    const fullRedraw = vi.fn();
-    const scheduler = new RenderScheduler({
-      fullRedraw,
-      fastNav: vi.fn(),
-      getSnapshot: () => snapshot(),
-    });
-
-    scheduler.recordFrame(100, snapshot());
-    scheduler.schedule({ action: 'nav', navDelta: { tx: 1, ty: 1, sx: 1, sy: 1 } });
-
-    expect(fullRedraw).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to a full redraw when canvas dimensions changed', () => {

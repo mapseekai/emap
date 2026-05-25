@@ -50,8 +50,16 @@ export class Bounds {
   }
 
   fillOut(aspect: number, focusX: number = 0.5, focusY: number = 0.5): this {
-    const w = this.width;
-    const h = this.height;
+    let w = this.width;
+    let h = this.height;
+    if (w === 0 && h === 0) {
+      this.xmin -= 0.5;
+      this.xmax += 0.5;
+      this.ymin -= 0.5;
+      this.ymax += 0.5;
+      w = this.width;
+      h = this.height;
+    }
     const currAspect = w / h;
     let pad;
     if (currAspect < aspect) {

@@ -120,11 +120,18 @@ export class Emap extends EventDispatcher {
   // Rendering
   private _pendingRender = 0;
   private _rafId = 0;
-  private _pendingAction: RenderAction = 'redraw';
+  private _pendingAction: RenderAction | null = null;
   private _pendingNavDelta: AffineDelta | null = null;
   private _navSnapshotTransform: { mx: number; my: number; bx: number; by: number } | null = null;
+  private _progressiveRenderFrames: number[] = [];
+  private _renderGeneration = 0;
   private _wheelSettleTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly _WHEEL_SETTLE_MS = 250;
+  private static readonly _HEAVY_WHEEL_SETTLE_MS = 2000;
+  private static readonly _PROGRESSIVE_POINT_THRESHOLD = 200000;
+  private static readonly _PROGRESSIVE_POINT_BATCH = 200000;
+  private static readonly _PROGRESSIVE_PATH_NODE_THRESHOLD = 200000;
+  private static readonly _PROGRESSIVE_PATH_NODE_BATCH = 200000;
 
   // UI controls
   private _controlContainers: globalThis.Map<ControlPosition, HTMLElement> =
@@ -568,7 +575,7 @@ export class Emap extends EventDispatcher {
       this._wheelSettleTimer = setTimeout(() => {
         this._wheelSettleTimer = null;
         this._endNavGesture();
-      }, Emap._WHEEL_SETTLE_MS);
+      }, this._getWheelSettleMs());
     });
   }
 
@@ -1161,7 +1168,7 @@ export class Emap extends EventDispatcher {
   _scheduleRender(action: RenderAction = 'redraw', navDelta?: AffineDelta): void {
     if (this._removed) return;
     this._pendingRender++;
-    if (this._pendingAction === 'redraw' || action === 'redraw') {
+    if (action === 'redraw' || this._pendingAction === 'redraw') {
       this._pendingAction = 'redraw';
       this._pendingNavDelta = null;
     } else {
@@ -1177,9 +1184,9 @@ export class Emap extends EventDispatcher {
     this._rafId = 0;
     if (this._pendingRender > 0) {
       this._pendingRender = 0;
-      const req: RenderRequest = { action: this._pendingAction };
+      const req: RenderRequest = { action: this._pendingAction ?? 'redraw' };
       if (this._pendingNavDelta) req.navDelta = this._pendingNavDelta;
-      this._pendingAction = 'redraw';
+      this._pendingAction = null;
       this._pendingNavDelta = null;
       this.render(req);
     }
@@ -1190,6 +1197,8 @@ export class Emap extends EventDispatcher {
   }
 
   private _renderFull(): void {
+    this._cancelProgressiveRender();
+    this._renderGeneration++;
     this._clearFastTransform();
     const t0 = performance.now();
     this._renderImpl();
@@ -1222,6 +1231,7 @@ export class Emap extends EventDispatcher {
   }
 
   private _applyFastTransform(delta: AffineDelta): void {
+    this._cancelProgressiveRender();
     this._canvas.style.transformOrigin = 'top left';
     this._canvas.style.transform = `translate(${delta.tx}px,${delta.ty}px) scale(${delta.sx},${delta.sy})`;
   }
@@ -1232,10 +1242,44 @@ export class Emap extends EventDispatcher {
     this._canvas.style.transformOrigin = '';
   }
 
+  private _cancelProgressiveRender(): void {
+    if (!this._progressiveRenderFrames?.length) {
+      this._progressiveRenderFrames = [];
+      return;
+    }
+    this._progressiveRenderFrames.forEach((id) => cancelAnimationFrame(id));
+    this._progressiveRenderFrames = [];
+  }
+
+  private _hasHeavyNavLayers(): boolean {
+    for (const layer of this._getEffectiveLayers()) {
+      if (layer.layout?.visibility === 'none' || layer.type !== 'circle') continue;
+      const source = this._sources.get(layer.source);
+      if (!source) continue;
+      const ml = this._resolveSourceLayer(source, layer['source-layer']);
+      if ((ml?.shapes?.length ?? 0) >= Emap._PROGRESSIVE_POINT_THRESHOLD) return true;
+    }
+    return false;
+  }
+
+  private _getWheelSettleMs(): number {
+    return this._hasHeavyNavLayers()
+      ? Emap._HEAVY_WHEEL_SETTLE_MS
+      : Emap._WHEEL_SETTLE_MS;
+  }
+
   private _renderLayers(pixelSize: number, lineScale: number): void {
     const effectiveLayers = this._getEffectiveLayers();
+    let lastVisibleLayerIndex = -1;
+    for (let i = effectiveLayers.length - 1; i >= 0; i--) {
+      if (effectiveLayers[i].layout?.visibility !== 'none') {
+        lastVisibleLayerIndex = i;
+        break;
+      }
+    }
 
-    for (const layer of effectiveLayers) {
+    for (let i = 0; i < effectiveLayers.length; i++) {
+      const layer = effectiveLayers[i];
       if (layer.layout?.visibility === 'none') continue;
 
       const source = this._sources.get(layer.source);
@@ -1259,15 +1303,158 @@ export class Emap extends EventDispatcher {
       const ml = this._resolveSourceLayer(source, layer['source-layer']);
       const cacheKey = `${layer.source}:${layer['source-layer'] || 'default'}`;
 
+      const canProgress = i === lastVisibleLayerIndex;
       if (layer.type === 'line' && arcs) {
-        this._renderLineLayer(layer, ml, arcs, cacheKey, lineScale);
+        this._renderLineLayer(layer, ml, arcs, cacheKey, lineScale, canProgress);
       } else if (layer.type === 'fill' && arcs && ml?.shapes) {
-        this._renderFillLayer(layer, ml, arcs, cacheKey, lineScale);
+        this._renderFillLayer(layer, ml, arcs, cacheKey, lineScale, canProgress);
       } else if (layer.type === 'circle' && ml?.shapes) {
         const style = resolvePointStyle(layer.paint as CirclePaint);
-        this._painter.drawPoints(ml.shapes, style);
+        this._renderPointLayer(ml.shapes, style, canProgress);
       }
     }
+  }
+
+  private _renderPointLayer(shapes: any[], style: ReturnType<typeof resolvePointStyle>, canProgress: boolean): void {
+    const painter = this._painter as Painter & {
+      drawPointsRange?: (input: any[], style: ReturnType<typeof resolvePointStyle>, start: number, end: number) => void;
+    };
+    if (!canProgress ||
+      shapes.length < Emap._PROGRESSIVE_POINT_THRESHOLD ||
+      typeof painter.drawPointsRange !== 'function') {
+      this._painter.drawPoints(shapes, style);
+      return;
+    }
+
+    const generation = this._renderGeneration;
+    let start = 0;
+    const drawNext = () => {
+      if (this._removed || generation !== this._renderGeneration) return;
+      const end = Math.min(start + Emap._PROGRESSIVE_POINT_BATCH, shapes.length);
+      painter.drawPointsRange!(shapes, style, start, end);
+      start = end;
+      if (start < shapes.length) {
+        const frame = requestAnimationFrame(drawNext);
+        this._progressiveRenderFrames.push(frame);
+      }
+    };
+
+    drawNext();
+  }
+
+  private _scheduleProgressiveChunks(
+    total: number,
+    getNextEnd: (start: number) => number,
+    drawRange: (start: number, end: number) => void,
+    onComplete?: () => void,
+  ): void {
+    const generation = this._renderGeneration;
+    let start = 0;
+    const drawNext = () => {
+      if (this._removed || generation !== this._renderGeneration) return;
+      const end = Math.max(start + 1, Math.min(getNextEnd(start), total));
+      drawRange(start, end);
+      start = end;
+      if (start < total) {
+        const frame = requestAnimationFrame(drawNext);
+        this._progressiveRenderFrames.push(frame);
+      } else {
+        onComplete?.();
+      }
+    };
+
+    drawNext();
+  }
+
+  private _getArcNodeCount(
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    arcId: number,
+  ): number {
+    const nn = arcs.getVertexData?.()?.nn;
+    return nn ? nn[arcId] || 0 : 1;
+  }
+
+  private _getArcChunkEnd(
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    start: number,
+    total: number,
+    nodeBudget: number,
+    filter?: (i: number) => boolean,
+  ): number {
+    let nodes = 0;
+    let end = start;
+    while (end < total) {
+      if (!filter || filter(end)) {
+        nodes += this._getArcNodeCount(arcs, end);
+      }
+      end++;
+      if (nodes >= nodeBudget) break;
+    }
+    return end;
+  }
+
+  private _getArcsNodeCount(
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    total: number,
+    filter?: (i: number) => boolean,
+  ): number {
+    if (!filter) {
+      return arcs.getPointCount?.() ?? arcs.getVertexData?.()?.xx.length ?? total;
+    }
+    let nodes = 0;
+    for (let i = 0; i < total; i++) {
+      if (filter(i)) nodes += this._getArcNodeCount(arcs, i);
+    }
+    return nodes;
+  }
+
+  private _getShapeNodeCount(
+    shape: unknown,
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    filter?: (i: number) => boolean,
+  ): number {
+    if (!Array.isArray(shape)) return 0;
+    let nodes = 0;
+    for (const part of shape) {
+      if (!Array.isArray(part)) continue;
+      for (const arcId of part) {
+        const absId = arcId >= 0 ? arcId : ~arcId;
+        if (!filter || filter(absId)) {
+          nodes += this._getArcNodeCount(arcs, absId);
+        }
+      }
+    }
+    return nodes;
+  }
+
+  private _getShapeChunkEnd(
+    shapes: any[],
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    start: number,
+    total: number,
+    nodeBudget: number,
+    filter?: (i: number) => boolean,
+  ): number {
+    let nodes = 0;
+    let end = start;
+    while (end < total) {
+      nodes += this._getShapeNodeCount(shapes[end], arcs, filter);
+      end++;
+      if (nodes >= nodeBudget) break;
+    }
+    return end;
+  }
+
+  private _getShapesNodeCount(
+    shapes: any[],
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    filter?: (i: number) => boolean,
+  ): number {
+    let nodes = 0;
+    for (const shape of shapes) {
+      nodes += this._getShapeNodeCount(shape, arcs, filter);
+    }
+    return nodes;
   }
 
   private _renderLineLayer(
@@ -1276,18 +1463,55 @@ export class Emap extends EventDispatcher {
     arcs: import('../types/mapshaper-types').ArcCollection,
     cacheKey: string,
     lineScale: number,
+    canProgress: boolean,
   ): void {
     const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
+    const totalArcs = arcs.size();
     if (ml?.shapes) {
       // Optimized layer line rendering: use drawArcs with a boolean arc
       // presence filter so each shared topology arc strokes exactly once.
       const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
       const filter = this._combineArcFilters(flags, this._viewport.getArcFilter(arcs));
-      this._painter.drawArcs(arcs, style, filter);
+      const totalNodes = this._getArcsNodeCount(arcs, totalArcs, filter);
+      this._renderArcLayer(arcs, style, filter, totalArcs, totalNodes, canProgress);
     } else {
       // Fallback: draw all arcs
-      this._painter.drawArcs(arcs, style, this._viewport.getArcFilter(arcs));
+      const filter = this._viewport.getArcFilter(arcs);
+      const totalNodes = this._getArcsNodeCount(arcs, totalArcs, filter);
+      this._renderArcLayer(arcs, style, filter, totalArcs, totalNodes, canProgress);
     }
+  }
+
+  private _renderArcLayer(
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    style: ReturnType<typeof resolveStrokeStyle>,
+    filter: ((i: number) => boolean) | undefined,
+    totalArcs: number,
+    totalNodes: number,
+    canProgress: boolean,
+  ): void {
+    const painter = this._painter as Painter & {
+      drawArcsRange?: (
+        arcs: import('../types/mapshaper-types').ArcCollection,
+        style: ReturnType<typeof resolveStrokeStyle>,
+        start: number,
+        end: number,
+        filter?: (i: number) => boolean,
+      ) => void;
+    };
+    if (totalNodes === 0) return;
+    if (!canProgress ||
+      totalNodes < Emap._PROGRESSIVE_PATH_NODE_THRESHOLD ||
+      typeof painter.drawArcsRange !== 'function') {
+      this._painter.drawArcs(arcs, style, filter);
+      return;
+    }
+
+    this._scheduleProgressiveChunks(totalArcs, (start) => {
+      return this._getArcChunkEnd(arcs, start, totalArcs, Emap._PROGRESSIVE_PATH_NODE_BATCH, filter);
+    }, (start, end) => {
+      painter.drawArcsRange!(arcs, style, start, end, filter);
+    });
   }
 
   private _renderFillLayer(
@@ -1296,25 +1520,65 @@ export class Emap extends EventDispatcher {
     arcs: import('../types/mapshaper-types').ArcCollection,
     cacheKey: string,
     lineScale: number,
+    canProgress: boolean,
   ): void {
     const fillPaint = layer.paint as FillPaint | undefined;
     const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
     const fillOpacity = fillPaint?.['fill-opacity'];
     const viewportFilter = this._viewport.getArcFilter(arcs);
-    this._painter.drawPolygonFill(
-      ml.shapes!,
-      arcs,
-      fillColor,
-      viewportFilter,
-      fillOpacity,
-    );
     // Outline: stroke each topology arc exactly once via the same flag cache
     // the line layer uses. drawPaths(shapes,...) would re-walk every shape
     // and double-stroke shared boundaries — on big polygon datasets that's
     // the dominant cost of fill mode.
     const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
     const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
-    this._painter.drawArcs(arcs, style, this._combineArcFilters(flags, viewportFilter));
+    const drawOutline = () => {
+      const totalArcs = arcs.size();
+      const outlineFilter = this._combineArcFilters(flags, viewportFilter);
+      const totalNodes = this._getArcsNodeCount(arcs, totalArcs, outlineFilter);
+      this._renderArcLayer(arcs, style, outlineFilter, totalArcs, totalNodes, canProgress);
+    };
+    this._renderPolygonFillLayer(ml.shapes!, arcs, fillColor, viewportFilter, fillOpacity, canProgress, drawOutline);
+  }
+
+  private _renderPolygonFillLayer(
+    shapes: any[],
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    fillColor: string,
+    filter: ((i: number) => boolean) | undefined,
+    opacity: number | undefined,
+    canProgress: boolean,
+    onComplete?: () => void,
+  ): void {
+    const painter = this._painter as Painter & {
+      drawPolygonFillRange?: (
+        shapes: any[],
+        arcs: import('../types/mapshaper-types').ArcCollection,
+        fillColor: string,
+        start: number,
+        end: number,
+        filter?: (i: number) => boolean,
+        opacity?: number,
+      ) => void;
+    };
+    const totalNodes = this._getShapesNodeCount(shapes, arcs, filter);
+    if (totalNodes === 0) {
+      onComplete?.();
+      return;
+    }
+    if (!canProgress ||
+      totalNodes < Emap._PROGRESSIVE_PATH_NODE_THRESHOLD ||
+      typeof painter.drawPolygonFillRange !== 'function') {
+      this._painter.drawPolygonFill(shapes, arcs, fillColor, filter, opacity);
+      onComplete?.();
+      return;
+    }
+
+    this._scheduleProgressiveChunks(shapes.length, (start) => {
+      return this._getShapeChunkEnd(shapes, arcs, start, shapes.length, Emap._PROGRESSIVE_PATH_NODE_BATCH, filter);
+    }, (start, end) => {
+      painter.drawPolygonFillRange!(shapes, arcs, fillColor, start, end, filter, opacity);
+    }, onComplete);
   }
 
   private _combineArcFilters(
@@ -1796,8 +2060,9 @@ export class Emap extends EventDispatcher {
       cancelAnimationFrame(this._rafId);
       this._rafId = 0;
     }
+    this._cancelProgressiveRender();
     this._pendingRender = 0;
-    this._pendingAction = 'redraw';
+    this._pendingAction = null;
     this._pendingNavDelta = null;
     this._navSnapshotTransform = null;
     if (this._wheelSettleTimer !== null) {

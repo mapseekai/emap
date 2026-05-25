@@ -34,11 +34,22 @@ export interface DrawOverlayState {
 export interface CorePainter {
   drawPaths(shapes: any[], style: StrokeStyle, arcs: ArcCollection): void;
   drawArcs(arcs: ArcCollection, style: StrokeStyle, filter?: (i: number) => boolean): void;
+  drawArcsRange(arcs: ArcCollection, style: StrokeStyle, start: number, end: number, filter?: (i: number) => boolean): void;
   drawPoints(shapes: any[], style: PointStyle): void;
+  drawPointsRange(shapes: any[], style: PointStyle, start: number, end: number): void;
   drawPolygonFill(
     shapes: any[],
     arcs: ArcCollection,
     fillColor: string,
+    filter?: (i: number) => boolean,
+    opacity?: number,
+  ): void;
+  drawPolygonFillRange(
+    shapes: any[],
+    arcs: ArcCollection,
+    fillColor: string,
+    start: number,
+    end: number,
     filter?: (i: number) => boolean,
     opacity?: number,
   ): void;

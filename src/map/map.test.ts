@@ -172,6 +172,235 @@ function createBareMap(): Emap {
   return map as Emap;
 }
 
+describe('Emap render scheduling', () => {
+  it('forwards standalone nav renders instead of promoting them to redraw', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    let queuedFrame: FrameRequestCallback | null = null;
+    const requestAnimationFrameMock = vi.fn((cb: FrameRequestCallback) => {
+      queuedFrame = cb;
+      return 1;
+    });
+    const renderMock = vi.fn();
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_pendingRender', 0);
+      setPrivate(map, '_rafId', 0);
+      setPrivate(map, '_pendingAction', null);
+      setPrivate(map, '_pendingNavDelta', null);
+      setPrivate(map, 'render', renderMock);
+      globalThis.requestAnimationFrame = requestAnimationFrameMock;
+
+      callPrivate(map, '_scheduleRender', 'nav', { scale: 2, tx: 12, ty: -8 });
+      expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
+      expect(queuedFrame).not.toBeNull();
+      queuedFrame?.(16);
+
+      expect(renderMock).toHaveBeenCalledWith({
+        action: 'nav',
+        navDelta: { scale: 2, tx: 12, ty: -8 },
+      });
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('uses a longer wheel settle delay for heavy point layers', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    setPrivate(map, '_sources', new globalThis.Map([['points', {}]]));
+    setPrivate(map, '_getEffectiveLayers', () => [
+      { id: 'points', type: 'circle', source: 'points' },
+    ]);
+    setPrivate(map, '_resolveSourceLayer', () => ({
+      shapes: Array.from({ length: 200000 }, (_, i) => [i, i]),
+    }));
+
+    expect(callPrivate(map, '_getWheelSettleMs')).toBe(2000);
+  });
+
+  it('renders heavy point layers progressively across animation frames', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const ranges: Array<[number, number]> = [];
+    const frames: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_renderGeneration', 1);
+      setPrivate(map, '_progressiveRenderFrames', []);
+      setPrivate(map, '_painter', {
+        drawPoints: vi.fn(),
+        drawPointsRange: vi.fn((_shapes: unknown[], _style: unknown, start: number, end: number) => {
+          ranges.push([start, end]);
+        }),
+      });
+      globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+        frames.push(cb);
+        return frames.length;
+      });
+
+      const shapes = Array.from({ length: 400001 }, (_, i) => [i, i]);
+      callPrivate(map, '_renderPointLayer', shapes, { color: '#333', radius: 4, fill: true }, true);
+
+      expect(ranges).toEqual([[0, 200000]]);
+      expect(frames).toHaveLength(1);
+      frames.shift()?.(16);
+      expect(ranges).toEqual([[0, 200000], [200000, 400000]]);
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('renders heavy line layers progressively by arc range', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const ranges: Array<[number, number]> = [];
+    const frames: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_renderGeneration', 1);
+      setPrivate(map, '_progressiveRenderFrames', []);
+      setPrivate(map, '_viewport', { getArcFilter: () => undefined });
+      setPrivate(map, '_painter', {
+        drawArcs: vi.fn(),
+        drawArcsRange: vi.fn((_arcs: unknown, _style: unknown, start: number, end: number) => {
+          ranges.push([start, end]);
+        }),
+      });
+      globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+        frames.push(cb);
+        return frames.length;
+      });
+
+      const arcs = {
+        size: () => 4,
+        getPointCount: () => 460000,
+        getVertexData: () => ({ nn: new Int32Array([120000, 120000, 120000, 100000]) }),
+      };
+      callPrivate(map, '_renderLineLayer', { type: 'line', paint: {} }, null, arcs, 'src:default', 1, true);
+
+      expect(ranges).toEqual([[0, 2]]);
+      frames.shift()?.(16);
+      expect(ranges).toEqual([[0, 2], [2, 4]]);
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('bases progressive line chunks on visible arc nodes', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const ranges: Array<[number, number]> = [];
+    const frames: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_renderGeneration', 1);
+      setPrivate(map, '_progressiveRenderFrames', []);
+      setPrivate(map, '_viewport', { getArcFilter: () => (i: number) => i >= 2 });
+      setPrivate(map, '_painter', {
+        drawArcs: vi.fn(),
+        drawArcsRange: vi.fn((_arcs: unknown, _style: unknown, start: number, end: number) => {
+          ranges.push([start, end]);
+        }),
+      });
+      globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+        frames.push(cb);
+        return frames.length;
+      });
+
+      const arcs = {
+        size: () => 4,
+        getVertexData: () => ({ nn: new Int32Array([120000, 120000, 120000, 120000]) }),
+      };
+      callPrivate(map, '_renderLineLayer', { type: 'line', paint: {} }, null, arcs, 'src:default', 1, true);
+
+      expect(ranges).toEqual([[0, 4]]);
+      expect(frames).toHaveLength(0);
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('skips line rendering when viewport filtering leaves no visible arc nodes', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const drawArcs = vi.fn();
+    const drawArcsRange = vi.fn();
+
+    setPrivate(map, '_removed', false);
+    setPrivate(map, '_renderGeneration', 1);
+    setPrivate(map, '_progressiveRenderFrames', []);
+    setPrivate(map, '_viewport', { getArcFilter: () => () => false });
+    setPrivate(map, '_painter', { drawArcs, drawArcsRange });
+
+      const arcs = {
+        size: () => 2,
+      getVertexData: () => ({ nn: new Int32Array([120000, 120000]) }),
+    };
+    callPrivate(map, '_renderLineLayer', { type: 'line', paint: {} }, null, arcs, 'src:default', 1, true);
+
+    expect(drawArcs).not.toHaveBeenCalled();
+    expect(drawArcsRange).not.toHaveBeenCalled();
+  });
+
+  it('renders heavy fill layers progressively before drawing outlines', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const calls: string[] = [];
+    const frames: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_renderGeneration', 1);
+      setPrivate(map, '_progressiveRenderFrames', []);
+      setPrivate(map, '_viewport', { getArcFilter: () => undefined });
+      setPrivate(map, '_getLayerArcFlags', () => null);
+      setPrivate(map, '_painter', {
+        drawPolygonFill: vi.fn(),
+        drawPolygonFillRange: vi.fn((_shapes: unknown[], _arcs: unknown, _fill: string, start: number, end: number) => {
+          calls.push(`fill:${start}-${end}`);
+        }),
+        drawArcs: vi.fn(),
+        drawArcsRange: vi.fn((_arcs: unknown, _style: unknown, start: number, end: number) => {
+          calls.push(`arc:${start}-${end}`);
+        }),
+      });
+      globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+        frames.push(cb);
+        return frames.length;
+      });
+
+      const shapes = [
+        [[0]],
+        [[1]],
+        [[2]],
+        [[3]],
+      ];
+      const arcs = {
+        size: () => 4,
+        getPointCount: () => 460000,
+        getVertexData: () => ({ nn: new Int32Array([120000, 120000, 120000, 100000]) }),
+      };
+      callPrivate(map, '_renderFillLayer', { type: 'fill', paint: {} }, { shapes }, arcs, 'src:default', 1, true);
+
+      expect(calls).toEqual(['fill:0-2']);
+      frames.shift()?.(16);
+      expect(calls).toEqual(['fill:0-2', 'fill:2-4', 'arc:0-2']);
+      frames.shift()?.(32);
+      expect(calls).toEqual([
+        'fill:0-2',
+        'fill:2-4',
+        'arc:0-2',
+        'arc:2-4',
+      ]);
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+});
+
 describe('Emap layer management', () => {
   let map: Emap;
 

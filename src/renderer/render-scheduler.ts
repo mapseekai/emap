@@ -1,6 +1,5 @@
 import type { AffineDelta, RenderAction, RenderRequest } from '../map/types';
 
-export const SLOW_FRAME_MS = 100;
 export const FAST_SETTLE_FALLBACK_MS = 2000;
 
 export interface RenderSnapshot {
@@ -71,8 +70,6 @@ export class RenderScheduler {
 
   private _shouldUseFastNav(): boolean {
     if (!this._snapshot) return false;
-    if (this._lastFrameMs <= SLOW_FRAME_MS) return false;
-
     const current = this._callbacks.getSnapshot();
     if (current.canvasWidth !== this._snapshot.canvasWidth) return false;
     if (current.canvasHeight !== this._snapshot.canvasHeight) return false;
