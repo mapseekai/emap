@@ -9,3 +9,5 @@ openspec/
 .opencode/
 .omx/
 .github/
+
+.codegraph/
