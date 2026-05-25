@@ -11,7 +11,6 @@ export interface RenderSnapshot {
 export interface RenderCallbacks {
   fullRedraw: () => void;
   fastNav: (delta: AffineDelta) => void;
-  overlayOnly: () => void;
   getSnapshot: () => RenderSnapshot;
 }
 
@@ -31,15 +30,6 @@ export class RenderScheduler {
       this._fastActive = true;
       this._callbacks.fastNav(req.navDelta);
       this._markRedrawPending();
-      return;
-    }
-
-    // Overlay-only path: skip the heavy layer pass and restore the cached
-    // snapshot. The map falls back to fullRedraw internally if the snapshot
-    // is missing/stale, so this stays correct under invalidation.
-    if (action === 'overlay' && !this._fastActive) {
-      this._cancelSettle();
-      this._callbacks.overlayOnly();
       return;
     }
 

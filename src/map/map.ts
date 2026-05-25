@@ -216,14 +216,8 @@ export class Emap extends EventDispatcher {
       const blocksPan = change.current.mode === 'vertex' || change.current.mode === 'draw';
       if (blocksPan) this._dragPan?.disable(); else this._dragPan?.enable();
       this.fire('editmodechange', { mode: change.current.mode });
-      // Mode changes redraw fully (entering/leaving overlay layers need
-      // the snapshot to be refreshed).
-      this._scheduleRender('redraw');
-    } else {
-      // Pure vertex/draw state updates: only the overlay changed, so we can
-      // restore the cached layer snapshot and just repaint the overlay.
-      this._scheduleRender('overlay');
     }
+    this._scheduleRender();
   });
 
   // Worker pool / mode / threshold are read by `MapshaperOps` via
@@ -276,7 +270,6 @@ export class Emap extends EventDispatcher {
     this._scheduler = new RenderScheduler({
       fullRedraw: () => this._renderFull(),
       fastNav: (delta) => this._applyFastTransform(delta),
-      overlayOnly: () => this._renderOverlayOnly(),
       getSnapshot: () => this._captureRenderSnapshot(),
     });
 
@@ -1175,17 +1168,12 @@ export class Emap extends EventDispatcher {
   _scheduleRender(action: RenderAction = 'redraw', navDelta?: AffineDelta): void {
     if (this._removed) return;
     this._pendingRender++;
-    // Coalescing precedence: redraw > nav > overlay. A stronger pending
-    // action always wins so we never downgrade a queued redraw to overlay.
     if (action === 'redraw' || this._pendingAction === 'redraw') {
       this._pendingAction = 'redraw';
       this._pendingNavDelta = null;
-    } else if (action === 'nav' || this._pendingAction === 'nav') {
+    } else {
       this._pendingAction = 'nav';
       if (navDelta) this._pendingNavDelta = { ...navDelta };
-    } else {
-      this._pendingAction = 'overlay';
-      this._pendingNavDelta = null;
     }
     if (this._rafId === 0) {
       this._rafId = requestAnimationFrame(() => this._doRender());
@@ -1226,29 +1214,6 @@ export class Emap extends EventDispatcher {
     const pixelSize = 1 / Math.abs(transform.mx);
 
     this._renderLayers(pixelSize, lineScale);
-    // Snapshot the bare layer pass so overlay-only renders (edit hover) can
-    // restore it without re-running _renderLayers. Highlight and edit overlay
-    // are drawn AFTER the snapshot so they don't get baked in.
-    this._painter.captureLayerSnapshot?.();
-    this._renderHighlight(transform, lineScale);
-    this._editOverlay.render(
-      this._editState.mode,
-      this._editState.vertex,
-      this._editState.draw,
-    );
-  }
-
-  private _renderOverlayOnly(): void {
-    if (this._removed) return;
-    // Fall back to a full redraw when no valid layer snapshot is available
-    // (first paint, after resize, after invalidation).
-    if (!this._painter.restoreLayerSnapshot?.()) {
-      this._renderFull();
-      return;
-    }
-    const transform = this._viewport.transform;
-    this._painter.setTransform(transform);
-    const lineScale = this._viewport.getLineScale();
     this._renderHighlight(transform, lineScale);
     this._editOverlay.render(
       this._editState.mode,
@@ -1312,13 +1277,13 @@ export class Emap extends EventDispatcher {
         break;
       }
     }
-    // Edit modes route hover updates through the overlay-only render path
-    // (snapshot blit + highlight + overlay), so _renderLayers no longer runs
-    // on every pointer move. When _renderLayers does run during edit (mode
-    // change, drag mutation), progressive rendering is still risky because
-    // the next mutation can cancel pending chunks. Keep it off for those
-    // cases — heavy layers render synchronously, but only on actual data
-    // changes, not on hover.
+    // Edit modes (vertex / draw / transform) trigger a full render on every
+    // pointer move. If progressive rendering is active, each render cancels
+    // the previous render's pending rAF chunks before they fire, so only the
+    // first synchronous chunk of the heavy layer is ever drawn — making the
+    // rest of the data flicker / disappear during edit hover. Disable
+    // progressive chunking while editing so the heavy layer always finishes
+    // within a single frame.
     const isEditing = this._editState.mode !== 'none';
 
     for (let i = 0; i < effectiveLayers.length; i++) {

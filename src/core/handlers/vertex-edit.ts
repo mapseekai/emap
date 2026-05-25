@@ -298,11 +298,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       this._hoverType = null;
       this._hoverInsertionId = -1;
       this._neighborShapes = [];
-      // clearEditVertexState fires the store callback which schedules an
-      // overlay-only render; the extra render() here would have coalesced
-      // it to a full redraw, defeating the snapshot fast-path on every
-      // mouse move.
       this._map.clearEditVertexState();
+      this._map.render();
       return;
     }
 
@@ -315,6 +312,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       this._hoverInsertionId = -1;
       this._neighborShapes = [];
       this._map.clearEditVertexState();
+      this._map.render();
       return;
     }
 
@@ -352,10 +350,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     }
     // Find neighbor shapes sharing the hovered arc (for shared-edge highlight)
     this._findNeighborShapes(arcs);
-    // _updateEditState calls setEditVertexState which fires the store
-    // callback and schedules an overlay-only render. No explicit render()
-    // needed; adding one would force a full redraw on every mouse move.
     this._updateEditState();
+    this._map.render();
   }
 
   /**
@@ -589,14 +585,9 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     // Update hover coords so highlight follows the pointer
     this._hoverVertexCoords = [dataCoords[0], dataCoords[1]];
 
-    // Update edit state. setEditVertexState schedules an overlay-only
-    // render: the layer snapshot is reused (briefly showing the pre-drag
-    // arc positions) while the vertex-dot + polygon-fill overlay tracks
-    // the live mutated arcs. Mouseup triggers a full redraw to catch the
-    // layer pixels up to the final position. This keeps drag smooth on
-    // heavy datasets where re-rendering the full layer per frame would
-    // jam the main thread.
+    // Update edit state and repaint — vertex dots + data layer on same canvas
     this._updateEditState();
+    this._map.render();
   }
 
   private _resolveDragCoords(px: number, py: number): [number, number] {
