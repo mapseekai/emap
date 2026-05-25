@@ -17,7 +17,14 @@ export type SnapKind = DrawOverlaySnapKind;
 
 export type ExpressionEvaluationPolicy = 'trusted' | 'disabled';
 
-export type RenderAction = 'redraw' | 'nav';
+export type RenderAction = 'redraw' | 'dirty' | 'nav' | 'overlay';
+
+export interface PixelRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export interface AffineDelta {
   tx: number;
@@ -29,6 +36,7 @@ export interface AffineDelta {
 export interface RenderRequest {
   action?: RenderAction;
   navDelta?: AffineDelta;
+  dirtyRect?: PixelRect;
 }
 
 export interface MapOptions {

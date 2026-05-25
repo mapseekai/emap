@@ -26,6 +26,8 @@ interface HoveredFeature {
   allLayers: Array<{ shapes?: EditVertexShape[] }>;
 }
 
+type ShapeBounds = [number, number, number, number];
+
 /** Pixel threshold for vertex hover detection */
 const VERTEX_HIT_THRESHOLD = 10;
 
@@ -62,6 +64,9 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
   private _neighborShapes: EditVertexShape[] = [];
   /** Coordinate of the dragged node before mouse-down, captured for VertexMoveCommand. */
   private _dragFromCoords: [number, number] | null = null;
+  /** Last resolved drag coordinate; reused on mouseup to avoid a second snap scan. */
+  private _lastDragCoords: [number, number] | null = null;
+  private _dragSnapShapeBounds = new WeakMap<EditVertexShape, ShapeBounds>();
   private _snapThreshold: number;
   private _snapToVertex: boolean;
   private _snapToEdge: boolean;
@@ -102,6 +107,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     this._hoverInsertionId = -1;
     this._neighborShapes = [];
     this._dragging = false;
+    this._lastDragCoords = null;
+    this._dragSnapShapeBounds = new WeakMap<EditVertexShape, ShapeBounds>();
     this._map.setEditMode('none');
     this._map.clearEditVertexState();
     this._map.off('move', this._onMapMoveBound);
@@ -197,6 +204,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     // updateVertexData() internally, which rebuilds all arc bounds via
     // initBounds(). No explicit updateArcBounds needed.
     getDefaultMapshaperAdapter().deleteVertex(arcs as unknown as ArcCollection, vtxId);
+    this._dragSnapShapeBounds = new WeakMap<EditVertexShape, ShapeBounds>();
 
     // Re-initialize the LOD copy in DisplayArcs since vertex layout changed.
     this._refreshSourceDisplayArcs(sourceId);
@@ -234,6 +242,15 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
    */
   private _refreshSourceDisplayArcs(sourceId: string): void {
     this._map.getSource(sourceId)?.refreshDisplayArcs();
+  }
+
+  /**
+   * Mark DisplayArcs stale after high-frequency in-place edits. This keeps the
+   * mouseup path cheap; the renderer rebuilds the filtered LOD copy only when
+   * it actually needs it.
+   */
+  private _markSourceDisplayArcsDirty(sourceId: string): void {
+    (this._map.getSource(sourceId) as TopologySource | undefined)?.markDisplayArcsDirty?.();
   }
 
   /**
@@ -554,6 +571,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     this._dragFromCoords = this._hoverVertexCoords
       ? [this._hoverVertexCoords[0], this._hoverVertexCoords[1]]
       : null;
+    this._lastDragCoords = null;
     this._dragging = true;
   }
 
@@ -573,6 +591,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     if (!this._hoveredFeature || this._hoverVertexIds.length === 0) return;
 
     const dataCoords = this._resolveDragCoords(px, py);
+    this._lastDragCoords = [dataCoords[0], dataCoords[1]];
     const arcs = this._hoveredFeature.arcs;
 
     // Topology-aware: move ALL shared vertices to the new position
@@ -585,9 +604,9 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     // Update hover coords so highlight follows the pointer
     this._hoverVertexCoords = [dataCoords[0], dataCoords[1]];
 
-    // Update edit state and repaint — vertex dots + data layer on same canvas
+    // Update edit state only. The edit-state store schedules an overlay render;
+    // forcing map.render() here promotes every drag frame to a full layer redraw.
     this._updateEditState();
-    this._map.render();
   }
 
   private _resolveDragCoords(px: number, py: number): [number, number] {
@@ -604,19 +623,30 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
 
     const adapter = getDefaultMapshaperAdapter();
     const dataPoint = this._map.unproject(px, py);
+    const t = this._snapThreshold;
+    const p0 = this._map.unproject(px - t, py - t);
+    const p1 = this._map.unproject(px + t, py + t);
+    const minX = Math.min(p0[0], p1[0]);
+    const maxX = Math.max(p0[0], p1[0]);
+    const minY = Math.min(p0[1], p1[1]);
+    const maxY = Math.max(p0[1], p1[1]);
     const movingVertices = new Set(this._hoverVertexIds);
     let bestDist = this._snapThreshold;
     let bestCoord: [number, number] | null = null;
     const seenVertices = new Set<number>();
+    const partBox: number[] = [];
 
     const considerVertex = (vertexId: number, xx: Float64Array, yy: Float64Array) => {
       if (!this._snapToVertex || movingVertices.has(vertexId) || seenVertices.has(vertexId)) return;
       seenVertices.add(vertexId);
-      const projected = this._map.project(xx[vertexId], yy[vertexId]);
+      const x = xx[vertexId];
+      const y = yy[vertexId];
+      if (x < minX || x > maxX || y < minY || y > maxY) return;
+      const projected = this._map.project(x, y);
       const dist = Math.hypot(projected[0] - px, projected[1] - py);
       if (dist < bestDist) {
         bestDist = dist;
-        bestCoord = [xx[vertexId], yy[vertexId]];
+        bestCoord = [x, y];
       }
     };
 
@@ -629,13 +659,21 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
         if (layerId === this._hoveredFeature.layer && shapeIndex === this._hoveredFeature.id) continue;
         const shape = layer.shapes[shapeIndex];
         if (!shape) continue;
+        if (!this._shapeIntersectsBounds(shape, arcs, partBox, minX, minY, maxX, maxY)) continue;
 
         adapter.forEachSegmentInShape(shape, arcs as unknown as ArcCollection, (i, j, xx, yy) => {
           considerVertex(i, xx, yy);
           considerVertex(j, xx, yy);
 
           if (!this._snapToEdge) return;
-          const closest = adapter.findClosestPointOnSeg(dataPoint[0], dataPoint[1], xx[i], yy[i], xx[j], yy[j], 0);
+          const ax = xx[i], ay = yy[i];
+          const bx = xx[j], by = yy[j];
+          const segMinX = ax < bx ? ax : bx;
+          const segMaxX = ax < bx ? bx : ax;
+          const segMinY = ay < by ? ay : by;
+          const segMaxY = ay < by ? by : ay;
+          if (segMaxX < minX || segMinX > maxX || segMaxY < minY || segMinY > maxY) return;
+          const closest = adapter.findClosestPointOnSeg(dataPoint[0], dataPoint[1], ax, ay, bx, by, 0);
           const projected = this._map.project(closest[0], closest[1]);
           const dist = Math.hypot(projected[0] - px, projected[1] - py);
           if (dist < bestDist) {
@@ -649,11 +687,48 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     return bestCoord;
   }
 
+  private _shapeIntersectsBounds(
+    shape: EditVertexShape,
+    arcs: EditableArcs,
+    box: number[],
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+  ): boolean {
+    const getSimpleShapeBbox = (arcs as any).getSimpleShapeBbox;
+    if (typeof getSimpleShapeBbox !== 'function') return true;
+
+    let bounds = this._dragSnapShapeBounds.get(shape);
+    if (!bounds) {
+      let hasPart = false;
+      let shapeMinX = Infinity;
+      let shapeMinY = Infinity;
+      let shapeMaxX = -Infinity;
+      let shapeMaxY = -Infinity;
+
+      for (const part of shape) {
+        getSimpleShapeBbox.call(arcs, part, box);
+        hasPart = true;
+        if (box[0] < shapeMinX) shapeMinX = box[0];
+        if (box[1] < shapeMinY) shapeMinY = box[1];
+        if (box[2] > shapeMaxX) shapeMaxX = box[2];
+        if (box[3] > shapeMaxY) shapeMaxY = box[3];
+      }
+
+      if (!hasPart) return false;
+      bounds = [shapeMinX, shapeMinY, shapeMaxX, shapeMaxY];
+      this._dragSnapShapeBounds.set(shape, bounds);
+    }
+
+    return !(bounds[2] < minX || bounds[0] > maxX || bounds[3] < minY || bounds[1] > maxY);
+  }
+
   private _finishDrag(px: number, py: number): void {
     if (!this._dragging || !this._hoveredFeature) return;
     this._dragging = false;
 
-    const dataCoords = this._resolveDragCoords(px, py);
+    const dataCoords = this._lastDragCoords ?? this._resolveDragCoords(px, py);
     const sourceId = this._hoveredFeature.source;
     if (this._hoverVertexIds.length > 0) {
       getDefaultMapshaperAdapter().snapVertices(
@@ -664,18 +739,9 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       this._hoverVertexCoords = [dataCoords[0], dataCoords[1]];
     }
 
-    // mapshaper's snapVerticesToPoint already updates per-arc bounds during the
-    // drag (see paths/mapshaper-vertex-utils.mjs). transformPoints with a no-op
-    // forces a full bounds rebuild to recover from any direct vertex mutations
-    // that bypassed the canonical helper.
     const arcs = this._hoveredFeature.arcs;
-    if (arcs.transformPoints) {
-      arcs.transformPoints(function () { });
-    }
 
-    // If the source has a low-detail LOD copy, regenerate it so the filtered
-    // arcs reflect the new vertex positions.
-    this._refreshSourceDisplayArcs(sourceId);
+    this._markSourceDisplayArcsDirty(sourceId);
     // The live drag in `_handleDrag` has been mutating arcs in place
     // every frame without bumping editVersion; the spatial-index cache
     // is therefore stale against the new bboxes. Bump now so the next
@@ -684,6 +750,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     // is invisible to `queryFeatures` until the next shape-count or
     // arc-count change.
     this._bumpSourceEditVersion(sourceId);
+    this._dragSnapShapeBounds = new WeakMap<EditVertexShape, ShapeBounds>();
 
     // Push an undoable VertexMoveCommand if the drag actually moved the node.
     // (A click-without-drag returns the same coord and is not worth recording.)
@@ -702,6 +769,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       }
     }
     this._dragFromCoords = null;
+    this._lastDragCoords = null;
 
     // Fire vertex_moved event with topology info
     this._map.fire('vertex_moved', {

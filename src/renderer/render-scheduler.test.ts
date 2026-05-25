@@ -24,7 +24,9 @@ describe('RenderScheduler', () => {
     const fastNav = vi.fn();
     const scheduler = new RenderScheduler({
       fullRedraw,
+      dirtyRedraw: vi.fn(),
       fastNav,
+      overlayRedraw: vi.fn(),
       getSnapshot: () => snapshot(),
     });
 
@@ -40,7 +42,9 @@ describe('RenderScheduler', () => {
     const fastNav = vi.fn();
     const scheduler = new RenderScheduler({
       fullRedraw,
+      dirtyRedraw: vi.fn(),
       fastNav,
+      overlayRedraw: vi.fn(),
       getSnapshot: () => snapshot({ canvasWidth: 900 }),
     });
 
@@ -56,7 +60,9 @@ describe('RenderScheduler', () => {
     const fastNav = vi.fn();
     const scheduler = new RenderScheduler({
       fullRedraw,
+      dirtyRedraw: vi.fn(),
       fastNav,
+      overlayRedraw: vi.fn(),
       getSnapshot: () => snapshot(),
     });
 
@@ -73,7 +79,9 @@ describe('RenderScheduler', () => {
     const fastNav = vi.fn();
     const scheduler = new RenderScheduler({
       fullRedraw,
+      dirtyRedraw: vi.fn(),
       fastNav,
+      overlayRedraw: vi.fn(),
       getSnapshot: () => snapshot(),
     });
 
@@ -90,7 +98,9 @@ describe('RenderScheduler', () => {
     const fullRedraw = vi.fn();
     const scheduler = new RenderScheduler({
       fullRedraw,
+      dirtyRedraw: vi.fn(),
       fastNav: vi.fn(),
+      overlayRedraw: vi.fn(),
       getSnapshot: () => snapshot(),
     });
 
@@ -101,5 +111,40 @@ describe('RenderScheduler', () => {
     vi.advanceTimersByTime(FAST_SETTLE_FALLBACK_MS);
 
     expect(fullRedraw).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders overlay-only frames without promoting to full redraw', () => {
+    const fullRedraw = vi.fn();
+    const overlayRedraw = vi.fn();
+    const scheduler = new RenderScheduler({
+      fullRedraw,
+      dirtyRedraw: vi.fn(),
+      fastNav: vi.fn(),
+      overlayRedraw,
+      getSnapshot: () => snapshot(),
+    });
+
+    scheduler.schedule({ action: 'overlay' });
+
+    expect(overlayRedraw).toHaveBeenCalledTimes(1);
+    expect(fullRedraw).not.toHaveBeenCalled();
+  });
+
+  it('renders dirty-rect frames without promoting to full redraw', () => {
+    const fullRedraw = vi.fn();
+    const dirtyRedraw = vi.fn();
+    const dirtyRect = { x: 1, y: 2, width: 3, height: 4 };
+    const scheduler = new RenderScheduler({
+      fullRedraw,
+      dirtyRedraw,
+      fastNav: vi.fn(),
+      overlayRedraw: vi.fn(),
+      getSnapshot: () => snapshot(),
+    });
+
+    scheduler.schedule({ action: 'dirty', dirtyRect });
+
+    expect(dirtyRedraw).toHaveBeenCalledWith(dirtyRect);
+    expect(fullRedraw).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 import { Painter, DrawOverlayState } from './painter';
 import { AffineTransform } from '../geo/transform';
 import type { ArcCollection, StrokeStyle, PointStyle, VertexDotStyle } from '../types/mapshaper-types';
+import type { PixelRect } from '../map/types';
 
 export class CanvasPainter implements Painter {
   private _ctx: CanvasRenderingContext2D;
@@ -19,6 +20,42 @@ export class CanvasPainter implements Painter {
 
   setPixelRatio(ratio: number): void {
     this._pixelRatio = ratio;
+  }
+
+  saveRegion(rect: PixelRect): ImageData | null {
+    const r = this._clampRect(rect);
+    if (!r) return null;
+    return this._ctx.getImageData(r.x, r.y, r.width, r.height);
+  }
+
+  restoreRegion(rect: PixelRect, image: ImageData): void {
+    const r = this._clampRect(rect);
+    if (!r) return;
+    this._ctx.putImageData(image, r.x, r.y);
+  }
+
+  withClipRect(rect: PixelRect, draw: () => void): void {
+    const r = this._clampRect(rect);
+    if (!r) return;
+    const ctx = this._ctx;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(r.x, r.y, r.width, r.height);
+    ctx.clip();
+    try {
+      draw();
+    } finally {
+      ctx.restore();
+    }
+  }
+
+  private _clampRect(rect: PixelRect): PixelRect | null {
+    const x0 = Math.max(0, Math.floor(rect.x));
+    const y0 = Math.max(0, Math.floor(rect.y));
+    const x1 = Math.min(this._ctx.canvas.width, Math.ceil(rect.x + rect.width));
+    const y1 = Math.min(this._ctx.canvas.height, Math.ceil(rect.y + rect.height));
+    if (x1 <= x0 || y1 <= y0) return null;
+    return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
   }
 
   drawPaths(shapes: any[], style: StrokeStyle, arcs: ArcCollection): void {

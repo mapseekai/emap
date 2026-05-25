@@ -22,6 +22,27 @@ Core capabilities:
 - Selection, feature events, feature accessors, highlighting, and validators.
 - MapLibre-style camera methods and layer specifications.
 
+## Hard Rules — Code Search (MANDATORY)
+
+**Code search MUST go through GitNexus or CodeGraph first. `grep` / `find` / generic file-walking is a fallback, not a default.** This applies to every read-only investigation: locating a symbol, tracing callers/callees, finding usages, surveying an area, mapping execution flows, assessing impact.
+
+Mandatory order:
+
+1. **Structural lookups first** — use the right tool for the question:
+   - "Where is X defined?" / "Find symbol X" → `codegraph_search` or `gitnexus_query`
+   - "What calls Y?" → `codegraph_callers` or `gitnexus_context`
+   - "What does Y call?" → `codegraph_callees`
+   - "What breaks if I change Z?" → `codegraph_impact` or `gitnexus_impact`
+   - "Show me Y's signature / source" → `codegraph_node`
+   - "Focused context for an area" → `codegraph_context` or `gitnexus_context`
+   - "Several related symbols at once" → `codegraph_explore`
+   - "How does X reach Y? / trace the flow" → `codegraph_trace`
+2. **Trust the result.** Do NOT re-verify a hit with `grep` — the index is from a full AST parse and is more accurate than text matching. Repeated verification wastes context.
+3. **Fall back to `grep` ONLY when** GitNexus/CodeGraph cannot answer the question — e.g., literal string contents (log messages, comment text, JSON values), or symbols that legitimately don't exist in the graph yet (uncommitted code in untracked files).
+4. **Document the fallback.** If you use `grep`, briefly state why the graph tools didn't suffice (e.g., "searching log message text, not a symbol").
+
+Violations of this rule waste context and produce inferior answers. If GitNexus or CodeGraph reports the index is stale, run `npx gitnexus analyze` (and/or `codegraph init -i`) FIRST, then continue with the graph tools — do not switch to grep as a shortcut.
+
 ## Repository Structure
 
 ```text
@@ -275,3 +296,49 @@ members public only for tests.
 - Worker offloading requires the host app to serve `emap-worker.js` and
   `mapshaper-vendor.js`.
 - Mapshaper internals must remain isolated behind `MapshaperAdapter`.
+
+<!-- gitnexus:start -->
+# GitNexus — Code Intelligence
+
+This project is indexed by GitNexus as **emap** (5161 symbols, 15764 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+
+> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+
+## Always Do
+
+- **MUST search via GitNexus / CodeGraph FIRST.** See the "Hard Rules — Code Search" section at the top of this file. `grep` is a fallback only.
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+
+## Never Do
+
+- NEVER reach for `grep` / `find` / file-walking for structural code questions (definitions, callers, callees, references). Use GitNexus / CodeGraph first. `grep` is reserved for literal text searches the graph cannot answer.
+- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
+- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+
+## Resources
+
+| Resource | Use for |
+|----------|---------|
+| `gitnexus://repo/emap/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/emap/clusters` | All functional areas |
+| `gitnexus://repo/emap/processes` | All execution flows |
+| `gitnexus://repo/emap/process/{name}` | Step-by-step execution trace |
+
+## CLI
+
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+
+<!-- gitnexus:end -->

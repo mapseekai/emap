@@ -10,7 +10,9 @@ export interface RenderSnapshot {
 
 export interface RenderCallbacks {
   fullRedraw: () => void;
+  dirtyRedraw: (rect: import('../map/types').PixelRect) => void;
   fastNav: (delta: AffineDelta) => void;
+  overlayRedraw: () => void;
   getSnapshot: () => RenderSnapshot;
 }
 
@@ -30,6 +32,16 @@ export class RenderScheduler {
       this._fastActive = true;
       this._callbacks.fastNav(req.navDelta);
       this._markRedrawPending();
+      return;
+    }
+
+    if (action === 'dirty' && req.dirtyRect && !this._fastActive) {
+      this._callbacks.dirtyRedraw(req.dirtyRect);
+      return;
+    }
+
+    if (action === 'overlay' && !this._fastActive) {
+      this._callbacks.overlayRedraw();
       return;
     }
 

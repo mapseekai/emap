@@ -206,6 +206,84 @@ describe('Emap render scheduling', () => {
     }
   });
 
+  it('forwards standalone overlay renders without promoting them to redraw', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    let queuedFrame: FrameRequestCallback | null = null;
+    const requestAnimationFrameMock = vi.fn((cb: FrameRequestCallback) => {
+      queuedFrame = cb;
+      return 1;
+    });
+    const renderMock = vi.fn();
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_pendingRender', 0);
+      setPrivate(map, '_rafId', 0);
+      setPrivate(map, '_pendingAction', null);
+      setPrivate(map, '_pendingNavDelta', null);
+      setPrivate(map, 'render', renderMock);
+      globalThis.requestAnimationFrame = requestAnimationFrameMock;
+
+      callPrivate(map, '_scheduleRender', 'overlay');
+      expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
+      expect(queuedFrame).not.toBeNull();
+      queuedFrame?.(16);
+
+      expect(renderMock).toHaveBeenCalledWith({ action: 'overlay' });
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('keeps redraw priority over pending overlay renders', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    let queuedFrame: FrameRequestCallback | null = null;
+    const requestAnimationFrameMock = vi.fn((cb: FrameRequestCallback) => {
+      queuedFrame = cb;
+      return 1;
+    });
+    const renderMock = vi.fn();
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_pendingRender', 0);
+      setPrivate(map, '_rafId', 0);
+      setPrivate(map, '_pendingAction', null);
+      setPrivate(map, '_pendingNavDelta', null);
+      setPrivate(map, 'render', renderMock);
+      globalThis.requestAnimationFrame = requestAnimationFrameMock;
+
+      callPrivate(map, '_scheduleRender', 'overlay');
+      callPrivate(map, '_scheduleRender', 'redraw');
+      queuedFrame?.(16);
+
+      expect(renderMock).toHaveBeenCalledWith({ action: 'redraw' });
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('schedules overlay-only renders for highlight changes', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const scheduleRender = vi.fn();
+    setPrivate(map, '_highlightManager', {
+      setHighlightedFeatures: vi.fn(),
+      clearHighlightedFeatures: vi.fn(() => true),
+      setHighlightStyle: vi.fn(() => true),
+    });
+    setPrivate(map, '_scheduleRender', scheduleRender);
+
+    map.setHighlightedFeatures([{ source: 's', layer: 'l', id: 1 }]);
+    map.clearHighlightedFeatures();
+    map.setHighlightStyle({ color: '#f00' });
+
+    expect(scheduleRender).toHaveBeenNthCalledWith(1, 'overlay');
+    expect(scheduleRender).toHaveBeenNthCalledWith(2, 'overlay');
+    expect(scheduleRender).toHaveBeenNthCalledWith(3, 'overlay');
+  });
+
   it('uses a longer wheel settle delay for heavy point layers', () => {
     const map = Object.create(Emap.prototype) as Emap;
     setPrivate(map, '_sources', new globalThis.Map([['points', {}]]));
@@ -962,6 +1040,33 @@ describe('Emap deleteSelected', () => {
     map.undo();
     expect(layer.shapes).toEqual([['s0'], ['s1'], ['s2'], ['s3']]);
     expect(records).toEqual([{ name: 'a' }, { name: 'b' }, { name: 'c' }, { name: 'd' }]);
+  });
+
+  it('schedules a dirty-rect redraw when deleted geometry has screen bounds', () => {
+    const scheduleRender = vi.fn();
+    setPrivate(map, '_scheduleRender', scheduleRender);
+    setPrivate(map, 'project', (x: number, y: number) => [x, y]);
+    records = [{ name: 'a' }, { name: 'b' }];
+    layer = {
+      geometry_type: 'point',
+      shapes: [[10, 20], [30, 40]],
+      data: { getRecords: () => records },
+    } as any;
+    (map as any)._sources.set('src1', {
+      id: 'src1',
+      type: 'topology',
+      getLayers: () => [layer],
+      getArcs: () => undefined,
+    });
+
+    selectIds([1]);
+    expect(map.deleteSelected()).toBe(true);
+
+    expect(scheduleRender).toHaveBeenLastCalledWith(
+      'dirty',
+      undefined,
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+    );
   });
 });
 
