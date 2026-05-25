@@ -229,6 +229,7 @@ describe('Emap render scheduling', () => {
       setPrivate(map, '_removed', false);
       setPrivate(map, '_renderGeneration', 1);
       setPrivate(map, '_progressiveRenderFrames', []);
+      setPrivate(map, '_repaintOverlays', () => {});
       setPrivate(map, '_painter', {
         drawPoints: vi.fn(),
         drawPointsRange: vi.fn((_shapes: unknown[], _style: unknown, start: number, end: number) => {
@@ -262,6 +263,7 @@ describe('Emap render scheduling', () => {
       setPrivate(map, '_removed', false);
       setPrivate(map, '_renderGeneration', 1);
       setPrivate(map, '_progressiveRenderFrames', []);
+      setPrivate(map, '_repaintOverlays', () => {});
       setPrivate(map, '_viewport', { getArcFilter: () => undefined });
       setPrivate(map, '_painter', {
         drawArcs: vi.fn(),
@@ -299,6 +301,7 @@ describe('Emap render scheduling', () => {
       setPrivate(map, '_removed', false);
       setPrivate(map, '_renderGeneration', 1);
       setPrivate(map, '_progressiveRenderFrames', []);
+      setPrivate(map, '_repaintOverlays', () => {});
       setPrivate(map, '_viewport', { getArcFilter: () => (i: number) => i >= 2 });
       setPrivate(map, '_painter', {
         drawArcs: vi.fn(),
@@ -355,6 +358,7 @@ describe('Emap render scheduling', () => {
       setPrivate(map, '_removed', false);
       setPrivate(map, '_renderGeneration', 1);
       setPrivate(map, '_progressiveRenderFrames', []);
+      setPrivate(map, '_repaintOverlays', () => {});
       setPrivate(map, '_viewport', { getArcFilter: () => undefined });
       setPrivate(map, '_getLayerArcFlags', () => null);
       setPrivate(map, '_painter', {
@@ -397,6 +401,41 @@ describe('Emap render scheduling', () => {
         'fill:2-4',
         'arc:2-4',
       ]);
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('repaints highlight and edit overlays after each progressive chunk', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const frames: FrameRequestCallback[] = [];
+    const repaintCalls: number[] = [];
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_renderGeneration', 1);
+      setPrivate(map, '_progressiveRenderFrames', []);
+      setPrivate(map, '_painter', {
+        drawPoints: vi.fn(),
+        drawPointsRange: vi.fn(),
+      });
+      setPrivate(map, '_repaintOverlays', () => {
+        repaintCalls.push(repaintCalls.length + 1);
+      });
+      globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+        frames.push(cb);
+        return frames.length;
+      });
+
+      const shapes = Array.from({ length: 400001 }, (_, i) => [i, i]);
+      callPrivate(map, '_renderPointLayer', shapes, { color: '#333', radius: 4, fill: true }, true);
+
+      // Initial synchronous chunk does NOT repaint (caller's _renderImpl will).
+      expect(repaintCalls).toHaveLength(0);
+      frames.shift()?.(16);
+      // Subsequent chunk must repaint overlays so chunk pixels don't cover them.
+      expect(repaintCalls).toHaveLength(1);
     } finally {
       globalThis.requestAnimationFrame = originalRequestAnimationFrame;
     }

@@ -1347,20 +1347,37 @@ export class Emap extends EventDispatcher {
   ): void {
     const generation = this._renderGeneration;
     let start = 0;
-    const drawNext = () => {
+    const drawNext = (isInitial: boolean) => {
       if (this._removed || generation !== this._renderGeneration) return;
       const end = Math.max(start + 1, Math.min(getNextEnd(start), total));
       drawRange(start, end);
+      // _renderImpl draws highlights and edit overlay AFTER _renderLayers.
+      // Subsequent rAF chunks paint directly onto the canvas without re-
+      // rendering those overlays, so chunk pixels would overwrite selection
+      // highlights and vertex/draw markers. Repaint them after each chunk
+      // (skip the initial synchronous chunk; _renderImpl handles that frame).
+      if (!isInitial) this._repaintOverlays();
       start = end;
       if (start < total) {
-        const frame = requestAnimationFrame(drawNext);
+        const frame = requestAnimationFrame(() => drawNext(false));
         this._progressiveRenderFrames.push(frame);
       } else {
         onComplete?.();
       }
     };
 
-    drawNext();
+    drawNext(true);
+  }
+
+  private _repaintOverlays(): void {
+    const transform = this._viewport.transform;
+    const lineScale = this._viewport.getLineScale();
+    this._renderHighlight(transform, lineScale);
+    this._editOverlay.render(
+      this._editState.mode,
+      this._editState.vertex,
+      this._editState.draw,
+    );
   }
 
   private _getArcNodeCount(
