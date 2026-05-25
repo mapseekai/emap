@@ -1277,6 +1277,14 @@ export class Emap extends EventDispatcher {
         break;
       }
     }
+    // Edit modes (vertex / draw / transform) trigger a full render on every
+    // pointer move. If progressive rendering is active, each render cancels
+    // the previous render's pending rAF chunks before they fire, so only the
+    // first synchronous chunk of the heavy layer is ever drawn — making the
+    // rest of the data flicker / disappear during edit hover. Disable
+    // progressive chunking while editing so the heavy layer always finishes
+    // within a single frame.
+    const isEditing = this._editState.mode !== 'none';
 
     for (let i = 0; i < effectiveLayers.length; i++) {
       const layer = effectiveLayers[i];
@@ -1309,7 +1317,7 @@ export class Emap extends EventDispatcher {
       // beneath an overlay must render synchronously — promote them in the
       // layer stack or use a dedicated overlay canvas if responsiveness is
       // required.
-      const canProgress = i === lastVisibleLayerIndex;
+      const canProgress = !isEditing && i === lastVisibleLayerIndex;
       if (layer.type === 'line' && arcs) {
         this._renderLineLayer(layer, ml, arcs, cacheKey, lineScale, canProgress);
       } else if (layer.type === 'fill' && arcs && ml?.shapes) {
