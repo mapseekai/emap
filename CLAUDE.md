@@ -1,277 +1,126 @@
-# CLAUDE.md - AI Assistant Guide for `emap`
+# CLAUDE.md — Rules for AI agents working in `emap`
 
-This file provides architecture and maintenance context for AI assistants
-working in this repository.
+`emap` is a browser-only TypeScript topology-oriented map rendering and editing
+engine built on `mapshaper` data structures and Canvas.
 
-## Project Overview
+For repo layout, architectural patterns, code conventions, and where each kind
+of change goes, read [README.md — Architecture](README.md#architecture).
 
-`emap` is a topology-oriented geographic map rendering and editing engine built
-around Mapshaper data structures and HTML5 Canvas. It is a browser-only,
-framework-agnostic TypeScript library with no backend server requirement.
+---
 
-Core capabilities:
+## Hard Rules — Code Search (MANDATORY)
 
-- Topology-based rendering with shared-arc reuse and LOD.
-- GeoJSON, TopoJSON, ZIP Shapefile, and Mapshaper snapshot loading.
-- Interactive handlers for pan, zoom, click selection, box/lasso selection,
-  vertex editing, feature drawing, and feature transform.
-- 30+ data ops under `map.ops.*`.
-- Off-thread execution through `MapshaperWorkerPool`.
-- Undo/redo with command coalescing, dataset-replace barriers, transactions,
-  and structured `OpResult` errors.
-- Selection, feature events, feature accessors, highlighting, and validators.
-- MapLibre-style camera methods and layer specifications.
+**Structural code search MUST go through GitNexus or CodeGraph first. `grep` /
+`find` is a fallback, not a default.**
 
-## Repository Structure
-
-```text
-emap/
-├── src/
-│   ├── index.ts                 # Public entry point, explicit named exports
-│   ├── map/                     # Emap orchestrator, ops, selection, history
-│   │   ├── map.ts               # Main Emap class
-│   │   ├── mapshaper-ops.ts     # map.ops facade
-│   │   ├── ops/                 # One file per data op
-│   │   ├── op-result.ts         # OpResult and OpError helpers
-│   │   ├── selection.ts         # Selection model
-│   │   ├── feature-query.ts     # Hit testing and Flatbush indexes
-│   │   ├── feature-accessor.ts  # Read-side feature lookup API
-│   │   ├── highlight-manager.ts # Highlight state and rendering
-│   │   ├── layer.ts             # LayerSpecification and paint resolution
-│   │   ├── layer-registry.ts    # Layer resolution surface
-│   │   ├── edit-sessions.ts     # Translate/affine edit sessions
-│   │   ├── edit-state-store.ts  # Edit mode state
-│   │   ├── attribute-ops.ts     # Attribute and field commands
-│   │   ├── worker-routing.ts    # Worker decision tree
-│   │   └── types.ts             # Public map option and op option types
-│   ├── adapter/
-│   │   └── mapshaper-adapter.ts # Sole runtime bridge to mapshaper internals
-│   ├── core/
-│   │   ├── events.ts            # EventDispatcher
-│   │   ├── event-map.ts         # Typed Emap events
-│   │   ├── handler.ts           # Handler contract
-│   │   ├── handler-manager.ts   # Pointer arbitration and cursor resolution
-│   │   ├── handlers/            # Built-in interaction handlers
-│   │   ├── feature-event-dispatcher.ts
-│   │   ├── pointer-event-dispatcher.ts
-│   │   ├── mapshaper-worker-pool.ts
-│   │   └── tween.ts
-│   ├── edit/
-│   │   ├── edit-history.ts
-│   │   ├── edit-command.ts
-│   │   ├── transaction.ts
-│   │   └── commands/
-│   ├── source/
-│   │   ├── topology-source.ts
-│   │   ├── display-arcs.ts
-│   │   ├── source.ts
-│   │   └── layer-utils.ts
-│   ├── geo/
-│   │   ├── viewport.ts
-│   │   ├── camera.ts
-│   │   ├── projection.ts
-│   │   ├── crs-resolver.ts
-│   │   ├── bounds.ts
-│   │   └── transform.ts
-│   ├── renderer/
-│   │   ├── painter.ts
-│   │   ├── canvas-painter.ts
-│   │   └── edit-overlay-renderer.ts
-│   ├── ui/
-│   │   ├── control.ts
-│   │   ├── controls.css
-│   │   └── *-control.ts
-│   ├── validation/
-│   ├── worker/
-│   ├── vendor/
-│   ├── types/
-│   └── shim.ts
-├── test/examples/               # Manual HTML examples
-├── docs/                        # Supporting notes and backlog
-├── dist/                        # Build outputs, gitignored
-├── README.md                    # User-facing quick start
-├── FEATURES.md                  # Capability matrix
-├── AGENTS.md                    # Short agent rules
-├── SECURITY.md
-├── CHANGELOG.md
-├── package.json
-└── rollup.config.mjs
-```
-
-## Development Commands
-
-Use `cmd /c npm ...` on this Windows workspace to avoid PowerShell shim issues.
-
-```bash
-cmd /c npm install
-cmd /c npm run dev
-cmd /c npm run dev-build
-cmd /c npm run typecheck
-cmd /c npm run test:run
-cmd /c npm run build
-```
-
-Manual testing: build first, then open `test/examples/*.html` directly in a
-browser.
-
-## Key Architectural Patterns
-
-### MapshaperAdapter
-
-`src/adapter/mapshaper-adapter.ts` is the only runtime bridge to
-`mapshaper.internal.*`. Ops, commands, and sources should go through
-`getDefaultMapshaperAdapter()`. Tests can stub it with
-`setDefaultMapshaperAdapter(mock)`.
-
-Do not import `mapshaper` directly outside the adapter, worker entry, vendor
-modules, and type/shim boundaries.
-
-### ParsedCommand[]
-
-Ops emit parsed command objects:
-
-```ts
-[{ name: 'buffer', options: { radius: 50 } }]
-```
-
-New ops should call the parsed-command runner path. Avoid shell-style command
-strings for new code.
-
-### OpResult
-
-Every op returns:
-
-```ts
-{ ok: true, value?: T } | { ok: false, error: OpError }
-```
-
-Use `Err.*`, `OK`, and `okValue` from `src/map/op-result.ts`.
-
-### Effect-Aware Dataset Replace
-
-Each dataset op must classify its effect in `COMMAND_EFFECTS` inside
-`src/map/ops/_runner.ts`:
-
-- `shape-count`
-- `topology-only`
-- `attribute-only`
-- `crs-only`
-- `unknown`
-
-Selection preservation depends on this table.
-
-### Memento Commands and EditHistory
-
-Every edit command must capture enough state to perform `do()` and `undo()`
-without depending on later live dataset state. Dataset-replace commands mark
-older commands as stale barriers rather than clearing history.
-
-### Transaction
-
-`src/edit/transaction.ts` stages commands pushed during its lifetime.
-`commit(label)` collapses captured commands into one `CompositeCommand`.
-`rollback()` restores first-touch source snapshots and selection. Nesting is not
-supported.
-
-### Handler Architecture
-
-All map interactions are represented as `Handler` implementations:
-
-- `dragPan`
-- `scrollZoom`
-- `clickSelect`
-- `boxSelect`
-- `lassoSelect`
-- `vertexEdit`
-- `drawFeature`
-- `transformFeature`
-
-`HandlerManager` owns pointer normalization, priority ordering, exclusive
-gesture locking, pointer sinks for delegated events, and cursor arbitration.
-
-Thin UI controls should forward to handlers instead of duplicating pointer
-logic.
-
-### EventDispatcher
-
-Use `on()` and `fire()` for engine-level communication. Raw DOM events are
-limited to browser input boundaries, control DOM, and the handler manager.
-
-### Rendering Loop
-
-`Emap.render()` is the render driver. Avoid DOM updates or state changes inside
-render. Defer with `requestAnimationFrame`, event callbacks, or tween callbacks.
-
-### AffineTransform
-
-All coordinate math uses `AffineTransform` and viewport projection helpers. Do
-not introduce ad-hoc matrix calculations.
-
-### LayerRegistry
-
-Resolve source/layer pairs through `LayerRegistry.resolve(...)`. Do not inline
-`layers.find(...)` in new code.
-
-### LOD and Batch Rendering
-
-`DisplayArcs` manages zoom-dependent arc simplification for large datasets.
-`CanvasPainter` batches stroke rendering for performance. Do not bypass these
-paths for large topology rendering without profiling.
-
-### Validation
-
-`ValidatorRegistry` runs validators after committed history changes. Failures
-fire `validationfailed`; the engine does not auto-undo.
-
-## Where to Make Changes
-
-| Task | Files |
+| Question | Tool |
 |---|---|
-| New mapshaper op | `src/map/ops/<op>.ts`, `src/map/mapshaper-ops.ts`, `src/map/types.ts`, `_runner.COMMAND_EFFECTS` |
-| New edit command | `src/edit/commands/<cmd>.ts` |
-| New handler | `src/core/handlers/<name>.ts`, `src/core/handler-manager.ts` if priority changes, `src/index.ts` |
-| New UI control | `src/ui/<control>.ts`, `src/ui/controls.css`, `src/index.ts` |
-| Source loading/export | `src/source/topology-source.ts` |
-| CRS/projection | `src/geo/crs-resolver.ts`, `src/geo/projection.ts`, `src/geo/viewport.ts` |
-| Rendering | `src/renderer/canvas-painter.ts`, `src/map/map.ts` |
-| Hit testing | `src/map/feature-query.ts` |
-| Worker routing | `src/map/worker-routing.ts`, `src/map/ops/_runner.ts` |
-| Public API | `src/index.ts` |
-| User docs | `README.md`, `FEATURES.md`, `CHANGELOG.md` |
+| "Where is X defined?" / "Find symbol X" | `codegraph_search` or `gitnexus_query` |
+| "What calls Y?" | `codegraph_callers` or `gitnexus_context` |
+| "What does Y call?" | `codegraph_callees` |
+| "What breaks if I change Z?" | `codegraph_impact` or `gitnexus_impact` |
+| "Show Y's signature / source" | `codegraph_node` |
+| "Focused context for an area" | `codegraph_context` |
+| "Several related symbols at once" | `codegraph_explore` |
+| "How does X reach Y? / trace the flow" | `codegraph_trace` |
 
-## Code Conventions
+Trust the results — do NOT re-verify with `grep`; the AST index is more
+accurate than text matching. Use `grep` only for literal text the graph can't
+answer (log messages, comment text, string literals) and briefly say why.
 
-- Private members use `_camelCase`.
-- Public API uses `camelCase`.
-- Interfaces and types use `PascalCase`.
-- Constants inside functions/classes use `UPPER_CASE`.
-- Tests are colocated as `*.test.ts`.
-- Keep public exports explicit; do not use `export *` in `src/index.ts`.
-- Keep TypeScript strict-mode compatible.
-- Centralize Mapshaper runtime types in `src/types/mapshaper-types.ts`.
+If the graph tools report a stale index: run `npx gitnexus analyze` and/or
+`codegraph init -i` first; do not switch to grep as a shortcut.
 
-## Testing
+## Hard Rules — Code Conventions
 
-Framework: Vitest.
+- Use `EventDispatcher` (`on` / `fire`) for internal signals, never raw DOM events at the engine layer.
+- All coordinate math goes through `AffineTransform`, never ad-hoc matrices.
+- Layer resolution goes through `LayerRegistry.resolve(...)`, never inline `layers.find(...)`.
+- Render-loop side effects must defer via `requestAnimationFrame` or tween callbacks, never inline in `render()`.
+- New ops MUST classify their effect (`shape-count` / `topology-only` / `attribute-only` / `crs-only`) in `src/map/ops/_runner.ts`'s `COMMAND_EFFECTS` table — selection preservation depends on it.
+- Do not import `mapshaper` directly outside `src/adapter/mapshaper-adapter.ts`, worker entry, vendor modules, and type/shim boundaries.
 
-Useful targeted checks:
+## GitNexus — Before Editing
 
-```bash
-cmd /c npm run typecheck
-cmd /c npx vitest run src\map\handler-registry.test.ts src\core\handler-manager.test.ts --reporter=dot
-cmd /c npx vitest run src\map\map.test.ts src\source\topology-source.test.ts --reporter=dot
-cmd /c npm run build
+This repo is indexed by GitNexus as **emap**.
+
+- **MUST run `gitnexus_impact({target, direction: "upstream"})` before modifying any function/class/method.** Report the blast radius (direct callers, affected processes, risk) to the user before editing.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify changes only affect expected symbols.
+- **MUST warn the user** if impact returns HIGH or CRITICAL risk before proceeding.
+- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
+
+## Development Behavior
+
+Guardrails against the LLM coding failure modes that bite this codebase most
+often. **Bias toward caution over speed; use judgment on trivial tasks.**
+
+### Think before you write
+
+**Don't assume, don't hide confusion, surface the tradeoffs.**
+
+Before implementing:
+
+- State your assumptions explicitly; if unsure, ask.
+- When multiple interpretations exist, lay them out — don't silently pick one.
+- If a simpler approach exists, say so; push back when you should.
+- If something is unclear, stop, name the confusion, and ask.
+
+### Simplicity first
+
+**Solve the problem with the minimum code. No speculative code.**
+
+- No features that weren't asked for.
+- No abstractions for code used only once.
+- No "flexibility" / "configurability" that wasn't requested.
+- No error handling for situations that can't happen.
+- If you wrote 200 lines that could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overbuilt?" If yes, simplify.
+
+### Surgical edits
+
+**Only touch what needs to change; only clean up your own debris.**
+
+When modifying existing code:
+
+- Don't "improve" adjacent code, comments, or formatting along the way.
+- Don't refactor things that aren't broken.
+- Match the existing style even if you dislike it.
+- Notice unrelated dead code? **Mention it** — don't delete it.
+
+When your change creates orphans:
+
+- Delete imports / variables / functions made unused **by your change**.
+- Don't delete pre-existing dead code unless asked.
+
+Test: every line of the diff should trace back to the user's request.
+
+### Goal-driven work
+
+**Define a success criterion, close the loop on verification.**
+
+Convert tasks into verifiable goals:
+
+- "Add validation" → "write a test for invalid input, then make it pass"
+- "Fix this bug" → "write a failing repro test first, then make it pass"
+- "Refactor X" → "confirm tests pass before and after the refactor"
+
+For multi-step work, lay out a short plan first:
+
+```
+1. [step] → verify: [check]
+2. [step] → verify: [check]
+3. [step] → verify: [check]
 ```
 
-Use private access through `Reflect` in tests when needed. Do not make private
-members public only for tests.
+Strong criteria let you close the loop independently. Weak criteria ("make it
+work") force the user into repeated clarification rounds.
 
-## Important Constraints
+**Signals these rules are working**: fewer stray edits in diffs; less rework
+from over-engineering; clarifying questions land before implementation rather
+than after a broken result.
 
-- Browser-only runtime; no Node.js runtime APIs in shipped code.
-- No backend server requirement.
-- Expression evaluation defaults to disabled. Expression-bearing APIs require
-  `expressionPolicy: 'trusted'`.
-- Worker offloading requires the host app to serve `emap-worker.js` and
-  `mapshaper-vendor.js`.
-- Mapshaper internals must remain isolated behind `MapshaperAdapter`.
+## Development
+
+See [README.md — Development](README.md#development) for install / typecheck /
+test / build commands and the manual-example workflow.

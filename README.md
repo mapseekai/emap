@@ -516,25 +516,126 @@ Override CSS tokens at `:root` or an app-specific container:
 - Worker offloading requires the host app to deploy worker/vendor assets
   correctly and does not make every interaction asynchronous.
 
+## Architecture
+
+### Repository Layout
+
+```text
+src/
+├── index.ts                 # Public entry point, explicit named exports
+├── map/                     # Emap orchestrator, ops, selection, history
+│   ├── map.ts               # Main Emap class
+│   ├── mapshaper-ops.ts     # map.ops facade
+│   ├── ops/                 # One file per data op
+│   ├── op-result.ts         # OpResult and OpError helpers
+│   ├── selection.ts         # Selection model
+│   ├── feature-query.ts     # Hit testing and Flatbush indexes
+│   ├── feature-accessor.ts  # Read-side feature lookup API
+│   ├── highlight-manager.ts # Highlight state and rendering
+│   ├── layer.ts             # LayerSpecification and paint resolution
+│   ├── layer-registry.ts    # Layer resolution surface
+│   ├── edit-sessions.ts     # Translate/affine edit sessions
+│   ├── edit-state-store.ts  # Edit mode state
+│   ├── attribute-ops.ts     # Attribute and field commands
+│   ├── worker-routing.ts    # Worker decision tree
+│   └── types.ts             # Public map option and op option types
+├── adapter/mapshaper-adapter.ts  # Sole runtime bridge to mapshaper internals
+├── core/                    # EventDispatcher, handlers, worker pool, tween
+│   └── handlers/            # Built-in interaction handlers
+├── edit/                    # EditHistory, commands, Transaction
+├── source/                  # TopologySource, DisplayArcs (LOD)
+├── geo/                     # Viewport, Camera, Projection, CRS resolver
+├── renderer/                # Painter, CanvasPainter, EditOverlayRenderer
+├── ui/                      # Controls + CSS
+├── validation/, worker/, vendor/, types/
+test/examples/               # Manual HTML examples
+```
+
+### Key Patterns
+
+- **MapshaperAdapter** (`src/adapter/mapshaper-adapter.ts`) is the only runtime bridge to `mapshaper.internal.*`. Ops, commands, and sources go through `getDefaultMapshaperAdapter()`; tests stub via `setDefaultMapshaperAdapter(mock)`. Do not import `mapshaper` directly outside the adapter, worker entry, vendor modules, and type/shim boundaries.
+- **ParsedCommand[]** — ops emit `[{ name: 'buffer', options: { radius: 50 } }]` and call the parsed-command runner. Avoid shell-style command strings for new code.
+- **OpResult** — every op returns `{ ok: true, value? } | { ok: false, error: OpError }`. Use `Err.*`, `OK`, `okValue` from `src/map/op-result.ts`.
+- **Effect-aware dataset replace** — each dataset op must classify its effect in `COMMAND_EFFECTS` (`src/map/ops/_runner.ts`) as `shape-count` / `topology-only` / `attribute-only` / `crs-only` / `unknown`. Selection preservation depends on this table.
+- **Memento commands + EditHistory** — every edit command captures enough state to `do()` and `undo()` without depending on later live dataset state. Dataset-replace commands mark older commands as stale barriers rather than clearing history.
+- **Transaction** (`src/edit/transaction.ts`) — `commit(label)` collapses staged commands into one `CompositeCommand`; `rollback()` restores first-touch snapshots and selection. Nesting is not supported.
+- **Handler architecture** — all interactions (`dragPan`, `scrollZoom`, `clickSelect`, `boxSelect`, `lassoSelect`, `vertexEdit`, `drawFeature`, `transformFeature`) implement the `Handler` contract. `HandlerManager` owns pointer normalization, priority, exclusive gesture locking, pointer sinks, and cursor arbitration. UI controls forward to handlers rather than duplicating pointer logic.
+- **EventDispatcher** — `on()` / `fire()` for engine-level signals. Raw DOM events live only at browser input boundaries, control DOM, and the handler manager.
+- **Rendering loop** — `Emap.render()` is the driver; defer DOM updates / state changes via `requestAnimationFrame`, event callbacks, or tween callbacks.
+- **AffineTransform** — all coordinate math goes through `AffineTransform` and viewport projection helpers; no ad-hoc matrices.
+- **LayerRegistry** — resolve source/layer pairs via `LayerRegistry.resolve(...)`; do not inline `layers.find(...)` in new code.
+- **LOD + batch rendering** — `DisplayArcs` manages zoom-dependent arc simplification; `CanvasPainter` batches stroke rendering. Do not bypass for large topology rendering without profiling.
+- **Validation** — `ValidatorRegistry` runs after committed history changes; failures fire `validationfailed` (no auto-undo).
+
+### Where to Make Changes
+
+| Task | Files |
+|---|---|
+| New mapshaper op | `src/map/ops/<op>.ts`, `src/map/mapshaper-ops.ts`, `src/map/types.ts`, `_runner.COMMAND_EFFECTS` |
+| New edit command | `src/edit/commands/<cmd>.ts` (use `vertex-move.ts` as template) |
+| New handler | `src/core/handlers/<name>.ts`, `src/core/handler-manager.ts` if priority changes, `src/index.ts` |
+| New UI control | `src/ui/<control>.ts`, `src/ui/controls.css`, `src/index.ts` |
+| Source loading/export | `src/source/topology-source.ts` |
+| CRS/projection | `src/geo/crs-resolver.ts`, `src/geo/projection.ts`, `src/geo/viewport.ts` |
+| Rendering | `src/renderer/canvas-painter.ts`, `src/map/map.ts` |
+| Hit testing | `src/map/feature-query.ts` |
+| Worker routing | `src/map/worker-routing.ts`, `src/map/ops/_runner.ts` |
+| Mapshaper internals | `src/adapter/mapshaper-adapter.ts` only |
+| Public API | `src/index.ts` |
+| User docs | `README.md`, `FEATURES.md`, `CHANGELOG.md` |
+
+### Code Conventions
+
+- Private members `_camelCase`; public API `camelCase`; interfaces/types `PascalCase`; constants `UPPER_CASE`.
+- Tests colocated as `*.test.ts`. Use `Reflect` for private-member access in tests rather than widening visibility.
+- Explicit named exports in `src/index.ts`; no `export *`.
+- TypeScript strict-mode compatible. Centralize mapshaper runtime types in `src/types/mapshaper-types.ts`.
+
+### Important Constraints
+
+- Browser-only runtime; no Node.js runtime APIs in shipped code.
+- No backend server requirement.
+- Expression evaluation defaults to disabled. Expression-bearing APIs require `expressionPolicy: 'trusted'`.
+- Worker offloading requires the host app to serve `emap-worker.js` and `mapshaper-vendor.js`.
+- Mapshaper internals must remain isolated behind `MapshaperAdapter`.
+
 ## Development
+
+Install dependencies (use `pnpm` locally, or `cmd /c npm install` on Windows
+to avoid the PowerShell shim):
 
 ```bash
 pnpm install
-cmd /c npm run typecheck
-cmd /c npm run test:run
-cmd /c npm run build
 ```
+
+Common tasks (prepend `cmd /c` on Windows):
+
+```bash
+npm run dev           # rollup watch + dev server for test/examples/*.html
+npm run dev-build     # one-off dev build (sourcemaps, no minify)
+npm run typecheck     # tsc --noEmit
+npm run test:run      # vitest run
+npm run build         # production build → dist/
+```
+
+Targeted test runs:
+
+```bash
+npx vitest run src/geo/crs-resolver.test.ts --reporter=dot
+npx vitest run src/map/map.test.ts src/source/topology-source.test.ts
+```
+
+Manual examples live in `test/examples/*.html` — run `npm run dev-build`
+first, then open any HTML file directly in a browser.
 
 Build outputs:
 
-- `dist/emap.js` - IIFE bundle.
-- `dist/emap.mjs` - ES module.
-- `dist/emap-worker.js` - worker bundle.
-- `dist/mapshaper-vendor.js` and `dist/mapshaper-vendor.mjs` - Mapshaper vendor bundles.
-- `dist/emap.css` - control styles.
-- `dist/index.d.ts` - TypeScript declarations.
-
-Manual examples live in `test/examples/*.html`.
+- `dist/emap.js` — IIFE bundle.
+- `dist/emap.mjs` — ES module.
+- `dist/emap-worker.js` — worker bundle.
+- `dist/mapshaper-vendor.js` / `dist/mapshaper-vendor.mjs` — Mapshaper vendor bundles.
+- `dist/emap.css` — control styles.
+- `dist/index.d.ts` — TypeScript declarations.
 
 ## Release Checklist
 
