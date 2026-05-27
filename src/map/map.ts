@@ -1507,7 +1507,7 @@ export class Emap extends EventDispatcher {
   private _applyFastTransform(delta: AffineDelta): void {
     this._cancelProgressiveRender();
     this._canvas.style.transformOrigin = 'top left';
-    this._canvas.style.transform = `translate(${delta.tx}px,${delta.ty}px) scale(${delta.sx},${delta.sy})`;
+    this._canvas.style.transform = `matrix(${delta.sx},0,0,${delta.sy},${delta.tx},${delta.ty})`;
   }
 
   private _clearFastTransform(): void {

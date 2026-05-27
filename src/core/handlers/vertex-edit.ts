@@ -316,7 +316,6 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       this._hoverInsertionId = -1;
       this._neighborShapes = [];
       this._map.clearEditVertexState();
-      this._map.render();
       return;
     }
 
@@ -329,7 +328,6 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       this._hoverInsertionId = -1;
       this._neighborShapes = [];
       this._map.clearEditVertexState();
-      this._map.render();
       return;
     }
 
@@ -368,7 +366,6 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     // Find neighbor shapes sharing the hovered arc (for shared-edge highlight)
     this._findNeighborShapes(arcs);
     this._updateEditState();
-    this._map.render();
   }
 
   /**

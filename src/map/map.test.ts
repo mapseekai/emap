@@ -193,18 +193,38 @@ describe('Emap render scheduling', () => {
       setPrivate(map, 'render', renderMock);
       globalThis.requestAnimationFrame = requestAnimationFrameMock;
 
-      callPrivate(map, '_scheduleRender', 'nav', { scale: 2, tx: 12, ty: -8 });
+      callPrivate(map, '_scheduleRender', 'nav', { sx: 2, sy: 2, tx: 12, ty: -8 });
       expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
       expect(queuedFrame).not.toBeNull();
       queuedFrame?.(16);
 
       expect(renderMock).toHaveBeenCalledWith({
         action: 'nav',
-        navDelta: { scale: 2, tx: 12, ty: -8 },
+        navDelta: { sx: 2, sy: 2, tx: 12, ty: -8 },
       });
     } finally {
       globalThis.requestAnimationFrame = originalRequestAnimationFrame;
     }
+  });
+
+  it('applies fast-nav zoom as one affine matrix so translation is not re-scaled', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const cancelProgressiveRender = vi.fn();
+    const canvas = {
+      style: {
+        transform: '',
+        transformOrigin: '',
+      },
+    };
+
+    setPrivate(map, '_cancelProgressiveRender', cancelProgressiveRender);
+    setPrivate(map, '_canvas', canvas);
+
+    callPrivate(map, '_applyFastTransform', { sx: 1.5, sy: 1.5, tx: -120, ty: 48 });
+
+    expect(cancelProgressiveRender).toHaveBeenCalledTimes(1);
+    expect(canvas.style.transformOrigin).toBe('top left');
+    expect(canvas.style.transform).toBe('matrix(1.5,0,0,1.5,-120,48)');
   });
 
   it('forwards standalone overlay renders without promoting them to redraw', () => {

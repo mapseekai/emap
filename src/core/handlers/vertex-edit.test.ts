@@ -82,6 +82,50 @@ describe('VertexEditHandler', () => {
     expect(mapMock.render).not.toHaveBeenCalled();
   });
 
+  it('updates hover overlay on mousemove without forcing a full render', () => {
+    const render = vi.fn();
+    const setEditVertexState = vi.fn();
+    const mapMock = {
+      queryFeatures: vi.fn(() => [{ source: 'src-a', layer: 'roads', id: 0, geometryType: 'polyline' }]),
+      getSource: vi.fn(() => ({
+        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [[[0]]] }],
+        getArcs: () => ({
+          getVertex2: () => [1, 2],
+        }),
+      })),
+      unproject: vi.fn(() => [1, 2] as [number, number]),
+      project: vi.fn(() => [90, 100] as [number, number]),
+      setEditVertexState,
+      render,
+    };
+    Reflect.set(mapshaper.internal as object, 'findNearestVertices', vi.fn(() => [0]));
+
+    const handler = new VertexEditHandler(mapMock as any);
+    callPrivate(handler, '_onMouseMove', 90, 100);
+
+    expect(setEditVertexState).toHaveBeenCalledWith(expect.objectContaining({
+      hoverVertex: [1, 2],
+      hoverType: 'vertex',
+    }));
+    expect(render).not.toHaveBeenCalled();
+  });
+
+  it('clears hover overlay on empty mousemove hit without forcing a full render', () => {
+    const render = vi.fn();
+    const clearEditVertexState = vi.fn();
+    const mapMock = {
+      queryFeatures: vi.fn(() => []),
+      clearEditVertexState,
+      render,
+    };
+
+    const handler = new VertexEditHandler(mapMock as any);
+    callPrivate(handler, '_onMouseMove', 90, 100);
+
+    expect(clearEditVertexState).toHaveBeenCalledTimes(1);
+    expect(render).not.toHaveBeenCalled();
+  });
+
   it('snaps dragged vertices to other feature vertices when drag snap is enabled', () => {
     const movingShape = [[0]];
     const targetShape = [[1]];
