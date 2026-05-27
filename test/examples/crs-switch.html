@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 切换坐标系 (CRS Switch)</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header {
+      padding: 10px 14px; background: #2c3e50; color: white;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px;
+    }
+    .group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .group-label { opacity: 0.8; font-size: 12px; padding-right: 4px; border-right: 1px solid #4a5d70; }
+    #header button {
+      padding: 5px 10px; background: #16a085; color: white;
+      border: 0; border-radius: 3px; cursor: pointer; font-size: 12px;
+    }
+    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
+    #header button.active { background: #1abc9c; box-shadow: 0 0 0 2px #ecf0f1 inset; }
+    #header button.aux { background: #34495e; }
+    .pill {
+      padding: 3px 8px; background: #34495e; border-radius: 10px;
+      font-family: ui-monospace, Menlo, monospace; font-size: 12px; max-width: 360px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .hint { opacity: 0.8; font-size: 12px; flex-basis: 100%; }
+    #loading-overlay {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: rgba(255, 255, 255, 0.7); font-size: 14px; z-index: 10;
+    }
+    #loading-overlay.hidden { display: none; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <span class="group">
+      <span class="group-label">当前:</span>
+      <span id="current-crs" class="pill" title="">—</span>
+    </span>
+
+    <span class="group">
+      <span class="group-label">地理 (经纬度):</span>
+      <!-- Buttons get their CRS from data-crs; data-label is the friendly name -->
+      <button data-key="wgs84" data-label="WGS84"
+              data-crs="wgs84">WGS84</button>
+      <button data-key="cgcs2000" data-label="CGCS2000 (EPSG:4490)"
+              data-crs="+proj=longlat +ellps=GRS80 +no_defs">CGCS2000</button>
+      <button data-key="beijing54" data-label="Beijing 1954 (EPSG:4214)"
+              data-crs="+proj=longlat +ellps=krass +towgs84=15.8,-154.4,-82.3,0,0,0,0 +no_defs">Beijing 1954</button>
+      <button data-key="xian80" data-label="Xi'an 1980 (EPSG:4610)"
+              data-crs="+proj=longlat +a=6378140 +b=6356755.288157997 +no_defs">Xi'an 1980</button>
+    </span>
+
+    <span class="group">
+      <span class="group-label">投影 (China):</span>
+      <button data-key="lcc-cn" data-label="Lambert LCC (China)"
+              data-crs="+proj=lcc +lat_1=25 +lat_2=47 +lat_0=0 +lon_0=110 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs">Lambert</button>
+      <button data-key="aea-cn" data-label="Albers AEA (China)"
+              data-crs="+proj=aea +lat_1=25 +lat_2=47 +lat_0=0 +lon_0=105 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs">Albers</button>
+      <button data-key="webmerc" data-label="Web Mercator (EPSG:3857)"
+              data-crs="webmercator">Web Mercator</button>
+    </span>
+
+    <span class="group">
+      <span class="group-label">高斯-克吕格 (GK，CGCS2000):</span>
+      <!-- Gauss-Krüger = Transverse Mercator with k=1, x_0=500000.
+           6° zones: zone N central meridian = 6N - 3; common China zones 19-22 (111-129°E).
+           3° zones: zone N central meridian = 3N; common China zones 37-40 (111-120°E). -->
+      <button data-key="gk6-117" data-label="GK 6° / 117°E (zone 20)"
+              data-crs="+proj=tmerc +lat_0=0 +lon_0=117 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs">6° 117°E</button>
+      <button data-key="gk3-114" data-label="GK 3° / 114°E (zone 38)"
+              data-crs="+proj=tmerc +lat_0=0 +lon_0=114 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs">3° 114°E</button>
+      <button data-key="gk3-117" data-label="GK 3° / 117°E (zone 39)"
+              data-crs="+proj=tmerc +lat_0=0 +lon_0=117 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs">3° 117°E</button>
+      <button data-key="gk3-120" data-label="GK 3° / 120°E (zone 40)"
+              data-crs="+proj=tmerc +lat_0=0 +lon_0=120 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs">3° 120°E</button>
+      <label class="group-label" style="border:none;padding-left:8px;">自定义中央经线:
+        <input id="gk-lon" type="number" min="-180" max="180" step="1" placeholder="例 117"
+               style="width:64px;padding:3px 5px;font-size:12px;border:1px solid #4a5d70;border-radius:3px;" />
+      </label>
+      <button id="btn-gk-custom" class="aux">应用</button>
+    </span>
+
+    <span class="group">
+      <span class="group-label">世界:</span>
+      <button data-key="robinson" data-label="Robinson"
+              data-crs="robinson">Robinson</button>
+      <button data-key="natearth" data-label="Natural Earth"
+              data-crs="natearth">Natural Earth</button>
+      <button data-key="wintri" data-label="Winkel Tripel"
+              data-crs="wintri">Winkel Tripel</button>
+    </span>
+
+    <span class="group">
+      <button id="btn-reload" class="aux">↺ 重置</button>
+    </span>
+
+    <span id="status" class="group-label">加载中…</span>
+    <span class="hint">
+      通过 <code>map.ops.projectLayer({ crs })</code> 切换坐标系；CRS 可为
+      <code>EPSG:NNNN</code>、mapshaper 别名（<code>wgs84</code>/<code>webmercator</code>/<code>natearth</code>/<code>wintri</code>/<code>robinson</code>/<code>lcc</code>/<code>aea</code>），
+      或完整 Proj.4 字符串。投影后自动 <code>setExtent</code>，Ctrl+Z 撤销。
+    </span>
+  </div>
+
+  <div id="map" tabindex="0">
+    <div id="loading-overlay"><span id="loading-text">加载中…</span></div>
+  </div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/mapshaper-vendor.js"></script>
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+
+    const SOURCE_ID = 'crs-demo';
+    const DATA_URL = 'https://geojson.cn/api/china/1.6.3/china.json';
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const status = document.getElementById('status');
+    const currentCrsEl = document.getElementById('current-crs');
+    const overlay = document.getElementById('loading-overlay');
+    const overlayText = document.getElementById('loading-text');
+    const buttons = Array.from(document.querySelectorAll('button[data-crs]'));
+    const reloadBtn = document.getElementById('btn-reload');
+
+    let activeKey = null;
+
+    function showOverlay(msg) { overlayText.textContent = msg; overlay.classList.remove('hidden'); }
+    function hideOverlay() { overlay.classList.add('hidden'); }
+    function setBusy(busy) {
+      buttons.forEach((b) => { b.disabled = busy; });
+      reloadBtn.disabled = busy;
+    }
+    function setActive(key, label) {
+      activeKey = key;
+      currentCrsEl.textContent = label;
+      currentCrsEl.title = label;
+      buttons.forEach((b) => b.classList.toggle('active', b.dataset.key === key));
+    }
+
+    async function loadFresh() {
+      setBusy(true);
+      showOverlay('加载示例数据…');
+      try {
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        const source = new TopologySource(SOURCE_ID, { data: DATA_URL });
+        await new Promise((resolve, reject) => {
+          source.on('data', ({ reason }) => { if (reason === 'load') resolve(); });
+          source.on('error', (e) => reject(e.error ?? new Error('load failed')));
+        });
+        map.addSource(SOURCE_ID, source);
+        map.setExtent(source.getExtent());
+        const resolved = source.getCRS?.() ?? 'unknown';
+        setActive('wgs84', `${resolved} (initial)`);
+
+        // Resync pill + refit viewport whenever the dataset's CRS changes
+        // through a path we didn't initiate (Ctrl+Z / Ctrl+Y / external ops).
+        source.on('data', ({ reason }) => {
+          if (reason !== 'reproject' && reason !== 'replace') return;
+          map.setExtent(source.getExtent());
+          const crs = source.getCRS?.() ?? 'unknown';
+          // If a known button matches the new CRS, light it up. Otherwise
+          // just print the raw CRS (e.g. after undo into a custom proj4).
+          const match = buttons.find((b) => b.dataset.crs === crs);
+          setActive(match?.dataset.key ?? null, match?.dataset.label ?? crs);
+        });
+
+        status.textContent = '已加载。点击按钮切换坐标系。';
+      } catch (err) {
+        console.error(err);
+        status.textContent = `加载失败: ${err?.message ?? err}`;
+      } finally {
+        hideOverlay();
+        setBusy(false);
+      }
+    }
+
+    async function switchCRS(btn) {
+      const src = map.getSource(SOURCE_ID);
+      if (!src) { status.textContent = '请先加载数据。'; return; }
+      const crs = btn.dataset.crs;
+      const key = btn.dataset.key;
+      const label = btn.dataset.label;
+      if (activeKey === key) { status.textContent = `已是 ${label}。`; return; }
+
+      setBusy(true);
+      showOverlay(`投影中: → ${label}`);
+      const t0 = performance.now();
+      try {
+        const result = await map.ops.projectLayer({ source: SOURCE_ID, crs });
+        if (!result?.ok) {
+          status.textContent = `投影失败 (${label}): ${result?.error?.message ?? '未知错误'}`;
+          return;
+        }
+        map.setExtent(src.getExtent());
+        const ms = Math.round(performance.now() - t0);
+        setActive(key, label);
+        status.textContent = `已切换到 ${label} (${ms} ms)。Ctrl+Z 撤销。`;
+      } catch (err) {
+        console.error(err);
+        status.textContent = `错误 (${label}): ${err?.message ?? err}`;
+      } finally {
+        hideOverlay();
+        setBusy(false);
+      }
+    }
+
+    buttons.forEach((b) => b.addEventListener('click', () => switchCRS(b)));
+    reloadBtn.addEventListener('click', loadFresh);
+
+    // Custom Gauss-Krüger central meridian. Builds a synthetic button on the fly
+    // so it reuses the same switchCRS pipeline (busy state, refit, error display).
+    document.getElementById('btn-gk-custom').addEventListener('click', () => {
+      const raw = document.getElementById('gk-lon').value.trim();
+      const lon = Number(raw);
+      if (!raw || !Number.isFinite(lon) || lon < -180 || lon > 180) {
+        status.textContent = '请输入合法的中央经线 (-180 到 180)。';
+        return;
+      }
+      const ghost = document.createElement('button');
+      ghost.dataset.key = `gk-custom-${lon}`;
+      ghost.dataset.label = `GK 自定义 / ${lon}°E`;
+      ghost.dataset.crs = `+proj=tmerc +lat_0=0 +lon_0=${lon} +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs`;
+      switchCRS(ghost);
+    });
+    window.addEventListener('resize', () => map.resize());
+
+    loadFresh();
+  </script>
+</body>
+
+</html>

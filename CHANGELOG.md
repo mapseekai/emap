@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `normalizeCrsString` now preserves the original case of non-EPSG inputs
+  instead of upper-casing everything. EPSG codes still normalize to
+  `EPSG:NNNN`; passthrough values (Proj.4 strings, mapshaper aliases) keep
+  their case so case-sensitive tokens like `+proj=utm` survive intact.
+
+### Fixed
+
+- `inferFromPrj` now recognizes ESRI's `WGS 1984 Web Mercator (auxiliary
+  sphere)` WKT spelling and `Web Mercator` with a space, both of which
+  previously fell through to the `EPSG:4326` default.
+
+### Examples
+
+- Added `test/examples/crs-switch.html` — one-click switching between WGS84,
+  CGCS2000, Beijing 1954, Xi'an 1980, Lambert / Albers / Gauss-Krüger
+  projections for China, and world projections (Robinson, Natural Earth,
+  Winkel Tripel) on a built-in China dataset. Demonstrates `map.ops.projectLayer`
+  and CRS-only history sync.
+- Fixed `test/examples/project.html` preset list: `natural-earth` →
+  `natearth`, `winkel3` → `wintri` (mapshaper's actual alias names).
+
 ## [0.3.3] - 2026-05-24
 
 ### Performance

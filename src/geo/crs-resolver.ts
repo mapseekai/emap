@@ -50,16 +50,21 @@ export function resolveDatasetCRS(dataset: MapshaperDataset | undefined): string
 
 /**
  * Map a free-text CRS label (`'wgs84'`, `'webmercator'`, `'epsg:4326'`, …)
- * onto a canonical `EPSG:NNNN` string. Inputs that already look canonical
- * are upper-cased; everything else passes through upper-cased so callers
- * still see a stable shape they can branch on.
+ * onto a canonical `EPSG:NNNN` string when possible. Inputs that look like
+ * EPSG codes are upper-cased; anything else (proj4 strings, named aliases
+ * mapshaper understands directly) passes through unchanged so case-sensitive
+ * tokens like `+proj=utm` survive.
+ *
+ * This is the inbound direction of the boundary translation: external/raw
+ * metadata → canonical EPSG. The outbound direction (canonical EPSG →
+ * mapshaper alias) lives in `normalizeProjectCrs` in `map/ops/project.ts`.
  */
 export function normalizeCrsString(str: string): string {
   const lower = str.toLowerCase();
   if (lower === 'wgs84' || lower.includes('4326')) return 'EPSG:4326';
   if (lower.includes('3857') || lower === 'webmercator') return 'EPSG:3857';
   if (/^epsg:\d+$/i.test(str)) return str.toUpperCase();
-  return str.toUpperCase();
+  return str;
 }
 
 /**
@@ -79,7 +84,8 @@ export function inferFromPrj(prj: string): string | null {
   if (
     /Mercator.*WGS.*84.*Pseudo/i.test(prj)
     || /WGS.*84.*Pseudo.*Mercator/i.test(prj)
-    || /Web_Mercator/i.test(prj)
+    || /Web[_ ]Mercator/i.test(prj)
+    || /WGS.?1984.*Web.?Mercator/i.test(prj)
   ) {
     return 'EPSG:3857';
   }
