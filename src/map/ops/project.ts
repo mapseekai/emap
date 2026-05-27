@@ -40,6 +40,9 @@ export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promis
   return ctx.runDatasetCommandParsed(opts.source, commands, label);
 }
 
+// Outbound boundary translation: canonical EPSG → mapshaper's preferred alias.
+// Mirror of `normalizeCrsString` in `geo/crs-resolver.ts`, which goes the
+// other way (raw metadata → canonical EPSG) when reading datasets in.
 function normalizeProjectCrs(crs: string): string {
   const trimmed = crs.trim();
   const lower = trimmed.toLowerCase();

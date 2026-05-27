@@ -21,9 +21,23 @@ describe('normalizeCrsString', () => {
     ['epsg:3857', 'EPSG:3857'],
     ['epsg:32633', 'EPSG:32633'],
     ['EPSG:4490', 'EPSG:4490'],
-    ['weird', 'WEIRD'],
+    // Unknown labels pass through unchanged so case-sensitive proj4 tokens
+    // (e.g. `+proj=utm +zone=10`) survive intact.
+    ['weird', 'weird'],
+    ['+proj=utm +zone=10', '+proj=utm +zone=10'],
   ])('%p → %p', (input, expected) => {
     expect(normalizeCrsString(input)).toBe(expected);
+  });
+});
+
+describe('inferFromPrj — ESRI Web Mercator variants', () => {
+  it('detects ESRI "WGS 1984 Web Mercator (auxiliary sphere)"', () => {
+    expect(
+      inferFromPrj('PROJCS["WGS 1984 Web Mercator (auxiliary sphere)"]'),
+    ).toBe('EPSG:3857');
+  });
+  it('detects "Web Mercator" with a space', () => {
+    expect(inferFromPrj('PROJCS["Web Mercator"]')).toBe('EPSG:3857');
   });
 });
 
