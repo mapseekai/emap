@@ -8,6 +8,7 @@ import { EditHistory } from '../edit/edit-history';
 import { CompositeCommand } from '../edit/commands/composite';
 import { ValidatorRegistry } from '../validation/registry';
 import { FeatureAccessor } from './feature-accessor';
+import { CanvasPainter } from '../renderer/canvas-painter';
 
 // Snapshot the real mapshaper.internal entry points at module-load time,
 // BEFORE any test has had a chance to mock them. Some test blocks below
@@ -517,6 +518,85 @@ describe('Emap render scheduling', () => {
     } finally {
       globalThis.requestAnimationFrame = originalRequestAnimationFrame;
     }
+  });
+
+  it('does not snapshot overlay regions while progressive chunks are pending', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const painter = Object.create(CanvasPainter.prototype) as CanvasPainter;
+    const saveRegion = vi.fn();
+    setPrivate(painter, 'saveRegion', saveRegion);
+    setPrivate(map, '_painter', painter);
+    setPrivate(map, '_progressiveRenderPending', 1);
+    setPrivate(map, '_overlaySnapshot', null);
+    setPrivate(map, '_getOverlayDirtyRect', () => ({ x: 1, y: 2, width: 3, height: 4 }));
+    setPrivate(map, '_renderHighlight', vi.fn());
+    setPrivate(map, '_editState', { mode: 'none', vertex: null, draw: null });
+    setPrivate(map, '_editOverlay', { render: vi.fn() });
+
+    callPrivate(map, '_renderOverlaysWithSnapshot', {}, 1);
+
+    expect(saveRegion).not.toHaveBeenCalled();
+    expect(getPrivate(map, '_overlaySnapshot')).toBeNull();
+    expect(getPrivate(map, '_overlayUnrestorableRect')).toEqual({ x: 1, y: 2, width: 3, height: 4 });
+  });
+
+  it('promotes overlay-only renders to full redraw while progressive chunks are pending', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const painter = Object.create(CanvasPainter.prototype) as CanvasPainter;
+    const renderFull = vi.fn();
+    setPrivate(map, '_painter', painter);
+    setPrivate(map, '_progressiveRenderPending', 1);
+    setPrivate(map, '_renderFull', renderFull);
+
+    callPrivate(map, '_renderOverlayOnly');
+
+    expect(renderFull).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders first highlight as overlay-only when no prior overlay snapshot exists', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const painter = Object.create(CanvasPainter.prototype) as CanvasPainter;
+    const renderFull = vi.fn();
+    const saveRegion = vi.fn(() => ({ width: 3, height: 4 } as ImageData));
+    const withClipRect = vi.fn((_rect: unknown, draw: () => void) => draw());
+    setPrivate(painter, 'saveRegion', saveRegion);
+    setPrivate(painter, 'setTransform', vi.fn());
+    setPrivate(painter, 'withClipRect', withClipRect);
+    setPrivate(map, '_painter', painter);
+    setPrivate(map, '_progressiveRenderPending', 0);
+    setPrivate(map, '_overlaySnapshot', null);
+    setPrivate(map, '_overlayUnrestorableRect', null);
+    setPrivate(map, '_renderFull', renderFull);
+    setPrivate(map, '_getOverlayDirtyRect', () => ({ x: 1, y: 2, width: 3, height: 4 }));
+    setPrivate(map, '_viewport', { transform: {}, getLineScale: () => 1 });
+    setPrivate(map, '_renderHighlight', vi.fn());
+    setPrivate(map, '_editState', { mode: 'none', vertex: null, draw: null });
+    setPrivate(map, '_editOverlay', { render: vi.fn() });
+
+    callPrivate(map, '_renderOverlayOnly');
+
+    expect(renderFull).not.toHaveBeenCalled();
+    expect(saveRegion).toHaveBeenCalledWith({ x: 1, y: 2, width: 3, height: 4 });
+    expect(withClipRect).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses dirty redraw for unrestorable previous overlays instead of full redraw', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const painter = Object.create(CanvasPainter.prototype) as CanvasPainter;
+    const renderFull = vi.fn();
+    const renderDirtyRect = vi.fn();
+    setPrivate(map, '_painter', painter);
+    setPrivate(map, '_progressiveRenderPending', 0);
+    setPrivate(map, '_overlaySnapshot', null);
+    setPrivate(map, '_overlayUnrestorableRect', { x: 1, y: 2, width: 3, height: 4 });
+    setPrivate(map, '_getOverlayDirtyRect', () => ({ x: 10, y: 20, width: 5, height: 6 }));
+    setPrivate(map, '_renderFull', renderFull);
+    setPrivate(map, '_renderDirtyRect', renderDirtyRect);
+
+    callPrivate(map, '_renderOverlayOnly');
+
+    expect(renderFull).not.toHaveBeenCalled();
+    expect(renderDirtyRect).toHaveBeenCalledWith({ x: 1, y: 2, width: 14, height: 24 });
   });
 });
 

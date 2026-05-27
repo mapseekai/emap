@@ -79,6 +79,7 @@ export class Emap extends EventDispatcher {
   private _painter: Painter;
   private _editOverlay: EditOverlayRenderer;
   private _overlaySnapshot: { rect: PixelRect; image: ImageData } | null = null;
+  private _overlayUnrestorableRect: PixelRect | null = null;
   private _scheduler!: RenderScheduler;
   private _viewport: Viewport = new Viewport();
   private _projection: Projection = new Projection();
@@ -127,6 +128,7 @@ export class Emap extends EventDispatcher {
   private _pendingDirtyRect: PixelRect | null = null;
   private _navSnapshotTransform: { mx: number; my: number; bx: number; by: number } | null = null;
   private _progressiveRenderFrames: number[] = [];
+  private _progressiveRenderPending = 0;
   private _renderGeneration = 0;
   private _wheelSettleTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly _WHEEL_SETTLE_MS = 250;
@@ -1220,6 +1222,7 @@ export class Emap extends EventDispatcher {
     this._renderGeneration++;
     this._clearFastTransform();
     this._overlaySnapshot = null;
+    this._overlayUnrestorableRect = null;
     const t0 = performance.now();
     this._renderImpl();
     this._scheduler.recordFrame(performance.now() - t0, this._captureRenderSnapshot());
@@ -1239,11 +1242,17 @@ export class Emap extends EventDispatcher {
 
   private _renderOverlaysWithSnapshot(transform: AffineTransform, lineScale: number): void {
     this._overlaySnapshot = null;
+    this._overlayUnrestorableRect = null;
     const rect = this._getOverlayDirtyRect();
     const painter = this._painter;
-    if (rect && painter instanceof CanvasPainter) {
-      const image = painter.saveRegion(rect);
-      if (image) this._overlaySnapshot = { rect, image };
+    if (rect) {
+      if (painter instanceof CanvasPainter && !this._hasPendingProgressiveRender()) {
+        const image = painter.saveRegion(rect);
+        if (image) this._overlaySnapshot = { rect, image };
+        else this._overlayUnrestorableRect = rect;
+      } else {
+        this._overlayUnrestorableRect = rect;
+      }
     }
     this._renderHighlight(transform, lineScale);
     this._editOverlay.render(
@@ -1255,7 +1264,7 @@ export class Emap extends EventDispatcher {
 
   private _renderOverlayOnly(): void {
     const painter = this._painter;
-    if (!(painter instanceof CanvasPainter)) {
+    if (!(painter instanceof CanvasPainter) || this._hasPendingProgressiveRender()) {
       this._renderFull();
       return;
     }
@@ -1264,14 +1273,25 @@ export class Emap extends EventDispatcher {
     if (previous) {
       painter.restoreRegion(previous.rect, previous.image);
       this._overlaySnapshot = null;
+    } else if (this._overlayUnrestorableRect) {
+      const rect = this._unionPixelRects(this._overlayUnrestorableRect, this._getOverlayDirtyRect());
+      if (rect) this._renderDirtyRect(rect);
+      return;
     }
 
     const rect = this._getOverlayDirtyRect();
-    if (!rect) return;
+    if (!rect) {
+      this._overlayUnrestorableRect = null;
+      return;
+    }
 
     const image = painter.saveRegion(rect);
-    if (!image) return;
+    if (!image) {
+      this._overlayUnrestorableRect = rect;
+      return;
+    }
     this._overlaySnapshot = { rect, image };
+    this._overlayUnrestorableRect = null;
 
     const transform = this._viewport.transform;
     painter.setTransform(transform);
@@ -1288,10 +1308,15 @@ export class Emap extends EventDispatcher {
 
   private _renderDirtyRect(rect: PixelRect): void {
     const painter = this._painter;
-    if (!(painter instanceof CanvasPainter)) {
+    if (!(painter instanceof CanvasPainter) || this._hasPendingProgressiveRender()) {
       this._renderFull();
       return;
     }
+
+    const repaintRect = this._overlayUnrestorableRect
+      ? this._unionPixelRects(rect, this._overlayUnrestorableRect) ?? rect
+      : rect;
+    this._overlayUnrestorableRect = null;
 
     const previous = this._overlaySnapshot;
     if (previous) {
@@ -1302,10 +1327,10 @@ export class Emap extends EventDispatcher {
     const transform = this._viewport.transform;
     const lineScale = this._viewport.getLineScale();
     const pixelSize = 1 / Math.abs(transform.mx);
-    const dirtyBounds = this._pixelRectToDataBounds(rect);
+    const dirtyBounds = this._pixelRectToDataBounds(repaintRect);
 
     painter.setTransform(transform);
-    painter.withClipRect(rect, () => {
+    painter.withClipRect(repaintRect, () => {
       painter.clear();
       this._renderLayers(pixelSize, lineScale, dirtyBounds);
     });
@@ -1494,10 +1519,18 @@ export class Emap extends EventDispatcher {
   private _cancelProgressiveRender(): void {
     if (!this._progressiveRenderFrames?.length) {
       this._progressiveRenderFrames = [];
+      this._progressiveRenderPending = 0;
       return;
     }
     this._progressiveRenderFrames.forEach((id) => cancelAnimationFrame(id));
     this._progressiveRenderFrames = [];
+    this._progressiveRenderPending = 0;
+    this._overlaySnapshot = null;
+    this._overlayUnrestorableRect = null;
+  }
+
+  private _hasPendingProgressiveRender(): boolean {
+    return this._progressiveRenderPending > 0;
   }
 
   private _hasHeavyNavLayers(): boolean {
@@ -1656,6 +1689,20 @@ export class Emap extends EventDispatcher {
   ): void {
     const generation = this._renderGeneration;
     let start = 0;
+    let registered = false;
+    const registerPending = () => {
+      if (registered) return;
+      registered = true;
+      this._progressiveRenderPending++;
+      this._overlaySnapshot = null;
+    };
+    const finish = () => {
+      if (registered) {
+        this._progressiveRenderPending = Math.max(0, this._progressiveRenderPending - 1);
+        registered = false;
+      }
+      onComplete?.();
+    };
     const drawNext = (isInitial: boolean) => {
       if (this._removed || generation !== this._renderGeneration) return;
       const end = Math.max(start + 1, Math.min(getNextEnd(start), total));
@@ -1668,10 +1715,11 @@ export class Emap extends EventDispatcher {
       if (!isInitial) this._repaintOverlays();
       start = end;
       if (start < total) {
+        registerPending();
         const frame = requestAnimationFrame(() => drawNext(false));
         this._progressiveRenderFrames.push(frame);
       } else {
-        onComplete?.();
+        finish();
       }
     };
 

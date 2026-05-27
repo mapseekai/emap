@@ -300,13 +300,12 @@ members public only for tests.
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **emap** (5161 symbols, 15764 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **emap** (5274 symbols, 16078 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
 ## Always Do
 
-- **MUST search via GitNexus / CodeGraph FIRST.** See the "Hard Rules — Code Search" section at the top of this file. `grep` is a fallback only.
 - **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
 - **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
 - **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
@@ -315,7 +314,6 @@ This project is indexed by GitNexus as **emap** (5161 symbols, 15764 relationshi
 
 ## Never Do
 
-- NEVER reach for `grep` / `find` / file-walking for structural code questions (definitions, callers, callees, references). Use GitNexus / CodeGraph first. `grep` is reserved for literal text searches the graph cannot answer.
 - NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
 - NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
 - NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
