@@ -46,7 +46,7 @@ import { BulkFeatureDeleteCommand, type BulkFeatureDeleteCommandOptions } from '
 // via the `ops` / `editSession` / `attributes` getters below.
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { Control, ControlPosition } from '../ui/control';
-import { getLayerId } from '../source/layer-utils';
+import { getLayerId, normalizePointShape } from '../source/layer-utils';
 import { resolveStrokeStyle, resolvePointStyle } from './layer';
 import type { LayerSpecification, FillPaint, LinePaint, CirclePaint } from './layer';
 import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
@@ -69,6 +69,7 @@ import {
   type RenderRequest,
   type RenderAction,
   type AffineDelta,
+  type PixelRect,
 } from './types';
 
 export class Emap extends EventDispatcher {
@@ -77,6 +78,8 @@ export class Emap extends EventDispatcher {
   private _canvas: HTMLCanvasElement;
   private _painter: Painter;
   private _editOverlay: EditOverlayRenderer;
+  private _overlaySnapshot: { rect: PixelRect; image: ImageData } | null = null;
+  private _overlayUnrestorableRect: PixelRect | null = null;
   private _scheduler!: RenderScheduler;
   private _viewport: Viewport = new Viewport();
   private _projection: Projection = new Projection();
@@ -120,11 +123,20 @@ export class Emap extends EventDispatcher {
   // Rendering
   private _pendingRender = 0;
   private _rafId = 0;
-  private _pendingAction: RenderAction = 'redraw';
+  private _pendingAction: RenderAction | null = null;
   private _pendingNavDelta: AffineDelta | null = null;
+  private _pendingDirtyRect: PixelRect | null = null;
   private _navSnapshotTransform: { mx: number; my: number; bx: number; by: number } | null = null;
+  private _progressiveRenderFrames: number[] = [];
+  private _progressiveRenderPending = 0;
+  private _renderGeneration = 0;
   private _wheelSettleTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly _WHEEL_SETTLE_MS = 250;
+  private static readonly _HEAVY_WHEEL_SETTLE_MS = 2000;
+  private static readonly _PROGRESSIVE_POINT_THRESHOLD = 200000;
+  private static readonly _PROGRESSIVE_POINT_BATCH = 200000;
+  private static readonly _PROGRESSIVE_PATH_NODE_THRESHOLD = 200000;
+  private static readonly _PROGRESSIVE_PATH_NODE_BATCH = 200000;
 
   // UI controls
   private _controlContainers: globalThis.Map<ControlPosition, HTMLElement> =
@@ -138,6 +150,7 @@ export class Emap extends EventDispatcher {
   // Delegated managers. `_selection` and `_history` are read by composed
   // managers via `EmapHostInternal`; the rest stay private.
   private _highlightManager: HighlightManager = new HighlightManager();
+  private _highlightOverlayRefs: Array<QueriedFeature | HighlightFeatureRef> = [];
   private _featureQuery: FeatureQuery;
   /**
    * Read-side feature accessor — `engine.features.get(ref)` returns one
@@ -209,8 +222,10 @@ export class Emap extends EventDispatcher {
       const blocksPan = change.current.mode === 'vertex' || change.current.mode === 'draw';
       if (blocksPan) this._dragPan?.disable(); else this._dragPan?.enable();
       this.fire('editmodechange', { mode: change.current.mode });
+      this._scheduleRender();
+      return;
     }
-    this._scheduleRender();
+    this._scheduleRender('overlay');
   });
 
   // Worker pool / mode / threshold are read by `MapshaperOps` via
@@ -262,7 +277,9 @@ export class Emap extends EventDispatcher {
     this._editOverlay = new EditOverlayRenderer(this._painter);
     this._scheduler = new RenderScheduler({
       fullRedraw: () => this._renderFull(),
+      dirtyRedraw: (rect) => this._renderDirtyRect(rect),
       fastNav: (delta) => this._applyFastTransform(delta),
+      overlayRedraw: () => this._renderOverlayOnly(),
       getSnapshot: () => this._captureRenderSnapshot(),
     });
 
@@ -568,7 +585,7 @@ export class Emap extends EventDispatcher {
       this._wheelSettleTimer = setTimeout(() => {
         this._wheelSettleTimer = null;
         this._endNavGesture();
-      }, Emap._WHEEL_SETTLE_MS);
+      }, this._getWheelSettleMs());
     });
   }
 
@@ -1158,15 +1175,24 @@ export class Emap extends EventDispatcher {
   /** Cancel any running camera animation (no-op when idle). */
   public stop(): this { this._camera.stop(); return this; }
 
-  _scheduleRender(action: RenderAction = 'redraw', navDelta?: AffineDelta): void {
+  _scheduleRender(action: RenderAction = 'redraw', navDelta?: AffineDelta, dirtyRect?: PixelRect): void {
     if (this._removed) return;
     this._pendingRender++;
-    if (this._pendingAction === 'redraw' || action === 'redraw') {
+    if (action === 'redraw' || this._pendingAction === 'redraw') {
       this._pendingAction = 'redraw';
       this._pendingNavDelta = null;
-    } else {
+      this._pendingDirtyRect = null;
+    } else if (action === 'dirty' || this._pendingAction === 'dirty') {
+      this._pendingAction = 'dirty';
+      this._pendingNavDelta = null;
+      if (dirtyRect) {
+        this._pendingDirtyRect = this._unionPixelRects(this._pendingDirtyRect, dirtyRect);
+      }
+    } else if (action === 'nav' || this._pendingAction === 'nav') {
       this._pendingAction = 'nav';
       if (navDelta) this._pendingNavDelta = { ...navDelta };
+    } else {
+      this._pendingAction = 'overlay';
     }
     if (this._rafId === 0) {
       this._rafId = requestAnimationFrame(() => this._doRender());
@@ -1177,10 +1203,12 @@ export class Emap extends EventDispatcher {
     this._rafId = 0;
     if (this._pendingRender > 0) {
       this._pendingRender = 0;
-      const req: RenderRequest = { action: this._pendingAction };
+      const req: RenderRequest = { action: this._pendingAction ?? 'redraw' };
       if (this._pendingNavDelta) req.navDelta = this._pendingNavDelta;
-      this._pendingAction = 'redraw';
+      if (this._pendingDirtyRect) req.dirtyRect = this._pendingDirtyRect;
+      this._pendingAction = null;
       this._pendingNavDelta = null;
+      this._pendingDirtyRect = null;
       this.render(req);
     }
   }
@@ -1190,7 +1218,11 @@ export class Emap extends EventDispatcher {
   }
 
   private _renderFull(): void {
+    this._cancelProgressiveRender();
+    this._renderGeneration++;
     this._clearFastTransform();
+    this._overlaySnapshot = null;
+    this._overlayUnrestorableRect = null;
     const t0 = performance.now();
     this._renderImpl();
     this._scheduler.recordFrame(performance.now() - t0, this._captureRenderSnapshot());
@@ -1205,12 +1237,263 @@ export class Emap extends EventDispatcher {
     const pixelSize = 1 / Math.abs(transform.mx);
 
     this._renderLayers(pixelSize, lineScale);
+    this._renderOverlaysWithSnapshot(transform, lineScale);
+  }
+
+  private _renderOverlaysWithSnapshot(transform: AffineTransform, lineScale: number): void {
+    this._overlaySnapshot = null;
+    this._overlayUnrestorableRect = null;
+    const rect = this._getOverlayDirtyRect();
+    const painter = this._painter;
+    if (rect) {
+      if (painter instanceof CanvasPainter && !this._hasPendingProgressiveRender()) {
+        const image = painter.saveRegion(rect);
+        if (image) this._overlaySnapshot = { rect, image };
+        else this._overlayUnrestorableRect = rect;
+      } else {
+        this._overlayUnrestorableRect = rect;
+      }
+    }
     this._renderHighlight(transform, lineScale);
     this._editOverlay.render(
       this._editState.mode,
       this._editState.vertex,
       this._editState.draw,
     );
+  }
+
+  private _renderOverlayOnly(): void {
+    const painter = this._painter;
+    if (!(painter instanceof CanvasPainter) || this._hasPendingProgressiveRender()) {
+      this._renderFull();
+      return;
+    }
+
+    const previous = this._overlaySnapshot;
+    if (previous) {
+      painter.restoreRegion(previous.rect, previous.image);
+      this._overlaySnapshot = null;
+    } else if (this._overlayUnrestorableRect) {
+      const rect = this._unionPixelRects(this._overlayUnrestorableRect, this._getOverlayDirtyRect());
+      if (rect) this._renderDirtyRect(rect);
+      return;
+    }
+
+    const rect = this._getOverlayDirtyRect();
+    if (!rect) {
+      this._overlayUnrestorableRect = null;
+      return;
+    }
+
+    const image = painter.saveRegion(rect);
+    if (!image) {
+      this._overlayUnrestorableRect = rect;
+      return;
+    }
+    this._overlaySnapshot = { rect, image };
+    this._overlayUnrestorableRect = null;
+
+    const transform = this._viewport.transform;
+    painter.setTransform(transform);
+    painter.withClipRect(rect, () => {
+      const lineScale = this._viewport.getLineScale();
+      this._renderHighlight(transform, lineScale);
+      this._editOverlay.render(
+        this._editState.mode,
+        this._editState.vertex,
+        this._editState.draw,
+      );
+    });
+  }
+
+  private _renderDirtyRect(rect: PixelRect): void {
+    const painter = this._painter;
+    if (!(painter instanceof CanvasPainter) || this._hasPendingProgressiveRender()) {
+      this._renderFull();
+      return;
+    }
+
+    const repaintRect = this._overlayUnrestorableRect
+      ? this._unionPixelRects(rect, this._overlayUnrestorableRect) ?? rect
+      : rect;
+    this._overlayUnrestorableRect = null;
+
+    const previous = this._overlaySnapshot;
+    if (previous) {
+      painter.restoreRegion(previous.rect, previous.image);
+      this._overlaySnapshot = null;
+    }
+
+    const transform = this._viewport.transform;
+    const lineScale = this._viewport.getLineScale();
+    const pixelSize = 1 / Math.abs(transform.mx);
+    const dirtyBounds = this._pixelRectToDataBounds(repaintRect);
+
+    painter.setTransform(transform);
+    painter.withClipRect(repaintRect, () => {
+      painter.clear();
+      this._renderLayers(pixelSize, lineScale, dirtyBounds);
+    });
+    this._renderOverlaysWithSnapshot(transform, lineScale);
+  }
+
+  private _getOverlayDirtyRect(): PixelRect | null {
+    let rect: PixelRect | null = null;
+    if (this._editState.mode === 'vertex' && this._editState.vertex) {
+      rect = this._unionPixelRects(rect, this._getVertexOverlayRect(this._editState.vertex));
+    }
+    if (this._editState.mode === 'draw' && this._editState.draw) {
+      rect = this._unionPixelRects(rect, this._getDrawOverlayRect(this._editState.draw));
+    }
+    rect = this._unionPixelRects(rect, this._getFeatureRefsOverlayRect(this._highlightOverlayRefs));
+    return rect ? this._padPixelRect(rect, 12 * this._pixelRatio()) : null;
+  }
+
+  private _pixelRectToDataBounds(rect: PixelRect): [number, number, number, number] {
+    const pr = this._pixelRatio();
+    const p0 = this.unproject(rect.x / pr, rect.y / pr);
+    const p1 = this.unproject((rect.x + rect.width) / pr, (rect.y + rect.height) / pr);
+    return [
+      Math.min(p0[0], p1[0]),
+      Math.min(p0[1], p1[1]),
+      Math.max(p0[0], p1[0]),
+      Math.max(p0[1], p1[1]),
+    ];
+  }
+
+  private _getFeatureRefsOverlayRect(
+    refs: ReadonlyArray<FeatureRef | QueriedFeature | HighlightFeatureRef>,
+  ): PixelRect | null {
+    let rect: PixelRect | null = null;
+    for (const ref of refs) {
+      const source = this._sources.get(ref.source);
+      if (!source) continue;
+      const layers = source.getLayers();
+      const arcs = source.getArcs();
+      for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+        const layer = layers[layerIndex] as MapshaperLayer;
+        if (getLayerId(layer, layerIndex) !== ref.layer) continue;
+        const shape = layer.shapes?.[ref.id];
+        if (!shape) break;
+        rect = this._extendShapePixelRect(rect, shape, layer.geometry_type || 'unknown', arcs);
+        break;
+      }
+    }
+    return rect;
+  }
+
+  private _extendShapePixelRect(
+    rect: PixelRect | null,
+    shape: unknown,
+    geometryType: string,
+    arcs?: import('../types/mapshaper-types').ArcCollection,
+  ): PixelRect | null {
+    if (geometryType === 'point') {
+      for (const p of normalizePointShape(shape)) {
+        rect = this._extendPixelRect(rect, p[0], p[1]);
+      }
+      return rect;
+    }
+    if (!arcs || !Array.isArray(shape)) return rect;
+    for (const part of shape) {
+      if (!Array.isArray(part)) continue;
+      const iter = typeof (arcs as any).getShapeIter === 'function'
+        ? (arcs as any).getShapeIter(part)
+        : null;
+      if (iter) {
+        while (iter.hasNext()) rect = this._extendPixelRect(rect, iter.x, iter.y);
+        continue;
+      }
+      for (const arcId of part) {
+        const absId = arcId >= 0 ? arcId : ~arcId;
+        const arcIter = arcs.getArcIter?.(absId);
+        if (!arcIter) continue;
+        while (arcIter.hasNext()) rect = this._extendPixelRect(rect, arcIter.x, arcIter.y);
+      }
+    }
+    return rect;
+  }
+
+  private _getVertexOverlayRect(state: EditVertexState): PixelRect | null {
+    let rect: PixelRect | null = null;
+    const arcs = state.arcs as any;
+    for (const shape of state.shapes) {
+      if (!shape) continue;
+      for (const part of shape) {
+        if (!Array.isArray(part)) continue;
+        const iter = typeof arcs.getShapeIter === 'function'
+          ? arcs.getShapeIter(part)
+          : null;
+        if (iter) {
+          while (iter.hasNext()) {
+            rect = this._extendPixelRect(rect, iter.x, iter.y);
+          }
+          continue;
+        }
+        for (const arcId of part) {
+          const absId = arcId >= 0 ? arcId : ~arcId;
+          const arcIter = arcs.getArcIter?.(absId);
+          if (!arcIter) continue;
+          while (arcIter.hasNext()) {
+            rect = this._extendPixelRect(rect, arcIter.x, arcIter.y);
+          }
+        }
+      }
+    }
+    if (state.hoverVertex) {
+      rect = this._extendPixelRect(rect, state.hoverVertex[0], state.hoverVertex[1]);
+    }
+    return rect;
+  }
+
+  private _getDrawOverlayRect(state: EditDrawState): PixelRect | null {
+    let rect: PixelRect | null = null;
+    for (const coord of state.vertices) {
+      rect = this._extendPixelRect(rect, coord[0], coord[1]);
+    }
+    if (state.cursorCoord) {
+      rect = this._extendPixelRect(rect, state.cursorCoord[0], state.cursorCoord[1]);
+    }
+    if (state.snapCoord) {
+      rect = this._extendPixelRect(rect, state.snapCoord[0], state.snapCoord[1]);
+    }
+    return rect;
+  }
+
+  private _extendPixelRect(rect: PixelRect | null, x: number, y: number): PixelRect {
+    const p = this.project(x, y);
+    const pr = this._pixelRatio();
+    const px = p[0] * pr;
+    const py = p[1] * pr;
+    if (!rect) return { x: px, y: py, width: 0, height: 0 };
+    const x0 = Math.min(rect.x, px);
+    const y0 = Math.min(rect.y, py);
+    const x1 = Math.max(rect.x + rect.width, px);
+    const y1 = Math.max(rect.y + rect.height, py);
+    return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+  }
+
+  private _unionPixelRects(a: PixelRect | null, b: PixelRect | null): PixelRect | null {
+    if (!a) return b;
+    if (!b) return a;
+    const x0 = Math.min(a.x, b.x);
+    const y0 = Math.min(a.y, b.y);
+    const x1 = Math.max(a.x + a.width, b.x + b.width);
+    const y1 = Math.max(a.y + a.height, b.y + b.height);
+    return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+  }
+
+  private _padPixelRect(rect: PixelRect, pad: number): PixelRect {
+    return {
+      x: rect.x - pad,
+      y: rect.y - pad,
+      width: rect.width + pad * 2,
+      height: rect.height + pad * 2,
+    };
+  }
+
+  private _pixelRatio(): number {
+    return typeof window === 'undefined' ? 1 : (window.devicePixelRatio || 1);
   }
 
   private _captureRenderSnapshot(): RenderSnapshot {
@@ -1222,8 +1505,9 @@ export class Emap extends EventDispatcher {
   }
 
   private _applyFastTransform(delta: AffineDelta): void {
+    this._cancelProgressiveRender();
     this._canvas.style.transformOrigin = 'top left';
-    this._canvas.style.transform = `translate(${delta.tx}px,${delta.ty}px) scale(${delta.sx},${delta.sy})`;
+    this._canvas.style.transform = `matrix(${delta.sx},0,0,${delta.sy},${delta.tx},${delta.ty})`;
   }
 
   private _clearFastTransform(): void {
@@ -1232,10 +1516,64 @@ export class Emap extends EventDispatcher {
     this._canvas.style.transformOrigin = '';
   }
 
-  private _renderLayers(pixelSize: number, lineScale: number): void {
-    const effectiveLayers = this._getEffectiveLayers();
+  private _cancelProgressiveRender(): void {
+    if (!this._progressiveRenderFrames?.length) {
+      this._progressiveRenderFrames = [];
+      this._progressiveRenderPending = 0;
+      return;
+    }
+    this._progressiveRenderFrames.forEach((id) => cancelAnimationFrame(id));
+    this._progressiveRenderFrames = [];
+    this._progressiveRenderPending = 0;
+    this._overlaySnapshot = null;
+    this._overlayUnrestorableRect = null;
+  }
 
-    for (const layer of effectiveLayers) {
+  private _hasPendingProgressiveRender(): boolean {
+    return this._progressiveRenderPending > 0;
+  }
+
+  private _hasHeavyNavLayers(): boolean {
+    for (const layer of this._getEffectiveLayers()) {
+      if (layer.layout?.visibility === 'none' || layer.type !== 'circle') continue;
+      const source = this._sources.get(layer.source);
+      if (!source) continue;
+      const ml = this._resolveSourceLayer(source, layer['source-layer']);
+      if ((ml?.shapes?.length ?? 0) >= Emap._PROGRESSIVE_POINT_THRESHOLD) return true;
+    }
+    return false;
+  }
+
+  private _getWheelSettleMs(): number {
+    return this._hasHeavyNavLayers()
+      ? Emap._HEAVY_WHEEL_SETTLE_MS
+      : Emap._WHEEL_SETTLE_MS;
+  }
+
+  private _renderLayers(
+    pixelSize: number,
+    lineScale: number,
+    dirtyBounds?: [number, number, number, number],
+  ): void {
+    const effectiveLayers = this._getEffectiveLayers();
+    let lastVisibleLayerIndex = -1;
+    for (let i = effectiveLayers.length - 1; i >= 0; i--) {
+      if (effectiveLayers[i].layout?.visibility !== 'none') {
+        lastVisibleLayerIndex = i;
+        break;
+      }
+    }
+    // Edit modes (vertex / draw / transform) trigger a full render on every
+    // pointer move. If progressive rendering is active, each render cancels
+    // the previous render's pending rAF chunks before they fire, so only the
+    // first synchronous chunk of the heavy layer is ever drawn — making the
+    // rest of the data flicker / disappear during edit hover. Disable
+    // progressive chunking while editing so the heavy layer always finishes
+    // within a single frame.
+    const isEditing = this._editState.mode !== 'none';
+
+    for (let i = 0; i < effectiveLayers.length; i++) {
+      const layer = effectiveLayers[i];
       if (layer.layout?.visibility === 'none') continue;
 
       const source = this._sources.get(layer.source);
@@ -1258,16 +1596,236 @@ export class Emap extends EventDispatcher {
 
       const ml = this._resolveSourceLayer(source, layer['source-layer']);
       const cacheKey = `${layer.source}:${layer['source-layer'] || 'default'}`;
+      const dirtyArcFilter = arcs && dirtyBounds
+        ? this._getDirtyArcFilter(arcs, dirtyBounds)
+        : undefined;
 
+      // Progressive chunking is restricted to the topmost visible layer.
+      // Canvas has no per-layer z-order: a later rAF chunk would paint on top
+      // of layers drawn above this one, violating layer order. Heavy layers
+      // beneath an overlay must render synchronously — promote them in the
+      // layer stack or use a dedicated overlay canvas if responsiveness is
+      // required.
+      const canProgress = !dirtyBounds && !isEditing && i === lastVisibleLayerIndex;
       if (layer.type === 'line' && arcs) {
-        this._renderLineLayer(layer, ml, arcs, cacheKey, lineScale);
+        this._renderLineLayer(layer, ml, arcs, cacheKey, lineScale, canProgress, dirtyArcFilter);
       } else if (layer.type === 'fill' && arcs && ml?.shapes) {
-        this._renderFillLayer(layer, ml, arcs, cacheKey, lineScale);
+        this._renderFillLayer(layer, ml, arcs, cacheKey, lineScale, canProgress, dirtyArcFilter);
       } else if (layer.type === 'circle' && ml?.shapes) {
         const style = resolvePointStyle(layer.paint as CirclePaint);
-        this._painter.drawPoints(ml.shapes, style);
+        const shapes = dirtyBounds ? this._filterPointShapesByBounds(ml.shapes, dirtyBounds) : ml.shapes;
+        this._renderPointLayer(shapes, style, canProgress);
       }
     }
+  }
+
+  private _getDirtyArcFilter(
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    bounds: [number, number, number, number],
+  ): (i: number) => boolean {
+    const cache = new globalThis.Map<number, boolean>();
+    const box: number[] = [];
+    return (i: number) => {
+      const cached = cache.get(i);
+      if (cached !== undefined) return cached;
+      let hit = false;
+      const getSimpleShapeBbox = (arcs as any).getSimpleShapeBbox;
+      if (typeof getSimpleShapeBbox === 'function') {
+        getSimpleShapeBbox.call(arcs, [i], box);
+        hit = this._dataBoundsIntersect(box[0], box[1], box[2], box[3], bounds);
+      } else {
+        const iter = arcs.getArcIter(i);
+        while (iter.hasNext()) {
+          if (iter.x >= bounds[0] && iter.x <= bounds[2] && iter.y >= bounds[1] && iter.y <= bounds[3]) {
+            hit = true;
+            break;
+          }
+        }
+      }
+      cache.set(i, hit);
+      return hit;
+    };
+  }
+
+  private _filterPointShapesByBounds(shapes: any[], bounds: [number, number, number, number]): any[] {
+    return shapes.filter((shape) => normalizePointShape(shape).some(
+      (p) => p[0] >= bounds[0] && p[0] <= bounds[2] && p[1] >= bounds[1] && p[1] <= bounds[3],
+    ));
+  }
+
+  private _dataBoundsIntersect(
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+    bounds: [number, number, number, number],
+  ): boolean {
+    return !(maxX < bounds[0] || minX > bounds[2] || maxY < bounds[1] || minY > bounds[3]);
+  }
+
+  private _renderPointLayer(shapes: any[], style: ReturnType<typeof resolvePointStyle>, canProgress: boolean): void {
+    const painter = this._painter as Painter & {
+      drawPointsRange?: (input: any[], style: ReturnType<typeof resolvePointStyle>, start: number, end: number) => void;
+    };
+    if (!canProgress ||
+      shapes.length < Emap._PROGRESSIVE_POINT_THRESHOLD ||
+      typeof painter.drawPointsRange !== 'function') {
+      this._painter.drawPoints(shapes, style);
+      return;
+    }
+
+    this._scheduleProgressiveChunks(
+      shapes.length,
+      (start) => start + Emap._PROGRESSIVE_POINT_BATCH,
+      (start, end) => painter.drawPointsRange!(shapes, style, start, end),
+    );
+  }
+
+  private _scheduleProgressiveChunks(
+    total: number,
+    getNextEnd: (start: number) => number,
+    drawRange: (start: number, end: number) => void,
+    onComplete?: () => void,
+  ): void {
+    const generation = this._renderGeneration;
+    let start = 0;
+    let registered = false;
+    const registerPending = () => {
+      if (registered) return;
+      registered = true;
+      this._progressiveRenderPending++;
+      this._overlaySnapshot = null;
+    };
+    const finish = () => {
+      if (registered) {
+        this._progressiveRenderPending = Math.max(0, this._progressiveRenderPending - 1);
+        registered = false;
+      }
+      onComplete?.();
+    };
+    const drawNext = (isInitial: boolean) => {
+      if (this._removed || generation !== this._renderGeneration) return;
+      const end = Math.max(start + 1, Math.min(getNextEnd(start), total));
+      drawRange(start, end);
+      // _renderImpl draws highlights and edit overlay AFTER _renderLayers.
+      // Subsequent rAF chunks paint directly onto the canvas without re-
+      // rendering those overlays, so chunk pixels would overwrite selection
+      // highlights and vertex/draw markers. Repaint them after each chunk
+      // (skip the initial synchronous chunk; _renderImpl handles that frame).
+      if (!isInitial) this._repaintOverlays();
+      start = end;
+      if (start < total) {
+        registerPending();
+        const frame = requestAnimationFrame(() => drawNext(false));
+        this._progressiveRenderFrames.push(frame);
+      } else {
+        finish();
+      }
+    };
+
+    drawNext(true);
+  }
+
+  private _repaintOverlays(): void {
+    const transform = this._viewport.transform;
+    const lineScale = this._viewport.getLineScale();
+    this._renderHighlight(transform, lineScale);
+    this._editOverlay.render(
+      this._editState.mode,
+      this._editState.vertex,
+      this._editState.draw,
+    );
+  }
+
+  private _getArcNodeCount(
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    arcId: number,
+  ): number {
+    const nn = arcs.getVertexData?.()?.nn;
+    return nn ? nn[arcId] || 0 : 1;
+  }
+
+  private _getArcChunkEnd(
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    start: number,
+    total: number,
+    nodeBudget: number,
+    filter?: (i: number) => boolean,
+  ): number {
+    let nodes = 0;
+    let end = start;
+    while (end < total) {
+      if (!filter || filter(end)) {
+        nodes += this._getArcNodeCount(arcs, end);
+      }
+      end++;
+      if (nodes >= nodeBudget) break;
+    }
+    return end;
+  }
+
+  private _getArcsNodeCount(
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    total: number,
+    filter?: (i: number) => boolean,
+  ): number {
+    if (!filter) {
+      return arcs.getPointCount?.() ?? arcs.getVertexData?.()?.xx.length ?? total;
+    }
+    let nodes = 0;
+    for (let i = 0; i < total; i++) {
+      if (filter(i)) nodes += this._getArcNodeCount(arcs, i);
+    }
+    return nodes;
+  }
+
+  private _getShapeNodeCount(
+    shape: unknown,
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    filter?: (i: number) => boolean,
+  ): number {
+    if (!Array.isArray(shape)) return 0;
+    let nodes = 0;
+    for (const part of shape) {
+      if (!Array.isArray(part)) continue;
+      for (const arcId of part) {
+        const absId = arcId >= 0 ? arcId : ~arcId;
+        if (!filter || filter(absId)) {
+          nodes += this._getArcNodeCount(arcs, absId);
+        }
+      }
+    }
+    return nodes;
+  }
+
+  private _getShapeChunkEnd(
+    shapes: any[],
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    start: number,
+    total: number,
+    nodeBudget: number,
+    filter?: (i: number) => boolean,
+  ): number {
+    let nodes = 0;
+    let end = start;
+    while (end < total) {
+      nodes += this._getShapeNodeCount(shapes[end], arcs, filter);
+      end++;
+      if (nodes >= nodeBudget) break;
+    }
+    return end;
+  }
+
+  private _getShapesNodeCount(
+    shapes: any[],
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    filter?: (i: number) => boolean,
+  ): number {
+    let nodes = 0;
+    for (const shape of shapes) {
+      nodes += this._getShapeNodeCount(shape, arcs, filter);
+    }
+    return nodes;
   }
 
   private _renderLineLayer(
@@ -1276,18 +1834,56 @@ export class Emap extends EventDispatcher {
     arcs: import('../types/mapshaper-types').ArcCollection,
     cacheKey: string,
     lineScale: number,
+    canProgress: boolean,
+    dirtyArcFilter?: (i: number) => boolean,
   ): void {
     const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
+    const totalArcs = arcs.size();
     if (ml?.shapes) {
       // Optimized layer line rendering: use drawArcs with a boolean arc
       // presence filter so each shared topology arc strokes exactly once.
       const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
-      const filter = this._combineArcFilters(flags, this._viewport.getArcFilter(arcs));
-      this._painter.drawArcs(arcs, style, filter);
+      const filter = this._combineArcFilters(flags, this._combineFilters(this._viewport.getArcFilter(arcs), dirtyArcFilter));
+      const totalNodes = this._getArcsNodeCount(arcs, totalArcs, filter);
+      this._renderArcLayer(arcs, style, filter, totalArcs, totalNodes, canProgress);
     } else {
       // Fallback: draw all arcs
-      this._painter.drawArcs(arcs, style, this._viewport.getArcFilter(arcs));
+      const filter = this._combineFilters(this._viewport.getArcFilter(arcs), dirtyArcFilter);
+      const totalNodes = this._getArcsNodeCount(arcs, totalArcs, filter);
+      this._renderArcLayer(arcs, style, filter, totalArcs, totalNodes, canProgress);
     }
+  }
+
+  private _renderArcLayer(
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    style: ReturnType<typeof resolveStrokeStyle>,
+    filter: ((i: number) => boolean) | undefined,
+    totalArcs: number,
+    totalNodes: number,
+    canProgress: boolean,
+  ): void {
+    const painter = this._painter as Painter & {
+      drawArcsRange?: (
+        arcs: import('../types/mapshaper-types').ArcCollection,
+        style: ReturnType<typeof resolveStrokeStyle>,
+        start: number,
+        end: number,
+        filter?: (i: number) => boolean,
+      ) => void;
+    };
+    if (totalNodes === 0) return;
+    if (!canProgress ||
+      totalNodes < Emap._PROGRESSIVE_PATH_NODE_THRESHOLD ||
+      typeof painter.drawArcsRange !== 'function') {
+      this._painter.drawArcs(arcs, style, filter);
+      return;
+    }
+
+    this._scheduleProgressiveChunks(totalArcs, (start) => {
+      return this._getArcChunkEnd(arcs, start, totalArcs, Emap._PROGRESSIVE_PATH_NODE_BATCH, filter);
+    }, (start, end) => {
+      painter.drawArcsRange!(arcs, style, start, end, filter);
+    });
   }
 
   private _renderFillLayer(
@@ -1296,25 +1892,63 @@ export class Emap extends EventDispatcher {
     arcs: import('../types/mapshaper-types').ArcCollection,
     cacheKey: string,
     lineScale: number,
+    canProgress: boolean,
+    dirtyArcFilter?: (i: number) => boolean,
   ): void {
     const fillPaint = layer.paint as FillPaint | undefined;
     const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
     const fillOpacity = fillPaint?.['fill-opacity'];
-    const viewportFilter = this._viewport.getArcFilter(arcs);
-    this._painter.drawPolygonFill(
-      ml.shapes!,
-      arcs,
-      fillColor,
-      viewportFilter,
-      fillOpacity,
-    );
+    const viewportFilter = this._combineFilters(this._viewport.getArcFilter(arcs), dirtyArcFilter);
     // Outline: stroke each topology arc exactly once via the same flag cache
     // the line layer uses. drawPaths(shapes,...) would re-walk every shape
     // and double-stroke shared boundaries — on big polygon datasets that's
     // the dominant cost of fill mode.
     const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
     const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
-    this._painter.drawArcs(arcs, style, this._combineArcFilters(flags, viewportFilter));
+    const totalArcs = arcs.size();
+    const outlineFilter = this._combineArcFilters(flags, viewportFilter);
+    const outlineNodes = this._getArcsNodeCount(arcs, totalArcs, outlineFilter);
+    // Kick fill and outline progressive schedulers off concurrently so the
+    // outline appears alongside fill chunks. Otherwise (outline as
+    // onComplete) the user sees several rAF frames of fills with no
+    // outlines on large datasets.
+    this._renderPolygonFillLayer(ml.shapes!, arcs, fillColor, viewportFilter, fillOpacity, canProgress);
+    this._renderArcLayer(arcs, style, outlineFilter, totalArcs, outlineNodes, canProgress);
+  }
+
+  private _renderPolygonFillLayer(
+    shapes: any[],
+    arcs: import('../types/mapshaper-types').ArcCollection,
+    fillColor: string,
+    filter: ((i: number) => boolean) | undefined,
+    opacity: number | undefined,
+    canProgress: boolean,
+  ): void {
+    const painter = this._painter as Painter & {
+      drawPolygonFillRange?: (
+        shapes: any[],
+        arcs: import('../types/mapshaper-types').ArcCollection,
+        fillColor: string,
+        start: number,
+        end: number,
+        filter?: (i: number) => boolean,
+        opacity?: number,
+      ) => void;
+    };
+    const totalNodes = this._getShapesNodeCount(shapes, arcs, filter);
+    if (totalNodes === 0) return;
+    if (!canProgress ||
+      totalNodes < Emap._PROGRESSIVE_PATH_NODE_THRESHOLD ||
+      typeof painter.drawPolygonFillRange !== 'function') {
+      this._painter.drawPolygonFill(shapes, arcs, fillColor, filter, opacity);
+      return;
+    }
+
+    this._scheduleProgressiveChunks(shapes.length, (start) => {
+      return this._getShapeChunkEnd(shapes, arcs, start, shapes.length, Emap._PROGRESSIVE_PATH_NODE_BATCH, filter);
+    }, (start, end) => {
+      painter.drawPolygonFillRange!(shapes, arcs, fillColor, start, end, filter, opacity);
+    });
   }
 
   private _combineArcFilters(
@@ -1326,6 +1960,14 @@ export class Emap extends EventDispatcher {
     }
     if (flags) return (i: number) => flags[i] === 1;
     return viewportFilter;
+  }
+
+  private _combineFilters(
+    a: ((i: number) => boolean) | undefined,
+    b: ((i: number) => boolean) | undefined,
+  ): ((i: number) => boolean) | undefined {
+    if (a && b) return (i: number) => a(i) && b(i);
+    return a ?? b;
   }
 
   private _renderHighlight(transform: AffineTransform, lineScale: number): void {
@@ -1407,19 +2049,21 @@ export class Emap extends EventDispatcher {
     features: Array<QueriedFeature | HighlightFeatureRef>,
     style?: HighlightStyle,
   ): void {
+    this._highlightOverlayRefs = features.slice();
     this._highlightManager.setHighlightedFeatures(features, style);
-    this._scheduleRender();
+    this._scheduleRender('overlay');
   }
 
   public clearHighlightedFeatures(): void {
+    this._highlightOverlayRefs = [];
     if (this._highlightManager.clearHighlightedFeatures()) {
-      this._scheduleRender();
+      this._scheduleRender('overlay');
     }
   }
 
   public setHighlightStyle(style: HighlightStyle): void {
     if (this._highlightManager.setHighlightStyle(style)) {
-      this._scheduleRender();
+      this._scheduleRender('overlay');
     }
   }
 
@@ -1515,6 +2159,7 @@ export class Emap extends EventDispatcher {
 
     const children: EditCommand[] = [];
     let totalDeleted = 0;
+    let dirtyRect: PixelRect | null = null;
 
     for (const [sourceId, byLayer] of grouped) {
       const source = this._sources.get(sourceId);
@@ -1545,6 +2190,15 @@ export class Emap extends EventDispatcher {
           snapshots.push({ id: featureId, shape, record: record ?? null });
         }
         if (snapshots.length === 0) continue;
+        const arcs = source.getArcs?.();
+        for (const snapshot of snapshots) {
+          dirtyRect = this._extendShapePixelRect(
+            dirtyRect,
+            snapshot.shape,
+            target.geometry_type || 'unknown',
+            arcs,
+          );
+        }
 
         const bulk = new BulkFeatureDeleteCommand({ layer: target, snapshots });
         bulk.do();
@@ -1569,7 +2223,11 @@ export class Emap extends EventDispatcher {
 
     // Clear the selection — the refs no longer exist.
     this._fireSelectionChange(this._selection.clear());
-    this._scheduleRender();
+    if (dirtyRect) {
+      this._scheduleRender('dirty', undefined, this._padPixelRect(dirtyRect, 16 * this._pixelRatio()));
+    } else {
+      this._scheduleRender();
+    }
 
     return true;
   }
@@ -1796,8 +2454,9 @@ export class Emap extends EventDispatcher {
       cancelAnimationFrame(this._rafId);
       this._rafId = 0;
     }
+    this._cancelProgressiveRender();
     this._pendingRender = 0;
-    this._pendingAction = 'redraw';
+    this._pendingAction = null;
     this._pendingNavDelta = null;
     this._navSnapshotTransform = null;
     if (this._wheelSettleTimer !== null) {

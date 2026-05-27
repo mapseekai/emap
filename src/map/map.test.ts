@@ -8,6 +8,7 @@ import { EditHistory } from '../edit/edit-history';
 import { CompositeCommand } from '../edit/commands/composite';
 import { ValidatorRegistry } from '../validation/registry';
 import { FeatureAccessor } from './feature-accessor';
+import { CanvasPainter } from '../renderer/canvas-painter';
 
 // Snapshot the real mapshaper.internal entry points at module-load time,
 // BEFORE any test has had a chance to mock them. Some test blocks below
@@ -171,6 +172,453 @@ function createBareMap(): Emap {
   setPrivate(map, '_expressionPolicy', 'trusted');
   return map as Emap;
 }
+
+describe('Emap render scheduling', () => {
+  it('forwards standalone nav renders instead of promoting them to redraw', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    let queuedFrame: FrameRequestCallback | null = null;
+    const requestAnimationFrameMock = vi.fn((cb: FrameRequestCallback) => {
+      queuedFrame = cb;
+      return 1;
+    });
+    const renderMock = vi.fn();
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_pendingRender', 0);
+      setPrivate(map, '_rafId', 0);
+      setPrivate(map, '_pendingAction', null);
+      setPrivate(map, '_pendingNavDelta', null);
+      setPrivate(map, 'render', renderMock);
+      globalThis.requestAnimationFrame = requestAnimationFrameMock;
+
+      callPrivate(map, '_scheduleRender', 'nav', { sx: 2, sy: 2, tx: 12, ty: -8 });
+      expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
+      expect(queuedFrame).not.toBeNull();
+      queuedFrame?.(16);
+
+      expect(renderMock).toHaveBeenCalledWith({
+        action: 'nav',
+        navDelta: { sx: 2, sy: 2, tx: 12, ty: -8 },
+      });
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('applies fast-nav zoom as one affine matrix so translation is not re-scaled', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const cancelProgressiveRender = vi.fn();
+    const canvas = {
+      style: {
+        transform: '',
+        transformOrigin: '',
+      },
+    };
+
+    setPrivate(map, '_cancelProgressiveRender', cancelProgressiveRender);
+    setPrivate(map, '_canvas', canvas);
+
+    callPrivate(map, '_applyFastTransform', { sx: 1.5, sy: 1.5, tx: -120, ty: 48 });
+
+    expect(cancelProgressiveRender).toHaveBeenCalledTimes(1);
+    expect(canvas.style.transformOrigin).toBe('top left');
+    expect(canvas.style.transform).toBe('matrix(1.5,0,0,1.5,-120,48)');
+  });
+
+  it('forwards standalone overlay renders without promoting them to redraw', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    let queuedFrame: FrameRequestCallback | null = null;
+    const requestAnimationFrameMock = vi.fn((cb: FrameRequestCallback) => {
+      queuedFrame = cb;
+      return 1;
+    });
+    const renderMock = vi.fn();
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_pendingRender', 0);
+      setPrivate(map, '_rafId', 0);
+      setPrivate(map, '_pendingAction', null);
+      setPrivate(map, '_pendingNavDelta', null);
+      setPrivate(map, 'render', renderMock);
+      globalThis.requestAnimationFrame = requestAnimationFrameMock;
+
+      callPrivate(map, '_scheduleRender', 'overlay');
+      expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
+      expect(queuedFrame).not.toBeNull();
+      queuedFrame?.(16);
+
+      expect(renderMock).toHaveBeenCalledWith({ action: 'overlay' });
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('keeps redraw priority over pending overlay renders', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    let queuedFrame: FrameRequestCallback | null = null;
+    const requestAnimationFrameMock = vi.fn((cb: FrameRequestCallback) => {
+      queuedFrame = cb;
+      return 1;
+    });
+    const renderMock = vi.fn();
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_pendingRender', 0);
+      setPrivate(map, '_rafId', 0);
+      setPrivate(map, '_pendingAction', null);
+      setPrivate(map, '_pendingNavDelta', null);
+      setPrivate(map, 'render', renderMock);
+      globalThis.requestAnimationFrame = requestAnimationFrameMock;
+
+      callPrivate(map, '_scheduleRender', 'overlay');
+      callPrivate(map, '_scheduleRender', 'redraw');
+      queuedFrame?.(16);
+
+      expect(renderMock).toHaveBeenCalledWith({ action: 'redraw' });
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('schedules overlay-only renders for highlight changes', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const scheduleRender = vi.fn();
+    setPrivate(map, '_highlightManager', {
+      setHighlightedFeatures: vi.fn(),
+      clearHighlightedFeatures: vi.fn(() => true),
+      setHighlightStyle: vi.fn(() => true),
+    });
+    setPrivate(map, '_scheduleRender', scheduleRender);
+
+    map.setHighlightedFeatures([{ source: 's', layer: 'l', id: 1 }]);
+    map.clearHighlightedFeatures();
+    map.setHighlightStyle({ color: '#f00' });
+
+    expect(scheduleRender).toHaveBeenNthCalledWith(1, 'overlay');
+    expect(scheduleRender).toHaveBeenNthCalledWith(2, 'overlay');
+    expect(scheduleRender).toHaveBeenNthCalledWith(3, 'overlay');
+  });
+
+  it('uses a longer wheel settle delay for heavy point layers', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    setPrivate(map, '_sources', new globalThis.Map([['points', {}]]));
+    setPrivate(map, '_getEffectiveLayers', () => [
+      { id: 'points', type: 'circle', source: 'points' },
+    ]);
+    setPrivate(map, '_resolveSourceLayer', () => ({
+      shapes: Array.from({ length: 200000 }, (_, i) => [i, i]),
+    }));
+
+    expect(callPrivate(map, '_getWheelSettleMs')).toBe(2000);
+  });
+
+  it('renders heavy point layers progressively across animation frames', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const ranges: Array<[number, number]> = [];
+    const frames: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_renderGeneration', 1);
+      setPrivate(map, '_progressiveRenderFrames', []);
+      setPrivate(map, '_repaintOverlays', () => {});
+      setPrivate(map, '_painter', {
+        drawPoints: vi.fn(),
+        drawPointsRange: vi.fn((_shapes: unknown[], _style: unknown, start: number, end: number) => {
+          ranges.push([start, end]);
+        }),
+      });
+      globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+        frames.push(cb);
+        return frames.length;
+      });
+
+      const shapes = Array.from({ length: 400001 }, (_, i) => [i, i]);
+      callPrivate(map, '_renderPointLayer', shapes, { color: '#333', radius: 4, fill: true }, true);
+
+      expect(ranges).toEqual([[0, 200000]]);
+      expect(frames).toHaveLength(1);
+      frames.shift()?.(16);
+      expect(ranges).toEqual([[0, 200000], [200000, 400000]]);
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('renders heavy line layers progressively by arc range', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const ranges: Array<[number, number]> = [];
+    const frames: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_renderGeneration', 1);
+      setPrivate(map, '_progressiveRenderFrames', []);
+      setPrivate(map, '_repaintOverlays', () => {});
+      setPrivate(map, '_viewport', { getArcFilter: () => undefined });
+      setPrivate(map, '_painter', {
+        drawArcs: vi.fn(),
+        drawArcsRange: vi.fn((_arcs: unknown, _style: unknown, start: number, end: number) => {
+          ranges.push([start, end]);
+        }),
+      });
+      globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+        frames.push(cb);
+        return frames.length;
+      });
+
+      const arcs = {
+        size: () => 4,
+        getPointCount: () => 460000,
+        getVertexData: () => ({ nn: new Int32Array([120000, 120000, 120000, 100000]) }),
+      };
+      callPrivate(map, '_renderLineLayer', { type: 'line', paint: {} }, null, arcs, 'src:default', 1, true);
+
+      expect(ranges).toEqual([[0, 2]]);
+      frames.shift()?.(16);
+      expect(ranges).toEqual([[0, 2], [2, 4]]);
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('bases progressive line chunks on visible arc nodes', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const ranges: Array<[number, number]> = [];
+    const frames: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_renderGeneration', 1);
+      setPrivate(map, '_progressiveRenderFrames', []);
+      setPrivate(map, '_repaintOverlays', () => {});
+      setPrivate(map, '_viewport', { getArcFilter: () => (i: number) => i >= 2 });
+      setPrivate(map, '_painter', {
+        drawArcs: vi.fn(),
+        drawArcsRange: vi.fn((_arcs: unknown, _style: unknown, start: number, end: number) => {
+          ranges.push([start, end]);
+        }),
+      });
+      globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+        frames.push(cb);
+        return frames.length;
+      });
+
+      const arcs = {
+        size: () => 4,
+        getVertexData: () => ({ nn: new Int32Array([120000, 120000, 120000, 120000]) }),
+      };
+      callPrivate(map, '_renderLineLayer', { type: 'line', paint: {} }, null, arcs, 'src:default', 1, true);
+
+      expect(ranges).toEqual([[0, 4]]);
+      expect(frames).toHaveLength(0);
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('skips line rendering when viewport filtering leaves no visible arc nodes', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const drawArcs = vi.fn();
+    const drawArcsRange = vi.fn();
+
+    setPrivate(map, '_removed', false);
+    setPrivate(map, '_renderGeneration', 1);
+    setPrivate(map, '_progressiveRenderFrames', []);
+    setPrivate(map, '_viewport', { getArcFilter: () => () => false });
+    setPrivate(map, '_painter', { drawArcs, drawArcsRange });
+
+      const arcs = {
+        size: () => 2,
+      getVertexData: () => ({ nn: new Int32Array([120000, 120000]) }),
+    };
+    callPrivate(map, '_renderLineLayer', { type: 'line', paint: {} }, null, arcs, 'src:default', 1, true);
+
+    expect(drawArcs).not.toHaveBeenCalled();
+    expect(drawArcsRange).not.toHaveBeenCalled();
+  });
+
+  it('interleaves fill and outline chunks for heavy fill layers', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const calls: string[] = [];
+    const frames: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_renderGeneration', 1);
+      setPrivate(map, '_progressiveRenderFrames', []);
+      setPrivate(map, '_repaintOverlays', () => {});
+      setPrivate(map, '_viewport', { getArcFilter: () => undefined });
+      setPrivate(map, '_getLayerArcFlags', () => null);
+      setPrivate(map, '_painter', {
+        drawPolygonFill: vi.fn(),
+        drawPolygonFillRange: vi.fn((_shapes: unknown[], _arcs: unknown, _fill: string, start: number, end: number) => {
+          calls.push(`fill:${start}-${end}`);
+        }),
+        drawArcs: vi.fn(),
+        drawArcsRange: vi.fn((_arcs: unknown, _style: unknown, start: number, end: number) => {
+          calls.push(`arc:${start}-${end}`);
+        }),
+      });
+      globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+        frames.push(cb);
+        return frames.length;
+      });
+
+      const shapes = [
+        [[0]],
+        [[1]],
+        [[2]],
+        [[3]],
+      ];
+      const arcs = {
+        size: () => 4,
+        getPointCount: () => 460000,
+        getVertexData: () => ({ nn: new Int32Array([120000, 120000, 120000, 100000]) }),
+      };
+      callPrivate(map, '_renderFillLayer', { type: 'fill', paint: {} }, { shapes }, arcs, 'src:default', 1, true);
+
+      // Fill and outline schedulers run concurrently, so the first chunk of
+      // each draws synchronously and subsequent chunks interleave in rAF order.
+      expect(calls).toEqual(['fill:0-2', 'arc:0-2']);
+      frames.shift()?.(16);
+      expect(calls).toEqual(['fill:0-2', 'arc:0-2', 'fill:2-4']);
+      frames.shift()?.(32);
+      expect(calls).toEqual([
+        'fill:0-2',
+        'arc:0-2',
+        'fill:2-4',
+        'arc:2-4',
+      ]);
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('repaints highlight and edit overlays after each progressive chunk', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const frames: FrameRequestCallback[] = [];
+    const repaintCalls: number[] = [];
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    try {
+      setPrivate(map, '_removed', false);
+      setPrivate(map, '_renderGeneration', 1);
+      setPrivate(map, '_progressiveRenderFrames', []);
+      setPrivate(map, '_painter', {
+        drawPoints: vi.fn(),
+        drawPointsRange: vi.fn(),
+      });
+      setPrivate(map, '_repaintOverlays', () => {
+        repaintCalls.push(repaintCalls.length + 1);
+      });
+      globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+        frames.push(cb);
+        return frames.length;
+      });
+
+      const shapes = Array.from({ length: 400001 }, (_, i) => [i, i]);
+      callPrivate(map, '_renderPointLayer', shapes, { color: '#333', radius: 4, fill: true }, true);
+
+      // Initial synchronous chunk does NOT repaint (caller's _renderImpl will).
+      expect(repaintCalls).toHaveLength(0);
+      frames.shift()?.(16);
+      // Subsequent chunk must repaint overlays so chunk pixels don't cover them.
+      expect(repaintCalls).toHaveLength(1);
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('does not snapshot overlay regions while progressive chunks are pending', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const painter = Object.create(CanvasPainter.prototype) as CanvasPainter;
+    const saveRegion = vi.fn();
+    setPrivate(painter, 'saveRegion', saveRegion);
+    setPrivate(map, '_painter', painter);
+    setPrivate(map, '_progressiveRenderPending', 1);
+    setPrivate(map, '_overlaySnapshot', null);
+    setPrivate(map, '_getOverlayDirtyRect', () => ({ x: 1, y: 2, width: 3, height: 4 }));
+    setPrivate(map, '_renderHighlight', vi.fn());
+    setPrivate(map, '_editState', { mode: 'none', vertex: null, draw: null });
+    setPrivate(map, '_editOverlay', { render: vi.fn() });
+
+    callPrivate(map, '_renderOverlaysWithSnapshot', {}, 1);
+
+    expect(saveRegion).not.toHaveBeenCalled();
+    expect(getPrivate(map, '_overlaySnapshot')).toBeNull();
+    expect(getPrivate(map, '_overlayUnrestorableRect')).toEqual({ x: 1, y: 2, width: 3, height: 4 });
+  });
+
+  it('promotes overlay-only renders to full redraw while progressive chunks are pending', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const painter = Object.create(CanvasPainter.prototype) as CanvasPainter;
+    const renderFull = vi.fn();
+    setPrivate(map, '_painter', painter);
+    setPrivate(map, '_progressiveRenderPending', 1);
+    setPrivate(map, '_renderFull', renderFull);
+
+    callPrivate(map, '_renderOverlayOnly');
+
+    expect(renderFull).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders first highlight as overlay-only when no prior overlay snapshot exists', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const painter = Object.create(CanvasPainter.prototype) as CanvasPainter;
+    const renderFull = vi.fn();
+    const saveRegion = vi.fn(() => ({ width: 3, height: 4 } as ImageData));
+    const withClipRect = vi.fn((_rect: unknown, draw: () => void) => draw());
+    setPrivate(painter, 'saveRegion', saveRegion);
+    setPrivate(painter, 'setTransform', vi.fn());
+    setPrivate(painter, 'withClipRect', withClipRect);
+    setPrivate(map, '_painter', painter);
+    setPrivate(map, '_progressiveRenderPending', 0);
+    setPrivate(map, '_overlaySnapshot', null);
+    setPrivate(map, '_overlayUnrestorableRect', null);
+    setPrivate(map, '_renderFull', renderFull);
+    setPrivate(map, '_getOverlayDirtyRect', () => ({ x: 1, y: 2, width: 3, height: 4 }));
+    setPrivate(map, '_viewport', { transform: {}, getLineScale: () => 1 });
+    setPrivate(map, '_renderHighlight', vi.fn());
+    setPrivate(map, '_editState', { mode: 'none', vertex: null, draw: null });
+    setPrivate(map, '_editOverlay', { render: vi.fn() });
+
+    callPrivate(map, '_renderOverlayOnly');
+
+    expect(renderFull).not.toHaveBeenCalled();
+    expect(saveRegion).toHaveBeenCalledWith({ x: 1, y: 2, width: 3, height: 4 });
+    expect(withClipRect).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses dirty redraw for unrestorable previous overlays instead of full redraw', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const painter = Object.create(CanvasPainter.prototype) as CanvasPainter;
+    const renderFull = vi.fn();
+    const renderDirtyRect = vi.fn();
+    setPrivate(map, '_painter', painter);
+    setPrivate(map, '_progressiveRenderPending', 0);
+    setPrivate(map, '_overlaySnapshot', null);
+    setPrivate(map, '_overlayUnrestorableRect', { x: 1, y: 2, width: 3, height: 4 });
+    setPrivate(map, '_getOverlayDirtyRect', () => ({ x: 10, y: 20, width: 5, height: 6 }));
+    setPrivate(map, '_renderFull', renderFull);
+    setPrivate(map, '_renderDirtyRect', renderDirtyRect);
+
+    callPrivate(map, '_renderOverlayOnly');
+
+    expect(renderFull).not.toHaveBeenCalled();
+    expect(renderDirtyRect).toHaveBeenCalledWith({ x: 1, y: 2, width: 14, height: 24 });
+  });
+});
 
 describe('Emap layer management', () => {
   let map: Emap;
@@ -692,6 +1140,33 @@ describe('Emap deleteSelected', () => {
     map.undo();
     expect(layer.shapes).toEqual([['s0'], ['s1'], ['s2'], ['s3']]);
     expect(records).toEqual([{ name: 'a' }, { name: 'b' }, { name: 'c' }, { name: 'd' }]);
+  });
+
+  it('schedules a dirty-rect redraw when deleted geometry has screen bounds', () => {
+    const scheduleRender = vi.fn();
+    setPrivate(map, '_scheduleRender', scheduleRender);
+    setPrivate(map, 'project', (x: number, y: number) => [x, y]);
+    records = [{ name: 'a' }, { name: 'b' }];
+    layer = {
+      geometry_type: 'point',
+      shapes: [[10, 20], [30, 40]],
+      data: { getRecords: () => records },
+    } as any;
+    (map as any)._sources.set('src1', {
+      id: 'src1',
+      type: 'topology',
+      getLayers: () => [layer],
+      getArcs: () => undefined,
+    });
+
+    selectIds([1]);
+    expect(map.deleteSelected()).toBe(true);
+
+    expect(scheduleRender).toHaveBeenLastCalledWith(
+      'dirty',
+      undefined,
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+    );
   });
 });
 

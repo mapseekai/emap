@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-05-27
+
+### Performance
+
+- Heavy map navigation now keeps pan and wheel interactions responsive by
+  reusing the last rendered frame during navigation and settling with a full
+  redraw afterward.
+- Large-layer overlay updates avoid full layer redraws for vertex hover,
+  highlighted features, and localized dirty regions. Vertex edit hover no
+  longer forces a synchronous full render on every mousemove.
+- Progressive rendering is guarded so overlay snapshots and dirty-rect redraws
+  do not read or restore unstable canvas regions while large layer chunks are
+  still pending.
+
 ### Changed
 
 - `normalizeCrsString` now preserves the original case of non-EPSG inputs

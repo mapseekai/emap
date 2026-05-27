@@ -9,7 +9,10 @@ type MockMap = {
   setEditVertexState: (state: unknown) => void;
   render: () => void;
   fire: (type: string, payload: unknown) => void;
-  getSource?: (id: string) => { refreshDisplayArcs?: () => void } | undefined;
+  getSource?: (id: string) => {
+    refreshDisplayArcs?: () => void;
+    markDisplayArcsDirty?: () => void;
+  } | undefined;
 };
 
 function setPrivate(target: object, key: string, value: unknown): void {
@@ -75,7 +78,52 @@ describe('VertexEditHandler', () => {
     callPrivate(handler, '_handleDrag', 90, 100);
 
     expect(snapSpy).toHaveBeenCalledWith([4, 9, 11], [11, 22], expect.any(Object));
-    expect(mapMock.render).toHaveBeenCalled();
+    expect(mapMock.setEditVertexState).toHaveBeenCalled();
+    expect(mapMock.render).not.toHaveBeenCalled();
+  });
+
+  it('updates hover overlay on mousemove without forcing a full render', () => {
+    const render = vi.fn();
+    const setEditVertexState = vi.fn();
+    const mapMock = {
+      queryFeatures: vi.fn(() => [{ source: 'src-a', layer: 'roads', id: 0, geometryType: 'polyline' }]),
+      getSource: vi.fn(() => ({
+        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [[[0]]] }],
+        getArcs: () => ({
+          getVertex2: () => [1, 2],
+        }),
+      })),
+      unproject: vi.fn(() => [1, 2] as [number, number]),
+      project: vi.fn(() => [90, 100] as [number, number]),
+      setEditVertexState,
+      render,
+    };
+    Reflect.set(mapshaper.internal as object, 'findNearestVertices', vi.fn(() => [0]));
+
+    const handler = new VertexEditHandler(mapMock as any);
+    callPrivate(handler, '_onMouseMove', 90, 100);
+
+    expect(setEditVertexState).toHaveBeenCalledWith(expect.objectContaining({
+      hoverVertex: [1, 2],
+      hoverType: 'vertex',
+    }));
+    expect(render).not.toHaveBeenCalled();
+  });
+
+  it('clears hover overlay on empty mousemove hit without forcing a full render', () => {
+    const render = vi.fn();
+    const clearEditVertexState = vi.fn();
+    const mapMock = {
+      queryFeatures: vi.fn(() => []),
+      clearEditVertexState,
+      render,
+    };
+
+    const handler = new VertexEditHandler(mapMock as any);
+    callPrivate(handler, '_onMouseMove', 90, 100);
+
+    expect(clearEditVertexState).toHaveBeenCalledTimes(1);
+    expect(render).not.toHaveBeenCalled();
   });
 
   it('snaps dragged vertices to other feature vertices when drag snap is enabled', () => {
@@ -160,11 +208,149 @@ describe('VertexEditHandler', () => {
     expect(snapSpy).toHaveBeenCalledWith([0], [11, 0], expect.any(Object));
   });
 
-  it('fires vertex_moved with compatibility fields and refreshes arc bbox', () => {
+  it('skips drag snap distance work for segments outside the pointer threshold bbox', () => {
+    const movingShape = [[0]];
+    const targetShape = [[1]];
+    const xx = new Float64Array([0, 0, 1000, 1010]);
+    const yy = new Float64Array([0, 0, 1000, 1010]);
+    const projectSpy = vi.fn((x: number, y: number) => [x, y] as [number, number]);
+    const closestSpy = vi.fn(() => [1000, 1000]);
+    const mapMock = {
+      unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
+      project: projectSpy,
+      getSource: vi.fn(() => ({
+        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] }],
+        getArcs: () => ({ getVertex2: () => [0, 0] }),
+      })),
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+    const snapSpy = vi.fn();
+    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
+    Reflect.set(mapshaper.internal as object, 'findClosestPointOnSeg', closestSpy);
+    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', vi.fn((shape, _arcs, cb) => {
+      if (shape === targetShape) cb(2, 3, xx, yy);
+    }));
+
+    const handler = new VertexEditHandler(mapMock as any, { snapThreshold: 5 });
+    setPrivate(handler, '_map', mapMock);
+    setPrivate(handler, '_hoverVertexIds', [0]);
+    setPrivate(handler, '_hoveredFeature', {
+      id: 0,
+      source: 'src-a',
+      layer: 'roads',
+      shape: movingShape,
+      arcs: { getVertex2: () => [0, 0] },
+      geometryType: 'polyline',
+      allLayers: [],
+    });
+
+    callPrivate(handler, '_handleDrag', 11, 0);
+
+    expect(projectSpy).not.toHaveBeenCalled();
+    expect(closestSpy).not.toHaveBeenCalled();
+    expect(snapSpy).toHaveBeenCalledWith([0], [11, 0], expect.any(Object));
+  });
+
+  it('skips segment iteration for shapes outside the pointer threshold bbox', () => {
+    const movingShape = [[0]];
+    const targetShape = [[1]];
+    const forEachSpy = vi.fn();
+    const mapMock = {
+      unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
+      project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
+      getSource: vi.fn(() => ({
+        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] }],
+        getArcs: () => ({
+          getVertex2: () => [0, 0],
+          getSimpleShapeBbox: (_part: number[], bbox: number[]) => {
+            bbox[0] = 1000;
+            bbox[1] = 1000;
+            bbox[2] = 1010;
+            bbox[3] = 1010;
+          },
+        }),
+      })),
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+    const snapSpy = vi.fn();
+    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
+    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', forEachSpy);
+
+    const handler = new VertexEditHandler(mapMock as any, { snapThreshold: 5 });
+    setPrivate(handler, '_map', mapMock);
+    setPrivate(handler, '_hoverVertexIds', [0]);
+    setPrivate(handler, '_hoveredFeature', {
+      id: 0,
+      source: 'src-a',
+      layer: 'roads',
+      shape: movingShape,
+      arcs: { getVertex2: () => [0, 0] },
+      geometryType: 'polyline',
+      allLayers: [],
+    });
+
+    callPrivate(handler, '_handleDrag', 11, 0);
+
+    expect(forEachSpy).not.toHaveBeenCalled();
+    expect(snapSpy).toHaveBeenCalledWith([0], [11, 0], expect.any(Object));
+  });
+
+  it('reuses the last drag coordinate on mouseup instead of resolving snap again', () => {
+    const unprojectSpy = vi.fn((px: number, py: number) => [px, py] as [number, number]);
+    const mapMock = {
+      getCanvasContainer: () => ({
+        getBoundingClientRect: () => ({ left: 0, top: 0 })
+      }),
+      unproject: unprojectSpy,
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+      fire: vi.fn(),
+      getSource: vi.fn(() => ({ markDisplayArcsDirty: vi.fn() })),
+      pushCommand: vi.fn(),
+    };
+    const snapSpy = vi.fn();
+    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
+
+    const handler = new VertexEditHandler(mapMock as any, {
+      snapToVertex: false,
+      snapToEdge: false,
+    });
+    setPrivate(handler, '_map', mapMock);
+    setPrivate(handler, '_dragging', true);
+    setPrivate(handler, '_dragFromCoords', [0, 0]);
+    setPrivate(handler, '_hoverVertexIds', [0]);
+    setPrivate(handler, '_hoveredFeature', {
+      id: 0,
+      source: 'src-a',
+      layer: 'roads',
+      shape: [[0]],
+      arcs: {
+        getArcIter: () => ({ x: 0, y: 0, hasNext: () => false }),
+        getVertex2: () => [0, 0],
+      },
+      geometryType: 'polyline',
+      allLayers: [],
+    });
+
+    callPrivate(handler, '_handleDrag', 11, 0);
+    callPrivate(handler, '_finishDrag', 99, 99);
+
+    expect(unprojectSpy).toHaveBeenCalledTimes(1);
+    expect(snapSpy).toHaveBeenLastCalledWith([0], [11, 0], expect.any(Object));
+    expect(mapMock.fire).toHaveBeenCalledWith(
+      'vertex_moved',
+      expect.objectContaining({ coords: [11, 0] }),
+    );
+  });
+
+  it('fires vertex_moved with compatibility fields and defers DisplayArcs rebuild', () => {
     const transformPoints = vi.fn();
     const fireSpy = vi.fn();
     const renderSpy = vi.fn();
     const refreshDisplayArcs = vi.fn();
+    const markDisplayArcsDirty = vi.fn();
 
     const mapMock: MockMap = {
       getCanvasContainer: () => ({
@@ -174,7 +360,7 @@ describe('VertexEditHandler', () => {
       setEditVertexState: vi.fn(),
       render: renderSpy,
       fire: fireSpy,
-      getSource: vi.fn(() => ({ refreshDisplayArcs }))
+      getSource: vi.fn(() => ({ refreshDisplayArcs, markDisplayArcsDirty }))
     };
 
     const handler = new VertexEditHandler(mapMock as any);
@@ -197,8 +383,9 @@ describe('VertexEditHandler', () => {
     // clientX:1, clientY:2, rect left:0, top:0 → px=1, py=2
     callPrivate(handler, '_finishDrag', 1, 2);
 
-    expect(transformPoints).toHaveBeenCalledTimes(1);
-    expect(refreshDisplayArcs).toHaveBeenCalledTimes(1);
+    expect(transformPoints).not.toHaveBeenCalled();
+    expect(refreshDisplayArcs).not.toHaveBeenCalled();
+    expect(markDisplayArcsDirty).toHaveBeenCalledTimes(1);
     expect(fireSpy).toHaveBeenCalledWith(
       'vertex_moved',
       expect.objectContaining({

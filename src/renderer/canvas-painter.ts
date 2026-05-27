@@ -1,7 +1,7 @@
 import { Painter, DrawOverlayState } from './painter';
 import { AffineTransform } from '../geo/transform';
-import { normalizePointShape } from '../source/layer-utils';
 import type { ArcCollection, StrokeStyle, PointStyle, VertexDotStyle } from '../types/mapshaper-types';
+import type { PixelRect } from '../map/types';
 
 export class CanvasPainter implements Painter {
   private _ctx: CanvasRenderingContext2D;
@@ -20,6 +20,42 @@ export class CanvasPainter implements Painter {
 
   setPixelRatio(ratio: number): void {
     this._pixelRatio = ratio;
+  }
+
+  saveRegion(rect: PixelRect): ImageData | null {
+    const r = this._clampRect(rect);
+    if (!r) return null;
+    return this._ctx.getImageData(r.x, r.y, r.width, r.height);
+  }
+
+  restoreRegion(rect: PixelRect, image: ImageData): void {
+    const r = this._clampRect(rect);
+    if (!r) return;
+    this._ctx.putImageData(image, r.x, r.y);
+  }
+
+  withClipRect(rect: PixelRect, draw: () => void): void {
+    const r = this._clampRect(rect);
+    if (!r) return;
+    const ctx = this._ctx;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(r.x, r.y, r.width, r.height);
+    ctx.clip();
+    try {
+      draw();
+    } finally {
+      ctx.restore();
+    }
+  }
+
+  private _clampRect(rect: PixelRect): PixelRect | null {
+    const x0 = Math.max(0, Math.floor(rect.x));
+    const y0 = Math.max(0, Math.floor(rect.y));
+    const x1 = Math.min(this._ctx.canvas.width, Math.ceil(rect.x + rect.width));
+    const y1 = Math.min(this._ctx.canvas.height, Math.ceil(rect.y + rect.height));
+    if (x1 <= x0 || y1 <= y0) return null;
+    return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
   }
 
   drawPaths(shapes: any[], style: StrokeStyle, arcs: ArcCollection): void {
@@ -57,10 +93,14 @@ export class CanvasPainter implements Painter {
 
   // Direct arc rendering for maximum performance (bypasses shape iteration)
   drawArcs(arcs: ArcCollection, style: StrokeStyle, filter?: (i: number) => boolean): void {
+    this.drawArcsRange(arcs, style, 0, arcs.size(), filter);
+  }
+
+  drawArcsRange(arcs: ArcCollection, style: StrokeStyle, start: number, end: number, filter?: (i: number) => boolean): void {
     if (style.width === 0) return;
     const ctx = this._ctx;
     const batchSize = 100;
-    const n = arcs.size();
+    const n = Math.min(end, arcs.size());
 
     ctx.strokeStyle = style.color || '#333';
     ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
@@ -70,7 +110,7 @@ export class CanvasPainter implements Painter {
     let count = 0;
     ctx.beginPath();
 
-    for (let i = 0; i < n; i++) {
+    for (let i = Math.max(0, start); i < n; i++) {
       if (filter && !filter(i)) continue;
       if (count > 0 && count % batchSize === 0) {
         ctx.stroke();
@@ -118,7 +158,11 @@ export class CanvasPainter implements Painter {
     }
   }
 
-  drawPoints(_shapes: any[], _style: PointStyle): void {
+  drawPoints(shapes: any[], style: PointStyle): void {
+    this.drawPointsRange(shapes, style, 0, shapes.length);
+  }
+
+  drawPointsRange(_shapes: any[], _style: PointStyle, start: number, end: number): void {
     const ctx = this._ctx;
     const pr = this._pixelRatio;
     const mx = this._transform.mx * pr;
@@ -128,27 +172,51 @@ export class CanvasPainter implements Painter {
     const radius = (Number(_style?.radius) || 4) * pr;
     const color = _style?.color || '#333';
     const fill = _style?.fill !== false;
+    const batchSize = 5000;
+    const minX = -radius;
+    const minY = -radius;
+    const maxX = ctx.canvas.width + radius;
+    const maxY = ctx.canvas.height + radius;
+    let count = 0;
+
+    const drawPoint = (p: number[]) => {
+      const x = p[0] * mx + bx;
+      const y = p[1] * my + by;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      if (x < minX || x > maxX || y < minY || y > maxY) return;
+      ctx.moveTo(x + radius, y);
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      count++;
+      if (count >= batchSize) flush();
+    };
+
+    const flush = () => {
+      if (count === 0) return;
+      if (fill) {
+        ctx.fill();
+      } else {
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      count = 0;
+    };
 
     ctx.beginPath();
     ctx.fillStyle = color;
     ctx.strokeStyle = color;
 
-    _shapes.forEach(shape => {
-      if (!shape) return;
-      const points = normalizePointShape(shape);
-      points.forEach((p: number[]) => {
-        const x = p[0] * mx + bx;
-        const y = p[1] * my + by;
-        ctx.moveTo(x + radius, y);
-        ctx.arc(x, y, radius, 0, Math.PI * 2);
-      });
-    });
-
-    if (fill) {
-      ctx.fill();
-    } else {
-      ctx.stroke();
+    const len = Math.min(end, _shapes.length);
+    for (let i = Math.max(0, start); i < len; i++) {
+      const shape = _shapes[i];
+      if (!shape) continue;
+      if (typeof shape[0] === 'number') {
+        drawPoint(shape);
+      } else if (Array.isArray(shape[0])) {
+        shape.forEach(drawPoint);
+      }
     }
+
+    flush();
   }
 
   /**
@@ -244,6 +312,18 @@ export class CanvasPainter implements Painter {
      */
     opacity?: number,
   ): void {
+    this.drawPolygonFillRange(shapes, arcs, fillColor, 0, shapes.length, filter, opacity);
+  }
+
+  drawPolygonFillRange(
+    shapes: any[],
+    arcs: ArcCollection & { getShapeIter?: (part: number[]) => { x: number; y: number; hasNext(): boolean } },
+    fillColor: string,
+    start: number,
+    end: number,
+    filter?: (i: number) => boolean,
+    opacity?: number,
+  ): void {
     if (!arcs.getShapeIter) return; // guard: need shape-aware iterator
 
     const ctx = this._ctx;
@@ -270,7 +350,8 @@ export class CanvasPainter implements Painter {
     let counts = 0;
 
     ctx.beginPath();
-    for (let sIdx = 0; sIdx < shapes.length; sIdx++) {
+    const len = Math.min(end, shapes.length);
+    for (let sIdx = Math.max(0, start); sIdx < len; sIdx++) {
       const shape = shapes[sIdx];
       if (!shape) continue;
       

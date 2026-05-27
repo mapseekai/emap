@@ -34,6 +34,21 @@ describe('Viewport camera-state primitives', () => {
     expect(px).toBeCloseTo(400, 6); // width/2
     expect(py).toBeCloseTo(300, 6); // height/2
   });
+
+  it('centers a zero-area point extent with a finite transform', () => {
+    const v = new Viewport();
+    v.updateSize(800, 600);
+
+    v.setExtent(new Bounds(12, 34, 12, 34));
+
+    expect(Number.isFinite(v.transform.mx)).toBe(true);
+    expect(Number.isFinite(v.transform.my)).toBe(true);
+    expect(Number.isFinite(v.transform.bx)).toBe(true);
+    expect(Number.isFinite(v.transform.by)).toBe(true);
+    const [px, py] = v.transform.project(12, 34);
+    expect(px).toBeCloseTo(400, 6);
+    expect(py).toBeCloseTo(300, 6);
+  });
 });
 
 describe('Viewport arc filtering', () => {

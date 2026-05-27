@@ -1,6 +1,5 @@
 import type { AffineDelta, RenderAction, RenderRequest } from '../map/types';
 
-export const SLOW_FRAME_MS = 100;
 export const FAST_SETTLE_FALLBACK_MS = 2000;
 
 export interface RenderSnapshot {
@@ -11,7 +10,9 @@ export interface RenderSnapshot {
 
 export interface RenderCallbacks {
   fullRedraw: () => void;
+  dirtyRedraw: (rect: import('../map/types').PixelRect) => void;
   fastNav: (delta: AffineDelta) => void;
+  overlayRedraw: () => void;
   getSnapshot: () => RenderSnapshot;
 }
 
@@ -31,6 +32,16 @@ export class RenderScheduler {
       this._fastActive = true;
       this._callbacks.fastNav(req.navDelta);
       this._markRedrawPending();
+      return;
+    }
+
+    if (action === 'dirty' && req.dirtyRect && !this._fastActive) {
+      this._callbacks.dirtyRedraw(req.dirtyRect);
+      return;
+    }
+
+    if (action === 'overlay' && !this._fastActive) {
+      this._callbacks.overlayRedraw();
       return;
     }
 
@@ -71,8 +82,6 @@ export class RenderScheduler {
 
   private _shouldUseFastNav(): boolean {
     if (!this._snapshot) return false;
-    if (this._lastFrameMs <= SLOW_FRAME_MS) return false;
-
     const current = this._callbacks.getSnapshot();
     if (current.canvasWidth !== this._snapshot.canvasWidth) return false;
     if (current.canvasHeight !== this._snapshot.canvasHeight) return false;
