@@ -1,4 +1,4 @@
-import type { Device, PrimitiveTopology, RenderPass } from '@luma.gl/core';
+import type { Device, PrimitiveTopology, RenderPass, RenderPassProps } from '@luma.gl/core';
 import { Geometry, Model } from '@luma.gl/engine';
 import { WebGLDevice } from '@luma.gl/webgl';
 import { AffineTransform } from '../geo/transform';
@@ -43,6 +43,11 @@ void main() {
 interface DrawableModel {
   draw(renderPass: RenderPass): boolean | void;
   destroy(): void;
+}
+
+interface DrawPositionOptions {
+  renderPass?: RenderPassProps;
+  beforeDraw?: () => void;
 }
 
 export interface WebGLPainterDependencies {
@@ -96,7 +101,11 @@ export class WebGLPainter implements Painter {
   }
 
   clear(): void {
-    this._gl.clear(this._gl.COLOR_BUFFER_BIT | this._gl.DEPTH_BUFFER_BIT);
+    this._gl.clear(
+      this._gl.COLOR_BUFFER_BIT |
+      this._gl.DEPTH_BUFFER_BIT |
+      this._gl.STENCIL_BUFFER_BIT,
+    );
   }
 
   resize(width: number, height: number): void {
@@ -160,17 +169,54 @@ export class WebGLPainter implements Painter {
     filter?: (i: number) => boolean,
     opacity?: number,
   ): void {
-    // Phase 1 keeps polygon conversion shape-aware; Phase 2 replaces this
-    // simple fan fill with a stencil evenodd fill path for large polygons.
     const geometry = buildPolygonRingGeometry(shapes, arcs as any, filter);
-    const triangles = this._triangulateRings(
+    const stencilTriangles = this._triangulateRings(
       geometry.positions,
       geometry.ringStarts,
       geometry.ringCounts,
     );
-    this._drawPositions(triangles, triangles.length / 2, 'triangle-list', {
+    if (stencilTriangles.length === 0) return;
+
+    this._drawPositions(stencilTriangles, stencilTriangles.length / 2, 'triangle-list', {
       color: parseColor(fillColor, opacity),
       pointSize: 1,
+    }, {
+      renderPass: {
+        clearColor: false,
+        clearDepth: false,
+        clearStencil: 0,
+        parameters: {
+          viewport: [0, 0, this._canvas.width, this._canvas.height],
+          colorMask: 0,
+        },
+      },
+      beforeDraw: () => {
+        this._gl.enable(this._gl.STENCIL_TEST);
+        this._gl.stencilMask(0xff);
+        this._gl.stencilFunc(this._gl.ALWAYS, 0, 0xff);
+        this._gl.stencilOp(this._gl.KEEP, this._gl.KEEP, this._gl.INVERT);
+      },
+    });
+
+    const fillQuad = this._viewportQuadPositions();
+    this._drawPositions(fillQuad, fillQuad.length / 2, 'triangle-list', {
+      color: parseColor(fillColor, opacity),
+      pointSize: 1,
+    }, {
+      renderPass: {
+        clearColor: false,
+        clearDepth: false,
+        clearStencil: false,
+        parameters: {
+          viewport: [0, 0, this._canvas.width, this._canvas.height],
+        },
+      },
+      beforeDraw: () => {
+        this._gl.enable(this._gl.STENCIL_TEST);
+        this._gl.stencilMask(0x00);
+        this._gl.stencilFunc(this._gl.NOTEQUAL, 0, 0xff);
+        this._gl.stencilOp(this._gl.KEEP, this._gl.KEEP, this._gl.KEEP);
+      },
     });
   }
 
@@ -296,6 +342,7 @@ export class WebGLPainter implements Painter {
     vertexCount: number,
     topology: PrimitiveTopology,
     uniforms: { color: Rgba; pointSize: number },
+    options: DrawPositionOptions = {},
   ): void {
     if (vertexCount === 0) return;
     const model = this._createModel(this._device, {
@@ -307,7 +354,7 @@ export class WebGLPainter implements Painter {
         u_pointSize: uniforms.pointSize,
       },
     });
-    const renderPass = this._device.beginRenderPass({
+    const renderPass = this._device.beginRenderPass(options.renderPass ?? {
       clearColor: false,
       clearDepth: false,
       clearStencil: false,
@@ -315,9 +362,25 @@ export class WebGLPainter implements Painter {
         viewport: [0, 0, this._canvas.width, this._canvas.height],
       },
     });
+    options.beforeDraw?.();
     model.draw(renderPass);
     renderPass.end();
     model.destroy();
+  }
+
+  private _viewportQuadPositions(): Float32Array {
+    const topLeft = this._transform.unproject(0, 0);
+    const topRight = this._transform.unproject(this._width, 0);
+    const bottomRight = this._transform.unproject(this._width, this._height);
+    const bottomLeft = this._transform.unproject(0, this._height);
+    return new Float32Array([
+      topLeft[0], topLeft[1],
+      topRight[0], topRight[1],
+      bottomRight[0], bottomRight[1],
+      topLeft[0], topLeft[1],
+      bottomRight[0], bottomRight[1],
+      bottomLeft[0], bottomLeft[1],
+    ]);
   }
 
   private _triangulateRings(
