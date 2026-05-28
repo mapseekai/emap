@@ -76,4 +76,20 @@ describe('webgl geometry helpers', () => {
       0, -2, 10, 2, 0, 2,
     ]);
   });
+
+  it('converts screen-space line width back through the active transform', () => {
+    const geometry = buildExpandedLineGeometry(
+      new Float32Array([0, 0, 10, 0]),
+      4,
+      { mx: 10, my: -10 },
+    );
+    const expected = [
+      0, 0.2, 10, 0.2, 10, -0.2,
+      0, 0.2, 10, -0.2, 0, -0.2,
+    ];
+    expect(geometry.vertexCount).toBe(6);
+    Array.from(geometry.positions).forEach((value, i) => {
+      expect(value).toBeCloseTo(expected[i]);
+    });
+  });
 });

@@ -15,13 +15,18 @@ function makeDeps() {
   const renderPass = { end: vi.fn() };
   const draw = vi.fn();
   const destroy = vi.fn();
+  const setDrawingBufferSize = vi.fn();
+  const beginRenderPass = vi.fn(() => renderPass);
   return {
     renderPass,
     draw,
     destroy,
+    setDrawingBufferSize,
+    beginRenderPass,
     deps: {
       createDevice: vi.fn(() => ({
-        beginRenderPass: vi.fn(() => renderPass),
+        beginRenderPass,
+        getDefaultCanvasContext: vi.fn(() => ({ setDrawingBufferSize })),
       })),
       createModel: vi.fn(() => ({ draw, destroy })),
     },
@@ -39,7 +44,7 @@ describe('WebGLPainter', () => {
     const viewport = vi.fn();
     const gl = { clear, viewport, COLOR_BUFFER_BIT: 1, DEPTH_BUFFER_BIT: 2 };
     const canvas = makeCanvas(gl);
-    const { deps } = makeDeps();
+    const { deps, setDrawingBufferSize } = makeDeps();
     const painter = new WebGLPainter(canvas, deps);
 
     painter.setPixelRatio(2);
@@ -49,6 +54,7 @@ describe('WebGLPainter', () => {
 
     expect(canvas.width).toBe(200);
     expect(canvas.height).toBe(100);
+    expect(setDrawingBufferSize).toHaveBeenCalledWith(200, 100);
     expect(viewport).toHaveBeenCalledWith(0, 0, 200, 100);
     expect(clear).toHaveBeenCalledWith(3);
   });
@@ -61,13 +67,20 @@ describe('WebGLPainter', () => {
       DEPTH_BUFFER_BIT: 2,
     };
     const canvas = makeCanvas(gl);
-    const { deps, draw, destroy, renderPass } = makeDeps();
+    const { deps, draw, destroy, renderPass, beginRenderPass } = makeDeps();
     const painter = new WebGLPainter(canvas, deps);
 
+    painter.setPixelRatio(2);
     painter.resize(100, 100);
     painter.drawPoints([[[1, 2], [3, 4]]], { color: '#336699', radius: 4 });
 
     expect(deps.createModel).toHaveBeenCalled();
+    expect(beginRenderPass).toHaveBeenCalledWith({
+      clearColor: false,
+      clearDepth: false,
+      clearStencil: false,
+      parameters: { viewport: [0, 0, 200, 200] },
+    });
     expect(draw).toHaveBeenCalledWith(renderPass);
     expect(destroy).toHaveBeenCalled();
   });

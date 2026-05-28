@@ -102,10 +102,14 @@ export class WebGLPainter implements Painter {
   resize(width: number, height: number): void {
     this._width = width;
     this._height = height;
-    this._canvas.width = Math.floor(width * this._pixelRatio);
-    this._canvas.height = Math.floor(height * this._pixelRatio);
+    const drawingBufferWidth = Math.floor(width * this._pixelRatio);
+    const drawingBufferHeight = Math.floor(height * this._pixelRatio);
+    this._canvas.width = drawingBufferWidth;
+    this._canvas.height = drawingBufferHeight;
     this._canvas.style.width = `${width}px`;
     this._canvas.style.height = `${height}px`;
+    this._device.getDefaultCanvasContext()
+      .setDrawingBufferSize(drawingBufferWidth, drawingBufferHeight);
     this._gl.viewport(0, 0, this._canvas.width, this._canvas.height);
   }
 
@@ -125,8 +129,9 @@ export class WebGLPainter implements Painter {
     if (style.width === 0) return;
     const geometry = buildArcLineGeometry(arcs, filter);
     const uniforms = resolveStrokeUniforms(style, this._pixelRatio);
-    const expanded = uniforms.width > 1
-      ? buildExpandedLineGeometry(geometry.positions, uniforms.width)
+    const width = style.width ?? 1;
+    const expanded = width > 1
+      ? buildExpandedLineGeometry(geometry.positions, width, this._transform)
       : geometry;
     this._drawPositions(
       expanded.positions,
@@ -215,7 +220,7 @@ export class WebGLPainter implements Painter {
       }
     }
 
-    const lines = buildExpandedLineGeometry(new Float32Array(lineCoords), 2 * this._pixelRatio);
+    const lines = buildExpandedLineGeometry(new Float32Array(lineCoords), 2, this._transform);
     this._drawPositions(lines.positions, lines.vertexCount, 'triangle-list', {
       color,
       pointSize: 1,
@@ -306,6 +311,9 @@ export class WebGLPainter implements Painter {
       clearColor: false,
       clearDepth: false,
       clearStencil: false,
+      parameters: {
+        viewport: [0, 0, this._canvas.width, this._canvas.height],
+      },
     });
     model.draw(renderPass);
     renderPass.end();

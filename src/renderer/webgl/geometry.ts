@@ -11,6 +11,11 @@ export interface WebGLPolygonRingGeometry extends WebGLPositionGeometry {
   ringCounts: number[];
 }
 
+export interface LineExpansionTransform {
+  mx: number;
+  my: number;
+}
+
 export function buildArcLineGeometry(
   arcs: ArcCollection,
   filter?: (i: number) => boolean,
@@ -35,6 +40,7 @@ export function buildArcLineGeometry(
 export function buildExpandedLineGeometry(
   lineListPositions: Float32Array,
   width: number,
+  transform?: LineExpansionTransform,
 ): WebGLPositionGeometry {
   const out: number[] = [];
   const half = width / 2;
@@ -43,11 +49,13 @@ export function buildExpandedLineGeometry(
     const y1 = lineListPositions[i + 1];
     const x2 = lineListPositions[i + 2];
     const y2 = lineListPositions[i + 3];
-    const dx = x2 - x1;
-    const dy = y2 - y1;
+    const dx = transform ? (x2 - x1) * transform.mx : x2 - x1;
+    const dy = transform ? (y2 - y1) * transform.my : y2 - y1;
     const len = Math.hypot(dx, dy) || 1;
-    const nx = dy / len * half;
-    const ny = -dx / len * half;
+    const screenNx = dy / len * half;
+    const screenNy = -dx / len * half;
+    const nx = transform && transform.mx !== 0 ? screenNx / transform.mx : screenNx;
+    const ny = transform && transform.my !== 0 ? screenNy / transform.my : screenNy;
     out.push(
       x1 + nx, y1 + ny, x2 + nx, y2 + ny, x2 - nx, y2 - ny,
       x1 + nx, y1 + ny, x2 - nx, y2 - ny, x1 - nx, y1 - ny,
