@@ -49,7 +49,7 @@ import { Control, ControlPosition } from '../ui/control';
 import { getLayerId } from '../source/layer-utils';
 import { resolveStrokeStyle, resolvePointStyle } from './layer';
 import type { LayerSpecification, FillPaint, LinePaint, CirclePaint } from './layer';
-import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
+import type { ArcCollection, MapshaperDataset, MapshaperLayer, StrokeStyle } from '../types/mapshaper-types';
 // All public type/option surfaces moved to `./types`. Re-export here so
 // existing `import { MapOptions, ... } from './map'` paths keep working.
 export * from './types';
@@ -1247,6 +1247,7 @@ export class Emap extends EventDispatcher {
       const arcs = displayArcs
         ? displayArcs.getScaledArcs(pixelSize)
         : source.getArcs();
+      this._setPainterArcRevision(arcs ?? null, source.getRenderRevision());
 
       if (arcs && arcs.setRetainedInterval &&
         (typeof arcs.isFlat !== 'function' || !arcs.isFlat())) {
@@ -1272,21 +1273,38 @@ export class Emap extends EventDispatcher {
     }
   }
 
+  private _setPainterArcRevision(arcs: ArcCollection | null, revision: number): void {
+    if (!arcs) return;
+    const painter = this._painter as Painter & {
+      setArcRenderRevision?: (arcs: ArcCollection, revision: number) => void;
+    };
+    painter.setArcRenderRevision?.(arcs, revision);
+  }
+
   private _renderLineLayer(
     layer: LayerSpecification,
     ml: MapshaperLayer | null,
-    arcs: import('../types/mapshaper-types').ArcCollection,
+    arcs: ArcCollection,
     cacheKey: string,
     lineScale: number,
   ): void {
     const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
+    const fastPainter = this._webglFastPainter();
     if (ml?.shapes) {
       // Optimized layer line rendering: use drawArcs with a boolean arc
       // presence filter so each shared topology arc strokes exactly once.
       const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
+      if (fastPainter) {
+        fastPainter.drawArcFlags(arcs, style, flags);
+        return;
+      }
       const filter = this._combineArcFilters(flags, this._viewport.getArcFilter(arcs));
       this._painter.drawArcs(arcs, style, filter);
     } else {
+      if (fastPainter) {
+        fastPainter.drawArcFlags(arcs, style, null);
+        return;
+      }
       // Fallback: draw all arcs
       this._painter.drawArcs(arcs, style, this._viewport.getArcFilter(arcs));
     }
@@ -1295,14 +1313,15 @@ export class Emap extends EventDispatcher {
   private _renderFillLayer(
     layer: LayerSpecification,
     ml: MapshaperLayer,
-    arcs: import('../types/mapshaper-types').ArcCollection,
+    arcs: ArcCollection,
     cacheKey: string,
     lineScale: number,
   ): void {
     const fillPaint = layer.paint as FillPaint | undefined;
     const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
     const fillOpacity = fillPaint?.['fill-opacity'];
-    const viewportFilter = this._viewport.getArcFilter(arcs);
+    const fastPainter = this._webglFastPainter();
+    const viewportFilter = fastPainter ? undefined : this._viewport.getArcFilter(arcs);
     this._painter.drawPolygonFill(
       ml.shapes!,
       arcs,
@@ -1316,7 +1335,28 @@ export class Emap extends EventDispatcher {
     // the dominant cost of fill mode.
     const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
     const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
+    if (fastPainter) {
+      fastPainter.drawArcFlags(arcs, style, flags);
+      return;
+    }
     this._painter.drawArcs(arcs, style, this._combineArcFilters(flags, viewportFilter));
+  }
+
+  private _webglFastPainter(): (Painter & {
+    prefersGpuClipping: () => boolean;
+    drawArcFlags: (arcs: ArcCollection, style: StrokeStyle, flags?: Uint8Array | null) => void;
+  }) | null {
+    const painter = this._painter as Painter & {
+      prefersGpuClipping?: () => boolean;
+      drawArcFlags?: (arcs: ArcCollection, style: StrokeStyle, flags?: Uint8Array | null) => void;
+    };
+    if (typeof painter.drawArcFlags === 'function' && painter.prefersGpuClipping?.()) {
+      return painter as Painter & {
+        prefersGpuClipping: () => boolean;
+        drawArcFlags: (arcs: ArcCollection, style: StrokeStyle, flags?: Uint8Array | null) => void;
+      };
+    }
+    return null;
   }
 
   private _combineArcFilters(

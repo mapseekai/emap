@@ -122,6 +122,16 @@ describe('DisplayArcs.markDirty', () => {
     // filtered copy (different identity) because it rebuilt.
     expect(first).not.toBe(second);
   });
+
+  it('increments its render revision when marked dirty', () => {
+    const arcs = makeMockArcs(1000);
+    const da = new DisplayArcs(arcs);
+    const before = da.getRenderRevision();
+
+    da.markDirty();
+
+    expect(da.getRenderRevision()).toBe(before + 1);
+  });
 });
 
 describe('DisplayArcs ZZ-vs-fallback path', () => {

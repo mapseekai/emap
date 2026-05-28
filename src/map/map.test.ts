@@ -172,6 +172,68 @@ function createBareMap(): Emap {
   return map as Emap;
 }
 
+describe('Emap WebGL rendering fast path', () => {
+  it('passes layer arc flags directly to WebGL painters and skips viewport CPU filtering', () => {
+    const map = createBareMap();
+    const viewportFilter = vi.fn(() => false);
+    const viewport = { getArcFilter: vi.fn(() => viewportFilter) };
+    const painter = {
+      prefersGpuClipping: vi.fn(() => true),
+      drawArcFlags: vi.fn(),
+      drawArcs: vi.fn(),
+      drawPolygonFill: vi.fn(),
+    };
+    const arcs = { size: () => 1 };
+    const ml = { shapes: [[[0]]] };
+    const layer: LayerSpecification = {
+      id: 'roads',
+      type: 'line',
+      source: 'src',
+      paint: { 'line-color': '#333', 'line-width': 1 },
+    };
+
+    setPrivate(map, '_viewport', viewport);
+    setPrivate(map, '_painter', painter);
+    callPrivate(map, '_renderLineLayer', layer, ml, arcs, 'src:roads', 1);
+
+    expect(painter.drawArcFlags).toHaveBeenCalledTimes(1);
+    expect(painter.drawArcFlags.mock.calls[0][2]).toBeInstanceOf(Uint8Array);
+    expect(painter.drawArcs).not.toHaveBeenCalled();
+    expect(viewport.getArcFilter).not.toHaveBeenCalled();
+    expect(viewportFilter).not.toHaveBeenCalled();
+  });
+
+  it('lets WebGL clip fill layers on the GPU instead of passing viewport filters into tessellation', () => {
+    const map = createBareMap();
+    const viewportFilter = vi.fn(() => false);
+    const viewport = { getArcFilter: vi.fn(() => viewportFilter) };
+    const painter = {
+      prefersGpuClipping: vi.fn(() => true),
+      drawArcFlags: vi.fn(),
+      drawArcs: vi.fn(),
+      drawPolygonFill: vi.fn(),
+    };
+    const arcs = { size: () => 1 };
+    const ml = { shapes: [[[0]]] };
+    const layer: LayerSpecification = {
+      id: 'parks',
+      type: 'fill',
+      source: 'src',
+      paint: { 'fill-color': '#4db6ac', 'fill-opacity': 0.5, 'line-color': '#333' },
+    };
+
+    setPrivate(map, '_viewport', viewport);
+    setPrivate(map, '_painter', painter);
+    callPrivate(map, '_renderFillLayer', layer, ml, arcs, 'src:parks', 1);
+
+    expect(painter.drawPolygonFill).toHaveBeenCalledWith(ml.shapes, arcs, '#4db6ac', undefined, 0.5);
+    expect(painter.drawArcFlags).toHaveBeenCalledTimes(1);
+    expect(painter.drawArcs).not.toHaveBeenCalled();
+    expect(viewport.getArcFilter).not.toHaveBeenCalled();
+    expect(viewportFilter).not.toHaveBeenCalled();
+  });
+});
+
 describe('Emap layer management', () => {
   let map: Emap;
 

@@ -43,6 +43,11 @@ export interface TopologySource extends Source {
   getDataset(): MapshaperDataset | undefined;
   getDisplayArcs(): DisplayArcs | null;
   /**
+   * Monotonic render-data revision. Increments whenever derived renderer
+   * artifacts built from this source's topology should be considered stale.
+   */
+  getRenderRevision(): number;
+  /**
    * Eagerly re-initialize the LOD copy in DisplayArcs from the current
    * dataset arcs. Use for one-shot mutations that need the new copy ready
    * immediately. Per-frame in-place edits (drag sessions) should prefer

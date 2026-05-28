@@ -122,10 +122,19 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    */
   private _simplifyFloor: number = 0;
   private _runner: MapshaperRunner;
+  private _renderRevision = 0;
 
   /** Max-detail threshold the user (or last `-simplify` run) asked for. */
   getSimplifyFloor(): number {
     return this._simplifyFloor;
+  }
+
+  getRenderRevision(): number {
+    return this._renderRevision;
+  }
+
+  private _bumpRenderRevision(): void {
+    this._renderRevision++;
   }
 
   constructor(id: string, options?: TopologySourceOptions) {
@@ -320,6 +329,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         this._displayArcs = new DisplayArcs(this._dataset.arcs);
       }
       this._simplifyFloor = this._dataset?.arcs?.getRetainedInterval?.() ?? 0;
+      this._bumpRenderRevision();
 
       this.fire('data', { reason: 'load' });
       this._resolvePending(version);
@@ -418,6 +428,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     if (this._dataset?.arcs) {
       this._displayArcs = new DisplayArcs(this._dataset.arcs);
     }
+    this._bumpRenderRevision();
   }
 
   getExtent(): Bounds {
@@ -446,6 +457,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    */
   markDisplayArcsDirty(): void {
     this._displayArcs?.markDirty();
+    this._bumpRenderRevision();
   }
 
   /**
@@ -458,6 +470,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     if (this._dataset?.arcs) {
       this._displayArcs = new DisplayArcs(this._dataset.arcs);
     }
+    this._bumpRenderRevision();
   }
 
   /**
@@ -475,6 +488,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     // Re-capture the simplification floor: mapshaper's `-simplify` writes
     // a non-zero `retainedInterval` here; other ops typically leave it at 0.
     this._simplifyFloor = dataset.arcs?.getRetainedInterval?.() ?? 0;
+    this._bumpRenderRevision();
     // `replace` distinguishes edit-driven dataset swaps from initial `load` —
     // listeners that auto-fit the viewport should only react to `load`.
     this.fire('data', { reason: 'replace' });

@@ -15,6 +15,7 @@ export class DisplayArcs {
   private _unfilteredArcs: ArcCollection;
   private _filteredArcs: ArcCollection | null = null;
   private _filteredSegLen = 0;
+  private _renderRevision = 0;
   /**
    * Set by {@link markDirty} when an in-place edit (translate / vertex move /
    * shared-arc split / …) mutates the underlying arcs. Cleared the next time
@@ -45,6 +46,11 @@ export class DisplayArcs {
    */
   markDirty(): void {
     this._dirty = true;
+    this._renderRevision++;
+  }
+
+  getRenderRevision(): number {
+    return this._renderRevision;
   }
 
   private _initFilteredArcs(): void {

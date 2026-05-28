@@ -195,6 +195,47 @@ describe('TopologySource.export', () => {
   });
 });
 
+describe('TopologySource render revision', () => {
+  function makeDataset(arcs: unknown = {
+    getPointCount: () => 0,
+    getRetainedInterval: () => 0,
+  }) {
+    return {
+      ...FAKE_DATASET,
+      arcs,
+    } as any;
+  }
+
+  it('increments when display arcs are marked dirty', () => {
+    const source = new TopologySource('test');
+    source.setDataset(makeDataset());
+    const before = source.getRenderRevision();
+
+    source.markDisplayArcsDirty();
+
+    expect(source.getRenderRevision()).toBe(before + 1);
+  });
+
+  it('increments when display arcs are refreshed', () => {
+    const source = new TopologySource('test');
+    source.setDataset(makeDataset());
+    const before = source.getRenderRevision();
+
+    source.refreshDisplayArcs();
+
+    expect(source.getRenderRevision()).toBe(before + 1);
+  });
+
+  it('increments when the dataset is replaced', () => {
+    const source = new TopologySource('test');
+    const before = source.getRenderRevision();
+
+    source.setDataset(makeDataset());
+
+    expect(source.getRenderRevision()).toBe(before + 1);
+  });
+});
+
 describe('TopologySource snapshot round-trip (real mapshaper)', () => {
   // Tiny single-feature polygon — survives the full Pack→Unpack pipeline.
   const TINY_GEOJSON = JSON.stringify({
@@ -230,6 +271,7 @@ describe('TopologySource snapshot round-trip (real mapshaper)', () => {
 
   it('round-trips layer names, geometry types, shape counts, and arc count via .msx', async () => {
     const original = await importGeoJSON('box.geojson', TINY_GEOJSON);
+    expect(original.getRenderRevision()).toBeGreaterThan(0);
     const before = summarize(original);
 
     const blob = await original.export({ format: 'msx' });
