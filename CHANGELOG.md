@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `vertexEdit` and `transformFeature` now accept `layers?: string[]`, matching
+  the selection handlers' layer-filter option so app-level edit filters can
+  constrain both selection and editing hit-tests.
+
+### Fixed
+
+- `map.reproject()` now normalizes common EPSG aliases before calling mapshaper
+  (`EPSG:3857` / `EPSG:900913` / `EPSG:102100` -> `webmercator`,
+  `EPSG:4326` -> `wgs84`), avoiding browser `+init=epsg:*` lookup failures.
+- `map.reproject()` now clears spatial indexes after reprojection so
+  click/box/lasso hit-testing rebuilds against the new coordinate space.
+- `map.reproject()` continues to reset the viewport initial line-scale state
+  before fitting the reprojected extent, preventing outline widths from drifting
+  after switching between degree- and meter-based CRS values.
+- Build output now suppresses only the known `rollup-plugin-polyfill-node`
+  `_stream_*` circular dependency warnings while preserving all other Rollup
+  circular dependency warnings.
+
 ## [0.3.5] - 2026-05-27
 
 ### Changed

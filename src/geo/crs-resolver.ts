@@ -56,8 +56,8 @@ export function resolveDatasetCRS(dataset: MapshaperDataset | undefined): string
  * tokens like `+proj=utm` survive.
  *
  * This is the inbound direction of the boundary translation: external/raw
- * metadata → canonical EPSG. The outbound direction (canonical EPSG →
- * mapshaper alias) lives in `normalizeProjectCrs` in `map/ops/project.ts`.
+ * metadata → canonical EPSG. Use {@link normalizeProjectCrs} for the outbound
+ * direction before handing CRS labels to mapshaper's `-proj`.
  */
 export function normalizeCrsString(str: string): string {
   const lower = str.toLowerCase();
@@ -65,6 +65,22 @@ export function normalizeCrsString(str: string): string {
   if (lower.includes('3857') || lower === 'webmercator') return 'EPSG:3857';
   if (/^epsg:\d+$/i.test(str)) return str.toUpperCase();
   return str;
+}
+
+/**
+ * Translate user-facing / canonical CRS labels into the aliases mapshaper's
+ * browser bundle can project without trying to read EPSG init files.
+ */
+export function normalizeProjectCrs(crs: string): string {
+  const trimmed = crs.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'epsg:3857' || lower === 'epsg:900913' || lower === 'epsg:102100') {
+    return 'webmercator';
+  }
+  if (lower === 'epsg:4326') {
+    return 'wgs84';
+  }
+  return trimmed;
 }
 
 /**

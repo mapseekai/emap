@@ -112,6 +112,19 @@ const mapshaperGlobal = {
   mapshaper: 'mapshaper',
 };
 
+function quietKnownPolyfillCircularWarnings(warning, warn) {
+  if (
+    warning.code === 'CIRCULAR_DEPENDENCY'
+    && (
+      warning.message?.includes('polyfill-node._stream_')
+      || warning.ids?.some((id) => id.includes('polyfill-node._stream_'))
+    )
+  ) {
+    return;
+  }
+  warn(warning);
+}
+
 function commonPlugins() {
   return [
     alias({
@@ -148,6 +161,7 @@ export default [
   // importScripts in the worker output's banner).
   {
     input: 'src/vendor/mapshaper-vendor.ts',
+    onwarn: quietKnownPolyfillCircularWarnings,
     output: {
       file: vendorOutput,
       format: 'iife',
@@ -161,6 +175,7 @@ export default [
   {
     input: 'src/vendor/mapshaper-vendor-esm.ts',
     external: ['maplibre-gl'],
+    onwarn: quietKnownPolyfillCircularWarnings,
     output: {
       file: 'dist/mapshaper-vendor.mjs',
       format: 'es',
@@ -173,6 +188,7 @@ export default [
   {
     input: 'src/index.ts',
     external: ['mapshaper'],
+    onwarn: quietKnownPolyfillCircularWarnings,
     output: {
       file: mainOutput,
       format: 'iife',
@@ -190,6 +206,7 @@ export default [
   {
     input: 'src/index.ts',
     external: ['maplibre-gl', 'mapshaper'],
+    onwarn: quietKnownPolyfillCircularWarnings,
     output: {
       file: moduleOutput,
       format: 'es',
@@ -206,6 +223,7 @@ export default [
   {
     input: 'src/worker/mapshaper-worker.ts',
     external: ['mapshaper'],
+    onwarn: quietKnownPolyfillCircularWarnings,
     output: {
       file: workerOutput,
       format: 'iife',

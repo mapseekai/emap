@@ -4,6 +4,7 @@ import { AffineTransform } from '../geo/transform';
 import { Viewport } from '../geo/viewport';
 import { Camera, type CameraOptions, type AnimationOptions, type FlyToOptions, type FitBoundsOptions } from '../geo/camera';
 import { Projection } from '../geo/projection';
+import { normalizeProjectCrs } from '../geo/crs-resolver';
 import { Painter } from '../renderer/painter';
 import { CanvasPainter } from '../renderer/canvas-painter';
 import { EditOverlayRenderer } from '../renderer/edit-overlay-renderer';
@@ -1052,12 +1053,14 @@ export class Emap extends EventDispatcher {
   }
 
   public async reproject(targetCrs: string): Promise<void> {
-    if (this._projection.crs === targetCrs) return;
+    const normalizedTarget = normalizeProjectCrs(targetCrs);
+    if (normalizeProjectCrs(this._projection.crs) === normalizedTarget) return;
 
-    const newExtent = await this._projection.reproject(targetCrs, this._sources);
+    const newExtent = await this._projection.reproject(normalizedTarget, this._sources);
 
-    this._viewport.setCRS(targetCrs);
+    this._viewport.setCRS(normalizedTarget);
     this._viewport.clearInitialState();
+    this._clearSpatialIndexesForSources(this._sources.keys());
 
     if (newExtent.hasBounds()) {
       this.setExtent(newExtent);

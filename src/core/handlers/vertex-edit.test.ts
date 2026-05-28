@@ -254,6 +254,29 @@ describe('VertexEditHandler', () => {
     expect(clearEditVertexState).toHaveBeenCalled();
     expect(Reflect.get(handler, '_dragging')).toBe(false);
   });
+
+  it('passes configured layers to hover hit-testing', () => {
+    const queryFeatures = vi.fn(() => []);
+    const mapMock = {
+      queryFeatures,
+      clearEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+
+    const handler = new VertexEditHandler(mapMock as any);
+    handler.setOptions({ layers: ['editable-roads'] });
+    setPrivate(handler, '_enabled', true);
+
+    handler.handlePointer({
+      kind: 'move',
+      point: { x: 12, y: 34 },
+      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+      button: 0,
+      originalEvent: { type: 'move' } as unknown as Event,
+    });
+
+    expect(queryFeatures).toHaveBeenCalledWith([12, 34], { layers: ['editable-roads'] });
+  });
 });
 
 describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {

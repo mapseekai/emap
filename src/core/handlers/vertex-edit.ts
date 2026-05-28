@@ -33,6 +33,8 @@ const VERTEX_HIT_THRESHOLD = 10;
 const DEFAULT_POLYGON_FILL = 'rgba(0,0,0,0.15)';
 
 export interface VertexEditOptions {
+  /** Restrict editable hit-testing to these layer ids/names. Default = all visible. */
+  layers?: string[];
   /** Polygon hover fill. Default 'rgba(0,0,0,0.15)'. */
   polygonFillColor?: string;
   /** Pixel threshold for snapping a dragged vertex to another feature. Default 10. */
@@ -50,6 +52,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
   /** Injected by HandlerManager.register (cursor recompute on mode flips). */
   _manager?: { refreshCursor(): void };
   private _polygonFillColor: string | null;
+  private _layers: string[] | undefined;
 
   // Hover / drag state
   private _hoveredFeature: HoveredFeature | null = null;
@@ -70,6 +73,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
 
   constructor(map: Emap, opts: VertexEditOptions = {}) {
     this._map = map;
+    this._layers = opts.layers;
     this._polygonFillColor = opts.polygonFillColor !== undefined
       ? opts.polygonFillColor
       : DEFAULT_POLYGON_FILL;
@@ -110,6 +114,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
   }
 
   setOptions(o: Partial<VertexEditOptions>): void {
+    if (o.layers !== undefined) this._layers = o.layers;
     if (o.polygonFillColor !== undefined) {
       this._polygonFillColor = o.polygonFillColor;
     }
@@ -120,6 +125,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
 
   getOptions(): Readonly<VertexEditOptions> {
     return {
+      layers: this._layers,
       polygonFillColor: this._polygonFillColor ?? undefined,
       snapThreshold: this._snapThreshold,
       snapToVertex: this._snapToVertex,
@@ -290,7 +296,10 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
 
   private _onMouseMove(px: number, py: number): void {
     // Hit test: find feature under pointer
-    const hits = this._map.queryFeatures([px, py]);
+    const hits = this._map.queryFeatures(
+      [px, py],
+      this._layers ? { layers: this._layers } : undefined,
+    );
     if (hits.length === 0) {
       this._hoveredFeature = null;
       this._hoverVertexCoords = null;

@@ -10,6 +10,8 @@ import { rotateMatrix, scaleMatrix } from '../../edit/commands/feature-affine';
 export interface TransformFeatureOptions {
   /** Active transform. Default 'translate'. */
   mode?: 'translate' | 'rotate' | 'scale';
+  /** Restrict transform hit-testing to these layer ids/names. Default = all visible. */
+  layers?: string[];
   /** Forwarded to begin*Session (e.g. { splitSharedArcs }). */
   session?: DragSessionOptions;
 }
@@ -49,6 +51,10 @@ export class TransformFeatureHandler implements Handler<TransformFeatureOptions>
 
   private get _mode(): 'translate' | 'rotate' | 'scale' {
     return this._opts.mode ?? 'translate';
+  }
+
+  private get _queryOptions(): { layers: string[] } | undefined {
+    return this._opts.layers ? { layers: this._opts.layers } : undefined;
   }
 
   enable(): void {
@@ -119,7 +125,7 @@ export class TransformFeatureHandler implements Handler<TransformFeatureOptions>
 
     if (ev.kind === 'down') {
       if (ev.button !== 0) return 'passthrough';
-      const hits = this._map.queryFeatures([ev.point.x, ev.point.y]);
+      const hits = this._map.queryFeatures([ev.point.x, ev.point.y], this._queryOptions);
       if (this._mode === 'translate') this._hoveringSelected = hits.length > 0;
       // Option A (spec §15.11): transformFeature only drags an ALREADY-
       // selected feature and owns no selection logic. No hit, or a hit
@@ -151,7 +157,7 @@ export class TransformFeatureHandler implements Handler<TransformFeatureOptions>
 
     if (ev.kind === 'move') {
       if (!this._translate && !this._affine) {
-        const hits = this._map.queryFeatures([ev.point.x, ev.point.y]);
+        const hits = this._map.queryFeatures([ev.point.x, ev.point.y], this._queryOptions);
         this._hoveringSelected = hits.some((hit) => this._map.isSelected(hit));
         return 'passthrough';
       }

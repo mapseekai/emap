@@ -14,6 +14,7 @@ import { Err, type OpResult } from '../op-result';
 import type { ProjectOptions } from '../types';
 import type { OpContext } from './_context';
 import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
+import { normalizeProjectCrs } from '../../geo/crs-resolver';
 
 export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
@@ -38,19 +39,4 @@ export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promis
 
   const label = `Project ${opts.target ?? opts.source}`;
   return ctx.runDatasetCommandParsed(opts.source, commands, label);
-}
-
-// Outbound boundary translation: canonical EPSG → mapshaper's preferred alias.
-// Mirror of `normalizeCrsString` in `geo/crs-resolver.ts`, which goes the
-// other way (raw metadata → canonical EPSG) when reading datasets in.
-function normalizeProjectCrs(crs: string): string {
-  const trimmed = crs.trim();
-  const lower = trimmed.toLowerCase();
-  if (lower === 'epsg:3857' || lower === 'epsg:900913' || lower === 'epsg:102100') {
-    return 'webmercator';
-  }
-  if (lower === 'epsg:4326') {
-    return 'wgs84';
-  }
-  return trimmed;
 }

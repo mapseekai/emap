@@ -171,6 +171,20 @@ describe('TransformFeatureHandler', () => {
     expect(map.editSession.beginTranslateSession).not.toHaveBeenCalled();
   });
 
+  it('passes configured layers to down and hover hit-testing', () => {
+    const { map } = makeMap();
+    map.queryFeatures.mockReturnValue([]);
+    const h = new TransformFeatureHandler(map as any);
+    h.setOptions({ layers: ['editable-roads'] });
+    h.enable();
+
+    h.handlePointer(pointer('down', 10, 20));
+    h.handlePointer(pointer('move', 30, 40));
+
+    expect(map.queryFeatures).toHaveBeenNthCalledWith(1, [10, 20], { layers: ['editable-roads'] });
+    expect(map.queryFeatures).toHaveBeenNthCalledWith(2, [30, 40], { layers: ['editable-roads'] });
+  });
+
   it('down with non-left button passes through', () => {
     const { map } = makeMap();
     const h = new TransformFeatureHandler(map as any);

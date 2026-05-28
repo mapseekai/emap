@@ -3,6 +3,7 @@ import {
   DEFAULT_CRS,
   inferFromPrj,
   normalizeCrsString,
+  normalizeProjectCrs,
   resolveDatasetCRS,
 } from './crs-resolver';
 import type { MapshaperDataset } from '../types/mapshaper-types';
@@ -27,6 +28,18 @@ describe('normalizeCrsString', () => {
     ['+proj=utm +zone=10', '+proj=utm +zone=10'],
   ])('%p → %p', (input, expected) => {
     expect(normalizeCrsString(input)).toBe(expected);
+  });
+});
+
+describe('normalizeProjectCrs', () => {
+  it.each([
+    ['EPSG:3857', 'webmercator'],
+    ['epsg:900913', 'webmercator'],
+    ['EPSG:102100', 'webmercator'],
+    ['EPSG:4326', 'wgs84'],
+    ['+proj=utm +zone=10', '+proj=utm +zone=10'],
+  ])('%p -> %p', (input, expected) => {
+    expect(normalizeProjectCrs(input)).toBe(expected);
   });
 });
 
