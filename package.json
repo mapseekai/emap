@@ -92,6 +92,9 @@
     "vitest": "^1.0.0"
   },
   "dependencies": {
+    "@luma.gl/core": "^9.3.3",
+    "@luma.gl/engine": "^9.3.3",
+    "@luma.gl/webgl": "^9.3.3",
     "fflate": "^0.8.2",
     "flatbush": "^4.5.0",
     "geographiclib-geodesic": "^2.2.0",

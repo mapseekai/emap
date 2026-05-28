@@ -111,6 +111,11 @@ const vendorOutput = 'dist/mapshaper-vendor.js';
 const mapshaperGlobal = {
   mapshaper: 'mapshaper',
 };
+const lumaExternals = [
+  '@luma.gl/core',
+  '@luma.gl/engine',
+  '@luma.gl/webgl',
+];
 
 function commonPlugins() {
   return [
@@ -170,6 +175,8 @@ export default [
   },
   // Main IIFE bundle exposing the `emap` global. Mapshaper is external here
   // because script-tag users load `mapshaper-vendor.js` first.
+  // luma.gl is bundled into the IIFE build so script-tag users do not need
+  // separate luma globals when opting into renderer: 'webgl'.
   {
     input: 'src/index.ts',
     external: ['mapshaper'],
@@ -189,7 +196,7 @@ export default [
   // dead require("adm-zip") and a runtime-throwing iconv-lite helper).
   {
     input: 'src/index.ts',
-    external: ['maplibre-gl', 'mapshaper'],
+    external: ['maplibre-gl', 'mapshaper', ...lumaExternals],
     output: {
       file: moduleOutput,
       format: 'es',
