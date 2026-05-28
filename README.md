@@ -180,6 +180,25 @@ When no user layers are added, `emap` creates default display layers from the
 source geometry type. Polygon defaults are outline-only for large-data browsing;
 add an explicit `fill` layer when you want area fills.
 
+Canvas 2D remains the default renderer:
+
+```ts
+const map = new Emap({ container: 'map' });
+```
+
+To opt into the experimental WebGL renderer:
+
+```ts
+const map = new Emap({
+  container: 'map',
+  renderer: 'webgl',
+});
+```
+
+`renderer: 'auto'` tries WebGL first and falls back to Canvas 2D when WebGL
+initialization fails. The WebGL renderer is optional; existing Canvas behavior
+is unchanged when `renderer` is omitted.
+
 ## Interactions Without Built-In Controls
 
 Most editing and selection tools are exposed as named handlers. You can use
@@ -505,8 +524,11 @@ Override CSS tokens at `:root` or an app-specific container:
   because area fills require full polygon path materialization and fill rules.
   For large-data browsing, keep polygon layers outline-first and enable fills
   only at suitable scales or for filtered subsets.
-- Rendering is Canvas 2D only. There is no WebGL renderer, symbol placement
-  engine, tiled vector source, or server-side tile pipeline.
+- Canvas 2D remains the default renderer. The optional WebGL renderer is
+  experimental in Phase 1: it targets painter-interface parity and fallback
+  behavior first. Geometry caching, full performance benchmarks, MapLibre
+  Custom Layer context sharing, symbol placement, and tiled vector sources are
+  separate follow-up phases.
 - CRS support follows the bundled Mapshaper/projection path and common browser
   data workflows. Validate project-specific CRS definitions before building
   user-facing editing workflows around them.

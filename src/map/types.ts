@@ -18,6 +18,7 @@ export type SnapKind = DrawOverlaySnapKind;
 export type ExpressionEvaluationPolicy = 'trusted' | 'disabled';
 
 export type RenderAction = 'redraw' | 'nav';
+export type RendererType = 'canvas' | 'webgl' | 'auto';
 
 export interface AffineDelta {
   tx: number;
@@ -34,6 +35,15 @@ export interface RenderRequest {
 export interface MapOptions {
   container: string | HTMLElement;
   interactive?: boolean;
+  /**
+   * Rendering backend. Defaults to `'canvas'`.
+   *
+   * - `'canvas'` uses the established Canvas 2D renderer.
+   * - `'webgl'` attempts the luma.gl renderer and falls back to Canvas if
+   *   WebGL initialization fails.
+   * - `'auto'` currently attempts WebGL first, then falls back to Canvas.
+   */
+  renderer?: RendererType;
   /**
    * Controls APIs that forward JavaScript expressions to mapshaper
    * (`applyExpression`, `filterFeatures`, `sortFeatures`, `splitLayer`, and

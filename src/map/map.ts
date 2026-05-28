@@ -5,7 +5,7 @@ import { Viewport } from '../geo/viewport';
 import { Camera, type CameraOptions, type AnimationOptions, type FlyToOptions, type FitBoundsOptions } from '../geo/camera';
 import { Projection } from '../geo/projection';
 import { Painter } from '../renderer/painter';
-import { CanvasPainter } from '../renderer/canvas-painter';
+import { createPainter } from '../renderer/painter-factory';
 import { EditOverlayRenderer } from '../renderer/edit-overlay-renderer';
 import { RenderScheduler, type RenderSnapshot } from '../renderer/render-scheduler';
 import { MapshaperOps } from './mapshaper-ops';
@@ -257,7 +257,9 @@ export class Emap extends EventDispatcher {
     this._canvas.style.left = '0';
     this._canvasContainer.appendChild(this._canvas);
 
-    this._painter = new CanvasPainter(this._canvas);
+    this._painter = createPainter(this._canvas, {
+      renderer: options.renderer,
+    }).painter;
     this._painter.setPixelRatio(window.devicePixelRatio || 1);
     this._editOverlay = new EditOverlayRenderer(this._painter);
     this._scheduler = new RenderScheduler({

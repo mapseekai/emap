@@ -179,6 +179,13 @@ export {
 // Renderers
 // ===========================================================================
 export { CanvasPainter } from './renderer/canvas-painter';
+export { WebGLPainter } from './renderer/webgl-painter';
+export { createPainter } from './renderer/painter-factory';
+export type {
+  PainterFactoryOptions,
+  PainterFactoryResult,
+} from './renderer/painter-factory';
+export type { RendererType } from './map/types';
 export { EditOverlayRenderer } from './renderer/edit-overlay-renderer';
 
 // ===========================================================================
