@@ -29,6 +29,15 @@
       border-bottom: 1px solid #0f3460;
     }
 
+    #header select {
+      padding: 4px 8px;
+      border: 1px solid #0f3460;
+      border-radius: 3px;
+      background: #fff;
+      color: #16213e;
+      font-size: 13px;
+    }
+
     #header strong {
       color: #e94560;
     }
@@ -74,6 +83,12 @@
 <body>
   <div id="header">
     <strong>Emap</strong> 顶点编辑演示
+    <label>渲染器:
+      <select id="renderer-select">
+        <option value="webgl" selected>WebGL</option>
+        <option value="canvas">Canvas 2D</option>
+      </select>
+    </label>
     <input type="file" id="file-input" accept=".json,.geojson,.zip" />
     <div class="info" id="status">上传 GeoJSON 文件开始</div>
   </div>
@@ -89,32 +104,129 @@
   <script>
     const { Emap, TopologySource, EditToolbar } = emap;
 
-    const map = new Emap({ container: "map" });
-
-    map.addControl(new emap.NavigationControl(), "top-left");
-    map.addControl(new EditToolbar(), "top-left");
-    map.addControl(new emap.BasemapControl(), "top-right");
-    map.addControl(
-      new emap.StatusControl({ alignment: "right", showEPSG: true }),
-      "bottom-right"
-    );
-
-    // 记录 vertex_moved 事件
-    const logEl = document.getElementById("event-log");
-    map.on("vertex_moved", (e) => {
-      const entry = document.createElement("div");
-      entry.className = "log-entry";
-      const coords = e.coords
-        ? `[${e.coords[0].toFixed(6)}, ${e.coords[1].toFixed(6)}]`
-        : "?";
-      const moved = Array.isArray(e.vertexIds) ? e.vertexIds.join(",") : "?";
-      entry.textContent = `id=${e.id} vtx=[${moved}] → ${coords}`;
-      logEl.appendChild(entry);
-      logEl.scrollTop = logEl.scrollHeight;
-    });
-
+    const SOURCE_ID = "test-source";
+    const rendererSelect = document.getElementById("renderer-select");
     const fileInput = document.getElementById("file-input");
     const status = document.getElementById("status");
+    const logEl = document.getElementById("event-log");
+
+    let map = null;
+    let currentFile = null;
+    let renderLayerIds = [];
+
+    function createMap(renderer) {
+      if (map) map.remove();
+      renderLayerIds = [];
+      map = new Emap({ container: "map", renderer });
+      map.addControl(new emap.NavigationControl(), "top-left");
+      map.addControl(new EditToolbar(), "top-left");
+      map.addControl(new emap.BasemapControl(), "top-right");
+      map.addControl(
+        new emap.StatusControl({ alignment: "right", showEPSG: true }),
+        "bottom-right"
+      );
+
+      map.on("vertex_moved", (e) => {
+        const entry = document.createElement("div");
+        entry.className = "log-entry";
+        const coords = e.coords
+          ? `[${e.coords[0].toFixed(6)}, ${e.coords[1].toFixed(6)}]`
+          : "?";
+        const moved = Array.isArray(e.vertexIds) ? e.vertexIds.join(",") : "?";
+        entry.textContent = `id=${e.id} vtx=[${moved}] → ${coords}`;
+        logEl.appendChild(entry);
+        logEl.scrollTop = logEl.scrollHeight;
+      });
+    }
+
+    function addLayer(spec) {
+      map.addLayer(spec);
+      renderLayerIds.push(spec.id);
+    }
+
+    function clearRenderLayers() {
+      while (renderLayerIds.length > 0) {
+        const id = renderLayerIds.pop();
+        if (map.getLayer(id)) map.removeLayer(id);
+      }
+    }
+
+    function addStyledLayers(source) {
+      clearRenderLayers();
+      source.getLayers().forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        const baseId = `${SOURCE_ID}-${name}`.replace(/[^a-zA-Z0-9_-]/g, "-");
+        if (lyr?.geometry_type === "polygon") {
+          addLayer({
+            id: `${baseId}-fill`,
+            type: "fill",
+            source: SOURCE_ID,
+            "source-layer": name,
+            paint: {
+              "fill-color": i % 2 ? "#ffb74d" : "#4db6ac",
+              "fill-opacity": 0.42,
+              "line-color": "#263238",
+              "line-width": 1,
+            },
+          });
+          addLayer({
+            id: `${baseId}-line`,
+            type: "line",
+            source: SOURCE_ID,
+            "source-layer": name,
+            paint: { "line-color": "#263238", "line-width": 1.2 },
+          });
+        } else if (lyr?.geometry_type === "polyline") {
+          addLayer({
+            id: `${baseId}-line`,
+            type: "line",
+            source: SOURCE_ID,
+            "source-layer": name,
+            paint: { "line-color": "#5e35b1", "line-width": 2.4 },
+          });
+        } else if (lyr?.geometry_type === "point") {
+          addLayer({
+            id: `${baseId}-circle`,
+            type: "circle",
+            source: SOURCE_ID,
+            "source-layer": name,
+            paint: { "circle-color": "#d81b60", "circle-radius": 5 },
+          });
+        }
+      });
+    }
+
+    async function loadCurrentFile() {
+      if (!currentFile) return;
+      status.textContent = `处理 ${currentFile.filename} 中...`;
+      clearRenderLayers();
+      if (map.getSource(SOURCE_ID)) {
+        map.removeSource(SOURCE_ID);
+      }
+
+      const source = new TopologySource(SOURCE_ID);
+      try {
+        await source.setData(currentFile);
+        map.addSource(SOURCE_ID, source);
+        map.setExtent(source.getExtent());
+        addStyledLayers(source);
+        const painterName = map.getPainter?.().constructor?.name || rendererSelect.value;
+        status.textContent = `当前: ${currentFile.filename} · ${painterName} —— 点击 ✏ 进入编辑模式`;
+      } catch (e) {
+        console.error(e);
+        status.textContent = "处理文件出错";
+      }
+    }
+
+    createMap(rendererSelect.value);
+
+    rendererSelect.addEventListener("change", async () => {
+      createMap(rendererSelect.value);
+      await loadCurrentFile();
+      if (!currentFile) {
+        status.textContent = `已切换到 ${rendererSelect.value}`;
+      }
+    });
 
     fileInput.addEventListener("change", async (ev) => {
       const file = ev.target.files[0];
@@ -124,23 +236,8 @@
         const reader = new FileReader();
         reader.onload = async (event) => {
           const content = new Uint8Array(event.target.result);
-          const source = new TopologySource("test-source");
-
-          if (map.getSource("test-source")) {
-            map.removeSource("test-source");
-          }
-
-          // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-          // is ready), then addSource (order-independent) + setExtent.
-          try {
-            await source.setData({ filename: file.name, content });
-            map.addSource("test-source", source);
-            map.setExtent(source.getExtent());
-            status.textContent = `当前: ${file.name} —— 点击 ✏ 进入编辑模式`;
-          } catch (e) {
-            console.error(e);
-            status.textContent = "处理文件出错";
-          }
+          currentFile = { filename: file.name, content };
+          await loadCurrentFile();
         };
         reader.readAsArrayBuffer(file);
       } catch (err) {
