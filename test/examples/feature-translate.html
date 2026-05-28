@@ -25,6 +25,15 @@
       font-size: 13px;
     }
 
+    #header select {
+      padding: 4px 8px;
+      border: 1px solid #4a5d70;
+      border-radius: 3px;
+      background: #fff;
+      color: #2c3e50;
+      font-size: 13px;
+    }
+
     #map {
       flex: 1;
       background: #ffffff;
@@ -42,6 +51,13 @@
 <body>
   <div id="header">
     <label>
+      渲染器:
+      <select id="renderer-select">
+        <option value="webgl" selected>WebGL</option>
+        <option value="canvas">Canvas 2D</option>
+      </select>
+    </label>
+    <label>
       文件:
       <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
     </label>
@@ -56,20 +72,64 @@
   <script>
     const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
 
-    const map = new Emap({ container: 'map' });
-    map.addControl(new NavigationControl(), 'top-left');
-    map.addControl(new HistoryControl(), 'top-left');
-    map.bindHistoryShortcuts();
-
     const SOURCE_ID = 'translate-source';
+    const mapEl = document.getElementById('map');
+    const rendererSelect = document.getElementById('renderer-select');
     const fileInput = document.getElementById('file-input');
     const status = document.getElementById('status');
 
-    map.on('selectionchange', (e) => {
-      if (e.selected.length === 0) {
-        map.clearHighlightedFeatures();
-      } else {
-        map.setHighlightedFeatures(e.selected, { color: '#1e88e5', width: 3 });
+    let map = null;
+    let currentFile = null;
+
+    function createMap(renderer) {
+      if (map) map.remove();
+      map = new Emap({ container: 'map', renderer });
+      map.addControl(new NavigationControl(), 'top-left');
+      map.addControl(new HistoryControl(), 'top-left');
+      map.bindHistoryShortcuts();
+
+      map.on('selectionchange', (e) => {
+        if (e.selected.length === 0) {
+          map.clearHighlightedFeatures();
+        } else {
+          map.setHighlightedFeatures(e.selected, { color: '#1e88e5', width: 3 });
+        }
+      });
+    }
+
+    async function loadCurrentFile() {
+      if (!currentFile) return;
+      status.textContent = `正在加载 ${currentFile.filename}...`;
+      const source = new TopologySource(SOURCE_ID);
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      // Canonical 0.2.0 recipe: await setData (resolves once the dataset
+      // is ready), then addSource (order-independent) + setExtent.
+      try {
+        await source.setData(currentFile);
+        map.addSource(SOURCE_ID, source);
+        map.setExtent(source.getExtent());
+        // Enable the transform handler only AFTER the map/data is ready
+        // (mirrors how the vertexEdit/drawFeature examples enable theirs).
+        map.clickSelect.enable();
+        map.transformFeature.setOptions({ mode: 'translate' });
+        map.transformFeature.enable();
+        const painterName = map.getPainter?.().constructor?.name || rendererSelect.value;
+        status.textContent = `已加载 ${currentFile.filename} · ${painterName}。单击选中,在已选要素上按住拖动平移,方向键步进。`;
+        // 聚焦 map 容器,让方向键事件被它接收
+        mapEl.focus();
+      } catch (err) {
+        console.error(err);
+        status.textContent = "处理文件出错";
+      }
+    }
+
+    createMap(rendererSelect.value);
+
+    rendererSelect.addEventListener('change', async () => {
+      createMap(rendererSelect.value);
+      await loadCurrentFile();
+      if (!currentFile) {
+        status.textContent = `已切换到 ${rendererSelect.value}`;
       }
     });
 
@@ -80,26 +140,8 @@
       const reader = new FileReader();
       reader.onload = async (ev) => {
         const content = new Uint8Array(ev.target.result);
-        const source = new TopologySource(SOURCE_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-        // is ready), then addSource (order-independent) + setExtent.
-        try {
-          await source.setData({ filename: file.name, content });
-          map.addSource(SOURCE_ID, source);
-          map.setExtent(source.getExtent());
-          // Enable the transform handler only AFTER the map/data is ready
-          // (mirrors how the vertexEdit/drawFeature examples enable theirs).
-          map.clickSelect.enable();
-          map.transformFeature.setOptions({ mode: 'translate' });
-          map.transformFeature.enable();
-          status.textContent = `已加载 ${file.name}。单击选中,在已选要素上按住拖动平移,方向键步进。`;
-          // 聚焦 map 容器,让方向键事件被它接收
-          document.getElementById('map').focus();
-        } catch (err) {
-          console.error(err);
-          status.textContent = "处理文件出错";
-        }
+        currentFile = { filename: file.name, content };
+        await loadCurrentFile();
       };
       reader.readAsArrayBuffer(file);
     });
@@ -127,7 +169,7 @@
 
     // Arrow-key step nudge still works (headless editSession API,
     // unchanged by the handler).
-    document.getElementById('map').addEventListener('keydown', (e) => {
+    mapEl.addEventListener('keydown', (e) => {
       const stride = e.shiftKey ? 10 : 1;
       let dx = 0, dy = 0;
       if (e.key === 'ArrowLeft') dx = -stride;
