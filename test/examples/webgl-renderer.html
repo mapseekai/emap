@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - WebGL 渲染器</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #263238; color: white; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header button { padding: 5px 12px; background: #00897b; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
+    #header input { font-size: 13px; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .badge { padding: 2px 7px; border: 1px solid rgba(255,255,255,0.35); border-radius: 999px; font-size: 12px; }
+    .status { margin-left: auto; opacity: 0.9; }
+    .hint { opacity: 0.82; font-size: 12px; flex-basis: 100%; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <strong>WebGL Renderer</strong>
+    <span id="renderer" class="badge">renderer: ...</span>
+    <button id="load-sample">加载内置样例</button>
+    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <span id="status" class="status">等待加载数据</span>
+    <span class="hint">
+      使用 <code>new Emap({ renderer: 'webgl' })</code> 创建地图；点、线、面图层会按几何类型自动添加样式。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/mapshaper-vendor.js"></script>
+  <script src="../../dist/emap-dev.js"></script>
+  <script>
+    const { Emap, TopologySource, NavigationControl, StatusControl } = emap;
+
+    const SOURCE_ID = 'webgl-example-source';
+    const SAMPLE_FILES = [
+      {
+        filename: 'webgl-polygons.geojson',
+        geojson: {
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              properties: { name: 'west-cell' },
+              geometry: {
+                type: 'Polygon',
+                coordinates: [[[-10, -4], [-1, -4], [-1, 5], [-10, 5], [-10, -4]]],
+              },
+            },
+            {
+              type: 'Feature',
+              properties: { name: 'east-cell' },
+              geometry: {
+                type: 'Polygon',
+                coordinates: [[[1, -3], [11, -3], [11, 6], [1, 6], [1, -3]]],
+              },
+            },
+          ],
+        },
+      },
+      {
+        filename: 'webgl-lines.geojson',
+        geojson: {
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              properties: { name: 'diagonal' },
+              geometry: { type: 'LineString', coordinates: [[-11, -6], [-5, 0], [0, 2], [6, 1], [12, 7]] },
+            },
+            {
+              type: 'Feature',
+              properties: { name: 'south-route' },
+              geometry: { type: 'LineString', coordinates: [[-9, -7], [-3, -5], [4, -6], [10, -4]] },
+            },
+          ],
+        },
+      },
+      {
+        filename: 'webgl-points.geojson',
+        geojson: {
+          type: 'FeatureCollection',
+          features: [
+            { type: 'Feature', properties: { name: 'alpha' }, geometry: { type: 'Point', coordinates: [-6, 1] } },
+            { type: 'Feature', properties: { name: 'beta' }, geometry: { type: 'Point', coordinates: [5, 2] } },
+            { type: 'Feature', properties: { name: 'gamma' }, geometry: { type: 'Point', coordinates: [9, -5] } },
+          ],
+        },
+      },
+    ];
+
+    const map = new Emap({
+      container: 'map',
+      renderer: 'webgl',
+    });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new StatusControl({ alignment: 'right', showEPSG: true }), 'bottom-right');
+
+    const encoder = new TextEncoder();
+    const renderer = document.getElementById('renderer');
+    const status = document.getElementById('status');
+    const renderLayerIds = [];
+
+    renderer.textContent = `renderer: ${map.getPainter?.().constructor?.name ?? 'unknown'}`;
+
+    function toSourceFile(file) {
+      return {
+        filename: file.filename,
+        content: encoder.encode(JSON.stringify(file.geojson)),
+      };
+    }
+
+    function clearRenderLayers() {
+      while (renderLayerIds.length > 0) {
+        const id = renderLayerIds.pop();
+        if (map.getLayer(id)) map.removeLayer(id);
+      }
+    }
+
+    function addLayer(spec) {
+      map.addLayer(spec);
+      renderLayerIds.push(spec.id);
+    }
+
+    function addStyledLayers(source) {
+      clearRenderLayers();
+      const layers = source.getLayers();
+      layers.forEach((lyr, i) => {
+        const name = lyr?.name || lyr?.id || `layer-${i}`;
+        const baseId = `${SOURCE_ID}-${name}`.replace(/[^a-zA-Z0-9_-]/g, '-');
+        if (lyr?.geometry_type === 'polygon') {
+          addLayer({
+            id: `${baseId}-fill`,
+            type: 'fill',
+            source: SOURCE_ID,
+            'source-layer': name,
+            paint: {
+              'fill-color': i % 2 ? '#ffb74d' : '#4db6ac',
+              'fill-opacity': 0.42,
+              'line-color': '#263238',
+              'line-width': 1,
+            },
+          });
+          addLayer({
+            id: `${baseId}-line`,
+            type: 'line',
+            source: SOURCE_ID,
+            'source-layer': name,
+            paint: { 'line-color': '#263238', 'line-width': 1.2 },
+          });
+        } else if (lyr?.geometry_type === 'polyline') {
+          addLayer({
+            id: `${baseId}-line`,
+            type: 'line',
+            source: SOURCE_ID,
+            'source-layer': name,
+            paint: { 'line-color': '#5e35b1', 'line-width': 2.4 },
+          });
+        } else if (lyr?.geometry_type === 'point') {
+          addLayer({
+            id: `${baseId}-circle`,
+            type: 'circle',
+            source: SOURCE_ID,
+            'source-layer': name,
+            paint: { 'circle-color': '#d81b60', 'circle-radius': 5 },
+          });
+        }
+      });
+      return layers.length;
+    }
+
+    async function loadSource(data, label) {
+      status.textContent = `正在加载 ${label}...`;
+      clearRenderLayers();
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+
+      const source = new TopologySource(SOURCE_ID);
+      try {
+        await source.setData(data);
+        map.addSource(SOURCE_ID, source);
+        map.setExtent(source.getExtent());
+        const layerCount = addStyledLayers(source);
+        status.textContent = `已加载 ${label}: ${layerCount} 个图层`;
+      } catch (err) {
+        console.error(err);
+        status.textContent = `错误: ${err?.message ?? err}`;
+      }
+    }
+
+    document.getElementById('load-sample').addEventListener('click', () => {
+      loadSource(SAMPLE_FILES.map(toSourceFile), '内置点线面样例');
+    });
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        loadSource({ filename: file.name, content: new Uint8Array(ev.target.result) }, file.name);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    window.addEventListener('resize', () => map.resize());
+    loadSource(SAMPLE_FILES.map(toSourceFile), '内置点线面样例');
+  </script>
+</body>
+
+</html>
