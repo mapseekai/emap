@@ -71,6 +71,17 @@ import {
   type AffineDelta,
 } from './types';
 
+interface ViewportArcFlagsCacheRecord {
+  arcs: ArcCollection;
+  layerFlags: Uint8Array | null;
+  arcCount: number;
+  pointCount: number;
+  retainedInterval: number;
+  revision: number;
+  viewKey: string;
+  flags: Uint8Array | null;
+}
+
 export class Emap extends EventDispatcher {
   private _container: HTMLElement;
   private _canvasContainer: HTMLElement;
@@ -103,6 +114,8 @@ export class Emap extends EventDispatcher {
   private _effectiveLayersCache: LayerSpecification[] = [];
   private _defaultLayersDirty = true;
   private _layerArcFlagsCache: globalThis.Map<string, Uint8Array> = new globalThis.Map();
+  private _viewportArcFlagsCache: globalThis.Map<string, ViewportArcFlagsCacheRecord> =
+    new globalThis.Map();
 
   // Interactions (delegated)
   private _handlers: HandlerManager;
@@ -681,6 +694,7 @@ export class Emap extends EventDispatcher {
       this.fire('data', { sourceId: id, ...e });
       this._defaultLayersDirty = true;
       this._layerArcFlagsCache.clear();
+      this._viewportArcFlagsCache?.clear();
       this._scheduleRender();
     };
 
@@ -704,11 +718,17 @@ export class Emap extends EventDispatcher {
       this._sources.delete(id);
       this._defaultLayersDirty = true;
       this._layerArcFlagsCache.delete(id);
+      this._viewportArcFlagsCache?.delete(id);
       
       // Remove all cached arc flags for this source
       for (const key of this._layerArcFlagsCache.keys()) {
         if (key.startsWith(`${id}:`)) {
           this._layerArcFlagsCache.delete(key);
+        }
+      }
+      for (const key of this._viewportArcFlagsCache?.keys() ?? []) {
+        if (key.startsWith(`${id}:`)) {
+          this._viewportArcFlagsCache.delete(key);
         }
       }
       this._scheduleRender();
@@ -1247,7 +1267,8 @@ export class Emap extends EventDispatcher {
       const arcs = displayArcs
         ? displayArcs.getScaledArcs(pixelSize)
         : source.getArcs();
-      this._setPainterArcRevision(arcs ?? null, source.getRenderRevision());
+      const renderRevision = source.getRenderRevision();
+      this._setPainterArcRevision(arcs ?? null, renderRevision);
 
       if (arcs && arcs.setRetainedInterval &&
         (typeof arcs.isFlat !== 'function' || !arcs.isFlat())) {
@@ -1256,18 +1277,19 @@ export class Emap extends EventDispatcher {
         // bigger pixel) but never below the user's threshold — otherwise
         // every render would re-introduce detail the user just filtered.
         const userFloor = source.getSimplifyFloor?.() ?? 0;
-        arcs.setRetainedInterval(Math.max(userFloor, pixelSize * 0.5));
+        arcs.setRetainedInterval(this._getRenderRetainedInterval(pixelSize, userFloor));
       }
 
       const ml = this._resolveSourceLayer(source, layer['source-layer']);
       const cacheKey = `${layer.source}:${layer['source-layer'] || 'default'}`;
 
       if (layer.type === 'line' && arcs) {
-        this._renderLineLayer(layer, ml, arcs, cacheKey, lineScale);
+        this._renderLineLayer(layer, ml, arcs, cacheKey, lineScale, renderRevision);
       } else if (layer.type === 'fill' && arcs && ml?.shapes) {
-        this._renderFillLayer(layer, ml, arcs, cacheKey, lineScale);
+        this._renderFillLayer(layer, ml, arcs, cacheKey, lineScale, renderRevision);
       } else if (layer.type === 'circle' && ml?.shapes) {
         const style = resolvePointStyle(layer.paint as CirclePaint);
+        this._setPainterPointRevision(ml.shapes, source.getRenderRevision());
         this._painter.drawPoints(ml.shapes, style);
       }
     }
@@ -1281,12 +1303,21 @@ export class Emap extends EventDispatcher {
     painter.setArcRenderRevision?.(arcs, revision);
   }
 
+  private _setPainterPointRevision(shapes: any[] | null | undefined, revision: number): void {
+    if (!shapes) return;
+    const painter = this._painter as Painter & {
+      setPointRenderRevision?: (shapes: any[], revision: number) => void;
+    };
+    painter.setPointRenderRevision?.(shapes, revision);
+  }
+
   private _renderLineLayer(
     layer: LayerSpecification,
     ml: MapshaperLayer | null,
     arcs: ArcCollection,
     cacheKey: string,
     lineScale: number,
+    renderRevision = 0,
   ): void {
     const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
     const fastPainter = this._webglFastPainter();
@@ -1295,14 +1326,26 @@ export class Emap extends EventDispatcher {
       // presence filter so each shared topology arc strokes exactly once.
       const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
       if (fastPainter) {
-        fastPainter.drawArcFlags(arcs, style, flags);
+        if (fastPainter.drawArcChunks) {
+          fastPainter.drawArcChunks(arcs, style, flags, this._viewport.getViewBounds());
+        } else {
+          fastPainter.drawArcFlags(arcs, style, this._getFastArcFlags(arcs, flags, cacheKey, renderRevision));
+        }
         return;
       }
       const filter = this._combineArcFilters(flags, this._viewport.getArcFilter(arcs));
       this._painter.drawArcs(arcs, style, filter);
     } else {
       if (fastPainter) {
-        fastPainter.drawArcFlags(arcs, style, null);
+        if (fastPainter.drawArcChunks) {
+          fastPainter.drawArcChunks(arcs, style, null, this._viewport.getViewBounds());
+        } else {
+          fastPainter.drawArcFlags(
+            arcs,
+            style,
+            this._getFastArcFlags(arcs, null, `${cacheKey}:all`, renderRevision),
+          );
+        }
         return;
       }
       // Fallback: draw all arcs
@@ -1316,44 +1359,99 @@ export class Emap extends EventDispatcher {
     arcs: ArcCollection,
     cacheKey: string,
     lineScale: number,
+    renderRevision = 0,
   ): void {
     const fillPaint = layer.paint as FillPaint | undefined;
     const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
     const fillOpacity = fillPaint?.['fill-opacity'];
     const fastPainter = this._webglFastPainter();
+    const layerFlags = this._getLayerArcFlags(ml, arcs, cacheKey);
     const viewportFilter = fastPainter ? undefined : this._viewport.getArcFilter(arcs);
-    this._painter.drawPolygonFill(
-      ml.shapes!,
-      arcs,
-      fillColor,
-      viewportFilter,
-      fillOpacity,
-    );
+    if (fastPainter?.drawPolygonFillArcFlags) {
+      const fillFlags = this._getFastArcFlags(arcs, layerFlags, `${cacheKey}:fill`, renderRevision);
+      fastPainter.drawPolygonFillArcFlags(
+        ml.shapes!,
+        arcs,
+        fillColor,
+        fillFlags,
+        fillOpacity,
+      );
+    } else {
+      this._painter.drawPolygonFill(
+        ml.shapes!,
+        arcs,
+        fillColor,
+        viewportFilter,
+        fillOpacity,
+      );
+    }
     // Outline: stroke each topology arc exactly once via the same flag cache
     // the line layer uses. drawPaths(shapes,...) would re-walk every shape
     // and double-stroke shared boundaries — on big polygon datasets that's
     // the dominant cost of fill mode.
     const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
-    const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
     if (fastPainter) {
-      fastPainter.drawArcFlags(arcs, style, flags);
+      if (fastPainter.drawArcChunks) {
+        fastPainter.drawArcChunks(arcs, style, layerFlags, this._viewport.getViewBounds());
+      } else {
+        fastPainter.drawArcFlags(arcs, style, this._getFastArcFlags(arcs, layerFlags, cacheKey, renderRevision));
+      }
       return;
     }
-    this._painter.drawArcs(arcs, style, this._combineArcFilters(flags, viewportFilter));
+    this._painter.drawArcs(arcs, style, this._combineArcFilters(layerFlags, viewportFilter));
   }
 
   private _webglFastPainter(): (Painter & {
     prefersGpuClipping: () => boolean;
     drawArcFlags: (arcs: ArcCollection, style: StrokeStyle, flags?: Uint8Array | null) => void;
+    drawPolygonFillArcFlags?: (
+      shapes: any[],
+      arcs: ArcCollection,
+      fillColor: string,
+      flags: Uint8Array | null | undefined,
+      opacity?: number,
+    ) => void;
+    drawArcChunks?: (
+      arcs: ArcCollection,
+      style: StrokeStyle,
+      flags: Uint8Array | null | undefined,
+      viewportBBox: number[] | null,
+    ) => void;
   }) | null {
     const painter = this._painter as Painter & {
       prefersGpuClipping?: () => boolean;
       drawArcFlags?: (arcs: ArcCollection, style: StrokeStyle, flags?: Uint8Array | null) => void;
+      drawPolygonFillArcFlags?: (
+        shapes: any[],
+        arcs: ArcCollection,
+        fillColor: string,
+        flags: Uint8Array | null | undefined,
+        opacity?: number,
+      ) => void;
+      drawArcChunks?: (
+        arcs: ArcCollection,
+        style: StrokeStyle,
+        flags: Uint8Array | null | undefined,
+        viewportBBox: number[] | null,
+      ) => void;
     };
     if (typeof painter.drawArcFlags === 'function' && painter.prefersGpuClipping?.()) {
       return painter as Painter & {
         prefersGpuClipping: () => boolean;
         drawArcFlags: (arcs: ArcCollection, style: StrokeStyle, flags?: Uint8Array | null) => void;
+        drawPolygonFillArcFlags?: (
+          shapes: any[],
+          arcs: ArcCollection,
+          fillColor: string,
+          flags: Uint8Array | null | undefined,
+          opacity?: number,
+        ) => void;
+        drawArcChunks?: (
+          arcs: ArcCollection,
+          style: StrokeStyle,
+          flags: Uint8Array | null | undefined,
+          viewportBBox: number[] | null,
+        ) => void;
       };
     }
     return null;
@@ -1368,6 +1466,85 @@ export class Emap extends EventDispatcher {
     }
     if (flags) return (i: number) => flags[i] === 1;
     return viewportFilter;
+  }
+
+  private _getFastArcFlags(
+    arcs: ArcCollection,
+    layerFlags: Uint8Array | null,
+    cacheKey: string,
+    revision = 0,
+  ): Uint8Array | null {
+    const arcCount = arcs.size?.() ?? layerFlags?.length ?? 0;
+    if (arcCount === 0) return layerFlags;
+
+    const pointCount = arcs.getPointCount?.() ?? 0;
+    const retainedInterval = arcs.getRetainedInterval?.() ?? 0;
+    const viewKey = this._getViewportArcFlagsCacheKey();
+    const viewportFlagsCache = this._viewportArcFlagsCache ??= new globalThis.Map();
+    const cache = viewportFlagsCache.get(cacheKey);
+    if (
+      cache &&
+      cache.arcs === arcs &&
+      cache.layerFlags === layerFlags &&
+      cache.arcCount === arcCount &&
+      cache.pointCount === pointCount &&
+      cache.retainedInterval === retainedInterval &&
+      cache.revision === revision &&
+      cache.viewKey === viewKey
+    ) {
+      return cache.flags;
+    }
+
+    const viewportFilter = this._viewport.getArcFilter(arcs);
+    const flags = new Uint8Array(arcCount);
+    let clippedAnyLayerArc = false;
+    let keptEveryArc = !layerFlags;
+
+    for (let i = 0; i < arcCount; i++) {
+      const inLayer = !layerFlags || layerFlags[i] === 1;
+      const keep = inLayer && viewportFilter(i);
+      if (keep) {
+        flags[i] = 1;
+      } else if (inLayer) {
+        clippedAnyLayerArc = true;
+      }
+      if (!keep) keptEveryArc = false;
+    }
+
+    const result = !layerFlags && keptEveryArc
+      ? null
+      : clippedAnyLayerArc
+        ? flags
+        : layerFlags;
+    viewportFlagsCache.set(cacheKey, {
+      arcs,
+      layerFlags,
+      arcCount,
+      pointCount,
+      retainedInterval,
+      revision,
+      viewKey,
+      flags: result,
+    });
+    return result;
+  }
+
+  private _getViewportArcFlagsCacheKey(): string {
+    const t = (this._viewport as Partial<Viewport>).transform;
+    if (!t) return 'no-transform';
+    return `${t.mx}|${t.my}|${t.bx}|${t.by}`;
+  }
+
+  private _getRenderRetainedInterval(pixelSize: number, userFloor: number): number {
+    const target = pixelSize * 0.5;
+    if (!Number.isFinite(target) || target <= userFloor) return userFloor;
+    return Math.max(userFloor, this._quantizePositiveInterval(target));
+  }
+
+  private _quantizePositiveInterval(value: number): number {
+    if (value <= 0) return 0;
+    const bucketsPerOctave = 4;
+    return 2 ** (Math.ceil(Math.log2(value) * bucketsPerOctave) / bucketsPerOctave);
   }
 
   private _renderHighlight(transform: AffineTransform, lineScale: number): void {
@@ -1627,6 +1804,9 @@ export class Emap extends EventDispatcher {
       for (const key of this._layerArcFlagsCache.keys()) {
         if (key.startsWith(prefix)) this._layerArcFlagsCache.delete(key);
       }
+      for (const key of this._viewportArcFlagsCache?.keys() ?? []) {
+        if (key.startsWith(prefix)) this._viewportArcFlagsCache.delete(key);
+      }
       this._featureQuery?.clear(sourceId);
     }
   }
@@ -1681,6 +1861,7 @@ export class Emap extends EventDispatcher {
    *  invalidation isn't tracked. */
   private _invalidateAllShapeCaches(): void {
     this._layerArcFlagsCache.clear();
+    this._viewportArcFlagsCache?.clear();
     for (const id of this._sources.keys()) this._featureQuery?.clear(id);
   }
 
@@ -1874,6 +2055,7 @@ export class Emap extends EventDispatcher {
     // Per-source feature query + arc-flag caches.
     for (const id of this._sources.keys()) this._featureQuery?.clear(id);
     this._layerArcFlagsCache.clear();
+    this._viewportArcFlagsCache?.clear();
     this._sources.clear();
 
     // Released registered controls. Each `onRemove` is responsible for its

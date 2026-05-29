@@ -11,6 +11,7 @@ import { getLayerId } from '../../source/layer-utils';
 interface EditableArcs extends EditVertexArcs {
   getVertex2(vertexId: number): [number, number] | null;
   getShapeIter?(part: number[]): { x: number; y: number; hasNext(): boolean };
+  getSimpleShapeBbox?(part: number[], bbox: number[]): void;
   transformPoints?: (cb: (x: number, y: number) => void) => void;
   getVertexData(): { xx: Float64Array; yy: Float64Array; nn: Int32Array; ii: Int32Array };
 }
@@ -31,6 +32,24 @@ const VERTEX_HIT_THRESHOLD = 10;
 
 /** Default light grey fill at ~30% opacity, matching mapshaper's hover style */
 const DEFAULT_POLYGON_FILL = 'rgba(0,0,0,0.15)';
+
+type SnapBBox = [number, number, number, number];
+
+function bboxIntersects(a: SnapBBox | number[], b: SnapBBox | number[]): boolean {
+  return !(a[2] < b[0] || a[0] > b[2] || a[3] < b[1] || a[1] > b[3]);
+}
+
+function pointInBBox(x: number, y: number, bbox: SnapBBox): boolean {
+  return x >= bbox[0] && x <= bbox[2] && y >= bbox[1] && y <= bbox[3];
+}
+
+function segmentIntersectsBBox(x1: number, y1: number, x2: number, y2: number, bbox: SnapBBox): boolean {
+  const xmin = Math.min(x1, x2);
+  const ymin = Math.min(y1, y2);
+  const xmax = Math.max(x1, x2);
+  const ymax = Math.max(y1, y2);
+  return !(xmax < bbox[0] || xmin > bbox[2] || ymax < bbox[1] || ymin > bbox[3]);
+}
 
 export interface VertexEditOptions {
   /** Polygon hover fill. Default 'rgba(0,0,0,0.15)'. */
@@ -234,6 +253,15 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
    */
   private _refreshSourceDisplayArcs(sourceId: string): void {
     this._map.getSource(sourceId)?.refreshDisplayArcs();
+  }
+
+  private _markSourceDisplayArcsDirty(sourceId: string): void {
+    const source = this._map.getSource(sourceId);
+    if (source?.markDisplayArcsDirty) {
+      source.markDisplayArcsDirty();
+    } else {
+      source?.refreshDisplayArcs();
+    }
   }
 
   /**
@@ -604,17 +632,43 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
 
     const adapter = getDefaultMapshaperAdapter();
     const dataPoint = this._map.unproject(px, py);
+    const snapPixelBBox: [[number, number], [number, number]] = [
+      [px - this._snapThreshold, py - this._snapThreshold],
+      [px + this._snapThreshold, py + this._snapThreshold],
+    ];
+    const dataMin = this._map.unproject(snapPixelBBox[0][0], snapPixelBBox[0][1]);
+    const dataMax = this._map.unproject(snapPixelBBox[1][0], snapPixelBBox[1][1]);
+    const snapDataBBox: SnapBBox = [
+      Math.min(dataMin[0], dataMax[0]),
+      Math.min(dataMin[1], dataMax[1]),
+      Math.max(dataMin[0], dataMax[0]),
+      Math.max(dataMin[1], dataMax[1]),
+    ];
     const movingVertices = new Set(this._hoverVertexIds);
     let bestDist = this._snapThreshold;
     let bestCoord: [number, number] | null = null;
     const seenVertices = new Set<number>();
+    const candidateShapeIdsByLayer = new Map<string, Set<number>>();
+
+    for (const hit of this._map.queryFeatures(snapPixelBBox)) {
+      if (hit.source !== this._hoveredFeature.source) continue;
+      if (hit.geometryType !== 'polyline' && hit.geometryType !== 'polygon') continue;
+      let ids = candidateShapeIdsByLayer.get(hit.layer);
+      if (!ids) {
+        ids = new Set<number>();
+        candidateShapeIdsByLayer.set(hit.layer, ids);
+      }
+      ids.add(hit.id);
+    }
+    if (candidateShapeIdsByLayer.size === 0) return null;
 
     const considerVertex = (vertexId: number, xx: Float64Array, yy: Float64Array) => {
       if (!this._snapToVertex || movingVertices.has(vertexId) || seenVertices.has(vertexId)) return;
-      seenVertices.add(vertexId);
+      if (!pointInBBox(xx[vertexId], yy[vertexId], snapDataBBox)) return;
       const projected = this._map.project(xx[vertexId], yy[vertexId]);
       const dist = Math.hypot(projected[0] - px, projected[1] - py);
       if (dist < bestDist) {
+        seenVertices.add(vertexId);
         bestDist = dist;
         bestCoord = [xx[vertexId], yy[vertexId]];
       }
@@ -624,25 +678,36 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       const layer = layers[layerIndex];
       if (!isPathLayer(layer) || !layer.shapes) continue;
       const layerId = getLayerId(layer, layerIndex);
+      const candidateShapeIds = candidateShapeIdsByLayer.get(layerId);
+      if (!candidateShapeIds) continue;
 
-      for (let shapeIndex = 0; shapeIndex < layer.shapes.length; shapeIndex++) {
+      const partBBox: number[] = [];
+      for (const shapeIndex of candidateShapeIds) {
         if (layerId === this._hoveredFeature.layer && shapeIndex === this._hoveredFeature.id) continue;
         const shape = layer.shapes[shapeIndex];
         if (!shape) continue;
 
-        adapter.forEachSegmentInShape(shape, arcs as unknown as ArcCollection, (i, j, xx, yy) => {
-          considerVertex(i, xx, yy);
-          considerVertex(j, xx, yy);
-
-          if (!this._snapToEdge) return;
-          const closest = adapter.findClosestPointOnSeg(dataPoint[0], dataPoint[1], xx[i], yy[i], xx[j], yy[j], 0);
-          const projected = this._map.project(closest[0], closest[1]);
-          const dist = Math.hypot(projected[0] - px, projected[1] - py);
-          if (dist < bestDist) {
-            bestDist = dist;
-            bestCoord = [closest[0], closest[1]];
+        for (const part of shape) {
+          if (arcs.getSimpleShapeBbox) {
+            arcs.getSimpleShapeBbox(part, partBBox);
+            if (!bboxIntersects(snapDataBBox, partBBox)) continue;
           }
-        });
+
+          adapter.forEachSegmentInShape([part], arcs as unknown as ArcCollection, (i, j, xx, yy) => {
+            considerVertex(i, xx, yy);
+            considerVertex(j, xx, yy);
+
+            if (!this._snapToEdge) return;
+            if (!segmentIntersectsBBox(xx[i], yy[i], xx[j], yy[j], snapDataBBox)) return;
+            const closest = adapter.findClosestPointOnSeg(dataPoint[0], dataPoint[1], xx[i], yy[i], xx[j], yy[j], 0);
+            const projected = this._map.project(closest[0], closest[1]);
+            const dist = Math.hypot(projected[0] - px, projected[1] - py);
+            if (dist < bestDist) {
+              bestDist = dist;
+              bestCoord = [closest[0], closest[1]];
+            }
+          });
+        }
       }
     }
 
@@ -673,9 +738,10 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       arcs.transformPoints(function () { });
     }
 
-    // If the source has a low-detail LOD copy, regenerate it so the filtered
-    // arcs reflect the new vertex positions.
-    this._refreshSourceDisplayArcs(sourceId);
+    // Mark the low-detail LOD copy stale without eagerly rebuilding it on
+    // pointerup; the renderer will refresh it lazily if the current zoom
+    // actually uses filtered arcs.
+    this._markSourceDisplayArcsDirty(sourceId);
     // The live drag in `_handleDrag` has been mutating arcs in place
     // every frame without bumping editVersion; the spatial-index cache
     // is therefore stale against the new bboxes. Bump now so the next

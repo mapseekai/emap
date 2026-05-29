@@ -8,6 +8,10 @@ export interface WebGLPositionGeometry {
   vertexCount: number;
 }
 
+export interface WebGLPointGeometry extends WebGLPositionGeometry {
+  origin: WebGLCoordinateOrigin;
+}
+
 export interface WebGLPolygonRingGeometry extends WebGLPositionGeometry {
   ringStarts: number[];
   ringCounts: number[];
@@ -75,7 +79,7 @@ export function buildArcSegmentGeometry(
   const end: number[] = [];
   const right: number[] = [];
   const segmentTypes: number[] = [];
-  const arcIds: number[] = [];
+  const segmentArcIds: number[] = [];
   const arcSegmentStarts: number[] = [];
   const arcSegmentCounts: number[] = [];
 
@@ -86,7 +90,6 @@ export function buildArcSegmentGeometry(
       arcSegmentCounts.push(0);
       continue;
     }
-
     const points: Array<[number, number]> = [];
     const iter = arcs.getArcIter(arcId);
     while (iter.hasNext()) points.push([iter.x, iter.y]);
@@ -106,7 +109,7 @@ export function buildArcSegmentGeometry(
       if (i === 0) type |= START_CAP;
       if (i === points.length - 2) type |= END_CAP;
       segmentTypes.push(type);
-      arcIds.push(arcId);
+      segmentArcIds.push(arcId);
     }
 
     arcSegmentStarts.push(firstSegment);
@@ -120,7 +123,65 @@ export function buildArcSegmentGeometry(
     rightPositions: new Float32Array(right),
     segmentTypes: new Uint8Array(segmentTypes),
     segmentTypesFloat: new Float32Array(segmentTypes),
-    arcIds: new Uint32Array(arcIds),
+    arcIds: new Uint32Array(segmentArcIds),
+    arcSegmentStarts: new Uint32Array(arcSegmentStarts),
+    arcSegmentCounts: new Uint32Array(arcSegmentCounts),
+    segmentCount: segmentTypes.length,
+    origin,
+  };
+}
+
+export function buildArcSegmentGeometryForArcIds(
+  arcs: ArcCollection,
+  arcIds: ArrayLike<number>,
+  origin: WebGLCoordinateOrigin = [0, 0],
+): WebGLArcSegmentGeometry {
+  const left: number[] = [];
+  const start: number[] = [];
+  const end: number[] = [];
+  const right: number[] = [];
+  const segmentTypes: number[] = [];
+  const segmentArcIds: number[] = [];
+  const arcSegmentStarts: number[] = [];
+  const arcSegmentCounts: number[] = [];
+
+  for (let arcIndex = 0; arcIndex < arcIds.length; arcIndex++) {
+    const arcId = arcIds[arcIndex];
+    const firstSegment = segmentTypes.length;
+    const points: Array<[number, number]> = [];
+    const iter = arcs.getArcIter(arcId);
+    while (iter.hasNext()) points.push([iter.x, iter.y]);
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const leftPoint = points[Math.max(0, i - 1)];
+      const startPoint = points[i];
+      const endPoint = points[i + 1];
+      const rightPoint = points[Math.min(points.length - 1, i + 2)];
+
+      left.push(leftPoint[0] - origin[0], leftPoint[1] - origin[1]);
+      start.push(startPoint[0] - origin[0], startPoint[1] - origin[1]);
+      end.push(endPoint[0] - origin[0], endPoint[1] - origin[1]);
+      right.push(rightPoint[0] - origin[0], rightPoint[1] - origin[1]);
+
+      let type = 0;
+      if (i === 0) type |= START_CAP;
+      if (i === points.length - 2) type |= END_CAP;
+      segmentTypes.push(type);
+      segmentArcIds.push(arcId);
+    }
+
+    arcSegmentStarts.push(firstSegment);
+    arcSegmentCounts.push(segmentTypes.length - firstSegment);
+  }
+
+  return {
+    leftPositions: new Float32Array(left),
+    startPositions: new Float32Array(start),
+    endPositions: new Float32Array(end),
+    rightPositions: new Float32Array(right),
+    segmentTypes: new Uint8Array(segmentTypes),
+    segmentTypesFloat: new Float32Array(segmentTypes),
+    arcIds: new Uint32Array(segmentArcIds),
     arcSegmentStarts: new Uint32Array(arcSegmentStarts),
     arcSegmentCounts: new Uint32Array(arcSegmentCounts),
     segmentCount: segmentTypes.length,
@@ -221,7 +282,7 @@ export function buildExpandedLineGeometry(
 export function buildPointGeometry(
   shapes: any[],
   origin: WebGLCoordinateOrigin = [0, 0],
-): WebGLPositionGeometry {
+): WebGLPointGeometry {
   const coords: number[] = [];
   for (const shape of shapes) {
     if (!shape) continue;
@@ -233,6 +294,7 @@ export function buildPointGeometry(
   return {
     positions: new Float32Array(coords),
     vertexCount: coords.length / 2,
+    origin,
   };
 }
 
@@ -347,7 +409,7 @@ export function buildPolygonTessellatedGeometry(
 
     if (polygonPositions.length < 8) continue;
     const vertexOffset = positions.length / 2;
-    positions.push(...polygonPositions);
+    appendNumbers(positions, polygonPositions);
     for (const index of earcut(polygonPositions, holeIndices, 2)) {
       indices.push(index + vertexOffset);
     }
@@ -359,6 +421,14 @@ export function buildPolygonTessellatedGeometry(
     vertexCount: indices.length,
     origin,
   };
+}
+
+function appendNumbers(target: number[], source: number[]): void {
+  const offset = target.length;
+  target.length = offset + source.length;
+  for (let i = 0; i < source.length; i++) {
+    target[offset + i] = source[i];
+  }
 }
 
 function closeRing(positions: number[], ringStart: number): void {

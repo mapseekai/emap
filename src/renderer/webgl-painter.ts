@@ -13,9 +13,7 @@ import {
   buildExpandedLineGeometry,
   buildLineSegmentQuadGeometry,
   buildPointQuadGeometry,
-  buildPointGeometry,
   buildPolygonTessellatedGeometry,
-  filterArcSegmentGeometry,
 } from './webgl/geometry';
 import {
   parseColor,
@@ -30,6 +28,7 @@ import {
   type WebGLModelProps,
 } from './webgl/models';
 import { WebGLGeometryCache } from './webgl/cache';
+import type { WebGLArcChunkOptions, WebGLArcSegmentChunk } from './webgl/cache';
 
 interface DrawableModel {
   update?(props: WebGLModelProps): void;
@@ -62,6 +61,7 @@ export class WebGLPainter implements Painter {
   private _models = new Map<string, DrawableModel>();
   private _geometryCache = new WebGLGeometryCache();
   private _arcRevisions = new WeakMap<ArcCollection, number>();
+  private _pointRevisions = new WeakMap<any[], number>();
 
   constructor(
     private _canvas: HTMLCanvasElement,
@@ -127,13 +127,10 @@ export class WebGLPainter implements Painter {
 
   drawArcs(arcs: ArcCollection, style: StrokeStyle, filter?: (i: number) => boolean): void {
     if (style.width === 0) return;
-    const baseGeometry = this._geometryCache.getArcSegments(
-      arcs,
-      this._arcRevisions.get(arcs) ?? 0,
-    );
+    const revision = this._arcRevisions.get(arcs) ?? 0;
     const geometry = filter
-      ? filterArcSegmentGeometry(baseGeometry, filter)
-      : baseGeometry;
+      ? this._geometryCache.getArcSegmentsForFilter(arcs, filter, revision)
+      : this._geometryCache.getArcSegments(arcs, revision);
     this._drawArcSegmentGeometry(geometry, style);
   }
 
@@ -145,6 +142,24 @@ export class WebGLPainter implements Painter {
       this._arcRevisions.get(arcs) ?? 0,
     );
     this._drawArcSegmentGeometry(geometry, style);
+  }
+
+  drawArcChunks(
+    arcs: ArcCollection,
+    style: StrokeStyle,
+    flags: Uint8Array | null | undefined,
+    viewportBBox: [number, number, number, number] | null | undefined,
+    options: WebGLArcChunkOptions = {},
+  ): void {
+    if (style.width === 0) return;
+    const chunks = this._geometryCache.getArcSegmentChunksForFlags(
+      arcs,
+      flags,
+      this._arcRevisions.get(arcs) ?? 0,
+      options,
+    );
+    const visible = viewportBBox ? chunks.search(viewportBBox) : chunks.chunks;
+    this._drawArcSegmentChunks(visible, style);
   }
 
   prefersGpuClipping(): boolean {
@@ -166,6 +181,10 @@ export class WebGLPainter implements Painter {
     this._arcRevisions.set(arcs, revision);
   }
 
+  setPointRenderRevision(shapes: any[], revision: number): void {
+    this._pointRevisions.set(shapes, revision);
+  }
+
   invalidateArcs(arcs: ArcCollection): void {
     this._geometryCache.invalidateArcs(arcs);
     this._arcRevisions.delete(arcs);
@@ -174,16 +193,19 @@ export class WebGLPainter implements Painter {
   invalidateAll(): void {
     this._geometryCache.invalidateAll();
     this._arcRevisions = new WeakMap();
+    this._pointRevisions = new WeakMap();
   }
 
   drawPoints(shapes: any[], style: PointStyle): void {
-    const frame = this._frame();
-    const geometry = buildPointGeometry(shapes, frame.origin);
+    const geometry = this._geometryCache.getPointGeometry(
+      shapes,
+      this._pointRevisions.get(shapes) ?? 0,
+    );
     const uniforms = resolvePointUniforms(style, this._pixelRatio);
     this._drawPointInstances(geometry.positions, geometry.vertexCount, {
       color: uniforms.color,
       radius: uniforms.radius,
-    });
+    }, geometry.origin);
   }
 
   drawPolygonFill(
@@ -200,6 +222,26 @@ export class WebGLPainter implements Painter {
         arcs,
         this._arcRevisions.get(arcs) ?? 0,
       );
+    if (geometry.vertexCount === 0) return;
+    this._drawIndexedPositions(geometry.positions, geometry.indices, geometry.vertexCount, {
+      color: parseColor(fillColor, opacity),
+      pointSize: 1,
+    }, geometry.origin);
+  }
+
+  drawPolygonFillArcFlags(
+    shapes: any[],
+    arcs: ArcCollection,
+    fillColor: string,
+    flags: Uint8Array | null | undefined,
+    opacity?: number,
+  ): void {
+    const geometry = this._geometryCache.getPolygonTessellationForFlags(
+      shapes,
+      arcs,
+      flags,
+      this._arcRevisions.get(arcs) ?? 0,
+    );
     if (geometry.vertexCount === 0) return;
     this._drawIndexedPositions(geometry.positions, geometry.indices, geometry.vertexCount, {
       color: parseColor(fillColor, opacity),
@@ -379,10 +421,11 @@ export class WebGLPainter implements Painter {
     instancePositions: Float32Array,
     instanceCount: number,
     uniforms: { color: Rgba; radius: number },
+    origin?: [number, number],
   ): void {
     if (instanceCount === 0) return;
     const quad = buildPointQuadGeometry();
-    const frame = this._frame();
+    const frame = this._frame(origin);
     const props = {
       topology: 'triangle-strip',
       positions: quad.positions,
@@ -465,6 +508,70 @@ export class WebGLPainter implements Painter {
       },
     });
     model.draw(renderPass);
+    renderPass.end();
+  }
+
+  private _drawArcSegmentChunks(
+    chunks: WebGLArcSegmentChunk[],
+    style: StrokeStyle,
+  ): void {
+    const visible = chunks.filter(chunk => chunk.geometry.segmentCount > 0);
+    if (visible.length === 0) return;
+    const uniforms = resolveStrokeUniforms(style, this._pixelRatio);
+    const quad = buildLineSegmentQuadGeometry();
+    const models = visible.map(chunk => {
+      const geometry = chunk.geometry;
+      const frame = this._frame(geometry.origin);
+      return this._getModel(`line-segments:${chunk.id}`, {
+        shaderKind: 'line',
+        topology: 'triangle-list',
+        positions: quad.positions,
+        instanceCount: geometry.segmentCount,
+        isInstanced: true,
+        uniforms: {
+          u_matrix: frame.matrix,
+          u_color: uniforms.color,
+          u_width: uniforms.width / 2,
+          u_viewportSize: frame.viewportSize,
+        },
+        attributes: {
+          instanceLeftPositions: {
+            data: geometry.leftPositions,
+            format: 'float32x2',
+            stepMode: 'instance',
+          },
+          instanceStartPositions: {
+            data: geometry.startPositions,
+            format: 'float32x2',
+            stepMode: 'instance',
+          },
+          instanceEndPositions: {
+            data: geometry.endPositions,
+            format: 'float32x2',
+            stepMode: 'instance',
+          },
+          instanceRightPositions: {
+            data: geometry.rightPositions,
+            format: 'float32x2',
+            stepMode: 'instance',
+          },
+          instanceSegmentTypes: {
+            data: geometry.segmentTypesFloat,
+            format: 'float32',
+            stepMode: 'instance',
+          },
+        },
+      } satisfies WebGLModelProps);
+    });
+    const renderPass = this._device.beginRenderPass({
+      clearColor: false,
+      clearDepth: false,
+      clearStencil: false,
+      parameters: {
+        viewport: [0, 0, this._canvas.width, this._canvas.height],
+      },
+    });
+    for (const model of models) model.draw(renderPass);
     renderPass.end();
   }
 

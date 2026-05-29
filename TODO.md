@@ -46,3 +46,26 @@ editing.
   worker-vendor and Plan-A self-containment guarantees.
 - **Next step:** `openspec` proposal under `openspec/changes/`; decide (a)
   vs (b) in the proposal.
+
+## E — WebGL spatial chunks for large line/polygon datasets
+
+**Status:** deferred — needs OpenSpec proposal.
+
+The current WebGL renderer keeps retained typed-array geometry and now applies
+viewport arc flags, but large topology layers are still converted/drawn as
+whole-layer buffers. For deck.gl-scale datasets, use a deck.gl-style tiled/bin
+or spatial-chunk pipeline: partition arcs/polygon outlines by bbox, keep one
+retained GPU buffer set per chunk, and draw only chunks intersecting the
+current viewport.
+
+- **Want:** chunk-level retained buffers for lines and polygon outlines, keyed
+  by source/layer/topology revision and invalidated by topology edits.
+- **Keep:** Mapshaper `ArcCollection` remains the authoritative data/editing
+  structure; chunks are render artifacts only.
+- **Touch points:** `src/map/map.ts` viewport selection, `src/renderer/webgl/*`
+  geometry/cache/model units, source edit invalidation hooks, performance
+  examples/benchmarks.
+- **Risk:** broad render-cache architecture change; must preserve shared-node
+  and shared-edge topology editing semantics while avoiding stale chunk bounds.
+- **Next step:** `openspec` proposal under `openspec/changes/`; include a
+  benchmark target for zoom/pan on million-segment line and polygon datasets.

@@ -155,6 +155,7 @@ function createBareMap(): Emap {
   setPrivate(map, '_effectiveLayersCache', []);
   setPrivate(map, '_defaultLayersDirty', true);
   setPrivate(map, '_layerArcFlagsCache', new globalThis.Map());
+  setPrivate(map, '_viewportArcFlagsCache', new globalThis.Map());
   setPrivate(map, '_pendingRender', 0);
   setPrivate(map, '_rafId', 0);
   setPrivate(map, '_highlightManager', { clearHighlightedFeatures: vi.fn() });
@@ -173,18 +174,21 @@ function createBareMap(): Emap {
 }
 
 describe('Emap WebGL rendering fast path', () => {
-  it('passes layer arc flags directly to WebGL painters and skips viewport CPU filtering', () => {
+  it('passes stable layer arc flags and viewport bounds to WebGL chunked line rendering', () => {
     const map = createBareMap();
-    const viewportFilter = vi.fn(() => false);
-    const viewport = { getArcFilter: vi.fn(() => viewportFilter) };
+    const viewport = {
+      getArcFilter: vi.fn(() => vi.fn()),
+      getViewBounds: vi.fn(() => [0, -1, 40, 1]),
+    };
     const painter = {
       prefersGpuClipping: vi.fn(() => true),
+      drawArcChunks: vi.fn(),
       drawArcFlags: vi.fn(),
       drawArcs: vi.fn(),
       drawPolygonFill: vi.fn(),
     };
-    const arcs = { size: () => 1 };
-    const ml = { shapes: [[[0]]] };
+    const arcs = { size: () => 3 };
+    const ml = { shapes: [[[0, 1, 2]]] };
     const layer: LayerSpecification = {
       id: 'roads',
       type: 'line',
@@ -196,25 +200,32 @@ describe('Emap WebGL rendering fast path', () => {
     setPrivate(map, '_painter', painter);
     callPrivate(map, '_renderLineLayer', layer, ml, arcs, 'src:roads', 1);
 
-    expect(painter.drawArcFlags).toHaveBeenCalledTimes(1);
-    expect(painter.drawArcFlags.mock.calls[0][2]).toBeInstanceOf(Uint8Array);
+    expect(painter.drawArcChunks).toHaveBeenCalledTimes(1);
+    expect(painter.drawArcChunks.mock.calls[0][2]).toBeInstanceOf(Uint8Array);
+    expect(Array.from(painter.drawArcChunks.mock.calls[0][2])).toEqual([1, 1, 1]);
+    expect(painter.drawArcChunks.mock.calls[0][3]).toEqual([0, -1, 40, 1]);
+    expect(painter.drawArcFlags).not.toHaveBeenCalled();
     expect(painter.drawArcs).not.toHaveBeenCalled();
     expect(viewport.getArcFilter).not.toHaveBeenCalled();
-    expect(viewportFilter).not.toHaveBeenCalled();
   });
 
-  it('lets WebGL clip fill layers on the GPU instead of passing viewport filters into tessellation', () => {
+  it('passes viewport arc flags to WebGL fill tessellation and chunks outlines', () => {
     const map = createBareMap();
-    const viewportFilter = vi.fn(() => false);
-    const viewport = { getArcFilter: vi.fn(() => viewportFilter) };
+    const viewportFilter = vi.fn((i: number) => i !== 2);
+    const viewport = {
+      getArcFilter: vi.fn(() => viewportFilter),
+      getViewBounds: vi.fn(() => [0, -1, 40, 1]),
+    };
     const painter = {
       prefersGpuClipping: vi.fn(() => true),
+      drawPolygonFillArcFlags: vi.fn(),
+      drawArcChunks: vi.fn(),
       drawArcFlags: vi.fn(),
       drawArcs: vi.fn(),
       drawPolygonFill: vi.fn(),
     };
-    const arcs = { size: () => 1 };
-    const ml = { shapes: [[[0]]] };
+    const arcs = { size: () => 3 };
+    const ml = { shapes: [[[0, 1, 2]]] };
     const layer: LayerSpecification = {
       id: 'parks',
       type: 'fill',
@@ -226,11 +237,30 @@ describe('Emap WebGL rendering fast path', () => {
     setPrivate(map, '_painter', painter);
     callPrivate(map, '_renderFillLayer', layer, ml, arcs, 'src:parks', 1);
 
-    expect(painter.drawPolygonFill).toHaveBeenCalledWith(ml.shapes, arcs, '#4db6ac', undefined, 0.5);
-    expect(painter.drawArcFlags).toHaveBeenCalledTimes(1);
+    expect(painter.drawPolygonFillArcFlags).toHaveBeenCalledTimes(1);
+    expect(painter.drawPolygonFillArcFlags.mock.calls[0][0]).toBe(ml.shapes);
+    expect(painter.drawPolygonFillArcFlags.mock.calls[0][1]).toBe(arcs);
+    expect(painter.drawPolygonFillArcFlags.mock.calls[0][2]).toBe('#4db6ac');
+    expect(Array.from(painter.drawPolygonFillArcFlags.mock.calls[0][3])).toEqual([1, 1, 0]);
+    expect(painter.drawPolygonFillArcFlags.mock.calls[0][4]).toBe(0.5);
+    expect(painter.drawPolygonFill).not.toHaveBeenCalled();
+    expect(painter.drawArcChunks).toHaveBeenCalledTimes(1);
+    expect(Array.from(painter.drawArcChunks.mock.calls[0][2])).toEqual([1, 1, 1]);
+    expect(painter.drawArcChunks.mock.calls[0][3]).toEqual([0, -1, 40, 1]);
+    expect(painter.drawArcFlags).not.toHaveBeenCalled();
     expect(painter.drawArcs).not.toHaveBeenCalled();
-    expect(viewport.getArcFilter).not.toHaveBeenCalled();
-    expect(viewportFilter).not.toHaveBeenCalled();
+    expect(viewport.getArcFilter).toHaveBeenCalledTimes(1);
+  });
+
+  it('quantizes render retained intervals to reduce zoom buffer churn', () => {
+    const map = createBareMap();
+
+    const first = callPrivate(map, '_getRenderRetainedInterval', 0.2, 0);
+    const second = callPrivate(map, '_getRenderRetainedInterval', 0.19, 0);
+    const floor = callPrivate(map, '_getRenderRetainedInterval', 0.001, 0.1);
+
+    expect(second).toBe(first);
+    expect(floor).toBe(0.1);
   });
 });
 

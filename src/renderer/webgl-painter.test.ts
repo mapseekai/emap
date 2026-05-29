@@ -119,7 +119,7 @@ describe("WebGLPainter", () => {
     expect(Array.from(modelProps.positions)).toEqual([
       -1, -1, 1, -1, -1, 1, 1, 1,
     ]);
-    expect(Array.from(modelProps.instancePositions)).toEqual([1, 2, 3, 4]);
+    expect(Array.from(modelProps.instancePositions)).toEqual([0, 0, 2, 2]);
     expect(modelProps.instanceCount).toBe(2);
     expect(modelProps.isInstanced).toBe(true);
     expect(modelProps.uniforms.u_radius).toBe(8);
@@ -137,9 +137,50 @@ describe("WebGLPainter", () => {
 
     expect(deps.createModel).toHaveBeenCalledTimes(1);
     expect(update).toHaveBeenCalledTimes(1);
-    expect(Array.from(update.mock.calls[0][0].instancePositions)).toEqual([
-      5, 6,
-    ]);
+    expect(Array.from(update.mock.calls[0][0].instancePositions)).toEqual([0, 0]);
+  });
+
+  it("keeps point buffers stable across navigation-only redraws", () => {
+    const gl = makeGl();
+    const canvas = makeCanvas(gl);
+    const { deps, update } = makeDeps();
+    const painter = new WebGLPainter(canvas, deps);
+    const shapes = [[[1_000_000, 2_000_000], [1_000_010, 2_000_020]]];
+
+    painter.resize(100, 100);
+    painter.setTransform(new AffineTransform(1, -1, 0, 0));
+    painter.drawPoints(shapes, { color: "#336699", radius: 4 });
+    const createdProps = deps.createModel.mock.calls[0][1];
+
+    painter.setTransform(new AffineTransform(2, -2, 30, 40));
+    painter.drawPoints(shapes, { color: "#336699", radius: 4 });
+
+    expect(deps.createModel).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls[0][0].instancePositions)
+      .toBe(createdProps.instancePositions);
+    expect(Array.from(createdProps.instancePositions)).toEqual([0, 0, 10, 20]);
+  });
+
+  it("rebuilds point buffers when the point render revision changes", () => {
+    const gl = makeGl();
+    const canvas = makeCanvas(gl);
+    const { deps, update } = makeDeps();
+    const painter = new WebGLPainter(canvas, deps);
+    const shapes = [[[1, 2], [3, 4]]];
+
+    painter.resize(100, 100);
+    painter.setPointRenderRevision(shapes, 1);
+    painter.drawPoints(shapes, { color: "#336699", radius: 4 });
+    const createdProps = deps.createModel.mock.calls[0][1];
+
+    shapes[0][1] = [5, 6];
+    painter.setPointRenderRevision(shapes, 2);
+    painter.drawPoints(shapes, { color: "#336699", radius: 4 });
+
+    expect(update.mock.calls[0][0].instancePositions)
+      .not.toBe(createdProps.instancePositions);
+    expect(Array.from(update.mock.calls[0][0].instancePositions))
+      .toEqual([0, 0, 4, 4]);
   });
 
   it("keeps polygon fills shape-aware instead of using raw arc iteration", () => {
@@ -221,6 +262,73 @@ describe("WebGLPainter", () => {
       .toBe(createdProps.attributes.instanceSegmentTypes.data);
   });
 
+  it("draws visible line chunks without rebuilding retained chunk buffers", () => {
+    const gl = makeGl();
+    const canvas = makeCanvas(gl);
+    const { deps } = makeDeps();
+    const painter = new WebGLPainter(canvas, deps);
+    const points: Array<Array<[number, number]>> = [
+      [[0, 0], [10, 0]],
+      [[20, 0], [30, 0]],
+      [[100, 0], [110, 0]],
+      [[120, 0], [130, 0]],
+    ];
+    const arcs = {
+      size: () => points.length,
+      getPointCount: () => points.length * 2,
+      getRetainedInterval: () => 0,
+      getVertexData: () => ({
+        xx: new Float64Array(points.flat().map(p => p[0])),
+        yy: new Float64Array(points.flat().map(p => p[1])),
+        zz: null,
+        nn: new Int32Array(points.map(p => p.length)),
+        ii: new Int32Array([0, 2, 4, 6]),
+        bb: new Float64Array([
+          0, 0, 10, 0,
+          20, 0, 30, 0,
+          100, 0, 110, 0,
+          120, 0, 130, 0,
+        ]),
+      }),
+      getArcIter: vi.fn((arcId: number) => makeArcIter(points[arcId])),
+    };
+
+    painter.resize(100, 100);
+    painter.drawArcChunks(
+      arcs as any,
+      { color: "#333", width: 1 },
+      null,
+      [0, -1, 40, 1],
+      { targetChunkArcCount: 2 },
+    );
+    const firstProps = deps.createModel.mock.calls[0][1];
+
+    painter.setTransform(new AffineTransform(2, -2, 10, 10));
+    painter.drawArcChunks(
+      arcs as any,
+      { color: "#333", width: 1 },
+      null,
+      [0, -1, 40, 1],
+      { targetChunkArcCount: 2 },
+    );
+
+    expect(deps.createModel).toHaveBeenCalledTimes(1);
+    expect(deps.createModel.mock.results[0].value.update.mock.calls[0][0]
+      .attributes.instanceStartPositions.data)
+      .toBe(firstProps.attributes.instanceStartPositions.data);
+
+    painter.drawArcChunks(
+      arcs as any,
+      { color: "#333", width: 1 },
+      null,
+      [90, -1, 140, 1],
+      { targetChunkArcCount: 2 },
+    );
+
+    expect(deps.createModel).toHaveBeenCalledTimes(2);
+    expect(arcs.getArcIter).toHaveBeenCalledTimes(4);
+  });
+
   it("reuses polygon fill tessellation across redraws when topology is unchanged", () => {
     const gl = makeGl();
     const canvas = makeCanvas(gl);
@@ -242,6 +350,33 @@ describe("WebGLPainter", () => {
 
     painter.drawPolygonFill(shapes, arcs as any, "#4db6ac");
     painter.drawPolygonFill(shapes, arcs as any, "#4db6ac");
+
+    expect(arcs.getShapeIter).toHaveBeenCalledTimes(1);
+    expect(deps.createModel).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses viewport-filtered polygon fill tessellation for stable arc flags", () => {
+    const gl = makeGl();
+    const canvas = makeCanvas(gl);
+    const { deps } = makeDeps();
+    const painter = new WebGLPainter(canvas, deps);
+    const points = [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+    ];
+    const arcs = {
+      size: () => 2,
+      getPointCount: () => points.length,
+      getRetainedInterval: () => 0,
+      getShapeIter: vi.fn(() => makeArcIter(points as Array<[number, number]>)),
+    };
+    const shapes = [[[0], [1]]];
+    const flags = new Uint8Array([1, 0]);
+
+    painter.drawPolygonFillArcFlags(shapes, arcs as any, "#4db6ac", flags);
+    painter.drawPolygonFillArcFlags(shapes, arcs as any, "#4db6ac", flags);
 
     expect(arcs.getShapeIter).toHaveBeenCalledTimes(1);
     expect(deps.createModel).toHaveBeenCalledTimes(1);
