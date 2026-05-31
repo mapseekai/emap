@@ -4,6 +4,7 @@ import { Emap } from './map';
 import type { FeatureRef } from './map';
 import type { LayerSpecification } from './layer';
 import { Selection } from './selection';
+import { Projection } from '../geo/projection';
 import { EditHistory } from '../edit/edit-history';
 import { CompositeCommand } from '../edit/commands/composite';
 import { ValidatorRegistry } from '../validation/registry';
@@ -5533,38 +5534,58 @@ describe('Emap.prebuildSpatialIndex / clearSpatialIndex', () => {
 });
 
 describe('Emap.reproject', () => {
-  it('normalizes EPSG aliases before projecting sources and CRS state', async () => {
+  it('resolves EPSG:3857 to webmercator before reprojection', async () => {
     const map = createBareMap();
     const source = {
       reproject: vi.fn(async () => undefined),
       getDataset: vi.fn(() => ({ layers: [], info: {} })),
     };
-    const projection = {
-      crs: 'EPSG:4326',
-      reproject: vi.fn(async (targetCrs: string) => {
-        projection.crs = targetCrs;
-        return { hasBounds: () => false };
-      }),
-    };
+    const projection = new Projection();
+    const reproject = vi.spyOn(projection, 'reproject');
+    const viewport = { setCRS: vi.fn(), clearInitialState: vi.fn() };
     setPrivate(map, '_sources', new globalThis.Map([['s1', source]]));
     setPrivate(map, '_projection', projection);
-    setPrivate(map, '_viewport', { setCRS: vi.fn(), clearInitialState: vi.fn() });
+    setPrivate(map, '_viewport', viewport);
     setPrivate(map, '_featureQuery', { clear: vi.fn() });
 
     await map.reproject('EPSG:3857');
 
-    expect(projection.reproject).toHaveBeenCalledWith('webmercator', expect.any(globalThis.Map));
-    expect(Reflect.get(map, '_viewport').setCRS).toHaveBeenCalledWith('webmercator');
+    expect(reproject).toHaveBeenCalledWith('webmercator', expect.any(globalThis.Map));
+    expect(source.reproject).toHaveBeenCalledWith('webmercator');
+    expect(viewport.setCRS).toHaveBeenCalledWith('webmercator');
+  });
+
+  it('resolves standard EPSG codes to Proj.4 strings before reprojection', async () => {
+    const map = createBareMap();
+    const source = {
+      reproject: vi.fn(async () => undefined),
+      getDataset: vi.fn(() => ({ layers: [], info: {} })),
+    };
+    const projection = new Projection();
+    const reproject = vi.spyOn(projection, 'reproject');
+    const viewport = { setCRS: vi.fn(), clearInitialState: vi.fn() };
+    setPrivate(map, '_sources', new globalThis.Map([['s1', source]]));
+    setPrivate(map, '_projection', projection);
+    setPrivate(map, '_viewport', viewport);
+    setPrivate(map, '_featureQuery', { clear: vi.fn() });
+
+    await map.reproject('EPSG:4490');
+
+    const resolvedTarget = source.reproject.mock.calls[0]?.[0];
+    expect(typeof resolvedTarget).toBe('string');
+    expect(resolvedTarget).toContain('+ellps=GRS80');
+    expect(reproject).toHaveBeenCalledWith(resolvedTarget, expect.any(globalThis.Map));
+    expect(viewport.setCRS).toHaveBeenCalledWith(resolvedTarget);
   });
 
   it('clears spatial indexes after source reprojection', async () => {
     const map = createBareMap();
     const clear = vi.fn();
-    const projection = {
-      crs: 'EPSG:4326',
-      reproject: vi.fn(async () => ({ hasBounds: () => false })),
-    };
-    setPrivate(map, '_sources', new globalThis.Map([['s1', {}], ['s2', {}]]));
+    const projection = new Projection();
+    const makeSource = () => ({
+      getDataset: vi.fn(() => ({ layers: [], info: {} })),
+    });
+    setPrivate(map, '_sources', new globalThis.Map([['s1', makeSource()], ['s2', makeSource()]]));
     setPrivate(map, '_projection', projection);
     setPrivate(map, '_viewport', { setCRS: vi.fn(), clearInitialState: vi.fn() });
     setPrivate(map, '_featureQuery', { clear });
@@ -5573,6 +5594,26 @@ describe('Emap.reproject', () => {
 
     expect(clear).toHaveBeenCalledWith('s1');
     expect(clear).toHaveBeenCalledWith('s2');
+  });
+
+  it('rejects unknown EPSG codes before projection starts', async () => {
+    const map = createBareMap();
+    const source = {
+      reproject: vi.fn(async () => undefined),
+      getDataset: vi.fn(() => ({ layers: [], info: {} })),
+    };
+    const projection = new Projection();
+    const reproject = vi.spyOn(projection, 'reproject');
+    const viewport = { setCRS: vi.fn(), clearInitialState: vi.fn() };
+    setPrivate(map, '_sources', new globalThis.Map([['s1', source]]));
+    setPrivate(map, '_projection', projection);
+    setPrivate(map, '_viewport', viewport);
+    setPrivate(map, '_featureQuery', { clear: vi.fn() });
+
+    await expect(map.reproject('EPSG:999999')).rejects.toThrow(/Unsupported EPSG code/);
+    expect(reproject).not.toHaveBeenCalled();
+    expect(source.reproject).not.toHaveBeenCalled();
+    expect(viewport.setCRS).not.toHaveBeenCalled();
   });
 });
 
