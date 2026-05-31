@@ -211,7 +211,6 @@ export default [
       file: moduleOutput,
       format: 'es',
       sourcemap: shouldWriteSourcemap,
-      inlineDynamicImports: true,
       paths: { mapshaper: './mapshaper-vendor.mjs' },
     },
     plugins: commonPlugins(),

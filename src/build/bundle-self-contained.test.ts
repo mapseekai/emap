@@ -85,6 +85,13 @@ d('shipped bundles are self-contained', () => {
     expect(others, `unexpected non-adm-zip requires in dist/${f}: ${others.join(', ')}`).toEqual([]);
   });
 
+  it('does not embed full EPSG metadata in the browser ESM bundle', () => {
+    const code = readFileSync(resolve(DIST, 'emap.mjs'), 'utf8');
+    expect(Buffer.byteLength(code, 'utf8')).toBeLessThan(5_000_000);
+    expect(code).not.toContain('China Geodetic Coordinate System 2000');
+    expect(code).not.toContain('China - onshore and offshore.');
+  });
+
   it('survives esbuild browser pre-bundling with a require shim present', () => {
     const dir = mkdtempSync(resolve(tmpdir(), 'emap-esbuild-'));
     const entry = resolve(dir, 'entry.mjs');

@@ -5616,6 +5616,26 @@ describe('Emap.reproject', () => {
     expect(viewport.setCRS).not.toHaveBeenCalled();
   });
 
+  it('rejects blank CRS input before projection starts', async () => {
+    const map = createBareMap();
+    const source = {
+      reproject: vi.fn(async () => undefined),
+      getDataset: vi.fn(() => ({ layers: [], info: {} })),
+    };
+    const projection = new Projection();
+    const reproject = vi.spyOn(projection, 'reproject');
+    const viewport = { setCRS: vi.fn(), clearInitialState: vi.fn() };
+    setPrivate(map, '_sources', new globalThis.Map([['s1', source]]));
+    setPrivate(map, '_projection', projection);
+    setPrivate(map, '_viewport', viewport);
+    setPrivate(map, '_featureQuery', { clear: vi.fn() });
+
+    await expect(map.reproject('   ')).rejects.toThrow('targetCrs must be a non-empty CRS string');
+    expect(reproject).not.toHaveBeenCalled();
+    expect(source.reproject).not.toHaveBeenCalled();
+    expect(viewport.setCRS).not.toHaveBeenCalled();
+  });
+
   it('does not reject when only the current CRS lacks a Proj.4 definition', async () => {
     const map = createBareMap();
     const source = {

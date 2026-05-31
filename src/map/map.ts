@@ -1053,6 +1053,9 @@ export class Emap extends EventDispatcher {
   }
 
   public async reproject(targetCrs: string): Promise<void> {
+    if (targetCrs.trim().length === 0) {
+      throw new Error('targetCrs must be a non-empty CRS string');
+    }
     const normalizedTarget = await resolveProjectCrs(targetCrs);
     let normalizedCurrent: string;
     try {

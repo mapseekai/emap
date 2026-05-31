@@ -11,18 +11,13 @@
 // matches. That matches the prior `TopologySource.getCRS()` behaviour.
 
 import type { MapshaperDataset } from '../types/mapshaper-types';
+import { EPSG_CODES_WITHOUT_PROJ4, EPSG_PROJ4_TABLE } from './epsg-proj4-data';
 
 /** Default fallback when no metadata identifies a CRS. */
 export const DEFAULT_CRS = 'EPSG:4326';
 
-interface EpsgIndexRecord {
-  code?: string;
-  proj4?: string;
-}
-
 const EPSG_CODE_RE = /^(?:EPSG:)?(\d+)$/i;
 const WEB_MERCATOR_CODES = new Set(['3857', '900913', '102100']);
-let epsgRecordsPromise: Promise<Record<string, EpsgIndexRecord>> | null = null;
 
 /**
  * Resolve a canonical CRS identifier (typically `EPSG:NNNN` or a passthrough
@@ -111,12 +106,18 @@ function formatEpsgCode(code: string): string {
   return `EPSG:${code}`;
 }
 
-function loadEpsgRecords(): Promise<Record<string, EpsgIndexRecord>> {
-  epsgRecordsPromise ??= import('epsg-index/all.json').then((mod) => {
-    const records = 'default' in mod ? mod.default : mod;
-    return records as Record<string, EpsgIndexRecord>;
-  });
-  return epsgRecordsPromise;
+function findEpsgProj4(code: string): string | null {
+  const firstNeedle = `${code}\t`;
+  let start = EPSG_PROJ4_TABLE.startsWith(firstNeedle) ? 0 : -1;
+  if (start === -1) {
+    const needle = `\n${firstNeedle}`;
+    const index = EPSG_PROJ4_TABLE.indexOf(needle);
+    if (index === -1) return null;
+    start = index + 1;
+  }
+  const valueStart = start + firstNeedle.length;
+  const valueEnd = EPSG_PROJ4_TABLE.indexOf('\n', valueStart);
+  return EPSG_PROJ4_TABLE.slice(valueStart, valueEnd === -1 ? undefined : valueEnd);
 }
 
 /**
@@ -134,22 +135,19 @@ export async function resolveProjectCrs(crs: string): Promise<string> {
   if (code === '4326') return 'wgs84';
   if (WEB_MERCATOR_CODES.has(code)) return 'webmercator';
 
-  const epsgRecords = await loadEpsgRecords();
-  const record = epsgRecords[code];
-  const proj4 = typeof record?.proj4 === 'string' ? record.proj4.trim() : '';
-  if (!record) {
+  const proj4 = findEpsgProj4(code);
+  if (proj4) return proj4;
+
+  if (!EPSG_CODES_WITHOUT_PROJ4.includes(`|${code}|`)) {
     throw new EpsgProjectionError(
       `Unsupported EPSG code: ${formatEpsgCode(code)}`,
       formatEpsgCode(code),
     );
   }
-  if (!proj4) {
-    throw new EpsgProjectionError(
-      `${formatEpsgCode(code)} does not include a Proj.4 definition`,
-      formatEpsgCode(code),
-    );
-  }
-  return proj4;
+  throw new EpsgProjectionError(
+    `${formatEpsgCode(code)} does not include a Proj.4 definition`,
+    formatEpsgCode(code),
+  );
 }
 
 /**
