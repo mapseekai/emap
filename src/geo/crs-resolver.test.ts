@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_CRS,
+  EpsgProjectionError,
   inferFromPrj,
   normalizeCrsString,
   normalizeProjectCrs,
@@ -81,6 +82,20 @@ describe('resolveProjectCrs', () => {
     await expect(resolveProjectCrs('EPSG:999999999')).rejects.toThrow(
       'Unsupported EPSG code: EPSG:999999999',
     );
+    await expect(resolveProjectCrs('EPSG:999999999')).rejects.toMatchObject({
+      code: 'EPSG:999999999',
+    });
+    await expect(resolveProjectCrs('EPSG:999999999')).rejects.toBeInstanceOf(EpsgProjectionError);
+  });
+
+  it('rejects EPSG records that do not include Proj.4 definitions', async () => {
+    await expect(resolveProjectCrs('EPSG:2000')).rejects.toThrow(
+      'EPSG:2000 does not include a Proj.4 definition',
+    );
+    await expect(resolveProjectCrs('EPSG:2000')).rejects.toMatchObject({
+      code: 'EPSG:2000',
+    });
+    await expect(resolveProjectCrs('EPSG:2000')).rejects.toBeInstanceOf(EpsgProjectionError);
   });
 });
 

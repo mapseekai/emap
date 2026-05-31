@@ -11,7 +11,6 @@
 // matches. That matches the prior `TopologySource.getCRS()` behaviour.
 
 import type { MapshaperDataset } from '../types/mapshaper-types';
-import epsgIndex from 'epsg-index/all.json';
 
 /** Default fallback when no metadata identifies a CRS. */
 export const DEFAULT_CRS = 'EPSG:4326';
@@ -23,7 +22,7 @@ interface EpsgIndexRecord {
 
 const EPSG_CODE_RE = /^(?:EPSG:)?(\d+)$/i;
 const WEB_MERCATOR_CODES = new Set(['3857', '900913', '102100']);
-const EPSG_RECORDS = epsgIndex as Record<string, EpsgIndexRecord>;
+let epsgRecordsPromise: Promise<Record<string, EpsgIndexRecord>> | null = null;
 
 /**
  * Resolve a canonical CRS identifier (typically `EPSG:NNNN` or a passthrough
@@ -112,6 +111,14 @@ function formatEpsgCode(code: string): string {
   return `EPSG:${code}`;
 }
 
+function loadEpsgRecords(): Promise<Record<string, EpsgIndexRecord>> {
+  epsgRecordsPromise ??= import('epsg-index/all.json').then((mod) => {
+    const records = 'default' in mod ? mod.default : mod;
+    return records as Record<string, EpsgIndexRecord>;
+  });
+  return epsgRecordsPromise;
+}
+
 /**
  * Resolve outbound projection input into a string mapshaper/mproj can consume.
  *
@@ -127,7 +134,8 @@ export async function resolveProjectCrs(crs: string): Promise<string> {
   if (code === '4326') return 'wgs84';
   if (WEB_MERCATOR_CODES.has(code)) return 'webmercator';
 
-  const record = EPSG_RECORDS[code];
+  const epsgRecords = await loadEpsgRecords();
+  const record = epsgRecords[code];
   const proj4 = typeof record?.proj4 === 'string' ? record.proj4.trim() : '';
   if (!record) {
     throw new EpsgProjectionError(
