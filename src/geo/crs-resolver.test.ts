@@ -50,34 +50,35 @@ describe('resolveProjectCrs', () => {
     ['epsg:3857', 'webmercator'],
     ['EPSG:900913', 'webmercator'],
     ['EPSG:102100', 'webmercator'],
-  ])('%p -> %p', (input, expected) => {
-    expect(resolveProjectCrs(input)).toBe(expected);
+  ])('%p -> %p', async (input, expected) => {
+    await expect(resolveProjectCrs(input)).resolves.toBe(expected);
   });
 
-  it('resolves EPSG:4490 to a Proj.4 longlat definition', () => {
-    const crs = resolveProjectCrs('EPSG:4490');
+  it('resolves EPSG:4490 to a Proj.4 longlat definition', async () => {
+    const crs = await resolveProjectCrs('EPSG:4490');
 
     expect(crs).toContain('+proj=longlat');
     expect(crs).toContain('+ellps=GRS80');
   });
 
-  it('resolves EPSG:32633 to a Proj.4 UTM definition', () => {
-    const crs = resolveProjectCrs('32633');
+  it('resolves EPSG:32633 to a Proj.4 UTM definition', async () => {
+    const crs = await resolveProjectCrs('32633');
 
     expect(crs).toContain('+proj=utm');
     expect(crs).toContain('+zone=33');
+    expect(crs).not.toContain('+south');
   });
 
   it.each([
     '+proj=utm +zone=10',
     'robinson',
     'natearth',
-  ])('passes through %p unchanged', (input) => {
-    expect(resolveProjectCrs(input)).toBe(input);
+  ])('passes through %p unchanged', async (input) => {
+    await expect(resolveProjectCrs(input)).resolves.toBe(input);
   });
 
-  it('rejects unsupported EPSG codes', () => {
-    expect(() => resolveProjectCrs('EPSG:999999999')).toThrow(
+  it('rejects unsupported EPSG codes', async () => {
+    await expect(resolveProjectCrs('EPSG:999999999')).rejects.toThrow(
       'Unsupported EPSG code: EPSG:999999999',
     );
   });
