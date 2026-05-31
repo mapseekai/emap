@@ -5615,6 +5615,28 @@ describe('Emap.reproject', () => {
     expect(source.reproject).not.toHaveBeenCalled();
     expect(viewport.setCRS).not.toHaveBeenCalled();
   });
+
+  it('does not reject when only the current CRS lacks a Proj.4 definition', async () => {
+    const map = createBareMap();
+    const source = {
+      reproject: vi.fn(async () => undefined),
+      getDataset: vi.fn(() => ({ layers: [], info: {} })),
+    };
+    const projection = new Projection();
+    projection.setCRS('EPSG:2000');
+    const reproject = vi.spyOn(projection, 'reproject');
+    const viewport = { setCRS: vi.fn(), clearInitialState: vi.fn() };
+    setPrivate(map, '_sources', new globalThis.Map([['s1', source]]));
+    setPrivate(map, '_projection', projection);
+    setPrivate(map, '_viewport', viewport);
+    setPrivate(map, '_featureQuery', { clear: vi.fn() });
+
+    await map.reproject('EPSG:3857');
+
+    expect(reproject).toHaveBeenCalledWith('webmercator', expect.any(globalThis.Map));
+    expect(source.reproject).toHaveBeenCalledWith('webmercator');
+    expect(viewport.setCRS).toHaveBeenCalledWith('webmercator');
+  });
 });
 
 // ===========================================================================

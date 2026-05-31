@@ -4,7 +4,7 @@ import { AffineTransform } from '../geo/transform';
 import { Viewport } from '../geo/viewport';
 import { Camera, type CameraOptions, type AnimationOptions, type FlyToOptions, type FitBoundsOptions } from '../geo/camera';
 import { Projection } from '../geo/projection';
-import { resolveProjectCrs } from '../geo/crs-resolver';
+import { EpsgProjectionError, normalizeProjectCrs, resolveProjectCrs } from '../geo/crs-resolver';
 import { Painter } from '../renderer/painter';
 import { CanvasPainter } from '../renderer/canvas-painter';
 import { EditOverlayRenderer } from '../renderer/edit-overlay-renderer';
@@ -1054,7 +1054,14 @@ export class Emap extends EventDispatcher {
 
   public async reproject(targetCrs: string): Promise<void> {
     const normalizedTarget = await resolveProjectCrs(targetCrs);
-    if (await resolveProjectCrs(this._projection.crs) === normalizedTarget) return;
+    let normalizedCurrent: string;
+    try {
+      normalizedCurrent = await resolveProjectCrs(this._projection.crs);
+    } catch (err) {
+      if (!(err instanceof EpsgProjectionError)) throw err;
+      normalizedCurrent = normalizeProjectCrs(this._projection.crs);
+    }
+    if (normalizedCurrent === normalizedTarget) return;
 
     const newExtent = await this._projection.reproject(normalizedTarget, this._sources);
 
