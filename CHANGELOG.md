@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `vertexEdit` and `transformFeature` now accept `layers?: string[]`, matching
   the selection handlers' layer-filter option so app-level edit filters can
   constrain both selection and editing hit-tests.
+- Standard EPSG CRS inputs now resolve through `epsg-index` to Proj.4 before
+  being handed to mapshaper / mproj, so the UI CRS picker can pass values like
+  `EPSG:4490` and `EPSG:32633` to `map.ops.projectLayer()` and `map.reproject()`.
 
 ### Fixed
 
