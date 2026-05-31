@@ -117,7 +117,12 @@
     function createMap(renderer) {
       if (map) map.remove();
       renderLayerIds = [];
-      map = new Emap({ container: "map", renderer });
+      map = new Emap({
+        container: "map",
+        renderer,
+        webglGeometryWorker: renderer === "webgl" ? "auto" : false,
+        webglGeometryWorkerUrl: "../../dist/emap-geometry-worker.js",
+      });
       map.addControl(new emap.NavigationControl(), "top-left");
       map.addControl(new EditToolbar(), "top-left");
       map.addControl(new emap.BasemapControl(), "top-right");

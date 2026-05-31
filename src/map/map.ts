@@ -272,6 +272,12 @@ export class Emap extends EventDispatcher {
 
     this._painter = createPainter(this._canvas, {
       renderer: options.renderer,
+    }, undefined, {
+      geometryWorkerEnabled: options.webglGeometryWorker === true ||
+        options.webglGeometryWorker === 'auto',
+      geometryWorkerUrl: options.webglGeometryWorkerUrl,
+      geometryWorkerThreshold: options.webglGeometryWorkerThreshold,
+      onAsyncGeometryReady: () => this._scheduleRender(),
     }).painter;
     this._painter.setPixelRatio(window.devicePixelRatio || 1);
     this._editOverlay = new EditOverlayRenderer(this._painter);
@@ -1375,6 +1381,7 @@ export class Emap extends EventDispatcher {
         fillColor,
         fillFlags,
         fillOpacity,
+        this._viewport.getViewBounds(),
       );
     } else {
       this._painter.drawPolygonFill(
@@ -1410,6 +1417,7 @@ export class Emap extends EventDispatcher {
       fillColor: string,
       flags: Uint8Array | null | undefined,
       opacity?: number,
+      viewportBBox?: number[] | null,
     ) => void;
     drawArcChunks?: (
       arcs: ArcCollection,
@@ -1427,6 +1435,7 @@ export class Emap extends EventDispatcher {
         fillColor: string,
         flags: Uint8Array | null | undefined,
         opacity?: number,
+        viewportBBox?: number[] | null,
       ) => void;
       drawArcChunks?: (
         arcs: ArcCollection,
@@ -1445,6 +1454,7 @@ export class Emap extends EventDispatcher {
           fillColor: string,
           flags: Uint8Array | null | undefined,
           opacity?: number,
+          viewportBBox?: number[] | null,
         ) => void;
         drawArcChunks?: (
           arcs: ArcCollection,

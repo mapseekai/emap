@@ -283,17 +283,25 @@ export function buildPointGeometry(
   shapes: any[],
   origin: WebGLCoordinateOrigin = [0, 0],
 ): WebGLPointGeometry {
-  const coords: number[] = [];
+  let pointCount = 0;
+  for (const shape of shapes) {
+    if (!shape) continue;
+    pointCount += normalizePointShape(shape).length;
+  }
+
+  const positions = new Float32Array(pointCount * 2);
+  let offset = 0;
   for (const shape of shapes) {
     if (!shape) continue;
     const points = normalizePointShape(shape);
     for (const point of points) {
-      coords.push(point[0] - origin[0], point[1] - origin[1]);
+      positions[offset++] = point[0] - origin[0];
+      positions[offset++] = point[1] - origin[1];
     }
   }
   return {
-    positions: new Float32Array(coords),
-    vertexCount: coords.length / 2,
+    positions,
+    vertexCount: pointCount,
     origin,
   };
 }

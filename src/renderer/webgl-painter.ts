@@ -28,7 +28,12 @@ import {
   type WebGLModelProps,
 } from './webgl/models';
 import { WebGLGeometryCache } from './webgl/cache';
-import type { WebGLArcChunkOptions, WebGLArcSegmentChunk } from './webgl/cache';
+import { WebGLGeometryWorkerPool } from './webgl/geometry-worker-client';
+import type {
+  WebGLArcChunkOptions,
+  WebGLArcSegmentChunk,
+  WebGLRenderGeometryWorker,
+} from './webgl/cache';
 
 interface DrawableModel {
   update?(props: WebGLModelProps): void;
@@ -47,6 +52,13 @@ export interface WebGLPainterDependencies {
     device: Device,
     props: WebGLModelProps,
   ) => DrawableModel;
+  geometryWorker?: WebGLRenderGeometryWorker | null;
+  geometryWorkerEnabled?: boolean;
+  geometryWorkerUrl?: string;
+  geometryWorkerThreshold?: number;
+  polygonChunkFeatureCount?: number;
+  WorkerCtor?: new (url: string) => Worker;
+  onAsyncGeometryReady?: () => void;
 }
 
 export class WebGLPainter implements Painter {
@@ -59,7 +71,9 @@ export class WebGLPainter implements Painter {
   private _height = 0;
   private _createModel: NonNullable<WebGLPainterDependencies['createModel']>;
   private _models = new Map<string, DrawableModel>();
-  private _geometryCache = new WebGLGeometryCache();
+  private _geometryCache: WebGLGeometryCache;
+  private _geometryWorkerThreshold: number;
+  private _polygonChunkFeatureCount: number;
   private _arcRevisions = new WeakMap<ArcCollection, number>();
   private _pointRevisions = new WeakMap<any[], number>();
 
@@ -81,6 +95,19 @@ export class WebGLPainter implements Painter {
       ? deps.createDevice(gl, _canvas)
       : this._createDefaultDevice(gl, _canvas);
     this._createModel = deps.createModel ?? this._createDefaultModel;
+    this._geometryWorkerThreshold = Math.max(1, Math.floor(
+      deps.geometryWorkerThreshold ?? 50_000,
+    ));
+    this._polygonChunkFeatureCount = Math.max(1, Math.floor(
+      deps.polygonChunkFeatureCount ?? 64,
+    ));
+    const geometryWorker = this._resolveGeometryWorker(deps);
+    this._geometryCache = new WebGLGeometryCache({
+      pointWorker: geometryWorker,
+      arcChunkWorker: geometryWorker,
+      polygonWorker: geometryWorker,
+      onGeometryReady: deps.onAsyncGeometryReady,
+    });
   }
 
   setTransform(transform: AffineTransform): void {
@@ -156,7 +183,11 @@ export class WebGLPainter implements Painter {
       arcs,
       flags,
       this._arcRevisions.get(arcs) ?? 0,
-      options,
+      {
+        ...options,
+        async: true,
+        minArcCount: this._geometryWorkerThreshold,
+      },
     );
     const visible = viewportBBox ? chunks.search(viewportBBox) : chunks.chunks;
     this._drawArcSegmentChunks(visible, style);
@@ -200,6 +231,11 @@ export class WebGLPainter implements Painter {
     const geometry = this._geometryCache.getPointGeometry(
       shapes,
       this._pointRevisions.get(shapes) ?? 0,
+      undefined,
+      {
+        async: true,
+        minPointCount: this._geometryWorkerThreshold,
+      },
     );
     const uniforms = resolvePointUniforms(style, this._pixelRatio);
     this._drawPointInstances(geometry.positions, geometry.vertexCount, {
@@ -221,6 +257,10 @@ export class WebGLPainter implements Painter {
         shapes,
         arcs,
         this._arcRevisions.get(arcs) ?? 0,
+        {
+          async: true,
+          minPointCount: this._geometryWorkerThreshold,
+        },
       );
     if (geometry.vertexCount === 0) return;
     this._drawIndexedPositions(geometry.positions, geometry.indices, geometry.vertexCount, {
@@ -235,12 +275,46 @@ export class WebGLPainter implements Painter {
     fillColor: string,
     flags: Uint8Array | null | undefined,
     opacity?: number,
+    viewportBBox?: [number, number, number, number] | number[] | null,
   ): void {
+    if (viewportBBox) {
+      const chunks = this._geometryCache.getPolygonTessellationChunksForFlags(
+        shapes,
+        arcs,
+        flags,
+        this._arcRevisions.get(arcs) ?? 0,
+        viewportBBox,
+        {
+          async: true,
+          minPointCount: this._geometryWorkerThreshold,
+          targetChunkFeatureCount: this._polygonChunkFeatureCount,
+        },
+      );
+      const color = parseColor(fillColor, opacity);
+      for (const chunk of chunks.chunks) {
+        this._drawIndexedPositions(
+          chunk.geometry.positions,
+          chunk.geometry.indices,
+          chunk.geometry.vertexCount,
+          {
+            color,
+            pointSize: 1,
+          },
+          chunk.geometry.origin,
+        );
+      }
+      return;
+    }
+
     const geometry = this._geometryCache.getPolygonTessellationForFlags(
       shapes,
       arcs,
       flags,
       this._arcRevisions.get(arcs) ?? 0,
+      {
+        async: true,
+        minPointCount: this._geometryWorkerThreshold,
+      },
     );
     if (geometry.vertexCount === 0) return;
     this._drawIndexedPositions(geometry.positions, geometry.indices, geometry.vertexCount, {
@@ -337,6 +411,19 @@ export class WebGLPainter implements Painter {
     props: WebGLModelProps,
   ): WebGLDrawableModel {
     return createRetainedWebGLModel(device, props);
+  }
+
+  private _resolveGeometryWorker(
+    deps: WebGLPainterDependencies,
+  ): WebGLRenderGeometryWorker | null {
+    if (deps.geometryWorker !== undefined) return deps.geometryWorker;
+    if (!deps.geometryWorkerEnabled) return null;
+    const WorkerCtor = deps.WorkerCtor ?? (globalThis as any).Worker;
+    if (!WorkerCtor) return null;
+    return new WebGLGeometryWorkerPool({
+      workerUrl: deps.geometryWorkerUrl ?? 'emap-geometry-worker.js',
+      WorkerCtor,
+    });
   }
 
   private _matrix(): Float32Array {

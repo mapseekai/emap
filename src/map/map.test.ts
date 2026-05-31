@@ -243,6 +243,7 @@ describe('Emap WebGL rendering fast path', () => {
     expect(painter.drawPolygonFillArcFlags.mock.calls[0][2]).toBe('#4db6ac');
     expect(Array.from(painter.drawPolygonFillArcFlags.mock.calls[0][3])).toEqual([1, 1, 0]);
     expect(painter.drawPolygonFillArcFlags.mock.calls[0][4]).toBe(0.5);
+    expect(painter.drawPolygonFillArcFlags.mock.calls[0][5]).toEqual([0, -1, 40, 1]);
     expect(painter.drawPolygonFill).not.toHaveBeenCalled();
     expect(painter.drawArcChunks).toHaveBeenCalledTimes(1);
     expect(Array.from(painter.drawArcChunks.mock.calls[0][2])).toEqual([1, 1, 1]);

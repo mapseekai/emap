@@ -183,6 +183,163 @@ describe("WebGLPainter", () => {
       .toEqual([0, 0, 4, 4]);
   });
 
+  it("can defer large point geometry to a worker and redraw when ready", async () => {
+    const gl = makeGl();
+    const canvas = makeCanvas(gl);
+    const onAsyncGeometryReady = vi.fn();
+    const { deps } = makeDeps();
+    let resolveGeometry!: (geometry: any) => void;
+    const geometryWorker = {
+      buildPointGeometry: vi.fn(() => new Promise(resolve => {
+        resolveGeometry = resolve;
+      })),
+    };
+    const painter = new WebGLPainter(canvas, {
+      ...deps,
+      geometryWorker,
+      geometryWorkerThreshold: 1,
+      onAsyncGeometryReady,
+    });
+    const shapes = [[[4, 5], [6, 7]]];
+
+    painter.resize(100, 100);
+    painter.drawPoints(shapes, { color: "#336699", radius: 4 });
+
+    expect(deps.createModel).not.toHaveBeenCalled();
+    expect(geometryWorker.buildPointGeometry).toHaveBeenCalledWith(shapes, [4, 5]);
+
+    resolveGeometry({
+      positions: new Float32Array([0, 0, 2, 2]),
+      vertexCount: 2,
+      origin: [4, 5],
+    });
+    await vi.waitFor(() => expect(onAsyncGeometryReady).toHaveBeenCalledTimes(1));
+
+    painter.drawPoints(shapes, { color: "#336699", radius: 4 });
+
+    expect(deps.createModel).toHaveBeenCalledTimes(1);
+    expect(Array.from(deps.createModel.mock.calls[0][1].instancePositions))
+      .toEqual([0, 0, 2, 2]);
+  });
+
+  it("can defer large polygon tessellation to a worker and redraw when ready", async () => {
+    const gl = makeGl();
+    const canvas = makeCanvas(gl);
+    const onAsyncGeometryReady = vi.fn();
+    const { deps } = makeDeps();
+    let resolveGeometry!: (geometry: any) => void;
+    const geometryWorker = {
+      buildPolygonTessellation: vi.fn(() => new Promise(resolve => {
+        resolveGeometry = resolve;
+      })),
+    };
+    const painter = new WebGLPainter(canvas, {
+      ...deps,
+      geometryWorker: geometryWorker as any,
+      geometryWorkerThreshold: 1,
+      polygonChunkFeatureCount: 1,
+      onAsyncGeometryReady,
+    });
+    const arcs = {
+      size: () => 1,
+      getPointCount: () => 4,
+      getRetainedInterval: () => 0,
+      getVertexData: () => ({
+        xx: new Float64Array([0, 10, 10, 0]),
+        yy: new Float64Array([0, 0, 10, 10]),
+        zz: null,
+        nn: new Int32Array([4]),
+        ii: new Int32Array([0]),
+        bb: new Float64Array([0, 0, 10, 10]),
+      }),
+      getShapeIter: vi.fn(() => makeArcIter([[0, 0], [10, 0], [10, 10], [0, 10]])),
+    };
+    const shapes = [[[0]]];
+    const flags = new Uint8Array([1]);
+
+    painter.resize(100, 100);
+    painter.drawPolygonFillArcFlags(shapes, arcs as any, "#4db6ac", flags);
+
+    expect(deps.createModel).not.toHaveBeenCalled();
+    expect(geometryWorker.buildPolygonTessellation).toHaveBeenCalledOnce();
+    expect(arcs.getShapeIter).not.toHaveBeenCalled();
+
+    resolveGeometry({
+      positions: new Float32Array([0, 0, 10, 0, 10, 10, 0, 10]),
+      indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
+      vertexCount: 6,
+      origin: [0, 0],
+    });
+    await vi.waitFor(() => expect(onAsyncGeometryReady).toHaveBeenCalledTimes(1));
+
+    painter.drawPolygonFillArcFlags(shapes, arcs as any, "#4db6ac", flags);
+
+    expect(deps.createModel).toHaveBeenCalledTimes(1);
+    expect(Array.from(deps.createModel.mock.calls[0][1].positions))
+      .toEqual([0, 0, 10, 0, 10, 10, 0, 10]);
+  });
+
+  it("draws polygon fills through retained visible chunks when viewport bounds are provided", async () => {
+    const gl = makeGl();
+    const canvas = makeCanvas(gl);
+    const onAsyncGeometryReady = vi.fn();
+    const { deps } = makeDeps();
+    let resolveChunk!: (geometry: any) => void;
+    const geometryWorker = {
+      registerSourceSnapshot: vi.fn().mockResolvedValue(undefined),
+      buildPolygonChunk: vi.fn(() => new Promise(resolve => {
+        resolveChunk = resolve;
+      })),
+      buildPolygonTessellation: vi.fn(),
+    };
+    const painter = new WebGLPainter(canvas, {
+      ...deps,
+      geometryWorker: geometryWorker as any,
+      geometryWorkerThreshold: 1,
+      polygonChunkFeatureCount: 1,
+      onAsyncGeometryReady,
+    });
+    const arcs = {
+      size: () => 2,
+      getPointCount: () => 8,
+      getRetainedInterval: () => 0,
+      getVertexData: () => ({
+        xx: new Float64Array([0, 10, 10, 0, 100, 110, 110, 100]),
+        yy: new Float64Array([0, 0, 10, 10, 0, 0, 10, 10]),
+        zz: null,
+        nn: new Int32Array([4, 4]),
+        ii: new Int32Array([0, 4]),
+        bb: new Float64Array([0, 0, 10, 10, 100, 0, 110, 10]),
+      }),
+      getShapeIter: vi.fn(() => makeArcIter([[0, 0], [10, 0], [10, 10], [0, 10]])),
+    };
+    const shapes = [[[0]], [[1]]];
+    const flags = new Uint8Array([1, 1]);
+
+    painter.resize(100, 100);
+    painter.drawPolygonFillArcFlags(shapes, arcs as any, "#4db6ac", flags, undefined, [-5, -5, 20, 20]);
+
+    expect(deps.createModel).not.toHaveBeenCalled();
+    expect(geometryWorker.registerSourceSnapshot).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(geometryWorker.buildPolygonChunk).toHaveBeenCalledOnce());
+    expect(geometryWorker.buildPolygonChunk.mock.calls[0][0].featureIds).toEqual(new Uint32Array([0]));
+    expect(geometryWorker.buildPolygonTessellation).not.toHaveBeenCalled();
+
+    resolveChunk({
+      positions: new Float32Array([0, 0, 10, 0, 10, 10, 0, 10]),
+      indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
+      vertexCount: 6,
+      origin: [0, 0],
+    });
+    await vi.waitFor(() => expect(onAsyncGeometryReady).toHaveBeenCalledTimes(1));
+
+    painter.drawPolygonFillArcFlags(shapes, arcs as any, "#4db6ac", flags, undefined, [-5, -5, 20, 20]);
+
+    expect(deps.createModel).toHaveBeenCalledTimes(1);
+    expect(Array.from(deps.createModel.mock.calls[0][1].positions))
+      .toEqual([0, 0, 10, 0, 10, 10, 0, 10]);
+  });
+
   it("keeps polygon fills shape-aware instead of using raw arc iteration", () => {
     const canvas = makeCanvas(makeGl());
     const { deps } = makeDeps();

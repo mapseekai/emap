@@ -21,11 +21,12 @@
   <div id="header">
     <strong>WebGL Renderer</strong>
     <span id="renderer" class="badge">renderer: ...</span>
+    <span id="geometry-worker" class="badge">geometry worker: ...</span>
     <button id="load-sample">加载内置样例</button>
     <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
     <span id="status" class="status">等待加载数据</span>
     <span class="hint">
-      使用 <code>new Emap({ renderer: 'webgl' })</code> 创建地图；点、线、面图层会按几何类型自动添加样式。
+      使用 <code>new Emap({ renderer: 'webgl', webglGeometryWorker: 'auto' })</code> 创建地图；点、线、面图层会按几何类型自动添加样式。
     </span>
   </div>
   <div id="map" tabindex="0"></div>
@@ -96,16 +97,21 @@
     const map = new Emap({
       container: 'map',
       renderer: 'webgl',
+      webglGeometryWorker: 'auto',
+      webglGeometryWorkerUrl: '../../dist/emap-geometry-worker.js',
+      webglGeometryWorkerThreshold: 1,
     });
     map.addControl(new NavigationControl(), 'top-left');
     map.addControl(new StatusControl({ alignment: 'right', showEPSG: true }), 'bottom-right');
 
     const encoder = new TextEncoder();
     const renderer = document.getElementById('renderer');
+    const geometryWorker = document.getElementById('geometry-worker');
     const status = document.getElementById('status');
     const renderLayerIds = [];
 
     renderer.textContent = `renderer: ${map.getPainter?.().constructor?.name ?? 'unknown'}`;
+    geometryWorker.textContent = 'geometry worker: auto (threshold 1)';
 
     function toSourceFile(file) {
       return {
@@ -184,7 +190,7 @@
         map.addSource(SOURCE_ID, source);
         map.setExtent(source.getExtent());
         const layerCount = addStyledLayers(source);
-        status.textContent = `已加载 ${label}: ${layerCount} 个图层`;
+        status.textContent = `已加载 ${label}: ${layerCount} 个图层，WebGL 几何缓存由 worker 预热`;
       } catch (err) {
         console.error(err);
         status.textContent = `错误: ${err?.message ?? err}`;

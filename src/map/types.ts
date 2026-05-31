@@ -45,6 +45,25 @@ export interface MapOptions {
    */
   renderer?: RendererType;
   /**
+   * Offload large WebGL render-geometry conversion to a dedicated worker.
+   *
+   * This only affects renderer-side typed-array cache construction; Mapshaper
+   * topology and editing operations remain on the main data structures.
+   * Defaults to `false` because the worker bundle URL must be served by the
+   * host page. Use `'auto'` or `true` to enable threshold-based async builds.
+   */
+  webglGeometryWorker?: boolean | 'auto';
+  /**
+   * URL of the WebGL render-geometry worker bundle. Defaults to
+   * `'emap-geometry-worker.js'` when {@link webglGeometryWorker} is enabled.
+   */
+  webglGeometryWorkerUrl?: string;
+  /**
+   * Minimum point count before WebGL point conversion is deferred to the
+   * geometry worker. Default `50000`.
+   */
+  webglGeometryWorkerThreshold?: number;
+  /**
    * Controls APIs that forward JavaScript expressions to mapshaper
    * (`applyExpression`, `filterFeatures`, `sortFeatures`, `splitLayer`, and
    * command options such as `where` / `calc`).

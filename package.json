@@ -16,6 +16,7 @@
       "default": "./dist/emap.css"
     },
     "./dist/emap-worker.js": "./dist/emap-worker.js",
+    "./dist/emap-geometry-worker.js": "./dist/emap-geometry-worker.js",
     "./dist/mapshaper-vendor.js": "./dist/mapshaper-vendor.js",
     "./dist/mapshaper-vendor.mjs": "./dist/mapshaper-vendor.mjs",
     "./dist/emap.js": "./dist/emap.js",
@@ -30,6 +31,7 @@
     "dist/emap.js",
     "dist/emap.mjs",
     "dist/emap-worker.js",
+    "dist/emap-geometry-worker.js",
     "dist/mapshaper-vendor.js",
     "dist/mapshaper-vendor.mjs",
     "dist/emap.css",

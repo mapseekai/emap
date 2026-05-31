@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Painter } from './painter';
 import { createPainter } from './painter-factory';
 
@@ -16,13 +16,24 @@ class FakeCanvasPainter implements Painter {
   setPixelRatio() {}
 }
 
-class FakeWebGLPainter extends FakeCanvasPainter {}
+class FakeWebGLPainter extends FakeCanvasPainter {
+  static deps: unknown[] = [];
+
+  constructor(canvas: HTMLCanvasElement, deps?: unknown) {
+    super(canvas);
+    FakeWebGLPainter.deps.push(deps);
+  }
+}
 
 function makeCanvas() {
   return { getContext: vi.fn(() => ({})), style: {} } as unknown as HTMLCanvasElement;
 }
 
 describe('createPainter', () => {
+  beforeEach(() => {
+    FakeWebGLPainter.deps = [];
+  });
+
   it('uses CanvasPainter by default', () => {
     const result = createPainter(makeCanvas(), {}, {
       CanvasPainter: FakeCanvasPainter,
@@ -36,15 +47,27 @@ describe('createPainter', () => {
   });
 
   it('uses WebGLPainter when requested and construction succeeds', () => {
+    const onAsyncGeometryReady = vi.fn();
     const result = createPainter(makeCanvas(), { renderer: 'webgl' }, {
       CanvasPainter: FakeCanvasPainter,
       WebGLPainter: FakeWebGLPainter,
       warn: vi.fn(),
+    }, {
+      geometryWorkerEnabled: true,
+      geometryWorkerUrl: 'emap-geometry-worker.js',
+      geometryWorkerThreshold: 10,
+      onAsyncGeometryReady,
     });
 
     expect(result.painter).toBeInstanceOf(FakeWebGLPainter);
     expect(result.renderer).toBe('webgl');
     expect(result.requestedRenderer).toBe('webgl');
+    expect(FakeWebGLPainter.deps[0]).toEqual({
+      geometryWorkerEnabled: true,
+      geometryWorkerUrl: 'emap-geometry-worker.js',
+      geometryWorkerThreshold: 10,
+      onAsyncGeometryReady,
+    });
   });
 
   it('falls back to CanvasPainter when WebGL construction fails', () => {

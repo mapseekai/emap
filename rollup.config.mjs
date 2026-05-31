@@ -105,6 +105,7 @@ const moduleOutput = 'dist/emap.mjs';
 // Worker file is always called emap-worker.js so consumers don't have to
 // branch by build mode. Minified in prod, sourcemapped in dev.
 const workerOutput = 'dist/emap-worker.js';
+const geometryWorkerOutput = 'dist/emap-geometry-worker.js';
 // Vendor bundle filename is fixed too — referenced by URL from the worker
 // banner and by users' page <script> tags.
 const vendorOutput = 'dist/mapshaper-vendor.js';
@@ -219,6 +220,17 @@ export default [
       sourcemap: shouldWriteSourcemap,
       banner: "importScripts('mapshaper-vendor.js');",
       globals: mapshaperGlobal,
+    },
+    plugins: commonPlugins(),
+  },
+  // WebGL render-geometry worker. This does not own Mapshaper topology; it
+  // only builds renderer-friendly typed arrays for large cached geometries.
+  {
+    input: 'src/renderer/webgl/geometry-worker.ts',
+    output: {
+      file: geometryWorkerOutput,
+      format: 'iife',
+      sourcemap: shouldWriteSourcemap,
     },
     plugins: commonPlugins(),
   },
