@@ -3079,6 +3079,31 @@ describe('Emap projectLayer', () => {
     expectCli('-proj webmercator init=wgs84', runParsedCommandsSpy.mock.calls[0][0]);
   });
 
+  it('resolves EPSG:4490 crs before building the command', async () => {
+    await map.ops.projectLayer({ source: 'src1', crs: 'EPSG:4490' });
+    const proj = runParsedCommandsSpy.mock.calls[0][0].at(-1);
+    expect(proj.options.crs).toContain('+ellps=GRS80');
+  });
+
+  it('resolves EPSG:32633 init before building the command', async () => {
+    await map.ops.projectLayer({ source: 'src1', crs: 'EPSG:3857', init: 'EPSG:32633' });
+    const proj = runParsedCommandsSpy.mock.calls[0][0].at(-1);
+    expect(proj.options.init).toContain('+zone=33');
+  });
+
+  it('returns a validation error for unsupported EPSG crs values', async () => {
+    const result = await map.ops.projectLayer({ source: 'src1', crs: 'EPSG:999999999' });
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'crs',
+        reason: 'Unsupported EPSG code: EPSG:999999999',
+      },
+    });
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
+  });
+
   it('appends densify', async () => {
     await map.ops.projectLayer({ source: 'src1', crs: 'robinson', densify: true });
     expectCli('-proj "robinson" densify', runParsedCommandsSpy.mock.calls[0][0]);

@@ -14,7 +14,7 @@ import { Err, type OpResult } from '../op-result';
 import type { ProjectOptions } from '../types';
 import type { OpContext } from './_context';
 import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
-import { normalizeProjectCrs } from '../../geo/crs-resolver';
+import { EpsgProjectionError, resolveProjectCrs } from '../../geo/crs-resolver';
 
 export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
@@ -24,11 +24,21 @@ export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promis
   if (opts.target !== undefined) {
     if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
   }
-  const crs = normalizeProjectCrs(opts.crs ?? '');
-  if (crs.length === 0) return Err.validation('crs', 'must be a non-empty CRS string');
+  const rawCrs = opts.crs ?? '';
+  if (rawCrs.trim().length === 0) return Err.validation('crs', 'must be a non-empty CRS string');
+
+  let crs: string;
+  let init: string | undefined;
+  try {
+    crs = await resolveProjectCrs(rawCrs);
+    if (opts.init && opts.init.trim()) init = await resolveProjectCrs(opts.init);
+  } catch (err) {
+    if (err instanceof EpsgProjectionError) return Err.validation('crs', err.message);
+    throw err;
+  }
 
   const projOpts: Record<string, unknown> = { crs };
-  if (opts.init && opts.init.trim()) projOpts.init = normalizeProjectCrs(opts.init);
+  if (init) projOpts.init = init;
   if (opts.densify) projOpts.densify = true;
 
   const commands: ParsedCommand[] = [];
