@@ -31,10 +31,17 @@ export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promis
   let init: string | undefined;
   try {
     crs = await resolveProjectCrs(rawCrs);
-    if (opts.init && opts.init.trim()) init = await resolveProjectCrs(opts.init);
   } catch (err) {
     if (err instanceof EpsgProjectionError) return Err.validation('crs', err.message);
     throw err;
+  }
+  if (opts.init && opts.init.trim()) {
+    try {
+      init = await resolveProjectCrs(opts.init);
+    } catch (err) {
+      if (err instanceof EpsgProjectionError) return Err.validation('init', err.message);
+      throw err;
+    }
   }
 
   const projOpts: Record<string, unknown> = { crs };

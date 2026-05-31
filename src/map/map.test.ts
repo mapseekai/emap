@@ -3104,6 +3104,53 @@ describe('Emap projectLayer', () => {
     expect(runParsedCommandsSpy).not.toHaveBeenCalled();
   });
 
+  it('returns an init validation error for unsupported EPSG init values', async () => {
+    const result = await map.ops.projectLayer({
+      source: 'src1',
+      crs: 'EPSG:3857',
+      init: 'EPSG:999999999',
+    });
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'init',
+        reason: 'Unsupported EPSG code: EPSG:999999999',
+      },
+    });
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns a validation error for crs EPSG records without Proj.4 definitions', async () => {
+    const result = await map.ops.projectLayer({ source: 'src1', crs: 'EPSG:2000' });
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'crs',
+        reason: 'EPSG:2000 does not include a Proj.4 definition',
+      },
+    });
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns an init validation error for init EPSG records without Proj.4 definitions', async () => {
+    const result = await map.ops.projectLayer({
+      source: 'src1',
+      crs: 'EPSG:3857',
+      init: 'EPSG:2000',
+    });
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'init',
+        reason: 'EPSG:2000 does not include a Proj.4 definition',
+      },
+    });
+    expect(runParsedCommandsSpy).not.toHaveBeenCalled();
+  });
+
   it('appends densify', async () => {
     await map.ops.projectLayer({ source: 'src1', crs: 'robinson', densify: true });
     expectCli('-proj "robinson" densify', runParsedCommandsSpy.mock.calls[0][0]);
