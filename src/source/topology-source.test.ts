@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mapshaper from 'mapshaper';
 import { unzipSync, strFromU8, zipSync } from 'fflate';
 import { TopologySource } from './topology-source';
+import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 
 function setPrivate(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
@@ -191,6 +192,30 @@ describe('TopologySource.export', () => {
       expect(Array.from(buf)).toEqual([0xff, 0xfe, 0xfd]);
     } finally {
       Reflect.set(mapshaper.internal as object, 'exportPackedDatasets', originalPack);
+    }
+  });
+});
+
+describe('TopologySource.reproject', () => {
+  it('resolves EPSG targets before calling mapshaper directly', async () => {
+    const source = new TopologySource('test');
+    const dataset = { ...FAKE_DATASET, info: {} };
+    const resultDataset = { ...FAKE_DATASET, info: {} };
+    setPrivate(source, '_dataset', dataset);
+
+    const adapter = getDefaultMapshaperAdapter();
+    const runOnDatasetSpy = vi.spyOn(adapter, 'runOnDataset').mockResolvedValue(resultDataset);
+
+    try {
+      await source.reproject('EPSG:4490');
+
+      expect(runOnDatasetSpy).toHaveBeenCalledTimes(1);
+      const cmd = runOnDatasetSpy.mock.calls[0][0];
+      expect(cmd).toContain('-proj ');
+      expect(cmd).toContain('+ellps=GRS80');
+      expect(cmd).not.toContain('EPSG:4490');
+    } finally {
+      runOnDatasetSpy.mockRestore();
     }
   });
 });

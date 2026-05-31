@@ -11,7 +11,7 @@ import {
   type MapshaperRunner,
 } from './mapshaper-runner';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
-import { resolveDatasetCRS } from '../geo/crs-resolver';
+import { resolveDatasetCRS, resolveProjectCrs } from '../geo/crs-resolver';
 
 export type TopologySourceData = string | { filename: string, content: Uint8Array };
 
@@ -392,6 +392,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
   public async reproject(targetCrs: string): Promise<void> {
     if (!this._dataset) return;
+    const resolvedTargetCrs = await resolveProjectCrs(targetCrs);
 
     // Reset dynamic simplification before running -proj. Mapshaper's -proj
     // internally calls arcs.flatten(), which errors if an interval is set but
@@ -409,7 +410,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       delete this._dataset.info.wkt1;
     }
 
-    const cmd = `-proj ${targetCrs}`;
+    const cmd = `-proj ${resolvedTargetCrs}`;
 
     const result = await getDefaultMapshaperAdapter().runOnDataset(cmd, this._dataset);
     this._dataset = result;
