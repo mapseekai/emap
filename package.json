@@ -92,6 +92,7 @@
     "vitest": "^1.0.0"
   },
   "dependencies": {
+    "epsg-index": "^2.0.0",
     "fflate": "^0.8.2",
     "flatbush": "^4.5.0",
     "geographiclib-geodesic": "^2.2.0",
