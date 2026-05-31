@@ -11,9 +11,19 @@
 // matches. That matches the prior `TopologySource.getCRS()` behaviour.
 
 import type { MapshaperDataset } from '../types/mapshaper-types';
+import epsgIndex from 'epsg-index/all.json';
 
 /** Default fallback when no metadata identifies a CRS. */
 export const DEFAULT_CRS = 'EPSG:4326';
+
+interface EpsgIndexRecord {
+  code?: string;
+  proj4?: string;
+}
+
+const EPSG_CODE_RE = /^(?:EPSG:)?(\d+)$/i;
+const WEB_MERCATOR_CODES = new Set(['3857', '900913', '102100']);
+const EPSG_RECORDS = epsgIndex as Record<string, EpsgIndexRecord>;
 
 /**
  * Resolve a canonical CRS identifier (typically `EPSG:NNNN` or a passthrough
@@ -81,6 +91,57 @@ export function normalizeProjectCrs(crs: string): string {
     return 'wgs84';
   }
   return trimmed;
+}
+
+export class EpsgProjectionError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+  ) {
+    super(message);
+    this.name = 'EpsgProjectionError';
+  }
+}
+
+function parseEpsgCode(crs: string): string | null {
+  const match = crs.match(EPSG_CODE_RE);
+  return match ? match[1] : null;
+}
+
+function formatEpsgCode(code: string): string {
+  return `EPSG:${code}`;
+}
+
+/**
+ * Resolve outbound projection input into a string mapshaper/mproj can consume.
+ *
+ * This keeps the existing browser-safe aliases for WGS84 and Web Mercator,
+ * converts other standard EPSG codes through epsg-index's Proj.4 definitions,
+ * and leaves custom Proj.4 strings / mapshaper aliases untouched.
+ */
+export async function resolveProjectCrs(crs: string): Promise<string> {
+  const trimmed = crs.trim();
+  const code = parseEpsgCode(trimmed);
+  if (!code) return normalizeProjectCrs(trimmed);
+
+  if (code === '4326') return 'wgs84';
+  if (WEB_MERCATOR_CODES.has(code)) return 'webmercator';
+
+  const record = EPSG_RECORDS[code];
+  const proj4 = typeof record?.proj4 === 'string' ? record.proj4.trim() : '';
+  if (!record) {
+    throw new EpsgProjectionError(
+      `Unsupported EPSG code: ${formatEpsgCode(code)}`,
+      formatEpsgCode(code),
+    );
+  }
+  if (!proj4) {
+    throw new EpsgProjectionError(
+      `${formatEpsgCode(code)} does not include a Proj.4 definition`,
+      formatEpsgCode(code),
+    );
+  }
+  return proj4;
 }
 
 /**
