@@ -5,6 +5,7 @@ import {
   normalizeCrsString,
   normalizeProjectCrs,
   resolveDatasetCRS,
+  resolveProjectCrs,
 } from './crs-resolver';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 
@@ -40,6 +41,45 @@ describe('normalizeProjectCrs', () => {
     ['+proj=utm +zone=10', '+proj=utm +zone=10'],
   ])('%p -> %p', (input, expected) => {
     expect(normalizeProjectCrs(input)).toBe(expected);
+  });
+});
+
+describe('resolveProjectCrs', () => {
+  it.each([
+    ['EPSG:4326', 'wgs84'],
+    ['epsg:3857', 'webmercator'],
+    ['EPSG:900913', 'webmercator'],
+    ['EPSG:102100', 'webmercator'],
+  ])('%p -> %p', (input, expected) => {
+    expect(resolveProjectCrs(input)).toBe(expected);
+  });
+
+  it('resolves EPSG:4490 to a Proj.4 longlat definition', () => {
+    const crs = resolveProjectCrs('EPSG:4490');
+
+    expect(crs).toContain('+proj=longlat');
+    expect(crs).toContain('+ellps=GRS80');
+  });
+
+  it('resolves EPSG:32633 to a Proj.4 UTM definition', () => {
+    const crs = resolveProjectCrs('32633');
+
+    expect(crs).toContain('+proj=utm');
+    expect(crs).toContain('+zone=33');
+  });
+
+  it.each([
+    '+proj=utm +zone=10',
+    'robinson',
+    'natearth',
+  ])('passes through %p unchanged', (input) => {
+    expect(resolveProjectCrs(input)).toBe(input);
+  });
+
+  it('rejects unsupported EPSG codes', () => {
+    expect(() => resolveProjectCrs('EPSG:999999999')).toThrow(
+      'Unsupported EPSG code: EPSG:999999999',
+    );
   });
 });
 
