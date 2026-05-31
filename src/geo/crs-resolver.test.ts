@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import {
   DEFAULT_CRS,
   EpsgProjectionError,
@@ -46,6 +46,10 @@ describe('normalizeProjectCrs', () => {
 });
 
 describe('resolveProjectCrs', () => {
+  beforeAll(async () => {
+    await resolveProjectCrs('EPSG:4490');
+  }, 15000);
+
   it.each([
     ['EPSG:4326', 'wgs84'],
     ['epsg:3857', 'webmercator'],
