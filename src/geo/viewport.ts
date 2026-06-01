@@ -208,7 +208,10 @@ export class Viewport {
     return s;
   }
 
-  getArcFilter(arcs: { arcIsSmaller?(i: number, minLen: number): boolean; arcIntersectsBBox?(i: number, bbox: number[]): boolean }): (i: number) => boolean {
+  getArcFilter(arcs: {
+    arcIsSmaller?(i: number, minLen: number): boolean;
+    arcIntersectsBBox?(i: number, bbox: number[]): boolean;
+  }): (i: number) => boolean {
     const mapScale = this._initialMX > 0 ? Math.abs(this._transform.mx) / this._initialMX : 1;
 
     if (mapScale < 1.1) {
@@ -238,12 +241,7 @@ export class Viewport {
     const x2 = (this._width - t.bx) / t.mx;
     const y1 = -t.by / t.my;
     const y2 = (this._height - t.by) / t.my;
-    return [
-      Math.min(x1, x2),
-      Math.min(y1, y2),
-      Math.max(x1, x2),
-      Math.max(y1, y2),
-    ];
+    return [Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2)];
   }
 
   private _applyConstraints(): void {
@@ -254,8 +252,7 @@ export class Viewport {
     const maxMX = this._getMaxMX();
 
     const isWebMercator =
-      this._crs.toLowerCase().includes('3857') ||
-      this._crs.toLowerCase().includes('webmercator');
+      this._crs.toLowerCase().includes('3857') || this._crs.toLowerCase().includes('webmercator');
     if (isWebMercator && mx < minMX) mx = minMX;
     if (mx > maxMX) mx = maxMX;
     const my = t.my > 0 ? mx : -mx;

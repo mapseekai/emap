@@ -158,7 +158,11 @@ export type {
   TopologySourceFromBytesOptions,
   ZipExtractionLimits,
 } from './source/topology-source';
-export type { TopologySource as ITopologySource, ExportFormat, ExportOptions } from './source/source';
+export type {
+  TopologySource as ITopologySource,
+  ExportFormat,
+  ExportOptions,
+} from './source/source';
 
 // ===========================================================================
 // Geometry / projection
@@ -189,7 +193,12 @@ export type { EmapEventMap, CameraEvent } from './core/event-map';
 export type { CameraOptions, AnimationOptions, FlyToOptions, FitBoundsOptions } from './geo/camera';
 export { HandlerManager } from './core/handler-manager';
 export { isHandler } from './core/handler';
-export type { Handler, HandlerResult, NormalizedPointerEvent, PointerModifiers } from './core/handler';
+export type {
+  Handler,
+  HandlerResult,
+  NormalizedPointerEvent,
+  PointerModifiers,
+} from './core/handler';
 export { DragPanHandler } from './core/handlers/drag-pan';
 export type { DragPanOptions } from './core/handlers/drag-pan';
 export { ScrollZoomHandler } from './core/handlers/scroll-zoom';

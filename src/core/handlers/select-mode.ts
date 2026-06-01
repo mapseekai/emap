@@ -6,10 +6,20 @@ export type SelectMode = 'replace' | 'add' | 'toggle';
 /** A canonical chord of modifier keys, '+'-joined in shift+ctrl+alt+meta order. */
 export type ModifierCombo =
   | 'none'
-  | 'shift' | 'ctrl' | 'alt' | 'meta'
-  | 'shift+ctrl' | 'shift+alt' | 'shift+meta'
-  | 'ctrl+alt' | 'ctrl+meta' | 'alt+meta'
-  | 'shift+ctrl+alt' | 'shift+ctrl+meta' | 'shift+alt+meta' | 'ctrl+alt+meta'
+  | 'shift'
+  | 'ctrl'
+  | 'alt'
+  | 'meta'
+  | 'shift+ctrl'
+  | 'shift+alt'
+  | 'shift+meta'
+  | 'ctrl+alt'
+  | 'ctrl+meta'
+  | 'alt+meta'
+  | 'shift+ctrl+alt'
+  | 'shift+ctrl+meta'
+  | 'shift+alt+meta'
+  | 'ctrl+alt+meta'
   | 'shift+ctrl+alt+meta';
 
 const ORDER = ['shift', 'ctrl', 'alt', 'meta'] as const;

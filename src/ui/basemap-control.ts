@@ -21,18 +21,18 @@ const DEFAULT_STYLES: BasemapStyle[] = [
   {
     name: 'OSM',
     url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    type: 'raster'
+    type: 'raster',
   },
   {
     name: 'CartoDB Light',
     url: 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-    type: 'raster'
+    type: 'raster',
   },
   {
     name: 'CartoDB Dark',
     url: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-    type: 'raster'
-  }
+    type: 'raster',
+  },
 ];
 
 /** MapLibre tile size - must match zoom calculation in map.ts */
@@ -148,7 +148,7 @@ export class BasemapControl implements Control {
       style: maplibreStyle,
       center: this._map.getCenter(),
       zoom: this._map.getZoom(),
-      interactive: false,  // Disable all interaction - we sync from parent map
+      interactive: false, // Disable all interaction - we sync from parent map
       attributionControl: false,
       maxPitch: 0,
 
@@ -183,15 +183,17 @@ export class BasemapControl implements Control {
             type: 'raster',
             tiles: [style.url],
             tileSize: MAPLIBRE_TILE_SIZE,
-          }
+          },
         },
-        layers: [{
-          id: 'basemap-layer',
-          type: 'raster',
-          source: 'basemap-tiles',
-          minzoom: 0,
-          maxzoom: 22,
-        }]
+        layers: [
+          {
+            id: 'basemap-layer',
+            type: 'raster',
+            source: 'basemap-tiles',
+            minzoom: 0,
+            maxzoom: 22,
+          },
+        ],
       };
     } else {
       // Assume vector style URL
@@ -199,13 +201,12 @@ export class BasemapControl implements Control {
     }
   }
 
-
   private _syncBasemap(): void {
     if (!this._maplibreMap || !this._map || !this._isOn) return;
     try {
       this._maplibreMap.jumpTo({
         center: this._map.getCenter(),
-        zoom: this._map.getZoom()
+        zoom: this._map.getZoom(),
       });
     } catch (e) {
       console.warn('Sync basemap failed:', e);

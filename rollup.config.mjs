@@ -87,7 +87,8 @@ function browserSafeMprojInitFallback() {
   return {
     name: 'browser-safe-mproj-init-fallback',
     transform(code, id) {
-      if (!id.includes('/node_modules/mproj/dist/')) return null;
+      const normalizedId = id.replaceAll('\\', '/');
+      if (!normalizedId.includes('/node_modules/mproj/dist/')) return null;
       if (!code.includes('function mproj_read_lib_anycase')) return null;
       const patched = code.replace(readLibPattern, replacement);
       if (patched === code) {
@@ -114,11 +115,9 @@ const mapshaperGlobal = {
 
 function quietKnownPolyfillCircularWarnings(warning, warn) {
   if (
-    warning.code === 'CIRCULAR_DEPENDENCY'
-    && (
-      warning.message?.includes('polyfill-node._stream_')
-      || warning.ids?.some((id) => id.includes('polyfill-node._stream_'))
-    )
+    warning.code === 'CIRCULAR_DEPENDENCY' &&
+    (warning.message?.includes('polyfill-node._stream_') ||
+      warning.ids?.some((id) => id.includes('polyfill-node._stream_')))
   ) {
     return;
   }
@@ -128,26 +127,24 @@ function quietKnownPolyfillCircularWarnings(warning, warn) {
 function commonPlugins() {
   return [
     alias({
-      entries: [
-        { find: 'iconv-lite', replacement: 'src/types/iconv-shim.ts' }
-      ]
+      entries: [{ find: 'iconv-lite', replacement: 'src/types/iconv-shim.ts' }],
     }),
     nodeResolve({
       browser: true,
-      preferBuiltins: false
+      preferBuiltins: false,
     }),
     commonjs({
-      ignoreDynamicRequires: true
+      ignoreDynamicRequires: true,
     }),
     json(),
     postcss({
-      inject: true,  // Inject CSS into <head>
+      inject: true, // Inject CSS into <head>
       minimize: isProduction,
     }),
     nodePolyfills(),
     browserSafeMprojInitFallback(),
     typescript({
-      tsconfig: './tsconfig.json'
+      tsconfig: './tsconfig.json',
     }),
     isProduction && terser(),
   ];

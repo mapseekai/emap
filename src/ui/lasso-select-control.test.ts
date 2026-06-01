@@ -10,7 +10,11 @@ function makeMap() {
     setOptions: vi.fn(),
     getOptions: vi.fn(() => ({})),
   };
-  const map = { get lassoSelect() { return handler; } };
+  const map = {
+    get lassoSelect() {
+      return handler;
+    },
+  };
   return { map, handler };
 }
 
@@ -26,12 +30,16 @@ describe('LassoSelectControl (thin shell, DX P2c)', () => {
 
   it('onAdd forwards options to map.lassoSelect.setOptions and enables it', () => {
     const c = new LassoSelectControl({
-      layers: ['a'], dragThreshold: 7, includeIntersecting: false,
+      layers: ['a'],
+      dragThreshold: 7,
+      includeIntersecting: false,
       style: { stroke: '#f00', strokeDasharray: '8 2' },
     });
     const anchor = c.onAdd(map as any);
     expect(handler.setOptions).toHaveBeenCalledWith({
-      layers: ['a'], dragThreshold: 7, includeIntersecting: false,
+      layers: ['a'],
+      dragThreshold: 7,
+      includeIntersecting: false,
       style: { stroke: '#f00', strokeDasharray: '8 2' },
     });
     expect(handler.enable).toHaveBeenCalledTimes(1);
@@ -43,8 +51,10 @@ describe('LassoSelectControl (thin shell, DX P2c)', () => {
     const c = new LassoSelectControl();
     c.onAdd(map as any);
     expect(handler.setOptions).toHaveBeenCalledWith({
-      layers: undefined, dragThreshold: undefined,
-      includeIntersecting: undefined, style: undefined,
+      layers: undefined,
+      dragThreshold: undefined,
+      includeIntersecting: undefined,
+      style: undefined,
     });
     expect(handler.enable).toHaveBeenCalledTimes(1);
   });
@@ -78,7 +88,9 @@ describe('LassoSelectControl (thin shell, DX P2c)', () => {
   });
 
   it('propagates the handler mutual-exclusivity throw from enable()', () => {
-    handler.enable.mockImplementation(() => { throw new Error('cannot enable lassoSelect: boxSelect is enabled'); });
+    handler.enable.mockImplementation(() => {
+      throw new Error('cannot enable lassoSelect: boxSelect is enabled');
+    });
     const c = new LassoSelectControl();
     expect(() => c.onAdd(map as any)).toThrow(/boxSelect is enabled/);
   });

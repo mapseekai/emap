@@ -3,7 +3,10 @@ import { Err, okValue, type OpResult } from '../op-result';
 
 export function validateFieldName(optionName: string, value: unknown): OpResult<string> {
   if (!isValidFieldName(value)) {
-    return Err.validation(optionName, `field name must be a non-empty safe identifier: ${String(value)}`);
+    return Err.validation(
+      optionName,
+      `field name must be a non-empty safe identifier: ${String(value)}`,
+    );
   }
   return okValue(value);
 }

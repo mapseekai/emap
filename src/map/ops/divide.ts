@@ -17,12 +17,18 @@ export async function divideLayer(ctx: OpContext, opts: DivideOptions): Promise<
   const targetLayer = resolveLayerInList(dataset.layers, opts.target);
   if (!targetLayer) return Err.notFound('layer', opts.target);
   if (targetLayer.geometry_type !== 'polyline') {
-    return Err.validation('target', `expected polyline layer, got ${targetLayer.geometry_type ?? 'unknown'}`);
+    return Err.validation(
+      'target',
+      `expected polyline layer, got ${targetLayer.geometry_type ?? 'unknown'}`,
+    );
   }
   const dividerLayer = resolveLayerInList(dataset.layers, opts.divider);
   if (!dividerLayer) return Err.notFound('divider', opts.divider);
   if (dividerLayer.geometry_type !== 'polygon') {
-    return Err.validation('divider', `expected polygon layer, got ${dividerLayer.geometry_type ?? 'unknown'}`);
+    return Err.validation(
+      'divider',
+      `expected polygon layer, got ${dividerLayer.geometry_type ?? 'unknown'}`,
+    );
   }
 
   const divideOpts: Record<string, unknown> = { source: opts.divider };

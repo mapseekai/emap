@@ -52,7 +52,10 @@ describe('FeatureCreateCommand', () => {
       source: makeSource(),
       appendedShape: [[5]],
       appendedRecord: {},
-      arcVertices: [[0, 0], [1, 1]],
+      arcVertices: [
+        [0, 0],
+        [1, 1],
+      ],
       arcs: makeArcs() as any,
     });
     cmd.undo();
@@ -92,7 +95,11 @@ describe('FeatureCreateCommand', () => {
       source: makeSource(),
       appendedShape: [[7]],
       appendedRecord: { foo: 1 },
-      arcVertices: [[0, 0], [3, 4], [5, 5]],
+      arcVertices: [
+        [0, 0],
+        [3, 4],
+        [5, 5],
+      ],
       arcs: makeArcs() as any,
     });
     cmd.do();
@@ -114,7 +121,12 @@ describe('FeatureCreateCommand', () => {
       source: makeSource(),
       appendedShape: [[1]],
       appendedRecord: {},
-      arcVertices: [[0, 0], [10, 0], [10, 10], [0, 0]],
+      arcVertices: [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 0],
+      ],
       arcs: makeArcs() as any,
     });
     cmd.undo();

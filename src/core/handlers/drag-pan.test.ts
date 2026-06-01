@@ -3,11 +3,18 @@ import { describe, it, expect, vi } from 'vitest';
 import { DragPanHandler } from './drag-pan';
 import type { NormalizedPointerEvent } from '../handler';
 
-function ev(kind: NormalizedPointerEvent['kind'], x: number, y: number, shift = false): NormalizedPointerEvent {
+function ev(
+  kind: NormalizedPointerEvent['kind'],
+  x: number,
+  y: number,
+  shift = false,
+): NormalizedPointerEvent {
   return {
-    kind, point: { x, y },
+    kind,
+    point: { x, y },
     modifiers: { shift, ctrl: false, alt: false, meta: false },
-    button: 0, originalEvent: new MouseEvent(kind === 'down' ? 'pointerdown' : 'pointermove'),
+    button: 0,
+    originalEvent: new MouseEvent(kind === 'down' ? 'pointerdown' : 'pointermove'),
   };
 }
 
@@ -22,8 +29,12 @@ describe('DragPanHandler (arbitrated)', () => {
 
   it('down (no shift) → exclusive + panstart; move → pan {dx,dy}; up → panend + releases', () => {
     const h = new DragPanHandler();
-    const start = vi.fn(); const pan = vi.fn(); const end = vi.fn();
-    h.on('panstart', start); h.on('pan', pan); h.on('panend', end);
+    const start = vi.fn();
+    const pan = vi.fn();
+    const end = vi.fn();
+    h.on('panstart', start);
+    h.on('pan', pan);
+    h.on('panend', end);
 
     expect(h.handlePointer(ev('down', 10, 10))).toBe('exclusive');
     expect(start).toHaveBeenCalledTimes(1);
@@ -37,7 +48,8 @@ describe('DragPanHandler (arbitrated)', () => {
 
   it('skipShiftDrag (default true): shift+down is passthrough, no gesture', () => {
     const h = new DragPanHandler();
-    const start = vi.fn(); h.on('panstart', start);
+    const start = vi.fn();
+    h.on('panstart', start);
     expect(h.handlePointer(ev('down', 0, 0, true))).toBe('passthrough');
     expect(start).not.toHaveBeenCalled();
   });

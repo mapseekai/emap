@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { EditHistory } from './edit-history';
 import type { EditCommand } from './edit-command';
 
-function makeCmd(label?: string): EditCommand & { do: ReturnType<typeof vi.fn>; undo: ReturnType<typeof vi.fn> } {
+function makeCmd(
+  label?: string,
+): EditCommand & { do: ReturnType<typeof vi.fn>; undo: ReturnType<typeof vi.fn> } {
   return {
     do: vi.fn(),
     undo: vi.fn(),
@@ -28,7 +30,7 @@ describe('EditHistory', () => {
     expect(h.size()).toBe(1);
   });
 
-  it('undo invokes the command\'s undo() and shifts it to the redo stack', () => {
+  it("undo invokes the command's undo() and shifts it to the redo stack", () => {
     const h = new EditHistory();
     const cmd = makeCmd();
     h.push(cmd);
@@ -239,7 +241,10 @@ describe('EditHistory stale marker (history barrier)', () => {
 // Merge fast-path (PR-9, M2)
 // ---------------------------------------------------------------------------
 
-function makeMergeable(label: string, key: string): EditCommand & {
+function makeMergeable(
+  label: string,
+  key: string,
+): EditCommand & {
   do: ReturnType<typeof vi.fn>;
   undo: ReturnType<typeof vi.fn>;
   merge: ReturnType<typeof vi.fn>;

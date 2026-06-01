@@ -3,11 +3,19 @@ import { describe, it, expect, vi } from 'vitest';
 import { BoxSelectHandler } from './box-select';
 import type { NormalizedPointerEvent } from '../handler';
 
-function ev(kind: NormalizedPointerEvent['kind'], x: number, y: number, shift = false, alt = false): NormalizedPointerEvent {
+function ev(
+  kind: NormalizedPointerEvent['kind'],
+  x: number,
+  y: number,
+  shift = false,
+  alt = false,
+): NormalizedPointerEvent {
   return {
-    kind, point: { x, y },
+    kind,
+    point: { x, y },
     modifiers: { shift, ctrl: false, alt, meta: false },
-    button: 0, originalEvent: new MouseEvent('pointerdown'),
+    button: 0,
+    originalEvent: new MouseEvent('pointerdown'),
   };
 }
 
@@ -43,8 +51,16 @@ describe('BoxSelectHandler', () => {
     expect(h.handlePointer(ev('down', 10, 10, false))).toBe('exclusive');
     expect(h.handlePointer(ev('move', 60, 40, false))).toBe('exclusive');
     expect(h.handlePointer(ev('up', 60, 40, false))).toBe('passthrough');
-    expect(map.queryFeatures).toHaveBeenCalledWith([[10, 10], [60, 40]], undefined);
-    expect(map.select).toHaveBeenCalledWith([{ source: 's', layer: 'l', id: 7 }], { mode: 'replace' });
+    expect(map.queryFeatures).toHaveBeenCalledWith(
+      [
+        [10, 10],
+        [60, 40],
+      ],
+      undefined,
+    );
+    expect(map.select).toHaveBeenCalledWith([{ source: 's', layer: 'l', id: 7 }], {
+      mode: 'replace',
+    });
   });
 
   it('shift+down → exclusive; move tracks; up past threshold → query+select(add)', () => {
@@ -54,7 +70,13 @@ describe('BoxSelectHandler', () => {
     expect(h.handlePointer(ev('down', 10, 10, true))).toBe('exclusive');
     expect(h.handlePointer(ev('move', 60, 40, true))).toBe('exclusive');
     expect(h.handlePointer(ev('up', 60, 40, true))).toBe('passthrough');
-    expect(map.queryFeatures).toHaveBeenCalledWith([[10, 10], [60, 40]], undefined);
+    expect(map.queryFeatures).toHaveBeenCalledWith(
+      [
+        [10, 10],
+        [60, 40],
+      ],
+      undefined,
+    );
     expect(map.select).toHaveBeenCalledWith([{ source: 's', layer: 'l', id: 7 }], { mode: 'add' });
   });
 

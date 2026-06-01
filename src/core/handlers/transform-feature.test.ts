@@ -110,7 +110,7 @@ describe('TransformFeatureHandler', () => {
     expect(h.isEnabled()).toBe(false);
   });
 
-  it('down on an UNSELECTED hit passes through — no session, no select (selection is clickSelect\'s job)', () => {
+  it("down on an UNSELECTED hit passes through — no session, no select (selection is clickSelect's job)", () => {
     const { map, translateStub } = makeMap();
     // isSelected default false → not already selected.
     const h = new TransformFeatureHandler(map as any);

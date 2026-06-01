@@ -39,7 +39,10 @@ export interface ArcCollection {
   getArcIter(arcId: number): ArcIterator;
   getShapeIter?(part: number[]): ArcIterator;
   forEachSegment?(cb: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void): void;
-  forEachArcSegment?(arcId: number, cb: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void): void;
+  forEachArcSegment?(
+    arcId: number,
+    cb: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void,
+  ): void;
 
   // Simplification
   setRetainedInterval?(interval: number): ArcCollection;

@@ -15,10 +15,7 @@ import type { AffineLayerOptions } from '../types';
 import type { OpContext } from './_context';
 import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
 
-export async function affineLayer(
-  ctx: OpContext,
-  opts: AffineLayerOptions,
-): Promise<OpResult> {
+export async function affineLayer(ctx: OpContext, opts: AffineLayerOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
   if (!source) return Err.notFound('source', opts.source);
   const dataset = source.getDataset();
@@ -31,8 +28,9 @@ export async function affineLayer(
   // the op is a no-op and shouldn't pollute history.
   const hasShift = Array.isArray(opts.shift);
   const hasRotate = typeof opts.rotate === 'number' && opts.rotate !== 0;
-  const hasScale = opts.scale !== undefined
-    && (typeof opts.scale === 'number' ? opts.scale !== 1 : Array.isArray(opts.scale));
+  const hasScale =
+    opts.scale !== undefined &&
+    (typeof opts.scale === 'number' ? opts.scale !== 1 : Array.isArray(opts.scale));
   if (!hasShift && !hasRotate && !hasScale) {
     return Err.validation('shift', 'must supply at least one of `shift`, `rotate`, or `scale`');
   }
@@ -51,13 +49,19 @@ export async function affineLayer(
     if (s.length !== 2 || !s.every((n) => Number.isFinite(n) && n !== 0)) {
       return Err.validation('scale', 'must be [sx, sy] of nonzero finite numbers');
     }
-  } else if (hasScale && typeof opts.scale === 'number'
-    && (!Number.isFinite(opts.scale) || opts.scale === 0)) {
+  } else if (
+    hasScale &&
+    typeof opts.scale === 'number' &&
+    (!Number.isFinite(opts.scale) || opts.scale === 0)
+  ) {
     return Err.validation('scale', 'must be a nonzero finite number');
   }
   if (opts.anchor !== undefined) {
-    if (!Array.isArray(opts.anchor) || opts.anchor.length !== 2
-      || !opts.anchor.every((n) => Number.isFinite(n))) {
+    if (
+      !Array.isArray(opts.anchor) ||
+      opts.anchor.length !== 2 ||
+      !opts.anchor.every((n) => Number.isFinite(n))
+    ) {
       return Err.validation('anchor', 'must be [x, y] of finite numbers');
     }
   }

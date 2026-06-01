@@ -7,10 +7,7 @@ import { Err, type OpResult } from '../op-result';
 import type { FilterFieldsOptions } from '../types';
 import type { OpContext } from './_context';
 
-export async function filterFields(
-  ctx: OpContext,
-  opts: FilterFieldsOptions,
-): Promise<OpResult> {
+export async function filterFields(ctx: OpContext, opts: FilterFieldsOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
   if (!source) return Err.notFound('source', opts.source);
   const dataset = source.getDataset();

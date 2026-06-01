@@ -68,9 +68,7 @@ export class PointerEventDispatcher {
   off(type: string, cb: Cb): void {
     if (!isPointerType(type)) return;
     const wrap = this._onceWrap.get(cb);
-    this._reg[type] = this._reg[type].filter(
-      (c) => c !== cb && (wrap === undefined || c !== wrap),
-    );
+    this._reg[type] = this._reg[type].filter((c) => c !== cb && (wrap === undefined || c !== wrap));
     this._onceWrap.delete(cb);
     this._onChange?.();
   }

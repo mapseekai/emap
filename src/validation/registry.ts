@@ -43,7 +43,9 @@ export class ValidatorRegistry {
    */
   register(v: Validator): () => void {
     this._all.add(v);
-    return () => { this._all.delete(v); };
+    return () => {
+      this._all.delete(v);
+    };
   }
 
   /** Remove every registered validator. */
@@ -69,9 +71,7 @@ export class ValidatorRegistry {
     for (const v of this._all) if (v.phase === phase) candidates.push(v);
     if (candidates.length === 0) return [];
 
-    const settled = await Promise.allSettled(
-      candidates.map((v) => v.run(host, change)),
-    );
+    const settled = await Promise.allSettled(candidates.map((v) => v.run(host, change)));
     const out: ValidatorResult[] = [];
     for (let i = 0; i < candidates.length; i++) {
       const v = candidates[i];
@@ -82,10 +82,12 @@ export class ValidatorRegistry {
       } else {
         report = {
           ok: false,
-          issues: [{
-            severity: 'error',
-            message: `validator '${v.name}' threw: ${s.reason instanceof Error ? s.reason.message : String(s.reason)}`,
-          }],
+          issues: [
+            {
+              severity: 'error',
+              message: `validator '${v.name}' threw: ${s.reason instanceof Error ? s.reason.message : String(s.reason)}`,
+            },
+          ],
         };
       }
       out.push({ validator: v.name, report });

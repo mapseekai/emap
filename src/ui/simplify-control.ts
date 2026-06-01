@@ -27,10 +27,10 @@ export interface SimplifyControlOptions {
 }
 
 const METHODS: Array<{ value: '' | SimplifyMethod; label: string }> = [
-  { value: '',          label: 'weighted (default)' },
-  { value: 'weighted',  label: 'weighted' },
+  { value: '', label: 'weighted (default)' },
+  { value: 'weighted', label: 'weighted' },
   { value: 'visvalingam', label: 'visvalingam' },
-  { value: 'dp',        label: 'dp (Douglas–Peucker)' },
+  { value: 'dp', label: 'dp (Douglas–Peucker)' },
 ];
 
 export class SimplifyControl implements Control {

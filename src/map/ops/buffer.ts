@@ -39,7 +39,10 @@ export async function bufferLayer(ctx: OpContext, opts: BufferOptions): Promise<
   } else if (NUMERIC_STRING_RE.test(opts.radius) && Number(opts.radius) <= 0) {
     return Err.validation('radius', 'numeric string must be a positive number');
   }
-  if (typeof opts.radius === 'string' && !ctx.host._allowExpressionEvaluation([opts.radius], 'bufferLayer')) {
+  if (
+    typeof opts.radius === 'string' &&
+    !ctx.host._allowExpressionEvaluation([opts.radius], 'bufferLayer')
+  ) {
     return Err.expressionDisabled('bufferLayer');
   }
 
@@ -72,7 +75,7 @@ export async function bufferLayer(ctx: OpContext, opts: BufferOptions): Promise<
   if (opts.type !== undefined && layer.geometry_type === 'polygon') {
     console.warn(
       `bufferLayer: type="${opts.type}" is intended for polyline layers; ` +
-      `applying to polygon layer "${opts.target}" may produce unexpected output.`,
+        `applying to polygon layer "${opts.target}" may produce unexpected output.`,
     );
   }
 

@@ -111,7 +111,10 @@ describe('SimplifyControl', () => {
   });
 
   it('shows failure status when simplifyLayer returns error', async () => {
-    map = makeFakeMap(async () => ({ ok: false, error: { kind: 'validation', field: 'percentage' } }));
+    map = makeFakeMap(async () => ({
+      ok: false,
+      error: { kind: 'validation', field: 'percentage' },
+    }));
     ctrl.onRemove();
     ctrl = new SimplifyControl({ source: 's1' });
     el = ctrl.onAdd(map as any);
@@ -126,7 +129,11 @@ describe('SimplifyControl', () => {
 
   it('honours initialPercentage and initialMethod', () => {
     ctrl.onRemove();
-    ctrl = new SimplifyControl({ source: 's1', initialPercentage: 5, initialMethod: 'visvalingam' });
+    ctrl = new SimplifyControl({
+      source: 's1',
+      initialPercentage: 5,
+      initialMethod: 'visvalingam',
+    });
     el = ctrl.onAdd(map as any);
     const slider = el.querySelector('input[type=range]') as HTMLInputElement;
     const label = el.querySelector('.value') as HTMLElement;

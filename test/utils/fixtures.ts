@@ -16,11 +16,7 @@ import { TopologySource } from '../../src/source/topology-source';
 import type { MapshaperDataset } from '../../src/types/mapshaper-types';
 import { getDefaultMapshaperAdapter } from '../../src/adapter/mapshaper-adapter';
 
-const FIXTURES_DIR = resolve(
-  fileURLToPath(new URL('.', import.meta.url)),
-  '..',
-  'fixtures',
-);
+const FIXTURES_DIR = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', 'fixtures');
 
 /** Read raw fixture bytes from `test/fixtures/<name>`. Synchronous; tests
  *  are sync-friendly. */

@@ -41,7 +41,10 @@ function comboHeld(m: PointerModifiers, combo: ModifierCombo): boolean {
  * via `queryFeatures`, then refines per-feature with the shared
  * `featureMatchesLasso`. Mutually exclusive with `boxSelect` (a later task).
  */
-export class LassoSelectHandler extends EventDispatcher implements Handler<LassoSelectHandlerOptions> {
+export class LassoSelectHandler
+  extends EventDispatcher
+  implements Handler<LassoSelectHandlerOptions>
+{
   readonly name = 'lassoSelect';
   private _enabled = false;
   private _opts: LassoSelectHandlerOptions = {};
@@ -51,11 +54,15 @@ export class LassoSelectHandler extends EventDispatcher implements Handler<Lasso
   /** Set by HandlerManager.register. */
   _manager?: { isEnabledByName(name: string): boolean };
 
-  constructor(private _map: Emap) { super(); }
+  constructor(private _map: Emap) {
+    super();
+  }
 
   enable(): void {
     if (this._manager?.isEnabledByName('boxSelect')) {
-      throw new Error('cannot enable lassoSelect: boxSelect is enabled (both consume selection drag gestures); disable it first');
+      throw new Error(
+        'cannot enable lassoSelect: boxSelect is enabled (both consume selection drag gestures); disable it first',
+      );
     }
     this._enabled = true;
   }
@@ -63,16 +70,26 @@ export class LassoSelectHandler extends EventDispatcher implements Handler<Lasso
     this._enabled = false;
     if (this._path) this._cancel();
   }
-  isEnabled(): boolean { return this._enabled; }
-  setOptions(opts: Partial<LassoSelectHandlerOptions>): void { this._opts = { ...this._opts, ...opts }; }
-  getOptions(): Readonly<LassoSelectHandlerOptions> { return this._opts; }
+  isEnabled(): boolean {
+    return this._enabled;
+  }
+  setOptions(opts: Partial<LassoSelectHandlerOptions>): void {
+    this._opts = { ...this._opts, ...opts };
+  }
+  getOptions(): Readonly<LassoSelectHandlerOptions> {
+    return this._opts;
+  }
 
   getCursor(): string | null {
     return this._enabled ? 'crosshair' : null;
   }
 
-  private get _threshold(): number { return this._opts.dragThreshold ?? 4; }
-  private get _activator(): ModifierCombo { return this._opts.dragActivator ?? 'shift'; }
+  private get _threshold(): number {
+    return this._opts.dragThreshold ?? 4;
+  }
+  private get _activator(): ModifierCombo {
+    return this._opts.dragActivator ?? 'shift';
+  }
 
   private _ensureSvg(): { svg: SVGSVGElement; poly: SVGPolylineElement } {
     if (this._svg && this._poly) return { svg: this._svg, poly: this._poly };
@@ -131,7 +148,10 @@ export class LassoSelectHandler extends EventDispatcher implements Handler<Lasso
       const closed = path.slice();
       closed.push(path[0]);
       const candidates = this._map.queryFeatures(
-        [[bbox[0], bbox[1]], [bbox[2], bbox[3]]],
+        [
+          [bbox[0], bbox[1]],
+          [bbox[2], bbox[3]],
+        ],
         this._opts.layers ? { layers: this._opts.layers } : undefined,
       );
       const includeIntersecting = this._opts.includeIntersecting !== false;
@@ -144,7 +164,11 @@ export class LassoSelectHandler extends EventDispatcher implements Handler<Lasso
         seen.add(key);
         refs.push({ source: f.source, layer: f.layer, id: f.id });
       }
-      const mode = resolveMode(ev.modifiers, this._opts.modifiers ?? LASSO_DEFAULT_MODS, this._activator);
+      const mode = resolveMode(
+        ev.modifiers,
+        this._opts.modifiers ?? LASSO_DEFAULT_MODS,
+        this._activator,
+      );
       this._map.select(refs, { mode });
       return 'passthrough';
     }

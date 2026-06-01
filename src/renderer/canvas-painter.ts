@@ -49,7 +49,7 @@ export class CanvasPainter implements Painter {
     let count = 0;
     ctx.beginPath();
 
-    shapes.forEach(shape => {
+    shapes.forEach((shape) => {
       if (!shape) return;
 
       (shape as PathShape).forEach((part) => {
@@ -108,15 +108,15 @@ export class CanvasPainter implements Painter {
     if (!iter.hasNext()) return;
 
     // Use half-pixel snapping for crisper 1px lines (Mapshaper's roundToHalfPix)
-    x = (iter.x * mx + bx) * 2 | 0;
-    y = (iter.y * my + by) * 2 | 0;
+    x = ((iter.x * mx + bx) * 2) | 0;
+    y = ((iter.y * my + by) * 2) | 0;
     ctx.moveTo(x / 2, y / 2);
 
     while (iter.hasNext()) {
       xp = x;
       yp = y;
-      x = (iter.x * mx + bx) * 2 | 0;
-      y = (iter.y * my + by) * 2 | 0;
+      x = ((iter.x * mx + bx) * 2) | 0;
+      y = ((iter.y * my + by) * 2) | 0;
 
       if (x !== xp || y !== yp) {
         ctx.lineTo(x / 2, y / 2);
@@ -130,10 +130,7 @@ export class CanvasPainter implements Painter {
     }
   }
 
-  drawPoints(
-    _shapes: readonly (FeatureShape | null | undefined)[],
-    _style: PointStyle,
-  ): void {
+  drawPoints(_shapes: readonly (FeatureShape | null | undefined)[], _style: PointStyle): void {
     const ctx = this._ctx;
     const pr = this._pixelRatio;
     const mx = this._transform.mx * pr;
@@ -148,7 +145,7 @@ export class CanvasPainter implements Painter {
     ctx.fillStyle = color;
     ctx.strokeStyle = color;
 
-    _shapes.forEach(shape => {
+    _shapes.forEach((shape) => {
       if (!shape) return;
       const points = normalizePointShape(shape);
       points.forEach((p) => {
@@ -190,17 +187,14 @@ export class CanvasPainter implements Painter {
     const hoverVertex = style.hoverVertex;
     let hoverPx: [number, number] | null = null;
     if (hoverVertex) {
-      hoverPx = [
-        hoverVertex[0] * mx + bx,
-        hoverVertex[1] * my + by
-      ];
+      hoverPx = [hoverVertex[0] * mx + bx, hoverVertex[1] * my + by];
     }
 
     // Draw normal vertex dots
     ctx.fillStyle = dotColor;
     ctx.beginPath();
 
-    shapes.forEach(shape => {
+    shapes.forEach((shape) => {
       if (!shape) return;
       (shape as PathShape).forEach((part) => {
         part.forEach((arcId) => {
@@ -277,7 +271,7 @@ export class CanvasPainter implements Painter {
       // with this style-level opacity.
       ctx.globalAlpha = prevAlpha * Math.max(0, Math.min(1, opacity!));
     }
-    
+
     // Smaller batches keep each `fill('evenodd')` call's path object
     // bounded — Canvas2D engines slow superlinearly with subpath count,
     // so 100 polygons/flush is the sweet spot for big topology datasets.
@@ -288,7 +282,7 @@ export class CanvasPainter implements Painter {
     for (let sIdx = 0; sIdx < shapes.length; sIdx++) {
       const shape = shapes[sIdx];
       if (!shape) continue;
-      
+
       let isVisible = true;
       if (filter) {
         // Find if this shape shares any arc with the viewport
@@ -318,38 +312,34 @@ export class CanvasPainter implements Painter {
         // getShapeIter respects arc direction (reversed arcs traversed backwards)
         const iter = arcs.getShapeIter!(part);
         if (!iter.hasNext()) continue;
-        
+
         let xp: number, yp: number;
         // Use half-pixel snapping for consistency and to avoid floating point math overhead
-        let x = (iter.x * mx + bx) * 2 | 0;
-        let y = (iter.y * my + by) * 2 | 0;
+        let x = ((iter.x * mx + bx) * 2) | 0;
+        let y = ((iter.y * my + by) * 2) | 0;
         ctx.moveTo(x / 2, y / 2);
-        
+
         while (iter.hasNext()) {
           xp = x;
           yp = y;
-          x = (iter.x * mx + bx) * 2 | 0;
-          y = (iter.y * my + by) * 2 | 0;
-          
+          x = ((iter.x * mx + bx) * 2) | 0;
+          y = ((iter.y * my + by) * 2) | 0;
+
           if (x !== xp || y !== yp) {
             ctx.lineTo(x / 2, y / 2);
           }
         }
         ctx.closePath();
       }
-      
+
       counts++;
     }
-    
+
     if (counts > 0) {
       ctx.fill('evenodd');
     }
     if (overrideAlpha) ctx.globalAlpha = prevAlpha;
   }
-
-
-
-
 
   /**
    * Draw the in-progress feature creation overlay.
@@ -369,10 +359,7 @@ export class CanvasPainter implements Painter {
     const cursor = state.cursorCoord;
 
     // Project helper
-    const proj = (c: [number, number]): [number, number] => [
-      c[0] * mx + bx,
-      c[1] * my + by,
-    ];
+    const proj = (c: [number, number]): [number, number] => [c[0] * mx + bx, c[1] * my + by];
 
     // Draw placed segments (solid line)
     if (verts.length > 0) {

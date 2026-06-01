@@ -7,10 +7,7 @@ import { Err, type OpResult } from '../op-result';
 import type { SortFeaturesOptions } from '../types';
 import type { OpContext } from './_context';
 
-export async function sortFeatures(
-  ctx: OpContext,
-  opts: SortFeaturesOptions,
-): Promise<OpResult> {
+export async function sortFeatures(ctx: OpContext, opts: SortFeaturesOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
   if (!source) return Err.notFound('source', opts.source);
   const dataset = source.getDataset();

@@ -31,7 +31,10 @@ export async function simplifyLayer(ctx: OpContext, opts: SimplifyOptions): Prom
     opts.resolution !== undefined,
   ].filter(Boolean).length;
   if (thresholdsSet !== 1) {
-    return Err.validation('threshold', 'must supply exactly one of percentage, interval, resolution');
+    return Err.validation(
+      'threshold',
+      'must supply exactly one of percentage, interval, resolution',
+    );
   }
 
   const simplifyOpts: Record<string, unknown> = {};
@@ -60,7 +63,10 @@ export async function simplifyLayer(ctx: OpContext, opts: SimplifyOptions): Prom
   // which leaves the caller wondering why their tuning had no effect.
   // Reject up-front. (Method `undefined` is fine — defaults to weighted.)
   if (opts.weighting !== undefined && opts.method !== undefined && opts.method !== 'weighted') {
-    return Err.validation('weighting', `weighting only applies to method='weighted', not ${opts.method}`);
+    return Err.validation(
+      'weighting',
+      `weighting only applies to method='weighted', not ${opts.method}`,
+    );
   }
 
   if (opts.method) simplifyOpts.method = opts.method;

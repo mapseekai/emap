@@ -10,8 +10,10 @@ function hostStub() {
   return {
     host: {
       getCameraState: () => ({ center: [...st.center] as [number, number], scale: st.scale }),
-      applyCameraState: (c: [number, number], s: number) => { st = { center: [c[0], c[1]], scale: s }; },
-      scaleFromZoom: (z: number) => Math.pow(2, z),     // pretend WebMercator-ish
+      applyCameraState: (c: [number, number], s: number) => {
+        st = { center: [c[0], c[1]], scale: s };
+      },
+      scaleFromZoom: (z: number) => Math.pow(2, z), // pretend WebMercator-ish
       fire: (type: string, e: any) => fired.push({ type, e }),
       requestRender: vi.fn(),
       getViewportSize: () => ({ width: 0, height: 0 }),
@@ -25,7 +27,7 @@ describe('Camera.jumpTo', () => {
   it('applies center+scale instantly and fires move/zoom lifecycle synchronously', () => {
     const { host, fired, state } = hostStub();
     const cam = new Camera(host as any);
-    cam.jumpTo({ center: [10, 20], zoom: 3 });   // scale = 2^3 = 8
+    cam.jumpTo({ center: [10, 20], zoom: 3 }); // scale = 2^3 = 8
     expect(state()).toEqual({ center: [10, 20], scale: 8 });
     const types = fired.map((f) => f.type);
     expect(types).toEqual(['movestart', 'zoomstart', 'move', 'zoom', 'moveend', 'zoomend']);
@@ -36,7 +38,7 @@ describe('Camera.jumpTo', () => {
   it('pure pan (zoom unchanged) fires only move* — no zoom*', () => {
     const { host, fired } = hostStub();
     const cam = new Camera(host as any);
-    cam.jumpTo({ center: [5, 5] });               // scale stays 1
+    cam.jumpTo({ center: [5, 5] }); // scale stays 1
     expect(fired.map((f) => f.type)).toEqual(['movestart', 'move', 'moveend']);
   });
 
@@ -64,7 +66,14 @@ describe('Camera.easeTo', () => {
     const cam = new Camera(host as any);
     cam.easeTo({ center: [7, 8], scale: 5, duration: 0 });
     expect(state()).toEqual({ center: [7, 8], scale: 5 });
-    expect(fired.map((f) => f.type)).toEqual(['movestart', 'zoomstart', 'move', 'zoom', 'moveend', 'zoomend']);
+    expect(fired.map((f) => f.type)).toEqual([
+      'movestart',
+      'zoomstart',
+      'move',
+      'zoom',
+      'moveend',
+      'zoomend',
+    ]);
     expect(cam.isMoving()).toBe(false);
   });
 
@@ -75,7 +84,7 @@ describe('Camera.easeTo', () => {
     cam.easeTo({ center: [100, 0], scale: 4, duration: 100, easing: (t) => t });
     expect(cam.isMoving()).toBe(true);
     expect(fired.filter((f) => f.type === 'movestart')).toHaveLength(1);
-    vi.advanceTimersByTime(200);              // run all rAF/timeout ticks
+    vi.advanceTimersByTime(200); // run all rAF/timeout ticks
     const t = fired.map((f) => f.type);
     expect(t.filter((x) => x === 'movestart')).toHaveLength(1);
     expect(t.filter((x) => x === 'move').length).toBeGreaterThanOrEqual(1);
@@ -115,7 +124,7 @@ describe('Camera.easeTo', () => {
     expect(fired.map((f) => f.type)).toContain('moveend');
     expect(cam.isMoving()).toBe(false);
     const n = fired.length;
-    cam.stop();                                // idle → no-op
+    cam.stop(); // idle → no-op
     expect(fired.length).toBe(n);
     vi.useRealTimers();
   });
@@ -127,20 +136,20 @@ describe('Camera wrappers / fitBounds / flyTo', () => {
     const cam = new Camera(host as any);
     cam.setCenter([3, 4]);
     expect(state().center).toEqual([3, 4]);
-    cam.setZoom(2);                         // scale 2^2=4
+    cam.setZoom(2); // scale 2^2=4
     expect(state().scale).toBe(4);
-    cam.zoomTo(3, { duration: 0 });         // scale 8
+    cam.zoomTo(3, { duration: 0 }); // scale 8
     expect(state().scale).toBe(8);
     cam.panTo([10, 10], { duration: 0 });
     expect(state().center).toEqual([10, 10]);
-    expect(state().scale).toBe(8);          // pan keeps scale
+    expect(state().scale).toBe(8); // pan keeps scale
   });
 
   it('panBy shifts the centre by a pixel delta converted through current scale', () => {
     const { host, state } = hostStub();
     const cam = new Camera(host as any);
     cam.jumpTo({ center: [0, 0], scale: 2 }); // 1 data unit = 2 px
-    cam.panBy([20, 10], { duration: 0 });     // → +10 data x, ∓ y (flipY)
+    cam.panBy([20, 10], { duration: 0 }); // → +10 data x, ∓ y (flipY)
     expect(state().center[0]).toBeCloseTo(10, 6);
     expect(Math.abs(state().center[1])).toBeCloseTo(5, 6);
   });

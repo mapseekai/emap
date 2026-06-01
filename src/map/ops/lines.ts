@@ -18,7 +18,10 @@ export async function linesLayer(ctx: OpContext, opts: LinesOptions): Promise<Op
   const layer = resolveLayerInList(dataset.layers, opts.target);
   if (!layer) return Err.notFound('layer', opts.target);
   if (layer.geometry_type !== 'polygon') {
-    return Err.validation('target', `expected polygon layer, got ${layer.geometry_type ?? 'unknown'}`);
+    return Err.validation(
+      'target',
+      `expected polygon layer, got ${layer.geometry_type ?? 'unknown'}`,
+    );
   }
 
   const linesOpts: Record<string, unknown> = {};

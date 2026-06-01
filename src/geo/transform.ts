@@ -9,8 +9,8 @@ export class AffineTransform {
     public mx: number = 1,
     public my: number = 1,
     public bx: number = 0,
-    public by: number = 0
-  ) { }
+    public by: number = 0,
+  ) {}
 
   static fromBounds(src: Bounds, dst: Bounds, flipY = false): AffineTransform {
     const mx = dst.width / src.width || 1;

@@ -15,18 +15,31 @@ function buildFixture() {
   const nn = new Int32Array([2, 2, 2, 2, 2]);
   const ii = new Int32Array([0, 2, 4, 6, 8]);
 
-  let storedNn: any = nn, storedXx: any = xx, storedYy: any = yy, storedIi: any = ii;
+  let storedNn: any = nn,
+    storedXx: any = xx,
+    storedYy: any = yy,
+    storedIi: any = ii;
 
   const arcs = {
     size: () => storedNn.length,
-    getVertexData: () => ({ xx: storedXx, yy: storedYy, nn: storedNn, ii: storedIi, zz: null, bb: null }),
+    getVertexData: () => ({
+      xx: storedXx,
+      yy: storedYy,
+      nn: storedNn,
+      ii: storedIi,
+      zz: null,
+      bb: null,
+    }),
     updateVertexData(newNn: Int32Array, newXx: Float64Array, newYy: Float64Array) {
       storedNn = newNn;
       storedXx = newXx;
       storedYy = newYy;
       const ii2 = new Int32Array(newNn.length);
       let cur = 0;
-      for (let i = 0; i < newNn.length; i++) { ii2[i] = cur; cur += newNn[i]; }
+      for (let i = 0; i < newNn.length; i++) {
+        ii2[i] = cur;
+        cur += newNn[i];
+      }
       storedIi = ii2;
     },
   } as any;
@@ -52,11 +65,7 @@ describe('planSharedArcSplit', () => {
 
   it('duplicates arcs shared with unselected features', () => {
     const { source, layerA, layerB } = buildFixture();
-    const plan = planSharedArcSplit(
-      source,
-      [{ layer: layerA, featureId: 0 }],
-      [layerA, layerB],
-    );
+    const plan = planSharedArcSplit(source, [{ layer: layerA, featureId: 0 }], [layerA, layerB]);
     expect(plan).not.toBeNull();
     expect(plan!.appendedArcs).toHaveLength(1);
     expect(plan!.remaps).toHaveLength(1);
@@ -69,11 +78,7 @@ describe('planSharedArcSplit', () => {
     const { source, arcs, layerA, layerB } = buildFixture();
     // Make A reference the shared arc reversed (~1) instead of forward.
     layerA.shapes[0] = [[0, ~1, 2]];
-    const plan = planSharedArcSplit(
-      source,
-      [{ layer: layerA, featureId: 0 }],
-      [layerA, layerB],
-    );
+    const plan = planSharedArcSplit(source, [{ layer: layerA, featureId: 0 }], [layerA, layerB]);
     expect(plan).not.toBeNull();
     // Selected feature's reference was ~1 (reversed). Replacement must
     // preserve the reversed sign: ~5.
@@ -86,11 +91,7 @@ describe('planSharedArcSplit', () => {
 describe('SplitSharedArcsCommand', () => {
   it('do() appends the new arc and rewrites only the selected shape', () => {
     const { source, arcs, layerA, layerB } = buildFixture();
-    const plan = planSharedArcSplit(
-      source,
-      [{ layer: layerA, featureId: 0 }],
-      [layerA, layerB],
-    )!;
+    const plan = planSharedArcSplit(source, [{ layer: layerA, featureId: 0 }], [layerA, layerB])!;
     new SplitSharedArcsCommand(plan).do();
     expect(arcs.size()).toBe(6);
     expect(layerA.shapes[0]).toEqual([[0, 5, 2]]);
@@ -100,11 +101,7 @@ describe('SplitSharedArcsCommand', () => {
 
   it('undo() restores original shapes and arc count', () => {
     const { source, arcs, layerA, layerB } = buildFixture();
-    const plan = planSharedArcSplit(
-      source,
-      [{ layer: layerA, featureId: 0 }],
-      [layerA, layerB],
-    )!;
+    const plan = planSharedArcSplit(source, [{ layer: layerA, featureId: 0 }], [layerA, layerB])!;
     const cmd = new SplitSharedArcsCommand(plan);
     cmd.do();
     cmd.undo();

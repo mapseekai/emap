@@ -6,10 +6,7 @@
 // directly.
 
 import type { MapshaperDataset } from '../types/mapshaper-types';
-import {
-  getDefaultMapshaperAdapter,
-  type MapshaperAdapter,
-} from '../adapter/mapshaper-adapter';
+import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../adapter/mapshaper-adapter';
 
 /** Files injected into the runner's input cache (e.g. `.shp` payloads). */
 export type RunnerInputFiles = Record<string, Uint8Array | string>;

@@ -41,8 +41,8 @@ function fileRequires(file: string): string[] {
 
 function distIsSelfContained(): boolean {
   const strictClean = STRICT.every((f) => fileRequires(f).length === 0);
-  const vendorClean = VENDOR.every((f) =>
-    fileRequires(f).filter((r) => r !== 'require("adm-zip")').length === 0,
+  const vendorClean = VENDOR.every(
+    (f) => fileRequires(f).filter((r) => r !== 'require("adm-zip")').length === 0,
   );
   return strictClean && vendorClean;
 }
@@ -57,10 +57,20 @@ async function loadEmap() {
 // (see src/source/topology-source.ts — mirrors the fromBytes static).
 function waitForLoad(src: any, input: any): Promise<void> {
   return new Promise((res, rej) => {
-    const ok = () => { cleanup(); res(); };
-    const bad = (e: any) => { cleanup(); rej(e?.error ?? e); };
-    const cleanup = () => { src.off('data', ok); src.off('error', bad); };
-    src.on('data', ok); src.on('error', bad);
+    const ok = () => {
+      cleanup();
+      res();
+    };
+    const bad = (e: any) => {
+      cleanup();
+      rej(e?.error ?? e);
+    };
+    const cleanup = () => {
+      src.off('data', ok);
+      src.off('error', bad);
+    };
+    src.on('data', ok);
+    src.on('error', bad);
     src.setData(input);
   });
 }
@@ -82,7 +92,9 @@ d('shipped bundles are self-contained', () => {
   it.each(VENDOR)('%s has only the documented-dead require("adm-zip")', (f) => {
     const m = readFileSync(resolve(DIST, f), 'utf8').match(REQUIRE_RE) ?? [];
     const others = [...new Set(m)].filter((r) => r !== 'require("adm-zip")');
-    expect(others, `unexpected non-adm-zip requires in dist/${f}: ${others.join(', ')}`).toEqual([]);
+    expect(others, `unexpected non-adm-zip requires in dist/${f}: ${others.join(', ')}`).toEqual(
+      [],
+    );
   });
 
   it('does not embed full EPSG metadata in the browser ESM bundle', () => {
@@ -102,7 +114,14 @@ d('shipped bundles are self-contained', () => {
         'globalThis.__emapTopologySource = TopologySource;\n',
     );
 
-    runBin('esbuild', [entry, '--bundle', '--format=esm', '--platform=browser', `--outfile=${bundle}`, '--log-level=warning']);
+    runBin('esbuild', [
+      entry,
+      '--bundle',
+      '--format=esm',
+      '--platform=browser',
+      `--outfile=${bundle}`,
+      '--log-level=warning',
+    ]);
     const bundled = readFileSync(bundle, 'utf8');
     expect(bundled).toContain('__require');
 
@@ -133,9 +152,7 @@ d('shipped bundles are self-contained', () => {
     // this exercises the real load path (fires 'data'), not a tolerated error.
     const content = Uint8Array.from(Buffer.from(geojson, 'utf8'));
     const src = new TopologySource('t');
-    await expect(
-      waitForLoad(src, { filename: 't.geojson', content }),
-    ).resolves.toBeUndefined();
+    await expect(waitForLoad(src, { filename: 't.geojson', content })).resolves.toBeUndefined();
   }, 30_000);
 
   it('a .dbf shapefile ZIP does not cause a dynamic-require crash', async () => {

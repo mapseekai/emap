@@ -613,6 +613,8 @@ Common tasks (prepend `cmd /c` on Windows):
 ```bash
 npm run dev           # rollup watch + dev server for test/examples/*.html
 npm run dev-build     # one-off dev build (sourcemaps, no minify)
+npm run format:check  # Biome formatting check
+npm run format        # Biome formatting write
 npm run typecheck     # tsc --noEmit
 npm run test:run      # vitest run
 npm run build         # production build → dist/
@@ -643,6 +645,7 @@ Before publishing a version:
 
 ```bash
 cmd /c npm ci
+cmd /c npm run format:check
 cmd /c npm run typecheck
 cmd /c npm run test:run
 cmd /c npm run build

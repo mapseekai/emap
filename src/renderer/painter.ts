@@ -33,7 +33,11 @@ export interface DrawOverlayState {
  * should depend on `CorePainter`, not the broader `Painter`/`EditPainter`.
  */
 export interface CorePainter {
-  drawPaths(shapes: readonly (FeatureShape | null | undefined)[], style: StrokeStyle, arcs: ArcCollection): void;
+  drawPaths(
+    shapes: readonly (FeatureShape | null | undefined)[],
+    style: StrokeStyle,
+    arcs: ArcCollection,
+  ): void;
   drawArcs(arcs: ArcCollection, style: StrokeStyle, filter?: (i: number) => boolean): void;
   drawPoints(shapes: readonly (FeatureShape | null | undefined)[], style: PointStyle): void;
   drawPolygonFill(

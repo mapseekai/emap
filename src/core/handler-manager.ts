@@ -3,7 +3,15 @@ import { type Handler, isHandler, type NormalizedPointerEvent } from './handler'
 // Highest → lowest. Only registered+enabled handlers participate. The
 // selection handlers (Phase 2b) slot ahead of the modal edit handlers
 // (transformFeature, drawFeature, vertexEdit), which slot ahead of dragPan.
-const PRIORITY = ['lassoSelect', 'boxSelect', 'clickSelect', 'transformFeature', 'drawFeature', 'vertexEdit', 'dragPan'] as const;
+const PRIORITY = [
+  'lassoSelect',
+  'boxSelect',
+  'clickSelect',
+  'transformFeature',
+  'drawFeature',
+  'vertexEdit',
+  'dragPan',
+] as const;
 
 /**
  * Registry of named interaction handlers owned by Emap. Owns the
@@ -84,7 +92,10 @@ export class HandlerManager {
     this._pointerSink = sink;
   }
 
-  private _norm(e: PointerEvent | MouseEvent, kind: NormalizedPointerEvent['kind']): NormalizedPointerEvent {
+  private _norm(
+    e: PointerEvent | MouseEvent,
+    kind: NormalizedPointerEvent['kind'],
+  ): NormalizedPointerEvent {
     const r = (this._element as HTMLElement).getBoundingClientRect();
     return {
       kind,
@@ -122,7 +133,10 @@ export class HandlerManager {
     }
     for (const h of this._orderedEnabled()) {
       const r = h.handlePointer(ev);
-      if (r === 'exclusive') { this._exclusive = h; return; }
+      if (r === 'exclusive') {
+        this._exclusive = h;
+        return;
+      }
       if (r === 'consumed') return;
     }
   }
@@ -143,7 +157,10 @@ export class HandlerManager {
     if (!next) {
       for (const h of this._orderedEnabled()) {
         const c = h.getCursor?.();
-        if (c) { next = c; break; }
+        if (c) {
+          next = c;
+          break;
+        }
       }
     }
     const value = next ?? '';

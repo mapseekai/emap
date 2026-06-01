@@ -1,9 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { DisplayArcs } from './display-arcs';
-import {
-  setDefaultMapshaperAdapter,
-  type MapshaperAdapter,
-} from '../adapter/mapshaper-adapter';
+import { setDefaultMapshaperAdapter, type MapshaperAdapter } from '../adapter/mapshaper-adapter';
 import type { ArcCollection } from '../types/mapshaper-types';
 
 // `DisplayArcs` is the LOD layer between rendering and the source's
@@ -20,11 +17,18 @@ function makeMockArcs(pointCount: number, opts?: { hasZZ?: boolean }) {
   const arcs: any = {
     size: () => 1,
     getPointCount: () => pointCount,
-    getVertexData: () => ({ zz: _zz, xx: new Float64Array(pointCount), yy: new Float64Array(pointCount) }),
+    getVertexData: () => ({
+      zz: _zz,
+      xx: new Float64Array(pointCount),
+      yy: new Float64Array(pointCount),
+    }),
     getRetainedInterval: () => retainedInterval,
-    setRetainedInterval: (v: number) => { retainedInterval = v; return arcs; },
+    setRetainedInterval: (v: number) => {
+      retainedInterval = v;
+      return arcs;
+    },
     getThresholdByPct: () => 0.5,
-    getFilteredCopy: () => ({ size: () => 1, isFilteredCopy: true } as any),
+    getFilteredCopy: () => ({ size: () => 1, isFilteredCopy: true }) as any,
   };
   return arcs as ArcCollection & { isFilteredCopy?: boolean };
 }
@@ -32,7 +36,9 @@ function makeMockArcs(pointCount: number, opts?: { hasZZ?: boolean }) {
 function makeMockAdapter(): MapshaperAdapter {
   return {
     getAvgSegment: vi.fn(() => 1.0),
-    simplifyArcsFast: vi.fn((arcs: any) => ({ size: () => 1, isFilteredCopy: true, fromFastPath: true } as any)),
+    simplifyArcsFast: vi.fn(
+      (arcs: any) => ({ size: () => 1, isFilteredCopy: true, fromFastPath: true }) as any,
+    ),
   } as unknown as MapshaperAdapter;
 }
 

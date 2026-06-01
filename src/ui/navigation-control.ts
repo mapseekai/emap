@@ -16,7 +16,7 @@ export class NavigationControl implements Control {
     this._options = {
       showZoom: true,
       showHome: true,
-      ...options
+      ...options,
     };
   }
 

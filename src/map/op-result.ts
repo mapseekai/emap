@@ -26,9 +26,7 @@ export type OpError =
  * (most ops have nothing to return; some — like `checkGeometry` — carry
  * a report); `ok: false` carries the structured `error`.
  */
-export type OpResult<T = void> =
-  | { ok: true; value: T }
-  | { ok: false; error: OpError };
+export type OpResult<T = void> = { ok: true; value: T } | { ok: false; error: OpError };
 
 /** Singleton "successful, no payload" result. Cheap to return. */
 export const OK: OpResult<void> = Object.freeze({ ok: true, value: undefined });
@@ -43,10 +41,7 @@ export function okValue<T>(value: T): OpResult<T> {
 //    callers that branch on `result.error.kind` get full type narrowing.
 
 export const Err = Object.freeze({
-  notFound(
-    what: 'source' | 'layer' | 'mask' | 'divider' | 'field',
-    id: string,
-  ): OpResult<never> {
+  notFound(what: 'source' | 'layer' | 'mask' | 'divider' | 'field', id: string): OpResult<never> {
     return { ok: false, error: { kind: 'not-found', what, id } };
   },
   validation(field: string, reason: string): OpResult<never> {

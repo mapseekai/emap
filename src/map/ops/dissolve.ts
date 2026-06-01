@@ -105,7 +105,10 @@ export async function mergeSelected(ctx: OpContext): Promise<OpResult> {
   const layer = ctx.host.layers.resolve(sourceId, layerId);
   if (!layer) return Err.notFound('layer', layerId);
 
-  const ids = refs.map((r: { id: number }) => r.id).slice().sort((a: number, b: number) => a - b);
+  const ids = refs
+    .map((r: { id: number }) => r.id)
+    .slice()
+    .sort((a: number, b: number) => a - b);
 
   if (!stampMergeDiscriminator(layer, ids)) {
     return Err.validation('layer', 'layer has no data table; cannot stamp discriminator');
@@ -146,9 +149,7 @@ function buildMergeDissolveCommands(layerName: string, layer: MapshaperLayer): P
   const dissolveOpts: Record<string, unknown> = { fields: [MERGE_SELECTED_FIELD] };
   const fields = layer.data?.getFields?.();
   if (fields && fields.length > 0) {
-    const safeFields = fields.filter(
-      (f) => f !== MERGE_SELECTED_FIELD && !f.includes(','),
-    );
+    const safeFields = fields.filter((f) => f !== MERGE_SELECTED_FIELD && !f.includes(','));
     if (safeFields.length > 0) dissolveOpts.copy_fields = safeFields;
   }
 

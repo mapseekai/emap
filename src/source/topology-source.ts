@@ -6,14 +6,11 @@ import type { UnzipFileInfo, Unzipped } from 'fflate';
 import { DisplayArcs } from './display-arcs';
 import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import type { ExportFormat, ExportOptions } from './source';
-import {
-  getDefaultMapshaperRunner,
-  type MapshaperRunner,
-} from './mapshaper-runner';
+import { getDefaultMapshaperRunner, type MapshaperRunner } from './mapshaper-runner';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { resolveDatasetCRS, resolveProjectCrs } from '../geo/crs-resolver';
 
-export type TopologySourceData = string | { filename: string, content: Uint8Array };
+export type TopologySourceData = string | { filename: string; content: Uint8Array };
 
 /**
  * Input shapes accepted by {@link TopologySource.setData}:
@@ -25,7 +22,7 @@ export type TopologySourceData = string | { filename: string, content: Uint8Arra
  */
 export type TopologySourceInput =
   | TopologySourceData
-  | Array<{ filename: string, content: Uint8Array }>;
+  | Array<{ filename: string; content: Uint8Array }>;
 
 /** MIME type for each supported export format */
 const EXPORT_MIME: Record<ExportFormat, string> = {
@@ -111,9 +108,11 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * A superseding `setData` resolves it early — last-write-wins, the newer
    * call owns the next outcome.
    */
-  private _pending:
-    | { version: number; resolve: (s: TopologySource) => void; reject: (e: unknown) => void }
-    | null = null;
+  private _pending: {
+    version: number;
+    resolve: (s: TopologySource) => void;
+    reject: (e: unknown) => void;
+  } | null = null;
   /**
    * Sticky simplification floor. mapshaper's `-simplify` writes a
    * `retainedInterval` into the resulting `ArcCollection`; we cache that
@@ -254,7 +253,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
           }
         }
       } else {
-        let input: { filename: string, content: Uint8Array };
+        let input: { filename: string; content: Uint8Array };
         if (typeof this._data === 'string') {
           // Load from URL
           const url = this._data;
@@ -379,9 +378,10 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
   private _pathnameFromUrl(url: string): string {
     try {
-      const base = typeof window !== 'undefined' && window.location?.href
-        ? window.location.href
-        : 'http://emap.local/';
+      const base =
+        typeof window !== 'undefined' && window.location?.href
+          ? window.location.href
+          : 'http://emap.local/';
       return new URL(url, base).pathname;
     } catch {
       return url.split(/[?#]/, 1)[0];
@@ -518,9 +518,10 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       // `compact: true` matches mapshaper CLI defaults — bakes simplification
       // thresholds into `zz` and gzip-compresses arc buffers for a small file.
       const adapter = getDefaultMapshaperAdapter();
-      const files = options.format === 'msx'
-        ? await adapter.exportPackedDatasets([this._dataset], { compact: true })
-        : adapter.exportFileContent(this._dataset, { format: options.format });
+      const files =
+        options.format === 'msx'
+          ? await adapter.exportPackedDatasets([this._dataset], { compact: true })
+          : adapter.exportFileContent(this._dataset, { format: options.format });
       return this._filesToBlob(files, options.format);
     } finally {
       if (savedInterval && arcs?.setRetainedInterval) {
@@ -647,12 +648,12 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     const priority = ['.shp', '.geojson', '.json', '.kml', '.topojson'];
 
     for (const ext of priority) {
-      const match = filenames.find(f => f.toLowerCase().endsWith(ext));
+      const match = filenames.find((f) => f.toLowerCase().endsWith(ext));
       if (match) return match;
     }
 
     // Return first importable file
-    return filenames.find(f => !this._isAuxiliaryFile(f)) || '';
+    return filenames.find((f) => !this._isAuxiliaryFile(f)) || '';
   }
 
   private _isAuxiliaryFile(filename: string): boolean {

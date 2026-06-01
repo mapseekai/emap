@@ -50,10 +50,12 @@
     "dev-build": "rollup -c --environment BUILD:development",
     "prebuild": "npm run clean",
     "build": "rollup -c --environment BUILD:production && tsc -p tsconfig.build.json",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "prepublishOnly": "npm run typecheck && npm run build && npm run test:run"
+    "prepublishOnly": "npm run format:check && npm run typecheck && npm run build && npm run test:run"
   },
   "keywords": [
     "mapshaper",
@@ -76,6 +78,7 @@
   },
   "homepage": "https://github.com/zwishing/emap#readme",
   "devDependencies": {
+    "@biomejs/biome": "^2.4.16",
     "@rollup/plugin-alias": "^6.0.0",
     "@rollup/plugin-commonjs": "^25.0.0",
     "@rollup/plugin-json": "^6.1.0",

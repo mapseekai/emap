@@ -16,7 +16,10 @@ export async function polygonsLayer(ctx: OpContext, opts: PolygonsOptions): Prom
   const layer = resolveLayerInList(dataset.layers, opts.target);
   if (!layer) return Err.notFound('layer', opts.target);
   if (layer.geometry_type !== 'polyline') {
-    return Err.validation('target', `expected polyline layer, got ${layer.geometry_type ?? 'unknown'}`);
+    return Err.validation(
+      'target',
+      `expected polyline layer, got ${layer.geometry_type ?? 'unknown'}`,
+    );
   }
 
   const polyOpts: Record<string, unknown> = {};

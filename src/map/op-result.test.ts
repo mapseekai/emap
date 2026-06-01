@@ -121,7 +121,9 @@ describe('Err.hostRemoved', () => {
 describe('Err is frozen', () => {
   it('cannot be mutated to redirect a factory', () => {
     expect(Object.isFrozen(Err)).toBe(true);
-    expect(() => { (Err as any).notFound = () => null; }).toThrow();
+    expect(() => {
+      (Err as any).notFound = () => null;
+    }).toThrow();
   });
 });
 
@@ -130,11 +132,16 @@ describe('discriminated narrowing in TypeScript flow', () => {
     function describe(r: OpResult): string {
       if (r.ok) return 'success';
       switch (r.error.kind) {
-        case 'not-found': return `nf:${r.error.what}:${r.error.id}`;
-        case 'validation': return `v:${r.error.field}`;
-        case 'expression-disabled': return `ed:${r.error.operation}`;
-        case 'mapshaper': return `ms:${r.error.cmd ?? ''}`;
-        case 'host-removed': return 'hr';
+        case 'not-found':
+          return `nf:${r.error.what}:${r.error.id}`;
+        case 'validation':
+          return `v:${r.error.field}`;
+        case 'expression-disabled':
+          return `ed:${r.error.operation}`;
+        case 'mapshaper':
+          return `ms:${r.error.cmd ?? ''}`;
+        case 'host-removed':
+          return 'hr';
       }
     }
     expect(describe(OK)).toBe('success');

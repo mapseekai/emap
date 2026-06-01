@@ -78,10 +78,7 @@ async function handleRun(req: RunRequest): Promise<void> {
     const targets = finished.catalog.getDefaultTargets();
     const result = targets.length > 0 ? targets[0].dataset : datasets[0];
 
-    const repacked = await mapshaper.internal.exportDatasetsToPack(
-      [result],
-      { compact: false },
-    );
+    const repacked = await mapshaper.internal.exportDatasetsToPack([result], { compact: false });
 
     const transferList = collectTransferables(repacked);
     (self as unknown as Worker).postMessage({ id, type: 'ok', packed: repacked }, transferList);

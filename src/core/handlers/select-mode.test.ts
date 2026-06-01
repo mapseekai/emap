@@ -5,12 +5,21 @@ import type { ModifierCombo, SelectMode } from './select-mode';
 function mods(s = false, c = false, a = false, m = false) {
   return { shift: s, ctrl: c, alt: a, meta: m };
 }
-const BOX_TABLE: Partial<Record<SelectMode, ModifierCombo>> =
-  { replace: 'none', add: 'shift', toggle: 'shift+alt' };
-const ACTIVATED_DRAG_TABLE: Partial<Record<SelectMode, ModifierCombo>> =
-  { replace: 'none', add: 'ctrl', toggle: 'alt' };
-const CLICK_TABLE: Partial<Record<SelectMode, ModifierCombo>> =
-  { replace: 'none', add: 'shift', toggle: 'shift+alt' };
+const BOX_TABLE: Partial<Record<SelectMode, ModifierCombo>> = {
+  replace: 'none',
+  add: 'shift',
+  toggle: 'shift+alt',
+};
+const ACTIVATED_DRAG_TABLE: Partial<Record<SelectMode, ModifierCombo>> = {
+  replace: 'none',
+  add: 'ctrl',
+  toggle: 'alt',
+};
+const CLICK_TABLE: Partial<Record<SelectMode, ModifierCombo>> = {
+  replace: 'none',
+  add: 'shift',
+  toggle: 'shift+alt',
+};
 
 describe('resolveMode', () => {
   it('clickSelect (no activator): plain → replace, shift → add, shift+alt → toggle', () => {

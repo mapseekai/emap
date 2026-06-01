@@ -24,7 +24,7 @@ function makeSource(layers: MapshaperLayer[]): TopologySource {
   return {
     getLayers: () => layers,
     getDisplayArcs: () => null,
-    getArcs: () => ({} as any), // truthy stub — drawPaths only checks truthiness
+    getArcs: () => ({}) as any, // truthy stub — drawPaths only checks truthiness
   } as unknown as TopologySource;
 }
 
@@ -111,12 +111,11 @@ describe('HighlightManager.renderHighlights', () => {
   it('renders polygon highlights via drawPaths', () => {
     const h = new HighlightManager();
     const layer: MapshaperLayer = {
-      name: 'parks', geometry_type: 'polygon',
+      name: 'parks',
+      geometry_type: 'polygon',
       shapes: [[[0]], [[1]], [[2]]],
     } as MapshaperLayer;
-    const sources = new globalThis.Map<string, TopologySource>([
-      ['src1', makeSource([layer])],
-    ]);
+    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([layer])]]);
     h.setHighlightedFeatures([
       { source: 'src1', layer: 'parks', id: 1, geometryType: 'polygon', properties: {} },
     ]);
@@ -129,12 +128,11 @@ describe('HighlightManager.renderHighlights', () => {
   it('renders point highlights via drawPoints', () => {
     const h = new HighlightManager();
     const layer: MapshaperLayer = {
-      name: 'cities', geometry_type: 'point',
+      name: 'cities',
+      geometry_type: 'point',
       shapes: [[[0, 0]], [[1, 1]]],
     } as MapshaperLayer;
-    const sources = new globalThis.Map<string, TopologySource>([
-      ['src1', makeSource([layer])],
-    ]);
+    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([layer])]]);
     h.setHighlightedFeatures([
       { source: 'src1', layer: 'cities', id: 0, geometryType: 'point', properties: {} },
     ]);
@@ -147,12 +145,11 @@ describe('HighlightManager.renderHighlights', () => {
   it('respects the visibleLayers filter', () => {
     const h = new HighlightManager();
     const layer: MapshaperLayer = {
-      name: 'parks', geometry_type: 'polygon',
+      name: 'parks',
+      geometry_type: 'polygon',
       shapes: [[[0]]],
     } as MapshaperLayer;
-    const sources = new globalThis.Map<string, TopologySource>([
-      ['src1', makeSource([layer])],
-    ]);
+    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([layer])]]);
     h.setHighlightedFeatures([
       { source: 'src1', layer: 'parks', id: 0, geometryType: 'polygon', properties: {} },
     ]);
@@ -168,10 +165,14 @@ describe('HighlightManager.renderHighlights', () => {
   it('skips layers whose ids do not match', () => {
     const h = new HighlightManager();
     const parks: MapshaperLayer = {
-      name: 'parks', geometry_type: 'polygon', shapes: [[[0]]],
+      name: 'parks',
+      geometry_type: 'polygon',
+      shapes: [[[0]]],
     } as MapshaperLayer;
     const roads: MapshaperLayer = {
-      name: 'roads', geometry_type: 'polyline', shapes: [[[0]]],
+      name: 'roads',
+      geometry_type: 'polyline',
+      shapes: [[[0]]],
     } as MapshaperLayer;
     const sources = new globalThis.Map<string, TopologySource>([
       ['src1', makeSource([parks, roads])],
@@ -189,12 +190,11 @@ describe('HighlightManager.renderHighlights', () => {
   it('skips ids that no longer exist in layer.shapes (post-edit dangling refs)', () => {
     const h = new HighlightManager();
     const layer: MapshaperLayer = {
-      name: 'parks', geometry_type: 'polygon',
+      name: 'parks',
+      geometry_type: 'polygon',
       shapes: [[[0]]],
     } as MapshaperLayer;
-    const sources = new globalThis.Map<string, TopologySource>([
-      ['src1', makeSource([layer])],
-    ]);
+    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([layer])]]);
     // Highlight an out-of-range id.
     h.setHighlightedFeatures([
       { source: 'src1', layer: 'parks', id: 99, geometryType: 'polygon', properties: {} },

@@ -44,7 +44,10 @@ describe('EditToolbar', () => {
 
     const root = toolbar.onAdd(fakeMap());
 
-    expect([...root.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['A', 'B']);
+    expect([...root.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
+      'A',
+      'B',
+    ]);
     expect(first.onAdd).toHaveBeenCalledTimes(1);
     expect(second.onAdd).toHaveBeenCalledTimes(1);
 
@@ -60,20 +63,26 @@ describe('EditToolbar', () => {
     const root = toolbar.onAdd(map);
 
     expect(root.querySelectorAll('button')).toHaveLength(4);
-    expect(map.drawFeature.setOptions).toHaveBeenCalledWith(expect.objectContaining({
-      source: 'source-a',
-      sourceLayer: 'layer-a',
-      type: 'polygon',
-    }));
-    expect(map.drawFeature.setOptions).toHaveBeenCalledWith(expect.objectContaining({
-      source: 'source-a',
-      sourceLayer: 'layer-a',
-      type: 'polyline',
-    }));
-    expect(map.drawFeature.setOptions).toHaveBeenCalledWith(expect.objectContaining({
-      source: 'source-a',
-      sourceLayer: 'layer-a',
-      type: 'point',
-    }));
+    expect(map.drawFeature.setOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'source-a',
+        sourceLayer: 'layer-a',
+        type: 'polygon',
+      }),
+    );
+    expect(map.drawFeature.setOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'source-a',
+        sourceLayer: 'layer-a',
+        type: 'polyline',
+      }),
+    );
+    expect(map.drawFeature.setOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'source-a',
+        sourceLayer: 'layer-a',
+        type: 'point',
+      }),
+    );
   });
 });

@@ -14,7 +14,8 @@ describe('box/lasso mutual exclusion', () => {
     const m = new HandlerManager();
     const box = new BoxSelectHandler(fakeMap() as any);
     const lasso = new LassoSelectHandler(fakeMap() as any);
-    m.register(box); m.register(lasso);
+    m.register(box);
+    m.register(lasso);
     box.enable();
     expect(() => lasso.enable()).toThrow(/boxSelect.*enabled|cannot enable lassoSelect/i);
   });
@@ -23,7 +24,8 @@ describe('box/lasso mutual exclusion', () => {
     const m = new HandlerManager();
     const box = new BoxSelectHandler(fakeMap() as any);
     const lasso = new LassoSelectHandler(fakeMap() as any);
-    m.register(box); m.register(lasso);
+    m.register(box);
+    m.register(lasso);
     lasso.enable();
     expect(() => box.enable()).toThrow(/lassoSelect.*enabled|cannot enable boxSelect/i);
   });
@@ -32,8 +34,10 @@ describe('box/lasso mutual exclusion', () => {
     const m = new HandlerManager();
     const box = new BoxSelectHandler(fakeMap() as any);
     const lasso = new LassoSelectHandler(fakeMap() as any);
-    m.register(box); m.register(lasso);
-    box.enable(); box.disable();
+    m.register(box);
+    m.register(lasso);
+    box.enable();
+    box.disable();
     expect(() => lasso.enable()).not.toThrow();
   });
 

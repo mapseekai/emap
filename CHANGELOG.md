@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Standard EPSG CRS inputs now resolve through `epsg-index` to Proj.4 before
   being handed to mapshaper / mproj, so the UI CRS picker can pass values like
   `EPSG:4490` and `EPSG:32633` to `map.ops.projectLayer()` and `map.reproject()`.
+- Biome is now the project formatting baseline, with `format` and
+  `format:check` npm scripts included in the release verification chain.
 
 ### Fixed
 

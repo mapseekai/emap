@@ -39,17 +39,12 @@ export function resolveStrokeStyle(
 ): StrokeStyle {
   const p = paint || {};
   return {
-    color:
-      (p as LinePaint)['line-color'] ||
-      (p as FillPaint)['fill-color'] ||
-      '#333',
+    color: (p as LinePaint)['line-color'] || (p as FillPaint)['fill-color'] || '#333',
     width: ((p as LinePaint)['line-width'] ?? 0.8) * lineScale,
   };
 }
 
-export function resolvePointStyle(
-  paint: CirclePaint | undefined,
-): PointStyle {
+export function resolvePointStyle(paint: CirclePaint | undefined): PointStyle {
   const p = paint || {};
   return {
     color: p['circle-color'] || '#333',

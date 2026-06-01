@@ -7,7 +7,10 @@ function makeArcs(xx: number[], yy: number[], nn: number[]) {
   // Build the ii (start index) array from nn
   const ii: number[] = [];
   let acc = 0;
-  for (const n of nn) { ii.push(acc); acc += n; }
+  for (const n of nn) {
+    ii.push(acc);
+    acc += n;
+  }
   // Real mapshaper ArcCollection.getVertexData() returns the SAME backing
   // typed arrays on every call (so in-place mutation is observable). The
   // mock must do the same — otherwise the command's writes vanish.
@@ -52,8 +55,12 @@ describe('FeatureTranslateCommand', () => {
     const { arcs, xx, yy } = makeArcs([0, 1, 10, 11, 12], [0, 1, 10, 11, 12], [2, 3]);
     const source = makeSource();
     const cmd = new FeatureTranslateCommand({
-      source, arcs, dx: 100, dy: 200,
-      arcIds: [1], pointFeatures: [],
+      source,
+      arcs,
+      dx: 100,
+      dy: 200,
+      arcIds: [1],
+      pointFeatures: [],
     });
     cmd.do();
     // Arc 0 untouched
@@ -68,12 +75,16 @@ describe('FeatureTranslateCommand', () => {
     expect(yy[4]).toBe(212);
   });
 
-  it('updates each affected arc\'s bounds exactly once per pass', () => {
+  it("updates each affected arc's bounds exactly once per pass", () => {
     const { arcs, updateArcBounds } = makeArcs([0, 1, 2, 3], [0, 1, 2, 3], [2, 2]);
     const source = makeSource();
     const cmd = new FeatureTranslateCommand({
-      source, arcs, dx: 1, dy: 1,
-      arcIds: [0, 1], pointFeatures: [],
+      source,
+      arcs,
+      dx: 1,
+      dy: 1,
+      arcIds: [0, 1],
+      pointFeatures: [],
     });
     cmd.do();
     expect(updateArcBounds).toHaveBeenCalledTimes(2);
@@ -85,7 +96,12 @@ describe('FeatureTranslateCommand', () => {
     const { arcs } = makeArcs([0, 1], [0, 1], [2]);
     const source = makeSource();
     const cmd = new FeatureTranslateCommand({
-      source, arcs, dx: 1, dy: 1, arcIds: [0], pointFeatures: [],
+      source,
+      arcs,
+      dx: 1,
+      dy: 1,
+      arcIds: [0],
+      pointFeatures: [],
     });
     cmd.do();
     expect(source.markDisplayArcsDirty).toHaveBeenCalledTimes(1);
@@ -101,8 +117,12 @@ describe('FeatureTranslateCommand', () => {
     const { arcs, xx, yy } = makeArcs(xxOrig, yyOrig, [2, 3]);
     const source = makeSource();
     const cmd = new FeatureTranslateCommand({
-      source, arcs, dx: -7, dy: 3.14,
-      arcIds: [0, 1], pointFeatures: [],
+      source,
+      arcs,
+      dx: -7,
+      dy: 3.14,
+      arcIds: [0, 1],
+      pointFeatures: [],
     });
     cmd.do();
     cmd.undo();
@@ -116,7 +136,10 @@ describe('FeatureTranslateCommand', () => {
     } as MapshaperLayer;
     const source = makeSource();
     const cmd = new FeatureTranslateCommand({
-      source, dx: 1, dy: 2, arcIds: [],
+      source,
+      dx: 1,
+      dy: 2,
+      arcIds: [],
       pointFeatures: [{ layer, featureId: 0 }],
     });
     cmd.do();
@@ -127,15 +150,28 @@ describe('FeatureTranslateCommand', () => {
 
   it('handles multipoint shapes (multiple coord pairs in one shape)', () => {
     const layer = {
-      shapes: [[[1, 2], [3, 4], [5, 6]]] as any[],
+      shapes: [
+        [
+          [1, 2],
+          [3, 4],
+          [5, 6],
+        ],
+      ] as any[],
     } as MapshaperLayer;
     const source = makeSource();
     const cmd = new FeatureTranslateCommand({
-      source, dx: 10, dy: 0, arcIds: [],
+      source,
+      dx: 10,
+      dy: 0,
+      arcIds: [],
       pointFeatures: [{ layer, featureId: 0 }],
     });
     cmd.do();
-    expect(layer.shapes![0]).toEqual([[11, 2], [13, 4], [15, 6]]);
+    expect(layer.shapes![0]).toEqual([
+      [11, 2],
+      [13, 4],
+      [15, 6],
+    ]);
   });
 
   it('handles mixed path + point in one command', () => {
@@ -143,7 +179,10 @@ describe('FeatureTranslateCommand', () => {
     const layer = { shapes: [[[100, 200]]] as any[] } as MapshaperLayer;
     const source = makeSource();
     const cmd = new FeatureTranslateCommand({
-      source, arcs, dx: 1, dy: 1,
+      source,
+      arcs,
+      dx: 1,
+      dy: 1,
       arcIds: [0],
       pointFeatures: [{ layer, featureId: 0 }],
     });
@@ -154,9 +193,21 @@ describe('FeatureTranslateCommand', () => {
 
   it('label reflects affected feature count', () => {
     const source = makeSource();
-    const c1 = new FeatureTranslateCommand({ source, dx: 1, dy: 0, arcIds: [3], pointFeatures: [] });
+    const c1 = new FeatureTranslateCommand({
+      source,
+      dx: 1,
+      dy: 0,
+      arcIds: [3],
+      pointFeatures: [],
+    });
     expect(c1.label).toBe('Translate 1 feature');
-    const c2 = new FeatureTranslateCommand({ source, dx: 1, dy: 0, arcIds: [3, 4], pointFeatures: [] });
+    const c2 = new FeatureTranslateCommand({
+      source,
+      dx: 1,
+      dy: 0,
+      arcIds: [3, 4],
+      pointFeatures: [],
+    });
     expect(c2.label).toBe('Translate 2 features');
   });
 
@@ -165,14 +216,24 @@ describe('FeatureTranslateCommand', () => {
       const { arcs, xx, yy } = makeArcs([0, 1], [0, 1], [2]);
       const source = makeSource();
       const a = new FeatureTranslateCommand({
-        source, arcs, dx: 2, dy: 3, arcIds: [0], pointFeatures: [],
+        source,
+        arcs,
+        dx: 2,
+        dy: 3,
+        arcIds: [0],
+        pointFeatures: [],
       });
       const b = new FeatureTranslateCommand({
-        source, arcs, dx: 5, dy: 7, arcIds: [0], pointFeatures: [],
+        source,
+        arcs,
+        dx: 5,
+        dy: 7,
+        arcIds: [0],
+        pointFeatures: [],
       });
       a.do();
       b.do();
-      expect(xx[0]).toBe(7);  // 0 + 2 + 5
+      expect(xx[0]).toBe(7); // 0 + 2 + 5
       expect(yy[0]).toBe(10); // 0 + 3 + 7
       expect(b.mergeable(a)).toBe(true);
       a.merge(b);
@@ -184,17 +245,37 @@ describe('FeatureTranslateCommand', () => {
 
     it('refuses to merge when arcIds differ', () => {
       const source = makeSource();
-      const a = new FeatureTranslateCommand({ source, dx: 1, dy: 0, arcIds: [0], pointFeatures: [] });
-      const b = new FeatureTranslateCommand({ source, dx: 1, dy: 0, arcIds: [1], pointFeatures: [] });
+      const a = new FeatureTranslateCommand({
+        source,
+        dx: 1,
+        dy: 0,
+        arcIds: [0],
+        pointFeatures: [],
+      });
+      const b = new FeatureTranslateCommand({
+        source,
+        dx: 1,
+        dy: 0,
+        arcIds: [1],
+        pointFeatures: [],
+      });
       expect(b.mergeable(a)).toBe(false);
     });
 
     it('refuses to merge across sources', () => {
       const a = new FeatureTranslateCommand({
-        source: makeSource(), dx: 1, dy: 0, arcIds: [0], pointFeatures: [],
+        source: makeSource(),
+        dx: 1,
+        dy: 0,
+        arcIds: [0],
+        pointFeatures: [],
       });
       const b = new FeatureTranslateCommand({
-        source: makeSource(), dx: 1, dy: 0, arcIds: [0], pointFeatures: [],
+        source: makeSource(),
+        dx: 1,
+        dy: 0,
+        arcIds: [0],
+        pointFeatures: [],
       });
       expect(b.mergeable(a)).toBe(false);
     });

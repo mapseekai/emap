@@ -79,8 +79,7 @@ export class DisplayArcs {
     // Decide whether the filtered copy is even relevant at this zoom.
     // When it isn't, postpone any rebuild — saves the O(N) work for
     // drags that stay zoomed in.
-    const wantFiltered = this._filteredArcs !== null
-      && unitsPerPixel > this._filteredSegLen * 1.5;
+    const wantFiltered = this._filteredArcs !== null && unitsPerPixel > this._filteredSegLen * 1.5;
 
     // Rebuild conditions:
     //   1. Arc count changed since last LOD build (e.g. shared-arc split).

@@ -36,10 +36,7 @@ export class AttributeOps {
    * Returns a `validation` error when every key already has the requested
    * value (no-op call); no command is pushed and no events fire.
    */
-  setFeatureProperties(
-    ref: FeatureRef,
-    props: Record<string, unknown>,
-  ): OpResult {
+  setFeatureProperties(ref: FeatureRef, props: Record<string, unknown>): OpResult {
     const layer = this._emap.layers.resolve(ref.source, ref.layer);
     if (!layer) return Err.notFound('layer', ref.layer);
     const records = layer.data?.getRecords?.();
@@ -84,9 +81,12 @@ export class AttributeOps {
    * `null`. Returns a `not-found` error when the source / target / data table
    * cannot be resolved.
    */
-  addField(
-    opts: { source: string; target: string; field: string; defaultValue?: unknown },
-  ): OpResult {
+  addField(opts: {
+    source: string;
+    target: string;
+    field: string;
+    defaultValue?: unknown;
+  }): OpResult {
     const layer = this._emap.layers.resolve(opts.source, opts.target);
     if (!layer) return Err.notFound('layer', opts.target);
     if (!layer.data) return Err.validation('target', 'layer has no data table');
@@ -106,9 +106,7 @@ export class AttributeOps {
    * Drop a column from a layer's data table. Per-record values are
    * snapshotted for undo so removing the field is fully reversible.
    */
-  removeField(
-    opts: { source: string; target: string; field: string },
-  ): OpResult {
+  removeField(opts: { source: string; target: string; field: string }): OpResult {
     const layer = this._emap.layers.resolve(opts.source, opts.target);
     if (!layer) return Err.notFound('layer', opts.target);
     if (!layer.data) return Err.validation('target', 'layer has no data table');
@@ -126,9 +124,7 @@ export class AttributeOps {
    * overwrites are impossible. Use `removeField(to)` first if that is the
    * intent.
    */
-  renameField(
-    opts: { source: string; target: string; from: string; to: string },
-  ): OpResult {
+  renameField(opts: { source: string; target: string; from: string; to: string }): OpResult {
     const layer = this._emap.layers.resolve(opts.source, opts.target);
     if (!layer) return Err.notFound('layer', opts.target);
     if (!layer.data) return Err.validation('target', 'layer has no data table');

@@ -20,11 +20,7 @@
 // resolves a singleton via {@link getDefaultMapshaperAdapter} when no explicit
 // adapter is supplied.
 
-import type {
-  ArcCollection,
-  MapshaperDataset,
-  MapshaperLayer,
-} from '../types/mapshaper-types';
+import type { ArcCollection, MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 
 // -- Pack / snapshot serialisation ------------------------------------------
 // Mapshaper's pack format has no published TypeScript shape. Treat it as an
@@ -98,11 +94,7 @@ export interface MapshaperAdapter {
    * mutates the per-arc `xx`/`yy` slices in place and updates affected arc
    * bounds. Used by VertexMoveCommand for both do() and undo().
    */
-  snapVertices(
-    vertexIds: number[],
-    to: [number, number],
-    arcs: ArcCollection,
-  ): void;
+  snapVertices(vertexIds: number[], to: [number, number], arcs: ArcCollection): void;
 
   /**
    * Insert `point` immediately before the vertex at index `vertexIndex`,
@@ -114,11 +106,7 @@ export interface MapshaperAdapter {
    * from the global vertex index. The tuple-based naming in the plan was
    * inaccurate; this signature matches actual mapshaper.
    */
-  insertVertex(
-    arcs: ArcCollection,
-    vertexIndex: number,
-    point: [number, number],
-  ): void;
+  insertVertex(arcs: ArcCollection, vertexIndex: number, point: [number, number]): void;
 
   /** Remove the vertex at the given global vertex index. */
   deleteVertex(arcs: ArcCollection, vertexIndex: number): void;
@@ -146,11 +134,7 @@ export interface MapshaperAdapter {
    * vertex closest to `point` within the given `shape`. Returns an empty
    * array when no vertex is close enough.
    */
-  findNearestVertices(
-    point: [number, number],
-    shape: number[][],
-    arcs: ArcCollection,
-  ): number[];
+  findNearestVertices(point: [number, number], shape: number[][], arcs: ArcCollection): number[];
 
   /**
    * Resolve a global vertex index back to its parent arc id, given the
@@ -185,9 +169,12 @@ export interface MapshaperAdapter {
    * snap-tolerance argument and is forwarded as-is.
    */
   findClosestPointOnSeg(
-    px: number, py: number,
-    ax: number, ay: number,
-    bx: number, by: number,
+    px: number,
+    py: number,
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
     snapArg: number,
   ): [number, number];
 
@@ -251,12 +238,7 @@ export interface MapshaperAdapter {
     arcs: ArcCollection,
   ): PointToShapeInfo;
 
-  testPointInPolygon(
-    x: number,
-    y: number,
-    shape: number[][],
-    arcs: ArcCollection,
-  ): boolean;
+  testPointInPolygon(x: number, y: number, shape: number[][], arcs: ArcCollection): boolean;
 
   /**
    * Returns `true` iff the layer carries renderable shape data (a
@@ -309,10 +291,7 @@ export interface MapshaperAdapter {
   ): Promise<ExportedFile[]>;
 
   /** Plain-text export (GeoJSON / TopoJSON). */
-  exportFileContent(
-    dataset: MapshaperDataset,
-    opts: { format: string },
-  ): ExportedFile[];
+  exportFileContent(dataset: MapshaperDataset, opts: { format: string }): ExportedFile[];
 
   // -- Dataset cloning (used by dataset-replace ops) ---------------------
 
@@ -371,19 +350,11 @@ export interface MapshaperAdapter {
 import mapshaper from 'mapshaper';
 
 export class DefaultMapshaperAdapter implements MapshaperAdapter {
-  snapVertices(
-    vertexIds: number[],
-    to: [number, number],
-    arcs: ArcCollection,
-  ): void {
+  snapVertices(vertexIds: number[], to: [number, number], arcs: ArcCollection): void {
     mapshaper.internal.snapVerticesToPoint(vertexIds, to, arcs);
   }
 
-  insertVertex(
-    arcs: ArcCollection,
-    vertexIndex: number,
-    point: [number, number],
-  ): void {
+  insertVertex(arcs: ArcCollection, vertexIndex: number, point: [number, number]): void {
     mapshaper.internal.insertVertex(arcs, vertexIndex, point);
   }
 
@@ -403,11 +374,7 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     mapshaper.internal.deleteLastArc(arcs);
   }
 
-  findNearestVertices(
-    point: [number, number],
-    shape: number[][],
-    arcs: ArcCollection,
-  ): number[] {
+  findNearestVertices(point: [number, number], shape: number[][], arcs: ArcCollection): number[] {
     return mapshaper.internal.findNearestVertices(point, shape, arcs);
   }
 
@@ -428,9 +395,12 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
   }
 
   findClosestPointOnSeg(
-    px: number, py: number,
-    ax: number, ay: number,
-    bx: number, by: number,
+    px: number,
+    py: number,
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
     snapArg: number,
   ): [number, number] {
     return mapshaper.internal.findClosestPointOnSeg(px, py, ax, ay, bx, by, snapArg);
@@ -479,12 +449,7 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     return mapshaper.geom.getPointToShapeInfo(x, y, shape, arcs);
   }
 
-  testPointInPolygon(
-    x: number,
-    y: number,
-    shape: number[][],
-    arcs: ArcCollection,
-  ): boolean {
+  testPointInPolygon(x: number, y: number, shape: number[][], arcs: ArcCollection): boolean {
     return mapshaper.geom.testPointInPolygon(x, y, shape, arcs);
   }
 
@@ -516,7 +481,9 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     // mapshaper's `.d.ts` insists `datasets` is required on the input; our
     // public `PackedSession` keeps it optional so callers can spread `emap`
     // metadata onto a fresh object. Cast on the way down.
-    return mapshaper.internal.restoreSessionData(packed as { [k: string]: unknown; datasets: unknown[] });
+    return mapshaper.internal.restoreSessionData(
+      packed as { [k: string]: unknown; datasets: unknown[] },
+    );
   }
 
   pack(obj: PackedSession): Uint8Array {
@@ -537,10 +504,7 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     return mapshaper.internal.exportPackedDatasets(datasets, opts ?? {});
   }
 
-  exportFileContent(
-    dataset: MapshaperDataset,
-    opts: { format: string },
-  ): ExportedFile[] {
+  exportFileContent(dataset: MapshaperDataset, opts: { format: string }): ExportedFile[] {
     return mapshaper.internal.exportFileContent(dataset, opts);
   }
 
@@ -548,10 +512,7 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     return mapshaper.internal.copyDataset(dataset);
   }
 
-  runImport(
-    cmd: string,
-    inputFiles: RunnerInputFiles,
-  ): Promise<MapshaperDataset> {
+  runImport(cmd: string, inputFiles: RunnerInputFiles): Promise<MapshaperDataset> {
     const commands = mapshaper.internal.parseCommands(cmd);
     if (commands.length > 0 && commands[0].name === 'i') {
       commands[0].options.input = inputFiles;

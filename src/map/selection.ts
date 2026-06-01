@@ -35,7 +35,8 @@ export type SelectionSnapshot = ReadonlySet<string>;
  * ("what to draw extra strokes on right now").
  */
 export class Selection {
-  private _byKey: globalThis.Map<string, globalThis.Map<string, Set<number>>> = new globalThis.Map();
+  private _byKey: globalThis.Map<string, globalThis.Map<string, Set<number>>> =
+    new globalThis.Map();
   private _size = 0;
 
   /** Number of distinct selected features across all source/layer pairs. */

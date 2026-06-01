@@ -3,13 +3,25 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { Emap } from '../map/map';
 
 beforeAll(() => {
-  HTMLCanvasElement.prototype.getContext = () => ({
-    scale: () => {}, clearRect: () => {}, fillRect: () => {}, strokeRect: () => {},
-    beginPath: () => {}, moveTo: () => {}, lineTo: () => {}, stroke: () => {},
-    fill: () => {}, arc: () => {}, save: () => {}, restore: () => {},
-    translate: () => {}, setTransform: () => {}, drawImage: () => {},
-    measureText: () => ({ width: 0 }),
-  } as any);
+  HTMLCanvasElement.prototype.getContext = () =>
+    ({
+      scale: () => {},
+      clearRect: () => {},
+      fillRect: () => {},
+      strokeRect: () => {},
+      beginPath: () => {},
+      moveTo: () => {},
+      lineTo: () => {},
+      stroke: () => {},
+      fill: () => {},
+      arc: () => {},
+      save: () => {},
+      restore: () => {},
+      translate: () => {},
+      setTransform: () => {},
+      drawImage: () => {},
+      measureText: () => ({ width: 0 }),
+    }) as any;
 });
 
 function container(): HTMLElement {
@@ -34,7 +46,9 @@ describe('EmapEventMap runtime wiring (DX P10)', () => {
   it('off() unsubscribes a keyed listener', () => {
     const map = new Emap({ container: container() });
     let n = 0;
-    const cb = () => { n++; };
+    const cb = () => {
+      n++;
+    };
     map.on('moveend', cb);
     map.jumpTo({ center: [1, 1], scale: 2 });
     map.off('moveend', cb);
@@ -45,7 +59,9 @@ describe('EmapEventMap runtime wiring (DX P10)', () => {
   it('escape-hatch custom event still fires through the generic path', () => {
     const map = new Emap({ container: container() });
     let got = '';
-    map.on('myCustomThing', (e: { type: string; payload?: string }) => { got = e.payload ?? ''; });
+    map.on('myCustomThing', (e: { type: string; payload?: string }) => {
+      got = e.payload ?? '';
+    });
     map.fire('myCustomThing', { payload: 'hi' });
     expect(got).toBe('hi');
   });

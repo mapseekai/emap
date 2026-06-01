@@ -14,7 +14,9 @@ function makePainter(strokeCalls: string[]) {
     beginPath() {},
     moveTo() {},
     lineTo() {},
-    stroke() { strokeCalls.push('stroke'); },
+    stroke() {
+      strokeCalls.push('stroke');
+    },
     clearRect() {},
   };
   const canvas = { getContext: () => ctx, width: 100, height: 100, style: {} };

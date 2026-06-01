@@ -1,9 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  FAST_SETTLE_FALLBACK_MS,
-  RenderScheduler,
-  type RenderSnapshot,
-} from './render-scheduler';
+import { FAST_SETTLE_FALLBACK_MS, RenderScheduler, type RenderSnapshot } from './render-scheduler';
 
 function snapshot(overrides: Partial<RenderSnapshot> = {}): RenderSnapshot {
   return {

@@ -42,14 +42,22 @@ describe('Friction #9 reopened — setData/addSource ordering renders correctly'
   const origRun = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
 
   beforeEach(() => {
-    Reflect.set(mapshaper.internal as object, 'parseCommands', vi.fn(() => [{ name: 'i', options: {} }]));
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any[], _j: any, cb: any) => {
-      cb(null, {
-        catalog: {
-          getDefaultTargets: () => [{ dataset: { layers: [{ name: 'L' }], info: {} } }],
-        },
-      });
-    }));
+    Reflect.set(
+      mapshaper.internal as object,
+      'parseCommands',
+      vi.fn(() => [{ name: 'i', options: {} }]),
+    );
+    Reflect.set(
+      mapshaper.internal as object,
+      'runParsedCommands',
+      vi.fn((_c: any[], _j: any, cb: any) => {
+        cb(null, {
+          catalog: {
+            getDefaultTargets: () => [{ dataset: { layers: [{ name: 'L' }], info: {} } }],
+          },
+        });
+      }),
+    );
   });
 
   afterEach(() => {

@@ -11,14 +11,25 @@ function makeCtx() {
   const calls: Array<[string, any]> = [];
   let _alpha = 1;
   const ctx: any = {
-    get globalAlpha() { return _alpha; },
-    set globalAlpha(v: number) { _alpha = v; calls.push(['globalAlpha=', v]); },
-    set fillStyle(v: string) { calls.push(['fillStyle=', v]); },
-    beginPath() { calls.push(['beginPath', null]); },
+    get globalAlpha() {
+      return _alpha;
+    },
+    set globalAlpha(v: number) {
+      _alpha = v;
+      calls.push(['globalAlpha=', v]);
+    },
+    set fillStyle(v: string) {
+      calls.push(['fillStyle=', v]);
+    },
+    beginPath() {
+      calls.push(['beginPath', null]);
+    },
     moveTo() {},
     lineTo() {},
     closePath() {},
-    fill(rule?: string) { calls.push(['fill', rule]); },
+    fill(rule?: string) {
+      calls.push(['fill', rule]);
+    },
     clearRect() {},
   };
   return { ctx, calls };
@@ -44,8 +55,12 @@ function makeArcs() {
       const ys = [0, 0, 1, 1, 0];
       let i = 0;
       return {
-        get x() { return xs[i]; },
-        get y() { return ys[i]; },
+        get x() {
+          return xs[i];
+        },
+        get y() {
+          return ys[i];
+        },
         hasNext() {
           if (i >= xs.length) return false;
           i++;
@@ -74,7 +89,7 @@ describe('CanvasPainter.drawPolygonFill — fill-opacity', () => {
     const painter = makePainter(ctx);
     const arcs = makeArcs();
     ctx.globalAlpha = 0.8; // pretend something upstream already set this
-    calls.length = 0;       // clear setup noise
+    calls.length = 0; // clear setup noise
     painter.drawPolygonFill(shapes as any, arcs as any, '#1e88e5', undefined, 0.5);
     const alphaSets = calls.filter(([k]) => k === 'globalAlpha=').map(([, v]) => v);
     // First write multiplies onto prevAlpha (0.8 * 0.5 = 0.4); restore returns to 0.8.

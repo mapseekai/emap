@@ -1,5 +1,9 @@
 import type { EditCommand } from '../edit-command';
-import { bumpEditVersion, type ArcCollection, type MapshaperLayer } from '../../types/mapshaper-types';
+import {
+  bumpEditVersion,
+  type ArcCollection,
+  type MapshaperLayer,
+} from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
 import { normalizePointShape } from '../../source/layer-utils';
 

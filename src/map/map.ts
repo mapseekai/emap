@@ -2,7 +2,13 @@ import { EventDispatcher } from '../core/events';
 import { Bounds } from '../geo/bounds';
 import { AffineTransform } from '../geo/transform';
 import { Viewport } from '../geo/viewport';
-import { Camera, type CameraOptions, type AnimationOptions, type FlyToOptions, type FitBoundsOptions } from '../geo/camera';
+import {
+  Camera,
+  type CameraOptions,
+  type AnimationOptions,
+  type FlyToOptions,
+  type FitBoundsOptions,
+} from '../geo/camera';
 import { Projection } from '../geo/projection';
 import { EpsgProjectionError, normalizeProjectCrs, resolveProjectCrs } from '../geo/crs-resolver';
 import { Painter } from '../renderer/painter';
@@ -25,11 +31,18 @@ import { BoxSelectHandler, type BoxSelectHandlerOptions } from '../core/handlers
 import { LassoSelectHandler, type LassoSelectHandlerOptions } from '../core/handlers/lasso-select';
 import { VertexEditHandler, type VertexEditOptions } from '../core/handlers/vertex-edit';
 import { DrawFeatureHandler, type DrawFeatureOptions } from '../core/handlers/draw-feature';
-import { TransformFeatureHandler, type TransformFeatureOptions } from '../core/handlers/transform-feature';
+import {
+  TransformFeatureHandler,
+  type TransformFeatureOptions,
+} from '../core/handlers/transform-feature';
 import type { Handler } from '../core/handler';
 import { HandlerManager } from '../core/handler-manager';
 import { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
-import { FeatureEventDispatcher, type FeatureEvent, type FeatureEventFilter } from '../core/feature-event-dispatcher';
+import {
+  FeatureEventDispatcher,
+  type FeatureEvent,
+  type FeatureEventFilter,
+} from '../core/feature-event-dispatcher';
 import { PointerEventDispatcher, type PointerMoveEvent } from '../core/pointer-event-dispatcher';
 import { type EventListener } from '../core/events';
 import type { EmapEventMap } from '../core/event-map';
@@ -42,7 +55,10 @@ import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
 import type { EditCommand } from '../edit/edit-command';
 import { CompositeCommand } from '../edit/commands/composite';
 import { Transaction, type TransactionInternal } from '../edit/transaction';
-import { BulkFeatureDeleteCommand, type BulkFeatureDeleteCommandOptions } from '../edit/commands/feature-delete';
+import {
+  BulkFeatureDeleteCommand,
+  type BulkFeatureDeleteCommandOptions,
+} from '../edit/commands/feature-delete';
 // `MapshaperOps`, `EditSessions`, `AttributeOps` are composed onto `Emap`
 // via the `ops` / `editSession` / `attributes` getters below.
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
@@ -84,8 +100,7 @@ export class Emap extends EventDispatcher {
   private _camera!: Camera;
   // Accessed by composed managers via `EmapHostInternal`. Treat as
   // read-only outside this class.
-  _sources: globalThis.Map<string, TopologySource> =
-    new globalThis.Map();
+  _sources: globalThis.Map<string, TopologySource> = new globalThis.Map();
   /**
    * Single resolution surface for `(sourceId, layerId) → MapshaperLayer`.
    * Exposed to managers via `EmapHostInternal.layers`. Reads `_sources`
@@ -98,8 +113,7 @@ export class Emap extends EventDispatcher {
   get layers(): LayerRegistry {
     return this._layersCache ?? (this._layersCache = new LayerRegistry(this._sources));
   }
-  private _sourceListeners: globalThis.Map<string, (e: any) => void> =
-    new globalThis.Map();
+  private _sourceListeners: globalThis.Map<string, (e: any) => void> = new globalThis.Map();
   private _layers: LayerSpecification[] = [];
   private _effectiveLayersCache: LayerSpecification[] = [];
   private _defaultLayersDirty = true;
@@ -128,8 +142,7 @@ export class Emap extends EventDispatcher {
   private static readonly _WHEEL_SETTLE_MS = 250;
 
   // UI controls
-  private _controlContainers: globalThis.Map<ControlPosition, HTMLElement> =
-    new globalThis.Map();
+  private _controlContainers: globalThis.Map<ControlPosition, HTMLElement> = new globalThis.Map();
   // Track every `addControl()` instance so `remove()` can call
   // `onRemove()` on each. We intentionally don't drop entries on
   // `removeControl()` — that would require both an Array and a Set —
@@ -208,7 +221,8 @@ export class Emap extends EventDispatcher {
       // selected feature; for every other point the arbiter falls through to
       // `dragPan` and pan should still work.
       const blocksPan = change.current.mode === 'vertex' || change.current.mode === 'draw';
-      if (blocksPan) this._dragPan?.disable(); else this._dragPan?.enable();
+      if (blocksPan) this._dragPan?.disable();
+      else this._dragPan?.enable();
       this.fire('editmodechange', { mode: change.current.mode });
     }
     this._scheduleRender();
@@ -324,9 +338,12 @@ export class Emap extends EventDispatcher {
     this.features = new FeatureAccessor(this);
     const _self = this;
     this._featureEvents = new FeatureEventDispatcher({
-      queryFeatures: (g, o) => _self.queryFeatures(g, o) as Array<{ source: string; layer: string; id: number }>,
+      queryFeatures: (g, o) =>
+        _self.queryFeatures(g, o) as Array<{ source: string; layer: string; id: number }>,
       unproject: (x, y) => _self.unproject(x, y),
-      get features() { return _self.features; },
+      get features() {
+        return _self.features;
+      },
     });
     this._pointerEvents = new PointerEventDispatcher({
       unproject: (x, y) => _self.unproject(x, y),
@@ -393,7 +410,9 @@ export class Emap extends EventDispatcher {
 
   // Called by `MapshaperOps` via `this._emap._allowExpressionEvaluation`.
   _allowExpressionEvaluation(values: Array<string | undefined>, operation: string): boolean {
-    const hasExpression = values.some((value) => typeof value === 'string' && value.trim().length > 0);
+    const hasExpression = values.some(
+      (value) => typeof value === 'string' && value.trim().length > 0,
+    );
     // No expression payload → always allowed regardless of policy.
     // Policy is `'trusted'` → opt-in, allowed. Anything else → block.
     if (!hasExpression || this.getExpressionPolicy() === 'trusted') return true;
@@ -402,7 +421,6 @@ export class Emap extends EventDispatcher {
     });
     return false;
   }
-
 
   // Overload 1: typed pointer-move form. The `'mousemove'` literal MUST
   // precede the generic `string` overload — `EventListener<T>` defaults T
@@ -560,17 +578,20 @@ export class Emap extends EventDispatcher {
       this._endNavGesture();
     });
 
-    this._scrollZoom.on('mousewheel', (e: { direction: number; multiplier: number; x: number; y: number }) => {
-      this._ensureNavSnapshot();
-      this._viewport.applyWheelZoom(e.direction, e.multiplier, e.x, e.y);
-      this._scheduleRender('nav', this._computeNavDelta());
-      this.fire('move');
-      if (this._wheelSettleTimer !== null) clearTimeout(this._wheelSettleTimer);
-      this._wheelSettleTimer = setTimeout(() => {
-        this._wheelSettleTimer = null;
-        this._endNavGesture();
-      }, Emap._WHEEL_SETTLE_MS);
-    });
+    this._scrollZoom.on(
+      'mousewheel',
+      (e: { direction: number; multiplier: number; x: number; y: number }) => {
+        this._ensureNavSnapshot();
+        this._viewport.applyWheelZoom(e.direction, e.multiplier, e.x, e.y);
+        this._scheduleRender('nav', this._computeNavDelta());
+        this.fire('move');
+        if (this._wheelSettleTimer !== null) clearTimeout(this._wheelSettleTimer);
+        this._wheelSettleTimer = setTimeout(() => {
+          this._wheelSettleTimer = null;
+          this._endNavGesture();
+        }, Emap._WHEEL_SETTLE_MS);
+      },
+    );
   }
 
   private _ensureNavSnapshot(): void {
@@ -612,12 +633,7 @@ export class Emap extends EventDispatcher {
     el.style.overflow = 'hidden';
     el.className = 'emap-canvas-container';
 
-    const corners: ControlPosition[] = [
-      'top-left',
-      'top-right',
-      'bottom-left',
-      'bottom-right',
-    ];
+    const corners: ControlPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
     for (const pos of corners) {
       const container = document.createElement('div');
       container.className = `emap-ctrl-${pos}`;
@@ -664,7 +680,6 @@ export class Emap extends EventDispatcher {
     this._painter.resize(width, height);
   }
 
-
   public addSource(id: string, source: TopologySource): void {
     this._sources.set(id, source);
 
@@ -703,7 +718,7 @@ export class Emap extends EventDispatcher {
       this._sources.delete(id);
       this._defaultLayersDirty = true;
       this._layerArcFlagsCache.delete(id);
-      
+
       // Remove all cached arc flags for this source
       for (const key of this._layerArcFlagsCache.keys()) {
         if (key.startsWith(`${id}:`)) {
@@ -804,7 +819,7 @@ export class Emap extends EventDispatcher {
     if (!_looksLikeMsxBytes(bytes)) {
       throw new Error(
         'loadSnapshot: input does not look like a mapshaper .msx snapshot ' +
-        '(expected msgpack map marker as the first byte)',
+          '(expected msgpack map marker as the first byte)',
       );
     }
 
@@ -813,7 +828,8 @@ export class Emap extends EventDispatcher {
     const meta = (obj as Record<string, unknown>).emap as
       | { sources?: Array<{ id?: string }> }
       | undefined;
-    const storedIds = meta?.sources?.map((s) => s?.id).filter((s): s is string => typeof s === 'string') ?? [];
+    const storedIds =
+      meta?.sources?.map((s) => s?.id).filter((s): s is string => typeof s === 'string') ?? [];
 
     const resolvedIds: string[] = datasets.map((_, i) => {
       const stored = storedIds[i];
@@ -825,7 +841,9 @@ export class Emap extends EventDispatcher {
     if (!replace) {
       for (const id of resolvedIds) {
         if (this._sources.has(id)) {
-          throw new Error(`loadSnapshot: source "${id}" already exists (pass { replace: true } to overwrite)`);
+          throw new Error(
+            `loadSnapshot: source "${id}" already exists (pass { replace: true } to overwrite)`,
+          );
         }
       }
     }
@@ -965,7 +983,7 @@ export class Emap extends EventDispatcher {
         }
       }
     }
-    
+
     this._effectiveLayersCache = defaults;
     this._defaultLayersDirty = false;
     return defaults;
@@ -1092,21 +1110,37 @@ export class Emap extends EventDispatcher {
   }
 
   /** The drag-to-pan interaction handler. */
-  get dragPan(): Handler<DragPanOptions> { return this._dragPan; }
+  get dragPan(): Handler<DragPanOptions> {
+    return this._dragPan;
+  }
   /** The scroll-wheel zoom interaction handler. */
-  get scrollZoom(): Handler<ScrollZoomOptions> { return this._scrollZoom; }
+  get scrollZoom(): Handler<ScrollZoomOptions> {
+    return this._scrollZoom;
+  }
   /** The click-to-select interaction handler (disabled by default). */
-  get clickSelect(): Handler<SelectHandlerOptions> { return this._clickSelect; }
+  get clickSelect(): Handler<SelectHandlerOptions> {
+    return this._clickSelect;
+  }
   /** The box-select interaction handler (disabled by default). */
-  get boxSelect(): Handler<BoxSelectHandlerOptions> { return this._boxSelect; }
+  get boxSelect(): Handler<BoxSelectHandlerOptions> {
+    return this._boxSelect;
+  }
   /** The lasso-select interaction handler (disabled by default). */
-  get lassoSelect(): Handler<LassoSelectHandlerOptions> { return this._lassoSelect; }
+  get lassoSelect(): Handler<LassoSelectHandlerOptions> {
+    return this._lassoSelect;
+  }
   /** The vertex-edit interaction handler (disabled by default). */
-  get vertexEdit(): Handler<VertexEditOptions> { return this._vertexEdit; }
+  get vertexEdit(): Handler<VertexEditOptions> {
+    return this._vertexEdit;
+  }
   /** The draw-feature interaction handler (disabled by default). */
-  get drawFeature(): Handler<DrawFeatureOptions> { return this._drawFeature; }
+  get drawFeature(): Handler<DrawFeatureOptions> {
+    return this._drawFeature;
+  }
   /** The transform-feature interaction handler (disabled by default). */
-  get transformFeature(): Handler<TransformFeatureOptions> { return this._transformFeature; }
+  get transformFeature(): Handler<TransformFeatureOptions> {
+    return this._transformFeature;
+  }
 
   public getTransform(): AffineTransform {
     return this._viewport.transform;
@@ -1125,10 +1159,7 @@ export class Emap extends EventDispatcher {
     this._viewport.reset();
   }
 
-  public addControl(
-    control: Control,
-    position: ControlPosition = 'top-left',
-  ): void {
+  public addControl(control: Control, position: ControlPosition = 'top-left'): void {
     const el = control.onAdd(this);
     el.style.pointerEvents = 'auto';
     this._controlContainers.get(position)?.appendChild(el);
@@ -1151,25 +1182,55 @@ export class Emap extends EventDispatcher {
 
   // ── Camera (DX P9) ───────────────────────────────────────────────
   /** Instant camera move. Fires movestart/move/moveend (+zoom*). */
-  public jumpTo(o: CameraOptions): this { this._camera.jumpTo(o); return this; }
+  public jumpTo(o: CameraOptions): this {
+    this._camera.jumpTo(o);
+    return this;
+  }
   /** Set centre (projected/data coords) instantly. */
-  public setCenter(center: [number, number]): this { this._camera.setCenter(center); return this; }
+  public setCenter(center: [number, number]): this {
+    this._camera.setCenter(center);
+    return this;
+  }
   /** Set zoom (WebMercator) instantly. */
-  public setZoom(zoom: number): this { this._camera.setZoom(zoom); return this; }
+  public setZoom(zoom: number): this {
+    this._camera.setZoom(zoom);
+    return this;
+  }
   /** Animated move (centre+zoom/scale). */
-  public easeTo(o: CameraOptions & AnimationOptions): this { this._camera.easeTo(o); return this; }
+  public easeTo(o: CameraOptions & AnimationOptions): this {
+    this._camera.easeTo(o);
+    return this;
+  }
   /** Animated pan to a centre. */
-  public panTo(center: [number, number], o: AnimationOptions = {}): this { this._camera.panTo(center, o); return this; }
+  public panTo(center: [number, number], o: AnimationOptions = {}): this {
+    this._camera.panTo(center, o);
+    return this;
+  }
   /** Animated pan by a pixel offset. */
-  public panBy(offset: [number, number], o: AnimationOptions = {}): this { this._camera.panBy(offset, o); return this; }
+  public panBy(offset: [number, number], o: AnimationOptions = {}): this {
+    this._camera.panBy(offset, o);
+    return this;
+  }
   /** Animated zoom to a level. */
-  public zoomTo(zoom: number, o: AnimationOptions = {}): this { this._camera.zoomTo(zoom, o); return this; }
+  public zoomTo(zoom: number, o: AnimationOptions = {}): this {
+    this._camera.zoomTo(zoom, o);
+    return this;
+  }
   /** van-Wijk parabolic flight. */
-  public flyTo(o: FlyToOptions): this { this._camera.flyTo(o); return this; }
+  public flyTo(o: FlyToOptions): this {
+    this._camera.flyTo(o);
+    return this;
+  }
   /** Fit a Bounds into the viewport with optional padding. */
-  public fitBounds(b: import('../geo/bounds').Bounds, o: FitBoundsOptions = {}): this { this._camera.fitBounds(b, o); return this; }
+  public fitBounds(b: import('../geo/bounds').Bounds, o: FitBoundsOptions = {}): this {
+    this._camera.fitBounds(b, o);
+    return this;
+  }
   /** Cancel any running camera animation (no-op when idle). */
-  public stop(): this { this._camera.stop(); return this; }
+  public stop(): this {
+    this._camera.stop();
+    return this;
+  }
 
   _scheduleRender(action: RenderAction = 'redraw', navDelta?: AffineDelta): void {
     if (this._removed) return;
@@ -1219,11 +1280,7 @@ export class Emap extends EventDispatcher {
 
     this._renderLayers(pixelSize, lineScale);
     this._renderHighlight(transform, lineScale);
-    this._editOverlay.render(
-      this._editState.mode,
-      this._editState.vertex,
-      this._editState.draw,
-    );
+    this._editOverlay.render(this._editState.mode, this._editState.vertex, this._editState.draw);
   }
 
   private _captureRenderSnapshot(): RenderSnapshot {
@@ -1255,12 +1312,13 @@ export class Emap extends EventDispatcher {
       if (!source) continue;
 
       const displayArcs = source.getDisplayArcs();
-      const arcs = displayArcs
-        ? displayArcs.getScaledArcs(pixelSize)
-        : source.getArcs();
+      const arcs = displayArcs ? displayArcs.getScaledArcs(pixelSize) : source.getArcs();
 
-      if (arcs && arcs.setRetainedInterval &&
-        (typeof arcs.isFlat !== 'function' || !arcs.isFlat())) {
+      if (
+        arcs &&
+        arcs.setRetainedInterval &&
+        (typeof arcs.isFlat !== 'function' || !arcs.isFlat())
+      ) {
         // User-driven `-simplify` writes a sticky floor on the source.
         // Per-frame zoom-LOD raises that floor on zoom-out (smaller scale,
         // bigger pixel) but never below the user's threshold — otherwise
@@ -1314,13 +1372,7 @@ export class Emap extends EventDispatcher {
     const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
     const fillOpacity = fillPaint?.['fill-opacity'];
     const viewportFilter = this._viewport.getArcFilter(arcs);
-    this._painter.drawPolygonFill(
-      ml.shapes!,
-      arcs,
-      fillColor,
-      viewportFilter,
-      fillOpacity,
-    );
+    this._painter.drawPolygonFill(ml.shapes!, arcs, fillColor, viewportFilter, fillOpacity);
     // Outline: stroke each topology arc exactly once via the same flag cache
     // the line layer uses. drawPaths(shapes,...) would re-walk every shape
     // and double-stroke shared boundaries — on big polygon datasets that's
@@ -1452,10 +1504,7 @@ export class Emap extends EventDispatcher {
    * Fires a `selectionchange` event with `{ selected, added, removed }` only
    * when the set actually changes.
    */
-  public select(
-    features: ReadonlyArray<FeatureRef>,
-    options?: { mode?: SelectMode },
-  ): void {
+  public select(features: ReadonlyArray<FeatureRef>, options?: { mode?: SelectMode }): void {
     const mode = options?.mode ?? 'replace';
     const diff = this._selection.apply(features, mode);
     this._fireSelectionChange(diff);
@@ -1789,7 +1838,6 @@ export class Emap extends EventDispatcher {
     return this.layers.resolve(sourceId, layerId);
   }
 
-
   /**
    * Tear the map down: cancel pending renders, detach every `data` listener
    * we attached to sources, release each registered control, kill the worker
@@ -1889,8 +1937,8 @@ function _looksLikeMsxBytes(bytes: Uint8Array): boolean {
   if (!bytes || bytes.length === 0) return false;
   const b = bytes[0];
   return (
-    (b >= 0x80 && b <= 0x8f) // fixmap
-    || b === 0xde // map16
-    || b === 0xdf // map32
+    (b >= 0x80 && b <= 0x8f) || // fixmap
+    b === 0xde || // map16
+    b === 0xdf // map32
   );
 }

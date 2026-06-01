@@ -5,7 +5,12 @@ import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler'
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface ScrollZoomOptions {}
 
-interface WheelPayload { direction: number; multiplier: number; x: number; y: number; }
+interface WheelPayload {
+  direction: number;
+  multiplier: number;
+  x: number;
+  y: number;
+}
 
 /**
  * Named `scrollZoom` handler. Phase 1: adapts the existing MouseWheel DOM
@@ -29,12 +34,24 @@ export class ScrollZoomHandler extends EventDispatcher implements Handler<Scroll
     });
   }
 
-  enable(): void { this._enabled = true; }
-  disable(): void { this._enabled = false; }
-  isEnabled(): boolean { return this._enabled; }
+  enable(): void {
+    this._enabled = true;
+  }
+  disable(): void {
+    this._enabled = false;
+  }
+  isEnabled(): boolean {
+    return this._enabled;
+  }
   setOptions(_opts: Partial<ScrollZoomOptions>): void {}
-  getOptions(): Readonly<ScrollZoomOptions> { return {}; }
-  handlePointer(_ev: NormalizedPointerEvent): HandlerResult { return 'passthrough'; }
+  getOptions(): Readonly<ScrollZoomOptions> {
+    return {};
+  }
+  handlePointer(_ev: NormalizedPointerEvent): HandlerResult {
+    return 'passthrough';
+  }
 
-  destroy(): void { this._wheel.destroy(); }
+  destroy(): void {
+    this._wheel.destroy();
+  }
 }

@@ -15,21 +15,14 @@ import {
   invertMatrix,
   IDENTITY_MATRIX,
 } from '../edit/commands/feature-affine';
-import {
-  SplitSharedArcsCommand,
-  planSharedArcSplit,
-} from '../edit/commands/split-shared-arcs';
+import { SplitSharedArcsCommand, planSharedArcSplit } from '../edit/commands/split-shared-arcs';
 import type { EditCommand } from '../edit/edit-command';
 import type { TopologySource } from '../source/source';
 import type { MapshaperLayer } from '../types/mapshaper-types';
 import { normalizePointShape } from '../source/layer-utils';
 import type { EmapHostInternal } from './emap-host';
 import { Err, OK, type OpResult } from './op-result';
-import type {
-  DragSessionOptions,
-  FeatureTranslateSession,
-  FeatureAffineSession,
-} from './types';
+import type { DragSessionOptions, FeatureTranslateSession, FeatureAffineSession } from './types';
 
 /**
  * Selection-editing manager. Owned by Emap and exposed as `emap.editSession`.
@@ -82,7 +75,8 @@ export class EditSessions {
       }
     }
 
-    if (bySource.size === 0) return Err.validation('selection', 'no resolvable layers in selection');
+    if (bySource.size === 0)
+      return Err.validation('selection', 'no resolvable layers in selection');
 
     const children: EditCommand[] = [];
     const editedSourceIds: string[] = [];
@@ -300,15 +294,16 @@ export class EditSessions {
         // command and push it WITHOUT calling `.do()` — the post-do state
         // is already live. `undo` will subtract the cumulative offset,
         // `redo` re-applies it.
-        const translateChildren: EditCommand[] = buckets.map((b: any) =>
-          new FeatureTranslateCommand({
-            source: b.source,
-            arcs: b.source.getArcs(),
-            dx: accumDx,
-            dy: accumDy,
-            arcIds: b.arcIds,
-            pointFeatures: b.pointFeatures,
-          }),
+        const translateChildren: EditCommand[] = buckets.map(
+          (b: any) =>
+            new FeatureTranslateCommand({
+              source: b.source,
+              arcs: b.source.getArcs(),
+              dx: accumDx,
+              dy: accumDy,
+              arcIds: b.arcIds,
+              pointFeatures: b.pointFeatures,
+            }),
         );
         const total = buckets.reduce(
           (n: number, b: any) => n + b.arcIds.length + b.pointFeatures.length,
@@ -444,15 +439,16 @@ export class EditSessions {
           (n: number, b: any) => n + b.arcIds.length + b.pointFeatures.length,
           0,
         );
-        const affineChildren: EditCommand[] = buckets.map((b: any) =>
-          new FeatureAffineCommand({
-            source: b.source,
-            arcs: b.source.getArcs(),
-            matrix: cumulative,
-            arcIds: b.arcIds,
-            pointFeatures: b.pointFeatures,
-            label,
-          }),
+        const affineChildren: EditCommand[] = buckets.map(
+          (b: any) =>
+            new FeatureAffineCommand({
+              source: b.source,
+              arcs: b.source.getArcs(),
+              matrix: cumulative,
+              arcIds: b.arcIds,
+              pointFeatures: b.pointFeatures,
+              label,
+            }),
         );
         // Splits FIRST so undo runs affine.undo() (apply matrix^-1 on the
         // duplicated arcs) before split.undo() (truncate + restore shapes).
@@ -623,9 +619,7 @@ export class EditSessions {
     }
 
     const pushed: EditCommand =
-      children.length === 1
-        ? children[0]
-        : new CompositeCommand(children, labelFor(refs.length));
+      children.length === 1 ? children[0] : new CompositeCommand(children, labelFor(refs.length));
     this._emap._history.push(pushed);
     this._emap._fireHistoryChange();
     this._emap._clearSpatialIndexesForSources(editedSourceIds);
@@ -638,11 +632,17 @@ export class EditSessions {
    * (across path-feature arcs and point-feature shapes). Returns `null` when
    * no vertex was found (e.g., empty arcs).
    */
-  _computeSelectionCentroid(this: any,
-    bySource: globalThis.Map<string, { arcIdSet: Set<number>; pointFeatures: TranslatedPointFeature[] }>,
+  _computeSelectionCentroid(
+    this: any,
+    bySource: globalThis.Map<
+      string,
+      { arcIdSet: Set<number>; pointFeatures: TranslatedPointFeature[] }
+    >,
   ): [number, number] | null {
-    let xmin = Infinity, ymin = Infinity;
-    let xmax = -Infinity, ymax = -Infinity;
+    let xmin = Infinity,
+      ymin = Infinity;
+    let xmax = -Infinity,
+      ymax = -Infinity;
     let any = false;
 
     for (const [sourceId, bucket] of bySource) {

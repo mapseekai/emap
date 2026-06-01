@@ -11,7 +11,10 @@ map.on('moveend', (e) => {
   const z: number = e.zoom;
   const t: 'moveend' = e.type;
   const oe: MouseEvent | null = e.originalEvent;
-  void c; void z; void t; void oe;
+  void c;
+  void z;
+  void t;
+  void oe;
 });
 
 map.on('error', (e) => {
@@ -31,23 +34,34 @@ map.on('move', (e) => {
 });
 
 // off / once infer identically
-map.off('zoomend', (e) => { const z: number = e.zoom; void z; });
+map.off('zoomend', (e) => {
+  const z: number = e.zoom;
+  void z;
+});
 map.once('editmodechange', (e) => {
   const m: 'none' | 'vertex' | 'draw' | 'transform' = e.mode;
   void m;
 });
 
 // --- bad property on a known event must error ---
-// @ts-expect-error 'nope' is not on the moveend payload
-map.on('moveend', (e) => { void e.nope; });
+map.on('moveend', (e) => {
+  // @ts-expect-error 'nope' is not on the moveend payload
+  void e.nope;
+});
 
 // --- escape hatch: arbitrary custom names still compile ---
-map.on('totallyCustomAppEvent', (e) => { void e; });
-map.off('anotherCustomEvent', (e) => { void e; });
+map.on('totallyCustomAppEvent', (e) => {
+  void e;
+});
+map.off('anotherCustomEvent', (e) => {
+  void e;
+});
 
 // --- module augmentation adds a key that then infers ---
 declare module './event-map' {
-  interface EmapEventMap { myAugmentedEvent: { detail: string } }
+  interface EmapEventMap {
+    myAugmentedEvent: { detail: string };
+  }
 }
 map.on('myAugmentedEvent', (e) => {
   const d: string = e.detail;
@@ -58,12 +72,14 @@ map.on('myAugmentedEvent', (e) => {
 map.on('mousemove', (e) => {
   const p: { x: number; y: number } = e.point;
   const mc: [number, number] = e.mapCoord;
-  void p; void mc;
+  void p;
+  void mc;
 });
 map.on('feature:click', { layers: ['district-fill'] }, (e) => {
   const refId: number = e.ref.id;
   const point: { x: number; y: number } = e.point;
-  void refId; void point;
+  void refId;
+  void point;
 });
 
 // The event-map type is useful to facade authors too.

@@ -4,12 +4,7 @@ import { AffineTransform } from '../geo/transform';
 import { TopologySource } from '../source/source';
 import { getLayerId, normalizePointShape } from '../source/layer-utils';
 import type { QueryFeaturesOptions, QueriedFeature } from './map';
-import type {
-  ArcCollection,
-  MapshaperLayer,
-  PathPart,
-  PathShape,
-} from '../types/mapshaper-types';
+import type { ArcCollection, MapshaperLayer, PathPart, PathShape } from '../types/mapshaper-types';
 
 /** Pixel distance for a bullseye hit on point features */
 const POINT_BULLSEYE_DIST = 2;
@@ -52,8 +47,7 @@ export class FeatureQuery {
   // The map of (sourceId, layerIndex) → null entries marks layers that
   // have been seen as empty so the no-shape fallback path also
   // short-circuits.
-  private _indexCache: globalThis.Map<string, IndexedLayer> =
-    new globalThis.Map();
+  private _indexCache: globalThis.Map<string, IndexedLayer> = new globalThis.Map();
 
   constructor(
     sources: globalThis.Map<string, TopologySource>,
@@ -173,7 +167,10 @@ export class FeatureQuery {
         index.add(0, 0, 0, 0);
         continue;
       }
-      let xmin = Infinity, ymin = Infinity, xmax = -Infinity, ymax = -Infinity;
+      let xmin = Infinity,
+        ymin = Infinity,
+        xmax = -Infinity,
+        ymax = -Infinity;
       if (isPoint) {
         for (const p of normalizePointShape(shp)) {
           if (!p || p.length < 2) continue;
@@ -217,9 +214,9 @@ export class FeatureQuery {
     const geometry = isGeometry
       ? geometryOrOptions
       : [
-        [0, 0],
-        [width, height],
-      ];
+          [0, 0],
+          [width, height],
+        ];
     const opts = options || (isGeometry ? {} : geometryOrOptions) || {};
 
     if (Array.isArray(geometry) && typeof geometry[0] === 'number') {
@@ -235,11 +232,7 @@ export class FeatureQuery {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  private _layerMatchesFilter(
-    layer: MapshaperLayer,
-    index: number,
-    layers?: string[],
-  ): boolean {
+  private _layerMatchesFilter(layer: MapshaperLayer, index: number, layers?: string[]): boolean {
     if (!layers || layers.length === 0) return true;
     const layerId = getLayerId(layer, index);
     if (layers.includes(layerId)) return true;
@@ -301,12 +294,7 @@ export class FeatureQuery {
       for (let j = 0; j < shp.length; j++) {
         const part: PathPart = shp[j];
         arcs.getSimpleShapeBbox!(part, bbox);
-        if (
-          x + dist < bbox[0] ||
-          x - dist > bbox[2] ||
-          y + dist < bbox[1] ||
-          y - dist > bbox[3]
-        ) {
+        if (x + dist < bbox[0] || x - dist > bbox[2] || y + dist < bbox[1] || y - dist > bbox[3]) {
           continue;
         }
         let cand = index[shpId];
@@ -425,7 +413,16 @@ export class FeatureQuery {
   ): number[] {
     const adapter = getDefaultMapshaperAdapter();
     const maxDist = this._getZoomAdjustedHitBuffer(10, 1);
-    const cands = this._findHitCandidates(sourceId, layerIndex, layer, arcs, x, y, maxDist, dataset);
+    const cands = this._findHitCandidates(
+      sourceId,
+      layerIndex,
+      layer,
+      arcs,
+      x,
+      y,
+      maxDist,
+      dataset,
+    );
     let hits: HitCandidate[] = [];
     for (const cand of cands) {
       if (adapter.testPointInPolygon(x, y, cand.shape, arcs)) {
@@ -472,9 +469,7 @@ export class FeatureQuery {
     for (const [sourceId, source] of this._sources) {
       const layers = source.getLayers();
       const displayArcs = source.getDisplayArcs();
-      const arcs = displayArcs
-        ? displayArcs.getScaledArcs(pixelSize)
-        : source.getArcs();
+      const arcs = displayArcs ? displayArcs.getScaledArcs(pixelSize) : source.getArcs();
       const dataset = source.getDataset?.();
 
       for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
@@ -498,8 +493,7 @@ export class FeatureQuery {
 
         for (const id of ids) {
           const table = layer.data;
-          const record =
-            table?.getRecordAt?.(id) ?? table?.getRecords?.()?.[id] ?? {};
+          const record = table?.getRecordAt?.(id) ?? table?.getRecords?.()?.[id] ?? {};
           results.push({
             id,
             source: sourceId,
@@ -537,9 +531,7 @@ export class FeatureQuery {
     for (const [sourceId, source] of this._sources) {
       const layers = source.getLayers();
       const displayArcs = source.getDisplayArcs();
-      const arcs = displayArcs
-        ? displayArcs.getScaledArcs(pixelSize)
-        : source.getArcs();
+      const arcs = displayArcs ? displayArcs.getScaledArcs(pixelSize) : source.getArcs();
       const dataset = source.getDataset?.();
 
       for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
@@ -558,9 +550,7 @@ export class FeatureQuery {
         // whose stored bbox overlaps the query bbox. Falls back to a full
         // scan for shape-less / un-indexed layers.
         const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, arcs, dataset);
-        const candidateIds = indexed
-          ? indexed.index.search(xmin, ymin, xmax, ymax)
-          : null;
+        const candidateIds = indexed ? indexed.index.search(xmin, ymin, xmax, ymax) : null;
         const idCount = candidateIds !== null ? candidateIds.length : layer.shapes.length;
 
         for (let i = 0; i < idCount; i++) {
@@ -570,8 +560,7 @@ export class FeatureQuery {
           let hit = false;
           if (geometryType === 'point') {
             hit = normalizePointShape(shp).some(
-              (p) =>
-                p[0] >= xmin && p[0] <= xmax && p[1] >= ymin && p[1] <= ymax,
+              (p) => p[0] >= xmin && p[0] <= xmax && p[1] >= ymin && p[1] <= ymax,
             );
           } else if (arcs) {
             const path = shp as PathShape;
@@ -590,8 +579,7 @@ export class FeatureQuery {
             }
           }
           if (!hit) continue;
-          const record =
-            table?.getRecordAt?.(id) ?? table?.getRecords?.()?.[id] ?? {};
+          const record = table?.getRecordAt?.(id) ?? table?.getRecords?.()?.[id] ?? {};
           results.push({
             id,
             source: sourceId,

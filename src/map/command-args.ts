@@ -62,15 +62,13 @@ export function quoteCliArg(value: string): string {
  *   - control characters 0x00..0x1F
  *   - `<>{}[];|&$` — reserved for future hygiene
  */
-const LAYER_NAME_RE =
-  /^[A-Za-z0-9_\-:.一-鿿][A-Za-z0-9_\-:. 一-鿿]*$/;
+const LAYER_NAME_RE = /^[A-Za-z0-9_\-:.一-鿿][A-Za-z0-9_\-:. 一-鿿]*$/;
 
 /**
  * Field-name rule. Slightly stricter than {@link LAYER_NAME_RE}: no `:`
  * (mapshaper field-name parsers in some places treat `:` as a type tag).
  */
-const FIELD_NAME_RE =
-  /^[A-Za-z0-9_\-.一-鿿][A-Za-z0-9_\-. 一-鿿]*$/;
+const FIELD_NAME_RE = /^[A-Za-z0-9_\-.一-鿿][A-Za-z0-9_\-. 一-鿿]*$/;
 
 /** True iff `value` looks like a safe mapshaper layer name. */
 export function isValidLayerName(value: unknown): value is string {

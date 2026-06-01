@@ -12,7 +12,10 @@ import type { TopologySource } from '../../source/source';
 function makeArcs(xx: number[], yy: number[], nn: number[]) {
   const ii: number[] = [];
   let acc = 0;
-  for (const n of nn) { ii.push(acc); acc += n; }
+  for (const n of nn) {
+    ii.push(acc);
+    acc += n;
+  }
   const xxArr = new Float64Array(xx);
   const yyArr = new Float64Array(yy);
   const nnArr = new Int32Array(nn);
@@ -50,7 +53,8 @@ describe('rotateMatrix', () => {
   it('rotates by 90 degrees around origin', () => {
     const m = rotateMatrix(Math.PI / 2, 0, 0);
     // (1, 0) -> (0, 1)
-    const x = 1, y = 0;
+    const x = 1,
+      y = 0;
     expect(close(m.a * x + m.c * y + m.tx, 0)).toBe(true);
     expect(close(m.b * x + m.d * y + m.ty, 1)).toBe(true);
   });
@@ -58,7 +62,8 @@ describe('rotateMatrix', () => {
   it('rotates around a non-zero pivot', () => {
     const m = rotateMatrix(Math.PI, 5, 5); // 180 deg around (5,5)
     // (7, 5) -> (3, 5)
-    const x = 7, y = 5;
+    const x = 7,
+      y = 5;
     expect(close(m.a * x + m.c * y + m.tx, 3)).toBe(true);
     expect(close(m.b * x + m.d * y + m.ty, 5)).toBe(true);
   });
@@ -68,11 +73,13 @@ describe('scaleMatrix', () => {
   it('scales by 2 around origin (5,5)', () => {
     const m = scaleMatrix(2, 2, 5, 5);
     // (7, 7) -> (9, 9); origin (5,5) -> (5,5)
-    const x = 7, y = 7;
+    const x = 7,
+      y = 7;
     expect(m.a * x + m.c * y + m.tx).toBe(9);
     expect(m.b * x + m.d * y + m.ty).toBe(9);
 
-    const ox = 5, oy = 5;
+    const ox = 5,
+      oy = 5;
     expect(m.a * ox + m.c * oy + m.tx).toBe(5);
     expect(m.b * ox + m.d * oy + m.ty).toBe(5);
   });
@@ -92,7 +99,8 @@ describe('invertMatrix', () => {
     const m: AffineMatrix = { a: 1, b: 0, c: 0, d: 1, tx: 10, ty: -3 };
     const inv = invertMatrix(m);
     // m then inv should be identity
-    const x = 4, y = 7;
+    const x = 4,
+      y = 7;
     const mx = m.a * x + m.c * y + m.tx;
     const my = m.b * x + m.d * y + m.ty;
     const ix = inv.a * mx + inv.c * my + inv.tx;
@@ -104,7 +112,8 @@ describe('invertMatrix', () => {
   it('round-trips a rotate around a non-zero pivot', () => {
     const m = rotateMatrix(0.7, 3.5, -2.1);
     const inv = invertMatrix(m);
-    const x = 1.234, y = 5.678;
+    const x = 1.234,
+      y = 5.678;
     const mx = m.a * x + m.c * y + m.tx;
     const my = m.b * x + m.d * y + m.ty;
     const ix = inv.a * mx + inv.c * my + inv.tx;
@@ -123,9 +132,11 @@ describe('FeatureAffineCommand', () => {
     const { arcs, xx, yy } = makeArcs([0, 1], [0, 1], [2]);
     const source = makeSource();
     const cmd = new FeatureAffineCommand({
-      source, arcs,
+      source,
+      arcs,
       matrix: { a: 1, b: 0, c: 0, d: 1, tx: 5, ty: 7 },
-      arcIds: [0], pointFeatures: [],
+      arcIds: [0],
+      pointFeatures: [],
     });
     cmd.do();
     expect(xx[0]).toBe(5);
@@ -138,9 +149,11 @@ describe('FeatureAffineCommand', () => {
     const { arcs, xx, yy } = makeArcs([1, 0], [0, 1], [2]);
     const source = makeSource();
     const cmd = new FeatureAffineCommand({
-      source, arcs,
+      source,
+      arcs,
       matrix: rotateMatrix(Math.PI / 2, 0, 0),
-      arcIds: [0], pointFeatures: [],
+      arcIds: [0],
+      pointFeatures: [],
     });
     cmd.do();
     // (1, 0) -> (0, 1); (0, 1) -> (-1, 0)
@@ -156,9 +169,11 @@ describe('FeatureAffineCommand', () => {
     const { arcs, xx, yy } = makeArcs(xxOrig, yyOrig, [2, 2]);
     const source = makeSource();
     const cmd = new FeatureAffineCommand({
-      source, arcs,
+      source,
+      arcs,
       matrix: rotateMatrix(0.6, 7, -3),
-      arcIds: [0, 1], pointFeatures: [],
+      arcIds: [0, 1],
+      pointFeatures: [],
     });
     cmd.do();
     cmd.undo();
@@ -174,7 +189,8 @@ describe('FeatureAffineCommand', () => {
     const cmd = new FeatureAffineCommand({
       source,
       matrix: scaleMatrix(2, 2, 0, 0),
-      arcIds: [], pointFeatures: [{ layer, featureId: 0 }],
+      arcIds: [],
+      pointFeatures: [{ layer, featureId: 0 }],
     });
     cmd.do();
     expect(layer.shapes![0]).toEqual([[20, 40]]);
@@ -186,9 +202,11 @@ describe('FeatureAffineCommand', () => {
     const { arcs, updateArcBounds } = makeArcs([0, 1, 2, 3], [0, 1, 2, 3], [2, 2]);
     const source = makeSource();
     const cmd = new FeatureAffineCommand({
-      source, arcs,
+      source,
+      arcs,
       matrix: rotateMatrix(0.1),
-      arcIds: [0, 1], pointFeatures: [],
+      arcIds: [0, 1],
+      pointFeatures: [],
     });
     cmd.do();
     expect(updateArcBounds).toHaveBeenCalledTimes(2);
@@ -197,9 +215,19 @@ describe('FeatureAffineCommand', () => {
 
   it('label reflects affected feature count', () => {
     const source = makeSource();
-    const c1 = new FeatureAffineCommand({ source, matrix: rotateMatrix(0.1), arcIds: [3], pointFeatures: [] });
+    const c1 = new FeatureAffineCommand({
+      source,
+      matrix: rotateMatrix(0.1),
+      arcIds: [3],
+      pointFeatures: [],
+    });
     expect(c1.label).toBe('Transform 1 feature');
-    const c2 = new FeatureAffineCommand({ source, matrix: rotateMatrix(0.1), arcIds: [3, 4], pointFeatures: [] });
+    const c2 = new FeatureAffineCommand({
+      source,
+      matrix: rotateMatrix(0.1),
+      arcIds: [3, 4],
+      pointFeatures: [],
+    });
     expect(c2.label).toBe('Transform 2 features');
   });
 });

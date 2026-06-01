@@ -105,9 +105,7 @@ describe('resolveProjectCrs', () => {
 
 describe('inferFromPrj — ESRI Web Mercator variants', () => {
   it('detects ESRI "WGS 1984 Web Mercator (auxiliary sphere)"', () => {
-    expect(
-      inferFromPrj('PROJCS["WGS 1984 Web Mercator (auxiliary sphere)"]'),
-    ).toBe('EPSG:3857');
+    expect(inferFromPrj('PROJCS["WGS 1984 Web Mercator (auxiliary sphere)"]')).toBe('EPSG:3857');
   });
   it('detects "Web Mercator" with a space', () => {
     expect(inferFromPrj('PROJCS["Web Mercator"]')).toBe('EPSG:3857');
@@ -150,30 +148,50 @@ describe('resolveDatasetCRS', () => {
   });
 
   it('falls through to prj when crs_string is missing', () => {
-    expect(resolveDatasetCRS(ds({
-      prj: 'PROJCS["x",AUTHORITY["EPSG","4490"]]',
-    }))).toBe('EPSG:4490');
+    expect(
+      resolveDatasetCRS(
+        ds({
+          prj: 'PROJCS["x",AUTHORITY["EPSG","4490"]]',
+        }),
+      ),
+    ).toBe('EPSG:4490');
   });
 
   it('falls through to crs object when prj is missing', () => {
-    expect(resolveDatasetCRS(ds({
-      crs: { is_latlong: true },
-    }))).toBe('EPSG:4326');
-    expect(resolveDatasetCRS(ds({
-      crs: { projName: 'merc', a: 6378137 },
-    }))).toBe('EPSG:3857');
+    expect(
+      resolveDatasetCRS(
+        ds({
+          crs: { is_latlong: true },
+        }),
+      ),
+    ).toBe('EPSG:4326');
+    expect(
+      resolveDatasetCRS(
+        ds({
+          crs: { projName: 'merc', a: 6378137 },
+        }),
+      ),
+    ).toBe('EPSG:3857');
   });
 
   it('precedence: crs_string > prj > crs > default', () => {
     // crs_string wins over a contradictory prj.
-    expect(resolveDatasetCRS(ds({
-      crs_string: 'epsg:3857',
-      prj: 'AUTHORITY["EPSG","4326"]',
-    }))).toBe('EPSG:3857');
+    expect(
+      resolveDatasetCRS(
+        ds({
+          crs_string: 'epsg:3857',
+          prj: 'AUTHORITY["EPSG","4326"]',
+        }),
+      ),
+    ).toBe('EPSG:3857');
     // prj wins over a contradictory crs.
-    expect(resolveDatasetCRS(ds({
-      prj: 'AUTHORITY["EPSG","32633"]',
-      crs: { is_latlong: true },
-    }))).toBe('EPSG:32633');
+    expect(
+      resolveDatasetCRS(
+        ds({
+          prj: 'AUTHORITY["EPSG","32633"]',
+          crs: { is_latlong: true },
+        }),
+      ),
+    ).toBe('EPSG:32633');
   });
 });

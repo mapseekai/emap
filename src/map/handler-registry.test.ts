@@ -5,14 +5,25 @@ import { Emap } from './map';
 // jsdom does not implement CanvasRenderingContext2D; stub getContext so
 // CanvasPainter construction succeeds.
 beforeAll(() => {
-  HTMLCanvasElement.prototype.getContext = () => ({
-    scale: () => {}, clearRect: () => {}, fillRect: () => {},
-    strokeRect: () => {}, beginPath: () => {}, moveTo: () => {},
-    lineTo: () => {}, stroke: () => {}, fill: () => {},
-    arc: () => {}, save: () => {}, restore: () => {},
-    translate: () => {}, setTransform: () => {}, drawImage: () => {},
-    measureText: () => ({ width: 0 }),
-  } as any);
+  HTMLCanvasElement.prototype.getContext = () =>
+    ({
+      scale: () => {},
+      clearRect: () => {},
+      fillRect: () => {},
+      strokeRect: () => {},
+      beginPath: () => {},
+      moveTo: () => {},
+      lineTo: () => {},
+      stroke: () => {},
+      fill: () => {},
+      arc: () => {},
+      save: () => {},
+      restore: () => {},
+      translate: () => {},
+      setTransform: () => {},
+      drawImage: () => {},
+      measureText: () => ({ width: 0 }),
+    }) as any;
 });
 
 function container(): HTMLElement {
@@ -49,10 +60,24 @@ describe('Emap handler registry (Phase 1)', () => {
     const el = container();
     const map = new Emap({ container: el });
     const canvas = map.getCanvasContainer();
-    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    canvas.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 800,
+      height: 600,
+      right: 800,
+      bottom: 600,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    });
     const before = map.getCenter();
-    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 100, clientY: 100, button: 0 }));
-    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 160, clientY: 100, button: 0 }));
+    canvas.dispatchEvent(
+      new PointerEvent('pointerdown', { clientX: 100, clientY: 100, button: 0 }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 160, clientY: 100, button: 0 }),
+    );
     window.dispatchEvent(new PointerEvent('pointerup', { clientX: 160, clientY: 100, button: 0 }));
     const after = map.getCenter();
     expect(after[0]).not.toBe(before[0]); // longitude changed → pan happened
@@ -72,11 +97,23 @@ describe('Emap handler registry (Phase 1)', () => {
     const el = container();
     const map = new Emap({ container: el });
     const canvas = map.getCanvasContainer();
-    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    canvas.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 800,
+      height: 600,
+      right: 800,
+      bottom: 600,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    });
     map.boxSelect.enable();
     const before = map.getCenter();
     canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 50, clientY: 50, button: 0 }));
-    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 200, clientY: 200, button: 0 }));
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 200, clientY: 200, button: 0 }),
+    );
     window.dispatchEvent(new PointerEvent('pointerup', { clientX: 200, clientY: 200, button: 0 }));
     expect(map.getCenter()[0]).toBe(before[0]);
   });
@@ -85,7 +122,17 @@ describe('Emap handler registry (Phase 1)', () => {
     const el = container();
     const map = new Emap({ container: el });
     const canvas = map.getCanvasContainer();
-    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    canvas.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 800,
+      height: 600,
+      right: 800,
+      bottom: 600,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    });
     const hit = { source: 's', layer: 'l', id: 1 };
     (map as any).queryFeatures = vi.fn(() => [hit]);
     (map as any).isSelected = vi.fn(() => true);
@@ -96,10 +143,22 @@ describe('Emap handler registry (Phase 1)', () => {
   it('map.on("feature:click", filter, cb) fires for the hit feature via the arbiter', () => {
     const map = new Emap({ container: container() });
     const canvas = map.getCanvasContainer();
-    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    canvas.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 800,
+      height: 600,
+      right: 800,
+      bottom: 600,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    });
     const hit = { source: 's', layer: 'l', id: 1 };
     (map as any).queryFeatures = () => [hit];
-    (map as any).features = { get: (r: any) => ({ ref: r, geometry: null, properties: Object.freeze({}) }) };
+    (map as any).features = {
+      get: (r: any) => ({ ref: r, geometry: null, properties: Object.freeze({}) }),
+    };
     const cb = vi.fn();
     map.on('feature:click', { layers: ['l'] }, cb);
     canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 10, clientY: 10, button: 0 }));
@@ -112,10 +171,22 @@ describe('Emap handler registry (Phase 1)', () => {
   it('map.once("feature:click", cb) fires once then a second click does nothing', () => {
     const map = new Emap({ container: container() });
     const canvas = map.getCanvasContainer();
-    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    canvas.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 800,
+      height: 600,
+      right: 800,
+      bottom: 600,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    });
     const hit = { source: 's', layer: 'l', id: 1 };
     (map as any).queryFeatures = () => [hit];
-    (map as any).features = { get: (r: any) => ({ ref: r, geometry: null, properties: Object.freeze({}) }) };
+    (map as any).features = {
+      get: (r: any) => ({ ref: r, geometry: null, properties: Object.freeze({}) }),
+    };
     const cb = vi.fn();
     map.once('feature:click', cb);
     // First click fires cb
@@ -133,10 +204,22 @@ describe('Emap handler registry (Phase 1)', () => {
   it('map.once("feature:click", cb) then map.off("feature:click", cb) → cb never called and sink is null', () => {
     const map = new Emap({ container: container() });
     const canvas = map.getCanvasContainer();
-    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    canvas.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 800,
+      height: 600,
+      right: 800,
+      bottom: 600,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    });
     const hit = { source: 's', layer: 'l', id: 1 };
     (map as any).queryFeatures = () => [hit];
-    (map as any).features = { get: (r: any) => ({ ref: r, geometry: null, properties: Object.freeze({}) }) };
+    (map as any).features = {
+      get: (r: any) => ({ ref: r, geometry: null, properties: Object.freeze({}) }),
+    };
     const cb = vi.fn();
     map.once('feature:click', cb);
     map.off('feature:click', cb);
@@ -152,7 +235,9 @@ describe('Emap handler registry (Phase 1)', () => {
   it('typed 2-arg feature on/off compile smoke (Bug 2 fix)', () => {
     const map = new Emap({ container: container() });
     // This must compile: proves the typed 2-arg overload exists for feature events.
-    const cb = (e: import('../core/feature-event-dispatcher').FeatureEvent) => { void e.ref; };
+    const cb = (e: import('../core/feature-event-dispatcher').FeatureEvent) => {
+      void e.ref;
+    };
     map.on('feature:hover', cb);
     map.off('feature:hover', cb);
     // No runtime assertion needed — the test passing without tsc errors proves the fix.
@@ -167,9 +252,12 @@ describe('Emap handler registry (Phase 1)', () => {
     map.on('mousemove', (e) => {
       const c: [number, number] = e.mapCoord;
       const p: { x: number; y: number } = e.point;
-      void c; void p;
+      void c;
+      void p;
     });
-    const cb = (e: import('../core/pointer-event-dispatcher').PointerMoveEvent) => { void e.mapCoord; };
+    const cb = (e: import('../core/pointer-event-dispatcher').PointerMoveEvent) => {
+      void e.mapCoord;
+    };
     map.on('mousemove', cb);
     map.off('mousemove', cb);
     map.once('mousemove', cb);
@@ -286,7 +374,17 @@ describe('Emap handler registry (Phase 1)', () => {
     const el = container();
     const map = new Emap({ container: el });
     const canvas = map.getCanvasContainer();
-    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    canvas.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 800,
+      height: 600,
+      right: 800,
+      bottom: 600,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    });
     const hit = { source: 's', layer: 'l', id: 1 };
     (map as any).queryFeatures = vi.fn(() => [hit]);
     (map as any).isSelected = vi.fn(() => true);
@@ -300,7 +398,7 @@ describe('Emap handler registry (Phase 1)', () => {
   it('enabling vertexEdit cross-deactivates an active transformFeature', () => {
     const map = new Emap({ container: container() });
     map.transformFeature.enable();
-    map.vertexEdit.enable();                 // setEditMode('vertex') → editmodechange
+    map.vertexEdit.enable(); // setEditMode('vertex') → editmodechange
     expect(map.transformFeature.isEnabled()).toBe(false);
     expect(map.getEditMode()).toBe('vertex');
   });
@@ -310,11 +408,11 @@ describe('Emap handler registry (Phase 1)', () => {
     map.drawFeature.setOptions({ source: 's', type: 'polygon' });
     // drawFeature active → enabling transformFeature deactivates it.
     map.drawFeature.enable();
-    map.transformFeature.enable();           // setEditMode('transform') → editmodechange
+    map.transformFeature.enable(); // setEditMode('transform') → editmodechange
     expect(map.drawFeature.isEnabled()).toBe(false);
     expect(map.getEditMode()).toBe('transform');
     // transformFeature active → enabling drawFeature deactivates it.
-    map.drawFeature.enable();                // setEditMode('draw') → editmodechange
+    map.drawFeature.enable(); // setEditMode('draw') → editmodechange
     expect(map.transformFeature.isEnabled()).toBe(false);
     expect(map.getEditMode()).toBe('draw');
   });
@@ -348,15 +446,15 @@ describe('Emap handler registry (Phase 1)', () => {
     const mgr = (map as any)._handlers;
     const fcb = vi.fn();
     const pcb = vi.fn();
-    expect(mgr._pointerSink).toBeNull();                 // neither
+    expect(mgr._pointerSink).toBeNull(); // neither
     map.on('feature:hover', {}, fcb);
-    expect(typeof mgr._pointerSink).toBe('function');    // feature-only
+    expect(typeof mgr._pointerSink).toBe('function'); // feature-only
     map.on('mousemove', pcb);
-    expect(typeof mgr._pointerSink).toBe('function');    // both
+    expect(typeof mgr._pointerSink).toBe('function'); // both
     map.off('feature:hover', fcb);
-    expect(typeof mgr._pointerSink).toBe('function');    // pointer-only
+    expect(typeof mgr._pointerSink).toBe('function'); // pointer-only
     map.off('mousemove', pcb);
-    expect(mgr._pointerSink).toBeNull();                 // neither
+    expect(mgr._pointerSink).toBeNull(); // neither
   });
 
   it('combined sink fans out: one move reaches BOTH feature hover and mousemove', () => {
@@ -364,7 +462,7 @@ describe('Emap handler registry (Phase 1)', () => {
     const mgr = (map as any)._handlers;
     const fcb = vi.fn();
     const pcb = vi.fn();
-    map.on('feature:hover', {}, fcb);   // no data loaded → hover may not fire, but must not throw
+    map.on('feature:hover', {}, fcb); // no data loaded → hover may not fire, but must not throw
     map.on('mousemove', pcb);
     mgr._pointerSink({
       kind: 'move',
@@ -373,6 +471,6 @@ describe('Emap handler registry (Phase 1)', () => {
       button: 0,
       originalEvent: new Event('pointermove'),
     });
-    expect(pcb).toHaveBeenCalledTimes(1);   // pointer-move always delivered
+    expect(pcb).toHaveBeenCalledTimes(1); // pointer-move always delivered
   });
 });

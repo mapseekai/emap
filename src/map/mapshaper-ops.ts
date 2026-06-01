@@ -125,52 +125,124 @@ export class MapshaperOps {
 
   // -- Whole-dataset CLI ops ---------------------------------------------
 
-  clipLayer(opts: ClipEraseOptions): Promise<OpResult> { return clipLayer(this._ctx, opts); }
-  eraseLayer(opts: ClipEraseOptions): Promise<OpResult> { return eraseLayer(this._ctx, opts); }
-  dissolveLayer(opts: DissolveOptions): Promise<OpResult> { return dissolveLayer(this._ctx, opts); }
-  bufferLayer(opts: BufferOptions): Promise<OpResult> { return bufferLayer(this._ctx, opts); }
-  applyExpression(opts: ApplyExpressionOptions): Promise<OpResult> { return applyExpression(this._ctx, opts); }
-  filterFeatures(opts: FilterOptions): Promise<OpResult> { return filterFeatures(this._ctx, opts); }
-  filterIslands(opts: FilterIslandsOptions): Promise<OpResult> { return filterIslands(this._ctx, opts); }
-  filterSlivers(opts: FilterSliversOptions): Promise<OpResult> { return filterSlivers(this._ctx, opts); }
-  filterGeom(opts: FilterGeomOptions): Promise<OpResult> { return filterGeom(this._ctx, opts); }
-  explodeLayer(opts: ExplodeOptions): Promise<OpResult> { return explodeLayer(this._ctx, opts); }
-  innerlinesLayer(opts: InnerlinesOptions): Promise<OpResult> { return innerlinesLayer(this._ctx, opts); }
-  snapLayer(opts: SnapOptions): Promise<OpResult> { return snapLayer(this._ctx, opts); }
-  cleanLayer(opts: CleanOptions): Promise<OpResult> { return cleanLayer(this._ctx, opts); }
-  mosaicLayer(opts: MosaicOptions): Promise<OpResult> { return mosaicLayer(this._ctx, opts); }
-  unionLayers(opts: UnionOptions): Promise<OpResult> { return unionLayers(this._ctx, opts); }
-  divideLayer(opts: DivideOptions): Promise<OpResult> { return divideLayer(this._ctx, opts); }
-  pointsLayer(opts: PointsOptions): Promise<OpResult> { return pointsLayer(this._ctx, opts); }
-  linesLayer(opts: LinesOptions): Promise<OpResult> { return linesLayer(this._ctx, opts); }
-  polygonsLayer(opts: PolygonsOptions): Promise<OpResult> { return polygonsLayer(this._ctx, opts); }
-  simplifyLayer(opts: SimplifyOptions): Promise<OpResult> { return simplifyLayer(this._ctx, opts); }
-  projectLayer(opts: ProjectOptions): Promise<OpResult> { return projectLayer(this._ctx, opts); }
-  affineLayer(opts: AffineLayerOptions): Promise<OpResult> { return affineLayer(this._ctx, opts); }
+  clipLayer(opts: ClipEraseOptions): Promise<OpResult> {
+    return clipLayer(this._ctx, opts);
+  }
+  eraseLayer(opts: ClipEraseOptions): Promise<OpResult> {
+    return eraseLayer(this._ctx, opts);
+  }
+  dissolveLayer(opts: DissolveOptions): Promise<OpResult> {
+    return dissolveLayer(this._ctx, opts);
+  }
+  bufferLayer(opts: BufferOptions): Promise<OpResult> {
+    return bufferLayer(this._ctx, opts);
+  }
+  applyExpression(opts: ApplyExpressionOptions): Promise<OpResult> {
+    return applyExpression(this._ctx, opts);
+  }
+  filterFeatures(opts: FilterOptions): Promise<OpResult> {
+    return filterFeatures(this._ctx, opts);
+  }
+  filterIslands(opts: FilterIslandsOptions): Promise<OpResult> {
+    return filterIslands(this._ctx, opts);
+  }
+  filterSlivers(opts: FilterSliversOptions): Promise<OpResult> {
+    return filterSlivers(this._ctx, opts);
+  }
+  filterGeom(opts: FilterGeomOptions): Promise<OpResult> {
+    return filterGeom(this._ctx, opts);
+  }
+  explodeLayer(opts: ExplodeOptions): Promise<OpResult> {
+    return explodeLayer(this._ctx, opts);
+  }
+  innerlinesLayer(opts: InnerlinesOptions): Promise<OpResult> {
+    return innerlinesLayer(this._ctx, opts);
+  }
+  snapLayer(opts: SnapOptions): Promise<OpResult> {
+    return snapLayer(this._ctx, opts);
+  }
+  cleanLayer(opts: CleanOptions): Promise<OpResult> {
+    return cleanLayer(this._ctx, opts);
+  }
+  mosaicLayer(opts: MosaicOptions): Promise<OpResult> {
+    return mosaicLayer(this._ctx, opts);
+  }
+  unionLayers(opts: UnionOptions): Promise<OpResult> {
+    return unionLayers(this._ctx, opts);
+  }
+  divideLayer(opts: DivideOptions): Promise<OpResult> {
+    return divideLayer(this._ctx, opts);
+  }
+  pointsLayer(opts: PointsOptions): Promise<OpResult> {
+    return pointsLayer(this._ctx, opts);
+  }
+  linesLayer(opts: LinesOptions): Promise<OpResult> {
+    return linesLayer(this._ctx, opts);
+  }
+  polygonsLayer(opts: PolygonsOptions): Promise<OpResult> {
+    return polygonsLayer(this._ctx, opts);
+  }
+  simplifyLayer(opts: SimplifyOptions): Promise<OpResult> {
+    return simplifyLayer(this._ctx, opts);
+  }
+  projectLayer(opts: ProjectOptions): Promise<OpResult> {
+    return projectLayer(this._ctx, opts);
+  }
+  affineLayer(opts: AffineLayerOptions): Promise<OpResult> {
+    return affineLayer(this._ctx, opts);
+  }
 
   // -- Layer management --------------------------------------------------
 
-  renameLayer(opts: RenameLayerOptions): Promise<OpResult> { return renameLayer(this._ctx, opts); }
-  mergeLayers(opts: MergeLayersOptions): Promise<OpResult> { return mergeLayers(this._ctx, opts); }
-  splitLayer(opts: SplitLayerOptions): Promise<OpResult> { return splitLayer(this._ctx, opts); }
-  dropLayer(opts: DropLayerOptions): Promise<OpResult> { return dropLayer(this._ctx, opts); }
+  renameLayer(opts: RenameLayerOptions): Promise<OpResult> {
+    return renameLayer(this._ctx, opts);
+  }
+  mergeLayers(opts: MergeLayersOptions): Promise<OpResult> {
+    return mergeLayers(this._ctx, opts);
+  }
+  splitLayer(opts: SplitLayerOptions): Promise<OpResult> {
+    return splitLayer(this._ctx, opts);
+  }
+  dropLayer(opts: DropLayerOptions): Promise<OpResult> {
+    return dropLayer(this._ctx, opts);
+  }
 
   // -- Feature data ------------------------------------------------------
 
-  sortFeatures(opts: SortFeaturesOptions): Promise<OpResult> { return sortFeatures(this._ctx, opts); }
-  uniqueFeatures(opts: UniqueFeaturesOptions): Promise<OpResult> { return uniqueFeatures(this._ctx, opts); }
-  filterFields(opts: FilterFieldsOptions): Promise<OpResult> { return filterFields(this._ctx, opts); }
-  renameFields(opts: RenameFieldsOptions): Promise<OpResult> { return renameFields(this._ctx, opts); }
-  joinTable(opts: JoinTableOptions): Promise<OpResult> { return joinTable(this._ctx, opts); }
-  dataFill(opts: DataFillOptions): Promise<OpResult> { return dataFill(this._ctx, opts); }
+  sortFeatures(opts: SortFeaturesOptions): Promise<OpResult> {
+    return sortFeatures(this._ctx, opts);
+  }
+  uniqueFeatures(opts: UniqueFeaturesOptions): Promise<OpResult> {
+    return uniqueFeatures(this._ctx, opts);
+  }
+  filterFields(opts: FilterFieldsOptions): Promise<OpResult> {
+    return filterFields(this._ctx, opts);
+  }
+  renameFields(opts: RenameFieldsOptions): Promise<OpResult> {
+    return renameFields(this._ctx, opts);
+  }
+  joinTable(opts: JoinTableOptions): Promise<OpResult> {
+    return joinTable(this._ctx, opts);
+  }
+  dataFill(opts: DataFillOptions): Promise<OpResult> {
+    return dataFill(this._ctx, opts);
+  }
 
   // -- Topology repair / inspection -------------------------------------
 
-  rebuildTopology(opts: RebuildTopologyOptions): Promise<OpResult> { return rebuildTopology(this._ctx, opts); }
-  checkGeometry(opts: CheckGeometryOptions): Promise<OpResult<GeometryCheckReport>> { return checkGeometry(this._ctx, opts); }
-  intersectionPointsLayer(opts: IntersectionPointsLayerOptions): Promise<OpResult> { return intersectionPointsLayer(this._ctx, opts); }
+  rebuildTopology(opts: RebuildTopologyOptions): Promise<OpResult> {
+    return rebuildTopology(this._ctx, opts);
+  }
+  checkGeometry(opts: CheckGeometryOptions): Promise<OpResult<GeometryCheckReport>> {
+    return checkGeometry(this._ctx, opts);
+  }
+  intersectionPointsLayer(opts: IntersectionPointsLayerOptions): Promise<OpResult> {
+    return intersectionPointsLayer(this._ctx, opts);
+  }
 
   // -- Selection-driven ops ---------------------------------------------
 
-  mergeSelected(): Promise<OpResult> { return mergeSelected(this._ctx); }
+  mergeSelected(): Promise<OpResult> {
+    return mergeSelected(this._ctx);
+  }
 }

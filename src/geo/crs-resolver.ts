@@ -165,10 +165,10 @@ export function inferFromPrj(prj: string): string | null {
   if (authorityMatch) return `EPSG:${authorityMatch[1]}`;
 
   if (
-    /Mercator.*WGS.*84.*Pseudo/i.test(prj)
-    || /WGS.*84.*Pseudo.*Mercator/i.test(prj)
-    || /Web[_ ]Mercator/i.test(prj)
-    || /WGS.?1984.*Web.?Mercator/i.test(prj)
+    /Mercator.*WGS.*84.*Pseudo/i.test(prj) ||
+    /WGS.*84.*Pseudo.*Mercator/i.test(prj) ||
+    /Web[_ ]Mercator/i.test(prj) ||
+    /WGS.?1984.*Web.?Mercator/i.test(prj)
   ) {
     return 'EPSG:3857';
   }

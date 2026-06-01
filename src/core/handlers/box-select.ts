@@ -47,11 +47,15 @@ export class BoxSelectHandler extends EventDispatcher implements Handler<BoxSele
   /** Set by HandlerManager.register. */
   _manager?: { isEnabledByName(name: string): boolean };
 
-  constructor(private _map: Emap) { super(); }
+  constructor(private _map: Emap) {
+    super();
+  }
 
   enable(): void {
     if (this._manager?.isEnabledByName('lassoSelect')) {
-      throw new Error('cannot enable boxSelect: lassoSelect is enabled (both consume selection drag gestures); disable it first');
+      throw new Error(
+        'cannot enable boxSelect: lassoSelect is enabled (both consume selection drag gestures); disable it first',
+      );
     }
     this._enabled = true;
   }
@@ -59,16 +63,26 @@ export class BoxSelectHandler extends EventDispatcher implements Handler<BoxSele
     this._enabled = false;
     if (this._start) this._cancel();
   }
-  isEnabled(): boolean { return this._enabled; }
-  setOptions(opts: Partial<BoxSelectHandlerOptions>): void { this._opts = { ...this._opts, ...opts }; }
-  getOptions(): Readonly<BoxSelectHandlerOptions> { return this._opts; }
+  isEnabled(): boolean {
+    return this._enabled;
+  }
+  setOptions(opts: Partial<BoxSelectHandlerOptions>): void {
+    this._opts = { ...this._opts, ...opts };
+  }
+  getOptions(): Readonly<BoxSelectHandlerOptions> {
+    return this._opts;
+  }
 
   getCursor(): string | null {
     return this._enabled ? 'crosshair' : null;
   }
 
-  private get _threshold(): number { return this._opts.dragThreshold ?? 4; }
-  private get _activator(): ModifierCombo { return this._opts.dragActivator ?? 'none'; }
+  private get _threshold(): number {
+    return this._opts.dragThreshold ?? 4;
+  }
+  private get _activator(): ModifierCombo {
+    return this._opts.dragActivator ?? 'none';
+  }
 
   private _ensureOverlay(): HTMLDivElement {
     if (this._overlay) return this._overlay;
@@ -122,13 +136,22 @@ export class BoxSelectHandler extends EventDispatcher implements Handler<BoxSele
       const { x: cx, y: cy } = ev.point;
       this._cancel();
       if (Math.hypot(cx - s.x, cy - s.y) < this._threshold) return 'passthrough';
-      const x1 = Math.min(s.x, cx), y1 = Math.min(s.y, cy);
-      const x2 = Math.max(s.x, cx), y2 = Math.max(s.y, cy);
+      const x1 = Math.min(s.x, cx),
+        y1 = Math.min(s.y, cy);
+      const x2 = Math.max(s.x, cx),
+        y2 = Math.max(s.y, cy);
       const hits = this._map.queryFeatures(
-        [[x1, y1], [x2, y2]],
+        [
+          [x1, y1],
+          [x2, y2],
+        ],
         this._opts.layers ? { layers: this._opts.layers } : undefined,
       );
-      const mode = resolveMode(ev.modifiers, this._opts.modifiers ?? BOX_DEFAULT_MODS, this._activator);
+      const mode = resolveMode(
+        ev.modifiers,
+        this._opts.modifiers ?? BOX_DEFAULT_MODS,
+        this._activator,
+      );
       this._map.select(dedupeRefs(hits), { mode });
       return 'passthrough';
     }

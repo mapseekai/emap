@@ -18,10 +18,7 @@ describe('FieldRemoveCommand', () => {
   });
 
   it('leaves records that never had the field untouched', () => {
-    const records = [
-      { name: 'A', pop: 100 },
-      { name: 'B' },
-    ];
+    const records = [{ name: 'A', pop: 100 }, { name: 'B' }];
     const layer = makeLayer(records);
     const cmd = new FieldRemoveCommand({ layer, field: 'pop' });
     cmd.do();
@@ -31,11 +28,7 @@ describe('FieldRemoveCommand', () => {
   });
 
   it('undo restores exact prior values', () => {
-    const records = [
-      { name: 'A', pop: 100, density: 5.5 },
-      { name: 'B', pop: 200 },
-      { name: 'C' },
-    ];
+    const records = [{ name: 'A', pop: 100, density: 5.5 }, { name: 'B', pop: 200 }, { name: 'C' }];
     const original = JSON.parse(JSON.stringify(records));
     const layer = makeLayer(records);
     const cmd = new FieldRemoveCommand({ layer, field: 'pop' });

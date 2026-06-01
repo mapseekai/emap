@@ -11,10 +11,7 @@ import { Err, type OpResult } from '../op-result';
 import type { MergeLayersOptions } from '../types';
 import type { OpContext } from './_context';
 
-export async function mergeLayers(
-  ctx: OpContext,
-  opts: MergeLayersOptions,
-): Promise<OpResult> {
+export async function mergeLayers(ctx: OpContext, opts: MergeLayersOptions): Promise<OpResult> {
   if (!opts.targets || opts.targets.length < 2) {
     return Err.validation('targets', 'must supply at least 2 target layers');
   }
@@ -41,7 +38,10 @@ export async function mergeLayers(
     const firstGeom = layers[0]?.geometry_type;
     const allSame = layers.every((l) => l?.geometry_type === firstGeom);
     if (!allSame) {
-      return Err.validation('targets', 'targets have mixed geometry types; pass `force: true` to merge anyway');
+      return Err.validation(
+        'targets',
+        'targets have mixed geometry types; pass `force: true` to merge anyway',
+      );
     }
   }
 

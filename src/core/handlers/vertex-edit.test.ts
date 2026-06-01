@@ -25,32 +25,56 @@ function callPrivate(target: object, key: string, ...args: unknown[]): unknown {
 }
 
 describe('VertexEditHandler', () => {
-  const originalFindNearestVertices = Reflect.get(mapshaper.internal as object, 'findNearestVertices');
-  const originalSnapVerticesToPoint = Reflect.get(mapshaper.internal as object, 'snapVerticesToPoint');
-  const originalForEachSegmentInShape = Reflect.get(mapshaper.internal as object, 'forEachSegmentInShape');
-  const originalFindClosestPointOnSeg = Reflect.get(mapshaper.internal as object, 'findClosestPointOnSeg');
+  const originalFindNearestVertices = Reflect.get(
+    mapshaper.internal as object,
+    'findNearestVertices',
+  );
+  const originalSnapVerticesToPoint = Reflect.get(
+    mapshaper.internal as object,
+    'snapVerticesToPoint',
+  );
+  const originalForEachSegmentInShape = Reflect.get(
+    mapshaper.internal as object,
+    'forEachSegmentInShape',
+  );
+  const originalFindClosestPointOnSeg = Reflect.get(
+    mapshaper.internal as object,
+    'findClosestPointOnSeg',
+  );
 
   beforeEach(() => {
-    Reflect.set(mapshaper.internal as object, 'findNearestVertices', vi.fn(() => []));
+    Reflect.set(
+      mapshaper.internal as object,
+      'findNearestVertices',
+      vi.fn(() => []),
+    );
     Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', vi.fn());
   });
 
   afterEach(() => {
     Reflect.set(mapshaper.internal as object, 'findNearestVertices', originalFindNearestVertices);
     Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', originalSnapVerticesToPoint);
-    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', originalForEachSegmentInShape);
-    Reflect.set(mapshaper.internal as object, 'findClosestPointOnSeg', originalFindClosestPointOnSeg);
+    Reflect.set(
+      mapshaper.internal as object,
+      'forEachSegmentInShape',
+      originalForEachSegmentInShape,
+    );
+    Reflect.set(
+      mapshaper.internal as object,
+      'findClosestPointOnSeg',
+      originalFindClosestPointOnSeg,
+    );
   });
 
   it('moves all shared vertices during drag', () => {
     const mapMock: MockMap = {
       getCanvasContainer: () => ({
-        getBoundingClientRect: () => ({ left: 10, top: 20 })
+        getBoundingClientRect: () => ({ left: 10, top: 20 }),
       }),
       unproject: () => [11, 22],
       setEditVertexState: vi.fn(),
       render: vi.fn(),
-      fire: vi.fn()
+      fire: vi.fn(),
     };
 
     const handler = new VertexEditHandler(mapMock as any);
@@ -66,9 +90,9 @@ describe('VertexEditHandler', () => {
       shape: [[1]],
       arcs: {
         getArcIter: () => ({ x: 0, y: 0, hasNext: () => false }),
-        getVertex2: () => [0, 0]
+        getVertex2: () => [0, 0],
       },
-      geometryType: 'polyline'
+      geometryType: 'polyline',
     });
 
     // clientX:100, clientY:120, rect left:10, top:20 → px=90, py=100
@@ -87,7 +111,9 @@ describe('VertexEditHandler', () => {
       unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
       project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
       getSource: vi.fn(() => ({
-        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] }],
+        getLayers: () => [
+          { name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] },
+        ],
         getArcs: () => ({ getVertex2: () => [0, 0] }),
       })),
       setEditVertexState: vi.fn(),
@@ -95,9 +121,13 @@ describe('VertexEditHandler', () => {
     };
     const snapSpy = vi.fn();
     Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
-    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', vi.fn((shape, _arcs, cb) => {
-      if (shape === targetShape) cb(2, 3, xx, yy);
-    }));
+    Reflect.set(
+      mapshaper.internal as object,
+      'forEachSegmentInShape',
+      vi.fn((shape, _arcs, cb) => {
+        if (shape === targetShape) cb(2, 3, xx, yy);
+      }),
+    );
 
     const handler = new VertexEditHandler(mapMock as any, { snapThreshold: 5, snapToEdge: false });
     setPrivate(handler, '_map', mapMock);
@@ -126,7 +156,9 @@ describe('VertexEditHandler', () => {
       unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
       project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
       getSource: vi.fn(() => ({
-        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] }],
+        getLayers: () => [
+          { name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] },
+        ],
         getArcs: () => ({ getVertex2: () => [0, 0] }),
       })),
       setEditVertexState: vi.fn(),
@@ -134,9 +166,13 @@ describe('VertexEditHandler', () => {
     };
     const snapSpy = vi.fn();
     Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
-    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', vi.fn((shape, _arcs, cb) => {
-      if (shape === targetShape) cb(2, 3, xx, yy);
-    }));
+    Reflect.set(
+      mapshaper.internal as object,
+      'forEachSegmentInShape',
+      vi.fn((shape, _arcs, cb) => {
+        if (shape === targetShape) cb(2, 3, xx, yy);
+      }),
+    );
 
     const handler = new VertexEditHandler(mapMock as any, {
       snapThreshold: 5,
@@ -168,13 +204,13 @@ describe('VertexEditHandler', () => {
 
     const mapMock: MockMap = {
       getCanvasContainer: () => ({
-        getBoundingClientRect: () => ({ left: 0, top: 0 })
+        getBoundingClientRect: () => ({ left: 0, top: 0 }),
       }),
       unproject: () => [123.45, 67.89],
       setEditVertexState: vi.fn(),
       render: renderSpy,
       fire: fireSpy,
-      getSource: vi.fn(() => ({ refreshDisplayArcs }))
+      getSource: vi.fn(() => ({ refreshDisplayArcs })),
     };
 
     const handler = new VertexEditHandler(mapMock as any);
@@ -189,9 +225,9 @@ describe('VertexEditHandler', () => {
       arcs: {
         getArcIter: () => ({ x: 0, y: 0, hasNext: () => false }),
         getVertex2: () => [0, 0],
-        transformPoints
+        transformPoints,
       },
-      geometryType: 'polyline'
+      geometryType: 'polyline',
     });
 
     // clientX:1, clientY:2, rect left:0, top:0 → px=1, py=2
@@ -207,8 +243,8 @@ describe('VertexEditHandler', () => {
         layer: 'roads',
         vertexIndex: 8,
         vertexIds: [8, 20],
-        coords: [123.45, 67.89]
-      })
+        coords: [123.45, 67.89],
+      }),
     );
     expect(renderSpy).toHaveBeenCalled();
   });
@@ -282,7 +318,13 @@ describe('VertexEditHandler', () => {
 describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
   it('_showContextMenu sets class-based DOM and only dynamic position inline', () => {
     document.getElementById('emap-ctx-menu')?.remove();
-    const mapMock = { setEditMode: () => {}, on: () => {}, off: () => {}, render: () => {}, clearEditVertexState: () => {} } as any;
+    const mapMock = {
+      setEditMode: () => {},
+      on: () => {},
+      off: () => {},
+      render: () => {},
+      clearEditVertexState: () => {},
+    } as any;
     const handler = new VertexEditHandler(mapMock);
     Reflect.get(handler, '_showContextMenu').call(handler, 123, 456, () => {});
 
@@ -307,10 +349,18 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
 
   it('_showContextMenu click handler invokes onDelete and removes the menu', () => {
     document.getElementById('emap-ctx-menu')?.remove();
-    const mapMock = { setEditMode: () => {}, on: () => {}, off: () => {}, render: () => {}, clearEditVertexState: () => {} } as any;
+    const mapMock = {
+      setEditMode: () => {},
+      on: () => {},
+      off: () => {},
+      render: () => {},
+      clearEditVertexState: () => {},
+    } as any;
     const handler = new VertexEditHandler(mapMock);
     let called = 0;
-    Reflect.get(handler, '_showContextMenu').call(handler, 10, 20, () => { called++; });
+    Reflect.get(handler, '_showContextMenu').call(handler, 10, 20, () => {
+      called++;
+    });
     const item = document.querySelector('#emap-ctx-menu > div') as HTMLDivElement;
     item.click();
     expect(called).toBe(1);
