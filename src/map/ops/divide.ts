@@ -7,6 +7,7 @@ import { resolveLayerInList } from '../layer-registry';
 import { Err, type OpResult } from '../op-result';
 import type { DivideOptions } from '../types';
 import type { OpContext } from './_context';
+import { validateFieldList } from './_fields';
 
 export async function divideLayer(ctx: OpContext, opts: DivideOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
@@ -26,8 +27,9 @@ export async function divideLayer(ctx: OpContext, opts: DivideOptions): Promise<
 
   const divideOpts: Record<string, unknown> = { source: opts.divider };
   if (opts.fields && opts.fields.length > 0) {
-    const safe = opts.fields.filter((f) => !f.includes(','));
-    if (safe.length > 0) divideOpts.fields = safe;
+    const fields = validateFieldList('fields', opts.fields);
+    if (!fields.ok) return fields;
+    divideOpts.fields = fields.value;
   }
   if (opts.force) divideOpts.force = true;
 

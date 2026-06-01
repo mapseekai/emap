@@ -5233,16 +5233,24 @@ describe('audit-fix: linesLayer fields token has a single canonical form', () =>
     expectCli('-target "states" -lines STATE,COUNTY', parseSpy.mock.calls[0][0]);
   });
 
-  it('strips comma-bearing field names but keeps the rest', async () => {
+  it('rejects comma-bearing field names before dispatch', async () => {
     const { map, parseSpy } = makeMapWithLayers();
-    await map.ops.linesLayer({ source: 'src1', target: 'states', fields: ['ok', 'bad,name', 'ok2'] });
-    expectCli('-target "states" -lines ok,ok2', parseSpy.mock.calls[0][0]);
+    const result = await map.ops.linesLayer({
+      source: 'src1',
+      target: 'states',
+      fields: ['ok', 'bad,name', 'ok2'],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('validation');
+    expect(parseSpy).not.toHaveBeenCalled();
   });
 
-  it('falls back to bare "-lines" when every field is invalid', async () => {
+  it('rejects instead of falling back when every field is invalid', async () => {
     const { map, parseSpy } = makeMapWithLayers();
-    await map.ops.linesLayer({ source: 'src1', target: 'states', fields: ['bad,name'] });
-    expectCli('-target "states" -lines', parseSpy.mock.calls[0][0]);
+    const result = await map.ops.linesLayer({ source: 'src1', target: 'states', fields: ['bad,name'] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('validation');
+    expect(parseSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -5329,13 +5337,15 @@ describe('dissolveLayer: expanded options', () => {
     expect(parseSpy).not.toHaveBeenCalled();
   });
 
-  it('comma-bearing fields[] entries are filtered out', async () => {
+  it('comma-bearing fields[] entries are rejected before dispatch', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
-    await map.ops.dissolveLayer({
+    const result = await map.ops.dissolveLayer({
       source: 'src1', target: 'counties',
       fields: ['ok', 'bad,name', 'ok2'],
     });
-    expectCli('-target "counties" -dissolve "ok,ok2"', parseSpy.mock.calls[0][0]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('validation');
+    expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('empty fields[] is treated as no group-by', async () => {
@@ -5387,15 +5397,17 @@ describe('dissolveLayer: expanded options', () => {
     expectCli('-target "counties" -dissolve multipart name="states-out" no-replace', parseSpy.mock.calls[0][0]);
   });
 
-  it('comma-bearing entries in sumFields/copyFields are filtered', async () => {
+  it('comma-bearing entries in sumFields/copyFields are rejected before dispatch', async () => {
     const { map, parseSpy } = makeMapWithLayer('counties');
-    await map.ops.dissolveLayer({
+    const result = await map.ops.dissolveLayer({
       source: 'src1', target: 'counties',
       field: 'STATE',
       sumFields: ['POP', 'bad,one'],
       copyFields: ['NAME', 'also,bad'],
     });
-    expectCli('-target "counties" -dissolve "STATE" sum-fields=POP copy-fields=NAME', parseSpy.mock.calls[0][0]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('validation');
+    expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it('full minimal call still works (regression)', async () => {

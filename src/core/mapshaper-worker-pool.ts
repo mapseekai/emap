@@ -213,10 +213,16 @@ export class MapshaperWorkerPool {
         msg.commands = cmdOrCommands;
       }
       if (inputFiles) msg.inputFiles = inputFiles;
-      if (transferList && transferList.length > 0) {
-        worker.postMessage(msg, transferList);
-      } else {
-        worker.postMessage(msg);
+      try {
+        if (transferList && transferList.length > 0) {
+          worker.postMessage(msg, transferList);
+        } else {
+          worker.postMessage(msg);
+        }
+      } catch (err) {
+        this._pending.delete(id);
+        slot.pendingCount = Math.max(0, slot.pendingCount - 1);
+        reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
   }

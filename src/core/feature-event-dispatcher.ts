@@ -98,7 +98,13 @@ export class FeatureEventDispatcher {
     const wrap = this._onceWrap.get(cb);
     this._reg[type] = this._reg[type].filter((e) => e.cb !== cb && (wrap === undefined || e.cb !== wrap));
     this._onceWrap.delete(cb);
+    if (!this.hasListeners()) this._clearHoverState();
     this._onChange?.();
+  }
+
+  private _clearHoverState(): void {
+    this._lastKey = null;
+    this._lastRef = null;
   }
 
   /** Topmost hit at a point, restricted to the union of all registered filters' layers. */

@@ -266,7 +266,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
           const buf = await response.arrayBuffer();
           const content = new Uint8Array(buf);
 
-          const urlPath = new URL(url).pathname;
+          const urlPath = this._pathnameFromUrl(url);
           let filename = urlPath.split('/').pop() || '';
 
           if (!this._hasSupportedExtension(filename)) {
@@ -375,6 +375,17 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     };
     const ext = extMap[ct] || '.json';
     return (fallbackName || 'data') + ext;
+  }
+
+  private _pathnameFromUrl(url: string): string {
+    try {
+      const base = typeof window !== 'undefined' && window.location?.href
+        ? window.location.href
+        : 'http://emap.local/';
+      return new URL(url, base).pathname;
+    } catch {
+      return url.split(/[?#]/, 1)[0];
+    }
   }
 
   public getDataset(): MapshaperDataset | undefined {

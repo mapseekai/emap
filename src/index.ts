@@ -4,7 +4,6 @@
 // tree-shaking is precise and the API surface stays auditable.
 
 import './shim';
-import 'mapshaper';
 
 // ===========================================================================
 // Core orchestrator + types

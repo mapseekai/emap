@@ -83,6 +83,24 @@ describe('FeatureEventDispatcher', () => {
     expect(d.hasListeners()).toBe(false);
   });
 
+  it('clears hover state when the last listener is removed', () => {
+    const map = stubMap([
+      [{ source: 's', layer: 'l', id: 1 }],
+      [],
+    ]);
+    const d = new FeatureEventDispatcher(map as any);
+    const hover = vi.fn();
+    const leave = vi.fn();
+    d.on('feature:hover', undefined, hover);
+    d.dispatch(ev('move', 0, 0));
+    d.off('feature:hover', hover);
+
+    d.on('feature:leave', undefined, leave);
+    d.dispatch(ev('move', 1, 1));
+
+    expect(leave).not.toHaveBeenCalled();
+  });
+
   it('empty registry → dispatch is a no-op (no queryFeatures call)', () => {
     const map = stubMap([[{ source: 's', layer: 'l', id: 1 }]]);
     const d = new FeatureEventDispatcher(map as any);

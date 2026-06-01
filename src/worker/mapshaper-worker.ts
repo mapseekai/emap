@@ -83,7 +83,8 @@ async function handleRun(req: RunRequest): Promise<void> {
       { compact: false },
     );
 
-    (self as unknown as Worker).postMessage({ id, type: 'ok', packed: repacked });
+    const transferList = collectTransferables(repacked);
+    (self as unknown as Worker).postMessage({ id, type: 'ok', packed: repacked }, transferList);
   } catch (err: any) {
     const message = err?.message ?? String(err);
     (self as unknown as Worker).postMessage({ id: req.id, type: 'error', message });
@@ -106,3 +107,35 @@ self.onmessage = (e: MessageEvent) => {
     queue = queue.then(() => handleRun(data)).catch(() => undefined);
   }
 };
+
+function collectTransferables(root: unknown): Transferable[] {
+  const out: Transferable[] = [];
+  const seen = new Set<ArrayBuffer>();
+  const visit = (val: unknown): void => {
+    if (!val || typeof val !== 'object') return;
+    if (val instanceof Uint8Array) {
+      const buf = val.buffer;
+      if (buf instanceof ArrayBuffer && !seen.has(buf)) {
+        seen.add(buf);
+        out.push(buf);
+      }
+      return;
+    }
+    if (val instanceof ArrayBuffer) {
+      if (!seen.has(val)) {
+        seen.add(val);
+        out.push(val);
+      }
+      return;
+    }
+    if (Array.isArray(val)) {
+      for (const item of val) visit(item);
+      return;
+    }
+    for (const key of Object.keys(val)) {
+      visit((val as Record<string, unknown>)[key]);
+    }
+  };
+  visit(root);
+  return out;
+}

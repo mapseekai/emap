@@ -3,6 +3,7 @@ import { AffineTransform } from '../geo/transform';
 import { TopologySource } from '../source/source';
 import { getLayerId } from '../source/layer-utils';
 import type { HighlightStyle, HighlightFeatureRef, QueriedFeature } from './map';
+import type { FeatureShape } from '../types/mapshaper-types';
 
 /**
  * Manages feature highlighting state and rendering.
@@ -84,7 +85,7 @@ export class HighlightManager {
         if (visibleLayers && !visibleLayers.has(`${sourceId}:${layerId}`)) continue;
         const ids = sourceHighlights.get(layerId);
         if (!ids || ids.size === 0) continue;
-        const shapes: unknown[] = [];
+        const shapes: FeatureShape[] = [];
         for (const id of ids) {
           const shape = layer.shapes[id];
           if (shape) shapes.push(shape);

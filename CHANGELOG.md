@@ -18,6 +18,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `TopologySource.setData()` now derives import filenames from root-relative
+  and other relative URLs without throwing, so browser calls like
+  `setData('/data/roads.geojson')` keep the correct file extension for
+  mapshaper import.
+- Worker-backed mapshaper operations now clean up pending job state if
+  `Worker.postMessage()` throws synchronously, preventing stuck promises and
+  stale worker load accounting after clone/transfer failures.
+- Worker results now transfer packed binary buffers back to the main thread
+  instead of cloning them, reducing memory pressure on large dataset
+  operations.
+- `DrawFeatureControl` now unregisters its `editmodechange` listener on
+  removal, and delegated feature hover state is cleared when the last
+  `feature:*` listener is removed, avoiding stale event/control state after
+  teardown.
+- `BasemapControl` now guards asynchronous MapLibre initialization against
+  `onRemove()` races and clears container/style references during teardown.
+- Feature hit-testing now routes mapshaper geometry helpers through the
+  `MapshaperAdapter` boundary instead of importing `mapshaper` directly from
+  `FeatureQuery`.
+- `dissolveLayer`, `linesLayer`, `joinTable`, `unionLayers`, and `divideLayer`
+  now reject invalid field lists with structured validation errors instead of
+  silently dropping bad field names and running a partial command.
+- Painter interfaces now use the shared mapshaper shape types instead of
+  `any[]`, tightening the renderer contract without changing rendering
+  behaviour.
 - `map.reproject()` now normalizes common EPSG aliases before calling mapshaper
   (`EPSG:3857` / `EPSG:900913` / `EPSG:102100` -> `webmercator`,
   `EPSG:4326` -> `wgs84`), avoiding browser `+init=epsg:*` lookup failures.

@@ -17,6 +17,7 @@ import { resolveLayerInList } from '../layer-registry';
 import { Err, type OpResult } from '../op-result';
 import type { JoinTableOptions } from '../types';
 import type { OpContext } from './_context';
+import { validateFieldList } from './_fields';
 
 export async function joinTable(ctx: OpContext, opts: JoinTableOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
@@ -72,8 +73,9 @@ export async function joinTable(ctx: OpContext, opts: JoinTableOptions): Promise
     keys: [targetKey, sourceKey],
   };
   if (opts.fields && opts.fields.length > 0) {
-    const safe = opts.fields.filter((f) => typeof f === 'string' && !f.includes(','));
-    if (safe.length > 0) joinOpts.fields = safe;
+    const fields = validateFieldList('fields', opts.fields);
+    if (!fields.ok) return fields;
+    joinOpts.fields = fields.value;
   }
   if (opts.prefix && opts.prefix.length > 0) joinOpts.prefix = opts.prefix;
   if (opts.where && opts.where.trim().length > 0) joinOpts.where = opts.where;

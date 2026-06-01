@@ -1,5 +1,5 @@
-import mapshaper from 'mapshaper';
 import Flatbush from 'flatbush';
+import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { AffineTransform } from '../geo/transform';
 import { TopologySource } from '../source/source';
 import { getLayerId, normalizePointShape } from '../source/layer-utils';
@@ -321,9 +321,9 @@ export class FeatureQuery {
   }
 
   private _sortByDistance(x: number, y: number, cands: HitCandidate[], arcs: ArcCollection): void {
-    const geom = mapshaper.geom;
+    const adapter = getDefaultMapshaperAdapter();
     for (const cand of cands) {
-      cand.info = geom.getPointToShapeInfo(x, y, cand.shape, arcs);
+      cand.info = adapter.getPointToShapeInfo(x, y, cand.shape, arcs);
       cand.dist = cand.info!.distance;
     }
     cands.sort((a, b) => a.dist - b.dist);
@@ -357,7 +357,7 @@ export class FeatureQuery {
     y: number,
     dataset?: { editVersion?: number },
   ): number[] {
-    const geom = mapshaper.geom;
+    const adapter = getDefaultMapshaperAdapter();
     const toPx = Math.abs(this._getTransform().mx || 1);
     let bestId = -1;
     let bestDist = Infinity;
@@ -381,7 +381,7 @@ export class FeatureQuery {
       if (!shp) continue;
       for (const p of normalizePointShape(shp)) {
         if (!p) continue;
-        const dist = geom.distance2D(x, y, p[0], p[1]) * toPx;
+        const dist = adapter.distance2D(x, y, p[0], p[1]) * toPx;
         if (dist > hitThreshold) continue;
         if (dist < hitThreshold && hitThreshold > POINT_BULLSEYE_DIST) {
           hitThreshold = Math.max(POINT_BULLSEYE_DIST, dist);
@@ -423,12 +423,12 @@ export class FeatureQuery {
     y: number,
     dataset?: { editVersion?: number },
   ): number[] {
-    const geom = mapshaper.geom;
+    const adapter = getDefaultMapshaperAdapter();
     const maxDist = this._getZoomAdjustedHitBuffer(10, 1);
     const cands = this._findHitCandidates(sourceId, layerIndex, layer, arcs, x, y, maxDist, dataset);
     let hits: HitCandidate[] = [];
     for (const cand of cands) {
-      if (geom.testPointInPolygon(x, y, cand.shape, arcs)) {
+      if (adapter.testPointInPolygon(x, y, cand.shape, arcs)) {
         hits.push(cand);
       }
     }

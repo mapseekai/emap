@@ -7,10 +7,14 @@ function fakeMap() {
   let modeCb: ((e: { mode: string }) => void) | null = null;
   const df = { isEnabled: () => enabled, enable: vi.fn(() => { enabled = true; }),
     disable: vi.fn(() => { enabled = false; }), setOptions: vi.fn() };
+  const off = vi.fn((t: string, cb: any) => {
+    if (t === 'editmodechange' && cb === modeCb) modeCb = null;
+  });
   return {
     drawFeature: df,
     getCanvasContainer: () => document.createElement('div'),
     on: (t: string, cb: any) => { if (t === 'editmodechange') modeCb = cb; },
+    off,
     _fireMode: (m: string) => modeCb?.({ mode: m }),
   } as any;
 }
@@ -85,5 +89,18 @@ describe('DrawFeatureControl (thin shell)', () => {
     (root.querySelector('button') as HTMLButtonElement).click();
     c.onRemove();
     expect(map.drawFeature.disable).toHaveBeenCalled();
+  });
+
+  it('onRemove unsubscribes the editmodechange listener', () => {
+    const map = fakeMap();
+    const c = new DrawFeatureControl({ source: 's', type: 'point' });
+    const root = c.onAdd(map);
+    const btn = root.querySelector('button') as HTMLButtonElement;
+
+    c.onRemove();
+    map._fireMode('vertex');
+
+    expect(map.off).toHaveBeenCalledWith('editmodechange', expect.any(Function));
+    expect(btn.classList.contains('active')).toBe(false);
   });
 });

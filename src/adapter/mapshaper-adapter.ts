@@ -55,6 +55,12 @@ export interface MapshaperBBox {
   ymax: number;
 }
 
+/** Result from mapshaper.geom.getPointToShapeInfo; only distance is consumed. */
+export interface PointToShapeInfo {
+  distance: number;
+  [key: string]: unknown;
+}
+
 /**
  * One entry in a parsed mapshaper command pipeline. Equivalent to what
  * `parseCommands('-clip source=mask')` returns: a `name` (kebab-case op
@@ -233,6 +239,24 @@ export interface MapshaperAdapter {
    * the renderer falls back to at zoomed-out scales.
    */
   simplifyArcsFast(arcs: ArcCollection, segLength: number): ArcCollection;
+
+  // -- Geometry predicates / measurements ---------------------------------
+
+  distance2D(ax: number, ay: number, bx: number, by: number): number;
+
+  getPointToShapeInfo(
+    x: number,
+    y: number,
+    shape: number[][],
+    arcs: ArcCollection,
+  ): PointToShapeInfo;
+
+  testPointInPolygon(
+    x: number,
+    y: number,
+    shape: number[][],
+    arcs: ArcCollection,
+  ): boolean;
 
   /**
    * Returns `true` iff the layer carries renderable shape data (a
@@ -440,6 +464,28 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
 
   simplifyArcsFast(arcs: ArcCollection, segLength: number): ArcCollection {
     return mapshaper.internal.simplifyArcsFast(arcs, segLength);
+  }
+
+  distance2D(ax: number, ay: number, bx: number, by: number): number {
+    return mapshaper.geom.distance2D(ax, ay, bx, by);
+  }
+
+  getPointToShapeInfo(
+    x: number,
+    y: number,
+    shape: number[][],
+    arcs: ArcCollection,
+  ): PointToShapeInfo {
+    return mapshaper.geom.getPointToShapeInfo(x, y, shape, arcs);
+  }
+
+  testPointInPolygon(
+    x: number,
+    y: number,
+    shape: number[][],
+    arcs: ArcCollection,
+  ): boolean {
+    return mapshaper.geom.testPointInPolygon(x, y, shape, arcs);
   }
 
   layerHasGeometry(layer: MapshaperLayer): boolean {

@@ -25,6 +25,11 @@ export class DrawFeatureControl implements Control {
   private _map: Emap | null = null;
   private _container: HTMLElement | null = null;
   private _btn: HTMLButtonElement | null = null;
+  private _onEditModeChange = (e: { mode: string }) => {
+    if (e.mode !== 'draw') {
+      this._btn?.classList.remove('active');
+    }
+  };
 
   constructor(options: DrawFeatureControlOptions) {
     this._opts = options;
@@ -53,11 +58,7 @@ export class DrawFeatureControl implements Control {
 
     this._applyOptions();
 
-    map.on('editmodechange', (e: { mode: string }) => {
-      if (e.mode !== 'draw') {
-        this._btn?.classList.remove('active');
-      }
-    });
+    map.on('editmodechange', this._onEditModeChange);
 
     return this._container;
   }
@@ -66,6 +67,7 @@ export class DrawFeatureControl implements Control {
     if (this._map && this._map.drawFeature.isEnabled()) {
       this._map.drawFeature.disable();
     }
+    this._map?.off('editmodechange', this._onEditModeChange);
     if (this._container?.parentNode) {
       this._container.parentNode.removeChild(this._container);
     }

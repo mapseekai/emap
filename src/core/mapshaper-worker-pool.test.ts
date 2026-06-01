@@ -13,6 +13,7 @@ class MockWorker {
   onmessage: ((e: MessageEvent) => void) | null = null;
   onerror: ((e: ErrorEvent) => void) | null = null;
   posted: any[] = [];
+  transfers: Transferable[][] = [];
   terminateCalled = false;
   static instances: MockWorker[] = [];
   url: string;
@@ -22,8 +23,9 @@ class MockWorker {
     MockWorker.instances.push(this);
   }
 
-  postMessage(msg: any): void {
+  postMessage(msg: any, transfer?: Transferable[]): void {
     this.posted.push(msg);
+    this.transfers.push(transfer ?? []);
   }
 
   terminate(): void {
@@ -318,6 +320,35 @@ describe('MapshaperWorkerPool', () => {
     const bMsg = newWorker.posted[0];
     newWorker.respond({ id: bMsg.id, type: 'ok', packed: 'fresh-ok' });
     await expect(b).resolves.toBe('fresh-ok');
+  });
+
+  it('rejects and clears load accounting when postMessage throws', async () => {
+    class ThrowOnceWorker extends MockWorker {
+      static throwsLeft = 1;
+
+      override postMessage(msg: any, transfer?: Transferable[]): void {
+        if (ThrowOnceWorker.throwsLeft > 0) {
+          ThrowOnceWorker.throwsLeft--;
+          throw new Error('clone failed');
+        }
+        super.postMessage(msg, transfer);
+      }
+    }
+
+    const pool = new MapshaperWorkerPool({
+      workerUrl: 'fake-worker.js',
+      WorkerCtor: ThrowOnceWorker as unknown as typeof Worker,
+      poolSize: 2,
+    });
+
+    const failed = pool.run('-clip', {});
+    await expect(failed).rejects.toThrow(/clone failed/);
+
+    const second = pool.run('-dissolve', {});
+    expect(MockWorker.instances).toHaveLength(1);
+    const worker = MockWorker.instances[0];
+    worker.respond({ id: worker.posted[0].id, type: 'ok', packed: 'ok-after-throw' });
+    await expect(second).resolves.toBe('ok-after-throw');
   });
 });
 

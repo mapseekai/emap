@@ -196,6 +196,32 @@ describe('TopologySource.export', () => {
   });
 });
 
+describe('TopologySource.setData', () => {
+  it('derives filenames from root-relative URLs before import', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'Content-Type': 'application/geo+json' }),
+      arrayBuffer: async () => new Uint8Array([123, 125]).buffer,
+    } as Response);
+    const runImport = vi.fn(async () => FAKE_DATASET);
+
+    try {
+      const source = new TopologySource('roads', {
+        mapshaperRunner: { runImport },
+      });
+
+      await source.setData('/data/roads.geojson');
+
+      expect(fetchSpy).toHaveBeenCalledWith('/data/roads.geojson', expect.any(Object));
+      expect(runImport).toHaveBeenCalledTimes(1);
+      expect(runImport.mock.calls[0][0]).toBe('-i "roads.geojson"');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+});
+
 describe('TopologySource.reproject', () => {
   it('resolves EPSG targets before calling mapshaper directly', async () => {
     const source = new TopologySource('test');

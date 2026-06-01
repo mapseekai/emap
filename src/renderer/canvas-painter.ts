@@ -1,7 +1,15 @@
 import { Painter, DrawOverlayState } from './painter';
 import { AffineTransform } from '../geo/transform';
 import { normalizePointShape } from '../source/layer-utils';
-import type { ArcCollection, StrokeStyle, PointStyle, VertexDotStyle } from '../types/mapshaper-types';
+import type {
+  ArcCollection,
+  ArcIterator,
+  FeatureShape,
+  PathShape,
+  StrokeStyle,
+  PointStyle,
+  VertexDotStyle,
+} from '../types/mapshaper-types';
 
 export class CanvasPainter implements Painter {
   private _ctx: CanvasRenderingContext2D;
@@ -22,7 +30,11 @@ export class CanvasPainter implements Painter {
     this._pixelRatio = ratio;
   }
 
-  drawPaths(shapes: any[], style: StrokeStyle, arcs: ArcCollection): void {
+  drawPaths(
+    shapes: readonly (FeatureShape | null | undefined)[],
+    style: StrokeStyle,
+    arcs: ArcCollection,
+  ): void {
     // Width 0 means "no outline" — skip the whole pass so callers can use it
     // to disable strokes (e.g. fill-only polygons) without paying any cost.
     if (style.width === 0) return;
@@ -40,8 +52,8 @@ export class CanvasPainter implements Painter {
     shapes.forEach(shape => {
       if (!shape) return;
 
-      shape.forEach((part: number[]) => {
-        part.forEach((arcId: number) => {
+      (shape as PathShape).forEach((part) => {
+        part.forEach((arcId) => {
           if (count > 0 && count % batchSize === 0) {
             ctx.stroke();
             ctx.beginPath();
@@ -84,7 +96,7 @@ export class CanvasPainter implements Painter {
   }
 
   // Equivalent to mapshaper's drawPath2 with optimized rounding
-  private drawPathSnapping(iter: any, ctx: CanvasRenderingContext2D): void {
+  private drawPathSnapping(iter: ArcIterator, ctx: CanvasRenderingContext2D): void {
     // Cache transform values in local variables (Chrome 80+ performance workaround)
     const mx = this._transform.mx * this._pixelRatio;
     const my = this._transform.my * this._pixelRatio;
@@ -118,7 +130,10 @@ export class CanvasPainter implements Painter {
     }
   }
 
-  drawPoints(_shapes: any[], _style: PointStyle): void {
+  drawPoints(
+    _shapes: readonly (FeatureShape | null | undefined)[],
+    _style: PointStyle,
+  ): void {
     const ctx = this._ctx;
     const pr = this._pixelRatio;
     const mx = this._transform.mx * pr;
@@ -136,7 +151,7 @@ export class CanvasPainter implements Painter {
     _shapes.forEach(shape => {
       if (!shape) return;
       const points = normalizePointShape(shape);
-      points.forEach((p: number[]) => {
+      points.forEach((p) => {
         const x = p[0] * mx + bx;
         const y = p[1] * my + by;
         ctx.moveTo(x + radius, y);
@@ -156,7 +171,7 @@ export class CanvasPainter implements Painter {
    * Called during render() when in vertex edit mode.
    */
   drawVertexDots(
-    shapes: any[],
+    shapes: readonly (FeatureShape | null | undefined)[],
     arcs: ArcCollection,
     style: VertexDotStyle = {},
   ): void {
@@ -187,8 +202,8 @@ export class CanvasPainter implements Painter {
 
     shapes.forEach(shape => {
       if (!shape) return;
-      shape.forEach((part: number[]) => {
-        part.forEach((arcId: number) => {
+      (shape as PathShape).forEach((part) => {
+        part.forEach((arcId) => {
           const absId = arcId >= 0 ? arcId : ~arcId;
           const iter = arcs.getArcIter(absId);
           while (iter.hasNext()) {
@@ -233,8 +248,8 @@ export class CanvasPainter implements Painter {
    * produces incorrect fills (doesn't cover the whole polygon, or fills holes).
    */
   drawPolygonFill(
-    shapes: any[],
-    arcs: ArcCollection & { getShapeIter?: (part: number[]) => { x: number; y: number; hasNext(): boolean } },
+    shapes: readonly (FeatureShape | null | undefined)[],
+    arcs: ArcCollection,
     fillColor: string,
     filter?: (i: number) => boolean,
     /**
@@ -278,7 +293,7 @@ export class CanvasPainter implements Painter {
       if (filter) {
         // Find if this shape shares any arc with the viewport
         isVisible = false;
-        for (const part of shape) {
+        for (const part of shape as PathShape) {
           for (const arcId of part) {
             const absId = arcId >= 0 ? arcId : ~arcId;
             if (filter(absId)) {
@@ -299,7 +314,7 @@ export class CanvasPainter implements Painter {
         counts = 0;
       }
 
-      for (const part of shape) {
+      for (const part of shape as PathShape) {
         // getShapeIter respects arc direction (reversed arcs traversed backwards)
         const iter = arcs.getShapeIter!(part);
         if (!iter.hasNext()) continue;

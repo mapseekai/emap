@@ -124,6 +124,7 @@ export class BasemapControl implements Control {
     if (currentCrs !== 'webmercator' && currentCrs !== 'epsg:3857' && this._map.reproject) {
       // Use 'webmercator' as the target for mapshaper
       await this._map.reproject('webmercator');
+      if (!this._basemapContainer || !this._map) return;
     }
 
     if (!this._maplibreMap) {
@@ -139,6 +140,7 @@ export class BasemapControl implements Control {
     if (!this._basemapContainer || !this._map) return;
 
     const maplibregl = await this._loadMapLibre();
+    if (!this._basemapContainer || !this._map) return;
     const maplibreStyle = this._createMapLibreStyle(style);
 
     this._maplibreMap = new maplibregl.Map({
@@ -247,5 +249,9 @@ export class BasemapControl implements Control {
       this._container.parentNode.removeChild(this._container);
     }
     this._map = null;
+    this._basemapContainer = null;
+    this._container = null;
+    this._activeStyle = null;
+    this._isOn = false;
   }
 }
