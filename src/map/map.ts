@@ -20,7 +20,7 @@ import { EditSessions } from './edit-sessions';
 import { AttributeOps } from './attribute-ops';
 import { EditStateStore, type EditMode } from './edit-state-store';
 import { LayerRegistry } from './layer-registry';
-import { TopologySource } from '../source/source';
+import type { TopologySource } from '../source/source';
 import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
 import { ScrollZoomHandler } from '../core/handlers/scroll-zoom';
 import type { ScrollZoomOptions } from '../core/handlers/scroll-zoom';
@@ -53,20 +53,16 @@ import { HighlightManager } from './highlight-manager';
 import { Selection, type SelectMode, SelectionDiff } from './selection';
 import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
 import type { EditCommand } from '../edit/edit-command';
-import { CompositeCommand } from '../edit/commands/composite';
 import { Transaction, type TransactionInternal } from '../edit/transaction';
-import {
-  BulkFeatureDeleteCommand,
-  type BulkFeatureDeleteCommandOptions,
-} from '../edit/commands/feature-delete';
 // `MapshaperOps`, `EditSessions`, `AttributeOps` are composed onto `Emap`
 // via the `ops` / `editSession` / `attributes` getters below.
-import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { Control, ControlPosition } from '../ui/control';
 import { getLayerId } from '../source/layer-utils';
-import { resolveStrokeStyle, resolvePointStyle } from './layer';
-import type { LayerSpecification, FillPaint, LinePaint, CirclePaint } from './layer';
-import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
+import type { LayerSpecification } from './layer';
+import type { ArcCollection, MapshaperLayer } from '../types/mapshaper-types';
+import { exportSnapshotFromSources, unpackSnapshot } from './snapshot';
+import { deleteSelectedFeatures } from './delete-selected';
+import { renderLayers } from './layer-renderer';
 // All public type/option surfaces moved to `./types`. Re-export here so
 // existing `import { MapOptions, ... } from './map'` paths keep working.
 export * from './types';
@@ -131,6 +127,8 @@ export class Emap extends EventDispatcher {
   private _vertexEdit!: VertexEditHandler;
   private _drawFeature!: DrawFeatureHandler;
   private _transformFeature!: TransformFeatureHandler;
+  private _dragPanSuspendedByEdit = false;
+  private _dragPanEnabledBeforeEditSuspend = false;
 
   // Rendering
   private _pendingRender = 0;
@@ -220,9 +218,7 @@ export class Emap extends EventDispatcher {
       // `'exclusive'` on `'down'` when (and only when) the hit is an already-
       // selected feature; for every other point the arbiter falls through to
       // `dragPan` and pan should still work.
-      const blocksPan = change.current.mode === 'vertex' || change.current.mode === 'draw';
-      if (blocksPan) this._dragPan?.disable();
-      else this._dragPan?.enable();
+      this._syncEditModeDragPan(change.current.mode);
       this.fire('editmodechange', { mode: change.current.mode });
     }
     this._scheduleRender();
@@ -544,6 +540,27 @@ export class Emap extends EventDispatcher {
     this._editState.setMode(mode);
   }
 
+  private _syncEditModeDragPan(mode: EditMode): void {
+    const blocksPan = mode === 'vertex' || mode === 'draw';
+
+    if (blocksPan) {
+      if (!this._dragPanSuspendedByEdit) {
+        this._dragPanEnabledBeforeEditSuspend = this._dragPan.isEnabled();
+        this._dragPan.disable();
+        this._dragPanSuspendedByEdit = true;
+      }
+      return;
+    }
+
+    if (!this._dragPanSuspendedByEdit) return;
+
+    if (this._dragPanEnabledBeforeEditSuspend) {
+      this._dragPan.enable();
+    }
+    this._dragPanSuspendedByEdit = false;
+    this._dragPanEnabledBeforeEditSuspend = false;
+  }
+
   public setEditVertexState(state: EditVertexState): void {
     this._editState.setVertex(state);
   }
@@ -749,25 +766,7 @@ export class Emap extends EventDispatcher {
    * load it (just dropping the `emap` metadata).
    */
   public async exportSnapshot(opts: ExportSnapshotOptions = {}): Promise<Blob> {
-    const compact = opts.compact !== false;
-    const ids: string[] = [];
-    const datasets: any[] = [];
-    for (const [id, source] of this._sources) {
-      if (source.type !== 'topology') continue;
-      const ds = source.getDataset?.();
-      if (!ds) continue;
-      ids.push(id);
-      datasets.push(ds);
-    }
-
-    const adapter = getDefaultMapshaperAdapter();
-    const obj = await adapter.exportDatasetsToPack(datasets, { compact });
-    (obj as Record<string, unknown>).emap = {
-      version: 1,
-      sources: ids.map((id) => ({ id })),
-    };
-    const bytes = adapter.pack(obj);
-    return new Blob([bytes as BlobPart], { type: 'application/octet-stream' });
+    return exportSnapshotFromSources(this._sources, opts);
   }
 
   /**
@@ -793,49 +792,7 @@ export class Emap extends EventDispatcher {
     opts: LoadSnapshotOptions = {},
   ): Promise<string[]> {
     const replace = opts.replace !== false;
-    const prefix = opts.idPrefix ?? '';
-    const defaults = opts.defaultIds ?? [];
-
-    let bytes: Uint8Array;
-    if (input instanceof Uint8Array) {
-      bytes = input;
-    } else if (input instanceof ArrayBuffer) {
-      bytes = new Uint8Array(input);
-    } else if (typeof Blob !== 'undefined' && input instanceof Blob) {
-      bytes = new Uint8Array(await input.arrayBuffer());
-    } else {
-      throw new Error('loadSnapshot: input must be Blob, Uint8Array, or ArrayBuffer');
-    }
-
-    // Pre-flight sanity check before handing the bytes to mapshaper's
-    // msgpack-based unpacker. The unpacker throws opaque errors on garbage
-    // input ("Unexpected end of buffer" / "Invalid code 0x..") that aren't
-    // useful to surface in a UI. The .msx format is a top-level map; its
-    // first byte must therefore be a msgpack map marker:
-    //   - fixmap   (0-15 entries):    0x80..0x8F
-    //   - map16    (0..2^16 entries): 0xDE
-    //   - map32    (0..2^32 entries): 0xDF
-    // GeoJSON / TopoJSON / random ZIPs / empty buffers all fail this check.
-    if (!_looksLikeMsxBytes(bytes)) {
-      throw new Error(
-        'loadSnapshot: input does not look like a mapshaper .msx snapshot ' +
-          '(expected msgpack map marker as the first byte)',
-      );
-    }
-
-    const obj = await getDefaultMapshaperAdapter().unpackSessionData(bytes);
-    const datasets = obj.datasets ?? [];
-    const meta = (obj as Record<string, unknown>).emap as
-      | { sources?: Array<{ id?: string }> }
-      | undefined;
-    const storedIds =
-      meta?.sources?.map((s) => s?.id).filter((s): s is string => typeof s === 'string') ?? [];
-
-    const resolvedIds: string[] = datasets.map((_, i) => {
-      const stored = storedIds[i];
-      const fallback = defaults[i] ?? `snapshot-${i}`;
-      return prefix + (stored ?? fallback);
-    });
+    const { datasets, resolvedIds } = await unpackSnapshot(input, opts);
 
     // Collision check before any side effects when replace=false
     if (!replace) {
@@ -858,7 +815,7 @@ export class Emap extends EventDispatcher {
       const id = resolvedIds[i];
       if (replace && this._sources.has(id)) this.removeSource(id);
       const src = new ConcreteTopologySource(id);
-      src.setDataset(datasets[i] as MapshaperDataset);
+      src.setDataset(datasets[i]);
       this.addSource(id, src);
       registered.push(id);
     }
@@ -1011,7 +968,11 @@ export class Emap extends EventDispatcher {
    * arc references, so iterating their shapes contributes nothing — caller
    * should filter by `isPathLayer` before invoking.
    */
-  private _getLayerArcFlags(ml: MapshaperLayer, arcs: any, cacheKey: string): Uint8Array | null {
+  private _getLayerArcFlags(
+    ml: MapshaperLayer,
+    arcs: ArcCollection,
+    cacheKey: string,
+  ): Uint8Array | null {
     if (!ml || !ml.shapes || !arcs) return null;
 
     let flags = this._layerArcFlagsCache.get(cacheKey);
@@ -1303,94 +1264,19 @@ export class Emap extends EventDispatcher {
   }
 
   private _renderLayers(pixelSize: number, lineScale: number): void {
-    const effectiveLayers = this._getEffectiveLayers();
-
-    for (const layer of effectiveLayers) {
-      if (layer.layout?.visibility === 'none') continue;
-
-      const source = this._sources.get(layer.source);
-      if (!source) continue;
-
-      const displayArcs = source.getDisplayArcs();
-      const arcs = displayArcs ? displayArcs.getScaledArcs(pixelSize) : source.getArcs();
-
-      if (
-        arcs &&
-        arcs.setRetainedInterval &&
-        (typeof arcs.isFlat !== 'function' || !arcs.isFlat())
-      ) {
-        // User-driven `-simplify` writes a sticky floor on the source.
-        // Per-frame zoom-LOD raises that floor on zoom-out (smaller scale,
-        // bigger pixel) but never below the user's threshold — otherwise
-        // every render would re-introduce detail the user just filtered.
-        const userFloor = source.getSimplifyFloor?.() ?? 0;
-        arcs.setRetainedInterval(Math.max(userFloor, pixelSize * 0.5));
-      }
-
-      const ml = this._resolveSourceLayer(source, layer['source-layer']);
-      const cacheKey = `${layer.source}:${layer['source-layer'] || 'default'}`;
-
-      if (layer.type === 'line' && arcs) {
-        this._renderLineLayer(layer, ml, arcs, cacheKey, lineScale);
-      } else if (layer.type === 'fill' && arcs && ml?.shapes) {
-        this._renderFillLayer(layer, ml, arcs, cacheKey, lineScale);
-      } else if (layer.type === 'circle' && ml?.shapes) {
-        const style = resolvePointStyle(layer.paint as CirclePaint);
-        this._painter.drawPoints(ml.shapes, style);
-      }
-    }
-  }
-
-  private _renderLineLayer(
-    layer: LayerSpecification,
-    ml: MapshaperLayer | null,
-    arcs: import('../types/mapshaper-types').ArcCollection,
-    cacheKey: string,
-    lineScale: number,
-  ): void {
-    const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
-    if (ml?.shapes) {
-      // Optimized layer line rendering: use drawArcs with a boolean arc
-      // presence filter so each shared topology arc strokes exactly once.
-      const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
-      const filter = this._combineArcFilters(flags, this._viewport.getArcFilter(arcs));
-      this._painter.drawArcs(arcs, style, filter);
-    } else {
-      // Fallback: draw all arcs
-      this._painter.drawArcs(arcs, style, this._viewport.getArcFilter(arcs));
-    }
-  }
-
-  private _renderFillLayer(
-    layer: LayerSpecification,
-    ml: MapshaperLayer,
-    arcs: import('../types/mapshaper-types').ArcCollection,
-    cacheKey: string,
-    lineScale: number,
-  ): void {
-    const fillPaint = layer.paint as FillPaint | undefined;
-    const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
-    const fillOpacity = fillPaint?.['fill-opacity'];
-    const viewportFilter = this._viewport.getArcFilter(arcs);
-    this._painter.drawPolygonFill(ml.shapes!, arcs, fillColor, viewportFilter, fillOpacity);
-    // Outline: stroke each topology arc exactly once via the same flag cache
-    // the line layer uses. drawPaths(shapes,...) would re-walk every shape
-    // and double-stroke shared boundaries — on big polygon datasets that's
-    // the dominant cost of fill mode.
-    const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
-    const flags = this._getLayerArcFlags(ml, arcs, cacheKey);
-    this._painter.drawArcs(arcs, style, this._combineArcFilters(flags, viewportFilter));
-  }
-
-  private _combineArcFilters(
-    flags: Uint8Array | null,
-    viewportFilter: ((i: number) => boolean) | undefined,
-  ): ((i: number) => boolean) | undefined {
-    if (flags && viewportFilter) {
-      return (i: number) => flags[i] === 1 && viewportFilter(i);
-    }
-    if (flags) return (i: number) => flags[i] === 1;
-    return viewportFilter;
+    renderLayers(
+      {
+        layers: this._getEffectiveLayers(),
+        sources: this._sources,
+        viewport: this._viewport,
+        painter: this._painter,
+        resolveSourceLayer: (source, sourceLayerName) =>
+          this._resolveSourceLayer(source, sourceLayerName),
+        getLayerArcFlags: (ml, arcs, cacheKey) => this._getLayerArcFlags(ml, arcs, cacheKey),
+      },
+      pixelSize,
+      lineScale,
+    );
   }
 
   private _renderHighlight(transform: AffineTransform, lineScale: number): void {
@@ -1557,79 +1443,16 @@ export class Emap extends EventDispatcher {
    */
   public deleteSelected(): boolean {
     const refs = this._selection.getAll();
-    if (refs.length === 0) return false;
+    const deletion = deleteSelectedFeatures(refs, this._sources);
+    if (!deletion) return false;
 
-    // Group ids by (sourceId, layerId) so each (source, layer) pair runs as
-    // ONE BulkFeatureDeleteCommand — splicing K features individually on a
-    // layer with N shapes is O(K·N), the bulk command compacts in a single
-    // O(N) pass.
-    const grouped: globalThis.Map<string, globalThis.Map<string, number[]>> = new globalThis.Map();
-    for (const ref of refs) {
-      let bySource = grouped.get(ref.source);
-      if (!bySource) {
-        bySource = new globalThis.Map();
-        grouped.set(ref.source, bySource);
-      }
-      const ids = bySource.get(ref.layer) ?? [];
-      ids.push(ref.id);
-      bySource.set(ref.layer, ids);
-    }
-
-    const children: EditCommand[] = [];
-    let totalDeleted = 0;
-
-    for (const [sourceId, byLayer] of grouped) {
-      const source = this._sources.get(sourceId);
-      if (!source) continue;
-      const layers = source.getLayers();
-      for (const [layerId, ids] of byLayer) {
-        let target: MapshaperLayer | null = null;
-        for (let i = 0; i < layers.length; i++) {
-          if (getLayerId(layers[i], i) === layerId) {
-            target = layers[i] as MapshaperLayer;
-            break;
-          }
-        }
-        if (!target?.shapes) continue;
-
-        const records = target.data?.getRecords?.();
-        const snapshots: BulkFeatureDeleteCommandOptions['snapshots'] = [];
-        // De-dup ids — selection theoretically guarantees this but
-        // defensive: a duplicate would corrupt the bulk command's
-        // del-set / undo path.
-        const seen = new Set<number>();
-        for (const featureId of ids) {
-          if (seen.has(featureId)) continue;
-          seen.add(featureId);
-          const shape = target.shapes[featureId];
-          if (shape === undefined) continue;
-          const record = records ? records[featureId] : null;
-          snapshots.push({ id: featureId, shape, record: record ?? null });
-        }
-        if (snapshots.length === 0) continue;
-
-        const bulk = new BulkFeatureDeleteCommand({ layer: target, snapshots });
-        bulk.do();
-        children.push(bulk);
-        totalDeleted += snapshots.length;
-      }
-    }
-
-    if (children.length === 0) return false;
-
-    const composite = new CompositeCommand(
-      children,
-      `Delete ${totalDeleted} feature${totalDeleted > 1 ? 's' : ''}`,
-    );
-    this._history.push(composite);
+    this._history.push(deletion.command);
     this._fireHistoryChange();
 
-    // Invalidate caches keyed off `layer.shapes` for every touched source —
-    // the line-layer arc-flag cache and the per-layer Flatbush index both
-    // hold references to shapes that no longer exist.
-    this._invalidateShapeCachesForSources(grouped.keys());
+    // Invalidate caches keyed off `layer.shapes` for every touched source.
+    this._invalidateShapeCachesForSources(deletion.sourceIds);
 
-    // Clear the selection — the refs no longer exist.
+    // Clear the selection; the refs no longer exist.
     this._fireSelectionChange(this._selection.clear());
     this._scheduleRender();
 
@@ -1924,21 +1747,4 @@ export class Emap extends EventDispatcher {
   }
   /** Read by composed managers via `EmapHostInternal._removed`. */
   _removed = false;
-}
-
-/**
- * Cheap pre-validator for `.msx` (mapshaper-pack) bytes. Looks for any
- * msgpack map marker as the first byte; that's the only structural rule
- * `unpackSessionData` requires (the rest of the format is a content map).
- *
- * Exported for tests that want to assert the boundary.
- */
-function _looksLikeMsxBytes(bytes: Uint8Array): boolean {
-  if (!bytes || bytes.length === 0) return false;
-  const b = bytes[0];
-  return (
-    (b >= 0x80 && b <= 0x8f) || // fixmap
-    b === 0xde || // map16
-    b === 0xdf // map32
-  );
 }

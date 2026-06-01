@@ -345,6 +345,26 @@ describe('Emap handler registry (Phase 1)', () => {
     expect(map.dragPan.isEnabled()).toBe(true);
   });
 
+  it('setEditMode restores dragPan to the state that existed before edit-mode suspension', () => {
+    const map = new Emap({ container: container(), interactive: false });
+    map.setEditMode('vertex');
+    expect(map.dragPan.isEnabled()).toBe(false);
+    map.setEditMode('none');
+    expect(map.dragPan.isEnabled()).toBe(false);
+
+    map.setEditMode('draw');
+    expect(map.dragPan.isEnabled()).toBe(false);
+    map.setEditMode('none');
+    expect(map.dragPan.isEnabled()).toBe(false);
+
+    const manual = new Emap({ container: container() });
+    manual.dragPan.disable();
+    manual.setEditMode('vertex');
+    expect(manual.dragPan.isEnabled()).toBe(false);
+    manual.setEditMode('none');
+    expect(manual.dragPan.isEnabled()).toBe(false);
+  });
+
   it('enabling vertexEdit cross-deactivates an active drawFeature', () => {
     const map = new Emap({ container: container() });
     map.drawFeature.setOptions({ source: 's', type: 'polygon' });

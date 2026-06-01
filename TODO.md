@@ -46,3 +46,60 @@ editing.
   worker-vendor and Plan-A self-containment guarantees.
 - **Next step:** `openspec` proposal under `openspec/changes/`; decide (a)
   vs (b) in the proposal.
+
+---
+
+## E - Incremental Flatbush spatial index
+
+**Status:** deferred - not implemented.
+
+`FeatureQuery` still uses a full immutable Flatbush cache keyed by `sourceId`,
+layer index, shape count, arc count, and `dataset.editVersion`. There is no
+`LiveSpatialIndex` wrapper or `markFeatureBBoxDirty(...)` API yet.
+
+- **Trigger:** profile `_getOrBuildIndex` above 16 ms/frame, drag-FPS
+  regression on realistic data, or a feature that queries the index every
+  frame.
+- **Next step:** benchmark the current rebuild cost, then design a dirty-bbox
+  wrapper that is property-tested against brute-force scans.
+
+## F - Large-file import guard / streaming import
+
+**Status:** deferred - not implemented.
+
+`TopologySource.setData(url)` still fetches the URL and calls
+`response.arrayBuffer()` before import. There is no HEAD preflight,
+source-level `maxBytes` option, or worker-side direct URL load path. Current
+`maxBytes` coverage is limited to ZIP extraction limits.
+
+- **Trigger:** real imports above 500 MB, OOM telemetry, or a mapshaper
+  streaming import API.
+- **Next step:** implement the smaller preflight guard first: optional source
+  `maxBytes`, HEAD `content-length` check, and early validation error. True
+  streaming remains blocked on mapshaper/upstream importer support.
+
+## G - EditHistory ring buffer eviction
+
+**Status:** deferred - not implemented.
+
+`EditHistory.push(...)` still uses `_undoStack.push(...)` plus
+`_undoStack.shift()` when `maxSize` is exceeded.
+
+- **Trigger:** `maxSize` routinely configured much larger than the default 200
+  or history eviction appears in profiles.
+- **Next step:** replace the undo-stack eviction path with a ring buffer while
+  preserving undo/redo/capture/merge semantics.
+
+## H - Worker routing default semantics review
+
+**Status:** conditional follow-up - not implemented as a behavior change.
+
+`MapOptions` still defaults `useWorker` / `workerMode` to `false`, while custom
+`workerRouting` only participates once worker execution is enabled. The backlog
+item is conditional: revisit opt-out semantics only if real apps disagree with
+the current default routing decision tree.
+
+- **Trigger:** repeated integration feedback that the default should route
+  eligible operations through workers unless explicitly disabled.
+- **Next step:** write a compatibility note and decide whether the default can
+  change without surprising existing browser consumers.
