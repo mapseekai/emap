@@ -688,3 +688,34 @@ describe('TopologySource.setData — awaitable', () => {
     expect(source.getDataset()?.info?.winner).toBe('B'); // stale chain never overwrote
   });
 });
+describe('TopologySource point import', () => {
+  it('loads GeoJSON Point data with point geometry, shapes, and finite extent', async () => {
+    const geojson = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { name: 'a' },
+          geometry: { type: 'Point', coordinates: [120, 30] },
+        },
+      ],
+    };
+    const source = new TopologySource('points');
+
+    await source.setData({
+      filename: 'points.geojson',
+      content: new TextEncoder().encode(JSON.stringify(geojson)),
+    });
+
+    const layers = source.getLayers();
+    expect(layers).toHaveLength(1);
+    expect(layers[0].geometry_type).toBe('point');
+    expect(layers[0].shapes?.[0]).toEqual([[120, 30]]);
+
+    const extent = source.getExtent();
+    expect(Number.isFinite(extent.xmin)).toBe(true);
+    expect(Number.isFinite(extent.ymin)).toBe(true);
+    expect(Number.isFinite(extent.xmax)).toBe(true);
+    expect(Number.isFinite(extent.ymax)).toBe(true);
+  });
+});

@@ -141,18 +141,31 @@ export class CanvasPainter implements Painter {
     const color = _style?.color || '#333';
     const fill = _style?.fill !== false;
 
-    ctx.beginPath();
     ctx.fillStyle = color;
     ctx.strokeStyle = color;
+
+    // Flush the accumulated path every `batchSize` points. A single Canvas2D
+    // path holding tens of thousands of sub-paths makes fill()/stroke() cost
+    // super-linear in Skia (an 80k-point fill measures ~18s); batching keeps
+    // it linear (~10ms). Mirrors the batching in drawPaths()/drawArcs().
+    const batchSize = 100;
+    let count = 0;
+    ctx.beginPath();
 
     _shapes.forEach((shape) => {
       if (!shape) return;
       const points = normalizePointShape(shape);
       points.forEach((p) => {
+        if (count > 0 && count % batchSize === 0) {
+          if (fill) ctx.fill();
+          else ctx.stroke();
+          ctx.beginPath();
+        }
         const x = p[0] * mx + bx;
         const y = p[1] * my + by;
         ctx.moveTo(x + radius, y);
         ctx.arc(x, y, radius, 0, Math.PI * 2);
+        count++;
       });
     });
 

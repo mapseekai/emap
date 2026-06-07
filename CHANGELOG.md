@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-06-07
+
+### Fixed
+
+- Large point datasets no longer freeze the renderer. `CanvasPainter.drawPoints()`
+  accumulated every point into one Canvas2D path and filled it once, which is
+  super-linear in Skia (an 80k-point fill measured ~18s and blocked the main
+  thread, so the layer appeared not to render). It now flushes the path every
+  100 points like `drawArcs()` / `drawPaths()`, keeping render time linear
+  (~200ms at 200k points).
+- Point sources whose extent has zero area (a single point, or coincident
+  points) now produce a finite camera transform. `Bounds.fillOut()` expands a
+  degenerate (zero width/height) extent to the target viewport aspect instead
+  of deriving a `NaN` transform, so single-point datasets render centered.
+
 ## [0.3.6] - 2026-06-01
 
 ### Added

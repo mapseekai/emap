@@ -147,6 +147,16 @@ describe('Bounds.fillOut', () => {
     expect(b.ymax).toBeCloseTo(15);
   });
 
+  it('expands zero-area bounds to the target aspect', () => {
+    const b = new Bounds(5, 7, 5, 7);
+    b.fillOut(2.0, 0.5, 0.5);
+
+    expect(b.width).toBeCloseTo(2);
+    expect(b.height).toBeCloseTo(1);
+    expect(b.centerX).toBeCloseTo(5);
+    expect(b.centerY).toBeCloseTo(7);
+  });
+
   it('returns `this` for chaining', () => {
     const b = new Bounds(0, 0, 10, 5);
     expect(b.fillOut(1.0)).toBe(b);

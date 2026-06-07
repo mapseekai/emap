@@ -10,6 +10,21 @@ function vp(): Viewport {
 }
 
 describe('Viewport camera-state primitives', () => {
+  it('creates a finite transform for a zero-area extent', () => {
+    const v = new Viewport();
+    v.updateSize(800, 600);
+    v.setExtent(new Bounds(5, 7, 5, 7));
+
+    const t = v.transform;
+    expect(Number.isFinite(t.mx)).toBe(true);
+    expect(Number.isFinite(t.my)).toBe(true);
+    expect(Number.isFinite(t.bx)).toBe(true);
+    expect(Number.isFinite(t.by)).toBe(true);
+    const projected = v.project(5, 7);
+    expect(projected[0]).toBeCloseTo(400);
+    expect(projected[1]).toBeCloseTo(300);
+  });
+
   it('getCameraState returns center (data coords) + positive scale', () => {
     const v = vp();
     const s = v.getCameraState();
