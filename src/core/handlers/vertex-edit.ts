@@ -64,6 +64,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
   private _dragging: boolean = false;
   /** Shapes of neighboring polygons sharing the hovered arc (for shared-edge highlight) */
   private _neighborShapes: EditVertexShape[] = [];
+  private _shapeSignatureIds = new WeakMap<object, number>();
+  private _nextShapeSignatureId = 1;
   /** Coordinate of the dragged node before mouse-down, captured for VertexMoveCommand. */
   private _dragFromCoords: [number, number] | null = null;
   private _snapThreshold: number;
@@ -305,33 +307,25 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
   }
 
   private _onMouseMove(px: number, py: number): void {
+    const previousHoverSignature = this._getHoverSignature();
+
     // Hit test: find feature under pointer
     const hits = this._map.queryFeatures(
       [px, py],
       this._layers ? { layers: this._layers } : undefined,
     );
     if (hits.length === 0) {
-      this._hoveredFeature = null;
-      this._hoverVertexCoords = null;
-      this._hoverVertexIds = [];
-      this._hoverType = null;
-      this._hoverInsertionId = -1;
-      this._neighborShapes = [];
-      this._map.clearEditVertexState();
-      this._map.render();
+      if (this._clearHoverState()) {
+        this._map.render();
+      }
       return;
     }
 
     const hit = hits[0];
     if (hit.geometryType === 'point') {
-      this._hoveredFeature = null;
-      this._hoverVertexCoords = null;
-      this._hoverVertexIds = [];
-      this._hoverType = null;
-      this._hoverInsertionId = -1;
-      this._neighborShapes = [];
-      this._map.clearEditVertexState();
-      this._map.render();
+      if (this._clearHoverState()) {
+        this._map.render();
+      }
       return;
     }
 
@@ -369,6 +363,9 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     }
     // Find neighbor shapes sharing the hovered arc (for shared-edge highlight)
     this._findNeighborShapes(arcs);
+    if (this._getHoverSignature() === previousHoverSignature) {
+      return;
+    }
     this._updateEditState();
     this._map.render();
   }
@@ -383,6 +380,14 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     px: number,
     py: number,
   ): void {
+    if (!this._shapeHasScreenVertexNear(shape, arcs, px, py)) {
+      this._hoverVertexCoords = null;
+      this._hoverVertexIds = [];
+      this._hoverType = null;
+      this._hoverInsertionId = -1;
+      return;
+    }
+
     const p = this._map.unproject(px, py);
 
     // findNearestVertices returns ALL vertex IDs at the same topological node
@@ -394,6 +399,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     if (!ids || ids.length === 0) {
       this._hoverVertexCoords = null;
       this._hoverVertexIds = [];
+      this._hoverType = null;
+      this._hoverInsertionId = -1;
       return;
     }
 
@@ -402,6 +409,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     if (!vtxCoords) {
       this._hoverVertexCoords = null;
       this._hoverVertexIds = [];
+      this._hoverType = null;
+      this._hoverInsertionId = -1;
       return;
     }
 
@@ -422,6 +431,60 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       this._hoverType = null;
       this._hoverInsertionId = -1;
     }
+  }
+
+  private _shapeHasScreenVertexNear(
+    shape: EditVertexShape,
+    arcs: EditableArcs,
+    px: number,
+    py: number,
+  ): boolean {
+    const thresholdSq = VERTEX_HIT_THRESHOLD * VERTEX_HIT_THRESHOLD;
+    const minData = this._map.unproject(px - VERTEX_HIT_THRESHOLD, py - VERTEX_HIT_THRESHOLD);
+    const maxData = this._map.unproject(px + VERTEX_HIT_THRESHOLD, py + VERTEX_HIT_THRESHOLD);
+    const dataXMin = Math.min(minData[0], maxData[0]);
+    const dataYMin = Math.min(minData[1], maxData[1]);
+    const dataXMax = Math.max(minData[0], maxData[0]);
+    const dataYMax = Math.max(minData[1], maxData[1]);
+    const partBbox: number[] = [];
+
+    const vertexIsNear = (x: number, y: number): boolean => {
+      const projected = this._map.project(x, y);
+      const dx = projected[0] - px;
+      const dy = projected[1] - py;
+      return dx * dx + dy * dy <= thresholdSq;
+    };
+
+    for (const part of shape) {
+      if (arcs.getSimpleShapeBbox !== undefined) {
+        arcs.getSimpleShapeBbox(part, partBbox);
+        if (
+          dataXMax < partBbox[0] ||
+          dataXMin > partBbox[2] ||
+          dataYMax < partBbox[1] ||
+          dataYMin > partBbox[3]
+        ) {
+          continue;
+        }
+      }
+
+      const shapeIter = arcs.getShapeIter?.(part);
+      if (shapeIter) {
+        while (shapeIter.hasNext()) {
+          if (vertexIsNear(shapeIter.x, shapeIter.y)) return true;
+        }
+        continue;
+      }
+
+      for (const rawArcId of part) {
+        const iter = arcs.getArcIter(rawArcId);
+        while (iter.hasNext()) {
+          if (vertexIsNear(iter.x, iter.y)) return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -552,6 +615,57 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       polygonFill: geomType === 'polygon' ? this._polygonFillColor : null,
       neighborShapes: this._neighborShapes.length > 0 ? this._neighborShapes : undefined,
     });
+  }
+
+  private _clearHoverState(): boolean {
+    const hadState =
+      this._hoveredFeature !== null ||
+      this._hoverVertexCoords !== null ||
+      this._hoverVertexIds.length > 0 ||
+      this._hoverType !== null ||
+      this._hoverInsertionId !== -1 ||
+      this._neighborShapes.length > 0;
+    if (!hadState) return false;
+
+    this._hoveredFeature = null;
+    this._hoverVertexCoords = null;
+    this._hoverVertexIds = [];
+    this._hoverType = null;
+    this._hoverInsertionId = -1;
+    this._neighborShapes = [];
+    this._map.clearEditVertexState();
+    return true;
+  }
+
+  private _getHoverSignature(): string {
+    if (!this._hoveredFeature) return 'none';
+    const vertex = this._hoverVertexCoords
+      ? `${this._hoverVertexCoords[0]},${this._hoverVertexCoords[1]}`
+      : '';
+    const neighborIds = this._neighborShapes
+      .map((shape) => this._getShapeSignatureId(shape))
+      .join(',');
+    return [
+      this._hoveredFeature.source,
+      this._hoveredFeature.layer,
+      this._hoveredFeature.id,
+      this._hoveredFeature.geometryType,
+      this._getShapeSignatureId(this._hoveredFeature.shape),
+      this._hoverType ?? '',
+      this._hoverInsertionId,
+      this._hoverVertexIds.join(','),
+      vertex,
+      neighborIds,
+    ].join('|');
+  }
+
+  private _getShapeSignatureId(shape: EditVertexShape): number {
+    let id = this._shapeSignatureIds.get(shape);
+    if (id === undefined) {
+      id = this._nextShapeSignatureId++;
+      this._shapeSignatureIds.set(shape, id);
+    }
+    return id;
   }
 
   private _onMouseDown(_px: number, _py: number): void {
