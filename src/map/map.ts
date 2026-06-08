@@ -1195,8 +1195,12 @@ export class Emap extends EventDispatcher {
 
   _scheduleRender(action: RenderAction = 'redraw', navDelta?: AffineDelta): void {
     if (this._removed) return;
+    const hadPendingRender = this._pendingRender > 0;
     this._pendingRender++;
-    if (this._pendingAction === 'redraw' || action === 'redraw') {
+    if (!hadPendingRender) {
+      this._pendingAction = action;
+      this._pendingNavDelta = navDelta ? { ...navDelta } : null;
+    } else if (this._pendingAction === 'redraw' || action === 'redraw') {
       this._pendingAction = 'redraw';
       this._pendingNavDelta = null;
     } else {
