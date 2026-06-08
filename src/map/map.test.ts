@@ -176,6 +176,35 @@ function createBareMap(): Emap {
   return map as Emap;
 }
 
+describe('Emap rendering', () => {
+  it('passes the viewport arc filter to the vertex edit overlay', () => {
+    const map = createBareMap();
+    const arcs = { getArcIter: vi.fn() };
+    const vertexState = { shapes: [[[0]]], arcs, hoverVertex: null };
+    const vertexArcFilter = vi.fn();
+    const renderOverlay = vi.fn();
+    const getArcFilter = vi.fn((inputArcs) => {
+      expect(inputArcs).toBe(arcs);
+      return vertexArcFilter;
+    });
+
+    setPrivate(map, '_viewport', {
+      transform: { mx: 1, my: 1, bx: 0, by: 0 },
+      getLineScale: () => 1,
+      getArcFilter,
+    });
+    setPrivate(map, '_painter', { setTransform: vi.fn(), clear: vi.fn() });
+    setPrivate(map, '_editOverlay', { render: renderOverlay });
+    setPrivate(map, '_editState', { mode: 'vertex', vertex: vertexState, draw: null });
+    setPrivate(map, '_renderLayers', vi.fn());
+    setPrivate(map, '_renderHighlight', vi.fn());
+
+    (map as any)._renderImpl();
+
+    expect(renderOverlay).toHaveBeenCalledWith('vertex', vertexState, null, vertexArcFilter);
+  });
+});
+
 describe('Emap layer management', () => {
   let map: Emap;
 
@@ -359,6 +388,7 @@ describe('Emap layer management', () => {
       expect(effective[0].type).toBe('line');
       expect(effective[1].id).toBe('src1:cities');
       expect(effective[1].type).toBe('circle');
+      expect((effective[1].paint as any)['circle-color']).toBe((effective[0].paint as any)['line-color']);
     });
 
     it('creates a default line layer for source with no mapshaper layers', () => {
@@ -381,7 +411,7 @@ describe('Emap layer management', () => {
 
       const effective = callPrivate(map, '_getEffectiveLayers') as LayerSpecification[];
       expect(effective[0].type).toBe('line');
-      expect((effective[0].paint as any)['line-color']).toBe('#333');
+      expect((effective[0].paint as any)['line-color']).toBe('#1e88e5');
     });
   });
 
