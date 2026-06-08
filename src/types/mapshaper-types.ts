@@ -220,8 +220,6 @@ export interface PointStyle {
 export interface VertexDotStyle {
   dotColor?: string;
   dotRadius?: number;
-  /** Optional arc-level visibility filter for large topology datasets. */
-  arcFilter?: (arcId: number) => boolean;
   hoverVertex?: [number, number] | null;
   /**
    * Distinguishes a vertex hover (drawn as a circle) from an interpolated

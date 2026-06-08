@@ -176,99 +176,6 @@ function createBareMap(): Emap {
   return map as Emap;
 }
 
-describe('Emap rendering', () => {
-  it('preserves a first nav render request until the RAF callback runs', () => {
-    const map = Object.create(Emap.prototype) as Emap;
-    const callbacks: FrameRequestCallback[] = [];
-    const render = vi.fn();
-    const navDelta = { tx: 12, ty: -4, sx: 1, sy: 1 };
-    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-
-    setPrivate(map, '_removed', false);
-    setPrivate(map, '_pendingRender', 0);
-    setPrivate(map, '_rafId', 0);
-    setPrivate(map, '_pendingAction', 'redraw');
-    setPrivate(map, '_pendingNavDelta', null);
-    setPrivate(map, 'render', render);
-    globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
-      callbacks.push(cb);
-      return 7;
-    }) as unknown as typeof requestAnimationFrame;
-
-    try {
-      callPrivate(map, '_scheduleRender', 'nav', navDelta);
-
-      expect(getPrivate(map, '_pendingAction')).toBe('nav');
-      expect(getPrivate(map, '_pendingNavDelta')).toEqual(navDelta);
-
-      callbacks[0](0);
-
-      expect(render).toHaveBeenCalledWith({ action: 'nav', navDelta });
-    } finally {
-      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-    }
-  });
-
-  it('upgrades a pending nav render request when a redraw is scheduled before RAF', () => {
-    const map = Object.create(Emap.prototype) as Emap;
-    const callbacks: FrameRequestCallback[] = [];
-    const render = vi.fn();
-    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-
-    setPrivate(map, '_removed', false);
-    setPrivate(map, '_pendingRender', 0);
-    setPrivate(map, '_rafId', 0);
-    setPrivate(map, '_pendingAction', 'redraw');
-    setPrivate(map, '_pendingNavDelta', null);
-    setPrivate(map, 'render', render);
-    globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
-      callbacks.push(cb);
-      return 7;
-    }) as unknown as typeof requestAnimationFrame;
-
-    try {
-      callPrivate(map, '_scheduleRender', 'nav', { tx: 12, ty: -4, sx: 1, sy: 1 });
-      callPrivate(map, '_scheduleRender', 'redraw');
-
-      expect(getPrivate(map, '_pendingAction')).toBe('redraw');
-      expect(getPrivate(map, '_pendingNavDelta')).toBeNull();
-
-      callbacks[0](0);
-
-      expect(render).toHaveBeenCalledWith({ action: 'redraw' });
-    } finally {
-      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-    }
-  });
-
-  it('passes the viewport arc filter to the vertex edit overlay', () => {
-    const map = createBareMap();
-    const arcs = { getArcIter: vi.fn() };
-    const vertexState = { shapes: [[[0]]], arcs, hoverVertex: null };
-    const vertexArcFilter = vi.fn();
-    const renderOverlay = vi.fn();
-    const getArcFilter = vi.fn((inputArcs) => {
-      expect(inputArcs).toBe(arcs);
-      return vertexArcFilter;
-    });
-
-    setPrivate(map, '_viewport', {
-      transform: { mx: 1, my: 1, bx: 0, by: 0 },
-      getLineScale: () => 1,
-      getArcFilter,
-    });
-    setPrivate(map, '_painter', { setTransform: vi.fn(), clear: vi.fn() });
-    setPrivate(map, '_editOverlay', { render: renderOverlay });
-    setPrivate(map, '_editState', { mode: 'vertex', vertex: vertexState, draw: null });
-    setPrivate(map, '_renderLayers', vi.fn());
-    setPrivate(map, '_renderHighlight', vi.fn());
-
-    (map as any)._renderImpl();
-
-    expect(renderOverlay).toHaveBeenCalledWith('vertex', vertexState, null, vertexArcFilter);
-  });
-});
-
 describe('Emap layer management', () => {
   let map: Emap;
 
@@ -452,7 +359,6 @@ describe('Emap layer management', () => {
       expect(effective[0].type).toBe('line');
       expect(effective[1].id).toBe('src1:cities');
       expect(effective[1].type).toBe('circle');
-      expect((effective[1].paint as any)['circle-color']).toBe((effective[0].paint as any)['line-color']);
     });
 
     it('creates a default line layer for source with no mapshaper layers', () => {
@@ -475,7 +381,7 @@ describe('Emap layer management', () => {
 
       const effective = callPrivate(map, '_getEffectiveLayers') as LayerSpecification[];
       expect(effective[0].type).toBe('line');
-      expect((effective[0].paint as any)['line-color']).toBe('#1e88e5');
+      expect((effective[0].paint as any)['line-color']).toBe('#333');
     });
   });
 

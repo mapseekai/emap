@@ -58,7 +58,7 @@ import { Transaction, type TransactionInternal } from '../edit/transaction';
 // via the `ops` / `editSession` / `attributes` getters below.
 import { Control, ControlPosition } from '../ui/control';
 import { getLayerId } from '../source/layer-utils';
-import { DEFAULT_LAYER_COLOR, type LayerSpecification } from './layer';
+import type { LayerSpecification } from './layer';
 import type { ArcCollection, MapshaperLayer } from '../types/mapshaper-types';
 import { exportSnapshotFromSources, unpackSnapshot } from './snapshot';
 import { deleteSelectedFeatures } from './delete-selected';
@@ -914,7 +914,7 @@ export class Emap extends EventDispatcher {
           id: `${sourceId}:default`,
           type: 'line',
           source: sourceId,
-          paint: { 'line-color': DEFAULT_LAYER_COLOR, 'line-width': 0.8 },
+          paint: { 'line-color': '#333', 'line-width': 0.8 },
         });
       } else {
         for (let i = 0; i < mapshaperLayers.length; i++) {
@@ -934,8 +934,8 @@ export class Emap extends EventDispatcher {
             'source-layer': layerId,
             paint:
               geomType === 'point'
-                ? { 'circle-color': DEFAULT_LAYER_COLOR, 'circle-radius': 4 }
-                : { 'line-color': DEFAULT_LAYER_COLOR, 'line-width': 0.8 },
+                ? { 'circle-color': '#333', 'circle-radius': 4 }
+                : { 'line-color': '#333', 'line-width': 0.8 },
           });
         }
       }
@@ -1195,12 +1195,8 @@ export class Emap extends EventDispatcher {
 
   _scheduleRender(action: RenderAction = 'redraw', navDelta?: AffineDelta): void {
     if (this._removed) return;
-    const hadPendingRender = this._pendingRender > 0;
     this._pendingRender++;
-    if (!hadPendingRender) {
-      this._pendingAction = action;
-      this._pendingNavDelta = navDelta ? { ...navDelta } : null;
-    } else if (this._pendingAction === 'redraw' || action === 'redraw') {
+    if (this._pendingAction === 'redraw' || action === 'redraw') {
       this._pendingAction = 'redraw';
       this._pendingNavDelta = null;
     } else {
@@ -1245,17 +1241,7 @@ export class Emap extends EventDispatcher {
 
     this._renderLayers(pixelSize, lineScale);
     this._renderHighlight(transform, lineScale);
-    const vertexState = this._editState.vertex;
-    const vertexArcFilter =
-      this._editState.mode === 'vertex' && vertexState
-        ? this._viewport.getArcFilter(vertexState.arcs as unknown as ArcCollection)
-        : undefined;
-    this._editOverlay.render(
-      this._editState.mode,
-      vertexState,
-      this._editState.draw,
-      vertexArcFilter,
-    );
+    this._editOverlay.render(this._editState.mode, this._editState.vertex, this._editState.draw);
   }
 
   private _captureRenderSnapshot(): RenderSnapshot {

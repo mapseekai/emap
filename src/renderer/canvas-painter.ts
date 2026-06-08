@@ -198,11 +198,6 @@ export class CanvasPainter implements Painter {
     const hoverColor = style.hoverColor || '#cc6acc';
     const hoverRadius = (style.hoverRadius || 6) * pr;
     const hoverVertex = style.hoverVertex;
-    const arcFilter = style.arcFilter;
-    const left = -dotRadius;
-    const top = -dotRadius;
-    const right = this._canvas.width + dotRadius;
-    const bottom = this._canvas.height + dotRadius;
     let hoverPx: [number, number] | null = null;
     if (hoverVertex) {
       hoverPx = [hoverVertex[0] * mx + bx, hoverVertex[1] * my + by];
@@ -217,12 +212,10 @@ export class CanvasPainter implements Painter {
       (shape as PathShape).forEach((part) => {
         part.forEach((arcId) => {
           const absId = arcId >= 0 ? arcId : ~arcId;
-          if (arcFilter && !arcFilter(absId)) return;
           const iter = arcs.getArcIter(absId);
           while (iter.hasNext()) {
             const x = iter.x * mx + bx;
             const y = iter.y * my + by;
-            if (x < left || x > right || y < top || y > bottom) continue;
             // Skip hover vertex (drawn separately with larger radius)
             if (hoverPx && Math.abs(x - hoverPx[0]) < 1 && Math.abs(y - hoverPx[1]) < 1) continue;
             ctx.moveTo(x + dotRadius, y);

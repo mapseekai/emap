@@ -44,34 +44,14 @@ function makeArcs(size: number) {
   };
 }
 
-function makeCountingArcs(visited: number[]) {
-  return {
-    getArcIter: (i: number) => {
-      visited.push(i);
-      let done = false;
-      return {
-        x: i,
-        y: i,
-        hasNext() {
-          if (done) return false;
-          done = true;
-          return true;
-        },
-      };
-    },
-  };
-}
-
-function makePointPainter(fillCalls: string[], arcCalls: unknown[] = []) {
+function makePointPainter(fillCalls: string[]) {
   const ctx: any = {
     canvas: { width: 100, height: 100 },
     set strokeStyle(_v: string) {},
     set fillStyle(_v: string) {},
     beginPath() {},
     moveTo() {},
-    arc(...args: unknown[]) {
-      arcCalls.push(args);
-    },
+    arc() {},
     fill() {
       fillCalls.push('fill');
     },
@@ -103,49 +83,5 @@ describe('CanvasPainter batching', () => {
 
     // flush at 100 and 200, plus the final fill after the loop
     expect(fills).toHaveLength(3);
-  });
-
-  it('skips vertex-dot arcs rejected by the edit viewport filter', () => {
-    const fills: string[] = [];
-    const visited: number[] = [];
-    const painter = makePointPainter(fills);
-
-    painter.drawVertexDots([[[0, 1, 2]]] as any, makeCountingArcs(visited) as any, {
-      arcFilter: (arcId) => arcId === 1,
-    });
-
-    expect(visited).toEqual([1]);
-    expect(fills).toHaveLength(1);
-  });
-
-  it('does not add offscreen vertex dots to the canvas path', () => {
-    const fills: string[] = [];
-    const arcCalls: unknown[] = [];
-    const painter = makePointPainter(fills, arcCalls);
-    const arcs = {
-      getArcIter: () => {
-        const points = [
-          [-10, 10],
-          [20, 20],
-          [110, 20],
-        ];
-        let idx = -1;
-        return {
-          x: 0,
-          y: 0,
-          hasNext() {
-            idx += 1;
-            if (idx >= points.length) return false;
-            this.x = points[idx][0];
-            this.y = points[idx][1];
-            return true;
-          },
-        };
-      },
-    };
-
-    painter.drawVertexDots([[[0]]] as any, arcs as any);
-
-    expect(arcCalls).toHaveLength(1);
   });
 });

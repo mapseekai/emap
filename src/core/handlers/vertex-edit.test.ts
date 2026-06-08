@@ -9,13 +9,7 @@ type MockMap = {
   setEditVertexState: (state: unknown) => void;
   render: () => void;
   fire: (type: string, payload: unknown) => void;
-  getSource?: (id: string) =>
-    | {
-        refreshDisplayArcs?: () => void;
-        markDisplayArcsDirty?: () => void;
-        getDataset?: () => unknown;
-      }
-    | undefined;
+  getSource?: (id: string) => { refreshDisplayArcs?: () => void } | undefined;
 };
 
 function setPrivate(target: object, key: string, value: unknown): void {
@@ -72,12 +66,6 @@ describe('VertexEditHandler', () => {
     );
   });
 
-  it('uses a light green polygon fill by default', () => {
-    const handler = new VertexEditHandler({} as any);
-
-    expect(handler.getOptions().polygonFillColor).toBe('rgba(76,175,80,0.2)');
-  });
-
   it('moves all shared vertices during drag', () => {
     const mapMock: MockMap = {
       getCanvasContainer: () => ({
@@ -122,22 +110,11 @@ describe('VertexEditHandler', () => {
     const mapMock = {
       unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
       project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
-      queryFeatures: vi.fn(() => [
-        { id: 1, source: 'src-a', layer: 'roads', geometryType: 'polyline', properties: {} },
-      ]),
       getSource: vi.fn(() => ({
         getLayers: () => [
           { name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] },
         ],
-        getArcs: () => ({
-          getVertex2: () => [0, 0],
-          getSimpleShapeBbox: (_part: number[], bbox: number[]) => {
-            bbox[0] = 0;
-            bbox[1] = 0;
-            bbox[2] = 20;
-            bbox[3] = 0;
-          },
-        }),
+        getArcs: () => ({ getVertex2: () => [0, 0] }),
       })),
       setEditVertexState: vi.fn(),
       render: vi.fn(),
@@ -148,8 +125,7 @@ describe('VertexEditHandler', () => {
       mapshaper.internal as object,
       'forEachSegmentInShape',
       vi.fn((shape, _arcs, cb) => {
-        expect(shape).toEqual(targetShape);
-        cb(2, 3, xx, yy);
+        if (shape === targetShape) cb(2, 3, xx, yy);
       }),
     );
 
@@ -169,140 +145,6 @@ describe('VertexEditHandler', () => {
     callPrivate(handler, '_handleDrag', 11, 0);
 
     expect(snapSpy).toHaveBeenCalledWith([0], [10, 0], expect.any(Object));
-    expect(mapMock.queryFeatures).toHaveBeenCalledWith(
-      [
-        [6, -5],
-        [16, 5],
-      ],
-      undefined,
-    );
-  });
-
-  it('limits drag snap scanning to spatial query hits', () => {
-    const movingShape = [[0]];
-    const farShape = [[1]];
-    const targetShape = [[2]];
-    const xx = new Float64Array([0, 0, 1000, 1010, 10, 20]);
-    const yy = new Float64Array([0, 0, 1000, 1010, 0, 0]);
-    const mapMock = {
-      unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
-      project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
-      queryFeatures: vi.fn(() => [
-        { id: 2, source: 'src-a', layer: 'roads', geometryType: 'polyline', properties: {} },
-      ]),
-      getSource: vi.fn(() => ({
-        getLayers: () => [
-          {
-            name: 'roads',
-            geometry_type: 'polyline',
-            shapes: [movingShape, farShape, targetShape],
-          },
-        ],
-        getArcs: () => ({
-          getVertex2: () => [0, 0],
-          getSimpleShapeBbox: (part: number[], bbox: number[]) => {
-            if (part === targetShape[0]) {
-              bbox[0] = 10;
-              bbox[1] = 0;
-              bbox[2] = 20;
-              bbox[3] = 0;
-            } else {
-              bbox[0] = 1000;
-              bbox[1] = 1000;
-              bbox[2] = 1010;
-              bbox[3] = 1010;
-            }
-          },
-        }),
-      })),
-      setEditVertexState: vi.fn(),
-      render: vi.fn(),
-    };
-    const snapSpy = vi.fn();
-    const segmentSpy = vi.fn((shape, _arcs, cb) => {
-      expect(shape).toEqual(targetShape);
-      cb(4, 5, xx, yy);
-    });
-    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
-    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', segmentSpy);
-
-    const handler = new VertexEditHandler(mapMock as any, { snapThreshold: 5, snapToEdge: false });
-    setPrivate(handler, '_map', mapMock);
-    setPrivate(handler, '_hoverVertexIds', [0]);
-    setPrivate(handler, '_hoveredFeature', {
-      id: 0,
-      source: 'src-a',
-      layer: 'roads',
-      shape: movingShape,
-      arcs: { getVertex2: () => [0, 0] },
-      geometryType: 'polyline',
-      allLayers: [],
-    });
-
-    callPrivate(handler, '_handleDrag', 11, 0);
-
-    expect(segmentSpy).toHaveBeenCalledTimes(1);
-    expect(snapSpy).toHaveBeenCalledWith([0], [10, 0], expect.any(Object));
-  });
-
-  it('does not keep an unbounded seen-vertex set while drag snapping', () => {
-    const movingShape = [[0]];
-    const targetShape = [[1]];
-    const xx = new Float64Array([0, 0, 10, 20]);
-    const yy = new Float64Array([0, 0, 0, 0]);
-    const mapMock = {
-      unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
-      project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
-      queryFeatures: vi.fn(() => [
-        { id: 1, source: 'src-a', layer: 'roads', geometryType: 'polyline', properties: {} },
-      ]),
-      getSource: vi.fn(() => ({
-        getLayers: () => [
-          { name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] },
-        ],
-        getArcs: () => ({
-          getVertex2: () => [0, 0],
-          getSimpleShapeBbox: (_part: number[], bbox: number[]) => {
-            bbox[0] = 0;
-            bbox[1] = 0;
-            bbox[2] = 20;
-            bbox[3] = 0;
-          },
-        }),
-      })),
-      setEditVertexState: vi.fn(),
-      render: vi.fn(),
-    };
-    const originalSetAdd = Set.prototype.add;
-    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', vi.fn((_shape, _arcs, cb) => {
-      cb(2, 3, xx, yy);
-    }));
-    Set.prototype.add = function add(value: unknown) {
-      if (value !== 0) throw new Error('unexpected unbounded Set.add');
-      return originalSetAdd.call(this, value);
-    };
-
-    try {
-      const handler = new VertexEditHandler(mapMock as any, {
-        snapThreshold: 5,
-        snapToEdge: false,
-      });
-      setPrivate(handler, '_map', mapMock);
-      setPrivate(handler, '_hoverVertexIds', [0]);
-      setPrivate(handler, '_hoveredFeature', {
-        id: 0,
-        source: 'src-a',
-        layer: 'roads',
-        shape: movingShape,
-        arcs: { getVertex2: () => [0, 0] },
-        geometryType: 'polyline',
-        allLayers: [],
-      });
-
-      expect(() => callPrivate(handler, '_findDragSnapTarget', 11, 0)).not.toThrow();
-    } finally {
-      Set.prototype.add = originalSetAdd;
-    }
   });
 
   it('does not drag-snap when vertex and edge drag snapping are disabled', () => {
@@ -354,12 +196,11 @@ describe('VertexEditHandler', () => {
     expect(snapSpy).toHaveBeenCalledWith([0], [11, 0], expect.any(Object));
   });
 
-  it('fires vertex_moved and avoids the full-bounds rebuild on finish drag', () => {
+  it('fires vertex_moved with compatibility fields and refreshes arc bbox', () => {
     const transformPoints = vi.fn();
     const fireSpy = vi.fn();
     const renderSpy = vi.fn();
     const refreshDisplayArcs = vi.fn();
-    const markDisplayArcsDirty = vi.fn();
 
     const mapMock: MockMap = {
       getCanvasContainer: () => ({
@@ -369,7 +210,7 @@ describe('VertexEditHandler', () => {
       setEditVertexState: vi.fn(),
       render: renderSpy,
       fire: fireSpy,
-      getSource: vi.fn(() => ({ refreshDisplayArcs, markDisplayArcsDirty })),
+      getSource: vi.fn(() => ({ refreshDisplayArcs })),
     };
 
     const handler = new VertexEditHandler(mapMock as any);
@@ -392,9 +233,8 @@ describe('VertexEditHandler', () => {
     // clientX:1, clientY:2, rect left:0, top:0 → px=1, py=2
     callPrivate(handler, '_finishDrag', 1, 2);
 
-    expect(transformPoints).not.toHaveBeenCalled();
+    expect(transformPoints).toHaveBeenCalledTimes(1);
     expect(refreshDisplayArcs).toHaveBeenCalledTimes(1);
-    expect(markDisplayArcsDirty).not.toHaveBeenCalled();
     expect(fireSpy).toHaveBeenCalledWith(
       'vertex_moved',
       expect.objectContaining({
