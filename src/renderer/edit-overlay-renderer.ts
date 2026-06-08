@@ -3,6 +3,8 @@ import type { ArcCollection } from '../types/mapshaper-types';
 import type { EditVertexState, EditDrawState } from '../map/types';
 import type { EditMode } from '../map/edit-state-store';
 
+const EDIT_VERTEX_COLOR = '#2e7d32';
+
 /**
  * Draws edit-mode-only decorations on top of the regular layer pass:
  *   - polygon fill highlight while editing a polygon's vertices
@@ -24,15 +26,19 @@ export class EditOverlayRenderer {
     editMode: EditMode,
     vertexState: EditVertexState | null,
     drawState: EditDrawState | null,
+    vertexArcFilter?: (arcId: number) => boolean,
   ): void {
     if (editMode === 'vertex' && vertexState) {
-      this._renderVertexOverlay(vertexState);
+      this._renderVertexOverlay(vertexState, vertexArcFilter);
     } else if (editMode === 'draw' && drawState) {
       this._painter.drawDrawingOverlay(drawState);
     }
   }
 
-  private _renderVertexOverlay(state: EditVertexState): void {
+  private _renderVertexOverlay(
+    state: EditVertexState,
+    arcFilter?: (arcId: number) => boolean,
+  ): void {
     // `EditVertexArcs` is structurally a subset of `ArcCollection` (both
     // expose `getArcIter`/`getShapeIter`); the cast keeps the Painter API
     // strictly typed without forcing the editor to depend on the full
@@ -41,15 +47,16 @@ export class EditOverlayRenderer {
 
     // Polygon fill is drawn first so vertex dots stack on top of it.
     if (state.geometryType === 'polygon' && state.polygonFill) {
-      this._painter.drawPolygonFill(state.shapes, arcs, state.polygonFill);
+      this._painter.drawPolygonFill(state.shapes, arcs, state.polygonFill, arcFilter);
     }
 
     this._painter.drawVertexDots(state.shapes, arcs, {
-      dotColor: '#333',
+      dotColor: EDIT_VERTEX_COLOR,
       dotRadius: 3,
+      arcFilter,
       hoverVertex: state.hoverVertex,
       hoverType: state.hoverType ?? 'vertex',
-      hoverColor: '#cc6acc',
+      hoverColor: EDIT_VERTEX_COLOR,
       hoverRadius: 6,
     });
   }
