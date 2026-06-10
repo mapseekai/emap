@@ -44,6 +44,25 @@ function makeArcs(size: number) {
   };
 }
 
+function makeVertexCountArcs(vertexCounts: number[]) {
+  return {
+    size: () => vertexCounts.length,
+    getVertexData: () => ({ nn: Uint32Array.from(vertexCounts) }),
+    getArcIter: (_i: number) => {
+      let done = false;
+      return {
+        x: 0,
+        y: 0,
+        hasNext() {
+          if (done) return false;
+          done = true;
+          return true;
+        },
+      };
+    },
+  };
+}
+
 function makeCountingArcs(visited: number[]) {
   return {
     getArcIter: (i: number) => {
@@ -92,6 +111,33 @@ describe('CanvasPainter batching', () => {
     painter.drawArcs(makeArcs(250) as any, { color: '#333', width: 1 });
 
     expect(strokes).toHaveLength(3);
+  });
+
+  it('flushes drawArcs when the vertex budget would be exceeded', () => {
+    const strokes: string[] = [];
+    const painter = makePainter(strokes);
+
+    painter.drawArcs(makeVertexCountArcs([8000, 5000, 2000]) as any, {
+      color: '#333',
+      width: 1,
+    });
+
+    expect(strokes).toHaveLength(2);
+  });
+
+  it('flushes the backing canvas when getImageData is available', () => {
+    const calls: unknown[][] = [];
+    const ctx: any = {
+      getImageData(...args: unknown[]) {
+        calls.push(args);
+      },
+    };
+    const canvas = { getContext: () => ctx, width: 100, height: 100, style: {} };
+    const painter = new CanvasPainter(canvas as any);
+
+    painter.flush();
+
+    expect(calls).toEqual([[0, 0, 1, 1]]);
   });
 
   it('flushes drawPoints every 100 points plus a final fill', () => {

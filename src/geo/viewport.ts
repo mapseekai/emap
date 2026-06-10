@@ -214,10 +214,6 @@ export class Viewport {
   }): (i: number) => boolean {
     const mapScale = this._initialMX > 0 ? Math.abs(this._transform.mx) / this._initialMX : 1;
 
-    if (mapScale < 1.1) {
-      return (_i: number) => true;
-    }
-
     const pixelSize = 1 / Math.abs(this._transform.mx);
     const minPathLen = pixelSize * MIN_PATH_LEN;
     const adjustedMinLen = mapScale < 1 ? minPathLen * mapScale : minPathLen;

@@ -241,6 +241,74 @@ describe('Emap rendering', () => {
     }
   });
 
+  it('lets a new nav request replace a pending settle redraw during fast-nav', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const callbacks: FrameRequestCallback[] = [];
+    const render = vi.fn();
+    const navDelta = { tx: 6, ty: 3, sx: 1, sy: 1 };
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    setPrivate(map, '_removed', false);
+    setPrivate(map, '_pendingRender', 0);
+    setPrivate(map, '_rafId', 0);
+    setPrivate(map, '_pendingAction', 'redraw');
+    setPrivate(map, '_pendingNavDelta', null);
+    setPrivate(map, '_scheduler', { fastActive: true });
+    setPrivate(map, 'render', render);
+    globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+      callbacks.push(cb);
+      return 7;
+    }) as unknown as typeof requestAnimationFrame;
+
+    try {
+      callPrivate(map, '_scheduleRender', 'redraw', undefined, true);
+      callPrivate(map, '_scheduleRender', 'nav', navDelta);
+
+      expect(getPrivate(map, '_pendingAction')).toBe('nav');
+      expect(getPrivate(map, '_pendingNavDelta')).toEqual(navDelta);
+
+      callbacks[0](0);
+
+      expect(render).toHaveBeenCalledWith({ action: 'nav', navDelta });
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
+  it('does not let nav replace a normal pending redraw', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const callbacks: FrameRequestCallback[] = [];
+    const render = vi.fn();
+    const navDelta = { tx: 6, ty: 3, sx: 1, sy: 1 };
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    setPrivate(map, '_removed', false);
+    setPrivate(map, '_pendingRender', 0);
+    setPrivate(map, '_rafId', 0);
+    setPrivate(map, '_pendingAction', 'redraw');
+    setPrivate(map, '_pendingNavDelta', null);
+    setPrivate(map, '_scheduler', { fastActive: true });
+    setPrivate(map, 'render', render);
+    globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+      callbacks.push(cb);
+      return 7;
+    }) as unknown as typeof requestAnimationFrame;
+
+    try {
+      callPrivate(map, '_scheduleRender', 'redraw');
+      callPrivate(map, '_scheduleRender', 'nav', navDelta);
+
+      expect(getPrivate(map, '_pendingAction')).toBe('redraw');
+      expect(getPrivate(map, '_pendingNavDelta')).toBeNull();
+
+      callbacks[0](0);
+
+      expect(render).toHaveBeenCalledWith({ action: 'redraw' });
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
+
   it('passes the viewport arc filter to the vertex edit overlay', () => {
     const map = createBareMap();
     const arcs = { getArcIter: vi.fn() };
@@ -266,6 +334,46 @@ describe('Emap rendering', () => {
     (map as any)._renderImpl();
 
     expect(renderOverlay).toHaveBeenCalledWith('vertex', vertexState, null, vertexArcFilter);
+  });
+
+  it('flushes the canvas before recording full-frame timing', () => {
+    const map = Object.create(Emap.prototype) as Emap;
+    const order: string[] = [];
+    const recordFrame = vi.fn(() => order.push('record'));
+    const flush = vi.fn(() => order.push('flush'));
+    const now = vi.spyOn(performance, 'now').mockReturnValueOnce(10).mockReturnValueOnce(35);
+    vi.stubGlobal('window', { devicePixelRatio: 1 });
+
+    setPrivate(map, '_canvas', {
+      width: 800,
+      height: 600,
+      style: { transform: 'translate(1px, 2px)', transformOrigin: 'top left' },
+    });
+    setPrivate(map, '_scheduler', { recordFrame });
+    setPrivate(map, '_viewport', {
+      transform: { mx: 1, my: 1, bx: 0, by: 0 },
+      getLineScale: () => 1,
+      getArcFilter: vi.fn(),
+    });
+    setPrivate(map, '_painter', { setTransform: vi.fn(), clear: vi.fn(), flush });
+    setPrivate(map, '_editOverlay', { render: vi.fn() });
+    setPrivate(map, '_editState', { mode: null, vertex: null, draw: null });
+    setPrivate(map, '_renderLayers', vi.fn());
+    setPrivate(map, '_renderHighlight', vi.fn());
+
+    try {
+      callPrivate(map, '_renderFull');
+    } finally {
+      now.mockRestore();
+      vi.unstubAllGlobals();
+    }
+
+    expect(flush).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(['flush', 'record']);
+    expect(recordFrame).toHaveBeenCalledWith(
+      25,
+      expect.objectContaining({ canvasWidth: 800, canvasHeight: 600 }),
+    );
   });
 });
 
@@ -452,7 +560,9 @@ describe('Emap layer management', () => {
       expect(effective[0].type).toBe('line');
       expect(effective[1].id).toBe('src1:cities');
       expect(effective[1].type).toBe('circle');
-      expect((effective[1].paint as any)['circle-color']).toBe((effective[0].paint as any)['line-color']);
+      expect((effective[1].paint as any)['circle-color']).toBe(
+        (effective[0].paint as any)['line-color'],
+      );
     });
 
     it('creates a default line layer for source with no mapshaper layers', () => {

@@ -52,7 +52,7 @@ describe('Viewport camera-state primitives', () => {
 });
 
 describe('Viewport arc filtering', () => {
-  it('passes all arcs near full extent without running per-arc checks', () => {
+  it('filters tiny arcs near full extent before they reach Canvas stroke', () => {
     const v = vp();
     let smallerCalls = 0;
     let bboxCalls = 0;
@@ -67,9 +67,24 @@ describe('Viewport arc filtering', () => {
       },
     });
 
-    expect(filter(0)).toBe(true);
-    expect(smallerCalls).toBe(0);
+    expect(filter(0)).toBe(false);
+    expect(smallerCalls).toBe(1);
     expect(bboxCalls).toBe(0);
+  });
+
+  it('still applies viewport bbox filtering near full extent', () => {
+    const v = vp();
+    let bboxCalls = 0;
+    const filter = v.getArcFilter({
+      arcIsSmaller: () => false,
+      arcIntersectsBBox: () => {
+        bboxCalls++;
+        return false;
+      },
+    });
+
+    expect(filter(0)).toBe(false);
+    expect(bboxCalls).toBe(1);
   });
 
   it('uses the 0.35 pixel path-length threshold once zoomed in', () => {

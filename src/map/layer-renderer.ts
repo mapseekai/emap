@@ -77,8 +77,11 @@ function renderFillLayer(
   const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
   const fillOpacity = fillPaint?.['fill-opacity'];
   const viewportFilter = ctx.viewport.getArcFilter(arcs);
-  ctx.painter.drawPolygonFill(ml.shapes!, arcs, fillColor, viewportFilter, fillOpacity);
+  ctx.painter.drawPolygonFill(ml.shapes!, arcs, fillColor, viewportFilter, fillOpacity, {
+    viewBBox: ctx.viewport.getViewBounds(),
+  });
   const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
+  if (style.width === 0) return;
   const flags = ctx.getLayerArcFlags(ml, arcs, cacheKey);
   ctx.painter.drawArcs(arcs, style, combineArcFilters(flags, viewportFilter));
 }

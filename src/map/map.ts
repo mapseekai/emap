@@ -135,6 +135,7 @@ export class Emap extends EventDispatcher {
   private _rafId = 0;
   private _pendingAction: RenderAction = 'redraw';
   private _pendingNavDelta: AffineDelta | null = null;
+  private _pendingRedrawIsSettle = false;
   private _navSnapshotTransform: { mx: number; my: number; bx: number; by: number } | null = null;
   private _wheelSettleTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly _WHEEL_SETTLE_MS = 250;
@@ -273,6 +274,7 @@ export class Emap extends EventDispatcher {
     this._editOverlay = new EditOverlayRenderer(this._painter);
     this._scheduler = new RenderScheduler({
       fullRedraw: () => this._renderFull(),
+      requestRedraw: () => this._scheduleRender('redraw', undefined, true),
       fastNav: (delta) => this._applyFastTransform(delta),
       getSnapshot: () => this._captureRenderSnapshot(),
     });
@@ -1193,19 +1195,36 @@ export class Emap extends EventDispatcher {
     return this;
   }
 
-  _scheduleRender(action: RenderAction = 'redraw', navDelta?: AffineDelta): void {
+  _scheduleRender(
+    action: RenderAction = 'redraw',
+    navDelta?: AffineDelta,
+    settleRedraw = false,
+  ): void {
     if (this._removed) return;
     const hadPendingRender = this._pendingRender > 0;
     this._pendingRender++;
     if (!hadPendingRender) {
       this._pendingAction = action;
       this._pendingNavDelta = navDelta ? { ...navDelta } : null;
+      this._pendingRedrawIsSettle = action === 'redraw' && settleRedraw;
+    } else if (
+      this._pendingAction === 'redraw' &&
+      action === 'nav' &&
+      navDelta &&
+      this._pendingRedrawIsSettle &&
+      this._scheduler.fastActive
+    ) {
+      this._pendingAction = 'nav';
+      this._pendingNavDelta = { ...navDelta };
+      this._pendingRedrawIsSettle = false;
     } else if (this._pendingAction === 'redraw' || action === 'redraw') {
       this._pendingAction = 'redraw';
       this._pendingNavDelta = null;
+      this._pendingRedrawIsSettle = action === 'redraw' && settleRedraw;
     } else {
       this._pendingAction = 'nav';
       if (navDelta) this._pendingNavDelta = { ...navDelta };
+      this._pendingRedrawIsSettle = false;
     }
     if (this._rafId === 0) {
       this._rafId = requestAnimationFrame(() => this._doRender());
@@ -1220,6 +1239,7 @@ export class Emap extends EventDispatcher {
       if (this._pendingNavDelta) req.navDelta = this._pendingNavDelta;
       this._pendingAction = 'redraw';
       this._pendingNavDelta = null;
+      this._pendingRedrawIsSettle = false;
       this.render(req);
     }
   }
@@ -1232,6 +1252,7 @@ export class Emap extends EventDispatcher {
     this._clearFastTransform();
     const t0 = performance.now();
     this._renderImpl();
+    (this._painter as typeof this._painter & { flush?: () => void }).flush?.();
     this._scheduler.recordFrame(performance.now() - t0, this._captureRenderSnapshot());
   }
 

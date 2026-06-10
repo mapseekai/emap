@@ -1,4 +1,4 @@
-import { Painter, DrawOverlayState } from './painter';
+import { Painter, DrawOverlayState, type PolygonFillOptions } from './painter';
 import { AffineTransform } from '../geo/transform';
 import { normalizePointShape } from '../source/layer-utils';
 import type {
@@ -10,6 +10,70 @@ import type {
   PointStyle,
   VertexDotStyle,
 } from '../types/mapshaper-types';
+
+const POLYGON_FILL_BATCH_SHAPE_LIMIT = 100;
+const POLYGON_FILL_BATCH_VERTEX_LIMIT = 12_000;
+const ARC_STROKE_BATCH_ARC_LIMIT = 100;
+const ARC_STROKE_BATCH_VERTEX_LIMIT = 12_000;
+
+function absArcId(arcId: number): number {
+  return arcId >= 0 ? arcId : ~arcId;
+}
+
+function bboxIntersects(a: readonly number[], b: readonly number[]): boolean {
+  return a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
+}
+
+function partIntersectsView(
+  part: readonly number[],
+  getSimpleShapeBbox: (shapeIds: number[], bbox: number[]) => void,
+  viewBBox: readonly number[],
+): boolean {
+  const bbox = [0, 0, 0, 0];
+  getSimpleShapeBbox(part as number[], bbox);
+  return bboxIntersects(bbox, viewBBox);
+}
+
+function partPassesArcFilter(part: readonly number[], filter?: (i: number) => boolean): boolean {
+  if (!filter) return true;
+  for (const arcId of part) {
+    if (filter(absArcId(arcId))) return true;
+  }
+  return false;
+}
+
+function getVisiblePolygonParts(
+  shape: PathShape,
+  arcs: ArcCollection,
+  filter: ((i: number) => boolean) | undefined,
+  viewBBox: readonly number[] | null,
+): PathShape {
+  const parts: PathShape = [];
+  const getSimpleShapeBbox = viewBBox ? arcs.getSimpleShapeBbox : undefined;
+  for (const part of shape) {
+    if (getSimpleShapeBbox && viewBBox) {
+      if (!partIntersectsView(part, getSimpleShapeBbox, viewBBox)) continue;
+    } else if (!partPassesArcFilter(part, filter)) {
+      continue;
+    }
+    parts.push(part);
+  }
+  return parts;
+}
+
+function countShapeVertices(
+  parts: PathShape,
+  vertexCounts: Int32Array | Uint32Array | null,
+): number {
+  if (!vertexCounts) return parts.length;
+  let count = 0;
+  for (const part of parts) {
+    for (const arcId of part) {
+      count += vertexCounts[absArcId(arcId)] ?? 0;
+    }
+  }
+  return count;
+}
 
 export class CanvasPainter implements Painter {
   private _ctx: CanvasRenderingContext2D;
@@ -71,28 +135,45 @@ export class CanvasPainter implements Painter {
   drawArcs(arcs: ArcCollection, style: StrokeStyle, filter?: (i: number) => boolean): void {
     if (style.width === 0) return;
     const ctx = this._ctx;
-    const batchSize = 100;
     const n = arcs.size();
+    const vertexCounts = arcs.getVertexData?.().nn ?? null;
 
     ctx.strokeStyle = style.color || '#333';
     ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    let count = 0;
+    let arcCount = 0;
+    let vertexCount = 0;
+    let hasPath = false;
     ctx.beginPath();
+
+    const flush = () => {
+      if (!hasPath) return;
+      ctx.stroke();
+      ctx.beginPath();
+      arcCount = 0;
+      vertexCount = 0;
+      hasPath = false;
+    };
 
     for (let i = 0; i < n; i++) {
       if (filter && !filter(i)) continue;
-      if (count > 0 && count % batchSize === 0) {
-        ctx.stroke();
-        ctx.beginPath();
+      const arcVertexCount = vertexCounts?.[i] ?? 1;
+      if (
+        hasPath &&
+        (arcCount >= ARC_STROKE_BATCH_ARC_LIMIT ||
+          vertexCount + arcVertexCount > ARC_STROKE_BATCH_VERTEX_LIMIT)
+      ) {
+        flush();
       }
       const iter = arcs.getArcIter(i);
       this.drawPathSnapping(iter, ctx);
-      count++;
+      arcCount++;
+      vertexCount += arcVertexCount;
+      hasPath = true;
     }
-    ctx.stroke();
+    flush();
   }
 
   // Equivalent to mapshaper's drawPath2 with optimized rounding
@@ -269,9 +350,10 @@ export class CanvasPainter implements Painter {
     /**
      * Multiplier on top of `fillColor`'s own alpha. `1` (default) leaves
      * the colour as-is; `0.5` halves the resulting alpha. Matches MapLibre's
-     * `fill-opacity` semantics — independent of the colour's own alpha.
+     * `fill-opacity` semantics, independent of the colour's own alpha.
      */
     opacity?: number,
+    options: PolygonFillOptions = {},
   ): void {
     if (!arcs.getShapeIter) return; // guard: need shape-aware iterator
 
@@ -293,42 +375,37 @@ export class CanvasPainter implements Painter {
     }
 
     // Smaller batches keep each `fill('evenodd')` call's path object
-    // bounded — Canvas2D engines slow superlinearly with subpath count,
-    // so 100 polygons/flush is the sweet spot for big topology datasets.
-    const batchSize = 100;
-    let counts = 0;
+    // bounded because Canvas2D engines slow superlinearly with subpath count.
+    // Keep mapshaper's same-style batching idea, but also cap by vertex
+    // budget because a few huge features can be much more expensive than
+    // hundreds of tiny polygons. Do not split a single shape across flushes:
+    // polygon holes have to stay in the same evenodd path as their shell.
+    const viewBBox = options.viewBBox ?? null;
+    const vertexCounts = arcs.getVertexData?.().nn ?? null;
+    let shapeCount = 0;
+    let vertexCount = 0;
 
     ctx.beginPath();
     for (let sIdx = 0; sIdx < shapes.length; sIdx++) {
       const shape = shapes[sIdx];
       if (!shape) continue;
 
-      let isVisible = true;
-      if (filter) {
-        // Find if this shape shares any arc with the viewport
-        isVisible = false;
-        for (const part of shape as PathShape) {
-          for (const arcId of part) {
-            const absId = arcId >= 0 ? arcId : ~arcId;
-            if (filter(absId)) {
-              isVisible = true;
-              break;
-            }
-          }
-          if (isVisible) break;
-        }
-      }
+      const parts = getVisiblePolygonParts(shape as PathShape, arcs, filter, viewBBox);
+      if (parts.length === 0) continue;
+      const shapeVertexCount = countShapeVertices(parts, vertexCounts);
 
-      if (!isVisible) continue;
-
-      // When batch limit reached, fill and start new path
-      if (counts > 0 && counts >= batchSize) {
+      if (
+        shapeCount > 0 &&
+        (shapeCount >= POLYGON_FILL_BATCH_SHAPE_LIMIT ||
+          vertexCount + shapeVertexCount > POLYGON_FILL_BATCH_VERTEX_LIMIT)
+      ) {
         ctx.fill('evenodd');
         ctx.beginPath();
-        counts = 0;
+        shapeCount = 0;
+        vertexCount = 0;
       }
 
-      for (const part of shape as PathShape) {
+      for (const part of parts) {
         // getShapeIter respects arc direction (reversed arcs traversed backwards)
         const iter = arcs.getShapeIter!(part);
         if (!iter.hasNext()) continue;
@@ -349,13 +426,13 @@ export class CanvasPainter implements Painter {
             ctx.lineTo(x / 2, y / 2);
           }
         }
-        ctx.closePath();
       }
 
-      counts++;
+      shapeCount++;
+      vertexCount += shapeVertexCount;
     }
 
-    if (counts > 0) {
+    if (shapeCount > 0) {
       ctx.fill('evenodd');
     }
     if (overrideAlpha) ctx.globalAlpha = prevAlpha;
@@ -452,6 +529,11 @@ export class CanvasPainter implements Painter {
 
   clear(): void {
     this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
+  }
+
+  flush(): void {
+    if (typeof this._ctx.getImageData !== 'function') return;
+    this._ctx.getImageData(0, 0, 1, 1);
   }
 
   resize(width: number, height: number): void {

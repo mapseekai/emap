@@ -11,6 +11,7 @@ export interface RenderSnapshot {
 
 export interface RenderCallbacks {
   fullRedraw: () => void;
+  requestRedraw: () => void;
   fastNav: (delta: AffineDelta) => void;
   getSnapshot: () => RenderSnapshot;
 }
@@ -19,6 +20,7 @@ export class RenderScheduler {
   private _lastFrameMs = 0;
   private _snapshot: RenderSnapshot | null = null;
   private _fastActive = false;
+  private _redrawPending = false;
   private _settleRequested = false;
   private _settleTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -43,8 +45,8 @@ export class RenderScheduler {
   }
 
   notifyInteractionEnd(hasPendingNav = false): void {
-    if (this._fastActive) {
-      this._fullRedrawNow();
+    if (this._redrawPending) {
+      this._requestRedraw();
     } else if (hasPendingNav) {
       this._settleRequested = true;
     }
@@ -64,9 +66,17 @@ export class RenderScheduler {
 
   private _fullRedrawNow(): void {
     this._fastActive = false;
+    this._redrawPending = false;
     this._settleRequested = false;
     this._cancelSettle();
     this._callbacks.fullRedraw();
+  }
+
+  private _requestRedraw(): void {
+    this._redrawPending = false;
+    this._settleRequested = false;
+    this._cancelSettle();
+    this._callbacks.requestRedraw();
   }
 
   private _shouldUseFastNav(): boolean {
@@ -81,13 +91,14 @@ export class RenderScheduler {
   }
 
   private _markRedrawPending(): void {
+    this._redrawPending = true;
     this._cancelSettle();
     if (this._settleRequested) {
-      this._fullRedrawNow();
+      this._requestRedraw();
       return;
     }
     this._settleTimer = setTimeout(() => {
-      if (this._fastActive) this._fullRedrawNow();
+      if (this._redrawPending) this._requestRedraw();
     }, FAST_SETTLE_FALLBACK_MS);
   }
 

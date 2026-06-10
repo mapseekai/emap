@@ -27,6 +27,11 @@ export interface DrawOverlayState {
   drawColor: string;
 }
 
+export interface PolygonFillOptions {
+  /** Current viewport bbox in data coordinates, used to reject offscreen parts before path iteration. */
+  viewBBox?: readonly [number, number, number, number] | number[] | null;
+}
+
 /**
  * Stateless drawing primitives: enough to render basemap topology, points,
  * polygons, and arc highlights. Anything that paints actual map content
@@ -46,6 +51,7 @@ export interface CorePainter {
     fillColor: string,
     filter?: (i: number) => boolean,
     opacity?: number,
+    options?: PolygonFillOptions,
   ): void;
   clear(): void;
   resize(width: number, height: number): void;
