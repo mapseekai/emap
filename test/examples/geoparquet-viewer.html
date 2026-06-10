@@ -66,7 +66,7 @@
     <strong>GeoParquet / GeoArrow 查看器</strong>
     <label>
       文件:
-      <input id="file-input" type="file" accept=".parquet,.geoparquet,.arrow,.arrows,.feather" />
+      <input id="file-input" type="file" accept=".parquet,.geoparquet,.arrow,.arrows,.feather" disabled />
     </label>
     <label>
       导出格式:
@@ -77,7 +77,7 @@
       </select>
     </label>
     <button id="export-btn" disabled>导出并下载</button>
-    <span id="status">上传 .parquet / .arrow 文件开始</span>
+    <span id="status">正在初始化 GeoParquet 支持...</span>
   </div>
   <div id="map"></div>
 
@@ -86,6 +86,17 @@
   <script src="../../dist/emap-dev.js"></script>
   <!-- formats bundle: registers geoparquet/geoarrow plugin as a side effect -->
   <script src="../../dist/emap-formats.js"></script>
+  <!--
+    parquet-wasm 无法通过裸模块标识符在 script-tag 环境下动态 import。
+    用 <script type="module"> 从 CDN 加载后注入，GeoArrow (.arrow) 无需此步骤。
+  -->
+  <script type="module">
+    const mod = await import('https://esm.sh/parquet-wasm@0.7.1');
+    await mod.default?.();
+    emapFormats.setParquetWasm(mod);
+    document.getElementById('status').textContent = '上传 .parquet / .arrow 文件开始';
+    document.getElementById('file-input').disabled = false;
+  </script>
   <script>
     const { Emap, TopologySource } = emap;
 

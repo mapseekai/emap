@@ -66,7 +66,7 @@
     <strong>Emap 示例</strong>
     <label>
       输入文件:
-      <input id="file-input" type="file"
+      <input id="file-input" type="file" disabled
         accept=".geojson,.json,.topojson,.zip,.parquet,.geoparquet,.arrow,.arrows,.feather" />
     </label>
     <label>
@@ -80,7 +80,7 @@
       </select>
     </label>
     <button id="export-btn" disabled>导出并下载</button>
-    <span id="status">加载文件以开始</span>
+    <span id="status">正在初始化 GeoParquet 支持...</span>
   </div>
   <div id="map"></div>
 
@@ -89,6 +89,17 @@
   <script src="../../dist/emap-dev.js"></script>
   <!-- formats bundle: 注册 geoparquet / geoarrow 插件（副作用） -->
   <script src="../../dist/emap-formats.js"></script>
+  <!--
+    parquet-wasm 无法通过裸模块标识符在 script-tag 环境下动态 import。
+    用 <script type="module"> 从 CDN 加载后注入，GeoArrow (.arrow) 无需此步骤。
+  -->
+  <script type="module">
+    const mod = await import('https://esm.sh/parquet-wasm@0.7.1');
+    await mod.default?.();
+    emapFormats.setParquetWasm(mod);
+    document.getElementById('status').textContent = '加载文件以开始';
+    document.getElementById('file-input').disabled = false;
+  </script>
   <script>
     const { Emap, TopologySource, NavigationControl } = emap;
 
