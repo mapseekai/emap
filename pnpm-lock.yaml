@@ -8,12 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@zwishing/epsg-index':
+        specifier: ^2.1.0
+        version: 2.1.0
       apache-arrow:
         specifier: ^21.1.0
         version: 21.1.0
-      epsg-index:
-        specifier: ^2.0.0
-        version: 2.0.0
       fflate:
         specifier: ^0.8.2
         version: 0.8.2
@@ -703,6 +703,10 @@ packages:
     resolution: {integrity: sha512-cQzWCtO6C8TQiYl1ruKNn2U6Ao4o4WBBcbL61yJl84x+j5sOWWFU9X7DpND8XZG3daDppSsigMdfAIl2upQBRw==}
     engines: {node: '>=10.0.0'}
 
+  '@zwishing/epsg-index@2.1.0':
+    resolution: {integrity: sha512-KnK4el9Tst0xLm3/eji9lptgcpIwWpdQZlJeVuhKpklCLIQdht6vnkvs0ejIuItNfIkujWJuWpd0vYng3RBoCg==}
+    engines: {node: '>=18'}
+
   acorn-walk@8.3.4:
     resolution: {integrity: sha512-ueEepnujpqee2o5aIYnvHU6C0A42MNdsIDeqy5BydrkuC5R1ZuUFnm27EeFJGoEHJQgn3uleRvmTXaJgfXbt4g==}
     engines: {node: '>=0.4.0'}
@@ -999,10 +1003,6 @@ packages:
     resolution: {integrity: sha512-zwfzJecQ/Uej6tusMqwAqU/6KL2XaB2VZ2Jg54Je6ahNBGNH6Ek6g3jjNCF0fG9EWQKGZNddNjU5F1ZQn/sBnA==}
     engines: {node: '>=20.19.0'}
 
-  epsg-index@2.0.0:
-    resolution: {integrity: sha512-JFRqtXMmxEO/BWbXZuLNJuWS44vbwDPQkfycnISnfm/I8/OLlAqwbYRImgAV9ulr63p/hyW2YIFT9jizHeDzvQ==}
-    engines: {node: '>=18'}
-
   es-define-property@1.0.1:
     resolution: {integrity: sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==}
     engines: {node: '>= 0.4'}
@@ -1128,7 +1128,7 @@ packages:
   glob@8.1.0:
     resolution: {integrity: sha512-r8hpEjiQEYlF2QU0df3dS+nxxSIreXQS1qRhMJM0Q5NDdR386C7jb7Hwwod8Fgiuex+k0GFjgft18yvxm5XoCQ==}
     engines: {node: '>=12'}
-    deprecated: Glob versions prior to v9 are no longer supported
+    deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
   gopd@1.2.0:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
@@ -2531,6 +2531,8 @@ snapshots:
 
   '@xmldom/xmldom@0.8.11': {}
 
+  '@zwishing/epsg-index@2.1.0': {}
+
   acorn-walk@8.3.4:
     dependencies:
       acorn: 8.15.0
@@ -2847,8 +2849,6 @@ snapshots:
   entities@2.2.0: {}
 
   entities@8.0.0: {}
-
-  epsg-index@2.0.0: {}
 
   es-define-property@1.0.1: {}
 
