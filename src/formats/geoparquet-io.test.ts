@@ -94,6 +94,15 @@ describe('GeoParquet round trip', () => {
     dataset.info = { ...dataset.info, crs_string: 'EPSG:3857' };
     const bytes = await exportGeoParquet(dataset);
 
+    const file = await wasm.ParquetFile.fromFile(new Blob([bytes]));
+    try {
+      const fileGeo = file.metadata().fileMetadata().keyValueMetadata().get('geo');
+      expect(typeof fileGeo).toBe('string');
+      expect(parseGeoMetadata(new Map([['geo', fileGeo as string]]))?.primary_column).toBe('geometry');
+    } finally {
+      file.free?.();
+    }
+
     // Inspect the raw arrow table parquet-wasm yields
     const table = tableFromIPC(wasm.readParquet(bytes).intoIPCStream());
     const geo = parseGeoMetadata(table.schema.metadata);
@@ -102,6 +111,13 @@ describe('GeoParquet round trip', () => {
     expect(geo?.columns.geometry.encoding).toBe('WKB');
     expect(geo?.columns.geometry.geometry_types).toEqual(['MultiPolygon']);
     expect(geo?.columns.geometry.bbox).toEqual([0, 0, 22, 22]);
+    expect(geo?.columns.geometry.crs).toMatchObject({
+      type: 'ProjectedCRS',
+      name: 'WGS 84 / Pseudo-Mercator',
+      id: { authority: 'EPSG', code: 3857 },
+    });
+    expect(geo?.columns.geometry.crs).toHaveProperty('base_crs');
+    expect(geo?.columns.geometry.crs).toHaveProperty('coordinate_system');
 
     const back = await importGeoParquet(bytes);
     expect(back.info?.crs_string).toBe('EPSG:3857');

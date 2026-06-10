@@ -13,13 +13,22 @@ export interface ParquetWasmTable {
   intoIPCStream(): Uint8Array;
 }
 
+export interface ParquetWasmWriterPropertiesBuilder {
+  setKeyValueMetadata(metadata: Map<string, string>): ParquetWasmWriterPropertiesBuilder;
+  setCompression(c: number): ParquetWasmWriterPropertiesBuilder;
+  build(): unknown;
+}
+
 export interface ParquetWasmModule {
   readParquet(bytes: Uint8Array): ParquetWasmTable;
   writeParquet(table: ParquetWasmTable, properties?: unknown): Uint8Array;
   Table: { fromIPCStream(ipc: Uint8Array): ParquetWasmTable };
-  WriterPropertiesBuilder: new () => {
-    setCompression(c: number): { build(): unknown };
-    build(): unknown;
+  WriterPropertiesBuilder: new () => ParquetWasmWriterPropertiesBuilder;
+  ParquetFile: {
+    fromFile(handle: Blob): Promise<{
+      metadata(): { fileMetadata(): { keyValueMetadata(): Map<unknown, unknown> } };
+      free?(): void;
+    }>;
   };
   Compression: Record<string, number>;
 }

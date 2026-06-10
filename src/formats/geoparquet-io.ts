@@ -51,6 +51,12 @@ export async function exportGeoParquet(
   if (compression === undefined) {
     throw new Error(`Unsupported parquet compression: ${opts.compression}`);
   }
-  const properties = new wasm.WriterPropertiesBuilder().setCompression(compression).build();
+  let propertiesBuilder = new wasm.WriterPropertiesBuilder();
+  const geoMetadata = table.schema.metadata.get('geo');
+  if (geoMetadata) {
+    propertiesBuilder = propertiesBuilder.setKeyValueMetadata(new Map([['geo', geoMetadata]]));
+  }
+
+  const properties = propertiesBuilder.setCompression(compression).build();
   return wasm.writeParquet(wasmTable, properties);
 }
