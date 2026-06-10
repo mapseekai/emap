@@ -242,12 +242,14 @@ describe('GeoArrow IPC round trip', () => {
     expect(back.info?.crs_string).toBe('EPSG:3857');
   });
 
-  it('default CRS (EPSG:4326) exports as crs:null and imports back as 4326', async () => {
+  it('default CRS (EPSG:4326) exports as CRS84 PROJJSON and imports back as 4326', async () => {
     const dataset = await datasetFromGeoJSON(POINTS_FC);
     dataset.info = { ...dataset.info, crs_string: 'EPSG:4326' };
     const bytes = exportGeoArrow(dataset);
     const table = tableFromIPC(bytes);
-    expect(parseGeoMetadata(table.schema.metadata)?.columns.geometry.crs).toBeNull();
+    expect(
+      (parseGeoMetadata(table.schema.metadata)?.columns.geometry.crs as { id: unknown }).id,
+    ).toEqual({ authority: 'OGC', code: 'CRS84' });
     expect(importGeoArrow(bytes).info?.crs_string).toBe('EPSG:4326');
   });
 });

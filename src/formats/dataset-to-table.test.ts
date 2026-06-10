@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { toArrowTable } from './dataset-to-table';
+import { parseGeoMetadata } from './geoparquet-metadata';
 import { datasetFromGeoJSON } from './test-utils';
 
 const TWO_LAYER_INPUT = {
@@ -77,6 +78,53 @@ describe('toArrowTable', () => {
     expect(table.schema.fields.at(-1)!.name).toBe('geom');
     const meta = JSON.parse(table.schema.metadata.get('geo')!);
     expect(meta.primary_column).toBe('geom');
+  });
+
+  it('exports CRS resolved from dataset metadata, not only crs_string', async () => {
+    const dataset = await datasetFromGeoJSON(TWO_LAYER_INPUT);
+    dataset.info = {
+      ...dataset.info,
+      prj: 'PROJCS["Web Mercator",AUTHORITY["EPSG","3857"]]',
+    };
+
+    const table = toArrowTable(dataset, { encoding: 'wkb' });
+    const crs = parseGeoMetadata(table.schema.metadata)?.columns.geometry.crs as {
+      id: { authority: string; code: number };
+    };
+    expect(crs.id).toEqual({ authority: 'EPSG', code: 3857 });
+
+    const extMeta = JSON.parse(
+      table.schema.fields.at(-1)!.metadata.get('ARROW:extension:metadata')!,
+    );
+    expect(extMeta.crs.id).toEqual({ authority: 'EPSG', code: 3857 });
+  });
+
+  it('writes crs:null for unknown CRS labels instead of implying CRS84', async () => {
+    const dataset = await datasetFromGeoJSON(TWO_LAYER_INPUT);
+    dataset.info = { ...dataset.info, crs_string: '+proj=utm +zone=10' };
+
+    const table = toArrowTable(dataset, { encoding: 'wkb' });
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry as Record<
+      string,
+      unknown
+    >;
+    expect(column.crs).toBeNull();
+    expect(JSON.parse(table.schema.fields.at(-1)!.metadata.get('ARROW:extension:metadata')!)).toEqual(
+      { crs: null },
+    );
+  });
+
+  it('writes EPSG:4326 as an OGC:CRS84 PROJJSON object', async () => {
+    const dataset = await datasetFromGeoJSON(TWO_LAYER_INPUT);
+    dataset.info = { ...dataset.info, crs_string: 'EPSG:4326' };
+
+    const table = toArrowTable(dataset, { encoding: 'wkb' });
+    const crs = parseGeoMetadata(table.schema.metadata)?.columns.geometry.crs as {
+      type: string;
+      id: { authority: string; code: string };
+    };
+    expect(crs.type).toBe('GeographicCRS');
+    expect(crs.id).toEqual({ authority: 'OGC', code: 'CRS84' });
   });
 
   it('degrades mixed-type attribute columns to strings', async () => {

@@ -34,6 +34,42 @@ export interface GeoMetadata {
 export const ARROW_EXTENSION_NAME = 'ARROW:extension:name';
 export const ARROW_EXTENSION_METADATA = 'ARROW:extension:metadata';
 
+const OGC_CRS84_PROJJSON = {
+  $schema: 'https://proj.org/schemas/v0.5/projjson.schema.json',
+  type: 'GeographicCRS',
+  name: 'WGS 84 longitude-latitude',
+  datum: {
+    type: 'GeodeticReferenceFrame',
+    name: 'World Geodetic System 1984',
+    ellipsoid: {
+      name: 'WGS 84',
+      semi_major_axis: 6378137,
+      inverse_flattening: 298.257223563,
+    },
+  },
+  coordinate_system: {
+    subtype: 'ellipsoidal',
+    axis: [
+      {
+        name: 'Geodetic longitude',
+        abbreviation: 'Lon',
+        direction: 'east',
+        unit: 'degree',
+      },
+      {
+        name: 'Geodetic latitude',
+        abbreviation: 'Lat',
+        direction: 'north',
+        unit: 'degree',
+      },
+    ],
+  },
+  id: {
+    authority: 'OGC',
+    code: 'CRS84',
+  },
+};
+
 /** Parse the `geo` key out of an Arrow schema metadata map, if present. */
 export function parseGeoMetadata(metadata: Map<string, string>): GeoMetadata | null {
   const raw = metadata.get('geo');
@@ -61,9 +97,10 @@ export function buildGeoMetadata(opts: {
     geometry_types: opts.geometryTypes,
   };
   if (opts.bbox && opts.bbox.every((v) => Number.isFinite(v))) column.bbox = opts.bbox;
-  // GeoParquet: `crs: null` explicitly means OGC:CRS84 (lon/lat). Omitting
-  // the key has the same default, but null is the spec's recommended form.
-  column.crs = opts.crs ?? null;
+  // GeoParquet: a missing `crs` key means the default OGC:CRS84. `crs: null`
+  // explicitly means the CRS is undefined/unknown, so only write a null when
+  // the caller deliberately passes null.
+  if (opts.crs !== undefined) column.crs = opts.crs;
   const geo: GeoMetadata = {
     version: '1.1.0',
     primary_column: opts.columnName,
@@ -100,11 +137,12 @@ export function extensionNameFromEncoding(encoding: GeoEncoding): string {
 
 /**
  * Map a PROJJSON CRS object to emap's `dataset.info.crs_string` convention.
- * Only authority-coded CRSs translate ("EPSG:nnnn"); null/undefined means
- * OGC:CRS84, which emap treats as EPSG:4326 (axis order is lon/lat in both).
+ * Only authority-coded CRSs translate ("EPSG:nnnn"). A null CRS means
+ * undefined/unknown in GeoParquet 1.1; a missing CRS key is handled by the
+ * caller as the default OGC:CRS84.
  */
 export function projjsonToCrsString(crs: unknown): string | null {
-  if (crs == null) return 'EPSG:4326';
+  if (crs == null) return null;
   if (typeof crs !== 'object') return null;
   const id = (crs as { id?: { authority?: string; code?: number | string } }).id;
   if (id?.authority && id.code != null) {
@@ -117,21 +155,21 @@ export function projjsonToCrsString(crs: unknown): string | null {
 }
 
 /**
- * Map emap's `crs_string` to the GeoParquet `crs` value: null for 4326 /
- * CRS84 (the spec default), a minimal authority-id PROJJSON for other
- * EPSG codes, undefined (omit + warn) for anything unrecognized.
+ * Map emap's `crs_string` to the GeoParquet `crs` value: a full OGC:CRS84
+ * PROJJSON object for 4326 / CRS84, a minimal authority-id object for other
+ * EPSG codes, null for anything unrecognized/unknown.
  */
 export function crsStringToProjjson(crsString: string | undefined): unknown {
   if (!crsString) return null;
   const m = /^(EPSG|OGC):([\w]+)$/i.exec(crsString.trim());
   if (!m) {
-    console.warn(`emap formats: cannot express CRS '${crsString}' as PROJJSON; omitting`);
-    return undefined;
+    console.warn(`emap formats: cannot express CRS '${crsString}' as PROJJSON; marking unknown`);
+    return null;
   }
   const authority = m[1].toUpperCase();
   const code = m[2];
   if ((authority === 'EPSG' && code === '4326') || (authority === 'OGC' && code === 'CRS84')) {
-    return null;
+    return OGC_CRS84_PROJJSON;
   }
   // Minimal PROJJSON: authority id + name only (no `type` — we don't ship
   // a CRS database to know geographic vs projected). Readers that resolve

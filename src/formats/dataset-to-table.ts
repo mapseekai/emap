@@ -19,6 +19,7 @@ import {
   type ExportedPath,
   type MapshaperAdapter,
 } from '../adapter/mapshaper-adapter';
+import { resolveDatasetCRS } from '../geo/crs-resolver';
 import { normalizePointShape } from '../source/layer-utils';
 import type { ArcCollection, MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import { groupPolygonRings } from './group-polygon-rings';
@@ -83,7 +84,7 @@ export function toArrowTable(dataset: MapshaperDataset, opts: ToArrowTableOption
   }
 
   // Geometry field: geoarrow extension metadata (+ crs when known)
-  const crs = crsStringToProjjson(dataset.info?.crs_string);
+  const crs = crsStringToProjjson(resolveDatasetCRS(dataset));
   const extMeta = new Map<string, string>([
     [ARROW_EXTENSION_NAME, extensionNameFromEncoding(encoding)],
   ]);

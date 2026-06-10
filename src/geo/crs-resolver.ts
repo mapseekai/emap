@@ -44,6 +44,11 @@ export function resolveDatasetCRS(dataset: MapshaperDataset | undefined): string
     if (fromPrj) return fromPrj;
   }
 
+  if (info.wkt1) {
+    const fromWkt1 = inferFromPrj(info.wkt1);
+    if (fromWkt1) return fromWkt1;
+  }
+
   if (info.crs) {
     if (info.crs.is_latlong) return 'EPSG:4326';
     if (info.crs.projName === 'merc' && info.crs.a === 6378137) return 'EPSG:3857';

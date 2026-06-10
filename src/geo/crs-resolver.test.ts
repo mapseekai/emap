@@ -157,6 +157,16 @@ describe('resolveDatasetCRS', () => {
     ).toBe('EPSG:4490');
   });
 
+  it('falls through to wkt1 when crs_string and prj are missing', () => {
+    expect(
+      resolveDatasetCRS(
+        ds({
+          wkt1: 'PROJCS["x",AUTHORITY["EPSG","3857"]]',
+        }),
+      ),
+    ).toBe('EPSG:3857');
+  });
+
   it('falls through to crs object when prj is missing', () => {
     expect(
       resolveDatasetCRS(
