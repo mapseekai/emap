@@ -3,6 +3,7 @@ import mapshaper from 'mapshaper';
 import { unzipSync, strFromU8, zipSync } from 'fflate';
 import { TopologySource } from './topology-source';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
+import { registerFormat, unregisterFormat } from './format-registry';
 
 function setPrivate(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
@@ -717,5 +718,79 @@ describe('TopologySource point import', () => {
     expect(Number.isFinite(extent.ymin)).toBe(true);
     expect(Number.isFinite(extent.xmax)).toBe(true);
     expect(Number.isFinite(extent.ymax)).toBe(true);
+  });
+});
+
+describe('TopologySource format plugin routing', () => {
+  const PLUGIN_DATASET = {
+    layers: [{ name: 'plug', geometry_type: 'point' as const, shapes: [[[1, 2]]] }],
+    arcs: undefined,
+    info: {},
+  };
+
+  afterEach(() => {
+    unregisterFormat('test-plugin');
+  });
+
+  function registerTestPlugin() {
+    const importBinary = vi.fn(async () => PLUGIN_DATASET);
+    const exportHandler = vi.fn(async () => [
+      { filename: 'out.parquet', content: new Uint8Array([1, 2, 3]) },
+    ]);
+    registerFormat({
+      name: 'test-plugin',
+      extensions: ['parquet', 'geoparquet', 'arrow', 'arrows', 'feather'],
+      importBinary,
+      exportFormats: { geoparquet: exportHandler, geoarrow: exportHandler },
+    });
+    return { importBinary, exportHandler };
+  }
+
+  it('routes .parquet files to the registered plugin instead of mapshaper', async () => {
+    const { importBinary } = registerTestPlugin();
+    const source = new TopologySource('p');
+    const content = new Uint8Array([0xde, 0xad]);
+    await source.setData({ filename: 'data.parquet', content });
+    expect(importBinary).toHaveBeenCalledWith(content, 'data.parquet');
+    expect(source.getLayers()[0].name).toBe('plug');
+  });
+
+  it('throws a registration hint for plugin extensions when unregistered', async () => {
+    const source = new TopologySource('p');
+    await expect(
+      source.setData({ filename: 'data.parquet', content: new Uint8Array([1]) }),
+    ).rejects.toThrow(/@zwishing\/emap\/formats/);
+  });
+
+  it('rejects mixing plugin files with other inputs', async () => {
+    registerTestPlugin();
+    const source = new TopologySource('p');
+    await expect(
+      source.setData([
+        { filename: 'a.parquet', content: new Uint8Array([1]) },
+        { filename: 'b.geojson', content: new Uint8Array([1]) },
+      ]),
+    ).rejects.toThrow(/cannot be combined/);
+  });
+
+  it('exports plugin formats through the registered handler with correct MIME', async () => {
+    const { exportHandler } = registerTestPlugin();
+    const source = new TopologySource('p');
+    setPrivate(source, '_dataset', FAKE_DATASET);
+    const blob = await source.export({ format: 'geoparquet', encoding: 'wkb' });
+    expect(exportHandler).toHaveBeenCalledWith(
+      FAKE_DATASET,
+      expect.objectContaining({ format: 'geoparquet', encoding: 'wkb' }),
+    );
+    expect(blob.type).toBe('application/vnd.apache.parquet');
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it('throws a registration hint for geoparquet export when unregistered', async () => {
+    const source = new TopologySource('p');
+    setPrivate(source, '_dataset', FAKE_DATASET);
+    await expect(source.export({ format: 'geoparquet' })).rejects.toThrow(
+      /@zwishing\/emap\/formats/,
+    );
   });
 });

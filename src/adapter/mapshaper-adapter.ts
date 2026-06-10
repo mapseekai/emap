@@ -20,7 +20,12 @@
 // resolves a singleton via {@link getDefaultMapshaperAdapter} when no explicit
 // adapter is supplied.
 
-import type { ArcCollection, MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
+import type {
+  ArcCollection,
+  DataTable,
+  MapshaperDataset,
+  MapshaperLayer,
+} from '../types/mapshaper-types';
 
 // -- Pack / snapshot serialisation ------------------------------------------
 // Mapshaper's pack format has no published TypeScript shape. Treat it as an
@@ -79,6 +84,40 @@ export interface ParsedCommand {
 
 /** Files injected onto a `-i` command's `input` option. */
 export type RunnerInputFiles = Record<string, Uint8Array | string>;
+
+/**
+ * Handle over mapshaper's internal `PathImporter` — the same streaming
+ * builder mapshaper's own GeoJSON / Shapefile importers feed. Lets the
+ * formats module construct a dataset directly from coordinate buffers
+ * without a GeoJSON intermediate. Call `startShape` once per feature,
+ * then zero or more import* calls, then `done()`.
+ */
+export interface PathImporterHandle {
+  startShape(properties?: Record<string, unknown>): void;
+  /** Import a polygon ring; mapshaper fixes winding from the signed area. */
+  importRing(points: Array<[number, number]>, isHole?: boolean): void;
+  importLine(points: Array<[number, number]>): void;
+  importPoints(points: Array<[number, number]>): void;
+  done(): MapshaperDataset;
+}
+
+/** One exported path from {@link MapshaperAdapter.exportPathData}. */
+export interface ExportedPath {
+  points: Array<[number, number]>;
+  pointCount: number;
+  /** Signed planar area (polygons only): positive = shell, negative = hole. */
+  area?: number;
+  /** Signed arc ids making up this path (input shape part). */
+  ids?: number[];
+  /** mapshaper Bounds object; callers read xmin/ymin/xmax/ymax. */
+  bounds?: MapshaperBBox;
+}
+
+/** Result of {@link MapshaperAdapter.exportPathData} / `exportPointData`. */
+export interface ExportedPathData {
+  pathData: ExportedPath[];
+  pointCount: number;
+}
 
 /**
  * The mapshaper internal API surface the editor depends on. Methods are
@@ -293,6 +332,43 @@ export interface MapshaperAdapter {
   /** Plain-text export (GeoJSON / TopoJSON). */
   exportFileContent(dataset: MapshaperDataset, opts: { format: string }): ExportedFile[];
 
+  // -- Format-module bridge (GeoParquet / GeoArrow) -----------------------
+  // Used exclusively by src/formats/* for direct (non-GeoJSON) conversion
+  // between Arrow tables and mapshaper datasets.
+
+  /** New streaming dataset builder (mapshaper's internal `PathImporter`). */
+  createPathImporter(opts?: Record<string, unknown>): PathImporterHandle;
+
+  /**
+   * Post-import cleanup pass (duplicate-point removal, defective-path
+   * dropping) mapshaper's own importers run before topology building.
+   */
+  cleanPathsAfterImport(dataset: MapshaperDataset, opts?: Record<string, unknown>): void;
+
+  /** Convert imported per-ring arcs into shared-arc topology in place. */
+  buildTopology(dataset: MapshaperDataset): void;
+
+  /** Wrap a records array in a mapshaper `DataTable`. */
+  createDataTable(records: Array<Record<string, unknown>>): DataTable;
+
+  /**
+   * Per-feature absolute coordinates for export, traversing arcs in shape
+   * order (reversed arcs walked backwards). `type` selects ring-validity
+   * rules; polygons get a signed `area` per path (shell > 0, hole < 0).
+   */
+  exportPathData(
+    shape: number[][] | null,
+    arcs: ArcCollection,
+    type: 'polygon' | 'polyline',
+  ): ExportedPathData;
+
+  /**
+   * Winding-number test of point (x, y) against the ring formed by the
+   * signed arc ids. Non-zero = inside. Used by the formats module's
+   * hole-to-shell grouping (port of mapshaper's groupPolygonRings).
+   */
+  testPointInRing(x: number, y: number, ids: number[], arcs: ArcCollection): number;
+
   // -- Dataset cloning (used by dataset-replace ops) ---------------------
 
   /**
@@ -451,6 +527,34 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
 
   testPointInPolygon(x: number, y: number, shape: number[][], arcs: ArcCollection): boolean {
     return mapshaper.geom.testPointInPolygon(x, y, shape, arcs);
+  }
+
+  createPathImporter(opts?: Record<string, unknown>): PathImporterHandle {
+    return new mapshaper.internal.PathImporter(opts ?? {});
+  }
+
+  cleanPathsAfterImport(dataset: MapshaperDataset, opts?: Record<string, unknown>): void {
+    mapshaper.internal.cleanPathsAfterImport(dataset, opts ?? {});
+  }
+
+  buildTopology(dataset: MapshaperDataset): void {
+    mapshaper.internal.buildTopology(dataset);
+  }
+
+  createDataTable(records: Array<Record<string, unknown>>): DataTable {
+    return new mapshaper.internal.DataTable(records);
+  }
+
+  exportPathData(
+    shape: number[][] | null,
+    arcs: ArcCollection,
+    type: 'polygon' | 'polyline',
+  ): ExportedPathData {
+    return mapshaper.internal.exportPathData(shape, arcs, type);
+  }
+
+  testPointInRing(x: number, y: number, ids: number[], arcs: ArcCollection): number {
+    return mapshaper.geom.testPointInRing(x, y, ids, arcs);
   }
 
   layerHasGeometry(layer: MapshaperLayer): boolean {

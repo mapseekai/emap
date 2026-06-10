@@ -11,6 +11,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/emap.mjs"
     },
+    "./formats": {
+      "types": "./dist/formats/index.d.ts",
+      "import": "./dist/emap-formats.mjs"
+    },
     "./style.css": {
       "types": "./style.css.d.ts",
       "default": "./dist/emap.css"
@@ -19,17 +23,23 @@
     "./dist/mapshaper-vendor.js": "./dist/mapshaper-vendor.js",
     "./dist/mapshaper-vendor.mjs": "./dist/mapshaper-vendor.mjs",
     "./dist/emap.js": "./dist/emap.js",
+    "./dist/emap-formats.js": "./dist/emap-formats.js",
+    "./dist/emap-formats.mjs": "./dist/emap-formats.mjs",
     "./package.json": "./package.json"
   },
   "sideEffects": [
     "*.css",
     "./dist/mapshaper-vendor.js",
-    "./dist/mapshaper-vendor.mjs"
+    "./dist/mapshaper-vendor.mjs",
+    "./dist/emap-formats.js",
+    "./dist/emap-formats.mjs"
   ],
   "files": [
     "dist/emap.js",
     "dist/emap.mjs",
     "dist/emap-worker.js",
+    "dist/emap-formats.js",
+    "dist/emap-formats.mjs",
     "dist/mapshaper-vendor.js",
     "dist/mapshaper-vendor.mjs",
     "dist/emap.css",
@@ -95,6 +105,7 @@
     "vitest": "^1.0.0"
   },
   "dependencies": {
+    "apache-arrow": "^21.1.0",
     "epsg-index": "^2.0.0",
     "fflate": "^0.8.2",
     "flatbush": "^4.5.0",
@@ -102,6 +113,7 @@
     "kdbush": "^4.0.2",
     "maplibre-gl": "^5.17.0",
     "mapshaper": "^0.6.113",
-    "mproj": "^0.1.2"
+    "mproj": "^0.1.2",
+    "parquet-wasm": "^0.7.1"
   }
 }

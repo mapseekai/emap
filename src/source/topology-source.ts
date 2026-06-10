@@ -9,6 +9,12 @@ import type { ExportFormat, ExportOptions } from './source';
 import { getDefaultMapshaperRunner, type MapshaperRunner } from './mapshaper-runner';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { resolveDatasetCRS, resolveProjectCrs } from '../geo/crs-resolver';
+import {
+  getExportHandler,
+  getFileExtension,
+  getFormatForExtension,
+  isKnownPluginExtension,
+} from './format-registry';
 
 export type TopologySourceData = string | { filename: string; content: Uint8Array };
 
@@ -30,6 +36,8 @@ const EXPORT_MIME: Record<ExportFormat, string> = {
   topojson: 'application/json',
   shapefile: 'application/zip',
   msx: 'application/octet-stream',
+  geoparquet: 'application/vnd.apache.parquet',
+  geoarrow: 'application/vnd.apache.arrow.file',
 };
 
 /** Coerce mapshaper export content (string | Uint8Array | ArrayBuffer) to Uint8Array for zip packing. */
@@ -298,6 +306,11 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         }
       }
 
+      // Plugin formats (GeoParquet / GeoArrow) bypass mapshaper's CLI —
+      // mapshaper has no parser for them. The plugin builds the dataset
+      // directly (including cleanPathsAfterImport + buildTopology).
+      const pluginImport = this._resolvePluginImport(primaryFiles, inputFiles);
+
       // Match mapshaper GUI's import path: bare `-i FILE [FILE2 ...]`.
       // mapshaper's importContent runs cleanPathsAfterImport (deduplication
       // + defective-path removal) and buildTopology (coincident-endpoint
@@ -307,7 +320,9 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       // sized files unusable. Callers run `Emap.ops.cleanLayer()` /
       // `source.simplifyArcs()` explicitly when they need those passes.
       const cmd = `-i ${primaryFiles.map((f) => `"${f.replace(/"/g, '\\"')}"`).join(' ')}`;
-      const dataset: MapshaperDataset = await this._runner.runImport(cmd, inputFiles);
+      const dataset: MapshaperDataset = pluginImport
+        ? await pluginImport
+        : await this._runner.runImport(cmd, inputFiles);
 
       // Stale guard: another setData superseded this run while it was awaiting.
       // Drop the result silently — the live chain owns the next data/error.
@@ -355,8 +370,42 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     pending.reject(error);
   }
 
+  /**
+   * Route plugin-format files (GeoParquet / GeoArrow) to their registered
+   * {@link DatasetFormatPlugin}. Returns `null` when no file involves a
+   * plugin extension (caller proceeds with mapshaper's `-i` import).
+   *
+   * v1 restriction: a plugin file must be the only input — mapshaper's
+   * multi-file `-i` can't mix datasets it can't parse.
+   */
+  private _resolvePluginImport(
+    primaryFiles: string[],
+    inputFiles: Record<string, Uint8Array | string>,
+  ): Promise<MapshaperDataset> | null {
+    const pluginFile = primaryFiles.find((f) => isKnownPluginExtension(getFileExtension(f)));
+    if (!pluginFile) return null;
+    const ext = getFileExtension(pluginFile);
+    const plugin = getFormatForExtension(ext);
+    if (!plugin) {
+      throw new Error(
+        `'.${ext}' import requires the emap formats module — ` +
+          `import '@zwishing/emap/formats' (or call registerFormat) before setData`,
+      );
+    }
+    if (primaryFiles.length > 1) {
+      throw new Error(`'.${ext}' files cannot be combined with other files in one import`);
+    }
+    const content = inputFiles[pluginFile];
+    if (typeof content === 'string') {
+      throw new Error(`'.${ext}' import expects binary content, received a string`);
+    }
+    return plugin.importBinary(content, pluginFile);
+  }
+
   private _hasSupportedExtension(filename: string): boolean {
-    return /\.(json|geojson|topojson|zip|shp|kml|msx)$/i.test(filename);
+    return /\.(json|geojson|topojson|zip|shp|kml|msx|parquet|geoparquet|arrow|arrows|feather)$/i.test(
+      filename,
+    );
   }
 
   private _filenameFromContentType(contentType: string, fallbackName: string): string {
@@ -370,6 +419,9 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       'application/x-zip-compressed': '.zip',
       'application/octet-stream': '.zip',
       'application/vnd.google-earth.kml+xml': '.kml',
+      'application/vnd.apache.parquet': '.parquet',
+      'application/vnd.apache.arrow.file': '.arrow',
+      'application/vnd.apache.arrow.stream': '.arrows',
       'text/plain': '.json',
     };
     const ext = extMap[ct] || '.json';
@@ -513,6 +565,19 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     }
 
     try {
+      // Plugin formats (geoparquet / geoarrow) are produced by their
+      // registered DatasetFormatPlugin, not by mapshaper's exporters.
+      const pluginHandler = getExportHandler(options.format);
+      if (pluginHandler) {
+        const files = await pluginHandler(this._dataset, options);
+        return this._filesToBlob(files, options.format);
+      }
+      if (options.format === 'geoparquet' || options.format === 'geoarrow') {
+        throw new Error(
+          `'${options.format}' export requires the emap formats module — ` +
+            `import '@zwishing/emap/formats' (or call registerFormat) before export`,
+        );
+      }
       // mapshaper's `.msx` snapshot format is special-cased: exportFileContent
       // does not handle it, so we go through the Pack pipeline directly.
       // `compact: true` matches mapshaper CLI defaults — bakes simplification

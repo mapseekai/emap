@@ -14,4 +14,8 @@ describe('public export surface (DX P1 additions)', () => {
     // Guards the breaking 0.3.0 consolidation against regression.
     expect(emap.DragPanHandler).toBe(NewDragPan);
   });
+
+  it('exports the format-plugin registry hook (arrow-free core surface)', () => {
+    expect(typeof emap.registerFormat).toBe('function');
+  });
 });

@@ -149,6 +149,39 @@ declare module 'mapshaper' {
     deleteLastArc(arcs: ArcCollection): void;
     findArcIdFromVertexId(vertexId: number, ii: Int32Array | Uint32Array): number;
 
+    // Direct dataset construction — used by the formats module
+    // (GeoParquet / GeoArrow) to build datasets from coordinate buffers
+    // without a GeoJSON intermediate.
+    /** Streaming importer; the class mapshaper's own format readers feed. */
+    PathImporter: new (
+      opts: Record<string, unknown>,
+    ) => {
+      startShape(properties?: Record<string, unknown>): void;
+      importRing(points: Array<[number, number]>, isHole?: boolean): void;
+      importLine(points: Array<[number, number]>): void;
+      importPoints(points: Array<[number, number]>): void;
+      done(): MapshaperDataset;
+    };
+    cleanPathsAfterImport(dataset: MapshaperDataset, opts: Record<string, unknown>): void;
+    buildTopology(dataset: MapshaperDataset): void;
+    DataTable: new (
+      records: Array<Record<string, unknown>>,
+    ) => import('./mapshaper-types').DataTable;
+    exportPathData(
+      shape: number[][] | null,
+      arcs: ArcCollection,
+      type: 'polygon' | 'polyline',
+    ): {
+      pathData: Array<{
+        points: Array<[number, number]>;
+        pointCount: number;
+        area?: number;
+        ids?: number[];
+        bounds?: { xmin: number; ymin: number; xmax: number; ymax: number };
+      }>;
+      pointCount: number;
+    };
+
     // Segment iteration / closest-point
     forEachSegmentInShape(
       shape: number[][],
@@ -176,6 +209,8 @@ declare module 'mapshaper' {
       arcs: ArcCollection,
     ): { distance: number };
     testPointInPolygon(x: number, y: number, shape: number[][], arcs: ArcCollection): boolean;
+    /** Winding-number test against the ring formed by signed arc ids. */
+    testPointInRing(x: number, y: number, ids: number[], arcs: ArcCollection): number;
   }
 
   const mapshaper: {
