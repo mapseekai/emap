@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-10
+
+### Performance
+
+- Large topology navigation now follows a stronger fast-nav strategy: slow
+  pan/zoom interactions transform the last committed canvas frame, mark a
+  settle redraw as pending, and defer the real redraw until interaction settle
+  without synchronously blocking pointer-up / wheel-end handlers.
+- Full redraw timing now includes a one-pixel Canvas readback flush when the
+  browser exposes `getImageData()`. This makes the scheduler account for the
+  real Canvas Commit cost that dominates large datasets instead of measuring
+  only JavaScript path construction.
+- Pending settle redraws are tracked separately from normal redraws. A new nav
+  frame can supersede an obsolete settle redraw during continued interaction,
+  while ordinary data/style redraws are still preserved.
+- Line and polygon-outline rendering now bounds `drawArcs()` batches by both
+  arc count and vertex count, reducing worst-case `stroke()` / Canvas Commit
+  stalls when a few arcs contain many vertices.
+- Polygon fill rendering now filters offscreen polygon parts by viewport bounds
+  before path iteration, batches by vertex budget, and avoids per-ring
+  `closePath()` calls.
+- Fill-only polygon layers with `line-width: 0` now skip outline arc-flag
+  construction and stroke rendering entirely.
+- Near-full-extent rendering still applies tiny-arc and viewport arc filtering,
+  preventing dense datasets from sending every invisible or subpixel segment to
+  Canvas.
+
+### Fixed
+
+- Vertex drag snapping and edit-node rendering now stay bounded to the current
+  view/cursor area on large datasets, avoiding unbounded vertex scans and
+  `Set maximum size exceeded` failures during edit interactions.
+
 ## [0.3.7] - 2026-06-07
 
 ### Fixed
@@ -474,7 +507,11 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@zwishing/emap/style.css`).
 
-[Unreleased]: https://github.com/zwishing/emap/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/zwishing/emap/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/zwishing/emap/compare/v0.3.6...v0.4.0
+[0.3.7]: https://github.com/zwishing/emap/compare/v0.3.6...v0.3.7
+[0.3.6]: https://github.com/zwishing/emap/compare/v0.3.5...v0.3.6
+[0.3.5]: https://github.com/zwishing/emap/compare/v0.3.3...v0.3.5
 [0.3.3]: https://github.com/zwishing/emap/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/zwishing/emap/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/zwishing/emap/compare/v0.3.0...v0.3.1
