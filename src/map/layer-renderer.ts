@@ -77,9 +77,19 @@ function renderFillLayer(
   const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
   const fillOpacity = fillPaint?.['fill-opacity'];
   const viewportFilter = ctx.viewport.getArcFilter(arcs);
-  ctx.painter.drawPolygonFill(ml.shapes!, arcs, fillColor, viewportFilter, fillOpacity, {
-    viewBBox: ctx.viewport.getViewBounds(),
-  });
+  // Near full extent every part is visible anyway, so per-part bbox culling
+  // is pure overhead — and it dominates the frame once LOD arcs make the
+  // actual drawing cheap. Mapshaper's getShapeFilter applies the same
+  // skip-below-1.1 rule.
+  const cullParts = ctx.viewport.getMapScale() > 1.1;
+  ctx.painter.drawPolygonFill(
+    ml.shapes!,
+    arcs,
+    fillColor,
+    cullParts ? viewportFilter : undefined,
+    fillOpacity,
+    { viewBBox: cullParts ? ctx.viewport.getViewBounds() : null },
+  );
   const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
   if (style.width === 0) return;
   const flags = ctx.getLayerArcFlags(ml, arcs, cacheKey);

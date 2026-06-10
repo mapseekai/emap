@@ -136,6 +136,9 @@ describe('Emap handler registry (Phase 1)', () => {
     const hit = { source: 's', layer: 'l', id: 1 };
     (map as any).queryFeatures = vi.fn(() => [hit]);
     (map as any).isSelected = vi.fn(() => true);
+    // The hover hit test short-circuits when nothing is selected, so the
+    // selection must be non-empty for the cursor to flip to 'move'.
+    map.select([hit]);
     window.dispatchEvent(new PointerEvent('pointermove', { clientX: 50, clientY: 50, button: 0 }));
     expect(canvas.style.cursor).toBe('move');
   });

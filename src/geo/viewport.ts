@@ -196,6 +196,15 @@ export class Viewport {
     return this._transform.unproject(px, py);
   }
 
+  /**
+   * Current zoom relative to the initial full-extent fit (mapshaper's
+   * `ext.scale()`). 1 = full extent, >1 = zoomed in.
+   */
+  getMapScale(): number {
+    if (this._initialMX === 0) return 1;
+    return Math.abs(this._transform.mx) / this._initialMX;
+  }
+
   getLineScale(): number {
     if (this._initialMX === 0) return 1;
     const mapScale = Math.abs(this._transform.mx) / this._initialMX;

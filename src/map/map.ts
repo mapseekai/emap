@@ -304,7 +304,7 @@ export class Emap extends EventDispatcher {
     this._dragPan = new DragPanHandler(
       undefined,
       () => this.stop(),
-      (point) => this.queryFeatures([point.x, point.y]).some((feature) => this.isSelected(feature)),
+      (point) => this._isHoveringSelectedAt(point),
     );
     this._handlers.register(this._dragPan);
     this._handlers.register(this._scrollZoom);
@@ -1337,6 +1337,18 @@ export class Emap extends EventDispatcher {
     this._updateSize();
     this._viewport.setExtent(this._viewport.extent);
     this.fire('resize');
+  }
+
+  /**
+   * Cursor-affordance hit test: is the pointer over a selected feature?
+   * Runs on every non-drag pointer event via `DragPanHandler.getCursor`,
+   * so it must short-circuit when nothing is selected — otherwise plain
+   * hovering (and the mouseup that ends a pan) pays a full spatial hit
+   * test on every event, which stutters badly on large datasets.
+   */
+  private _isHoveringSelectedAt(point: { x: number; y: number }): boolean {
+    if (this._selection.size === 0) return false;
+    return this.queryFeatures([point.x, point.y]).some((feature) => this.isSelected(feature));
   }
 
   public queryFeatures(
