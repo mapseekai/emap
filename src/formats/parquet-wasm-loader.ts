@@ -58,6 +58,19 @@ export async function initParquetWasm(
   opts: InitParquetWasmOptions = {},
 ): Promise<ParquetWasmModule> {
   if (injected) return injected;
+
+  // IIFE / script-tag environments: the Rollup config maps the 'parquet-wasm'
+  // external to `globalThis.parquetWasm`. If a script has already set that
+  // global (e.g. via <script src="parquet-wasm.js">), use it directly and
+  // skip the dynamic import — which would fail without a bundler/import-map.
+  const globalMod = (globalThis as Record<string, unknown>)[
+    'parquetWasm'
+  ] as ParquetWasmEsmModule | undefined;
+  if (globalMod && typeof globalMod.readParquet === 'function') {
+    injected = globalMod;
+    return injected;
+  }
+
   if (!loadPromise) {
     loadPromise = (async () => {
       let mod: ParquetWasmEsmModule;
@@ -67,8 +80,8 @@ export async function initParquetWasm(
         loadPromise = null;
         throw new Error(
           'Failed to load parquet-wasm. Install it as a dependency (bundled apps), ' +
-            'or initialize it yourself and call setParquetWasm(module) ' +
-            `(script-tag / custom environments). Original error: ${err}`,
+            'or call setParquetWasm(module) / set window.parquetWasm before use ' +
+            `(script-tag environments). Original error: ${err}`,
         );
       }
       if (typeof mod.default === 'function') {
