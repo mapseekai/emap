@@ -743,6 +743,18 @@ describe('Emap selection', () => {
     map.clearSelection();
     expect(listener).not.toHaveBeenCalled();
   });
+
+  it('_isHoveringSelectedAt skips the spatial hit test when nothing is selected', () => {
+    const queryFeatures = vi.fn(() => [A]);
+    setPrivate(map, 'queryFeatures', queryFeatures);
+
+    expect(callPrivate(map, '_isHoveringSelectedAt', { x: 5, y: 5 })).toBe(false);
+    expect(queryFeatures).not.toHaveBeenCalled();
+
+    map.select([A]);
+    expect(callPrivate(map, '_isHoveringSelectedAt', { x: 5, y: 5 })).toBe(true);
+    expect(queryFeatures).toHaveBeenCalledWith([5, 5]);
+  });
 });
 
 describe('Emap edit history', () => {
