@@ -212,6 +212,53 @@ export default [
     },
     plugins: commonPlugins(),
   },
+  // Formats ESM bundle (`@zwishing/emap/formats`) — optional GeoParquet /
+  // GeoArrow support. apache-arrow is bundled INTO this file (it is not a
+  // core dependency); parquet-wasm stays external and loads lazily via
+  // dynamic import in the consumer's bundler. mapshaper is external and
+  // rewritten to the ESM vendor like the main module bundle.
+  // apache-arrow v21 ships `sideEffects:false` ESM that breaks when
+  // tree-shaken aggressively — keep its module side effects.
+  {
+    input: 'src/formats/index.ts',
+    external: ['maplibre-gl', 'mapshaper', 'parquet-wasm'],
+    onwarn: quietKnownPolyfillCircularWarnings,
+    treeshake: {
+      // Keep emap's own side effects (plugin registration in the entry) and
+      // apache-arrow's; everything else may be shaken normally.
+      moduleSideEffects: (id) => id.includes('apache-arrow') || !id.includes('node_modules'),
+    },
+    output: {
+      file: 'dist/emap-formats.mjs',
+      format: 'es',
+      sourcemap: shouldWriteSourcemap,
+      paths: { mapshaper: './mapshaper-vendor.mjs' },
+    },
+    plugins: commonPlugins(),
+  },
+  // Formats IIFE bundle for script-tag users (global `emapFormats`).
+  // parquet-wasm cannot be dynamically imported from an IIFE — GeoParquet
+  // users must call setParquetWasm() with a self-initialized module (the
+  // loader's error message says exactly that). GeoArrow needs no wasm.
+  {
+    input: 'src/formats/index.ts',
+    external: ['mapshaper', 'parquet-wasm'],
+    onwarn: quietKnownPolyfillCircularWarnings,
+    treeshake: {
+      // Keep emap's own side effects (plugin registration in the entry) and
+      // apache-arrow's; everything else may be shaken normally.
+      moduleSideEffects: (id) => id.includes('apache-arrow') || !id.includes('node_modules'),
+    },
+    output: {
+      file: 'dist/emap-formats.js',
+      format: 'iife',
+      name: 'emapFormats',
+      sourcemap: shouldWriteSourcemap,
+      inlineDynamicImports: true,
+      globals: { ...mapshaperGlobal, 'parquet-wasm': 'parquetWasm' },
+    },
+    plugins: commonPlugins(),
+  },
   // Worker bundle. Same external/global treatment, plus a banner that
   // pulls the vendor file in via importScripts at boot — workers don't
   // share the page's <script> globals, so the worker has to re-load

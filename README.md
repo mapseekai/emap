@@ -151,6 +151,45 @@ Supported inputs:
 - GeoJSON and TopoJSON.
 - ZIP Shapefile archives containing `.shp`, `.dbf`, `.shx`, and optional `.prj`.
 - Mapshaper `.msx` snapshots via `map.loadSnapshot()`.
+- GeoParquet and GeoArrow, with the optional formats module (below).
+
+### GeoParquet / GeoArrow (optional module)
+
+`@zwishing/emap/formats` adds GeoParquet (`.parquet`) and GeoArrow
+(`.arrow` / `.arrows` / `.feather`) support as a separate bundle so the core
+stays small. Conversion is direct (coordinate buffers ↔ mapshaper arcs, no
+GeoJSON intermediate); importing the module registers the formats with
+`setData` / `export` as a side effect:
+
+```ts
+import '@zwishing/emap/formats';
+
+await source.setData({ filename: 'parcels.parquet', content: bytes });
+const blob = await source.export({ format: 'geoparquet' }); // WKB encoding default
+const arrow = await source.export({ format: 'geoarrow' }); // native encoding default
+```
+
+In-memory Arrow tables work without files — this is the duckdb-wasm bridge
+(query results with an `ST_AsWKB(geometry)` column convert directly):
+
+```ts
+import { fromArrowTable, toArrowTable, setArrowTable } from '@zwishing/emap/formats';
+
+setArrowTable(source, duckdbResultTable); // replace a source's dataset
+const table = toArrowTable(source.getDataset()!); // dataset → Arrow table
+```
+
+Notes:
+
+- GeoParquet uses [parquet-wasm](https://github.com/kylebarron/parquet-wasm)
+  (~1.2 MB wasm), loaded lazily on first use via dynamic `import()`. Bundlers
+  that emit wasm assets (Vite, webpack 5) need no configuration. Script-tag /
+  IIFE setups must initialize parquet-wasm themselves and inject it with
+  `setParquetWasm(module)`. GeoArrow needs no wasm at all.
+- GeoParquet export writes spec 1.1 `geo` metadata; geometry encoding is WKB
+  by default (DuckDB / GeoPandas / GDAL compatible), switchable with
+  `{ encoding: 'native' }`. Non-EPSG CRSs export without PROJJSON details.
+- Exports cover one layer per file (`{ layer }` option selects which).
 
 ## Layers and Rendering
 
