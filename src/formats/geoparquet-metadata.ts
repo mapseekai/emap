@@ -71,6 +71,49 @@ const OGC_CRS84_PROJJSON = {
 };
 
 /** Parse the `geo` key out of an Arrow schema metadata map, if present. */
+const EPSG_3857_PROJJSON = {
+  type: 'ProjectedCRS',
+  name: 'WGS 84 / Pseudo-Mercator',
+  base_crs: {
+    type: 'GeographicCRS',
+    name: 'WGS 84',
+    datum_ensemble: {
+      name: 'World Geodetic System 1984 ensemble',
+      ellipsoid: {
+        name: 'WGS 84',
+        semi_major_axis: 6378137,
+        inverse_flattening: 298.257223563,
+      },
+    },
+    coordinate_system: {
+      subtype: 'ellipsoidal',
+      axis: [
+        { name: 'Geodetic latitude', abbreviation: 'Lat', direction: 'north', unit: 'degree' },
+        { name: 'Geodetic longitude', abbreviation: 'Lon', direction: 'east', unit: 'degree' },
+      ],
+    },
+    id: { authority: 'EPSG', code: 4326 },
+  },
+  conversion: {
+    name: 'Popular Visualisation Pseudo-Mercator',
+    method: { name: 'Popular Visualisation Pseudo Mercator', id: { authority: 'EPSG', code: 1024 } },
+    parameters: [
+      { name: 'Latitude of natural origin', value: 0, unit: 'degree', id: { authority: 'EPSG', code: 8801 } },
+      { name: 'Longitude of natural origin', value: 0, unit: 'degree', id: { authority: 'EPSG', code: 8802 } },
+      { name: 'False easting', value: 0, unit: 'metre', id: { authority: 'EPSG', code: 8806 } },
+      { name: 'False northing', value: 0, unit: 'metre', id: { authority: 'EPSG', code: 8807 } },
+    ],
+  },
+  coordinate_system: {
+    subtype: 'Cartesian',
+    axis: [
+      { name: 'Easting', abbreviation: 'X', direction: 'east', unit: 'metre' },
+      { name: 'Northing', abbreviation: 'Y', direction: 'north', unit: 'metre' },
+    ],
+  },
+  id: { authority: 'EPSG', code: 3857 },
+};
+
 export function parseGeoMetadata(metadata: Map<string, string>): GeoMetadata | null {
   const raw = metadata.get('geo');
   if (!raw) return null;
@@ -171,12 +214,16 @@ export function crsStringToProjjson(crsString: string | undefined): unknown {
   if ((authority === 'EPSG' && code === '4326') || (authority === 'OGC' && code === 'CRS84')) {
     return OGC_CRS84_PROJJSON;
   }
-  // Minimal PROJJSON: authority id + name only (no `type` — we don't ship
-  // a CRS database to know geographic vs projected). Readers that resolve
-  // by authority code (GDAL, pyproj) handle this; strict validators may
-  // warn. Better than omitting, which would imply the CRS84 default.
-  return {
-    name: `${authority}:${code}`,
-    id: { authority, code: /^\d+$/.test(code) ? Number(code) : code },
-  };
+  if (authority === 'EPSG' && code === '3857') {
+    return EPSG_3857_PROJJSON;
+  }
+
+  if (authority === 'EPSG') {
+    return {
+      name: `${authority}:${code}`,
+      id: { authority, code: /^\d+$/.test(code) ? Number(code) : code },
+    };
+  }
+
+  return null;
 }
