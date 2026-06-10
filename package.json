@@ -105,8 +105,8 @@
     "vitest": "^1.0.0"
   },
   "dependencies": {
+    "@zwishing/epsg-index": "^2.1.0",
     "apache-arrow": "^21.1.0",
-    "epsg-index": "^2.0.0",
     "fflate": "^0.8.2",
     "flatbush": "^4.5.0",
     "geographiclib-geodesic": "^2.2.0",
