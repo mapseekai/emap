@@ -120,5 +120,8 @@
     "mapshaper": "^0.6.113",
     "mproj": "^0.1.2",
     "parquet-wasm": "^0.7.1"
+  },
+  "optionalDependencies": {
+    "@duckdb/duckdb-wasm": "^1.33.1-dev45.0"
   }
 }
