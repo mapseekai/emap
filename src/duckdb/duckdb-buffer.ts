@@ -26,9 +26,13 @@ export function normalizeDuckDbBufferOptions(
   opts: DuckDbBufferOptions,
 ): NormalizedDuckDbBufferOptions {
   if (!Number.isFinite(opts.distance) || opts.distance <= 0) {
-    throw new DuckDbOperationError('validation', 'DuckDB buffer distance must be a finite number greater than zero', {
-      field: 'distance',
-    });
+    throw new DuckDbOperationError(
+      'validation',
+      'DuckDB buffer distance must be a finite number greater than zero',
+      {
+        field: 'distance',
+      },
+    );
   }
 
   const failOnGeographicCrs = opts.failOnGeographicCrs ?? true;
@@ -71,9 +75,13 @@ export async function bufferDatasetWithDuckDb(
     try {
       await runtime.ensureSpatial();
     } catch (err) {
-      throw new DuckDbOperationError('spatial-extension-unavailable', 'DuckDB spatial extension is unavailable', {
-        cause: err,
-      });
+      throw new DuckDbOperationError(
+        'spatial-extension-unavailable',
+        'DuckDB spatial extension is unavailable',
+        {
+          cause: err,
+        },
+      );
     }
 
     conn = await runtime.connect();
@@ -99,9 +107,13 @@ export async function bufferDatasetWithDuckDb(
       }
       return result;
     } catch (err) {
-      throw new DuckDbOperationError('conversion-failed', 'DuckDB buffer result could not be converted to a dataset', {
-        cause: err,
-      });
+      throw new DuckDbOperationError(
+        'conversion-failed',
+        'DuckDB buffer result could not be converted to a dataset',
+        {
+          cause: err,
+        },
+      );
     }
   } finally {
     await conn?.close?.();

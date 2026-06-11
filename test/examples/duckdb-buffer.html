@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>Emap 示例 - DuckDB-Wasm 缓冲区</title>
+    <link rel="stylesheet" href="../../dist/style.css" />
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      #map {
+        width: 100vw;
+        height: 100vh;
+      }
+
+      .panel {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 10;
+        width: 320px;
+        padding: 12px;
+        background: rgb(255 255 255 / 0.94);
+        border: 1px solid #d6d9de;
+        border-radius: 6px;
+        box-shadow: 0 8px 24px rgb(15 23 42 / 0.18);
+      }
+
+      .panel h1 {
+        margin: 0 0 10px;
+        font-size: 15px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 96px 1fr;
+        gap: 8px;
+        align-items: center;
+        margin: 8px 0;
+        font-size: 13px;
+      }
+
+      input,
+      button {
+        font: inherit;
+      }
+
+      input[type="number"] {
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      button {
+        width: 100%;
+        margin-top: 8px;
+        padding: 7px 10px;
+      }
+
+      #status {
+        margin-top: 10px;
+        min-height: 36px;
+        color: #334155;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "@duckdb/duckdb-wasm": "../../node_modules/@duckdb/duckdb-wasm/dist/duckdb-browser.mjs",
+          "apache-arrow": "../../node_modules/apache-arrow/Arrow.dom.mjs"
+        }
+      }
+    </script>
+    <script src="../../dist/mapshaper-vendor.js"></script>
+    <script src="../../dist/emap-dev.js"></script>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div class="panel">
+      <h1>DuckDB-Wasm ST_Buffer</h1>
+      <div class="row">
+        <label for="distance">半径</label>
+        <input id="distance" type="number" min="1" step="1" value="25000" />
+      </div>
+      <button id="run">生成缓冲区</button>
+      <div id="status">加载示例数据中...</div>
+    </div>
+
+    <script type="module">
+      import {
+        bufferDatasetWithDuckDb,
+        createDuckDbRuntimeFromJsDelivr,
+        setDuckDbRuntime,
+      } from '../../dist/emap-duckdb.mjs';
+
+      const { Emap, TopologySource, NavigationControl, StatusControl } = emap;
+
+      const SOURCE_ID = 'duckdb-input';
+      const OUTPUT_ID = 'duckdb-buffered';
+      const SAMPLE = {
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: { name: 'A' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [0, 0],
+                  [100000, 0],
+                  [100000, 80000],
+                  [0, 80000],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+          {
+            type: 'Feature',
+            properties: { name: 'B' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [150000, 25000],
+                  [230000, 25000],
+                  [230000, 115000],
+                  [150000, 115000],
+                  [150000, 25000],
+                ],
+              ],
+            },
+          },
+        ],
+      };
+
+      const map = new Emap({ container: 'map' });
+      map.addControl(new NavigationControl(), 'top-left');
+      map.addControl(new StatusControl({ alignment: 'right', showEPSG: true }), 'bottom-right');
+
+      const runBtn = document.getElementById('run');
+      const distanceInput = document.getElementById('distance');
+      const status = document.getElementById('status');
+
+      let inputDataset;
+      let runtimePromise;
+
+      async function addDatasetSource(id, dataset) {
+        const source = new TopologySource(id);
+        if (map.getSource(id)) map.removeSource(id);
+        await source.setData(dataset);
+        map.addSource(id, source);
+        return source;
+      }
+
+      async function loadSample() {
+        const source = new TopologySource(SOURCE_ID);
+        await source.setData({
+          filename: 'duckdb-buffer-sample.geojson',
+          content: JSON.stringify(SAMPLE),
+        });
+        inputDataset = source.getDataset();
+        inputDataset.info = { ...inputDataset.info, crs_string: 'EPSG:3857' };
+
+        map.addSource(SOURCE_ID, source);
+        map.addLayer({
+          id: 'input-fill',
+          src: SOURCE_ID,
+          type: 'fill',
+          paint: { fillColor: '#dbeafe', fillOpacity: 0.7 },
+        });
+        map.addLayer({
+          id: 'input-line',
+          src: SOURCE_ID,
+          type: 'line',
+          paint: { lineColor: '#1d4ed8', lineWidth: 2 },
+        });
+        map.setExtent(source.getExtent());
+        status.textContent = '示例数据已加载。首次运行会初始化 DuckDB-Wasm 和 spatial 扩展。';
+      }
+
+      async function getRuntime() {
+        runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
+          setDuckDbRuntime(runtime);
+          return runtime;
+        });
+        return runtimePromise;
+      }
+
+      runBtn.addEventListener('click', async () => {
+        const distance = Number(distanceInput.value);
+        if (!Number.isFinite(distance) || distance <= 0) {
+          status.textContent = '请输入大于 0 的缓冲半径。';
+          return;
+        }
+
+        runBtn.disabled = true;
+        status.textContent = 'DuckDB-Wasm 正在处理 ST_Buffer...';
+
+        try {
+          const runtime = await getRuntime();
+          const result = await bufferDatasetWithDuckDb(
+            inputDataset,
+            {
+              distance,
+              outputLayer: 'duckdb_buffered',
+            },
+            runtime,
+          );
+          const source = await addDatasetSource(OUTPUT_ID, result);
+
+          if (!map.getLayer('buffer-fill')) {
+            map.addLayer({
+              id: 'buffer-fill',
+              src: OUTPUT_ID,
+              type: 'fill',
+              paint: { fillColor: '#f97316', fillOpacity: 0.35 },
+            });
+            map.addLayer({
+              id: 'buffer-line',
+              src: OUTPUT_ID,
+              type: 'line',
+              paint: { lineColor: '#ea580c', lineWidth: 2 },
+            });
+          }
+
+          map.setExtent(source.getExtent());
+          status.textContent = `已生成 ${distance} 米缓冲区。`;
+        } catch (err) {
+          console.error(err);
+          status.textContent = `处理失败: ${err?.message ?? err}`;
+        } finally {
+          runBtn.disabled = false;
+        }
+      });
+
+      window.addEventListener('resize', () => map.resize());
+      await loadSample();
+    </script>
+  </body>
+</html>

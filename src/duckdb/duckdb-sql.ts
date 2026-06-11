@@ -13,7 +13,7 @@ export function buildBufferSql(opts: {
   return [
     'SELECT',
     `  * EXCLUDE (${geometryColumn}),`,
-    `  ST_AsWKB(ST_Buffer(${geometryColumn}, ${opts.distance})) AS ${geometryColumn}`,
+    `  ST_Buffer(${geometryColumn}, ${opts.distance}) AS ${geometryColumn}`,
     `FROM ${tableName}`,
     `WHERE ${geometryColumn} IS NOT NULL`,
   ].join('\n');

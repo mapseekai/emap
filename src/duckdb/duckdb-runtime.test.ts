@@ -13,7 +13,10 @@ class FakeDuckDbConnection {
   readonly queries: string[] = [];
   closed = false;
 
-  constructor(private readonly resultTable: Table) {}
+  constructor(
+    private readonly resultTable: Table,
+    private readonly queryError?: unknown,
+  ) {}
 
   async insertArrowTable(table: Table, opts: { name: string; create?: boolean }): Promise<void> {
     this.insertCalls.push({ table, opts });
@@ -21,6 +24,7 @@ class FakeDuckDbConnection {
 
   async query(sql: string): Promise<Table> {
     this.queries.push(sql);
+    if (this.queryError) throw this.queryError;
     return this.resultTable;
   }
 
@@ -34,6 +38,7 @@ class FakeAsyncDuckDB {
 
   readonly connections: FakeDuckDbConnection[] = [];
   readonly instantiateCalls: Array<{ mainModule: string; pthreadWorker?: string }> = [];
+  readonly queryErrors: unknown[] = [];
   terminated = false;
 
   constructor(
@@ -49,7 +54,7 @@ class FakeAsyncDuckDB {
   }
 
   async connect(): Promise<FakeDuckDbConnection> {
-    const conn = new FakeDuckDbConnection(this.resultTable);
+    const conn = new FakeDuckDbConnection(this.resultTable, this.queryErrors.shift());
     this.connections.push(conn);
     return conn;
   }
@@ -59,13 +64,15 @@ class FakeAsyncDuckDB {
   }
 }
 
-function fakeDuckDbModule(): DuckDbWasmModule {
+function fakeDuckDbModule(mainWorker = 'selected.worker.js'): DuckDbWasmModule {
   FakeAsyncDuckDB.instances = [];
   return {
-    getJsDelivrBundles: vi.fn(() => ({ mvp: { mainModule: 'mvp.wasm', mainWorker: 'mvp.worker.js' } })),
+    getJsDelivrBundles: vi.fn(() => ({
+      mvp: { mainModule: 'mvp.wasm', mainWorker: 'mvp.worker.js' },
+    })),
     selectBundle: vi.fn(async () => ({
       mainModule: 'selected.wasm',
-      mainWorker: 'selected.worker.js',
+      mainWorker,
       pthreadWorker: 'selected.pthread.worker.js',
     })),
     ConsoleLogger: class FakeConsoleLogger {},
@@ -137,6 +144,40 @@ describe('createDuckDbRuntimeFromJsDelivr', () => {
     expect(db.connections).toHaveLength(1);
     expect(db.connections[0]?.queries).toEqual(['INSTALL spatial; LOAD spatial;']);
     expect(db.connections[0]?.closed).toBe(true);
+  });
+
+  it('retries spatial setup after a failed install or load', async () => {
+    const runtime = await makeRuntime();
+    const db = FakeAsyncDuckDB.instances[0]!;
+    db.queryErrors.push(new Error('spatial install failed'));
+
+    await expect(runtime.ensureSpatial()).rejects.toThrow('spatial install failed');
+    await runtime.ensureSpatial();
+
+    expect(db.connections).toHaveLength(2);
+    expect(db.connections[0]?.queries).toEqual(['INSTALL spatial; LOAD spatial;']);
+    expect(db.connections[0]?.closed).toBe(true);
+    expect(db.connections[1]?.queries).toEqual(['INSTALL spatial; LOAD spatial;']);
+    expect(db.connections[1]?.closed).toBe(true);
+  });
+
+  it('escapes the selected worker script URL in the blob wrapper', async () => {
+    const workerScriptUrl = 'https://cdn.example.test/duck"db\\worker.js';
+    let workerBlob: Blob | undefined;
+
+    await createDuckDbRuntimeFromJsDelivr({
+      duckdb: fakeDuckDbModule(workerScriptUrl),
+      workerFactory: (url) => ({ url }) as unknown as Worker,
+      createObjectURL: vi.fn((blob: Blob) => {
+        workerBlob = blob;
+        return 'blob:duckdb-worker';
+      }),
+      revokeObjectURL: vi.fn(),
+    });
+
+    await expect(workerBlob?.text()).resolves.toBe(
+      `importScripts(${JSON.stringify(workerScriptUrl)});`,
+    );
   });
 
   it('delegates insertArrowTable and query to a DuckDB connection', async () => {

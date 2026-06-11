@@ -45,7 +45,9 @@ function createJsDelivrWorkerUrl(
   workerScriptUrl: string,
   createObjectURL: (blob: Blob) => string,
 ): string {
-  return createObjectURL(new Blob([`importScripts("${workerScriptUrl}");`], { type: 'text/javascript' }));
+  return createObjectURL(
+    new Blob([`importScripts(${JSON.stringify(workerScriptUrl)});`], { type: 'text/javascript' }),
+  );
 }
 
 async function createDuckDbWorker(
@@ -97,8 +99,8 @@ export async function createDuckDbRuntimeFromJsDelivr(
 
   let spatialReady: Promise<void> | null = null;
 
-  async function ensureSpatial(): Promise<void> {
-    spatialReady ??= (async () => {
+  function createSpatialReadyPromise(): Promise<void> {
+    const ready = (async () => {
       const conn = (await db.connect()) as unknown as DuckDbWasmConnectionLike;
       try {
         await conn.query('INSTALL spatial; LOAD spatial;');
@@ -106,6 +108,14 @@ export async function createDuckDbRuntimeFromJsDelivr(
         await conn.close();
       }
     })();
+    ready.catch(() => {
+      if (spatialReady === ready) spatialReady = null;
+    });
+    return ready;
+  }
+
+  async function ensureSpatial(): Promise<void> {
+    spatialReady ??= createSpatialReadyPromise();
     return spatialReady;
   }
 

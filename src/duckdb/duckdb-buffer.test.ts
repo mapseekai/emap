@@ -88,26 +88,36 @@ describe('DuckDB buffer operation validation', () => {
   it('rejects non-positive buffer distance', async () => {
     const dataset = await polygonDataset('EPSG:3857');
 
-    expect(() => normalizeDuckDbBufferOptions(dataset, { distance: 0 })).toThrow(DuckDbOperationError);
-    expect(() => normalizeDuckDbBufferOptions(dataset, { distance: 0 })).toThrow(/greater than zero/);
+    expect(() => normalizeDuckDbBufferOptions(dataset, { distance: 0 })).toThrow(
+      DuckDbOperationError,
+    );
+    expect(() => normalizeDuckDbBufferOptions(dataset, { distance: 0 })).toThrow(
+      /greater than zero/,
+    );
   });
 
   it('rejects non-finite buffer distance', async () => {
     const dataset = await polygonDataset('EPSG:3857');
 
-    expect(() => normalizeDuckDbBufferOptions(dataset, { distance: Number.NaN })).toThrow(DuckDbOperationError);
+    expect(() => normalizeDuckDbBufferOptions(dataset, { distance: Number.NaN })).toThrow(
+      DuckDbOperationError,
+    );
   });
 
   it('rejects geographic CRS by default', async () => {
     const dataset = await polygonDataset('EPSG:4326');
 
-    expect(() => normalizeDuckDbBufferOptions(dataset, { distance: 10 })).toThrow(/reproject to a projected CRS/);
+    expect(() => normalizeDuckDbBufferOptions(dataset, { distance: 10 })).toThrow(
+      /reproject to a projected CRS/,
+    );
   });
 
   it('allows geographic CRS when explicitly requested', async () => {
     const dataset = await polygonDataset('OGC:CRS84');
 
-    expect(normalizeDuckDbBufferOptions(dataset, { distance: 10, failOnGeographicCrs: false })).toMatchObject({
+    expect(
+      normalizeDuckDbBufferOptions(dataset, { distance: 10, failOnGeographicCrs: false }),
+    ).toMatchObject({
       distance: 10,
       failOnGeographicCrs: false,
     });
@@ -145,7 +155,7 @@ describe('DuckDB buffer SQL', () => {
       [
         'SELECT',
         '  * EXCLUDE ("geom""col"),',
-        '  ST_AsWKB(ST_Buffer("geom""col", 3)) AS "geom""col"',
+        '  ST_Buffer("geom""col", 3) AS "geom""col"',
         'FROM "input table"',
         'WHERE "geom""col" IS NOT NULL',
       ].join('\n'),
@@ -205,9 +215,11 @@ describe('bufferDatasetWithDuckDb', () => {
     const resultTable = toArrowTable(dataset, { encoding: 'wkb' });
     const runtime = new FakeRuntime(resultTable, new Error('query exploded'));
 
-    await expect(bufferDatasetWithDuckDb(dataset, { distance: 10 }, runtime)).rejects.toMatchObject({
-      kind: 'query-failed',
-    });
+    await expect(bufferDatasetWithDuckDb(dataset, { distance: 10 }, runtime)).rejects.toMatchObject(
+      {
+        kind: 'query-failed',
+      },
+    );
     expect(runtime.connection.closed).toBe(true);
   });
 });

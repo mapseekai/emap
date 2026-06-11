@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { tableToIPC, type Table } from 'apache-arrow';
-import * as duckdb from '@duckdb/duckdb-wasm/blocking';
+import type { DuckDBBundles } from '@duckdb/duckdb-wasm/blocking';
 import { afterAll, describe, expect, it } from 'vitest';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { datasetFromGeoJSON } from '../formats/test-utils';
@@ -8,7 +8,8 @@ import type { MapshaperDataset } from '../types/mapshaper-types';
 import { bufferDatasetWithDuckDb } from './duckdb-buffer';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
 
-const describeDuckDbIntegration = process.env.DUCKDB_WASM_INTEGRATION === '1' ? describe : describe.skip;
+const describeDuckDbIntegration =
+  process.env.DUCKDB_WASM_INTEGRATION === '1' ? describe : describe.skip;
 
 const POLYGON_FC = {
   type: 'FeatureCollection',
@@ -45,8 +46,11 @@ async function step<T>(label: string, fn: () => T | Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (err) {
-    const cause = err instanceof Error && err.cause instanceof Error ? `; cause: ${err.cause.message}` : '';
-    throw new Error(`${label}: ${err instanceof Error ? err.message : String(err)}${cause}`, { cause: err });
+    const cause =
+      err instanceof Error && err.cause instanceof Error ? `; cause: ${err.cause.message}` : '';
+    throw new Error(`${label}: ${err instanceof Error ? err.message : String(err)}${cause}`, {
+      cause: err,
+    });
   }
 }
 
@@ -57,6 +61,7 @@ async function polygonDataset(): Promise<MapshaperDataset> {
 }
 
 async function createBlockingDuckDbRuntime(): Promise<DuckDbRuntime> {
+  const duckdb = await import('@duckdb/duckdb-wasm/blocking');
   const bundles = {
     mvp: {
       mainModule: require.resolve('@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm'),
@@ -66,7 +71,7 @@ async function createBlockingDuckDbRuntime(): Promise<DuckDbRuntime> {
       mainModule: require.resolve('@duckdb/duckdb-wasm/dist/duckdb-eh.wasm'),
       mainWorker: '',
     },
-  } satisfies duckdb.DuckDBBundles;
+  } satisfies DuckDBBundles;
   const db = await duckdb.createDuckDB(bundles, new duckdb.ConsoleLogger(), duckdb.NODE_RUNTIME);
   await db.instantiate();
   let spatialReady: Promise<void> | null = null;
@@ -117,13 +122,19 @@ describeDuckDbIntegration('DuckDB-Wasm buffer integration', () => {
     runtime = await step('create DuckDB-Wasm runtime', () => createBlockingDuckDbRuntime());
 
     const result = await step('buffer dataset with DuckDB-Wasm', () =>
-      bufferDatasetWithDuckDb(dataset, { distance: 10, outputLayer: 'buffered' }, runtime),
+      bufferDatasetWithDuckDb(
+        dataset,
+        { distance: 10, outputLayer: 'buffered', geometryColumn: 'geom' },
+        runtime,
+      ),
     );
     const resultBounds = adapter.getDatasetBounds(result);
+    const resultRecords = result.layers[0]?.data?.getRecords?.();
 
     expect(result.layers).toHaveLength(1);
     expect(result.layers[0]?.name).toBe('buffered');
     expect(result.layers[0]?.shapes).toHaveLength(1);
+    expect(resultRecords?.[0]).toMatchObject({ name: 'a' });
     expect(result.info?.crs_string).toBe('EPSG:3857');
     expect(resultBounds.xmin).toBeLessThan(inputBounds.xmin);
     expect(resultBounds.ymin).toBeLessThan(inputBounds.ymin);
