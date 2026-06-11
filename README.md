@@ -191,6 +191,85 @@ Notes:
   `{ encoding: 'native' }`. Non-EPSG CRSs export without PROJJSON details.
 - Exports cover one layer per file (`{ layer }` option selects which).
 
+### DuckDB-Wasm Spatial Processing (opt mod)
+
+`@zwishing/emap/duckdb` adds an optional DuckDB-Wasm processing surface. It is
+kept out of the core and formats bundles; import it only where spatial
+processing is needed.
+
+```ts
+import {
+  bufferDatasetWithDuckDb,
+  createDuckDbRuntimeFromJsDelivr,
+  duckDbBufferLayer,
+  setDuckDbRuntime,
+} from '@zwishing/emap/duckdb';
+```
+
+The package declares `@duckdb/duckdb-wasm` as an optional dependency. If your
+package manager does not install optional dependencies by default, install it
+next to `@zwishing/emap`.
+
+```bash
+npm install @duckdb/duckdb-wasm
+```
+
+Use an injected runtime when your app already owns DuckDB-Wasm lifecycle:
+
+```ts
+setDuckDbRuntime({
+  async ensureSpatial() {
+    const conn = await db.connect();
+    try {
+      await conn.query('INSTALL spatial; LOAD spatial;');
+    } finally {
+      await conn.close();
+    }
+  },
+  async connect() {
+    const conn = await db.connect();
+    return {
+      insertArrowTable: (table, opts) => conn.insertArrowTable(table, { ...opts, create: true }),
+      query: (sql) => conn.query(sql),
+      close: () => conn.close(),
+    };
+  },
+});
+```
+
+Or create the browser runtime from DuckDB's jsDelivr bundles:
+
+```ts
+const runtime = await createDuckDbRuntimeFromJsDelivr();
+setDuckDbRuntime(runtime);
+```
+
+Run a dataset-level buffer and display the returned dataset however your app
+manages sources:
+
+```ts
+const buffered = await bufferDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  distance: 25,
+  outputLayer: 'parcels_buffer',
+});
+```
+
+For map-like integrations, use the adapter form with a minimal source context:
+
+```ts
+await duckDbBufferLayer(ctx, {
+  src: 'parcels',
+  layer: 'parcels',
+  distance: 25,
+  output: { sourceId: 'parcels-buffer' },
+});
+```
+
+Buffer distance uses the dataset coordinate units. `EPSG:4326` and `OGC:CRS84`
+are rejected by default; reproject to a projected CRS before buffering, or pass
+`failOnGeographicCrs: false` only when degree-based buffering is intentional.
+
 ## Layers and Rendering
 
 ```ts
