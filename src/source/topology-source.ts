@@ -8,7 +8,12 @@ import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types'
 import type { ExportFormat, ExportOptions } from './source';
 import { getDefaultMapshaperRunner, type MapshaperRunner } from './mapshaper-runner';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
-import { resolveDatasetCRS, resolveProjectCrs } from '../geo/crs-resolver';
+import {
+  normalizeProjectCrsMetadata,
+  resolveDatasetCRS,
+  resolveProjectCrs,
+  setDatasetCrsMetadata,
+} from '../geo/crs-resolver';
 import {
   getExportHandler,
   getFileExtension,
@@ -453,9 +458,10 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     return resolveDatasetCRS(this._dataset);
   }
 
-  public async reproject(targetCrs: string): Promise<void> {
+  public async reproject(targetCrs: string, targetCrsMetadata?: string): Promise<void> {
     if (!this._dataset) return;
     const resolvedTargetCrs = await resolveProjectCrs(targetCrs);
+    const metadataCrs = targetCrsMetadata ?? normalizeProjectCrsMetadata(targetCrs);
 
     // Reset dynamic simplification before running -proj. Mapshaper's -proj
     // internally calls arcs.flatten(), which errors if an interval is set but
@@ -476,6 +482,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     const cmd = `-proj ${resolvedTargetCrs}`;
 
     const result = await getDefaultMapshaperAdapter().runOnDataset(cmd, this._dataset);
+    setDatasetCrsMetadata(result, metadataCrs);
     this._dataset = result;
     // Re-initialize DisplayArcs (including LOD threshold detection) against
     // the post-projection arcs — coordinates and z-values may have changed.

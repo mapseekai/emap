@@ -123,6 +123,70 @@ describe('GeoParquet round trip', () => {
     expect(back.info?.crs_string).toBe('EPSG:3857');
   });
 
+  it('writes full PROJJSON CRS metadata for EPSG codes from epsg-index', async () => {
+    const dataset = await datasetFromGeoJSON(FC);
+    dataset.info = { ...dataset.info, crs_string: 'EPSG:4490' };
+    const bytes = await exportGeoParquet(dataset);
+
+    const file = await wasm.ParquetFile.fromFile(new Blob([bytes]));
+    try {
+      const fileGeo = file.metadata().fileMetadata().keyValueMetadata().get('geo');
+      const fileCrs = parseGeoMetadata(new Map([['geo', fileGeo as string]]))?.columns.geometry
+        .crs as Record<string, unknown>;
+
+      expect(fileCrs).toMatchObject({
+        type: 'GeographicCRS',
+        name: 'China Geodetic Coordinate System 2000',
+        id: { authority: 'EPSG', code: 4490 },
+      });
+      expect(fileCrs).toHaveProperty('datum');
+      expect(fileCrs).toHaveProperty('coordinate_system');
+    } finally {
+      file.free?.();
+    }
+
+    const table = tableFromIPC(wasm.readParquet(bytes).intoIPCStream());
+    const geo = parseGeoMetadata(table.schema.metadata);
+    expect(geo?.columns.geometry.crs).toMatchObject({
+      type: 'GeographicCRS',
+      id: { authority: 'EPSG', code: 4490 },
+    });
+
+    const back = await importGeoParquet(bytes);
+    expect(back.info?.crs_string).toBe('EPSG:4490');
+  });
+
+  it('omits CRS metadata for GeoParquet default WGS84 lon/lat data', async () => {
+    const dataset = await datasetFromGeoJSON(FC);
+    dataset.info = { ...dataset.info, crs_string: 'EPSG:4326' };
+    const bytes = await exportGeoParquet(dataset);
+    const table = tableFromIPC(wasm.readParquet(bytes).intoIPCStream());
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry as Record<
+      string,
+      unknown
+    >;
+
+    expect(column).not.toHaveProperty('crs');
+    expect((await importGeoParquet(bytes)).info?.crs_string).toBe('EPSG:4326');
+  });
+
+  it('writes unknown CRS metadata when the source has no explicit CRS', async () => {
+    const dataset = await datasetFromGeoJSON(FC);
+    delete dataset.info?.crs_string;
+    delete dataset.info?.prj;
+    delete dataset.info?.wkt1;
+    delete dataset.info?.crs;
+    const bytes = await exportGeoParquet(dataset);
+    const table = tableFromIPC(wasm.readParquet(bytes).intoIPCStream());
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry as Record<
+      string,
+      unknown
+    >;
+
+    expect(column.crs).toBeNull();
+    expect((await importGeoParquet(bytes)).info?.crs_string).toBe('EPSG:4326');
+  });
+
   it('supports compression options', async () => {
     const dataset = await datasetFromGeoJSON(FC);
     for (const compression of ['snappy', 'gzip', 'zstd', 'none'] as const) {

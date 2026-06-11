@@ -3599,6 +3599,8 @@ describe('Emap simplifyLayer', () => {
 describe('Emap projectLayer', () => {
   let map: Emap;
   let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
+  let source: any;
+  let afterDs: any;
 
   const originalCopyDataset = Reflect.get(mapshaper.internal as object, 'copyDataset');
   const originalRunParsedCommands = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
@@ -3611,16 +3613,19 @@ describe('Emap projectLayer', () => {
       layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }],
       info: { crs_string: '+proj=longlat +datum=WGS84' },
     };
-    const afterDs = {
+    afterDs = {
       layers: [{ name: 'states', shapes: [] }],
       info: { crs_string: '+proj=merc' },
     };
-    const source = {
+    let liveDataset: any = beforeDs;
+    source = {
       id: 'src1',
       type: 'topology',
-      getDataset: () => beforeDs,
+      getDataset: () => liveDataset,
       getLayers: () => beforeDs.layers,
-      setDataset: vi.fn(),
+      setDataset: vi.fn((dataset) => {
+        liveDataset = dataset;
+      }),
       refreshDisplayArcs: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
@@ -3667,6 +3672,19 @@ describe('Emap projectLayer', () => {
     await map.ops.projectLayer({ source: 'src1', crs: 'EPSG:4490' });
     const proj = runParsedCommandsSpy.mock.calls[0][0].at(-1);
     expect(proj.options.crs).toContain('+ellps=GRS80');
+  });
+
+  it('preserves the target CRS identifier after whole-source projection', async () => {
+    await map.ops.projectLayer({ source: 'src1', crs: 'EPSG:4490' });
+
+    expect(source.setDataset).toHaveBeenCalledWith(afterDs);
+    expect(afterDs.info.crs_string).toBe('EPSG:4490');
+  });
+
+  it('does not stamp dataset-level CRS metadata for target-scoped projection', async () => {
+    await map.ops.projectLayer({ source: 'src1', target: 'states', crs: 'EPSG:4490' });
+
+    expect(afterDs.info.crs_string).toBe('+proj=merc');
   });
 
   it('resolves EPSG:32633 init before building the command', async () => {
@@ -6742,8 +6760,8 @@ describe('Emap.reproject', () => {
 
     await map.reproject('EPSG:3857');
 
-    expect(reproject).toHaveBeenCalledWith('webmercator', expect.any(globalThis.Map));
-    expect(source.reproject).toHaveBeenCalledWith('webmercator');
+    expect(reproject).toHaveBeenCalledWith('webmercator', expect.any(globalThis.Map), 'EPSG:3857');
+    expect(source.reproject).toHaveBeenCalledWith('webmercator', 'EPSG:3857');
     expect(viewport.setCRS).toHaveBeenCalledWith('webmercator');
   });
 
@@ -6766,7 +6784,8 @@ describe('Emap.reproject', () => {
     const resolvedTarget = source.reproject.mock.calls[0]?.[0];
     expect(typeof resolvedTarget).toBe('string');
     expect(resolvedTarget).toContain('+ellps=GRS80');
-    expect(reproject).toHaveBeenCalledWith(resolvedTarget, expect.any(globalThis.Map));
+    expect(source.reproject).toHaveBeenCalledWith(resolvedTarget, 'EPSG:4490');
+    expect(reproject).toHaveBeenCalledWith(resolvedTarget, expect.any(globalThis.Map), 'EPSG:4490');
     expect(viewport.setCRS).toHaveBeenCalledWith(resolvedTarget);
   });
 
@@ -6852,8 +6871,8 @@ describe('Emap.reproject', () => {
 
     await map.reproject('EPSG:3857');
 
-    expect(reproject).toHaveBeenCalledWith('webmercator', expect.any(globalThis.Map));
-    expect(source.reproject).toHaveBeenCalledWith('webmercator');
+    expect(reproject).toHaveBeenCalledWith('webmercator', expect.any(globalThis.Map), 'EPSG:3857');
+    expect(source.reproject).toHaveBeenCalledWith('webmercator', 'EPSG:3857');
     expect(viewport.setCRS).toHaveBeenCalledWith('webmercator');
   });
 });

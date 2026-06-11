@@ -120,7 +120,10 @@ describe('duckDbBufferLayer', () => {
   it('does not create output source when buffer processing fails', async () => {
     const dataset = await polygonDataset();
     const ctx = makeContext('src', dataset);
-    const runtime = new FakeRuntime(toArrowTable(dataset, { encoding: 'wkb' }), new Error('query exploded'));
+    const runtime = new FakeRuntime(
+      toArrowTable(dataset, { encoding: 'wkb' }),
+      new Error('query exploded'),
+    );
 
     const result = await duckDbBufferLayer(ctx, {
       src: 'src',
@@ -169,12 +172,14 @@ describe('duckDbBufferLayer', () => {
 
     expect(result.ok).toBe(true);
     expect(runtime.connection.inserted).toHaveLength(1);
+    const inputTableName = runtime.connection.inserted[0]!.opts.name;
     expect(runtime.connection.queries).toEqual([
       buildBufferSql({
-        tableName: 'input',
+        tableName: inputTableName,
         geometryColumn: 'geometry',
         distance: 12.5,
       }),
+      `DROP TABLE IF EXISTS ${inputTableName}`,
     ]);
   });
 });

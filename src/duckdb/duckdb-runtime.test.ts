@@ -39,6 +39,7 @@ class FakeAsyncDuckDB {
   readonly connections: FakeDuckDbConnection[] = [];
   readonly instantiateCalls: Array<{ mainModule: string; pthreadWorker?: string }> = [];
   readonly queryErrors: unknown[] = [];
+  terminateError: unknown;
   terminated = false;
 
   constructor(
@@ -60,6 +61,7 @@ class FakeAsyncDuckDB {
   }
 
   async terminate(): Promise<void> {
+    if (this.terminateError) throw this.terminateError;
     this.terminated = true;
   }
 }
@@ -87,6 +89,10 @@ async function makeRuntime(duckdb = fakeDuckDbModule()): Promise<DuckDbRuntime> 
     createObjectURL: vi.fn(() => 'blob:duckdb-worker'),
     revokeObjectURL: vi.fn(),
   });
+}
+
+function fakeWorker(): Worker {
+  return { terminate: vi.fn() } as unknown as Worker;
 }
 
 describe('DuckDB runtime injection', () => {
@@ -178,6 +184,44 @@ describe('createDuckDbRuntimeFromJsDelivr', () => {
     await expect(workerBlob?.text()).resolves.toBe(
       `importScripts(${JSON.stringify(workerScriptUrl)});`,
     );
+  });
+
+  it('terminates the worker if AsyncDuckDB construction fails', async () => {
+    const worker = fakeWorker();
+    const duckdb = {
+      ...fakeDuckDbModule(),
+      AsyncDuckDB: class FailingAsyncDuckDB {
+        constructor() {
+          throw new Error('constructor failed');
+        }
+      },
+    } as unknown as DuckDbWasmModule;
+
+    await expect(
+      createDuckDbRuntimeFromJsDelivr({
+        duckdb,
+        workerFactory: () => worker,
+        createObjectURL: vi.fn(() => 'blob:duckdb-worker'),
+        revokeObjectURL: vi.fn(),
+      }),
+    ).rejects.toThrow('constructor failed');
+
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it('terminates the worker if runtime close cannot terminate DuckDB cleanly', async () => {
+    const worker = fakeWorker();
+    const runtime = await createDuckDbRuntimeFromJsDelivr({
+      duckdb: fakeDuckDbModule(),
+      workerFactory: () => worker,
+      createObjectURL: vi.fn(() => 'blob:duckdb-worker'),
+      revokeObjectURL: vi.fn(),
+    });
+    FakeAsyncDuckDB.instances[0]!.terminateError = new Error('terminate failed');
+
+    await expect(runtime.close?.()).rejects.toThrow('terminate failed');
+
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
   });
 
   it('delegates insertArrowTable and query to a DuckDB connection', async () => {

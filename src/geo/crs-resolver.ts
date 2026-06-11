@@ -17,6 +17,8 @@ import { EPSG_CODES_WITHOUT_PROJ4, EPSG_PROJ4_TABLE } from './epsg-proj4-data';
 export const DEFAULT_CRS = 'EPSG:4326';
 
 const EPSG_CODE_RE = /^(?:EPSG:)?(\d+)$/i;
+const EPSG_URN_RE = /^urn:ogc:def:crs:epsg(?::[^:]*)?:(\d+)$/i;
+const EPSG_HTTP_RE = /\/epsg\/(?:[^/]+\/)?(\d+)$/i;
 const WEB_MERCATOR_CODES = new Set(['3857', '900913', '102100']);
 
 /**
@@ -33,9 +35,18 @@ const WEB_MERCATOR_CODES = new Set(['3857', '900913', '102100']);
  *   4. {@link DEFAULT_CRS}.
  */
 export function resolveDatasetCRS(dataset: MapshaperDataset | undefined): string {
-  if (!dataset) return DEFAULT_CRS;
+  return resolveDatasetCRSMetadata(dataset) ?? DEFAULT_CRS;
+}
+
+/**
+ * Resolve only CRS metadata explicitly carried by the dataset. Unlike
+ * {@link resolveDatasetCRS}, this does not invent the display fallback CRS.
+ * Use it for file export metadata where unknown CRS must remain unknown.
+ */
+export function resolveDatasetCRSMetadata(dataset: MapshaperDataset | undefined): string | undefined {
+  if (!dataset) return undefined;
   const info = dataset.info;
-  if (!info) return DEFAULT_CRS;
+  if (!info) return undefined;
 
   if (info.crs_string) return normalizeCrsString(info.crs_string);
 
@@ -54,7 +65,7 @@ export function resolveDatasetCRS(dataset: MapshaperDataset | undefined): string
     if (info.crs.projName === 'merc' && info.crs.a === 6378137) return 'EPSG:3857';
   }
 
-  return DEFAULT_CRS;
+  return undefined;
 }
 
 /**
@@ -92,6 +103,40 @@ export function normalizeProjectCrs(crs: string): string {
   return trimmed;
 }
 
+/**
+ * Canonical CRS identifier to persist after a successful projection.
+ * This preserves user-facing EPSG authority codes even when
+ * {@link resolveProjectCrs} must hand mapshaper a Proj.4 string.
+ */
+export function normalizeProjectCrsMetadata(crs: string): string | undefined {
+  const trimmed = crs.trim();
+  if (!trimmed) return undefined;
+
+  const code = parseEpsgCode(trimmed);
+  if (code) return formatEpsgCode(code);
+
+  const lower = trimmed.toLowerCase();
+  if (lower === 'wgs84' || lower === 'ogc:crs84' || lower === 'crs84') return 'EPSG:4326';
+  if (lower === 'webmercator') return 'EPSG:3857';
+
+  return normalizeCrsString(trimmed);
+}
+
+export function setDatasetCrsMetadata(
+  dataset: MapshaperDataset | undefined,
+  crs: string | undefined,
+): void {
+  if (!dataset) return;
+  dataset.info ??= {};
+  delete dataset.info.prj;
+  delete dataset.info.wkt1;
+  if (crs) {
+    dataset.info.crs_string = crs;
+  } else {
+    delete dataset.info.crs_string;
+  }
+}
+
 export class EpsgProjectionError extends Error {
   constructor(
     message: string,
@@ -103,8 +148,15 @@ export class EpsgProjectionError extends Error {
 }
 
 function parseEpsgCode(crs: string): string | null {
-  const match = crs.match(EPSG_CODE_RE);
-  return match ? match[1] : null;
+  const trimmed = crs.trim();
+  const match = trimmed.match(EPSG_CODE_RE);
+  if (match) return match[1];
+
+  const urnMatch = trimmed.match(EPSG_URN_RE);
+  if (urnMatch) return urnMatch[1];
+
+  const httpMatch = trimmed.match(EPSG_HTTP_RE);
+  return httpMatch ? httpMatch[1] : null;
 }
 
 function formatEpsgCode(code: string): string {
@@ -123,6 +175,53 @@ function findEpsgProj4(code: string): string | null {
   const valueStart = start + firstNeedle.length;
   const valueEnd = EPSG_PROJ4_TABLE.indexOf('\n', valueStart);
   return EPSG_PROJ4_TABLE.slice(valueStart, valueEnd === -1 ? undefined : valueEnd);
+}
+
+function isLongLatProj4(proj4: string): boolean {
+  return /(?:^|\s)\+proj=(?:longlat|latlong)(?:\s|$)/i.test(proj4);
+}
+
+function isGeographicEpsgCode(code: string): boolean {
+  if (code === '4326') return true;
+  const proj4 = findEpsgProj4(code);
+  return proj4 ? isLongLatProj4(proj4) : false;
+}
+
+function detectTopLevelWktGeographic(wkt: string): boolean | null {
+  const trimmed = wkt.trim();
+  if (/^(?:GEOGCS|GEODCRS|GEOGRAPHICCRS)\s*\[/i.test(trimmed)) return true;
+  if (/^(?:PROJCS|PROJCRS|PROJECTEDCRS)\s*\[/i.test(trimmed)) return false;
+  return null;
+}
+
+export function isGeographicCrsString(crs: string | undefined): boolean {
+  if (!crs) return false;
+
+  const trimmed = crs.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'wgs84' || lower === 'ogc:crs84' || lower === 'crs84') return true;
+
+  const wktType = detectTopLevelWktGeographic(trimmed);
+  if (wktType !== null) return wktType;
+
+  const code = parseEpsgCode(trimmed);
+  if (code) return isGeographicEpsgCode(code);
+
+  const inferred = inferFromPrj(trimmed);
+  if (inferred) return isGeographicCrsString(inferred);
+
+  return isLongLatProj4(trimmed);
+}
+
+export function isGeographicCrs(dataset: MapshaperDataset | undefined): boolean {
+  const info = dataset?.info;
+  if (!info) return false;
+
+  if (isGeographicCrsString(info.crs_string)) return true;
+  if (isGeographicCrsString(info.prj)) return true;
+  if (isGeographicCrsString(info.wkt1)) return true;
+
+  return info.crs?.is_latlong === true;
 }
 
 /**

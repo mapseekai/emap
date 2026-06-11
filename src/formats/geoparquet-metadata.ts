@@ -31,44 +31,10 @@ export interface GeoMetadata {
   columns: Record<string, GeoColumnMetadata>;
 }
 
+export type CrsProjjsonLookup = (authority: string, code: string) => unknown | undefined;
+
 export const ARROW_EXTENSION_NAME = 'ARROW:extension:name';
 export const ARROW_EXTENSION_METADATA = 'ARROW:extension:metadata';
-
-const OGC_CRS84_PROJJSON = {
-  $schema: 'https://proj.org/schemas/v0.5/projjson.schema.json',
-  type: 'GeographicCRS',
-  name: 'WGS 84 longitude-latitude',
-  datum: {
-    type: 'GeodeticReferenceFrame',
-    name: 'World Geodetic System 1984',
-    ellipsoid: {
-      name: 'WGS 84',
-      semi_major_axis: 6378137,
-      inverse_flattening: 298.257223563,
-    },
-  },
-  coordinate_system: {
-    subtype: 'ellipsoidal',
-    axis: [
-      {
-        name: 'Geodetic longitude',
-        abbreviation: 'Lon',
-        direction: 'east',
-        unit: 'degree',
-      },
-      {
-        name: 'Geodetic latitude',
-        abbreviation: 'Lat',
-        direction: 'north',
-        unit: 'degree',
-      },
-    ],
-  },
-  id: {
-    authority: 'OGC',
-    code: 'CRS84',
-  },
-};
 
 /** Parse the `geo` key out of an Arrow schema metadata map, if present. */
 const EPSG_3857_PROJJSON = {
@@ -140,9 +106,9 @@ export function buildGeoMetadata(opts: {
     geometry_types: opts.geometryTypes,
   };
   if (opts.bbox && opts.bbox.every((v) => Number.isFinite(v))) column.bbox = opts.bbox;
-  // GeoParquet: a missing `crs` key means the default OGC:CRS84. `crs: null`
-  // explicitly means the CRS is undefined/unknown, so only write a null when
-  // the caller deliberately passes null.
+  // GeoParquet: a missing `crs` key means the default OGC:CRS84. We still
+  // write `crs:null` when the caller deliberately marks the export CRS as
+  // unknown; the import path treats both forms as EPSG:4326 for compatibility.
   if (opts.crs !== undefined) column.crs = opts.crs;
   const geo: GeoMetadata = {
     version: '1.1.0',
@@ -180,12 +146,12 @@ export function extensionNameFromEncoding(encoding: GeoEncoding): string {
 
 /**
  * Map a PROJJSON CRS object to emap's `dataset.info.crs_string` convention.
- * Only authority-coded CRSs translate ("EPSG:nnnn"). A null CRS means
- * undefined/unknown in GeoParquet 1.1; a missing CRS key is handled by the
- * caller as the default OGC:CRS84.
+ * Only authority-coded CRSs translate ("EPSG:nnnn"). A null CRS is treated
+ * like the GeoParquet default CRS for import compatibility; a missing CRS key
+ * is handled by the caller the same way.
  */
 export function projjsonToCrsString(crs: unknown): string | null {
-  if (crs == null) return null;
+  if (crs == null) return 'EPSG:4326';
   if (typeof crs !== 'object') return null;
   const id = (crs as { id?: { authority?: string; code?: number | string } }).id;
   if (id?.authority && id.code != null) {
@@ -198,11 +164,15 @@ export function projjsonToCrsString(crs: unknown): string | null {
 }
 
 /**
- * Map emap's `crs_string` to the GeoParquet `crs` value: a full OGC:CRS84
- * PROJJSON object for 4326 / CRS84, a minimal authority-id object for other
- * EPSG codes, null for anything unrecognized/unknown.
+ * Map emap's `crs_string` to the GeoParquet `crs` value. WGS84 lon/lat data
+ * uses the GeoParquet default CRS by omitting the `crs` key, unknown labels
+ * become `crs:null`, and non-default authority CRS values are written as
+ * PROJJSON when possible.
  */
-export function crsStringToProjjson(crsString: string | undefined): unknown {
+export function crsStringToProjjson(
+  crsString: string | undefined,
+  lookup?: CrsProjjsonLookup,
+): unknown {
   if (!crsString) return null;
   const m = /^(EPSG|OGC):([\w]+)$/i.exec(crsString.trim());
   if (!m) {
@@ -211,9 +181,16 @@ export function crsStringToProjjson(crsString: string | undefined): unknown {
   }
   const authority = m[1].toUpperCase();
   const code = m[2];
-  if ((authority === 'EPSG' && code === '4326') || (authority === 'OGC' && code === 'CRS84')) {
-    return OGC_CRS84_PROJJSON;
+  if (
+    (authority === 'EPSG' && code === '4326') ||
+    (authority === 'OGC' && code.toUpperCase() === 'CRS84')
+  ) {
+    return undefined;
   }
+
+  const resolved = lookup?.(authority, code);
+  if (resolved !== undefined) return resolved;
+
   if (authority === 'EPSG' && code === '3857') {
     return EPSG_3857_PROJJSON;
   }

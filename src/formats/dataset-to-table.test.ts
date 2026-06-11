@@ -114,17 +114,31 @@ describe('toArrowTable', () => {
     );
   });
 
-  it('writes EPSG:4326 as an OGC:CRS84 PROJJSON object', async () => {
+  it('writes crs:null when source data has no explicit CRS metadata', async () => {
+    const dataset = await datasetFromGeoJSON(TWO_LAYER_INPUT);
+    delete dataset.info?.crs_string;
+    delete dataset.info?.prj;
+    delete dataset.info?.wkt1;
+    delete dataset.info?.crs;
+
+    const table = toArrowTable(dataset, { encoding: 'wkb' });
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry as Record<
+      string,
+      unknown
+    >;
+    expect(column.crs).toBeNull();
+  });
+
+  it('omits CRS for GeoParquet default WGS84 lon/lat data', async () => {
     const dataset = await datasetFromGeoJSON(TWO_LAYER_INPUT);
     dataset.info = { ...dataset.info, crs_string: 'EPSG:4326' };
 
     const table = toArrowTable(dataset, { encoding: 'wkb' });
-    const crs = parseGeoMetadata(table.schema.metadata)?.columns.geometry.crs as {
-      type: string;
-      id: { authority: string; code: string };
-    };
-    expect(crs.type).toBe('GeographicCRS');
-    expect(crs.id).toEqual({ authority: 'OGC', code: 'CRS84' });
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry as Record<
+      string,
+      unknown
+    >;
+    expect(column).not.toHaveProperty('crs');
   });
 
   it('degrades mixed-type attribute columns to strings', async () => {

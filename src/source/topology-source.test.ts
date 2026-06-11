@@ -245,6 +245,27 @@ describe('TopologySource.reproject', () => {
       expect(cmd).toContain('-proj ');
       expect(cmd).toContain('+ellps=GRS80');
       expect(cmd).not.toContain('EPSG:4490');
+      expect(source.getDataset()?.info?.crs_string).toBe('EPSG:4490');
+    } finally {
+      runOnDatasetSpy.mockRestore();
+    }
+  });
+
+  it('uses caller-provided CRS metadata when the projection input is already resolved', async () => {
+    const source = new TopologySource('test');
+    const dataset = { ...FAKE_DATASET, info: { crs_string: 'EPSG:4326' } };
+    const resultDataset = { ...FAKE_DATASET, info: { crs_string: 'EPSG:4326' } };
+    setPrivate(source, '_dataset', dataset);
+
+    const adapter = getDefaultMapshaperAdapter();
+    const runOnDatasetSpy = vi.spyOn(adapter, 'runOnDataset').mockResolvedValue(resultDataset);
+
+    try {
+      await source.reproject('+proj=longlat +ellps=GRS80 +no_defs +type=crs', 'EPSG:4490');
+
+      expect(source.getDataset()?.info?.crs_string).toBe('EPSG:4490');
+      expect(source.getDataset()?.info?.prj).toBeUndefined();
+      expect(source.getDataset()?.info?.wkt1).toBeUndefined();
     } finally {
       runOnDatasetSpy.mockRestore();
     }

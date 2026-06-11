@@ -3,9 +3,13 @@ import {
   DEFAULT_CRS,
   EpsgProjectionError,
   inferFromPrj,
+  isGeographicCrs,
+  isGeographicCrsString,
   normalizeCrsString,
   normalizeProjectCrs,
+  normalizeProjectCrsMetadata,
   resolveDatasetCRS,
+  resolveDatasetCRSMetadata,
   resolveProjectCrs,
 } from './crs-resolver';
 import type { MapshaperDataset } from '../types/mapshaper-types';
@@ -42,6 +46,21 @@ describe('normalizeProjectCrs', () => {
     ['+proj=utm +zone=10', '+proj=utm +zone=10'],
   ])('%p -> %p', (input, expected) => {
     expect(normalizeProjectCrs(input)).toBe(expected);
+  });
+});
+
+describe('normalizeProjectCrsMetadata', () => {
+  it.each([
+    ['EPSG:4326', 'EPSG:4326'],
+    ['epsg:3857', 'EPSG:3857'],
+    ['32633', 'EPSG:32633'],
+    ['urn:ogc:def:crs:EPSG::4490', 'EPSG:4490'],
+    ['wgs84', 'EPSG:4326'],
+    ['OGC:CRS84', 'EPSG:4326'],
+    ['webmercator', 'EPSG:3857'],
+    ['+proj=utm +zone=10', '+proj=utm +zone=10'],
+  ])('%p -> %p', (input, expected) => {
+    expect(normalizeProjectCrsMetadata(input)).toBe(expected);
   });
 });
 
@@ -136,6 +155,50 @@ describe('inferFromPrj', () => {
   });
 });
 
+describe('isGeographicCrsString', () => {
+  it.each([
+    'EPSG:4326',
+    'epsg:4269',
+    'urn:ogc:def:crs:EPSG::4326',
+    'urn:ogc:def:crs:EPSG:6.6:4269',
+    'http://www.opengis.net/def/crs/EPSG/0/4326',
+    'OGC:CRS84',
+    'wgs84',
+    '+proj=longlat +datum=WGS84 +no_defs',
+    'GEOGCS["WGS 84",DATUM["WGS_1984"]]',
+    'GEODCRS["WGS 84"]',
+  ])('detects geographic CRS %p', (input) => {
+    expect(isGeographicCrsString(input)).toBe(true);
+  });
+
+  it.each([
+    'EPSG:3857',
+    'EPSG:32633',
+    'webmercator',
+    '+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs',
+    'PROJCS["WGS 84 / Pseudo-Mercator",GEOGCS["WGS 84"],AUTHORITY["EPSG","3857"]]',
+    'PROJCRS["WGS 84 / UTM zone 33N"]',
+  ])('does not mark projected CRS %p as geographic', (input) => {
+    expect(isGeographicCrsString(input)).toBe(false);
+  });
+});
+
+describe('isGeographicCrs', () => {
+  it('checks dataset CRS metadata from all supported sources', () => {
+    expect(isGeographicCrs(ds({ crs_string: 'EPSG:4269' }))).toBe(true);
+    expect(isGeographicCrs(ds({ prj: 'GEOGCS["WGS 84",DATUM["WGS_1984"]]' }))).toBe(true);
+    expect(isGeographicCrs(ds({ wkt1: 'urn:ogc:def:crs:EPSG::4326' }))).toBe(true);
+    expect(isGeographicCrs(ds({ crs: { is_latlong: true } }))).toBe(true);
+  });
+
+  it('does not treat missing or projected metadata as geographic', () => {
+    expect(isGeographicCrs(undefined)).toBe(false);
+    expect(isGeographicCrs(ds({}))).toBe(false);
+    expect(isGeographicCrs(ds({ crs_string: 'EPSG:3857' }))).toBe(false);
+    expect(isGeographicCrs(ds({ prj: 'PROJCS["x",AUTHORITY["EPSG","3857"]]' }))).toBe(false);
+  });
+});
+
 describe('resolveDatasetCRS', () => {
   it('falls back to EPSG:4326 with no dataset / info', () => {
     expect(resolveDatasetCRS(undefined)).toBe(DEFAULT_CRS);
@@ -203,5 +266,21 @@ describe('resolveDatasetCRS', () => {
         }),
       ),
     ).toBe('EPSG:32633');
+  });
+});
+
+describe('resolveDatasetCRSMetadata', () => {
+  it('does not invent a default CRS for export metadata', () => {
+    expect(resolveDatasetCRSMetadata(undefined)).toBeUndefined();
+    expect(resolveDatasetCRSMetadata({ layers: [] })).toBeUndefined();
+    expect(resolveDatasetCRSMetadata(ds({}))).toBeUndefined();
+  });
+
+  it('returns explicit CRS metadata when present', () => {
+    expect(resolveDatasetCRSMetadata(ds({ crs_string: 'epsg:4326' }))).toBe('EPSG:4326');
+    expect(
+      resolveDatasetCRSMetadata(ds({ prj: 'PROJCS["x",AUTHORITY["EPSG","3857"]]' })),
+    ).toBe('EPSG:3857');
+    expect(resolveDatasetCRSMetadata(ds({ crs: { is_latlong: true } }))).toBe('EPSG:4326');
   });
 });

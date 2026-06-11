@@ -10,7 +10,12 @@ import {
   type FitBoundsOptions,
 } from '../geo/camera';
 import { Projection } from '../geo/projection';
-import { EpsgProjectionError, normalizeProjectCrs, resolveProjectCrs } from '../geo/crs-resolver';
+import {
+  EpsgProjectionError,
+  normalizeProjectCrs,
+  normalizeProjectCrsMetadata,
+  resolveProjectCrs,
+} from '../geo/crs-resolver';
 import { Painter } from '../renderer/painter';
 import { CanvasPainter } from '../renderer/canvas-painter';
 import { EditOverlayRenderer } from '../renderer/edit-overlay-renderer';
@@ -1037,6 +1042,7 @@ export class Emap extends EventDispatcher {
     if (targetCrs.trim().length === 0) {
       throw new Error('targetCrs must be a non-empty CRS string');
     }
+    const targetCrsMetadata = normalizeProjectCrsMetadata(targetCrs);
     const normalizedTarget = await resolveProjectCrs(targetCrs);
     let normalizedCurrent: string;
     try {
@@ -1047,7 +1053,11 @@ export class Emap extends EventDispatcher {
     }
     if (normalizedCurrent === normalizedTarget) return;
 
-    const newExtent = await this._projection.reproject(normalizedTarget, this._sources);
+    const newExtent = await this._projection.reproject(
+      normalizedTarget,
+      this._sources,
+      targetCrsMetadata,
+    );
 
     this._viewport.setCRS(normalizedTarget);
     this._viewport.clearInitialState();

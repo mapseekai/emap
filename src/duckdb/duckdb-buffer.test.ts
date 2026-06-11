@@ -112,6 +112,30 @@ describe('DuckDB buffer operation validation', () => {
     );
   });
 
+  it('rejects geographic CRS variants by default', async () => {
+    const datasets = [
+      await polygonDataset('EPSG:4269'),
+      await polygonDataset('urn:ogc:def:crs:EPSG::4326'),
+      await polygonDataset('OGC:CRS84'),
+      await polygonDataset(),
+      await polygonDataset(),
+    ];
+    datasets[3]!.info = {
+      ...datasets[3]!.info,
+      prj: 'GEOGCS["WGS 84",DATUM["WGS_1984"]]',
+    };
+    datasets[4]!.info = {
+      ...datasets[4]!.info,
+      crs: { is_latlong: true },
+    };
+
+    for (const dataset of datasets) {
+      expect(() => normalizeDuckDbBufferOptions(dataset, { distance: 10 })).toThrow(
+        /reproject to a projected CRS/,
+      );
+    }
+  });
+
   it('allows geographic CRS when explicitly requested', async () => {
     const dataset = await polygonDataset('OGC:CRS84');
 
@@ -180,26 +204,63 @@ describe('bufferDatasetWithDuckDb', () => {
       runtime,
     );
 
-    expect(runtime.events).toEqual(['ensureSpatial', 'connect', 'insert:input', 'query', 'close']);
+    const inputTableName = runtime.connection.inserted[0]!.opts.name;
+
+    expect(runtime.events).toEqual([
+      'ensureSpatial',
+      'connect',
+      `insert:${inputTableName}`,
+      'query',
+      'query',
+      'close',
+    ]);
     expect(runtime.connection.closed).toBe(true);
     expect(runtime.connection.inserted).toHaveLength(1);
-    expect(runtime.connection.inserted[0]!.opts).toEqual({ name: 'input' });
+    expect(inputTableName).toMatch(/^emap_duckdb_buffer_input_\d+$/);
 
     const insertedTable = runtime.connection.inserted[0]!.table;
     const geometryField = insertedTable.schema.fields.find((field) => field.name === 'geometry');
     expect(geometryField?.metadata.get(ARROW_EXTENSION_NAME)).toBe('geoarrow.wkb');
     expect(runtime.connection.queries).toEqual([
       buildBufferSql({
-        tableName: 'input',
+        tableName: inputTableName,
         geometryColumn: 'geometry',
         distance: 12.5,
       }),
+      `DROP TABLE IF EXISTS ${inputTableName}`,
     ]);
 
     expect(result.layers).toHaveLength(1);
     expect(result.layers[0]?.name).toBe('buffered');
     expect(result.layers[0]?.shapes).toHaveLength(1);
     expect(result.info?.crs_string).toBe('EPSG:3857');
+  });
+
+  it('uses a fresh input table for repeated calls with the same runtime', async () => {
+    const dataset = await polygonDataset('EPSG:3857');
+    const resultTable = toArrowTable(dataset, { encoding: 'wkb' });
+    const runtime = new FakeRuntime(resultTable);
+
+    await bufferDatasetWithDuckDb(dataset, { distance: 10 }, runtime);
+    await bufferDatasetWithDuckDb(dataset, { distance: 20 }, runtime);
+
+    const inputTableNames = runtime.connection.inserted.map(({ opts }) => opts.name);
+    expect(inputTableNames).toHaveLength(2);
+    expect(new Set(inputTableNames).size).toBe(2);
+    expect(runtime.connection.queries).toEqual([
+      buildBufferSql({
+        tableName: inputTableNames[0]!,
+        geometryColumn: 'geometry',
+        distance: 10,
+      }),
+      `DROP TABLE IF EXISTS ${inputTableNames[0]}`,
+      buildBufferSql({
+        tableName: inputTableNames[1]!,
+        geometryColumn: 'geometry',
+        distance: 20,
+      }),
+      `DROP TABLE IF EXISTS ${inputTableNames[1]}`,
+    ]);
   });
 
   it('rejects missing DuckDB runtimes before opening a connection', async () => {

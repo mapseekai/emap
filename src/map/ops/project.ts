@@ -14,7 +14,12 @@ import { Err, type OpResult } from '../op-result';
 import type { ProjectOptions } from '../types';
 import type { OpContext } from './_context';
 import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
-import { EpsgProjectionError, resolveProjectCrs } from '../../geo/crs-resolver';
+import {
+  EpsgProjectionError,
+  normalizeProjectCrsMetadata,
+  resolveProjectCrs,
+  setDatasetCrsMetadata,
+} from '../../geo/crs-resolver';
 
 export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
@@ -55,5 +60,9 @@ export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promis
   commands.push({ name: 'proj', options: projOpts });
 
   const label = `Project ${opts.target ?? opts.source}`;
-  return ctx.runDatasetCommandParsed(opts.source, commands, label);
+  const result = await ctx.runDatasetCommandParsed(opts.source, commands, label);
+  if (result.ok && !opts.target) {
+    setDatasetCrsMetadata(source.getDataset(), normalizeProjectCrsMetadata(rawCrs));
+  }
+  return result;
 }

@@ -111,8 +111,8 @@ function describeField(
   }
 
   // CRS: geo metadata's PROJJSON, else geoarrow extension metadata's crs.
-  // In GeoParquet, a missing `crs` key means the default OGC:CRS84; `crs:
-  // null` means undefined/unknown.
+  // Missing `crs` uses GeoParquet's default OGC:CRS84. For compatibility with
+  // existing files, explicit `crs:null` is also read as the default CRS.
   let crsString: string | null = null;
   if (geoColumn && 'crs' in geoColumn) {
     crsString = projjsonToCrsString(geoColumn.crs);

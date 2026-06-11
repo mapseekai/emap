@@ -1,9 +1,12 @@
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import { toArrowTable } from '../formats/dataset-to-table';
 import { fromArrowTable } from '../formats/table-to-dataset';
+import { isGeographicCrs } from '../geo/crs-resolver';
 import { DuckDbOperationError } from './duckdb-errors';
 import { getDuckDbRuntime, type DuckDbRuntime } from './duckdb-runtime';
 import { buildBufferSql } from './duckdb-sql';
+
+let duckDbBufferInputTableSequence = 0;
 
 export interface DuckDbBufferOptions {
   layer?: string | number;
@@ -21,6 +24,11 @@ export interface NormalizedDuckDbBufferOptions {
   failOnGeographicCrs: boolean;
 }
 
+function nextDuckDbBufferInputTableName(): string {
+  duckDbBufferInputTableSequence += 1;
+  return `emap_duckdb_buffer_input_${duckDbBufferInputTableSequence}`;
+}
+
 export function normalizeDuckDbBufferOptions(
   dataset: MapshaperDataset,
   opts: DuckDbBufferOptions,
@@ -36,8 +44,7 @@ export function normalizeDuckDbBufferOptions(
   }
 
   const failOnGeographicCrs = opts.failOnGeographicCrs ?? true;
-  const crs = dataset.info?.crs_string?.trim().toUpperCase();
-  if (failOnGeographicCrs && (crs === 'EPSG:4326' || crs === 'OGC:CRS84')) {
+  if (failOnGeographicCrs && isGeographicCrs(dataset)) {
     throw new DuckDbOperationError(
       'validation',
       'DuckDB buffer uses coordinate units; reproject to a projected CRS before buffering.',
@@ -65,6 +72,7 @@ export async function bufferDatasetWithDuckDb(
   }
 
   let conn: Awaited<ReturnType<DuckDbRuntime['connect']>> | null = null;
+  let inputTableName: string | null = null;
   try {
     const input = toArrowTable(dataset, {
       layer: normalized.layer,
@@ -85,13 +93,14 @@ export async function bufferDatasetWithDuckDb(
     }
 
     conn = await runtime.connect();
-    await conn.insertArrowTable(input, { name: 'input' });
+    inputTableName = nextDuckDbBufferInputTableName();
+    await conn.insertArrowTable(input, { name: inputTableName });
 
     let resultTable: typeof input;
     try {
       resultTable = await conn.query(
         buildBufferSql({
-          tableName: 'input',
+          tableName: inputTableName,
           geometryColumn: normalized.geometryColumn,
           distance: normalized.distance,
         }),
@@ -116,6 +125,9 @@ export async function bufferDatasetWithDuckDb(
       );
     }
   } finally {
+    if (conn && inputTableName) {
+      await conn.query(`DROP TABLE IF EXISTS ${inputTableName}`).catch(() => undefined);
+    }
     await conn?.close?.();
   }
 }

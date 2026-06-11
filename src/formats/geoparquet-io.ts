@@ -3,6 +3,7 @@ import type { MapshaperDataset } from '../types/mapshaper-types';
 import { fromArrowTable, type FromArrowTableOptions } from './table-to-dataset';
 import { toArrowTable, type ToArrowTableOptions } from './dataset-to-table';
 import { initParquetWasm, type InitParquetWasmOptions } from './parquet-wasm-loader';
+import { findAuthorityProjjson } from './epsg-projjson';
 
 export interface ImportGeoParquetOptions extends FromArrowTableOptions, InitParquetWasmOptions {}
 
@@ -40,7 +41,11 @@ export async function exportGeoParquet(
   opts: ExportGeoParquetOptions = {},
 ): Promise<Uint8Array> {
   const wasm = await initParquetWasm(opts);
-  const table = toArrowTable(dataset, { ...opts, encoding: opts.encoding ?? 'wkb' });
+  const table = toArrowTable(dataset, {
+    ...opts,
+    encoding: opts.encoding ?? 'wkb',
+    crsProjjsonLookup: findAuthorityProjjson,
+  });
   const wasmTable = wasm.Table.fromIPCStream(tableToIPC(table, 'stream'));
 
   const compressionName = (opts.compression ?? 'snappy').toUpperCase();

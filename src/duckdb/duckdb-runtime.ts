@@ -27,6 +27,12 @@ type DuckDbWasmConnectionLike = {
   close(): Promise<void>;
 };
 
+type DuckDbWasmDatabaseLike = {
+  instantiate(mainModule: string, pthreadWorker?: string): Promise<unknown>;
+  connect(): Promise<unknown>;
+  terminate(): Promise<unknown>;
+};
+
 let injectedRuntime: DuckDbRuntime | null = null;
 
 export function setDuckDbRuntime(runtime: DuckDbRuntime | null): void {
@@ -79,6 +85,30 @@ async function createDuckDbWorker(
   );
 }
 
+function terminateWorker(worker: Worker): void {
+  worker.terminate();
+}
+
+async function terminateDuckDbAfterFailure(
+  db: DuckDbWasmDatabaseLike,
+  worker: Worker,
+): Promise<void> {
+  try {
+    await db.terminate();
+  } catch {
+    terminateWorker(worker);
+  }
+}
+
+async function closeDuckDbRuntime(db: DuckDbWasmDatabaseLike, worker: Worker): Promise<void> {
+  try {
+    await db.terminate();
+  } catch (err) {
+    terminateWorker(worker);
+    throw err;
+  }
+}
+
 export async function createDuckDbRuntimeFromJsDelivr(
   opts: CreateDuckDbRuntimeOptions = {},
 ): Promise<DuckDbRuntime> {
@@ -88,12 +118,18 @@ export async function createDuckDbRuntimeFromJsDelivr(
     throw new Error('Selected DuckDB-Wasm bundle does not include a worker script');
   }
   const worker = await createDuckDbWorker(bundle.mainWorker, opts);
-  const db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(), worker);
+  let db: DuckDbWasmDatabaseLike;
+  try {
+    db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(), worker);
+  } catch (err) {
+    terminateWorker(worker);
+    throw err;
+  }
 
   try {
     await db.instantiate(bundle.mainModule, bundle.pthreadWorker ?? undefined);
   } catch (err) {
-    await db.terminate().catch(() => undefined);
+    await terminateDuckDbAfterFailure(db, worker);
     throw err;
   }
 
@@ -136,7 +172,7 @@ export async function createDuckDbRuntimeFromJsDelivr(
     },
     ensureSpatial,
     close() {
-      return db.terminate();
+      return closeDuckDbRuntime(db, worker);
     },
   };
 }

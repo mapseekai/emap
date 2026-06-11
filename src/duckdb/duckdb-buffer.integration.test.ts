@@ -96,17 +96,25 @@ async function createBlockingDuckDbRuntime(): Promise<DuckDbRuntime> {
       return wrapConnection();
     },
     ensureSpatial() {
-      spatialReady ??= (async () => {
-        const conn = wrapConnection();
-        try {
-          await conn.query('INSTALL spatial; LOAD spatial;');
-        } finally {
-          await conn.close?.();
-        }
-      })();
-      return spatialReady;
+      const ready =
+        spatialReady ??
+        (async () => {
+          const conn = wrapConnection();
+          try {
+            await conn.query('INSTALL spatial; LOAD spatial;');
+          } finally {
+            await conn.close?.();
+          }
+        })();
+      spatialReady = ready;
+      ready.catch(() => {
+        if (spatialReady === ready) spatialReady = null;
+      });
+      return ready;
     },
-    async close() {},
+    async close() {
+      await db.terminate();
+    },
   };
 }
 

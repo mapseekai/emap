@@ -95,5 +95,5 @@ export interface TopologySource extends Source {
    */
   export(options: ExportOptions): Promise<Blob>;
   getCRS?(): string;
-  reproject?(targetCrs: string): Promise<void>;
+  reproject?(targetCrs: string, targetCrsMetadata?: string): Promise<void>;
 }
