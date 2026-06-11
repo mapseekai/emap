@@ -145,7 +145,7 @@ describe('DuckDB buffer SQL', () => {
       [
         'SELECT',
         '  * EXCLUDE ("geom""col"),',
-        '  ST_AsWKB(ST_Buffer(ST_GeomFromWKB("geom""col"), 3)) AS "geom""col"',
+        '  ST_AsWKB(ST_Buffer("geom""col", 3)) AS "geom""col"',
         'FROM "input table"',
         'WHERE "geom""col" IS NOT NULL',
       ].join('\n'),

@@ -9,13 +9,13 @@ import {
 } from './index';
 
 class FakeDuckDbConnection {
-  readonly insertCalls: Array<{ table: Table; opts: { name: string } }> = [];
+  readonly insertCalls: Array<{ table: Table; opts: { name: string; create?: boolean } }> = [];
   readonly queries: string[] = [];
   closed = false;
 
   constructor(private readonly resultTable: Table) {}
 
-  async insertArrowTable(table: Table, opts: { name: string }): Promise<void> {
+  async insertArrowTable(table: Table, opts: { name: string; create?: boolean }): Promise<void> {
     this.insertCalls.push({ table, opts });
   }
 
@@ -149,7 +149,7 @@ describe('createDuckDbRuntimeFromJsDelivr', () => {
     await conn.close?.();
 
     const duckdbConn = FakeAsyncDuckDB.instances[0]?.connections[0];
-    expect(duckdbConn?.insertCalls).toEqual([{ table, opts: { name: 'input' } }]);
+    expect(duckdbConn?.insertCalls).toEqual([{ table, opts: { name: 'input', create: true } }]);
     expect(duckdbConn?.queries).toEqual(['select * from input']);
     expect(duckdbConn?.closed).toBe(true);
     expect(result).toBe(duckdbConn?.['resultTable']);
