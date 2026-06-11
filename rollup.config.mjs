@@ -259,6 +259,39 @@ export default [
     },
     plugins: commonPlugins(),
   },
+  // ESM bundle (`@zwishing/emap/duckdb`) — optional DuckDB-Wasm spatial
+  // processing support. Keep DuckDB runtime dependencies external/lazy so
+  // the main and formats bundles stay light.
+  {
+    input: 'src/duckdb/index.ts',
+    external: ['@duckdb/duckdb-wasm', 'apache-arrow'],
+    onwarn: quietKnownPolyfillCircularWarnings,
+    output: {
+      file: 'dist/emap-duckdb.mjs',
+      format: 'es',
+      sourcemap: shouldWriteSourcemap,
+    },
+    plugins: commonPlugins(),
+  },
+
+  // IIFE bundle for script-tag users (global `emapDuckDb`).
+  {
+    input: 'src/duckdb/index.ts',
+    external: ['@duckdb/duckdb-wasm', 'apache-arrow'],
+    onwarn: quietKnownPolyfillCircularWarnings,
+    output: {
+      file: 'dist/emap-duckdb.js',
+      format: 'iife',
+      name: 'emapDuckDb',
+      sourcemap: shouldWriteSourcemap,
+      globals: {
+        '@duckdb/duckdb-wasm': 'duckdb',
+        'apache-arrow': 'Arrow',
+      },
+    },
+    plugins: commonPlugins(),
+  },
+
   // Worker bundle. Same external/global treatment, plus a banner that
   // pulls the vendor file in via importScripts at boot — workers don't
   // share the page's <script> globals, so the worker has to re-load

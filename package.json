@@ -15,6 +15,11 @@
       "types": "./dist/formats/index.d.ts",
       "import": "./dist/emap-formats.mjs"
     },
+    "./duckdb": {
+      "types": "./dist/duckdb/index.d.ts",
+      "import": "./dist/emap-duckdb.mjs",
+      "default": "./dist/emap-duckdb.mjs"
+    },
     "./style.css": {
       "types": "./style.css.d.ts",
       "default": "./dist/emap.css"
