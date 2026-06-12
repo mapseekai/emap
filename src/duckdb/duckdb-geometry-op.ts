@@ -1,0 +1,97 @@
+import type { MapshaperDataset } from '../types/mapshaper-types';
+import { toArrowTable } from '../formats/dataset-to-table';
+import { fromArrowTable } from '../formats/table-to-dataset';
+import { DuckDbOperationError } from './duckdb-errors';
+import { getDuckDbRuntime, type DuckDbRuntime } from './duckdb-runtime';
+import { buildUnaryGeometrySql } from './duckdb-sql';
+
+let duckDbGeometryInputTableSequence = 0;
+
+export interface DuckDbUnaryGeometryOptions {
+  layer?: string | number;
+  outputLayer?: string;
+  geometryColumn?: string;
+}
+
+export interface DuckDbGeometryOperationSpec {
+  id: string;
+  duckDbFunction: string;
+  args?: readonly number[];
+}
+
+function nextDuckDbGeometryInputTableName(): string {
+  duckDbGeometryInputTableSequence += 1;
+  return `emap_duckdb_geometry_input_${duckDbGeometryInputTableSequence}`;
+}
+
+export async function processGeometryWithDuckDb(
+  dataset: MapshaperDataset,
+  opts: DuckDbUnaryGeometryOptions,
+  spec: DuckDbGeometryOperationSpec,
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  if (!runtime) {
+    throw new DuckDbOperationError('runtime-unavailable', 'DuckDB runtime is not available');
+  }
+
+  const geometryColumn = opts.geometryColumn ?? 'geometry';
+  const input = toArrowTable(dataset, {
+    layer: opts.layer,
+    encoding: 'wkb',
+    geometryColumn,
+  });
+
+  try {
+    await runtime.ensureSpatial();
+  } catch (err) {
+    throw new DuckDbOperationError(
+      'spatial-extension-unavailable',
+      'DuckDB spatial extension is unavailable',
+      { cause: err },
+    );
+  }
+
+  let conn: Awaited<ReturnType<DuckDbRuntime['connect']>> | undefined;
+  let inputTableName: string | undefined;
+
+  try {
+    conn = await runtime.connect();
+    inputTableName = nextDuckDbGeometryInputTableName();
+    await conn.insertArrowTable(input, { name: inputTableName });
+
+    let resultTable: typeof input;
+    try {
+      resultTable = await conn.query(
+        buildUnaryGeometrySql({
+          tableName: inputTableName,
+          geometryColumn,
+          duckDbFunction: spec.duckDbFunction,
+          args: spec.args,
+        }),
+      );
+    } catch (err) {
+      throw new DuckDbOperationError('query-failed', `DuckDB ${spec.id} query failed`, {
+        cause: err,
+      });
+    }
+
+    try {
+      const result = fromArrowTable(resultTable, { layerName: opts.outputLayer });
+      if (dataset.info?.crs_string) {
+        result.info = { ...result.info, crs_string: dataset.info.crs_string };
+      }
+      return result;
+    } catch (err) {
+      throw new DuckDbOperationError(
+        'conversion-failed',
+        `DuckDB ${spec.id} result could not be converted to a dataset`,
+        { cause: err },
+      );
+    }
+  } finally {
+    if (conn && inputTableName) {
+      await conn.query(`DROP TABLE IF EXISTS ${inputTableName}`).catch(() => undefined);
+    }
+    await conn?.close?.();
+  }
+}

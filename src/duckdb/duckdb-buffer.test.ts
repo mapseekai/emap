@@ -7,7 +7,7 @@ import type { MapshaperDataset } from '../types/mapshaper-types';
 import { DuckDbOperationError } from './duckdb-errors';
 import { bufferDatasetWithDuckDb, normalizeDuckDbBufferOptions } from './duckdb-buffer';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
-import { buildBufferSql } from './duckdb-sql';
+import { buildBufferSql, buildUnaryGeometrySql } from './duckdb-sql';
 
 const POLYGON_FC = {
   type: 'FeatureCollection',
@@ -168,6 +168,35 @@ describe('DuckDB buffer operation validation', () => {
 });
 
 describe('DuckDB buffer SQL', () => {
+  it('builds a unary geometry query with an explicit WKB bridge', () => {
+    expect(
+      buildUnaryGeometrySql({
+        tableName: 'input',
+        geometryColumn: 'geometry',
+        duckDbFunction: 'ST_Centroid',
+      }),
+    ).toBe(
+      [
+        'SELECT',
+        '  * EXCLUDE ("geometry"),',
+        '  ST_Centroid("geometry") AS "geometry"',
+        'FROM "input"',
+        'WHERE "geometry" IS NOT NULL',
+      ].join('\n'),
+    );
+  });
+
+  it('builds a unary geometry query with numeric operation arguments', () => {
+    expect(
+      buildUnaryGeometrySql({
+        tableName: 'input',
+        geometryColumn: 'geometry',
+        duckDbFunction: 'ST_SimplifyPreserveTopology',
+        args: [2.5],
+      }),
+    ).toContain('ST_SimplifyPreserveTopology("geometry", 2.5)');
+  });
+
   it('builds a buffer query with quoted table and geometry identifiers', () => {
     expect(
       buildBufferSql({
@@ -216,7 +245,7 @@ describe('bufferDatasetWithDuckDb', () => {
     ]);
     expect(runtime.connection.closed).toBe(true);
     expect(runtime.connection.inserted).toHaveLength(1);
-    expect(inputTableName).toMatch(/^emap_duckdb_buffer_input_\d+$/);
+    expect(inputTableName).toMatch(/^emap_duckdb_geometry_input_\d+$/);
 
     const insertedTable = runtime.connection.inserted[0]!.table;
     const geometryField = insertedTable.schema.fields.find((field) => field.name === 'geometry');

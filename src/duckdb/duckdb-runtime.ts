@@ -16,6 +16,7 @@ export type DuckDbWasmModule = typeof import('@duckdb/duckdb-wasm');
 
 export interface CreateDuckDbRuntimeOptions {
   duckdb?: DuckDbWasmModule;
+  customExtensionRepository?: string;
   workerFactory?: (url: string) => Worker | Promise<Worker>;
   createObjectURL?: (blob: Blob) => string;
   revokeObjectURL?: (url: string) => void;
@@ -45,6 +46,10 @@ export function getDuckDbRuntime(): DuckDbRuntime | null {
 
 async function loadDuckDbWasm(): Promise<DuckDbWasmModule> {
   return import('@duckdb/duckdb-wasm');
+}
+
+function quoteSqlString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
 function createJsDelivrWorkerUrl(
@@ -139,6 +144,11 @@ export async function createDuckDbRuntimeFromJsDelivr(
     const ready = (async () => {
       const conn = (await db.connect()) as unknown as DuckDbWasmConnectionLike;
       try {
+        if (opts.customExtensionRepository) {
+          await conn.query(
+            `SET custom_extension_repository = ${quoteSqlString(opts.customExtensionRepository)};`,
+          );
+        }
         await conn.query('INSTALL spatial; LOAD spatial;');
       } finally {
         await conn.close();

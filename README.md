@@ -200,8 +200,12 @@ processing is needed.
 ```ts
 import {
   bufferDatasetWithDuckDb,
+  centroidDatasetWithDuckDb,
   createDuckDbRuntimeFromJsDelivr,
   duckDbBufferLayer,
+  duckDbGeometryLayer,
+  envelopeDatasetWithDuckDb,
+  simplifyPreserveTopologyDatasetWithDuckDb,
   setDuckDbRuntime,
 } from '@zwishing/emap/duckdb';
 ```
@@ -253,6 +257,31 @@ const buffered = await bufferDatasetWithDuckDb(dataset, {
   distance: 25,
   outputLayer: 'parcels_buffer',
 });
+
+Unary geometry-to-geometry helpers share the same DuckDB-Wasm path:
+
+```ts
+const centroids = await centroidDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  outputLayer: 'parcel_centroids',
+});
+
+const envelopes = await envelopeDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  outputLayer: 'parcel_envelopes',
+});
+
+const simplified = await simplifyPreserveTopologyDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  tolerance: 5,
+  outputLayer: 'parcels_simplified',
+});
+```
+
+Supported unary geometry helpers are centroid, envelope, convex hull, boundary,
+simplify, simplify-preserve-topology, and make-valid. Simplify tolerance uses
+dataset coordinate units and rejects geographic CRS by default; pass
+`failOnGeographicCrs: false` only when degree-based simplification is intentional.
 ```
 
 For map-like integrations, use the adapter form with a minimal source context:
@@ -263,6 +292,13 @@ await duckDbBufferLayer(ctx, {
   layer: 'parcels',
   distance: 25,
   output: { sourceId: 'parcels-buffer' },
+});
+
+await duckDbGeometryLayer(ctx, {
+  src: 'parcels',
+  operation: 'centroid',
+  layer: 'parcels',
+  output: { sourceId: 'parcel-centroids' },
 });
 ```
 

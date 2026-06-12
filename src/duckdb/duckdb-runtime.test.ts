@@ -152,6 +152,25 @@ describe('createDuckDbRuntimeFromJsDelivr', () => {
     expect(db.connections[0]?.closed).toBe(true);
   });
 
+  it('sets a custom extension repository before loading spatial', async () => {
+    const duckdb = fakeDuckDbModule();
+    const runtime = await createDuckDbRuntimeFromJsDelivr({
+      duckdb,
+      customExtensionRepository: "https://cdn.example.test/duckdb's/extensions",
+      workerFactory: (url) => ({ url }) as unknown as Worker,
+      createObjectURL: vi.fn(() => 'blob:duckdb-worker'),
+      revokeObjectURL: vi.fn(),
+    });
+
+    await runtime.ensureSpatial();
+
+    const db = FakeAsyncDuckDB.instances[0]!;
+    expect(db.connections[0]?.queries).toEqual([
+      "SET custom_extension_repository = 'https://cdn.example.test/duckdb''s/extensions';",
+      'INSTALL spatial; LOAD spatial;',
+    ]);
+  });
+
   it('retries spatial setup after a failed install or load', async () => {
     const runtime = await makeRuntime();
     const db = FakeAsyncDuckDB.instances[0]!;

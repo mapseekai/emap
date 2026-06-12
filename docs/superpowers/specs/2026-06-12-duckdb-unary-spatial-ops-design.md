@@ -134,7 +134,7 @@ bridge for DuckDB Spatial function calls:
 ```sql
 SELECT
   * EXCLUDE ("geometry"),
-  ST_AsWKB(ST_Op(ST_GeomFromWKB("geometry"), ...args)) AS "geometry"
+  ST_Op("geometry", ...args) AS "geometry"
 FROM "input_table"
 WHERE "geometry" IS NOT NULL
 ```

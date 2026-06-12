@@ -7,6 +7,12 @@ import { datasetFromGeoJSON } from '../formats/test-utils';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import { bufferDatasetWithDuckDb } from './duckdb-buffer';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
+import {
+  centroidDatasetWithDuckDb,
+  envelopeDatasetWithDuckDb,
+  makeValidDatasetWithDuckDb,
+  simplifyPreserveTopologyDatasetWithDuckDb,
+} from './duckdb-spatial-ops';
 
 const describeDuckDbIntegration =
   process.env.DUCKDB_WASM_INTEGRATION === '1' ? describe : describe.skip;
@@ -113,7 +119,7 @@ async function createBlockingDuckDbRuntime(): Promise<DuckDbRuntime> {
       return ready;
     },
     async close() {
-      await db.terminate();
+      await (db as { terminate?: () => Promise<unknown> }).terminate?.();
     },
   };
 }
@@ -122,18 +128,23 @@ afterAll(async () => {
   await runtime?.close?.();
 });
 
+async function getIntegrationRuntime(): Promise<DuckDbRuntime> {
+  runtime ??= await step('create DuckDB-Wasm runtime', () => createBlockingDuckDbRuntime());
+  return runtime;
+}
+
 describeDuckDbIntegration('DuckDB-Wasm buffer integration', () => {
   it('buffers a projected polygon dataset with the real DuckDB-Wasm runtime', async () => {
     const adapter = await step('create mapshaper adapter', () => getDefaultMapshaperAdapter());
     const dataset = await step('create input dataset', () => polygonDataset());
     const inputBounds = adapter.getDatasetBounds(dataset);
-    runtime = await step('create DuckDB-Wasm runtime', () => createBlockingDuckDbRuntime());
+    const duckDbRuntime = await getIntegrationRuntime();
 
     const result = await step('buffer dataset with DuckDB-Wasm', () =>
       bufferDatasetWithDuckDb(
         dataset,
         { distance: 10, outputLayer: 'buffered', geometryColumn: 'geom' },
-        runtime,
+        duckDbRuntime,
       ),
     );
     const resultBounds = adapter.getDatasetBounds(result);
@@ -148,5 +159,72 @@ describeDuckDbIntegration('DuckDB-Wasm buffer integration', () => {
     expect(resultBounds.ymin).toBeLessThan(inputBounds.ymin);
     expect(resultBounds.xmax).toBeGreaterThan(inputBounds.xmax);
     expect(resultBounds.ymax).toBeGreaterThan(inputBounds.ymax);
+  }, 60_000);
+
+  it('runs centroid with the real DuckDB-Wasm runtime', async () => {
+    const adapter = await step('create mapshaper adapter', () => getDefaultMapshaperAdapter());
+    const dataset = await step('create input dataset', () => polygonDataset());
+    const inputBounds = adapter.getDatasetBounds(dataset);
+    const duckDbRuntime = await getIntegrationRuntime();
+
+    const result = await step('centroid dataset with DuckDB-Wasm', () =>
+      centroidDatasetWithDuckDb(dataset, { outputLayer: 'centroids' }, duckDbRuntime),
+    );
+
+    const resultBounds = adapter.getDatasetBounds(result);
+    expect(result.layers[0]?.name).toBe('centroids');
+    expect(result.layers[0]?.shapes).toHaveLength(1);
+    expect(result.info?.crs_string).toBe('EPSG:3857');
+    expect(resultBounds.xmin).toBeGreaterThanOrEqual(inputBounds.xmin);
+    expect(resultBounds.xmax).toBeLessThanOrEqual(inputBounds.xmax);
+    expect(resultBounds.ymin).toBeGreaterThanOrEqual(inputBounds.ymin);
+    expect(resultBounds.ymax).toBeLessThanOrEqual(inputBounds.ymax);
+  }, 60_000);
+
+  it('runs envelope with the real DuckDB-Wasm runtime', async () => {
+    const adapter = await step('create mapshaper adapter', () => getDefaultMapshaperAdapter());
+    const dataset = await step('create input dataset', () => polygonDataset());
+    const inputBounds = adapter.getDatasetBounds(dataset);
+    const duckDbRuntime = await getIntegrationRuntime();
+
+    const result = await step('envelope dataset with DuckDB-Wasm', () =>
+      envelopeDatasetWithDuckDb(dataset, { outputLayer: 'envelope' }, duckDbRuntime),
+    );
+
+    const resultBounds = adapter.getDatasetBounds(result);
+    expect(result.layers[0]?.name).toBe('envelope');
+    expect(result.layers[0]?.shapes).toHaveLength(1);
+    expect(result.info?.crs_string).toBe('EPSG:3857');
+    expect(resultBounds).toMatchObject(inputBounds);
+  }, 60_000);
+
+  it('runs simplify-preserve-topology with the real DuckDB-Wasm runtime', async () => {
+    const dataset = await step('create input dataset', () => polygonDataset());
+    const duckDbRuntime = await getIntegrationRuntime();
+
+    const result = await step('simplify dataset with DuckDB-Wasm', () =>
+      simplifyPreserveTopologyDatasetWithDuckDb(
+        dataset,
+        { tolerance: 1, outputLayer: 'simplified' },
+        duckDbRuntime,
+      ),
+    );
+
+    expect(result.layers[0]?.name).toBe('simplified');
+    expect(result.layers[0]?.shapes).toHaveLength(1);
+    expect(result.info?.crs_string).toBe('EPSG:3857');
+  }, 60_000);
+
+  it('runs make-valid with the real DuckDB-Wasm runtime', async () => {
+    const dataset = await step('create input dataset', () => polygonDataset());
+    const duckDbRuntime = await getIntegrationRuntime();
+
+    const result = await step('make-valid dataset with DuckDB-Wasm', () =>
+      makeValidDatasetWithDuckDb(dataset, { outputLayer: 'valid' }, duckDbRuntime),
+    );
+
+    expect(result.layers[0]?.name).toBe('valid');
+    expect(result.layers[0]?.shapes).toHaveLength(1);
+    expect(result.info?.crs_string).toBe('EPSG:3857');
   }, 60_000);
 });

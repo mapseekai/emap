@@ -4,7 +4,12 @@ import { toArrowTable } from '../formats/dataset-to-table';
 import { datasetFromGeoJSON } from '../formats/test-utils';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
-import { duckDbBufferLayer, type DuckDbMapOpContext, type DuckDbMapOpSource } from './map-op';
+import {
+  duckDbBufferLayer,
+  duckDbGeometryLayer,
+  type DuckDbMapOpContext,
+  type DuckDbMapOpSource,
+} from './map-op';
 import { buildBufferSql } from './duckdb-sql';
 
 const POLYGON_FC = {
@@ -181,5 +186,98 @@ describe('duckDbBufferLayer', () => {
       }),
       `DROP TABLE IF EXISTS ${inputTableName}`,
     ]);
+  });
+});
+
+describe('duckDbGeometryLayer', () => {
+  it('runs a unary geometry operation and creates a new output source', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+    const runtime = new FakeRuntime(toArrowTable(dataset, { encoding: 'wkb' }));
+
+    const result = await duckDbGeometryLayer(ctx, {
+      src: 'src',
+      operation: 'centroid',
+      output: { sourceId: 'centroids' },
+      runtime,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(ctx.outputDatasets.has('centroids')).toBe(true);
+    expect(runtime.connection.queries[0]).toContain('ST_Centroid("geometry")');
+  });
+
+  it('returns not-found when the input source is missing', async () => {
+    const ctx = new FakeContext();
+
+    const result = await duckDbGeometryLayer(ctx, {
+      src: 'missing',
+      operation: 'centroid',
+      output: { sourceId: 'centroids' },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: 'not-found', what: 'source', id: 'missing' },
+    });
+  });
+
+  it('returns validation when output source id is missing', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+
+    const result = await duckDbGeometryLayer(ctx, {
+      src: 'src',
+      operation: 'centroid',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'output.sourceId',
+        reason: 'DuckDB operation requires output.sourceId',
+      },
+    });
+  });
+
+  it('returns validation for an unknown operation', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+
+    const result = await duckDbGeometryLayer(ctx, {
+      src: 'src',
+      operation: 'unknown',
+      output: { sourceId: 'out' },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'operation',
+        reason: "Unknown DuckDB geometry operation 'unknown'",
+      },
+    });
+    expect(ctx.outputDatasets.has('out')).toBe(false);
+  });
+
+  it('does not create output source when processing fails', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+    const runtime = new FakeRuntime(
+      toArrowTable(dataset, { encoding: 'wkb' }),
+      new Error('query failed'),
+    );
+
+    const result = await duckDbGeometryLayer(ctx, {
+      src: 'src',
+      operation: 'centroid',
+      output: { sourceId: 'centroids' },
+      runtime,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(ctx.outputDatasets.has('centroids')).toBe(false);
   });
 });
