@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - DuckDB 空间函数</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    #header {
+      padding: 10px;
+      background: #233142;
+      color: white;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    #header label {
+      font-size: 13px;
+    }
+
+    #header input,
+    #header select {
+      font-size: 13px;
+    }
+
+    #header button {
+      padding: 5px 12px;
+      background: #16817a;
+      color: white;
+      border: 0;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    #header button:disabled {
+      background: #7f8c8d;
+      cursor: not-allowed;
+    }
+
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+    }
+
+    #status {
+      font-size: 12px;
+      opacity: 0.9;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>
+      文件:
+      <input id="file" type="file" accept=".geojson,.json,.topojson,.zip" />
+    </label>
+    <label>
+      图层:
+      <select id="target" disabled></select>
+    </label>
+    <label>
+      操作:
+      <select id="operation">
+        <option value="centroid">Centroid</option>
+        <option value="envelope">Envelope</option>
+        <option value="convexHull">Convex Hull</option>
+        <option value="boundary">Boundary</option>
+        <option value="simplify">Simplify</option>
+        <option value="simplifyPreserveTopology">Simplify Preserve Topology</option>
+        <option value="makeValid">Make Valid</option>
+      </select>
+    </label>
+    <label id="tolerance-label">
+      容差:
+      <input id="tolerance" type="number" value="10" min="0" step="1" style="width: 72px" />
+    </label>
+    <label>
+      CRS:
+      <input id="crs" type="text" value="EPSG:3857" style="width: 92px" />
+    </label>
+    <label>
+      <input id="allow-geographic" type="checkbox" />
+      允许经纬度简化
+    </label>
+    <button id="run" disabled>运行 DuckDB</button>
+    <span id="status">加载文件后选择空间函数。</span>
+  </div>
+  <div id="map"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/mapshaper-vendor.js"></script>
+  <script src="../../dist/emap-dev.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "@duckdb/duckdb-wasm": "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev45.0/dist/duckdb-browser.mjs",
+          "apache-arrow": "https://cdn.jsdelivr.net/npm/apache-arrow@21.1.0/Arrow.dom.mjs",
+          "flatbuffers": "https://cdn.jsdelivr.net/npm/flatbuffers@25.9.23/mjs/flatbuffers.js",
+          "tslib": "https://cdn.jsdelivr.net/npm/tslib@2.8.1/tslib.es6.mjs"
+        }
+      }
+    </script>
+  <script type="module">
+    import {
+      boundaryDatasetWithDuckDb,
+      centroidDatasetWithDuckDb,
+      convexHullDatasetWithDuckDb,
+      createDuckDbRuntimeFromJsDelivr,
+      envelopeDatasetWithDuckDb,
+      makeValidDatasetWithDuckDb,
+      setDuckDbRuntime,
+      simplifyDatasetWithDuckDb,
+      simplifyPreserveTopologyDatasetWithDuckDb,
+    } from '../../dist/emap-duckdb.mjs';
+
+    const { Emap, TopologySource, NavigationControl, StatusControl } = emap;
+
+    const SOURCE_ID = 'duckdb-spatial-input';
+    const OUTPUT_ID = 'duckdb-spatial-output';
+    const OPERATION_LABELS = {
+      centroid: 'Centroid',
+      envelope: 'Envelope',
+      convexHull: 'Convex Hull',
+      boundary: 'Boundary',
+      simplify: 'Simplify',
+      simplifyPreserveTopology: 'Simplify Preserve Topology',
+      makeValid: 'Make Valid',
+    };
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new StatusControl({ alignment: 'right', showEPSG: true }), 'bottom-right');
+
+    const fileInput = document.getElementById('file');
+    const targetSelect = document.getElementById('target');
+    const operationSelect = document.getElementById('operation');
+    const toleranceInput = document.getElementById('tolerance');
+    const toleranceLabel = document.getElementById('tolerance-label');
+    const crsInput = document.getElementById('crs');
+    const allowGeographicInput = document.getElementById('allow-geographic');
+    const runBtn = document.getElementById('run');
+    const status = document.getElementById('status');
+
+    let inputDataset;
+    let runtimePromise;
+
+    function getLayerId(layer, index) {
+      return String(layer?.name || layer?.id || `layer-${index}`);
+    }
+
+    function removeSourceWithLayers(id) {
+      for (const layer of map.getLayers().filter((layer) => layer.source === id)) {
+        map.removeLayer(layer.id);
+      }
+      if (map.getSource(id)) map.removeSource(id);
+    }
+
+    function addDisplayLayers(sourceId, source, prefix, colors) {
+      const layers = source.getLayers();
+      for (let i = 0; i < layers.length; i += 1) {
+        const layer = layers[i];
+        const sourceLayer = getLayerId(layer, i);
+        const baseId = `${prefix}-${i}`;
+
+        if (layer?.geometry_type === 'polygon') {
+          map.addLayer({
+            id: `${baseId}-fill`,
+            source: sourceId,
+            'source-layer': sourceLayer,
+            type: 'fill',
+            paint: {
+              'fill-color': colors.fill,
+              'fill-opacity': colors.fillOpacity,
+            },
+          });
+          map.addLayer({
+            id: `${baseId}-line`,
+            source: sourceId,
+            'source-layer': sourceLayer,
+            type: 'line',
+            paint: {
+              'line-color': colors.line,
+              'line-width': colors.lineWidth,
+            },
+          });
+        } else if (layer?.geometry_type === 'polyline') {
+          map.addLayer({
+            id: `${baseId}-line`,
+            source: sourceId,
+            'source-layer': sourceLayer,
+            type: 'line',
+            paint: {
+              'line-color': colors.line,
+              'line-width': colors.lineWidth,
+            },
+          });
+        } else if (layer?.geometry_type === 'point') {
+          map.addLayer({
+            id: `${baseId}-point`,
+            source: sourceId,
+            'source-layer': sourceLayer,
+            type: 'circle',
+            paint: {
+              'circle-radius': colors.pointRadius,
+              'circle-color': colors.line,
+              'circle-stroke-color': '#ffffff',
+              'circle-stroke-width': 1,
+            },
+          });
+        }
+      }
+    }
+
+    function populateTargetLayers(source) {
+      targetSelect.innerHTML = '';
+      source.getLayers().forEach((layer, index) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = getLayerId(layer, index);
+        targetSelect.appendChild(option);
+      });
+    }
+
+    function applyInputCrs() {
+      if (!inputDataset) return;
+      const crs = crsInput.value.trim();
+      inputDataset.info = {
+        ...inputDataset.info,
+        crs_string: crs || undefined,
+      };
+    }
+
+    async function ensureDuckDbRuntime() {
+      runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
+        setDuckDbRuntime(runtime);
+        return runtime;
+      });
+      return runtimePromise;
+    }
+
+    function operationNeedsTolerance(operation) {
+      return operation === 'simplify' || operation === 'simplifyPreserveTopology';
+    }
+
+    function updateOperationControls() {
+      const needsTolerance = operationNeedsTolerance(operationSelect.value);
+      toleranceLabel.style.display = needsTolerance ? 'inline-flex' : 'none';
+      toleranceInput.disabled = !needsTolerance;
+      allowGeographicInput.disabled = !needsTolerance;
+    }
+
+    function makeOperationOptions() {
+      const operation = operationSelect.value;
+      const opts = {
+        layer: Number(targetSelect.value),
+        outputLayer: `${getLayerId(inputDataset.layers[Number(targetSelect.value)], Number(targetSelect.value))}_${operation}`,
+      };
+
+      if (!operationNeedsTolerance(operation)) return opts;
+
+      const tolerance = Number(toleranceInput.value);
+      if (!Number.isFinite(tolerance) || tolerance < 0) {
+        throw new Error('请输入大于等于 0 的简化容差。');
+      }
+
+      return {
+        ...opts,
+        tolerance,
+        failOnGeographicCrs: !allowGeographicInput.checked,
+      };
+    }
+
+    async function runOperation(dataset, operation, opts, runtime) {
+      switch (operation) {
+        case 'centroid':
+          return centroidDatasetWithDuckDb(dataset, opts, runtime);
+        case 'envelope':
+          return envelopeDatasetWithDuckDb(dataset, opts, runtime);
+        case 'convexHull':
+          return convexHullDatasetWithDuckDb(dataset, opts, runtime);
+        case 'boundary':
+          return boundaryDatasetWithDuckDb(dataset, opts, runtime);
+        case 'simplify':
+          return simplifyDatasetWithDuckDb(dataset, opts, runtime);
+        case 'simplifyPreserveTopology':
+          return simplifyPreserveTopologyDatasetWithDuckDb(dataset, opts, runtime);
+        case 'makeValid':
+          return makeValidDatasetWithDuckDb(dataset, opts, runtime);
+        default:
+          throw new Error(`未知空间函数: ${operation}`);
+      }
+    }
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+
+      runBtn.disabled = true;
+      targetSelect.disabled = true;
+      status.textContent = `正在加载 ${file.name}...`;
+
+      try {
+        const source = new TopologySource(SOURCE_ID);
+        const content = new Uint8Array(await file.arrayBuffer());
+        removeSourceWithLayers(OUTPUT_ID);
+        removeSourceWithLayers(SOURCE_ID);
+
+        await source.setData({ filename: file.name, content });
+        inputDataset = source.getDataset();
+        if (!inputDataset) throw new Error('文件未生成可用 dataset');
+
+        applyInputCrs();
+        map.addSource(SOURCE_ID, source);
+        addDisplayLayers(SOURCE_ID, source, 'duckdb-spatial-input', {
+          fill: '#dbeafe',
+          fillOpacity: 0.45,
+          line: '#1d4ed8',
+          lineWidth: 1.5,
+          pointRadius: 4,
+        });
+        populateTargetLayers(source);
+        map.setExtent(source.getExtent());
+
+        const featureCount = source
+          .getLayers()
+          .reduce((total, layer) => total + (layer?.shapes?.length ?? 0), 0);
+        status.textContent = `已加载 ${file.name}，${source.getLayers().length} 个图层，${featureCount} 个要素。`;
+      } catch (err) {
+        console.error(err);
+        inputDataset = undefined;
+        status.textContent = `加载失败: ${err?.message ?? err}`;
+      } finally {
+        runBtn.disabled = !inputDataset || targetSelect.options.length === 0;
+        targetSelect.disabled = !inputDataset || targetSelect.options.length === 0;
+      }
+    });
+
+    runBtn.addEventListener('click', async () => {
+      if (!inputDataset) {
+        status.textContent = '请先上传数据文件。';
+        return;
+      }
+
+      runBtn.disabled = true;
+      const operation = operationSelect.value;
+      status.textContent = `正在加载 DuckDB-Wasm 并运行 ${OPERATION_LABELS[operation]}...`;
+
+      try {
+        applyInputCrs();
+        const runtime = await ensureDuckDbRuntime();
+        const result = await runOperation(inputDataset, operation, makeOperationOptions(), runtime);
+        const outputSource = new TopologySource(OUTPUT_ID);
+        outputSource.setDataset(result);
+
+        removeSourceWithLayers(OUTPUT_ID);
+        map.addSource(OUTPUT_ID, outputSource);
+        addDisplayLayers(OUTPUT_ID, outputSource, 'duckdb-spatial-output', {
+          fill: '#fef3c7',
+          fillOpacity: 0.5,
+          line: '#b45309',
+          lineWidth: 2.5,
+          pointRadius: 5,
+        });
+
+        const resultCount = result.layers.reduce(
+          (total, layer) => total + (layer?.shapes?.length ?? 0),
+          0,
+        );
+        status.textContent = `${OPERATION_LABELS[operation]} 完成，输出 ${result.layers.length} 个图层，${resultCount} 个要素。`;
+      } catch (err) {
+        console.error(err);
+        status.textContent = `DuckDB 空间处理失败: ${err?.message ?? err}`;
+      } finally {
+        runBtn.disabled = !inputDataset || targetSelect.options.length === 0;
+      }
+    });
+
+    operationSelect.addEventListener('change', updateOperationControls);
+    crsInput.addEventListener('change', applyInputCrs);
+    updateOperationControls();
+  </script>
+</body>
+
+</html>
