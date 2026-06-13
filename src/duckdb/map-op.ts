@@ -28,6 +28,23 @@ import {
   type DuckDbAttributeOperationId,
   type DuckDbAttributeOperationOptions,
 } from './duckdb-attribute-ops';
+import {
+  containsAttributeDatasetWithDuckDb,
+  containsDatasetWithDuckDb,
+  disjointAttributeDatasetWithDuckDb,
+  disjointDatasetWithDuckDb,
+  distanceDatasetWithDuckDb,
+  distanceWithinAttributeDatasetWithDuckDb,
+  distanceWithinDatasetWithDuckDb,
+  intersectsAttributeDatasetWithDuckDb,
+  intersectsDatasetWithDuckDb,
+  touchesAttributeDatasetWithDuckDb,
+  touchesDatasetWithDuckDb,
+  withinAttributeDatasetWithDuckDb,
+  withinDatasetWithDuckDb,
+  type DuckDbRelationHelperOptions,
+  type DuckDbRelationOperationId,
+} from './duckdb-relation-ops';
 import type { DuckDbRuntime } from './duckdb-runtime';
 import type { DuckDbUnaryGeometryOptions } from './duckdb-geometry-op';
 
@@ -62,6 +79,15 @@ export interface DuckDbAttributeLayerOptions extends DuckDbAttributeOperationOpt
   runtime?: DuckDbRuntime;
 }
 
+export interface DuckDbRelationLayerOptions extends DuckDbRelationHelperOptions {
+  src: string;
+  mask: string;
+  mode: 'filter' | 'attribute' | string;
+  operation: DuckDbRelationOperationId | string;
+  output?: { sourceId: string };
+  runtime?: DuckDbRuntime;
+}
+
 interface DuckDbLayerSuccess {
   sourceId: string;
   dataset: MapshaperDataset;
@@ -70,6 +96,7 @@ interface DuckDbLayerSuccess {
 export type DuckDbBufferLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbGeometryLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbAttributeLayerResult = OpResult<DuckDbLayerSuccess>;
+export type DuckDbRelationLayerResult = OpResult<DuckDbLayerSuccess>;
 
 function duckDbErrorToOpResult(err: unknown, operation: string): OpResult<never> {
   if (err instanceof DuckDbOperationError && err.kind === 'validation') {
@@ -81,6 +108,7 @@ function duckDbErrorToOpResult(err: unknown, operation: string): OpResult<never>
 function readInputDataset(
   ctx: DuckDbMapOpContext,
   src: string,
+  field = 'src',
 ): { ok: true; dataset: MapshaperDataset } | { ok: false; result: OpResult<never> } {
   const source = ctx.getSource(src);
   if (!source) return { ok: false, result: Err.notFound('source', src) };
@@ -89,7 +117,7 @@ function readInputDataset(
   if (!dataset) {
     return {
       ok: false,
-      result: Err.validation('src', `Source '${src}' does not have a loaded dataset`),
+      result: Err.validation(field, `Source '${src}' does not have a loaded dataset`),
     };
   }
 
@@ -136,6 +164,19 @@ function attributeOptions(opts: DuckDbAttributeLayerOptions): DuckDbAttributeOpe
     outputLayer: opts.outputLayer,
     geometryColumn: opts.geometryColumn,
     outputColumn: opts.outputColumn,
+    failOnGeographicCrs: opts.failOnGeographicCrs,
+  };
+}
+
+function relationOptions(opts: DuckDbRelationLayerOptions): DuckDbRelationHelperOptions {
+  return {
+    inputLayer: opts.inputLayer,
+    maskLayer: opts.maskLayer,
+    outputLayer: opts.outputLayer,
+    inputGeometryColumn: opts.inputGeometryColumn,
+    maskGeometryColumn: opts.maskGeometryColumn,
+    outputColumn: opts.outputColumn,
+    distance: opts.distance,
     failOnGeographicCrs: opts.failOnGeographicCrs,
   };
 }
@@ -220,6 +261,111 @@ async function runAttributeOperation(
   }
 }
 
+export async function runRelationOperation(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationLayerOptions,
+): Promise<MapshaperDataset> {
+  const helperOptions = relationOptions(opts);
+
+  switch (opts.mode) {
+    case 'filter':
+      switch (opts.operation) {
+        case 'intersects':
+          return intersectsDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
+        case 'contains':
+          return containsDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
+        case 'within':
+          return withinDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
+        case 'touches':
+          return touchesDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
+        case 'disjoint':
+          return disjointDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
+        case 'distanceWithin':
+          return distanceWithinDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
+        case 'distance':
+          throw new DuckDbOperationError(
+            'validation',
+            "DuckDB relation operation 'distance' only supports attribute mode",
+            { field: 'operation' },
+          );
+        default:
+          throw new DuckDbOperationError(
+            'validation',
+            `Unknown DuckDB relation operation '${opts.operation}'`,
+            { field: 'operation' },
+          );
+      }
+    case 'attribute':
+      switch (opts.operation) {
+        case 'intersects':
+          return intersectsAttributeDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
+        case 'contains':
+          return containsAttributeDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
+        case 'within':
+          return withinAttributeDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
+        case 'touches':
+          return touchesAttributeDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
+        case 'disjoint':
+          return disjointAttributeDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
+        case 'distance':
+          return distanceDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
+        case 'distanceWithin':
+          return distanceWithinAttributeDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
+        default:
+          throw new DuckDbOperationError(
+            'validation',
+            `Unknown DuckDB relation operation '${opts.operation}'`,
+            { field: 'operation' },
+          );
+      }
+    default:
+      throw new DuckDbOperationError('validation', `Unknown DuckDB relation mode '${opts.mode}'`, {
+        field: 'mode',
+      });
+  }
+}
+
 export async function duckDbGeometryLayer(
   ctx: DuckDbMapOpContext,
   opts: DuckDbGeometryLayerOptions,
@@ -236,6 +382,28 @@ export async function duckDbGeometryLayer(
     return okValue({ sourceId, dataset });
   } catch (err) {
     return duckDbErrorToOpResult(err, `duckdb-${opts.operation}`);
+  }
+}
+
+export async function duckDbRelationLayer(
+  ctx: DuckDbMapOpContext,
+  opts: DuckDbRelationLayerOptions,
+): Promise<DuckDbRelationLayerResult> {
+  const input = readInputDataset(ctx, opts.src);
+  if (!input.ok) return input.result;
+
+  const mask = readInputDataset(ctx, opts.mask, 'mask');
+  if (!mask.ok) return mask.result;
+
+  const sourceId = outputSourceId(opts.output);
+  if (typeof sourceId !== 'string') return sourceId;
+
+  try {
+    const dataset = await runRelationOperation(input.dataset, mask.dataset, opts);
+    await ctx.setSourceDataset(sourceId, dataset);
+    return okValue({ sourceId, dataset });
+  } catch (err) {
+    return duckDbErrorToOpResult(err, `duckdb-relation-${opts.operation}`);
   }
 }
 

@@ -7,6 +7,7 @@ import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
 import {
   duckDbBufferLayer,
   duckDbGeometryLayer,
+  duckDbRelationLayer,
   type DuckDbMapOpContext,
   type DuckDbMapOpSource,
 } from './map-op';
@@ -279,5 +280,215 @@ describe('duckDbGeometryLayer', () => {
 
     expect(result.ok).toBe(false);
     expect(ctx.outputDatasets.has('centroids')).toBe(false);
+  });
+});
+
+describe('duckDbRelationLayer', () => {
+  it('writes an output source dataset in filter mode', async () => {
+    const input = await polygonDataset();
+    const mask = await polygonDataset();
+    const ctx = makeContext('src', input);
+    ctx.sources.set('mask', new FakeSource(mask));
+    const runtime = new FakeRuntime(toArrowTable(input, { encoding: 'wkb' }));
+
+    const result = await duckDbRelationLayer(ctx, {
+      src: 'src',
+      mask: 'mask',
+      mode: 'filter',
+      operation: 'intersects',
+      output: { sourceId: 'filtered' },
+      runtime,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(ctx.outputDatasets.has('filtered')).toBe(true);
+    if (result.ok) {
+      expect(result.value.sourceId).toBe('filtered');
+      expect(result.value.dataset).toBe(ctx.outputDatasets.get('filtered'));
+    }
+    expect(runtime.connection.inserted).toHaveLength(2);
+    expect(runtime.connection.queries.join('\n')).toContain('ST_Intersects');
+  });
+
+  it('writes an output source dataset in attribute mode', async () => {
+    const input = await polygonDataset();
+    const mask = await polygonDataset();
+    const ctx = makeContext('src', input);
+    ctx.sources.set('mask', new FakeSource(mask));
+    const runtime = new FakeRuntime(toArrowTable(input, { encoding: 'wkb' }));
+
+    const result = await duckDbRelationLayer(ctx, {
+      src: 'src',
+      mask: 'mask',
+      mode: 'attribute',
+      operation: 'intersects',
+      output: { sourceId: 'joined' },
+      outputColumn: 'touches_mask',
+      runtime,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(ctx.outputDatasets.has('joined')).toBe(true);
+    expect(runtime.connection.inserted).toHaveLength(2);
+    expect(runtime.connection.queries.join('\n')).toContain('touches_mask');
+  });
+
+  it('returns validation for an unknown relation operation', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+    ctx.sources.set('mask', new FakeSource(dataset));
+
+    const result = await duckDbRelationLayer(ctx, {
+      src: 'src',
+      mask: 'mask',
+      mode: 'filter',
+      operation: 'unknown',
+      output: { sourceId: 'out' },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { kind: 'validation', field: 'operation' },
+    });
+  });
+
+  it('returns validation when distance is requested in filter mode', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+    ctx.sources.set('mask', new FakeSource(dataset));
+
+    const result = await duckDbRelationLayer(ctx, {
+      src: 'src',
+      mask: 'mask',
+      mode: 'filter',
+      operation: 'distance',
+      output: { sourceId: 'out' },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { kind: 'validation', field: 'operation' },
+    });
+  });
+
+  it('returns validation for an unknown relation mode', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+    ctx.sources.set('mask', new FakeSource(dataset));
+
+    const result = await duckDbRelationLayer(ctx, {
+      src: 'src',
+      mask: 'mask',
+      mode: 'unknown',
+      operation: 'intersects',
+      output: { sourceId: 'out' },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { kind: 'validation', field: 'mode' },
+    });
+  });
+
+  it('returns not-found when the input source is missing', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('mask', dataset);
+
+    const result = await duckDbRelationLayer(ctx, {
+      src: 'missing',
+      mask: 'mask',
+      mode: 'filter',
+      operation: 'intersects',
+      output: { sourceId: 'out' },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: 'not-found', what: 'source', id: 'missing' },
+    });
+  });
+
+  it('returns not-found when the mask source is missing', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+
+    const result = await duckDbRelationLayer(ctx, {
+      src: 'src',
+      mask: 'missing',
+      mode: 'filter',
+      operation: 'intersects',
+      output: { sourceId: 'out' },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: 'not-found', what: 'source', id: 'missing' },
+    });
+  });
+
+  it('returns validation with mask field when the mask source has no dataset', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+    ctx.sources.set('mask', new FakeSource(null));
+
+    const result = await duckDbRelationLayer(ctx, {
+      src: 'src',
+      mask: 'mask',
+      mode: 'filter',
+      operation: 'intersects',
+      output: { sourceId: 'out' },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'mask',
+        reason: "Source 'mask' does not have a loaded dataset",
+      },
+    });
+  });
+
+  it('returns validation when output source id is missing', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+    ctx.sources.set('mask', new FakeSource(dataset));
+
+    const result = await duckDbRelationLayer(ctx, {
+      src: 'src',
+      mask: 'mask',
+      mode: 'filter',
+      operation: 'intersects',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'output.sourceId',
+        reason: 'DuckDB operation requires output.sourceId',
+      },
+    });
+  });
+
+  it('passes distance through to distanceWithin', async () => {
+    const input = await polygonDataset();
+    const mask = await polygonDataset();
+    const ctx = makeContext('src', input);
+    ctx.sources.set('mask', new FakeSource(mask));
+    const runtime = new FakeRuntime(toArrowTable(input, { encoding: 'wkb' }));
+
+    const result = await duckDbRelationLayer(ctx, {
+      src: 'src',
+      mask: 'mask',
+      mode: 'filter',
+      operation: 'distanceWithin',
+      distance: 12.5,
+      output: { sourceId: 'nearby' },
+      runtime,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(runtime.connection.queries.join('\n')).toContain('12.5');
   });
 });
