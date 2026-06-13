@@ -18,16 +18,20 @@ function importedDuckDbNames(): string[] {
 }
 
 function exportedDuckDbNames(): Set<string> {
-  const exportStart = duckDbBundle.lastIndexOf('\nexport ');
-  if (exportStart === -1) throw new Error('DuckDB module export list not found');
-  const exportLine = duckDbBundle.slice(exportStart).split('\n')[1] ?? '';
-  const exportMatch = exportLine.match(/export\s+\{?([^;]+)\}?;?/);
-  if (!exportMatch) throw new Error(`DuckDB module export list not found: ${exportLine}`);
+  const exportMatches = [...duckDbBundle.matchAll(/export\s*\{([^}]+)\}/g)];
+  const exportMatch = exportMatches.at(-1);
+  if (!exportMatch) throw new Error('DuckDB module export list not found');
   return new Set(
     exportMatch[1]
-      .replace(/[{}]/g, '')
       .split(',')
-      .map((name) => name.trim())
+      .map(
+        (name) =>
+          name
+            .trim()
+            .split(/\s+as\s+/)
+            .at(-1)
+            ?.trim() ?? '',
+      )
       .filter(Boolean),
   );
 }
