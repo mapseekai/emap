@@ -1,54 +1,59 @@
-import type { Field, Table } from "apache-arrow";
-import type { MapshaperDataset } from "../types/mapshaper-types";
-import { toArrowTable } from "../formats/dataset-to-table";
-import { fromArrowTable } from "../formats/table-to-dataset";
-import { DuckDbOperationError } from "./duckdb-errors";
-import { getDuckDbRuntime, type DuckDbRuntime } from "./duckdb-runtime";
+import type { Field, Table } from 'apache-arrow';
+import type { MapshaperDataset } from '../types/mapshaper-types';
+import { toArrowTable } from '../formats/dataset-to-table';
+import { fromArrowTable } from '../formats/table-to-dataset';
+import { DuckDbOperationError } from './duckdb-errors';
+import { getDuckDbRuntime, type DuckDbRuntime } from './duckdb-runtime';
 import {
   buildRelationAttributeSql,
   buildRelationFilterSql,
   type RelationDuckDbFunction,
-} from "./duckdb-sql";
+} from './duckdb-sql';
 
 let duckDbRelationInputTableSequence = 0;
 let duckDbRelationMaskTableSequence = 0;
 
-export type DuckDbRelationMode = "filter" | "attribute";
-export type DuckDbRelationOutputKind = "predicate" | "distance";
+export type DuckDbRelationMode = 'filter' | 'attribute';
+export type DuckDbRelationOutputKind = 'predicate' | 'distance';
 
 interface DuckDbRelationOperationBaseSpec {
   id: string;
 }
 
-export interface DuckDbRelationFilterPredicateOperationSpec extends DuckDbRelationOperationBaseSpec {
-  mode: "filter";
+export interface DuckDbRelationFilterPredicateOperationSpec
+  extends DuckDbRelationOperationBaseSpec {
+  mode: 'filter';
   duckDbFunction: RelationDuckDbFunction;
 }
 
-export interface DuckDbRelationFilterDistanceWithinOperationSpec extends DuckDbRelationOperationBaseSpec {
-  mode: "filter";
-  duckDbFunction: "ST_Distance";
+export interface DuckDbRelationFilterDistanceWithinOperationSpec
+  extends DuckDbRelationOperationBaseSpec {
+  mode: 'filter';
+  duckDbFunction: 'ST_Distance';
   distance: number;
 }
 
-export interface DuckDbRelationAttributePredicateOperationSpec extends DuckDbRelationOperationBaseSpec {
-  mode: "attribute";
+export interface DuckDbRelationAttributePredicateOperationSpec
+  extends DuckDbRelationOperationBaseSpec {
+  mode: 'attribute';
   duckDbFunction: RelationDuckDbFunction;
-  output?: "predicate";
+  output?: 'predicate';
   outputColumn?: string;
 }
 
-export interface DuckDbRelationAttributeDistanceOperationSpec extends DuckDbRelationOperationBaseSpec {
-  mode: "attribute";
-  duckDbFunction: "ST_Distance";
-  output: "distance";
+export interface DuckDbRelationAttributeDistanceOperationSpec
+  extends DuckDbRelationOperationBaseSpec {
+  mode: 'attribute';
+  duckDbFunction: 'ST_Distance';
+  output: 'distance';
   outputColumn?: string;
 }
 
-export interface DuckDbRelationAttributeDistanceWithinOperationSpec extends DuckDbRelationOperationBaseSpec {
-  mode: "attribute";
-  duckDbFunction: "ST_Distance";
-  output?: "predicate";
+export interface DuckDbRelationAttributeDistanceWithinOperationSpec
+  extends DuckDbRelationOperationBaseSpec {
+  mode: 'attribute';
+  duckDbFunction: 'ST_Distance';
+  output?: 'predicate';
   outputColumn?: string;
   distance: number;
 }
@@ -79,13 +84,8 @@ function nextDuckDbRelationMaskTableName(): string {
   return `emap_duckdb_relation_mask_${duckDbRelationMaskTableSequence}`;
 }
 
-export function resolveRelationOutputColumn(
-  table: Table,
-  requestedName: string,
-): string {
-  const existing = new Set(
-    table.schema.fields.map((field: Field) => field.name),
-  );
+export function resolveRelationOutputColumn(table: Table, requestedName: string): string {
+  const existing = new Set(table.schema.fields.map((field: Field) => field.name));
   if (!existing.has(requestedName)) return requestedName;
 
   let suffix = 1;
@@ -102,19 +102,14 @@ function relationOutputColumn(
   opts: DuckDbRelationOptions,
   spec: DuckDbRelationOperationSpec,
 ): string | undefined {
-  if (spec.mode !== "attribute") return undefined;
+  if (spec.mode !== 'attribute') return undefined;
 
-  const requestedOutputColumn =
-    opts.outputColumn ?? spec.outputColumn ?? `duckdb_${spec.id}`;
+  const requestedOutputColumn = opts.outputColumn ?? spec.outputColumn ?? `duckdb_${spec.id}`;
   const trimmedOutputColumn = requestedOutputColumn.trim();
   if (!trimmedOutputColumn) {
-    throw new DuckDbOperationError(
-      "validation",
-      "DuckDB relation output column is required",
-      {
-        field: "outputColumn",
-      },
-    );
+    throw new DuckDbOperationError('validation', 'DuckDB relation output column is required', {
+      field: 'outputColumn',
+    });
   }
 
   return resolveRelationOutputColumn(input, trimmedOutputColumn);
@@ -128,31 +123,28 @@ export async function processRelationWithDuckDb(
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
   if (!runtime) {
-    throw new DuckDbOperationError(
-      "runtime-unavailable",
-      "DuckDB runtime is not available",
-    );
+    throw new DuckDbOperationError('runtime-unavailable', 'DuckDB runtime is not available');
   }
 
-  const inputGeometryColumn = opts.inputGeometryColumn ?? "geometry";
-  const maskGeometryColumn = opts.maskGeometryColumn ?? "geometry";
+  const inputGeometryColumn = opts.inputGeometryColumn ?? 'geometry';
+  const maskGeometryColumn = opts.maskGeometryColumn ?? 'geometry';
 
   let input: Table;
   let mask: Table;
   try {
     input = toArrowTable(inputDataset, {
       layer: opts.inputLayer,
-      encoding: "wkb",
+      encoding: 'wkb',
       geometryColumn: inputGeometryColumn,
     });
     mask = toArrowTable(maskDataset, {
       layer: opts.maskLayer,
-      encoding: "wkb",
+      encoding: 'wkb',
       geometryColumn: maskGeometryColumn,
     });
   } catch (err) {
     throw new DuckDbOperationError(
-      "conversion-failed",
+      'conversion-failed',
       `DuckDB ${spec.id} input could not be converted to Arrow`,
       { cause: err },
     );
@@ -164,13 +156,13 @@ export async function processRelationWithDuckDb(
     await runtime.ensureSpatial();
   } catch (err) {
     throw new DuckDbOperationError(
-      "spatial-extension-unavailable",
-      "DuckDB spatial extension is unavailable",
+      'spatial-extension-unavailable',
+      'DuckDB spatial extension is unavailable',
       { cause: err },
     );
   }
 
-  let conn: Awaited<ReturnType<DuckDbRuntime["connect"]>> | undefined;
+  let conn: Awaited<ReturnType<DuckDbRuntime['connect']>> | undefined;
   let inputTableName: string | undefined;
   let maskTableName: string | undefined;
   let primaryError: unknown;
@@ -191,28 +183,28 @@ export async function processRelationWithDuckDb(
     };
 
     const resultTable = await conn.query(
-      spec.mode === "filter"
-        ? "distance" in spec
+      spec.mode === 'filter'
+        ? 'distance' in spec
           ? buildRelationFilterSql({
               ...baseSqlOptions,
-              duckDbFunction: "ST_Distance",
+              duckDbFunction: 'ST_Distance',
               distance: spec.distance,
             })
           : buildRelationFilterSql({
               ...baseSqlOptions,
               duckDbFunction: spec.duckDbFunction,
             })
-        : spec.output === "distance"
+        : spec.output === 'distance'
           ? buildRelationAttributeSql({
               ...baseSqlOptions,
-              duckDbFunction: "ST_Distance",
-              output: "distance",
+              duckDbFunction: 'ST_Distance',
+              output: 'distance',
               outputColumn: outputColumn!,
             })
-          : "distance" in spec
+          : 'distance' in spec
             ? buildRelationAttributeSql({
                 ...baseSqlOptions,
-                duckDbFunction: "ST_Distance",
+                duckDbFunction: 'ST_Distance',
                 distance: spec.distance,
                 outputColumn: outputColumn!,
               })
@@ -236,7 +228,7 @@ export async function processRelationWithDuckDb(
       return result;
     } catch (err) {
       throw new DuckDbOperationError(
-        "conversion-failed",
+        'conversion-failed',
         `DuckDB ${spec.id} result could not be converted to a dataset`,
         { cause: err },
       );
@@ -246,26 +238,18 @@ export async function processRelationWithDuckDb(
       primaryError = err;
       throw err;
     }
-    const wrapped = new DuckDbOperationError(
-      "query-failed",
-      `DuckDB ${spec.id} query failed`,
-      {
-        cause: err,
-      },
-    );
+    const wrapped = new DuckDbOperationError('query-failed', `DuckDB ${spec.id} query failed`, {
+      cause: err,
+    });
     primaryError = wrapped;
     throw wrapped;
   } finally {
     if (conn && inputTableName) {
-      await conn
-        .query(`DROP TABLE IF EXISTS ${inputTableName}`)
-        .catch(() => undefined);
+      await conn.query(`DROP TABLE IF EXISTS ${inputTableName}`).catch(() => undefined);
     }
 
     if (conn && maskTableName) {
-      await conn
-        .query(`DROP TABLE IF EXISTS ${maskTableName}`)
-        .catch(() => undefined);
+      await conn.query(`DROP TABLE IF EXISTS ${maskTableName}`).catch(() => undefined);
     }
 
     const closeError = await conn?.close?.().catch((err) => err);
