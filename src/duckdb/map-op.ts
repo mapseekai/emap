@@ -13,6 +13,21 @@ import {
   type DuckDbSimplifyOptions,
   type DuckDbUnaryGeometryOperationId,
 } from './duckdb-spatial-ops';
+import {
+  areaDatasetWithDuckDb,
+  centroidXDatasetWithDuckDb,
+  centroidYDatasetWithDuckDb,
+  geometryTypeDatasetWithDuckDb,
+  isEmptyDatasetWithDuckDb,
+  isSimpleDatasetWithDuckDb,
+  isValidDatasetWithDuckDb,
+  lengthDatasetWithDuckDb,
+  perimeterDatasetWithDuckDb,
+  xDatasetWithDuckDb,
+  yDatasetWithDuckDb,
+  type DuckDbAttributeOperationId,
+  type DuckDbAttributeOperationOptions,
+} from './duckdb-attribute-ops';
 import type { DuckDbRuntime } from './duckdb-runtime';
 import type { DuckDbUnaryGeometryOptions } from './duckdb-geometry-op';
 
@@ -40,6 +55,13 @@ export interface DuckDbGeometryLayerOptions extends DuckDbUnaryGeometryOptions {
   failOnGeographicCrs?: boolean;
 }
 
+export interface DuckDbAttributeLayerOptions extends DuckDbAttributeOperationOptions {
+  src: string;
+  operation: DuckDbAttributeOperationId | string;
+  output?: { sourceId: string };
+  runtime?: DuckDbRuntime;
+}
+
 interface DuckDbLayerSuccess {
   sourceId: string;
   dataset: MapshaperDataset;
@@ -47,6 +69,7 @@ interface DuckDbLayerSuccess {
 
 export type DuckDbBufferLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbGeometryLayerResult = OpResult<DuckDbLayerSuccess>;
+export type DuckDbAttributeLayerResult = OpResult<DuckDbLayerSuccess>;
 
 function duckDbErrorToOpResult(err: unknown, operation: string): OpResult<never> {
   if (err instanceof DuckDbOperationError && err.kind === 'validation') {
@@ -107,6 +130,16 @@ function geometryOptions(opts: DuckDbGeometryLayerOptions): DuckDbUnaryGeometryO
   };
 }
 
+function attributeOptions(opts: DuckDbAttributeLayerOptions): DuckDbAttributeOperationOptions {
+  return {
+    layer: opts.layer,
+    outputLayer: opts.outputLayer,
+    geometryColumn: opts.geometryColumn,
+    outputColumn: opts.outputColumn,
+    failOnGeographicCrs: opts.failOnGeographicCrs,
+  };
+}
+
 async function runGeometryOperation(
   dataset: MapshaperDataset,
   opts: DuckDbGeometryLayerOptions,
@@ -151,6 +184,42 @@ async function runGeometryOperation(
   }
 }
 
+async function runAttributeOperation(
+  dataset: MapshaperDataset,
+  opts: DuckDbAttributeLayerOptions,
+): Promise<MapshaperDataset> {
+  switch (opts.operation) {
+    case 'area':
+      return areaDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+    case 'length':
+      return lengthDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+    case 'perimeter':
+      return perimeterDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+    case 'geometryType':
+      return geometryTypeDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+    case 'isValid':
+      return isValidDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+    case 'isEmpty':
+      return isEmptyDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+    case 'isSimple':
+      return isSimpleDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+    case 'x':
+      return xDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+    case 'y':
+      return yDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+    case 'centroidX':
+      return centroidXDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+    case 'centroidY':
+      return centroidYDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+    default:
+      throw new DuckDbOperationError(
+        'validation',
+        `Unknown DuckDB attribute operation '${opts.operation}'`,
+        { field: 'operation' },
+      );
+  }
+}
+
 export async function duckDbGeometryLayer(
   ctx: DuckDbMapOpContext,
   opts: DuckDbGeometryLayerOptions,
@@ -163,6 +232,25 @@ export async function duckDbGeometryLayer(
 
   try {
     const dataset = await runGeometryOperation(input.dataset, opts);
+    await ctx.setSourceDataset(sourceId, dataset);
+    return okValue({ sourceId, dataset });
+  } catch (err) {
+    return duckDbErrorToOpResult(err, `duckdb-${opts.operation}`);
+  }
+}
+
+export async function duckDbAttributeLayer(
+  ctx: DuckDbMapOpContext,
+  opts: DuckDbAttributeLayerOptions,
+): Promise<DuckDbAttributeLayerResult> {
+  const input = readInputDataset(ctx, opts.src);
+  if (!input.ok) return input.result;
+
+  const sourceId = outputSourceId(opts.output);
+  if (typeof sourceId !== 'string') return sourceId;
+
+  try {
+    const dataset = await runAttributeOperation(input.dataset, opts);
     await ctx.setSourceDataset(sourceId, dataset);
     return okValue({ sourceId, dataset });
   } catch (err) {

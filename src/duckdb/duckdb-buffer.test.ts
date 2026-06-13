@@ -7,7 +7,7 @@ import type { MapshaperDataset } from '../types/mapshaper-types';
 import { DuckDbOperationError } from './duckdb-errors';
 import { bufferDatasetWithDuckDb, normalizeDuckDbBufferOptions } from './duckdb-buffer';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
-import { buildBufferSql, buildUnaryGeometrySql } from './duckdb-sql';
+import { buildAttributeSql, buildBufferSql, buildUnaryGeometrySql } from './duckdb-sql';
 
 const POLYGON_FC = {
   type: 'FeatureCollection',
@@ -213,6 +213,36 @@ describe('DuckDB buffer SQL', () => {
         'WHERE "geom""col" IS NOT NULL',
       ].join('\n'),
     );
+  });
+
+  it('builds an attribute query that preserves geometry and appends a scalar column', () => {
+    expect(
+      buildAttributeSql({
+        tableName: 'input',
+        geometryColumn: 'geometry',
+        duckDbFunction: 'ST_Area',
+        outputColumn: 'duckdb_area',
+      }),
+    ).toBe(
+      [
+        'SELECT',
+        '  *,',
+        '  ST_Area("geometry") AS "duckdb_area"',
+        'FROM "input"',
+        'WHERE "geometry" IS NOT NULL',
+      ].join('\n'),
+    );
+  });
+
+  it('quotes attribute query identifiers', () => {
+    expect(
+      buildAttributeSql({
+        tableName: 'input table',
+        geometryColumn: 'geom"col',
+        duckDbFunction: 'ST_GeometryType',
+        outputColumn: 'type"field',
+      }),
+    ).toContain('ST_GeometryType("geom""col") AS "type""field"');
   });
 });
 

@@ -199,12 +199,16 @@ processing is needed.
 
 ```ts
 import {
+  areaDatasetWithDuckDb,
   bufferDatasetWithDuckDb,
   centroidDatasetWithDuckDb,
+  centroidXDatasetWithDuckDb,
   createDuckDbRuntimeFromJsDelivr,
+  duckDbAttributeLayer,
   duckDbBufferLayer,
   duckDbGeometryLayer,
   envelopeDatasetWithDuckDb,
+  geometryTypeDatasetWithDuckDb,
   simplifyPreserveTopologyDatasetWithDuckDb,
   setDuckDbRuntime,
 } from '@zwishing/emap/duckdb';
@@ -284,6 +288,30 @@ dataset coordinate units and rejects geographic CRS by default; pass
 `failOnGeographicCrs: false` only when degree-based simplification is intentional.
 ```
 
+Geometry-to-attribute helpers preserve the input geometry and append scalar
+record columns:
+
+```ts
+const withArea = await areaDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  outputColumn: 'area_m2',
+});
+
+const withGeometryType = await geometryTypeDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  outputColumn: 'geom_type',
+});
+
+const withCentroidX = await centroidXDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  outputColumn: 'centroid_x',
+});
+```
+
+Supported attribute helpers are area, length, perimeter, geometry type, validity,
+empty/simple predicates, point x/y, and centroid x/y. Area, length, and
+perimeter use dataset coordinate units and reject geographic CRS by default.
+
 For map-like integrations, use the adapter form with a minimal source context:
 
 ```ts
@@ -299,6 +327,14 @@ await duckDbGeometryLayer(ctx, {
   operation: 'centroid',
   layer: 'parcels',
   output: { sourceId: 'parcel-centroids' },
+});
+
+await duckDbAttributeLayer(ctx, {
+  src: 'parcels',
+  operation: 'area',
+  layer: 'parcels',
+  outputColumn: 'area_m2',
+  output: { sourceId: 'parcels-with-area' },
 });
 ```
 

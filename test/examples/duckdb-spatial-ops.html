@@ -54,6 +54,34 @@
       position: relative;
     }
 
+    #attribute-panel {
+      position: absolute;
+      right: 12px;
+      bottom: 44px;
+      width: min(360px, calc(100vw - 24px));
+      max-height: min(360px, calc(100vh - 120px));
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+      font: 12px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      z-index: 2;
+    }
+    #attribute-panel strong {
+      font-size: 13px;
+    }
+    #picked-attributes {
+      margin: 0;
+      max-height: 300px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #111827;
+    }
     #status {
       font-size: 12px;
       opacity: 0.9;
@@ -78,10 +106,21 @@
         <option value="envelope">Envelope</option>
         <option value="convexHull">Convex Hull</option>
         <option value="boundary">Boundary</option>
-        <option value="simplify">Simplify</option>
-        <option value="simplifyPreserveTopology">Simplify Preserve Topology</option>
-        <option value="makeValid">Make Valid</option>
-      </select>
+      <option value="simplify">Simplify</option>
+      <option value="simplifyPreserveTopology">Simplify Preserve Topology</option>
+      <option value="makeValid">Make Valid</option>
+      <option value="area">Area Attribute</option>
+      <option value="length">Length Attribute</option>
+      <option value="perimeter">Perimeter Attribute</option>
+      <option value="geometryType">Geometry Type Attribute</option>
+      <option value="isValid">Is Valid Attribute</option>
+      <option value="isEmpty">Is Empty Attribute</option>
+      <option value="isSimple">Is Simple Attribute</option>
+      <option value="x">X Attribute</option>
+      <option value="y">Y Attribute</option>
+      <option value="centroidX">Centroid X Attribute</option>
+      <option value="centroidY">Centroid Y Attribute</option>
+    </select>
     </label>
     <label id="tolerance-label">
       容差:
@@ -99,6 +138,10 @@
     <span id="status">加载文件后选择空间函数。</span>
   </div>
   <div id="map"></div>
+  <aside id="attribute-panel" aria-label="拾取属性">
+    <strong>点击拾取属性</strong>
+    <pre id="picked-attributes">(点击地图上的要素)</pre>
+  </aside>
 
   <link rel="stylesheet" href="../../src/ui/controls.css" />
   <script src="../../dist/mapshaper-vendor.js"></script>
@@ -115,15 +158,26 @@
     </script>
   <script type="module">
     import {
+      areaDatasetWithDuckDb,
       boundaryDatasetWithDuckDb,
       centroidDatasetWithDuckDb,
+      centroidXDatasetWithDuckDb,
+      centroidYDatasetWithDuckDb,
       convexHullDatasetWithDuckDb,
       createDuckDbRuntimeFromJsDelivr,
       envelopeDatasetWithDuckDb,
+      geometryTypeDatasetWithDuckDb,
+      isEmptyDatasetWithDuckDb,
+      isSimpleDatasetWithDuckDb,
+      isValidDatasetWithDuckDb,
+      lengthDatasetWithDuckDb,
       makeValidDatasetWithDuckDb,
+      perimeterDatasetWithDuckDb,
       setDuckDbRuntime,
       simplifyDatasetWithDuckDb,
       simplifyPreserveTopologyDatasetWithDuckDb,
+      xDatasetWithDuckDb,
+      yDatasetWithDuckDb,
     } from '../../dist/emap-duckdb.mjs';
 
     const { Emap, TopologySource, NavigationControl, StatusControl } = emap;
@@ -138,6 +192,17 @@
       simplify: 'Simplify',
       simplifyPreserveTopology: 'Simplify Preserve Topology',
       makeValid: 'Make Valid',
+      area: 'Area Attribute',
+      length: 'Length Attribute',
+      perimeter: 'Perimeter Attribute',
+      geometryType: 'Geometry Type Attribute',
+      isValid: 'Is Valid Attribute',
+      isEmpty: 'Is Empty Attribute',
+      isSimple: 'Is Simple Attribute',
+      x: 'X Attribute',
+      y: 'Y Attribute',
+      centroidX: 'Centroid X Attribute',
+      centroidY: 'Centroid Y Attribute',
     };
 
     const map = new Emap({ container: 'map' });
@@ -153,9 +218,13 @@
     const allowGeographicInput = document.getElementById('allow-geographic');
     const runBtn = document.getElementById('run');
     const status = document.getElementById('status');
+    const pickedAttributes = document.getElementById('picked-attributes');
+    const mapContainer = map.getCanvasContainer();
 
     let inputDataset;
+    let outputDataset;
     let runtimePromise;
+    let layerPickerEntries = [];
 
     function getLayerId(layer, index) {
       return String(layer?.name || layer?.id || `layer-${index}`);
@@ -224,14 +293,62 @@
       }
     }
 
-    function populateTargetLayers(source) {
-      targetSelect.innerHTML = '';
+    function displayLayerIds(prefix, layer, index) {
+      const baseId = `${prefix}-${index}`;
+      if (layer?.geometry_type === 'polygon') return [`${baseId}-fill`, `${baseId}-line`];
+      if (layer?.geometry_type === 'polyline') return [`${baseId}-line`];
+      if (layer?.geometry_type === 'point') return [`${baseId}-point`];
+      return [];
+    }
+
+    function appendLayerPickerOptions(source, { sourceId, prefix, labelPrefix = '' }) {
       source.getLayers().forEach((layer, index) => {
+        const value = `${sourceId}:${index}`;
         const option = document.createElement('option');
-        option.value = String(index);
-        option.textContent = getLayerId(layer, index);
+        option.value = value;
+        option.textContent = `${labelPrefix}${getLayerId(layer, index)}`;
         targetSelect.appendChild(option);
+        layerPickerEntries.push({
+          value,
+          sourceId,
+          layerIndex: index,
+          layerIds: displayLayerIds(prefix, layer, index),
+        });
       });
+    }
+
+    function populateLayerPicker(source, { sourceId, prefix }) {
+      targetSelect.innerHTML = '';
+      layerPickerEntries = [];
+      appendLayerPickerOptions(source, { sourceId, prefix });
+      targetSelect.disabled = layerPickerEntries.length === 0;
+      if (layerPickerEntries.length > 0) {
+        targetSelect.value = layerPickerEntries[0].value;
+        setCurrentLayerVisibility(targetSelect.value);
+      }
+    }
+
+    function selectedLayerEntry() {
+      return layerPickerEntries.find((entry) => entry.value === targetSelect.value) ?? null;
+    }
+
+    function selectedOperationDataset() {
+      const entry = selectedLayerEntry();
+      if (!entry) return null;
+      return entry.sourceId === OUTPUT_ID ? outputDataset : inputDataset;
+    }
+
+    function setCurrentLayerVisibility(selectedValue) {
+      layerPickerEntries.forEach(({ value, layerIds }) => {
+        const visible = value === selectedValue;
+        layerIds.forEach((layerId) => {
+          if (map.getLayer(layerId)) {
+            map.setLayerVisibility(layerId, visible ? 'visible' : 'none');
+          }
+        });
+      });
+      pickedAttributes.textContent = '(点击地图上的要素)';
+      map.clearHighlightedFeatures();
     }
 
     function applyInputCrs() {
@@ -262,11 +379,32 @@
       allowGeographicInput.disabled = !needsTolerance;
     }
 
+    function renderPickedAttributes(features) {
+      if (!features.length) {
+        pickedAttributes.textContent = '(未命中要素)';
+        map.clearHighlightedFeatures();
+        return;
+      }
+
+      map.clearHighlightedFeatures();
+      map.setHighlightedFeatures(features, {
+        color: '#dc2626',
+        width: 3,
+        radius: 7,
+        fill: true,
+      });
+      pickedAttributes.textContent =
+        `命中 ${features.length} 个要素\n\n` + JSON.stringify(features[0].properties, null, 2);
+    }
+
     function makeOperationOptions() {
       const operation = operationSelect.value;
+      const entry = selectedLayerEntry();
+      const dataset = selectedOperationDataset();
+      if (!entry || !dataset) throw new Error('请选择可处理的图层。');
       const opts = {
-        layer: Number(targetSelect.value),
-        outputLayer: `${getLayerId(inputDataset.layers[Number(targetSelect.value)], Number(targetSelect.value))}_${operation}`,
+        layer: entry.layerIndex,
+        outputLayer: `${getLayerId(dataset.layers[entry.layerIndex], entry.layerIndex)}_${operation}`,
       };
 
       if (!operationNeedsTolerance(operation)) return opts;
@@ -299,7 +437,29 @@
           return simplifyPreserveTopologyDatasetWithDuckDb(dataset, opts, runtime);
         case 'makeValid':
           return makeValidDatasetWithDuckDb(dataset, opts, runtime);
-        default:
+        case 'area':
+          return areaDatasetWithDuckDb(dataset, opts, runtime);
+        case 'length':
+          return lengthDatasetWithDuckDb(dataset, opts, runtime);
+        case 'perimeter':
+          return perimeterDatasetWithDuckDb(dataset, opts, runtime);
+        case 'geometryType':
+          return geometryTypeDatasetWithDuckDb(dataset, opts, runtime);
+        case 'isValid':
+          return isValidDatasetWithDuckDb(dataset, opts, runtime);
+        case 'isEmpty':
+          return isEmptyDatasetWithDuckDb(dataset, opts, runtime);
+        case 'isSimple':
+          return isSimpleDatasetWithDuckDb(dataset, opts, runtime);
+      case 'x':
+        return xDatasetWithDuckDb(dataset, opts, runtime);
+      case 'y':
+        return yDatasetWithDuckDb(dataset, opts, runtime);
+      case 'centroidX':
+        return centroidXDatasetWithDuckDb(dataset, opts, runtime);
+      case 'centroidY':
+        return centroidYDatasetWithDuckDb(dataset, opts, runtime);
+      default:
           throw new Error(`未知空间函数: ${operation}`);
       }
     }
@@ -308,14 +468,17 @@
       const file = fileInput.files?.[0];
       if (!file) return;
 
-      runBtn.disabled = true;
-      targetSelect.disabled = true;
-      status.textContent = `正在加载 ${file.name}...`;
+    runBtn.disabled = true;
+    targetSelect.disabled = true;
+    status.textContent = `正在加载 ${file.name}...`;
+    pickedAttributes.textContent = '(点击地图上的要素)';
+    map.clearHighlightedFeatures();
 
       try {
         const source = new TopologySource(SOURCE_ID);
         const content = new Uint8Array(await file.arrayBuffer());
         removeSourceWithLayers(OUTPUT_ID);
+        outputDataset = undefined;
         removeSourceWithLayers(SOURCE_ID);
 
         await source.setData({ filename: file.name, content });
@@ -331,7 +494,7 @@
           lineWidth: 1.5,
           pointRadius: 4,
         });
-        populateTargetLayers(source);
+        populateLayerPicker(source, { sourceId: SOURCE_ID, prefix: 'duckdb-spatial-input' });
         map.setExtent(source.getExtent());
 
         const featureCount = source
@@ -354,28 +517,45 @@
         return;
       }
 
-      runBtn.disabled = true;
-      const operation = operationSelect.value;
-      status.textContent = `正在加载 DuckDB-Wasm 并运行 ${OPERATION_LABELS[operation]}...`;
+    runBtn.disabled = true;
+    const operation = operationSelect.value;
+    status.textContent = `正在加载 DuckDB-Wasm 并运行 ${OPERATION_LABELS[operation]}...`;
+    pickedAttributes.textContent = '(点击地图上的要素)';
+    map.clearHighlightedFeatures();
 
-      try {
-        applyInputCrs();
-        const runtime = await ensureDuckDbRuntime();
-        const result = await runOperation(inputDataset, operation, makeOperationOptions(), runtime);
-        const outputSource = new TopologySource(OUTPUT_ID);
-        outputSource.setDataset(result);
+    try {
+      applyInputCrs();
+      const runtime = await ensureDuckDbRuntime();
+      const operationDataset = selectedOperationDataset();
+      if (!operationDataset) throw new Error('请选择可处理的图层。');
+      const result = await runOperation(operationDataset, operation, makeOperationOptions(), runtime);
+      const outputSource = new TopologySource(OUTPUT_ID);
+      outputDataset = result;
+      outputSource.setDataset(result);
 
-        removeSourceWithLayers(OUTPUT_ID);
-        map.addSource(OUTPUT_ID, outputSource);
+      removeSourceWithLayers(OUTPUT_ID);
+      map.addSource(OUTPUT_ID, outputSource);
         addDisplayLayers(OUTPUT_ID, outputSource, 'duckdb-spatial-output', {
           fill: '#fef3c7',
           fillOpacity: 0.5,
           line: '#b45309',
-          lineWidth: 2.5,
-          pointRadius: 5,
-        });
+        lineWidth: 2.5,
+        pointRadius: 5,
+      });
+      layerPickerEntries = layerPickerEntries.filter((entry) => entry.sourceId !== OUTPUT_ID);
+      targetSelect.querySelectorAll(`option[value^="${OUTPUT_ID}:"]`).forEach((option) => option.remove());
+      appendLayerPickerOptions(outputSource, {
+        sourceId: OUTPUT_ID,
+        prefix: 'duckdb-spatial-output',
+        labelPrefix: '输出 / ',
+      });
+      const firstOutputEntry = layerPickerEntries.find((entry) => entry.sourceId === OUTPUT_ID);
+      if (firstOutputEntry) {
+        targetSelect.value = firstOutputEntry.value;
+        setCurrentLayerVisibility(targetSelect.value);
+      }
 
-        const resultCount = result.layers.reduce(
+      const resultCount = result.layers.reduce(
           (total, layer) => total + (layer?.shapes?.length ?? 0),
           0,
         );
@@ -388,9 +568,18 @@
       }
     });
 
-    operationSelect.addEventListener('change', updateOperationControls);
-    crsInput.addEventListener('change', applyInputCrs);
-    updateOperationControls();
+  operationSelect.addEventListener('change', updateOperationControls);
+  targetSelect.addEventListener('change', () => {
+    setCurrentLayerVisibility(targetSelect.value);
+  });
+  crsInput.addEventListener('change', applyInputCrs);
+  mapContainer.addEventListener('click', (e) => {
+    const rect = mapContainer.getBoundingClientRect();
+    const point = [e.clientX - rect.left, e.clientY - rect.top];
+    const features = map.queryFeatures(point);
+    renderPickedAttributes(features);
+  });
+  updateOperationControls();
   </script>
 </body>
 

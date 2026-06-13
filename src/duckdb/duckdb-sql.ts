@@ -23,6 +23,31 @@ export function buildUnaryGeometrySql(opts: BuildUnaryGeometrySqlOptions): strin
   ].join('\n');
 }
 
+export interface BuildAttributeSqlOptions {
+  tableName: string;
+  geometryColumn: string;
+  duckDbFunction: string;
+  buildExpression?: (geometryColumn: string) => string;
+  outputColumn: string;
+}
+
+export function buildAttributeSql(opts: BuildAttributeSqlOptions): string {
+  const tableName = quoteIdentifier(opts.tableName);
+  const geometryColumn = quoteIdentifier(opts.geometryColumn);
+  const outputColumn = quoteIdentifier(opts.outputColumn);
+  const expression = opts.buildExpression
+    ? opts.buildExpression(geometryColumn)
+    : `${opts.duckDbFunction}(${geometryColumn})`;
+
+  return [
+    'SELECT',
+    '  *,',
+    `  ${expression} AS ${outputColumn}`,
+    `FROM ${tableName}`,
+    `WHERE ${geometryColumn} IS NOT NULL`,
+  ].join('\n');
+}
+
 export function buildBufferSql(opts: {
   tableName: string;
   geometryColumn: string;
