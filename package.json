@@ -70,7 +70,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:duckdb": "DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/duckdb-buffer.integration.test.ts src/duckdb/duckdb-attribute.integration.test.ts",
+    "test:duckdb": "DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/duckdb-buffer.integration.test.ts src/duckdb/duckdb-attribute.integration.test.ts src/duckdb/duckdb-relation.integration.test.ts",
     "prepublishOnly": "npm run format:check && npm run typecheck && npm run build && npm run test:run"
   },
   "keywords": [
