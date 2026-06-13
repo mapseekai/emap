@@ -116,16 +116,38 @@
       <option value="isValid">Is Valid Attribute</option>
       <option value="isEmpty">Is Empty Attribute</option>
       <option value="isSimple">Is Simple Attribute</option>
-      <option value="x">X Attribute</option>
-      <option value="y">Y Attribute</option>
-      <option value="centroidX">Centroid X Attribute</option>
-      <option value="centroidY">Centroid Y Attribute</option>
-    </select>
-    </label>
-    <label id="tolerance-label">
-      容差:
-      <input id="tolerance" type="number" value="10" min="0" step="1" style="width: 72px" />
-    </label>
+          <option value="x">X Attribute</option>
+          <option value="y">Y Attribute</option>
+          <option value="centroidX">Centroid X Attribute</option>
+          <option value="centroidY">Centroid Y Attribute</option>
+          <option value="intersects">Intersects</option>
+          <option value="contains">Contains</option>
+          <option value="within">Within</option>
+          <option value="touches">Touches</option>
+          <option value="disjoint">Disjoint</option>
+          <option value="distance">Distance</option>
+          <option value="distanceWithin">Distance Within</option>
+        </select>
+      </label>
+      <label id="relation-mode-label" style="display: none">
+        关系模式:
+        <select id="relation-mode">
+          <option value="filter">Filter</option>
+          <option value="attribute">Attribute</option>
+        </select>
+      </label>
+      <label id="mask-layer-label" style="display: none">
+        Mask:
+        <select id="mask-layer"></select>
+      </label>
+      <label id="distance-label" style="display: none">
+        距离:
+        <input id="distance" type="number" value="0" min="0" step="1" style="width: 72px" />
+      </label>
+      <label id="tolerance-label">
+        容差:
+        <input id="tolerance" type="number" value="10" min="0" step="1" style="width: 72px" />
+      </label>
     <label>
       CRS:
       <input id="crs" type="text" value="EPSG:3857" style="width: 92px" />
@@ -159,10 +181,10 @@
   <script type="module">
     import {
       areaDatasetWithDuckDb,
-      boundaryDatasetWithDuckDb,
-      centroidDatasetWithDuckDb,
-      centroidXDatasetWithDuckDb,
-      centroidYDatasetWithDuckDb,
+        boundaryDatasetWithDuckDb,
+        centroidDatasetWithDuckDb,
+        centroidXDatasetWithDuckDb,
+        centroidYDatasetWithDuckDb,
       convexHullDatasetWithDuckDb,
       createDuckDbRuntimeFromJsDelivr,
       envelopeDatasetWithDuckDb,
@@ -170,9 +192,10 @@
       isEmptyDatasetWithDuckDb,
       isSimpleDatasetWithDuckDb,
       isValidDatasetWithDuckDb,
-      lengthDatasetWithDuckDb,
+        lengthDatasetWithDuckDb,
       makeValidDatasetWithDuckDb,
       perimeterDatasetWithDuckDb,
+      runRelationOperation as runDuckDbRelationOperation,
       setDuckDbRuntime,
       simplifyDatasetWithDuckDb,
       simplifyPreserveTopologyDatasetWithDuckDb,
@@ -182,8 +205,18 @@
 
     const { Emap, TopologySource, NavigationControl, StatusControl } = emap;
 
-    const SOURCE_ID = 'duckdb-spatial-input';
-    const OUTPUT_ID = 'duckdb-spatial-output';
+      const SOURCE_ID = 'duckdb-spatial-input';
+      const OUTPUT_ID = 'duckdb-spatial-output';
+      const MASK_ID = 'duckdb-spatial-mask';
+      const RELATION_OPERATIONS = new Set([
+        'intersects',
+        'contains',
+        'within',
+        'touches',
+        'disjoint',
+        'distance',
+        'distanceWithin',
+      ]);
     const OPERATION_LABELS = {
       centroid: 'Centroid',
       envelope: 'Envelope',
@@ -199,21 +232,34 @@
       isValid: 'Is Valid Attribute',
       isEmpty: 'Is Empty Attribute',
       isSimple: 'Is Simple Attribute',
-      x: 'X Attribute',
-      y: 'Y Attribute',
-      centroidX: 'Centroid X Attribute',
-      centroidY: 'Centroid Y Attribute',
-    };
+        x: 'X Attribute',
+        y: 'Y Attribute',
+        centroidX: 'Centroid X Attribute',
+        centroidY: 'Centroid Y Attribute',
+        intersects: 'Intersects',
+        contains: 'Contains',
+        within: 'Within',
+        touches: 'Touches',
+        disjoint: 'Disjoint',
+        distance: 'Distance',
+        distanceWithin: 'Distance Within',
+      };
 
     const map = new Emap({ container: 'map' });
     map.addControl(new NavigationControl(), 'top-left');
     map.addControl(new StatusControl({ alignment: 'right', showEPSG: true }), 'bottom-right');
 
     const fileInput = document.getElementById('file');
-    const targetSelect = document.getElementById('target');
-    const operationSelect = document.getElementById('operation');
-    const toleranceInput = document.getElementById('tolerance');
-    const toleranceLabel = document.getElementById('tolerance-label');
+      const targetSelect = document.getElementById('target');
+      const operationSelect = document.getElementById('operation');
+      const relationModeSelect = document.getElementById('relation-mode');
+      const relationModeLabel = document.getElementById('relation-mode-label');
+      const maskLayerSelect = document.getElementById('mask-layer');
+      const maskLayerLabel = document.getElementById('mask-layer-label');
+      const distanceInput = document.getElementById('distance');
+      const distanceLabel = document.getElementById('distance-label');
+      const toleranceInput = document.getElementById('tolerance');
+      const toleranceLabel = document.getElementById('tolerance-label');
     const crsInput = document.getElementById('crs');
     const allowGeographicInput = document.getElementById('allow-geographic');
     const runBtn = document.getElementById('run');
@@ -328,15 +374,45 @@
       }
     }
 
-    function selectedLayerEntry() {
-      return layerPickerEntries.find((entry) => entry.value === targetSelect.value) ?? null;
-    }
+      function selectedLayerEntry() {
+        return layerPickerEntries.find((entry) => entry.value === targetSelect.value) ?? null;
+      }
 
-    function selectedOperationDataset() {
-      const entry = selectedLayerEntry();
-      if (!entry) return null;
-      return entry.sourceId === OUTPUT_ID ? outputDataset : inputDataset;
-    }
+      function populateMaskLayerPicker() {
+        const currentValue = maskLayerSelect.value;
+        maskLayerSelect.innerHTML = '';
+        layerPickerEntries.forEach((entry) => {
+          const option = document.createElement('option');
+          const targetOption = Array.from(targetSelect.options).find(
+            (item) => item.value === entry.value,
+          );
+          option.value = entry.value;
+          option.textContent = targetOption?.textContent ?? entry.value;
+          maskLayerSelect.appendChild(option);
+        });
+
+        if (layerPickerEntries.some((entry) => entry.value === currentValue)) {
+          maskLayerSelect.value = currentValue;
+        } else if (layerPickerEntries.length > 0) {
+          maskLayerSelect.value = layerPickerEntries[0].value;
+        }
+
+        maskLayerSelect.disabled = layerPickerEntries.length === 0;
+      }
+
+      function selectedMaskLayerEntry() {
+        return layerPickerEntries.find((entry) => entry.value === maskLayerSelect.value) ?? null;
+      }
+
+      function datasetForLayerEntry(entry) {
+        return entry?.sourceId === OUTPUT_ID ? outputDataset : inputDataset;
+      }
+
+      function selectedOperationDataset() {
+        const entry = selectedLayerEntry();
+        if (!entry) return null;
+        return datasetForLayerEntry(entry);
+      }
 
     function setCurrentLayerVisibility(selectedValue) {
       layerPickerEntries.forEach(({ value, layerIds }) => {
@@ -368,16 +444,34 @@
       return runtimePromise;
     }
 
-    function operationNeedsTolerance(operation) {
-      return operation === 'simplify' || operation === 'simplifyPreserveTopology';
-    }
+      function operationNeedsTolerance(operation) {
+        return operation === 'simplify' || operation === 'simplifyPreserveTopology';
+      }
 
-    function updateOperationControls() {
-      const needsTolerance = operationNeedsTolerance(operationSelect.value);
-      toleranceLabel.style.display = needsTolerance ? 'inline-flex' : 'none';
-      toleranceInput.disabled = !needsTolerance;
-      allowGeographicInput.disabled = !needsTolerance;
-    }
+      function operationIsRelation(operation) {
+        return RELATION_OPERATIONS.has(operation);
+      }
+
+      function operationNeedsDistance(operation) {
+        return operation === 'distance' || operation === 'distanceWithin';
+      }
+
+      function updateOperationControls() {
+        const operation = operationSelect.value;
+        const needsTolerance = operationNeedsTolerance(operation);
+        const isRelation = operationIsRelation(operation);
+        const needsDistance = operationNeedsDistance(operationSelect.value);
+        toleranceLabel.style.display = needsTolerance ? 'inline-flex' : 'none';
+        toleranceInput.disabled = !needsTolerance;
+        allowGeographicInput.disabled = !needsTolerance;
+        relationModeLabel.style.display = isRelation ? 'inline-flex' : 'none';
+        maskLayerLabel.style.display = isRelation ? 'inline-flex' : 'none';
+        distanceLabel.style.display = needsDistance ? 'inline-flex' : 'none';
+        relationModeSelect.disabled = !isRelation || operation === 'distance';
+        maskLayerSelect.disabled = !isRelation || layerPickerEntries.length === 0;
+        distanceInput.disabled = !needsDistance;
+        if (operation === 'distance') relationModeSelect.value = 'attribute';
+      }
 
     function renderPickedAttributes(features) {
       if (!features.length) {
@@ -397,11 +491,11 @@
         `命中 ${features.length} 个要素\n\n` + JSON.stringify(features[0].properties, null, 2);
     }
 
-    function makeOperationOptions() {
-      const operation = operationSelect.value;
-      const entry = selectedLayerEntry();
-      const dataset = selectedOperationDataset();
-      if (!entry || !dataset) throw new Error('请选择可处理的图层。');
+      function makeOperationOptions() {
+        const operation = operationSelect.value;
+        const entry = selectedLayerEntry();
+        const dataset = selectedOperationDataset();
+        if (!entry || !dataset) throw new Error('请选择可处理的图层。');
       const opts = {
         layer: entry.layerIndex,
         outputLayer: `${getLayerId(dataset.layers[entry.layerIndex], entry.layerIndex)}_${operation}`,
@@ -417,12 +511,58 @@
       return {
         ...opts,
         tolerance,
-        failOnGeographicCrs: !allowGeographicInput.checked,
-      };
-    }
+          failOnGeographicCrs: !allowGeographicInput.checked,
+        };
+      }
 
-    async function runOperation(dataset, operation, opts, runtime) {
-      switch (operation) {
+      function createMaskSourceFromEntry(entry) {
+        const dataset = datasetForLayerEntry(entry);
+        const layer = dataset?.layers?.[entry?.layerIndex];
+        if (!entry || !dataset || !layer) throw new Error('请选择 Mask 图层。');
+        const maskDataset = {
+          ...dataset,
+          layers: [layer],
+        };
+        const maskSource = new TopologySource(MASK_ID);
+        maskSource.setDataset(maskDataset);
+        return maskSource;
+      }
+
+      function makeRelationOptions() {
+        const operation = operationSelect.value;
+        const inputEntry = selectedLayerEntry();
+        const inputDataset = selectedOperationDataset();
+        const maskEntry = selectedMaskLayerEntry();
+        const maskSource = createMaskSourceFromEntry(maskEntry);
+        const maskDataset = maskSource.getDataset();
+        if (!inputEntry || !inputDataset || !maskDataset) throw new Error('请选择可处理的图层。');
+
+        const opts = {
+          layer: inputEntry.layerIndex,
+          maskLayer: 0,
+          outputLayer: `${getLayerId(inputDataset.layers[inputEntry.layerIndex], inputEntry.layerIndex)}_${operation}`,
+          failOnGeographicCrs: !allowGeographicInput.checked,
+        };
+
+        if (!operationNeedsDistance(operation)) return { inputDataset, maskDataset, opts };
+
+        const distance = Number(distanceInput.value);
+        if (!Number.isFinite(distance) || distance < 0) {
+          throw new Error('请输入大于等于 0 的关系距离。');
+        }
+
+        return {
+          inputDataset,
+          maskDataset,
+          opts: {
+            ...opts,
+            distance,
+          },
+        };
+      }
+
+      async function runOperation(dataset, operation, opts, runtime) {
+        switch (operation) {
         case 'centroid':
           return centroidDatasetWithDuckDb(dataset, opts, runtime);
         case 'envelope':
@@ -459,9 +599,18 @@
         return centroidXDatasetWithDuckDb(dataset, opts, runtime);
       case 'centroidY':
         return centroidYDatasetWithDuckDb(dataset, opts, runtime);
-      default:
-          throw new Error(`未知空间函数: ${operation}`);
+          default:
+            throw new Error(`未知空间函数: ${operation}`);
+        }
       }
+
+      async function runRelationOperation(inputDataset, maskDataset, operation, mode, opts, runtime) {
+      return runDuckDbRelationOperation(inputDataset, maskDataset, {
+        ...opts,
+        operation,
+        mode,
+        runtime,
+      });
     }
 
     fileInput.addEventListener('change', async () => {
@@ -494,8 +643,10 @@
           lineWidth: 1.5,
           pointRadius: 4,
         });
-        populateLayerPicker(source, { sourceId: SOURCE_ID, prefix: 'duckdb-spatial-input' });
-        map.setExtent(source.getExtent());
+          populateLayerPicker(source, { sourceId: SOURCE_ID, prefix: 'duckdb-spatial-input' });
+          populateMaskLayerPicker();
+          updateOperationControls();
+          map.setExtent(source.getExtent());
 
         const featureCount = source
           .getLayers()
@@ -524,12 +675,25 @@
     map.clearHighlightedFeatures();
 
     try {
-      applyInputCrs();
-      const runtime = await ensureDuckDbRuntime();
-      const operationDataset = selectedOperationDataset();
-      if (!operationDataset) throw new Error('请选择可处理的图层。');
-      const result = await runOperation(operationDataset, operation, makeOperationOptions(), runtime);
-      const outputSource = new TopologySource(OUTPUT_ID);
+          applyInputCrs();
+          const runtime = await ensureDuckDbRuntime();
+          let result;
+          if (operationIsRelation(operation)) {
+            const { inputDataset, maskDataset, opts } = makeRelationOptions();
+            result = await runRelationOperation(
+              inputDataset,
+              maskDataset,
+              operation,
+              relationModeSelect.value,
+              opts,
+              runtime,
+            );
+          } else {
+            const operationDataset = selectedOperationDataset();
+            if (!operationDataset) throw new Error('请选择可处理的图层。');
+            result = await runOperation(operationDataset, operation, makeOperationOptions(), runtime);
+          }
+          const outputSource = new TopologySource(OUTPUT_ID);
       outputDataset = result;
       outputSource.setDataset(result);
 
@@ -544,12 +708,14 @@
       });
       layerPickerEntries = layerPickerEntries.filter((entry) => entry.sourceId !== OUTPUT_ID);
       targetSelect.querySelectorAll(`option[value^="${OUTPUT_ID}:"]`).forEach((option) => option.remove());
-      appendLayerPickerOptions(outputSource, {
-        sourceId: OUTPUT_ID,
-        prefix: 'duckdb-spatial-output',
-        labelPrefix: '输出 / ',
-      });
-      const firstOutputEntry = layerPickerEntries.find((entry) => entry.sourceId === OUTPUT_ID);
+        appendLayerPickerOptions(outputSource, {
+          sourceId: OUTPUT_ID,
+          prefix: 'duckdb-spatial-output',
+          labelPrefix: '输出 / ',
+        });
+        populateMaskLayerPicker();
+        updateOperationControls();
+        const firstOutputEntry = layerPickerEntries.find((entry) => entry.sourceId === OUTPUT_ID);
       if (firstOutputEntry) {
         targetSelect.value = firstOutputEntry.value;
         setCurrentLayerVisibility(targetSelect.value);
