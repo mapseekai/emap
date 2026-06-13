@@ -207,8 +207,12 @@ import {
   duckDbAttributeLayer,
   duckDbBufferLayer,
   duckDbGeometryLayer,
+  duckDbRelationLayer,
   envelopeDatasetWithDuckDb,
   geometryTypeDatasetWithDuckDb,
+  distanceDatasetWithDuckDb,
+  intersectsAttributeDatasetWithDuckDb,
+  intersectsDatasetWithDuckDb,
   simplifyPreserveTopologyDatasetWithDuckDb,
   setDuckDbRuntime,
 } from '@zwishing/emap/duckdb';
@@ -312,6 +316,34 @@ Supported attribute helpers are area, length, perimeter, geometry type, validity
 empty/simple predicates, point x/y, and centroid x/y. Area, length, and
 perimeter use dataset coordinate units and reject geographic CRS by default.
 
+Relation helpers compare an input dataset against a mask dataset. Topological
+predicates can run on geographic CRS; distance and distanceWithin reject
+geographic CRS by default unless `failOnGeographicCrs: false` is passed.
+
+```ts
+const inFloodplain = await intersectsDatasetWithDuckDb(parcels, floodplain, {
+  inputLayer: 'parcels',
+  maskLayer: 'floodplain',
+  outputLayer: 'parcels_in_floodplain',
+});
+
+const withIntersectFlag = await intersectsAttributeDatasetWithDuckDb(
+  parcels,
+  floodplain,
+  {
+    inputLayer: 'parcels',
+    maskLayer: 'floodplain',
+    outputColumn: 'in_floodplain',
+  },
+);
+
+const withDistance = await distanceDatasetWithDuckDb(parcels, hospitals, {
+  inputLayer: 'parcels',
+  maskLayer: 'hospitals',
+  outputColumn: 'nearest_hospital_m',
+});
+```
+
 For map-like integrations, use the adapter form with a minimal source context:
 
 ```ts
@@ -335,6 +367,16 @@ await duckDbAttributeLayer(ctx, {
   layer: 'parcels',
   outputColumn: 'area_m2',
   output: { sourceId: 'parcels-with-area' },
+});
+
+await duckDbRelationLayer(ctx, {
+  src: 'parcels',
+  mask: 'floodplain',
+  mode: 'filter',
+  operation: 'intersects',
+  inputLayer: 'parcels',
+  maskLayer: 'floodplain',
+  output: { sourceId: 'parcels-in-floodplain' },
 });
 ```
 
