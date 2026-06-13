@@ -7,7 +7,13 @@ import type { MapshaperDataset } from '../types/mapshaper-types';
 import { DuckDbOperationError } from './duckdb-errors';
 import { bufferDatasetWithDuckDb, normalizeDuckDbBufferOptions } from './duckdb-buffer';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
-import { buildAttributeSql, buildBufferSql, buildUnaryGeometrySql } from './duckdb-sql';
+import {
+  buildAttributeSql,
+  buildBufferSql,
+  buildRelationAttributeSql,
+  buildRelationFilterSql,
+  buildUnaryGeometrySql,
+} from './duckdb-sql';
 
 const POLYGON_FC = {
   type: 'FeatureCollection',
@@ -243,6 +249,158 @@ describe('DuckDB buffer SQL', () => {
         outputColumn: 'type"field',
       }),
     ).toContain('ST_GeometryType("geom""col") AS "type""field"');
+  });
+  it('builds relation filter query for intersecting input and mask geometries', () => {
+    expect(
+      buildRelationFilterSql({
+        inputTableName: 'input',
+        maskTableName: 'mask',
+        inputGeometryColumn: 'geometry',
+        maskGeometryColumn: 'geometry',
+        duckDbFunction: 'ST_Intersects',
+      }),
+    ).toBe(
+      [
+        'SELECT',
+        ' i.*',
+        'FROM "input" AS i',
+        'WHERE i."geometry" IS NOT NULL',
+        ' AND EXISTS (',
+        '  SELECT 1',
+        '  FROM "mask" AS m',
+        '  WHERE m."geometry" IS NOT NULL',
+        '   AND ST_Intersects(i."geometry", m."geometry")',
+        ' )',
+      ].join('\n'),
+    );
+  });
+
+  it('quotes relation table names and geometry column identifiers', () => {
+    expect(
+      buildRelationFilterSql({
+        inputTableName: 'input table',
+        maskTableName: 'mask"table',
+        inputGeometryColumn: 'input geom',
+        maskGeometryColumn: 'mask"geom',
+        duckDbFunction: 'ST_Intersects',
+      }),
+    ).toBe(
+      [
+        'SELECT',
+        ' i.*',
+        'FROM "input table" AS i',
+        'WHERE i."input geom" IS NOT NULL',
+        ' AND EXISTS (',
+        '  SELECT 1',
+        '  FROM "mask""table" AS m',
+        '  WHERE m."mask""geom" IS NOT NULL',
+        '   AND ST_Intersects(i."input geom", m."mask""geom")',
+        ' )',
+      ].join('\n'),
+    );
+  });
+
+  it('builds relation attribute query with boolean predicate output', () => {
+    expect(
+      buildRelationAttributeSql({
+        inputTableName: 'input',
+        maskTableName: 'mask',
+        inputGeometryColumn: 'geometry',
+        maskGeometryColumn: 'geometry',
+        duckDbFunction: 'ST_Intersects',
+        outputColumn: 'duckdb_intersects',
+      }),
+    ).toBe(
+      [
+        'SELECT',
+        ' i.*,',
+        ' EXISTS (',
+        '  SELECT 1',
+        '  FROM "mask" AS m',
+        '  WHERE m."geometry" IS NOT NULL',
+        '   AND ST_Intersects(i."geometry", m."geometry")',
+        ' ) AS "duckdb_intersects"',
+        'FROM "input" AS i',
+        'WHERE i."geometry" IS NOT NULL',
+      ].join('\n'),
+    );
+  });
+
+  it('builds relation attribute query with minimum distance output', () => {
+    expect(
+      buildRelationAttributeSql({
+        inputTableName: 'input',
+        maskTableName: 'mask',
+        inputGeometryColumn: 'geometry',
+        maskGeometryColumn: 'geometry',
+        duckDbFunction: 'ST_Distance',
+        outputColumn: 'duckdb_distance',
+        output: 'distance',
+      }),
+    ).toBe(
+      [
+        'SELECT',
+        ' i.*,',
+        ' (',
+        '  SELECT MIN(ST_Distance(i."geometry", m."geometry"))',
+        '  FROM "mask" AS m',
+        '  WHERE m."geometry" IS NOT NULL',
+        ' ) AS "duckdb_distance"',
+        'FROM "input" AS i',
+        'WHERE i."geometry" IS NOT NULL',
+      ].join('\n'),
+    );
+  });
+
+  it('builds distanceWithin relation filter and attribute SQL with distance threshold', () => {
+    expect(
+      buildRelationFilterSql({
+        inputTableName: 'input',
+        maskTableName: 'mask',
+        inputGeometryColumn: 'geometry',
+        maskGeometryColumn: 'geometry',
+        duckDbFunction: 'ST_Distance',
+        distance: 42,
+      }),
+    ).toBe(
+      [
+        'SELECT',
+        ' i.*',
+        'FROM "input" AS i',
+        'WHERE i."geometry" IS NOT NULL',
+        ' AND EXISTS (',
+        '  SELECT 1',
+        '  FROM "mask" AS m',
+        '  WHERE m."geometry" IS NOT NULL',
+        '   AND ST_Distance(i."geometry", m."geometry") <= 42',
+        ' )',
+      ].join('\n'),
+    );
+
+    expect(
+      buildRelationAttributeSql({
+        inputTableName: 'input',
+        maskTableName: 'mask',
+        inputGeometryColumn: 'geometry',
+        maskGeometryColumn: 'geometry',
+        duckDbFunction: 'ST_Distance',
+        outputColumn: 'duckdb_distance_within',
+        distance: 42,
+      }),
+    ).toBe(
+      [
+        'SELECT',
+        ' i.*,',
+        ' EXISTS (',
+        '  SELECT 1',
+        '  FROM "mask" AS m',
+        '  WHERE m."geometry" IS NOT NULL',
+        '   AND ST_Distance(i."geometry", m."geometry") <= 42',
+        ' ) AS "duckdb_distance_within"',
+        'FROM "input" AS i',
+        'WHERE i."geometry" IS NOT NULL',
+      ].join('\n'),
+    );
   });
 });
 
