@@ -101,7 +101,7 @@ export async function exportGeoParquet(
   );
   const wasmTable = wasm.Table.fromIPCStream(tableToIPC(table, 'stream'));
 
-  const compressionName = (opts.compression ?? 'zstd').toUpperCase();
+  const compressionName = (opts.compression ?? 'snappy').toUpperCase();
   const compression =
     compressionName === 'NONE'
       ? wasm.Compression.UNCOMPRESSED
