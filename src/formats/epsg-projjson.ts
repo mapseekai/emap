@@ -78,21 +78,25 @@ export async function findEpsgProjjsonAsync(
     throw error;
   }
 
+  let response: Response;
   try {
-    const response = await fetchImpl(url);
-    if (!response.ok) {
-      const error = new EpsgProjjsonError(
-        `EPSG:${normalized} PROJJSON fetch failed with HTTP ${response.status} ${response.statusText}`.trim(),
-      );
-      throw error;
-    }
+    response = await fetchImpl(url);
+  } catch {
+    throw new EpsgProjjsonError(`EPSG:${normalized} PROJJSON fetch failed`);
+  }
+
+  if (!response.ok) {
+    throw new EpsgProjjsonError(
+      `EPSG:${normalized} PROJJSON fetch failed with HTTP ${response.status} ${response.statusText}`.trim(),
+    );
+  }
+
+  try {
     const projjson = await response.json();
     projjsonCache.set(url, projjson);
     return projjson;
-  } catch (err) {
-    if (err instanceof EpsgProjjsonError) throw err;
-    const error = new EpsgProjjsonError(`EPSG:${normalized} PROJJSON asset could not be parsed`);
-    throw error;
+  } catch {
+    throw new EpsgProjjsonError(`EPSG:${normalized} PROJJSON asset could not be parsed`);
   }
 }
 

@@ -66,6 +66,17 @@ describe('EPSG PROJJSON asset lookup', () => {
     ).rejects.toThrow('EPSG:4490 PROJJSON asset could not be parsed');
   });
 
+  it('rejects with fetch diagnostics when the EPSG asset request fails before a response', async () => {
+    await expect(
+      findEpsgProjjsonAsync('4490', {
+        baseUrl: 'https://network-failure.example/pkg/',
+        fetch: async () => {
+          throw new TypeError('network down');
+        },
+      }),
+    ).rejects.toThrow('EPSG:4490 PROJJSON fetch failed');
+  });
+
   it('rejects when no fetch implementation is available', async () => {
     const originalFetch = globalThis.fetch;
     try {
