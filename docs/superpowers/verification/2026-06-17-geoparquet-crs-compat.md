@@ -58,7 +58,7 @@ Open each sample in QGIS:
 - Geometry appears in the expected location.
 
 Verification:
-- Run a placeholder scan on the new file for `TBD|TODO|FIXME|???`.
+- Run a placeholder scan on the new file and confirm it returns no matches.
 - GitNexus detect_changes staged should be low/no symbols.
 
 Commit:
