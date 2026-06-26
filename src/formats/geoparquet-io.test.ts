@@ -178,8 +178,21 @@ describe('GeoParquet round trip', () => {
     const table = tableFromIPC(wasm.readParquet(bytes).intoIPCStream());
     const geomField = table.schema.fields.find((f) => f.name === 'geometry');
     expect(geomField).toBeDefined();
-    expect(geomField!.metadata.get('ARROW:extension:name')).toBeUndefined();
-    expect(geomField!.metadata.get('ARROW:extension:metadata')).toBeUndefined();
+    expect(geomField?.metadata.has('ARROW:extension:name')).toBe(false);
+    expect(geomField?.metadata.has('ARROW:extension:metadata')).toBe(false);
+
+    const file = await wasm.ParquetFile.fromFile(new Blob([bytes]));
+    try {
+      const fileGeo = file.metadata().fileMetadata().keyValueMetadata().get('geo');
+      expect(fileGeo).toEqual(expect.any(String));
+      const column = parseGeoMetadata(new Map([['geo', fileGeo as string]]))?.columns.geometry;
+      expect(column?.encoding).toBe('WKB');
+      expect(column?.crs).toMatchObject({
+        id: { authority: 'EPSG', code: 3857 },
+      });
+    } finally {
+      file.free?.();
+    }
 
     // Still a fully usable GeoParquet: geo metadata intact, CRS round-trips.
     expect(parseGeoMetadata(table.schema.metadata)?.columns.geometry.encoding).toBe('WKB');
