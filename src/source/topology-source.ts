@@ -11,6 +11,7 @@ import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import {
   normalizeProjectCrsMetadata,
   resolveDatasetCRS,
+  resolveDatasetCRSMetadata,
   resolveProjectCrs,
   setDatasetCrsMetadata,
 } from '../geo/crs-resolver';
@@ -22,6 +23,14 @@ import {
 } from './format-registry';
 
 export type TopologySourceData = string | { filename: string; content: Uint8Array };
+
+/**
+ * Formats whose specs fix the CRS to WGS84 lon/lat: GeoJSON / TopoJSON
+ * (RFC 7946) and KML (OGC). Imports of these formats get an explicit
+ * `EPSG:4326` when the dataset carries no other CRS metadata, so display
+ * and export don't have to treat the CRS as unknown.
+ */
+const WGS84_SPEC_FORMAT_RE = /\.(geojson|topojson|json|kml)$/i;
 
 /**
  * Input shapes accepted by {@link TopologySource.setData}:
@@ -328,6 +337,14 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       const dataset: MapshaperDataset = pluginImport
         ? await pluginImport
         : await this._runner.runImport(cmd, inputFiles);
+
+      if (
+        resolveDatasetCRSMetadata(dataset) === undefined &&
+        primaryFiles.every((f) => WGS84_SPEC_FORMAT_RE.test(f))
+      ) {
+        dataset.info ??= {};
+        dataset.info.crs_string = 'EPSG:4326';
+      }
 
       // Stale guard: another setData superseded this run while it was awaiting.
       // Drop the result silently — the live chain owns the next data/error.

@@ -225,6 +225,39 @@ describe('TopologySource.setData', () => {
       fetchSpy.mockRestore();
     }
   });
+
+  it('marks GeoJSON imports as EPSG:4326 when mapshaper provides no CRS metadata', async () => {
+    // RFC 7946 fixes GeoJSON to WGS84 lon/lat; without this the CRS stays
+    // "unknown" and GeoParquet exports write `crs: null`.
+    const runImport = vi.fn(async () => ({ ...FAKE_DATASET, info: {} }));
+    const source = new TopologySource('t', { mapshaperRunner: { runImport } });
+
+    await source.setData({ filename: 'a.geojson', content: new Uint8Array([123, 125]) });
+
+    expect(source.getDataset()?.info?.crs_string).toBe('EPSG:4326');
+  });
+
+  it('does not mark shapefile imports as EPSG:4326 without CRS metadata', async () => {
+    const runImport = vi.fn(async () => ({ ...FAKE_DATASET, info: {} }));
+    const source = new TopologySource('t', { mapshaperRunner: { runImport } });
+
+    await source.setData({ filename: 'a.shp', content: new Uint8Array([0]) });
+
+    expect(source.getDataset()?.info?.crs_string).toBeUndefined();
+  });
+
+  it('does not override CRS metadata already carried by the imported dataset', async () => {
+    const runImport = vi.fn(async () => ({
+      ...FAKE_DATASET,
+      info: { prj: 'PROJCS["X",AUTHORITY["EPSG","3857"]]' },
+    }));
+    const source = new TopologySource('t', { mapshaperRunner: { runImport } });
+
+    await source.setData({ filename: 'a.geojson', content: new Uint8Array([123, 125]) });
+
+    expect(source.getDataset()?.info?.crs_string).toBeUndefined();
+    expect(source.getCRS()).toBe('EPSG:3857');
+  });
 });
 
 describe('TopologySource.reproject', () => {
