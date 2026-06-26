@@ -141,6 +141,67 @@ describe('toArrowTable', () => {
     expect(column).not.toHaveProperty('crs');
   });
 
+  it('uses a unique bbox covering column name when attributes already contain bbox', async () => {
+    const dataset = await datasetFromGeoJSON({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { bbox: 'kept', id: 1 },
+          geometry: { type: 'Point', coordinates: [3, 4] },
+        },
+      ],
+    });
+
+    const table = toArrowTable(dataset, { bboxColumn: 'bbox' });
+    const names = table.schema.fields.map((field) => field.name);
+    expect(names).toContain('bbox');
+    expect(names).toContain('bbox_1');
+    expect(table.getChild('bbox')!.get(0)).toBe('kept');
+    expect(table.getChild('bbox_1')!.get(0)?.toJSON()).toEqual({
+      xmin: 3,
+      ymin: 4,
+      xmax: 3,
+      ymax: 4,
+    });
+
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry;
+    expect(column?.covering?.bbox).toEqual({
+      xmin: ['bbox_1', 'xmin'],
+      ymin: ['bbox_1', 'ymin'],
+      xmax: ['bbox_1', 'xmax'],
+      ymax: ['bbox_1', 'ymax'],
+    });
+  });
+
+  it('omits bbox covering metadata when bboxColumn is false', async () => {
+    const dataset = await datasetFromGeoJSON(TWO_LAYER_INPUT);
+    const table = toArrowTable(dataset, { bboxColumn: false });
+    const names = table.schema.fields.map((field) => field.name);
+    expect(names).not.toContain('bbox');
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry;
+    expect(column?.covering).toBeUndefined();
+  });
+
+  it('writes null bbox struct rows for null geometries', async () => {
+    const dataset = await datasetFromGeoJSON({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { id: 1 },
+          geometry: { type: 'Point', coordinates: [1, 2] },
+        },
+        { type: 'Feature', properties: { id: 2 }, geometry: null },
+      ],
+    });
+
+    const table = toArrowTable(dataset, { bboxColumn: 'bbox' });
+    const bbox = table.getChild('bbox')!;
+    expect(bbox.isValid(0)).toBe(true);
+    expect(bbox.isValid(1)).toBe(false);
+  });
+
   it('degrades mixed-type attribute columns to strings', async () => {
     const dataset = await datasetFromGeoJSON({
       type: 'FeatureCollection',

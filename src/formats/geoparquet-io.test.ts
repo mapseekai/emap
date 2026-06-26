@@ -122,6 +122,40 @@ describe('GeoParquet round trip', () => {
     });
   });
 
+  it('keeps an existing bbox attribute and writes covering metadata to a suffixed bbox column', async () => {
+    const dataset = await datasetFromGeoJSON({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { bbox: 'attribute', id: 1 },
+          geometry: { type: 'Point', coordinates: [7, 8] },
+        },
+      ],
+    });
+
+    const bytes = await exportGeoParquet(dataset);
+    const table = tableFromIPC(wasm.readParquet(bytes).intoIPCStream());
+    expect(table.schema.fields.map((field) => field.name)).toContain('bbox_1');
+    expect(table.getChild('bbox')!.get(0)).toBe('attribute');
+    expect(table.getChild('bbox_1')!.get(0)?.toJSON()).toEqual({
+      xmin: 7,
+      ymin: 8,
+      xmax: 7,
+      ymax: 8,
+    });
+
+    const file = await wasm.ParquetFile.fromFile(new Blob([bytes]));
+    const fileGeo = file.metadata().fileMetadata().keyValueMetadata().get('geo');
+    const column = parseGeoMetadata(new Map([['geo', fileGeo as string]]))?.columns.geometry;
+    expect(column?.covering?.bbox).toEqual({
+      xmin: ['bbox_1', 'xmin'],
+      ymin: ['bbox_1', 'ymin'],
+      xmax: ['bbox_1', 'xmax'],
+      ymax: ['bbox_1', 'ymax'],
+    });
+  });
+
   it('does not declare geoarrow extension types in the embedded arrow schema', async () => {
     // GDAL ≥ 3.11 (libarrow ≥ 21) rejects parquet columns typed as
     // `geoarrow.wkb` Arrow extensions unless the parquet column uses the
