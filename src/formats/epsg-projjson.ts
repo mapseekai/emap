@@ -1,45 +1,109 @@
-import { EPSG_PROJJSON_TABLE } from '../geo/epsg-projjson-data';
+import { EPSG_PROJJSON_PATH_TABLE } from '../geo/epsg-projjson-data';
 
-const cache = new Map<string, unknown | null>();
+export const DEFAULT_EPSG_PROJJSON_BASE_URL =
+  'https://cdn.jsdelivr.net/npm/@zwishing/epsg-index@3.0.0/';
+
+export interface EpsgProjjsonFetchOptions {
+  baseUrl?: string;
+  fetch?: typeof fetch;
+}
+
+const pathCache = new Map<string, string | null>();
+const projjsonCache = new Map<string, unknown | Error>();
+
+export class EpsgProjjsonError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EpsgProjjsonError';
+  }
+}
 
 function findTableRow(code: string): string | null {
   const firstNeedle = `${code}\t`;
-  let start = EPSG_PROJJSON_TABLE.startsWith(firstNeedle) ? 0 : -1;
+  let start = EPSG_PROJJSON_PATH_TABLE.startsWith(firstNeedle) ? 0 : -1;
   if (start === -1) {
     const needle = `\n${firstNeedle}`;
-    const index = EPSG_PROJJSON_TABLE.indexOf(needle);
+    const index = EPSG_PROJJSON_PATH_TABLE.indexOf(needle);
     if (index === -1) return null;
     start = index + 1;
   }
 
   const valueStart = start + firstNeedle.length;
-  const valueEnd = EPSG_PROJJSON_TABLE.indexOf('\n', valueStart);
-  return EPSG_PROJJSON_TABLE.slice(valueStart, valueEnd === -1 ? undefined : valueEnd);
+  const valueEnd = EPSG_PROJJSON_PATH_TABLE.indexOf('\n', valueStart);
+  return EPSG_PROJJSON_PATH_TABLE.slice(valueStart, valueEnd === -1 ? undefined : valueEnd);
 }
 
-export function findEpsgProjjson(code: string): unknown | undefined {
+export function findEpsgProjjsonPath(code: string): string | undefined {
   const normalized = code.trim();
   if (!/^\d+$/.test(normalized)) return undefined;
 
-  const cached = cache.get(normalized);
+  const cached = pathCache.get(normalized);
   if (cached !== undefined) return cached ?? undefined;
 
-  const raw = findTableRow(normalized);
-  if (!raw) {
-    cache.set(normalized, null);
-    return undefined;
-  }
+  const path = findTableRow(normalized);
+  pathCache.set(normalized, path);
+  return path ?? undefined;
+}
 
-  try {
-    const parsed = JSON.parse(raw);
-    cache.set(normalized, parsed);
-    return parsed;
-  } catch {
-    cache.set(normalized, null);
-    return undefined;
-  }
+/**
+ * Synchronous compatibility hook. Full EPSG PROJJSON definitions are now kept
+ * in @zwishing/epsg-index assets and loaded by findAuthorityProjjsonAsync().
+ */
+export function findEpsgProjjson(_code: string): unknown | undefined {
+  return undefined;
 }
 
 export function findAuthorityProjjson(authority: string, code: string): unknown | undefined {
   return authority.toUpperCase() === 'EPSG' ? findEpsgProjjson(code) : undefined;
+}
+
+export async function findEpsgProjjsonAsync(
+  code: string,
+  opts: EpsgProjjsonFetchOptions = {},
+): Promise<unknown | undefined> {
+  const normalized = code.trim();
+  const path = findEpsgProjjsonPath(normalized);
+  if (!path) return undefined;
+
+  const baseUrl = opts.baseUrl ?? DEFAULT_EPSG_PROJJSON_BASE_URL;
+  const url = new URL(path, baseUrl).toString();
+  const cached = projjsonCache.get(url);
+  if (cached instanceof Error) throw cached;
+  if (cached !== undefined) return cached;
+
+  const fetchImpl = opts.fetch ?? globalThis.fetch;
+  if (!fetchImpl) {
+    const error = new EpsgProjjsonError(
+      `EPSG:${normalized} PROJJSON fetch requires a fetch implementation`,
+    );
+    projjsonCache.set(url, error);
+    throw error;
+  }
+
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      const error = new EpsgProjjsonError(
+        `EPSG:${normalized} PROJJSON fetch failed with HTTP ${response.status} ${response.statusText}`.trim(),
+      );
+      projjsonCache.set(url, error);
+      throw error;
+    }
+    const projjson = await response.json();
+    projjsonCache.set(url, projjson);
+    return projjson;
+  } catch (err) {
+    if (err instanceof EpsgProjjsonError) throw err;
+    const error = new EpsgProjjsonError(`EPSG:${normalized} PROJJSON asset could not be parsed`);
+    projjsonCache.set(url, error);
+    throw error;
+  }
+}
+
+export async function findAuthorityProjjsonAsync(
+  authority: string,
+  code: string,
+  opts: EpsgProjjsonFetchOptions = {},
+): Promise<unknown | undefined> {
+  return authority.toUpperCase() === 'EPSG' ? findEpsgProjjsonAsync(code, opts) : undefined;
 }
