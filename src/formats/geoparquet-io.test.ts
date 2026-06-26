@@ -146,14 +146,23 @@ describe('GeoParquet round trip', () => {
     });
 
     const file = await wasm.ParquetFile.fromFile(new Blob([bytes]));
-    const fileGeo = file.metadata().fileMetadata().keyValueMetadata().get('geo');
-    const column = parseGeoMetadata(new Map([['geo', fileGeo as string]]))?.columns.geometry;
-    expect(column?.covering?.bbox).toEqual({
-      xmin: ['bbox_1', 'xmin'],
-      ymin: ['bbox_1', 'ymin'],
-      xmax: ['bbox_1', 'xmax'],
-      ymax: ['bbox_1', 'ymax'],
-    });
+    try {
+      const fileGeo = file.metadata().fileMetadata().keyValueMetadata().get('geo');
+      const column = parseGeoMetadata(new Map([['geo', fileGeo as string]]))?.columns.geometry;
+      expect(column?.covering?.bbox).toEqual({
+        xmin: ['bbox_1', 'xmin'],
+        ymin: ['bbox_1', 'ymin'],
+        xmax: ['bbox_1', 'xmax'],
+        ymax: ['bbox_1', 'ymax'],
+      });
+    } finally {
+      file.free?.();
+    }
+
+    const back = await importGeoParquet(bytes);
+    const records = back.layers[0].data!.getRecords!() as Array<Record<string, unknown>>;
+    expect(records[0].bbox).toBe('attribute');
+    expect(records[0]).not.toHaveProperty('bbox_1');
   });
 
   it('does not declare geoarrow extension types in the embedded arrow schema', async () => {

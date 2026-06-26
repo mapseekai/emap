@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { findAuthorityProjjson } from './epsg-projjson';
+import { readFile } from 'node:fs/promises';
+import { findAuthorityProjjsonAsync } from './epsg-projjson';
 import {
   buildGeoMetadata,
   crsStringToProjjson,
@@ -7,6 +8,21 @@ import {
   GeoParquetCrsError,
   projjsonToCrsString,
 } from './geoparquet-metadata';
+
+const localEpsgIndexFetch: typeof fetch = async (input) => {
+  const url = new URL(
+    typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+  );
+  const match = /\/s\/([^/]+\.json)$/.exec(url.pathname);
+  if (!match) return new Response(null, { status: 404 });
+  const bytes = await readFile(
+    new URL(`../../node_modules/@zwishing/epsg-index/s/${match[1]}`, import.meta.url),
+  );
+  return new Response(bytes, {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+};
 
 describe('GeoParquet CRS metadata semantics', () => {
   it('treats missing crs as the GeoParquet default outside projjsonToCrsString', () => {
@@ -36,8 +52,10 @@ describe('GeoParquet CRS metadata semantics', () => {
     expect(projjsonToCrsString(null)).toBe('EPSG:4326');
   });
 
-  it('resolves EPSG codes to full PROJJSON', () => {
-    const crs = crsStringToProjjson('EPSG:4490', findAuthorityProjjson) as Record<string, unknown>;
+  it('resolves EPSG codes to full PROJJSON', async () => {
+    const crs = (await crsStringToProjjsonAsync('EPSG:4490', (authority, code) =>
+      findAuthorityProjjsonAsync(authority, code, { fetch: localEpsgIndexFetch }),
+    )) as Record<string, unknown>;
 
     expect(crs).toMatchObject({
       type: 'GeographicCRS',
@@ -81,7 +99,7 @@ describe('GeoParquet CRS metadata semantics', () => {
   });
 
   it('omits CRS for GeoParquet default WGS84 lon/lat data', () => {
-    expect(crsStringToProjjson('EPSG:4326', findAuthorityProjjson)).toBeUndefined();
-    expect(crsStringToProjjson('OGC:CRS84', findAuthorityProjjson)).toBeUndefined();
+    expect(crsStringToProjjson('EPSG:4326')).toBeUndefined();
+    expect(crsStringToProjjson('OGC:CRS84')).toBeUndefined();
   });
 });

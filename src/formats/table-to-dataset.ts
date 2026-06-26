@@ -3,7 +3,7 @@ import { getDefaultMapshaperAdapter, type PathImporterHandle } from '../adapter/
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import { decodeWkb } from './wkb';
 import { detectGeometryColumn } from './geometry-column';
-import type { GeoEncoding } from './geoparquet-metadata';
+import { parseGeoMetadata, type GeoEncoding } from './geoparquet-metadata';
 
 export interface FromArrowTableOptions {
   /** Override geometry column detection by column name. */
@@ -40,7 +40,7 @@ export function fromArrowTable(table: Table, opts: FromArrowTableOptions = {}): 
     );
   }
 
-  const records = buildRecords(table, geom?.fieldIndex ?? -1);
+  const records = buildRecords(table, geom?.fieldIndex ?? -1, getCoveringFieldIndexes(table, geom?.name));
   const importer = adapter.createPathImporter({});
   const geomVector = geom ? table.getChildAt(geom.fieldIndex) : null;
 
@@ -170,13 +170,17 @@ function readCoordList(list: Vector): Array<[number, number]> {
 // Attributes
 // ---------------------------------------------------------------------------
 
-function buildRecords(table: Table, geometryIndex: number): Array<Record<string, unknown>> {
+function buildRecords(
+  table: Table,
+  geometryIndex: number,
+  skipIndexes = new Set<number>(),
+): Array<Record<string, unknown>> {
   const fields = table.schema.fields;
   const records: Array<Record<string, unknown>> = new Array(table.numRows);
   for (let i = 0; i < table.numRows; i++) records[i] = {};
 
   for (let col = 0; col < fields.length; col++) {
-    if (col === geometryIndex) continue;
+    if (col === geometryIndex || skipIndexes.has(col)) continue;
     const field = fields[col];
     const vector = table.getChildAt(col);
     if (!vector) continue;
@@ -186,6 +190,22 @@ function buildRecords(table: Table, geometryIndex: number): Array<Record<string,
     }
   }
   return records;
+}
+
+function getCoveringFieldIndexes(table: Table, geometryColumn?: string): Set<number> {
+  const indexes = new Set<number>();
+  const geo = parseGeoMetadata(table.schema.metadata);
+  const column = geometryColumn ? geo?.columns[geometryColumn] : undefined;
+  const bbox = column?.covering?.bbox;
+  if (!bbox) return indexes;
+
+  for (const path of [bbox.xmin, bbox.ymin, bbox.xmax, bbox.ymax]) {
+    const name = Array.isArray(path) ? path[0] : undefined;
+    if (!name) continue;
+    const index = table.schema.fields.findIndex((field) => field.name === name);
+    if (index !== -1) indexes.add(index);
+  }
+  return indexes;
 }
 
 function toRecordValue(value: unknown, wrapDate: boolean): unknown {

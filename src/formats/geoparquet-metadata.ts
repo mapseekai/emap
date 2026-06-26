@@ -22,6 +22,15 @@ export interface GeoColumnMetadata {
   geometry_types?: string[];
   crs?: unknown;
   bbox?: number[];
+  covering?: {
+    bbox?: {
+      xmin: string[];
+      ymin: string[];
+      xmax: string[];
+      ymax: string[];
+    };
+    [key: string]: unknown;
+  };
 }
 
 /** Parsed GeoParquet `geo` file metadata. */
@@ -53,13 +62,15 @@ export const ARROW_EXTENSION_METADATA = 'ARROW:extension:metadata';
 
 /** Parse the `geo` key out of an Arrow schema metadata map, if present. */
 const EPSG_3857_PROJJSON = {
+  $schema: 'https://proj.org/schemas/v0.7/projjson.schema.json',
   type: 'ProjectedCRS',
   name: 'WGS 84 / Pseudo-Mercator',
   base_crs: {
     type: 'GeographicCRS',
     name: 'WGS 84',
-    datum_ensemble: {
-      name: 'World Geodetic System 1984 ensemble',
+    datum: {
+      type: 'GeodeticReferenceFrame',
+      name: 'World Geodetic System 1984',
       ellipsoid: {
         name: 'WGS 84',
         semi_major_axis: 6378137,
@@ -128,12 +139,23 @@ export function buildGeoMetadata(opts: {
   geometryTypes: string[];
   bbox?: number[];
   crs?: unknown;
+  bboxColumn?: string;
 }): string {
   const column: GeoColumnMetadata & Record<string, unknown> = {
     encoding: opts.encoding,
     geometry_types: opts.geometryTypes,
   };
   if (opts.bbox && opts.bbox.every((v) => Number.isFinite(v))) column.bbox = opts.bbox;
+  if (opts.bboxColumn) {
+    column.covering = {
+      bbox: {
+        xmin: [opts.bboxColumn, 'xmin'],
+        ymin: [opts.bboxColumn, 'ymin'],
+        xmax: [opts.bboxColumn, 'xmax'],
+        ymax: [opts.bboxColumn, 'ymax'],
+      },
+    };
+  }
   // GeoParquet: a missing `crs` key means the default OGC:CRS84. We still
   // write `crs:null` when the caller deliberately marks the export CRS as
   // unknown; the import path treats both forms as EPSG:4326 for compatibility.

@@ -41,8 +41,14 @@ export interface ToArrowTableOptions {
   layer?: number | string;
   /** Geometry column name; defaults to 'geometry'. */
   geometryColumn?: string;
+  /** Optional GeoParquet 1.1 covering bbox struct column name. */
+  bboxColumn?: string | false;
+  /** Reproject EPSG:3857 coordinates to GeoParquet's default OGC:CRS84 lon/lat output. */
+  reprojectToWgs84?: boolean;
   /** Optional authority lookup for writing full CRS PROJJSON objects. */
   crsProjjsonLookup?: CrsProjjsonLookup;
+  /** Pre-resolved GeoParquet PROJJSON CRS override. */
+  projjsonCrs?: unknown;
 }
 
 /**
@@ -70,10 +76,19 @@ export function toArrowTable(dataset: MapshaperDataset, opts: ToArrowTableOption
   const geometryColumn = opts.geometryColumn || 'geometry';
 
   const geometry = collectGeometry(shapes, arcs, geometryType, adapter);
+  const sourceCrsString = resolveDatasetCRSMetadata(dataset);
+  const reprojectToWgs84 = opts.reprojectToWgs84 === true && isWebMercatorCrs(sourceCrsString);
+  const outputGeometry = reprojectToWgs84 ? webMercatorGeometryToWgs84(geometry) : geometry;
+  const crs =
+    opts.projjsonCrs !== undefined
+      ? opts.projjsonCrs
+      : reprojectToWgs84
+        ? undefined
+        : crsStringToProjjson(sourceCrsString, opts.crsProjjsonLookup);
 
   const { geomData, encoding } = useWkb
-    ? buildWkbColumn(geometry)
-    : buildNativeColumn(geometry, geometryType);
+    ? buildWkbColumn(outputGeometry)
+    : buildNativeColumn(outputGeometry, geometryType);
 
   // Attribute columns
   const records = layer.data?.getRecords?.() ?? [];
@@ -86,8 +101,16 @@ export function toArrowTable(dataset: MapshaperDataset, opts: ToArrowTableOption
     children.push(data);
   }
 
+  const bboxColumn = opts.bboxColumn
+    ? uniqueColumnName(opts.bboxColumn, new Set([...fieldNames, geometryColumn]))
+    : null;
+  if (bboxColumn) {
+    const { field, data } = buildBBoxColumn(bboxColumn, outputGeometry);
+    fields.push(field);
+    children.push(data);
+  }
+
   // Geometry field: geoarrow extension metadata (+ crs when known)
-  const crs = crsStringToProjjson(resolveDatasetCRSMetadata(dataset), opts.crsProjjsonLookup);
   const extMeta = new Map<string, string>([
     [ARROW_EXTENSION_NAME, extensionNameFromEncoding(encoding)],
   ]);
@@ -104,8 +127,9 @@ export function toArrowTable(dataset: MapshaperDataset, opts: ToArrowTableOption
         columnName: geometryColumn,
         encoding,
         geometryTypes: geometry.geometryTypes,
-        bbox: geometry.bbox,
+        bbox: outputGeometry.bbox,
         crs,
+        bboxColumn: bboxColumn ?? undefined,
       }),
     ],
   ]);
@@ -179,6 +203,7 @@ function collectGeometry(
   const grow = new GrowableCoords();
   const features: CollectedGeometry['features'] = new Array(shapes.length);
   let maxParts = 0;
+  const geometryTypes = new Set<string>();
 
   for (let i = 0; i < shapes.length; i++) {
     const shape = shapes[i];
@@ -197,6 +222,7 @@ function collectGeometry(
       for (const p of points) grow.push(p[0], p[1]);
       features[i] = [start, grow.count] as CoordRun;
       maxParts = Math.max(maxParts, points.length);
+      geometryTypes.add(points.length > 1 ? 'MultiPoint' : 'Point');
       continue;
     }
 
@@ -215,6 +241,7 @@ function collectGeometry(
       const runs: CoordRun[] = exported.pathData.map((path) => grow.pushPath(path));
       features[i] = runs;
       maxParts = Math.max(maxParts, runs.length);
+      geometryTypes.add(runs.length > 1 ? 'MultiLineString' : 'LineString');
     } else {
       const groups = groupPolygonRings(exported.pathData, arcs, adapter);
       if (groups.length === 0) {
@@ -226,16 +253,9 @@ function collectGeometry(
       );
       features[i] = polygons;
       maxParts = Math.max(maxParts, polygons.length);
+      geometryTypes.add(polygons.length > 1 ? 'MultiPolygon' : 'Polygon');
     }
   }
-
-  const multi = maxParts > 1;
-  const geometryTypes =
-    geometryType === 'point'
-      ? [multi ? 'MultiPoint' : 'Point']
-      : geometryType === 'polyline'
-        ? [multi ? 'MultiLineString' : 'LineString']
-        : [multi ? 'MultiPolygon' : 'Polygon'];
 
   return {
     xs: grow.xs,
@@ -245,7 +265,41 @@ function collectGeometry(
     geometryType,
     maxParts,
     bbox: grow.bbox(),
-    geometryTypes,
+    geometryTypes: Array.from(geometryTypes),
+  };
+}
+
+const WEB_MERCATOR_RADIUS = 6378137;
+const RADIANS_TO_DEGREES = 180 / Math.PI;
+
+function isWebMercatorCrs(crsString: string | undefined): boolean {
+  return /^EPSG:3857$/i.test(crsString ?? '');
+}
+
+function webMercatorGeometryToWgs84(geometry: CollectedGeometry): CollectedGeometry {
+  const xs = new Float64Array(geometry.coordCount);
+  const ys = new Float64Array(geometry.coordCount);
+  let xmin = Infinity;
+  let ymin = Infinity;
+  let xmax = -Infinity;
+  let ymax = -Infinity;
+
+  for (let i = 0; i < geometry.coordCount; i++) {
+    const lon = (geometry.xs[i] / WEB_MERCATOR_RADIUS) * RADIANS_TO_DEGREES;
+    const lat = RADIANS_TO_DEGREES * (Math.PI * 0.5 - 2 * Math.atan(Math.exp(-geometry.ys[i] / WEB_MERCATOR_RADIUS)));
+    xs[i] = lon;
+    ys[i] = lat;
+    if (lon < xmin) xmin = lon;
+    if (lon > xmax) xmax = lon;
+    if (lat < ymin) ymin = lat;
+    if (lat > ymax) ymax = lat;
+  }
+
+  return {
+    ...geometry,
+    xs,
+    ys,
+    bbox: Number.isFinite(xmin) ? [xmin, ymin, xmax, ymax] : [],
   };
 }
 
@@ -348,6 +402,68 @@ function buildWkbColumn(geometry: CollectedGeometry): { geomData: Data; encoding
     nullCount,
   });
   return { geomData, encoding: 'WKB' };
+}
+
+function buildBBoxColumn(columnName: string, geometry: CollectedGeometry): { field: Field; data: Data } {
+  const n = geometry.features.length;
+  const xmin = new Float64Array(n);
+  const ymin = new Float64Array(n);
+  const xmax = new Float64Array(n);
+  const ymax = new Float64Array(n);
+
+  for (let i = 0; i < n; i++) {
+    const bbox = featureBBox(geometry, geometry.features[i]);
+    if (!bbox) continue;
+    xmin[i] = bbox[0];
+    ymin[i] = bbox[1];
+    xmax[i] = bbox[2];
+    ymax[i] = bbox[3];
+  }
+
+  const fields = ['xmin', 'ymin', 'xmax', 'ymax'].map((name) => new Field(name, new Float64(), false));
+  const type = new Struct(fields);
+  const { nullBitmap, nullCount } = packValidity(geometry.features);
+  const data = makeData({
+    type,
+    length: n,
+    nullBitmap,
+    nullCount,
+    children: [xmin, ymin, xmax, ymax].map((values) =>
+      makeData({ type: new Float64(), length: n, data: values, nullCount: 0 }),
+    ),
+  });
+  return { field: new Field(columnName, type, true), data };
+}
+
+function featureBBox(geometry: CollectedGeometry, feature: CollectedGeometry['features'][number]): number[] | null {
+  if (!feature) return null;
+  let xmin = Infinity;
+  let ymin = Infinity;
+  let xmax = -Infinity;
+  let ymax = -Infinity;
+
+  const visitRun = ([start, end]: CoordRun) => {
+    for (let i = start; i < end; i++) {
+      const x = geometry.xs[i];
+      const y = geometry.ys[i];
+      if (x < xmin) xmin = x;
+      if (x > xmax) xmax = x;
+      if (y < ymin) ymin = y;
+      if (y > ymax) ymax = y;
+    }
+  };
+
+  if (geometry.geometryType === 'point') {
+    visitRun(feature as CoordRun);
+  } else if (geometry.geometryType === 'polyline') {
+    for (const run of feature as CoordRun[]) visitRun(run);
+  } else {
+    for (const polygon of feature as CoordRun[][]) {
+      for (const ring of polygon) visitRun(ring);
+    }
+  }
+
+  return Number.isFinite(xmin) ? [xmin, ymin, xmax, ymax] : null;
 }
 
 function buildNativeColumn(
@@ -499,6 +615,14 @@ function collectFieldNames(records: Array<Record<string, unknown>>, rowCount: nu
     }
   }
   return names;
+}
+
+function uniqueColumnName(name: string, reserved: Set<string>): string {
+  if (!reserved.has(name)) return name;
+  for (let i = 1; ; i++) {
+    const candidate = `${name}_${i}`;
+    if (!reserved.has(candidate)) return candidate;
+  }
 }
 
 function buildAttributeColumn(

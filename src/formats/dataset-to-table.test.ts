@@ -1,6 +1,8 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { toArrowTable } from './dataset-to-table';
+import { fromArrowTable } from './table-to-dataset';
 import { parseGeoMetadata } from './geoparquet-metadata';
+import { decodeWkb } from './wkb';
 import { datasetFromGeoJSON } from './test-utils';
 
 const TWO_LAYER_INPUT = {
@@ -200,6 +202,171 @@ describe('toArrowTable', () => {
     const bbox = table.getChild('bbox')!;
     expect(bbox.isValid(0)).toBe(true);
     expect(bbox.isValid(1)).toBe(false);
+  });
+
+  it('writes complete EPSG:3857 PROJJSON metadata without datum ensembles', async () => {
+    const dataset = await datasetFromGeoJSON(TWO_LAYER_INPUT);
+    dataset.info = { ...dataset.info, crs_string: 'EPSG:3857' };
+
+    const table = toArrowTable(dataset, { encoding: 'wkb' });
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry as Record<
+      string,
+      unknown
+    >;
+    const crs = column.crs as Record<string, unknown>;
+    const crsJson = JSON.stringify(crs);
+    const baseCrs = crs.base_crs as Record<string, unknown>;
+    const datum = baseCrs.datum as Record<string, unknown>;
+    const axis = (crs.coordinate_system as { axis: Array<Record<string, unknown>> }).axis;
+
+    expect(crs).toMatchObject({
+      $schema: 'https://proj.org/schemas/v0.7/projjson.schema.json',
+      type: 'ProjectedCRS',
+      id: { authority: 'EPSG', code: 3857 },
+    });
+    expect(crsJson).not.toContain('datum_ensemble');
+    expect(datum.name).toBe('World Geodetic System 1984');
+    expect(axis.map((a) => [a.abbreviation, a.direction, a.unit])).toEqual([
+      ['X', 'east', 'metre'],
+      ['Y', 'north', 'metre'],
+    ]);
+  });
+
+  it('includes every observed polygon geometry type in metadata', async () => {
+    const dataset = await datasetFromGeoJSON({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { id: 1 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 1],
+                [0, 0],
+              ],
+            ],
+          },
+        },
+        {
+          type: 'Feature',
+          properties: { id: 2 },
+          geometry: {
+            type: 'MultiPolygon',
+            coordinates: [
+              [
+                [
+                  [2, 2],
+                  [3, 2],
+                  [3, 3],
+                  [2, 3],
+                  [2, 2],
+                ],
+              ],
+              [
+                [
+                  [4, 4],
+                  [5, 4],
+                  [5, 5],
+                  [4, 5],
+                  [4, 4],
+                ],
+              ],
+            ],
+          },
+        },
+      ],
+    });
+
+    const table = toArrowTable(dataset, { encoding: 'wkb' });
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry;
+
+    expect(column?.geometry_types).toEqual(['Polygon', 'MultiPolygon']);
+  });
+
+  it('writes optional GeoParquet bbox covering metadata and values', async () => {
+    const dataset = await datasetFromGeoJSON({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { id: 1 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [2, -1],
+                [4, -1],
+                [4, 3],
+                [2, 3],
+                [2, -1],
+              ],
+            ],
+          },
+        },
+        { type: 'Feature', properties: { id: 2 }, geometry: null },
+      ],
+    });
+
+    const table = toArrowTable(dataset, { encoding: 'wkb', bboxColumn: 'bbox' });
+    const column = parseGeoMetadata(table.schema.metadata)?.columns.geometry;
+    expect(column?.covering?.bbox).toEqual({
+      xmin: ['bbox', 'xmin'],
+      ymin: ['bbox', 'ymin'],
+      xmax: ['bbox', 'xmax'],
+      ymax: ['bbox', 'ymax'],
+    });
+    expect(table.schema.fields.map((field) => field.name)).toEqual(['id', 'bbox', 'geometry']);
+    expect(table.getChild('bbox')!.isValid(0)).toBe(true);
+    expect(table.getChild('bbox')!.isValid(1)).toBe(false);
+    expect(table.getChild('bbox')!.get(0)?.toJSON()).toEqual({ xmin: 2, ymin: -1, xmax: 4, ymax: 3 });
+  });
+
+  it('can reproject EPSG:3857 output to GeoParquet default WGS84 lon/lat', async () => {
+    const lon = 120;
+    const lat = 30;
+    const radius = 6378137;
+    const x = radius * (lon * Math.PI / 180);
+    const y = radius * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI / 180) / 2));
+    const dataset = await datasetFromGeoJSON({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { id: 1 },
+          geometry: { type: 'Point', coordinates: [x, y] },
+        },
+      ],
+    });
+    dataset.info = { ...dataset.info, crs_string: 'EPSG:3857' };
+
+    const table = toArrowTable(dataset, {
+      encoding: 'wkb',
+      bboxColumn: 'bbox',
+      reprojectToWgs84: true,
+    });
+    expect(parseGeoMetadata(table.schema.metadata)?.columns.geometry).not.toHaveProperty('crs');
+
+    const decoded = decodeWkb(table.getChild('geometry')!.get(0) as Uint8Array);
+    expect(decoded?.type).toBe('point');
+    const point = decoded?.type === 'point' ? decoded.points[0] : null;
+    expect(point?.[0]).toBeCloseTo(lon, 8);
+    expect(point?.[1]).toBeCloseTo(lat, 8);
+    const bbox = table.getChild('bbox')!.get(0)?.toJSON() as Record<string, number>;
+    expect(bbox.xmin).toBeCloseTo(lon, 8);
+    expect(bbox.ymin).toBeCloseTo(lat, 8);
+    expect(bbox.xmax).toBeCloseTo(lon, 8);
+    expect(bbox.ymax).toBeCloseTo(lat, 8);
+
+    const back = fromArrowTable(table);
+    expect(back.info?.crs_string).toBe('EPSG:4326');
+    const importedPoint = back.layers[0].shapes?.[0]?.[0];
+    expect(importedPoint?.[0]).toBeCloseTo(lon, 8);
+    expect(importedPoint?.[1]).toBeCloseTo(lat, 8);
   });
 
   it('degrades mixed-type attribute columns to strings', async () => {
