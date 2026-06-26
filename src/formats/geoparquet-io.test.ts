@@ -5,6 +5,7 @@ import { datasetFromGeoJSON, injectParquetWasmForTests } from './test-utils';
 import { tableFromIPC } from 'apache-arrow';
 import { parseGeoMetadata } from './geoparquet-metadata';
 import type { ParquetWasmModule } from './parquet-wasm-loader';
+import { readFile } from 'node:fs/promises';
 
 let wasm: ParquetWasmModule;
 
@@ -13,6 +14,21 @@ beforeAll(async () => {
 }, 30000);
 
 afterAll(() => setParquetWasm(null));
+
+const localEpsgIndexFetch: typeof fetch = async (input) => {
+  const url = new URL(
+    typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+  );
+  const match = /\/s\/([^/]+\.json)$/.exec(url.pathname);
+  if (!match) return new Response(null, { status: 404 });
+  const bytes = await readFile(
+    new URL(`../../node_modules/@zwishing/epsg-index/s/${match[1]}`, import.meta.url),
+  );
+  return new Response(bytes, {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+};
 
 const FC = {
   type: 'FeatureCollection',
@@ -66,7 +82,7 @@ const FC = {
 describe('GeoParquet round trip', () => {
   it('round-trips polygons via WKB encoding (default)', async () => {
     const dataset = await datasetFromGeoJSON(FC);
-    const bytes = await exportGeoParquet(dataset);
+    const bytes = await exportGeoParquet(dataset, { reprojectToWgs84: false });
     expect(bytes.length).toBeGreaterThan(0);
     // parquet magic
     expect(String.fromCharCode(...bytes.subarray(0, 4))).toBe('PAR1');
@@ -79,6 +95,54 @@ describe('GeoParquet round trip', () => {
     const recs = layer.data!.getRecords!() as Array<Record<string, unknown>>;
     expect(recs.map((r) => r.name)).toEqual(['alpha', 'beta']);
     expect(recs.map((r) => r.pop)).toEqual([1200, 3400]);
+    expect(recs[0]).not.toHaveProperty('bbox');
+    expect(recs[1]).not.toHaveProperty('bbox');
+  });
+
+  it('writes GeoParquet bbox covering metadata by default', async () => {
+    const dataset = await datasetFromGeoJSON(FC);
+    const bytes = await exportGeoParquet(dataset, { reprojectToWgs84: false });
+    const file = await wasm.ParquetFile.fromFile(new Blob([bytes]));
+    const fileGeo = file.metadata().fileMetadata().keyValueMetadata().get('geo');
+    const column = parseGeoMetadata(new Map([['geo', fileGeo as string]]))?.columns.geometry;
+    expect(column?.covering?.bbox).toEqual({
+      xmin: ['bbox', 'xmin'],
+      ymin: ['bbox', 'ymin'],
+      xmax: ['bbox', 'xmax'],
+      ymax: ['bbox', 'ymax'],
+    });
+
+    const table = tableFromIPC(wasm.readParquet(bytes).intoIPCStream());
+    expect(table.schema.fields.map((field) => field.name)).toContain('bbox');
+    expect(table.getChild('bbox')!.get(0)?.toJSON()).toEqual({
+      xmin: 0,
+      ymin: 0,
+      xmax: 4,
+      ymax: 4,
+    });
+  });
+
+  it('does not declare geoarrow extension types in the embedded arrow schema', async () => {
+    // GDAL ≥ 3.11 (libarrow ≥ 21) rejects parquet columns typed as
+    // `geoarrow.wkb` Arrow extensions unless the parquet column uses the
+    // native GEOMETRY/GEOGRAPHY logical type, which parquet-wasm cannot
+    // write — the column then loses its CRS ("coordinateSystem: null" in
+    // ogrinfo). The parquet container must rely on `geo` metadata alone.
+    const dataset = await datasetFromGeoJSON(FC);
+    dataset.info = { ...dataset.info, crs_string: 'EPSG:3857' };
+    const bytes = await exportGeoParquet(dataset, { reprojectToWgs84: false });
+
+    const table = tableFromIPC(wasm.readParquet(bytes).intoIPCStream());
+    const geomField = table.schema.fields.find((f) => f.name === 'geometry');
+    expect(geomField).toBeDefined();
+    expect(geomField!.metadata.get('ARROW:extension:name')).toBeUndefined();
+    expect(geomField!.metadata.get('ARROW:extension:metadata')).toBeUndefined();
+
+    // Still a fully usable GeoParquet: geo metadata intact, CRS round-trips.
+    expect(parseGeoMetadata(table.schema.metadata)?.columns.geometry.encoding).toBe('WKB');
+    const back = await importGeoParquet(bytes);
+    expect(back.layers[0].shapes).toHaveLength(2);
+    expect(back.info?.crs_string).toBe('EPSG:3857');
   });
 
   it('round-trips via native encoding option', async () => {
@@ -89,16 +153,18 @@ describe('GeoParquet round trip', () => {
     expect(back.layers[0].geometry_type).toBe('polygon');
   });
 
-  it('preserves geo metadata through the parquet container', async () => {
+  it('can reproject EPSG:3857 exports to default WGS84 lon/lat when requested', async () => {
     const dataset = await datasetFromGeoJSON(FC);
     dataset.info = { ...dataset.info, crs_string: 'EPSG:3857' };
-    const bytes = await exportGeoParquet(dataset);
+    const bytes = await exportGeoParquet(dataset, { reprojectToWgs84: true });
 
     const file = await wasm.ParquetFile.fromFile(new Blob([bytes]));
     try {
       const fileGeo = file.metadata().fileMetadata().keyValueMetadata().get('geo');
       expect(typeof fileGeo).toBe('string');
-      expect(parseGeoMetadata(new Map([['geo', fileGeo as string]]))?.primary_column).toBe('geometry');
+      expect(parseGeoMetadata(new Map([['geo', fileGeo as string]]))?.primary_column).toBe(
+        'geometry',
+      );
     } finally {
       file.free?.();
     }
@@ -109,7 +175,21 @@ describe('GeoParquet round trip', () => {
     expect(geo?.version).toBe('1.1.0');
     expect(geo?.primary_column).toBe('geometry');
     expect(geo?.columns.geometry.encoding).toBe('WKB');
-    expect(geo?.columns.geometry.geometry_types).toEqual(['MultiPolygon']);
+    expect(geo?.columns.geometry.geometry_types).toEqual(['Polygon', 'MultiPolygon']);
+    expect(geo?.columns.geometry).not.toHaveProperty('crs');
+    expect(geo?.columns.geometry.bbox?.every((value) => Math.abs(value) <= 180)).toBe(true);
+
+    const back = await importGeoParquet(bytes);
+    expect(back.info?.crs_string).toBe('EPSG:4326');
+  });
+
+  it('preserves EPSG:3857 geo metadata by default', async () => {
+    const dataset = await datasetFromGeoJSON(FC);
+    dataset.info = { ...dataset.info, crs_string: 'EPSG:3857' };
+    const bytes = await exportGeoParquet(dataset);
+    const table = tableFromIPC(wasm.readParquet(bytes).intoIPCStream());
+    const geo = parseGeoMetadata(table.schema.metadata);
+
     expect(geo?.columns.geometry.bbox).toEqual([0, 0, 22, 22]);
     expect(geo?.columns.geometry.crs).toMatchObject({
       type: 'ProjectedCRS',
@@ -117,6 +197,7 @@ describe('GeoParquet round trip', () => {
       id: { authority: 'EPSG', code: 3857 },
     });
     expect(geo?.columns.geometry.crs).toHaveProperty('base_crs');
+    expect(geo?.columns.geometry.crs).toHaveProperty('base_crs.datum');
     expect(geo?.columns.geometry.crs).toHaveProperty('coordinate_system');
 
     const back = await importGeoParquet(bytes);
@@ -126,7 +207,7 @@ describe('GeoParquet round trip', () => {
   it('writes full PROJJSON CRS metadata for EPSG codes from epsg-index', async () => {
     const dataset = await datasetFromGeoJSON(FC);
     dataset.info = { ...dataset.info, crs_string: 'EPSG:4490' };
-    const bytes = await exportGeoParquet(dataset);
+    const bytes = await exportGeoParquet(dataset, { fetch: localEpsgIndexFetch });
 
     const file = await wasm.ParquetFile.fromFile(new Blob([bytes]));
     try {
@@ -139,8 +220,17 @@ describe('GeoParquet round trip', () => {
         name: 'China Geodetic Coordinate System 2000',
         id: { authority: 'EPSG', code: 4490 },
       });
+      expect(fileCrs).toHaveProperty(
+        '$schema',
+        'https://proj.org/schemas/v0.7/projjson.schema.json',
+      );
       expect(fileCrs).toHaveProperty('datum');
       expect(fileCrs).toHaveProperty('coordinate_system');
+      expect(
+        (fileCrs.coordinate_system as { axis: Array<{ direction: string }> }).axis.map(
+          (axis) => axis.direction,
+        ),
+      ).toEqual(['north', 'east']);
     } finally {
       file.free?.();
     }
@@ -151,9 +241,41 @@ describe('GeoParquet round trip', () => {
       type: 'GeographicCRS',
       id: { authority: 'EPSG', code: 4490 },
     });
+    expect(geo?.columns.geometry.crs).toHaveProperty(
+      '$schema',
+      'https://proj.org/schemas/v0.7/projjson.schema.json',
+    );
+    expect(
+      (
+        geo?.columns.geometry.crs as {
+          coordinate_system: { axis: Array<{ direction: string }> };
+        }
+      ).coordinate_system.axis.map((axis) => axis.direction),
+    ).toEqual(['north', 'east']);
 
     const back = await importGeoParquet(bytes);
     expect(back.info?.crs_string).toBe('EPSG:4490');
+  });
+
+  it('rejects export when a known EPSG CRS cannot resolve to PROJJSON', async () => {
+    const dataset = await datasetFromGeoJSON(FC);
+    dataset.info = { ...dataset.info, crs_string: 'EPSG:4490' };
+
+    await expect(
+      exportGeoParquet(dataset, {
+        baseUrl: 'https://export-epsg-failure.example/pkg/',
+        fetch: async () => new Response('missing', { status: 404, statusText: 'Not Found' }),
+      }),
+    ).rejects.toThrow('EPSG:4490 PROJJSON fetch failed with HTTP 404 Not Found');
+  });
+
+  it('rejects export for custom CRS labels instead of writing unknown CRS', async () => {
+    const dataset = await datasetFromGeoJSON(FC);
+    dataset.info = { ...dataset.info, crs_string: '+proj=utm +zone=10' };
+
+    await expect(exportGeoParquet(dataset)).rejects.toThrow(
+      "GeoParquet export cannot express CRS '+proj=utm +zone=10' as PROJJSON",
+    );
   });
 
   it('omits CRS metadata for GeoParquet default WGS84 lon/lat data', async () => {
