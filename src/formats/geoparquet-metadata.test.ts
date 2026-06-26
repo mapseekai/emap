@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { findAuthorityProjjson } from './epsg-projjson';
-import { buildGeoMetadata, crsStringToProjjson, projjsonToCrsString } from './geoparquet-metadata';
+import {
+  buildGeoMetadata,
+  crsStringToProjjson,
+  crsStringToProjjsonAsync,
+  projjsonToCrsString,
+} from './geoparquet-metadata';
 
 describe('GeoParquet CRS metadata semantics', () => {
   it('treats missing crs as the GeoParquet default outside projjsonToCrsString', () => {
@@ -31,10 +36,7 @@ describe('GeoParquet CRS metadata semantics', () => {
   });
 
   it('resolves EPSG codes to full PROJJSON', () => {
-    const crs = crsStringToProjjson('EPSG:4490', findAuthorityProjjson) as Record<
-      string,
-      unknown
-    >;
+    const crs = crsStringToProjjson('EPSG:4490', findAuthorityProjjson) as Record<string, unknown>;
 
     expect(crs).toMatchObject({
       type: 'GeographicCRS',
@@ -43,6 +45,22 @@ describe('GeoParquet CRS metadata semantics', () => {
     });
     expect(crs).toHaveProperty('coordinate_system');
     expect(projjsonToCrsString(crs)).toBe('EPSG:4490');
+  });
+
+  it('rejects known EPSG CRS when strict PROJJSON resolution fails', async () => {
+    await expect(
+      crsStringToProjjsonAsync('EPSG:4490', async () => undefined, { strict: true }),
+    ).rejects.toThrow('GeoParquet export requires PROJJSON for EPSG:4490');
+  });
+
+  it('rejects custom CRS labels in strict GeoParquet export mode', async () => {
+    await expect(
+      crsStringToProjjsonAsync('+proj=utm +zone=10', undefined, { strict: true }),
+    ).rejects.toThrow("GeoParquet export cannot express CRS '+proj=utm +zone=10' as PROJJSON");
+  });
+
+  it('keeps permissive Arrow metadata behavior for custom CRS labels', () => {
+    expect(crsStringToProjjson('+proj=utm +zone=10')).toBeNull();
   });
 
   it('omits CRS for GeoParquet default WGS84 lon/lat data', () => {

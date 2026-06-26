@@ -32,6 +32,21 @@ export interface GeoMetadata {
 }
 
 export type CrsProjjsonLookup = (authority: string, code: string) => unknown | undefined;
+export type CrsProjjsonAsyncLookup = (
+  authority: string,
+  code: string,
+) => Promise<unknown | undefined>;
+
+export interface CrsStringToProjjsonOptions {
+  strict?: boolean;
+}
+
+export class GeoParquetCrsError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GeoParquetCrsError';
+  }
+}
 
 export const ARROW_EXTENSION_NAME = 'ARROW:extension:name';
 export const ARROW_EXTENSION_METADATA = 'ARROW:extension:metadata';
@@ -62,10 +77,23 @@ const EPSG_3857_PROJJSON = {
   },
   conversion: {
     name: 'Popular Visualisation Pseudo-Mercator',
-    method: { name: 'Popular Visualisation Pseudo Mercator', id: { authority: 'EPSG', code: 1024 } },
+    method: {
+      name: 'Popular Visualisation Pseudo Mercator',
+      id: { authority: 'EPSG', code: 1024 },
+    },
     parameters: [
-      { name: 'Latitude of natural origin', value: 0, unit: 'degree', id: { authority: 'EPSG', code: 8801 } },
-      { name: 'Longitude of natural origin', value: 0, unit: 'degree', id: { authority: 'EPSG', code: 8802 } },
+      {
+        name: 'Latitude of natural origin',
+        value: 0,
+        unit: 'degree',
+        id: { authority: 'EPSG', code: 8801 },
+      },
+      {
+        name: 'Longitude of natural origin',
+        value: 0,
+        unit: 'degree',
+        id: { authority: 'EPSG', code: 8802 },
+      },
       { name: 'False easting', value: 0, unit: 'metre', id: { authority: 'EPSG', code: 8806 } },
       { name: 'False northing', value: 0, unit: 'metre', id: { authority: 'EPSG', code: 8807 } },
     ],
@@ -169,16 +197,31 @@ export function projjsonToCrsString(crs: unknown): string | null {
  * become `crs:null`, and non-default authority CRS values are written as
  * PROJJSON when possible.
  */
+function unsupportedCrsResult(
+  crsString: string,
+  opts: CrsStringToProjjsonOptions | undefined,
+): null {
+  const message = `GeoParquet export cannot express CRS '${crsString}' as PROJJSON`;
+  if (opts?.strict) throw new GeoParquetCrsError(message);
+  console.warn(`emap formats: cannot express CRS '${crsString}' as PROJJSON; marking unknown`);
+  return null;
+}
+
+function unresolvedEpsgResult(code: string, opts: CrsStringToProjjsonOptions | undefined): null {
+  const message = `GeoParquet export requires PROJJSON for EPSG:${code}, but it could not be resolved`;
+  if (opts?.strict) throw new GeoParquetCrsError(message);
+  console.warn(`emap formats: EPSG:${code} PROJJSON not found; marking CRS unknown`);
+  return null;
+}
+
 export function crsStringToProjjson(
   crsString: string | undefined,
   lookup?: CrsProjjsonLookup,
+  opts?: CrsStringToProjjsonOptions,
 ): unknown {
   if (!crsString) return null;
   const m = /^(EPSG|OGC):([\w]+)$/i.exec(crsString.trim());
-  if (!m) {
-    console.warn(`emap formats: cannot express CRS '${crsString}' as PROJJSON; marking unknown`);
-    return null;
-  }
+  if (!m) return unsupportedCrsResult(crsString, opts);
   const authority = m[1].toUpperCase();
   const code = m[2];
   if (
@@ -189,18 +232,77 @@ export function crsStringToProjjson(
   }
 
   const resolved = lookup?.(authority, code);
-  if (resolved !== undefined) return resolved;
+  if (resolved !== undefined) return normalizeProjjsonForExport(resolved);
 
   if (authority === 'EPSG' && code === '3857') {
     return EPSG_3857_PROJJSON;
   }
 
   if (authority === 'EPSG') {
-    return {
-      name: `${authority}:${code}`,
-      id: { authority, code: /^\d+$/.test(code) ? Number(code) : code },
-    };
+    return unresolvedEpsgResult(code, opts);
   }
 
-  return null;
+  return unsupportedCrsResult(crsString, opts);
+}
+
+export async function crsStringToProjjsonAsync(
+  crsString: string | undefined,
+  lookup?: CrsProjjsonAsyncLookup,
+  opts?: CrsStringToProjjsonOptions,
+): Promise<unknown> {
+  if (!crsString) return null;
+  const m = /^(EPSG|OGC):([\w:]+)$/i.exec(crsString.trim());
+  if (!m) return unsupportedCrsResult(crsString, opts);
+  const authority = m[1].toUpperCase();
+  const code = m[2];
+  if (
+    (authority === 'EPSG' && code === '4326') ||
+    (authority === 'OGC' && code.toUpperCase() === 'CRS84')
+  ) {
+    return undefined;
+  }
+
+  if (authority === 'EPSG' && code === '3857') {
+    return EPSG_3857_PROJJSON;
+  }
+
+  const resolved = await lookup?.(authority, code);
+  if (resolved !== undefined) return normalizeProjjsonForExport(resolved);
+
+  if (authority === 'EPSG') {
+    return unresolvedEpsgResult(code, opts);
+  }
+
+  return unsupportedCrsResult(crsString, opts);
+}
+
+function normalizeProjjsonForExport(value: unknown): unknown {
+  return replaceDatumEnsembles(value);
+}
+
+function replaceDatumEnsembles(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(replaceDatumEnsembles);
+  if (!value || typeof value !== 'object') return value;
+  const input = value as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+
+  for (const [key, child] of Object.entries(input)) {
+    if (key !== 'datum_ensemble') out[key] = replaceDatumEnsembles(child);
+  }
+
+  if (!('datum' in out) && input.datum_ensemble && typeof input.datum_ensemble === 'object') {
+    const ensemble = input.datum_ensemble as Record<string, unknown>;
+    out.datum = replaceDatumEnsembles({
+      type: 'GeodeticReferenceFrame',
+      name: datumNameFromEnsemble(ensemble.name),
+      ellipsoid: ensemble.ellipsoid,
+    });
+  }
+
+  return out;
+}
+
+function datumNameFromEnsemble(name: unknown): unknown {
+  if (typeof name !== 'string') return name;
+  return name.replace(/\s+ensemble$/i, '');
 }
