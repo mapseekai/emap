@@ -23,6 +23,9 @@ const localEpsgIndexFetch: typeof fetch = async (input) => {
   });
 };
 
+const epsg4490AssetUrl = (baseUrl: string): string =>
+  new URL(findEpsgProjjsonPath('4490')!, baseUrl).toString();
+
 describe('EPSG PROJJSON asset lookup', () => {
   it('maps EPSG codes to epsg-index asset paths', () => {
     expect(findEpsgProjjsonPath('4490')).toMatch(/^s\/.+\.json$/);
@@ -49,43 +52,61 @@ describe('EPSG PROJJSON asset lookup', () => {
   });
 
   it('rejects when the EPSG asset response is not OK', async () => {
+    const baseUrl = 'https://http-failure.example/pkg/';
+
     await expect(
       findEpsgProjjsonAsync('4490', {
-        baseUrl: 'https://http-failure.example/pkg/',
+        baseUrl,
         fetch: async () => new Response('missing', { status: 404, statusText: 'Not Found' }),
       }),
-    ).rejects.toThrow('EPSG:4490 PROJJSON fetch failed with HTTP 404 Not Found');
+    ).rejects.toThrow(
+      `EPSG:4490 PROJJSON fetch failed with HTTP 404 Not Found from ${epsg4490AssetUrl(baseUrl)}`,
+    );
   });
 
   it('rejects when the EPSG asset is not JSON', async () => {
+    const baseUrl = 'https://json-failure.example/pkg/';
+
     await expect(
       findEpsgProjjsonAsync('4490', {
-        baseUrl: 'https://json-failure.example/pkg/',
+        baseUrl,
         fetch: async () => new Response('{', { status: 200 }),
       }),
-    ).rejects.toThrow('EPSG:4490 PROJJSON asset could not be parsed');
+    ).rejects.toThrow(
+      `EPSG:4490 PROJJSON asset could not be parsed from ${epsg4490AssetUrl(baseUrl)}`,
+    );
   });
 
   it('rejects with fetch diagnostics when the EPSG asset request fails before a response', async () => {
+    const baseUrl = 'https://network-failure.example/pkg/';
+    const cause = new TypeError('network down');
+
     await expect(
       findEpsgProjjsonAsync('4490', {
-        baseUrl: 'https://network-failure.example/pkg/',
+        baseUrl,
         fetch: async () => {
-          throw new TypeError('network down');
+          throw cause;
         },
       }),
-    ).rejects.toThrow('EPSG:4490 PROJJSON fetch failed');
+    ).rejects.toMatchObject({
+      cause,
+      message: `EPSG:4490 PROJJSON fetch failed from ${epsg4490AssetUrl(baseUrl)}`,
+    });
   });
 
   it('rejects when no fetch implementation is available', async () => {
     const originalFetch = globalThis.fetch;
     try {
       Object.defineProperty(globalThis, 'fetch', { value: undefined, configurable: true });
+      const baseUrl = 'https://missing-fetch.example/pkg/';
+
       await expect(
         findEpsgProjjsonAsync('4490', {
-          baseUrl: 'https://missing-fetch.example/pkg/',
+          baseUrl,
         }),
-      ).rejects.toThrow('EPSG:4490 PROJJSON fetch requires a fetch implementation');
+      ).rejects.toThrow(
+        `EPSG:4490 PROJJSON fetch requires a fetch implementation for ${epsg4490AssetUrl(baseUrl)}`,
+      );
     } finally {
       Object.defineProperty(globalThis, 'fetch', { value: originalFetch, configurable: true });
     }
