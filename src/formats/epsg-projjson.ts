@@ -9,7 +9,7 @@ export interface EpsgProjjsonFetchOptions {
 }
 
 const pathCache = new Map<string, string | null>();
-const projjsonCache = new Map<string, unknown | Error>();
+const projjsonCache = new Map<string, unknown>();
 
 export class EpsgProjjsonError extends Error {
   constructor(message: string) {
@@ -68,7 +68,6 @@ export async function findEpsgProjjsonAsync(
   const baseUrl = opts.baseUrl ?? DEFAULT_EPSG_PROJJSON_BASE_URL;
   const url = new URL(path, baseUrl).toString();
   const cached = projjsonCache.get(url);
-  if (cached instanceof Error) throw cached;
   if (cached !== undefined) return cached;
 
   const fetchImpl = opts.fetch ?? globalThis.fetch;
@@ -76,7 +75,6 @@ export async function findEpsgProjjsonAsync(
     const error = new EpsgProjjsonError(
       `EPSG:${normalized} PROJJSON fetch requires a fetch implementation`,
     );
-    projjsonCache.set(url, error);
     throw error;
   }
 
@@ -86,7 +84,6 @@ export async function findEpsgProjjsonAsync(
       const error = new EpsgProjjsonError(
         `EPSG:${normalized} PROJJSON fetch failed with HTTP ${response.status} ${response.statusText}`.trim(),
       );
-      projjsonCache.set(url, error);
       throw error;
     }
     const projjson = await response.json();
@@ -95,7 +92,6 @@ export async function findEpsgProjjsonAsync(
   } catch (err) {
     if (err instanceof EpsgProjjsonError) throw err;
     const error = new EpsgProjjsonError(`EPSG:${normalized} PROJJSON asset could not be parsed`);
-    projjsonCache.set(url, error);
     throw error;
   }
 }

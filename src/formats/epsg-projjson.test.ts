@@ -1,7 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import {
+  findAuthorityProjjson,
   findAuthorityProjjsonAsync,
+  findEpsgProjjson,
   findEpsgProjjsonAsync,
   findEpsgProjjsonPath,
 } from './epsg-projjson';
@@ -25,6 +27,11 @@ describe('EPSG PROJJSON asset lookup', () => {
   it('maps EPSG codes to epsg-index asset paths', () => {
     expect(findEpsgProjjsonPath('4490')).toMatch(/^s\/.+\.json$/);
     expect(findEpsgProjjsonPath(' EPSG:4490 ')).toBeUndefined();
+  });
+
+  it('keeps sync EPSG lookup as an undefined compatibility hook', () => {
+    expect(findEpsgProjjson('4490')).toBeUndefined();
+    expect(findAuthorityProjjson('EPSG', '4490')).toBeUndefined();
   });
 
   it('loads complete PROJJSON through an injected fetch', async () => {
@@ -57,6 +64,40 @@ describe('EPSG PROJJSON asset lookup', () => {
         fetch: async () => new Response('{', { status: 200 }),
       }),
     ).rejects.toThrow('EPSG:4490 PROJJSON asset could not be parsed');
+  });
+
+  it('rejects when no fetch implementation is available', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      Object.defineProperty(globalThis, 'fetch', { value: undefined, configurable: true });
+      await expect(
+        findEpsgProjjsonAsync('4490', {
+          baseUrl: 'https://missing-fetch.example/pkg/',
+        }),
+      ).rejects.toThrow('EPSG:4490 PROJJSON fetch requires a fetch implementation');
+    } finally {
+      Object.defineProperty(globalThis, 'fetch', { value: originalFetch, configurable: true });
+    }
+  });
+
+  it('does not cache failed EPSG asset fetches against later retries', async () => {
+    await expect(
+      findEpsgProjjsonAsync('4490', {
+        baseUrl: 'https://retry.example/pkg/',
+        fetch: async () => new Response('missing', { status: 404, statusText: 'Not Found' }),
+      }),
+    ).rejects.toThrow('EPSG:4490 PROJJSON fetch failed with HTTP 404 Not Found');
+
+    const crs = (await findEpsgProjjsonAsync('4490', {
+      baseUrl: 'https://retry.example/pkg/',
+      fetch: localEpsgIndexFetch,
+    })) as Record<string, unknown>;
+
+    expect(crs).toMatchObject({
+      type: 'GeographicCRS',
+      name: 'China Geodetic Coordinate System 2000',
+      id: { authority: 'EPSG', code: 4490 },
+    });
   });
 
   it('returns undefined for numeric EPSG codes that are absent from the path table', async () => {
