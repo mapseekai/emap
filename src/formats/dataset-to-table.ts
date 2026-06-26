@@ -286,7 +286,9 @@ function webMercatorGeometryToWgs84(geometry: CollectedGeometry): CollectedGeome
 
   for (let i = 0; i < geometry.coordCount; i++) {
     const lon = (geometry.xs[i] / WEB_MERCATOR_RADIUS) * RADIANS_TO_DEGREES;
-    const lat = RADIANS_TO_DEGREES * (Math.PI * 0.5 - 2 * Math.atan(Math.exp(-geometry.ys[i] / WEB_MERCATOR_RADIUS)));
+    const lat =
+      RADIANS_TO_DEGREES *
+      (Math.PI * 0.5 - 2 * Math.atan(Math.exp(-geometry.ys[i] / WEB_MERCATOR_RADIUS)));
     xs[i] = lon;
     ys[i] = lat;
     if (lon < xmin) xmin = lon;
@@ -404,7 +406,10 @@ function buildWkbColumn(geometry: CollectedGeometry): { geomData: Data; encoding
   return { geomData, encoding: 'WKB' };
 }
 
-function buildBBoxColumn(columnName: string, geometry: CollectedGeometry): { field: Field; data: Data } {
+function buildBBoxColumn(
+  columnName: string,
+  geometry: CollectedGeometry,
+): { field: Field; data: Data } {
   const n = geometry.features.length;
   const xmin = new Float64Array(n);
   const ymin = new Float64Array(n);
@@ -420,7 +425,9 @@ function buildBBoxColumn(columnName: string, geometry: CollectedGeometry): { fie
     ymax[i] = bbox[3];
   }
 
-  const fields = ['xmin', 'ymin', 'xmax', 'ymax'].map((name) => new Field(name, new Float64(), false));
+  const fields = ['xmin', 'ymin', 'xmax', 'ymax'].map(
+    (name) => new Field(name, new Float64(), false),
+  );
   const type = new Struct(fields);
   const { nullBitmap, nullCount } = packValidity(geometry.features);
   const data = makeData({
@@ -435,7 +442,10 @@ function buildBBoxColumn(columnName: string, geometry: CollectedGeometry): { fie
   return { field: new Field(columnName, type, true), data };
 }
 
-function featureBBox(geometry: CollectedGeometry, feature: CollectedGeometry['features'][number]): number[] | null {
+function featureBBox(
+  geometry: CollectedGeometry,
+  feature: CollectedGeometry['features'][number],
+): number[] | null {
   if (!feature) return null;
   let xmin = Infinity;
   let ymin = Infinity;

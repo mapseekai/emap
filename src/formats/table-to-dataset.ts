@@ -40,7 +40,11 @@ export function fromArrowTable(table: Table, opts: FromArrowTableOptions = {}): 
     );
   }
 
-  const records = buildRecords(table, geom?.fieldIndex ?? -1, getCoveringFieldIndexes(table, geom?.name));
+  const records = buildRecords(
+    table,
+    geom?.fieldIndex ?? -1,
+    getCoveringFieldIndexes(table, geom?.name),
+  );
   const importer = adapter.createPathImporter({});
   const geomVector = geom ? table.getChildAt(geom.fieldIndex) : null;
 

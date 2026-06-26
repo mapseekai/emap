@@ -111,9 +111,9 @@ describe('toArrowTable', () => {
       unknown
     >;
     expect(column.crs).toBeNull();
-    expect(JSON.parse(table.schema.fields.at(-1)!.metadata.get('ARROW:extension:metadata')!)).toEqual(
-      { crs: null },
-    );
+    expect(
+      JSON.parse(table.schema.fields.at(-1)!.metadata.get('ARROW:extension:metadata')!),
+    ).toEqual({ crs: null });
   });
 
   it('writes crs:null when source data has no explicit CRS metadata', async () => {
@@ -323,15 +323,20 @@ describe('toArrowTable', () => {
     expect(table.schema.fields.map((field) => field.name)).toEqual(['id', 'bbox', 'geometry']);
     expect(table.getChild('bbox')!.isValid(0)).toBe(true);
     expect(table.getChild('bbox')!.isValid(1)).toBe(false);
-    expect(table.getChild('bbox')!.get(0)?.toJSON()).toEqual({ xmin: 2, ymin: -1, xmax: 4, ymax: 3 });
+    expect(table.getChild('bbox')!.get(0)?.toJSON()).toEqual({
+      xmin: 2,
+      ymin: -1,
+      xmax: 4,
+      ymax: 3,
+    });
   });
 
   it('can reproject EPSG:3857 output to GeoParquet default WGS84 lon/lat', async () => {
     const lon = 120;
     const lat = 30;
     const radius = 6378137;
-    const x = radius * (lon * Math.PI / 180);
-    const y = radius * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI / 180) / 2));
+    const x = radius * ((lon * Math.PI) / 180);
+    const y = radius * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 180 / 2));
     const dataset = await datasetFromGeoJSON({
       type: 'FeatureCollection',
       features: [
