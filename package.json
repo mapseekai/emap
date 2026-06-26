@@ -99,16 +99,16 @@
     "@rollup/plugin-commonjs": "^25.0.0",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.0.0",
-    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-terser": "^1.0.0",
     "@rollup/plugin-typescript": "^11.0.0",
-    "esbuild": "^0.21.5",
+    "esbuild": "^0.25.12",
     "jsdom": "^29.1.0",
     "rollup": "^4.0.0",
     "rollup-plugin-polyfill-node": "^0.13.0",
     "rollup-plugin-postcss": "^4.0.2",
     "tslib": "^2.6.0",
     "typescript": "^5.0.0",
-    "vitest": "^1.0.0"
+    "vitest": "^4.1.9"
   },
   "dependencies": {
     "@zwishing/epsg-index": "^3.0.0",
@@ -123,6 +123,6 @@
     "parquet-wasm": "^0.7.1"
   },
   "optionalDependencies": {
-    "@duckdb/duckdb-wasm": "^1.33.1-dev45.0"
+    "@duckdb/duckdb-wasm": "1.33.1-dev57.0"
   }
 }

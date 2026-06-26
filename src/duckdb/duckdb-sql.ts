@@ -2,6 +2,19 @@ function quoteIdentifier(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
 
+/** DuckDB spatial function names are interpolated raw into SQL, so they are
+ * restricted to the `ST_*` namespace. Identifiers and numeric arguments are
+ * quoted/validated elsewhere; this guards the one remaining raw token against
+ * a caller wiring untrusted input into `duckDbFunction`. */
+const SAFE_DUCKDB_FUNCTION = /^ST_[A-Za-z0-9_]+$/;
+
+function assertSafeDuckDbFunction(duckDbFunction: string): string {
+  if (!SAFE_DUCKDB_FUNCTION.test(duckDbFunction)) {
+    throw new Error(`Unsafe DuckDB function name: ${JSON.stringify(duckDbFunction)}`);
+  }
+  return duckDbFunction;
+}
+
 export interface BuildUnaryGeometrySqlOptions {
   tableName: string;
   geometryColumn: string;
@@ -12,12 +25,13 @@ export interface BuildUnaryGeometrySqlOptions {
 export function buildUnaryGeometrySql(opts: BuildUnaryGeometrySqlOptions): string {
   const tableName = quoteIdentifier(opts.tableName);
   const geometryColumn = quoteIdentifier(opts.geometryColumn);
+  const duckDbFunction = assertSafeDuckDbFunction(opts.duckDbFunction);
   const args = opts.args?.length ? `, ${opts.args.join(', ')}` : '';
 
   return [
     'SELECT',
     `  * EXCLUDE (${geometryColumn}),`,
-    `  ${opts.duckDbFunction}(${geometryColumn}${args}) AS ${geometryColumn}`,
+    `  ${duckDbFunction}(${geometryColumn}${args}) AS ${geometryColumn}`,
     `FROM ${tableName}`,
     `WHERE ${geometryColumn} IS NOT NULL`,
   ].join('\n');
@@ -37,7 +51,7 @@ export function buildAttributeSql(opts: BuildAttributeSqlOptions): string {
   const outputColumn = quoteIdentifier(opts.outputColumn);
   const expression = opts.buildExpression
     ? opts.buildExpression(geometryColumn)
-    : `${opts.duckDbFunction}(${geometryColumn})`;
+    : `${assertSafeDuckDbFunction(opts.duckDbFunction)}(${geometryColumn})`;
 
   return [
     'SELECT',
@@ -106,7 +120,8 @@ export type BuildRelationSqlOptions =
 function relationPredicate(opts: BuildRelationFilterSqlOptions): string {
   const inputGeometryColumn = `i.${quoteIdentifier(opts.inputGeometryColumn)}`;
   const maskGeometryColumn = `m.${quoteIdentifier(opts.maskGeometryColumn)}`;
-  const expression = `${opts.duckDbFunction}(${inputGeometryColumn}, ${maskGeometryColumn})`;
+  const duckDbFunction = assertSafeDuckDbFunction(opts.duckDbFunction);
+  const expression = `${duckDbFunction}(${inputGeometryColumn}, ${maskGeometryColumn})`;
 
   return 'distance' in opts ? `${expression} <= ${opts.distance}` : expression;
 }
@@ -141,7 +156,7 @@ export function buildRelationAttributeSql(opts: BuildRelationSqlOptions): string
     opts.output === 'distance'
       ? [
           '(',
-          `  SELECT MIN(${opts.duckDbFunction}(${inputGeometryColumn}, ${maskGeometryColumn}))`,
+          `  SELECT MIN(${assertSafeDuckDbFunction(opts.duckDbFunction)}(${inputGeometryColumn}, ${maskGeometryColumn}))`,
           `  FROM ${maskTableName} AS m`,
           `  WHERE ${maskGeometryColumn} IS NOT NULL`,
           ` ) AS ${outputColumn}`,

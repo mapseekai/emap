@@ -52,10 +52,12 @@ class FakeConnection implements DuckDbConnection {
     private readonly resultTable: Table,
     private readonly events: string[],
     private readonly queryError?: unknown,
+    private readonly insertError?: unknown,
   ) {}
 
   async insertArrowTable(table: Table, opts: { name: string }): Promise<void> {
     this.events.push(`insert:${opts.name}`);
+    if (this.insertError) throw this.insertError;
     this.inserted.push({ table, opts });
   }
 
@@ -76,8 +78,8 @@ class FakeRuntime implements DuckDbRuntime {
   readonly events: string[] = [];
   readonly connection: FakeConnection;
 
-  constructor(resultTable: Table, queryError?: unknown) {
-    this.connection = new FakeConnection(resultTable, this.events, queryError);
+  constructor(resultTable: Table, queryError?: unknown, insertError?: unknown) {
+    this.connection = new FakeConnection(resultTable, this.events, queryError, insertError);
   }
 
   async connect(): Promise<DuckDbConnection> {
@@ -404,6 +406,51 @@ describe('DuckDB buffer SQL', () => {
   });
 });
 
+describe('DuckDB SQL function-name safety', () => {
+  it('rejects unsafe unary geometry function names', () => {
+    expect(() =>
+      buildUnaryGeometrySql({
+        tableName: 'input',
+        geometryColumn: 'geometry',
+        duckDbFunction: 'ST_Buffer(geometry); DROP TABLE input; --',
+      }),
+    ).toThrow(/unsafe duckdb function/i);
+  });
+
+  it('rejects unsafe attribute function names', () => {
+    expect(() =>
+      buildAttributeSql({
+        tableName: 'input',
+        geometryColumn: 'geometry',
+        duckDbFunction: '1); DROP TABLE input; --',
+        outputColumn: 'out',
+      }),
+    ).toThrow(/unsafe duckdb function/i);
+  });
+
+  it('rejects unsafe relation function names (defense-in-depth)', () => {
+    expect(() =>
+      buildRelationFilterSql({
+        inputTableName: 'input',
+        maskTableName: 'mask',
+        inputGeometryColumn: 'geometry',
+        maskGeometryColumn: 'geometry',
+        duckDbFunction: 'ST_Intersects(i.geometry, m.geometry) OR 1=1; --' as never,
+      }),
+    ).toThrow(/unsafe duckdb function/i);
+  });
+
+  it('accepts legitimate ST_* function names', () => {
+    expect(() =>
+      buildUnaryGeometrySql({
+        tableName: 'input',
+        geometryColumn: 'geometry',
+        duckDbFunction: 'ST_Centroid',
+      }),
+    ).not.toThrow();
+  });
+});
+
 describe('bufferDatasetWithDuckDb', () => {
   it('processes dataset buffers through an injected DuckDB runtime', async () => {
     const dataset = await polygonDataset('EPSG:3857');
@@ -498,6 +545,20 @@ describe('bufferDatasetWithDuckDb', () => {
         kind: 'query-failed',
       },
     );
+    expect(runtime.connection.closed).toBe(true);
+  });
+
+  it('wraps DuckDB table-insertion failures and closes the operation connection', async () => {
+    const dataset = await polygonDataset('EPSG:3857');
+    const resultTable = toArrowTable(dataset, { encoding: 'wkb' });
+    const runtime = new FakeRuntime(resultTable, undefined, new Error('insert exploded'));
+
+    const error = await bufferDatasetWithDuckDb(dataset, { distance: 10 }, runtime).catch(
+      (err) => err,
+    );
+
+    expect(error).toBeInstanceOf(DuckDbOperationError);
+    expect(error).toMatchObject({ kind: 'query-failed' });
     expect(runtime.connection.closed).toBe(true);
   });
 });

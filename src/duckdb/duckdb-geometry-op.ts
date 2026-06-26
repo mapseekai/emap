@@ -88,6 +88,11 @@ export async function processGeometryWithDuckDb(
         { cause: err },
       );
     }
+  } catch (err) {
+    if (err instanceof DuckDbOperationError) throw err;
+    throw new DuckDbOperationError('query-failed', `DuckDB ${spec.id} query failed`, {
+      cause: err,
+    });
   } finally {
     if (conn && inputTableName) {
       await conn.query(`DROP TABLE IF EXISTS ${inputTableName}`).catch(() => undefined);

@@ -384,6 +384,32 @@ Buffer distance uses the dataset coordinate units. `EPSG:4326` and `OGC:CRS84`
 are rejected by default; reproject to a projected CRS before buffering, or pass
 `failOnGeographicCrs: false` only when degree-based buffering is intentional.
 
+#### Security and deployment
+
+The DuckDB surface is **injection-first** by design: `setDuckDbRuntime(...)` lets
+your app own the DuckDB-Wasm lifecycle, and every helper accepts an explicit
+runtime argument. `createDuckDbRuntimeFromJsDelivr()` is a convenience loader for
+demos and prototypes — **prefer an injected, self-hosted runtime in production**.
+
+- **Remote code / supply chain.** `createDuckDbRuntimeFromJsDelivr()` fetches and
+  executes the DuckDB-Wasm worker and `.wasm` from the jsDelivr CDN at runtime,
+  and `INSTALL spatial; LOAD spatial;` downloads the spatial extension from
+  DuckDB's extension repository. For production, self-host the bundles, pin
+  versions / add Subresource Integrity, and point `customExtensionRepository` at
+  a repository you control.
+- **Content-Security-Policy.** The CDN loader needs `script-src` to allow the
+  bundle origin, `worker-src blob:` (the worker is created from a `Blob`), and a
+  WASM-capable policy (`wasm-unsafe-eval` on modern browsers). Self-hosted
+  bundles can use a strict same-origin CSP instead.
+- **Cross-origin isolation.** The multithreaded bundle uses `SharedArrayBuffer`,
+  which requires the page to be cross-origin isolated via `COOP`
+  (`same-origin`) + `COEP` (`require-corp`) response headers. Without these,
+  DuckDB-Wasm silently falls back to the slower single-threaded bundle.
+- **SQL safety.** Helpers parameterize all user-supplied inputs: identifiers are
+  quoted, numeric arguments are validated, and spatial function names are
+  restricted to the `ST_*` namespace. Do not bypass the named helpers by feeding
+  untrusted strings into the low-level `process*`/SQL-builder exports.
+
 ## Layers and Rendering
 
 ```ts
