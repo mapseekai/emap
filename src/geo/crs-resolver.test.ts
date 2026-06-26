@@ -278,9 +278,9 @@ describe('resolveDatasetCRSMetadata', () => {
 
   it('returns explicit CRS metadata when present', () => {
     expect(resolveDatasetCRSMetadata(ds({ crs_string: 'epsg:4326' }))).toBe('EPSG:4326');
-    expect(
-      resolveDatasetCRSMetadata(ds({ prj: 'PROJCS["x",AUTHORITY["EPSG","3857"]]' })),
-    ).toBe('EPSG:3857');
+    expect(resolveDatasetCRSMetadata(ds({ prj: 'PROJCS["x",AUTHORITY["EPSG","3857"]]' }))).toBe(
+      'EPSG:3857',
+    );
     expect(resolveDatasetCRSMetadata(ds({ crs: { is_latlong: true } }))).toBe('EPSG:4326');
   });
 });

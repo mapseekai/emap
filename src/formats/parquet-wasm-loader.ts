@@ -72,9 +72,9 @@ export async function initParquetWasm(
   // external to `globalThis.parquetWasm`. If a script has already set that
   // global (e.g. via <script src="parquet-wasm.js">), use it directly and
   // skip the dynamic import — which would fail without a bundler/import-map.
-  const globalMod = (globalThis as Record<string, unknown>)[
-    'parquetWasm'
-  ] as ParquetWasmEsmModule | undefined;
+  const globalMod = (globalThis as Record<string, unknown>)['parquetWasm'] as
+    | ParquetWasmEsmModule
+    | undefined;
   if (globalMod && typeof globalMod.readParquet === 'function') {
     injected = globalMod;
     return injected;

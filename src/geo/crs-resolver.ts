@@ -43,7 +43,9 @@ export function resolveDatasetCRS(dataset: MapshaperDataset | undefined): string
  * {@link resolveDatasetCRS}, this does not invent the display fallback CRS.
  * Use it for file export metadata where unknown CRS must remain unknown.
  */
-export function resolveDatasetCRSMetadata(dataset: MapshaperDataset | undefined): string | undefined {
+export function resolveDatasetCRSMetadata(
+  dataset: MapshaperDataset | undefined,
+): string | undefined {
   if (!dataset) return undefined;
   const info = dataset.info;
   if (!info) return undefined;

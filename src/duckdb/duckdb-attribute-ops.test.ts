@@ -84,7 +84,12 @@ async function runtimeFor(dataset: MapshaperDataset): Promise<FakeRuntime> {
 
 describe('DuckDB attribute operation helpers', () => {
   const projectedCases = [
-    { name: 'areaDatasetWithDuckDb', helper: areaDatasetWithDuckDb, fn: 'ST_Area', column: 'duckdb_area' },
+    {
+      name: 'areaDatasetWithDuckDb',
+      helper: areaDatasetWithDuckDb,
+      fn: 'ST_Area',
+      column: 'duckdb_area',
+    },
     {
       name: 'lengthDatasetWithDuckDb',
       helper: lengthDatasetWithDuckDb,
@@ -109,7 +114,11 @@ describe('DuckDB attribute operation helpers', () => {
     });
   });
 
-  it.each(projectedCases)('$name can opt out of geographic CRS rejection', async ({ helper, fn, column }) => {
+  it.each(projectedCases)('$name can opt out of geographic CRS rejection', async ({
+    helper,
+    fn,
+    column,
+  }) => {
     const dataset = await polygonDataset('EPSG:4326');
     const runtime = await runtimeFor(dataset);
 
@@ -170,7 +179,11 @@ describe('DuckDB attribute operation helpers', () => {
     },
   ];
 
-  it.each(geographicCases)('$name runs without geographic CRS rejection', async ({ helper, expression, column }) => {
+  it.each(geographicCases)('$name runs without geographic CRS rejection', async ({
+    helper,
+    expression,
+    column,
+  }) => {
     const dataset = await polygonDataset('EPSG:4326');
     const runtime = await runtimeFor(dataset);
 

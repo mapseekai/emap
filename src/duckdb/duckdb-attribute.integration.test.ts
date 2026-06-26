@@ -14,7 +14,8 @@ import {
 } from './duckdb-attribute-ops';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
 
-const describeDuckDbIntegration = process.env.DUCKDB_WASM_INTEGRATION === '1' ? describe : describe.skip;
+const describeDuckDbIntegration =
+  process.env.DUCKDB_WASM_INTEGRATION === '1' ? describe : describe.skip;
 
 const POLYGON_FC = {
   type: 'FeatureCollection',

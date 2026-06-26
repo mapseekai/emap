@@ -93,7 +93,9 @@ describe('duckDbAttributeLayer', () => {
 
     expect(result.ok).toBe(true);
     expect(ctx.sources.get('out')).toBeTruthy();
-    expect(runtime.connection.queries[0]).toContain('ST_X(ST_Centroid("geometry")) AS "centroid_x"');
+    expect(runtime.connection.queries[0]).toContain(
+      'ST_X(ST_Centroid("geometry")) AS "centroid_x"',
+    );
   });
 
   it('returns validation for unknown attribute operations', async () => {

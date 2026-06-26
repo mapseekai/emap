@@ -85,7 +85,8 @@ export interface BuildRelationPredicateAttributeSqlOptions
   output?: 'predicate';
 }
 
-export interface BuildRelationDistanceAttributeSqlOptions extends BuildRelationAttributeBaseSqlOptions {
+export interface BuildRelationDistanceAttributeSqlOptions
+  extends BuildRelationAttributeBaseSqlOptions {
   duckDbFunction: 'ST_Distance';
   output: 'distance';
 }
