@@ -19,8 +19,8 @@ for (const [code, record] of Object.entries(records).sort(([a], [b]) => Number(a
     codesWithoutProj4.push(code);
   }
 
-  if (record.projjson && typeof record.projjson === 'object') {
-    projjsonRows.push(`${code}\t${JSON.stringify(record.projjson)}`);
+  if (record.projjson && typeof record.projjson === 'string') {
+    projjsonRows.push(`${code}\t${record.projjson}`);
   }
 }
 
@@ -36,9 +36,9 @@ export const EPSG_CODES_WITHOUT_PROJ4 = ${JSON.stringify(`|${codesWithoutProj4.j
 writeFileSync(resolve(root, 'src/geo/epsg-proj4-data.ts'), output);
 
 const projjsonOutput = `// Generated from @zwishing/epsg-index/all.json by scripts/generate-epsg-proj4-data.mjs.
-// Compact TSV of EPSG code to PROJJSON for GeoParquet CRS metadata.
+// Compact TSV of EPSG code to @zwishing/epsg-index PROJJSON asset path.
 
-export const EPSG_PROJJSON_TABLE = ${JSON.stringify(projjsonRows.join('\n'))};
+export const EPSG_PROJJSON_PATH_TABLE = ${JSON.stringify(projjsonRows.join('\n'))};
 `;
 
 writeFileSync(resolve(root, 'src/geo/epsg-projjson-data.ts'), projjsonOutput);

@@ -111,7 +111,7 @@
     "vitest": "^1.0.0"
   },
   "dependencies": {
-    "@zwishing/epsg-index": "^2.1.0",
+    "@zwishing/epsg-index": "^3.0.0",
     "apache-arrow": "^21.1.0",
     "fflate": "^0.8.2",
     "flatbush": "^4.5.0",
