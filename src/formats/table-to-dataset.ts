@@ -18,7 +18,33 @@ export interface FromArrowTableOptions {
   noTopology?: boolean;
 }
 
+export interface RecordsFromArrowTableOptions {
+  skipColumns?: readonly string[];
+}
+
 let warnedBigInt = false;
+
+export function recordsFromArrowTable(
+  table: Table,
+  opts: RecordsFromArrowTableOptions = {},
+): Array<Record<string, unknown>> {
+  const fields = table.schema.fields;
+  const skipColumns = new Set(opts.skipColumns ?? []);
+  const records: Array<Record<string, unknown>> = new Array(table.numRows);
+
+  for (let row = 0; row < table.numRows; row++) {
+    const record: Record<string, unknown> = {};
+    for (const [col, field] of fields.entries()) {
+      if (skipColumns.has(field.name)) continue;
+      const vector = table.getChildAt(col);
+      const wrapDate = DataType.isTimestamp(field.type) || DataType.isDate(field.type);
+      record[field.name] = toRecordValue(vector?.get(row), wrapDate);
+    }
+    records[row] = record;
+  }
+
+  return records;
+}
 
 /**
  * Convert an Arrow table (GeoArrow native or WKB geometry column) into a

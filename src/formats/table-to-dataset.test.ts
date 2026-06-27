@@ -1,20 +1,27 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
   Binary,
+  Bool,
   Field,
   FixedSizeList,
   Float64,
+  Int32,
   Int64,
   RecordBatch,
   Schema,
   Struct,
   Table,
   TimestampMillisecond,
+  Utf8,
   makeData,
   vectorFromArray,
   type Data,
 } from 'apache-arrow';
-import { fromArrowTable, resetTableImportWarnings } from './table-to-dataset';
+import {
+  fromArrowTable,
+  recordsFromArrowTable,
+  resetTableImportWarnings,
+} from './table-to-dataset';
 import { WkbWriter } from './wkb';
 
 function tableFromColumns(
@@ -46,6 +53,72 @@ function wkbColumn(name: string, write: (w: WkbWriter) => void): { field: Field;
   });
   return { field: new Field(name, new Binary(), true), data };
 }
+
+describe('recordsFromArrowTable', () => {
+  beforeEach(() => resetTableImportWarnings());
+  afterEach(() => vi.restoreAllMocks());
+
+  it('converts scalar Arrow columns to records without geometry metadata', () => {
+    const nameVec = vectorFromArray(['alpha', 'beta'], new Utf8());
+    const countVec = vectorFromArray([1, 2], new Int32());
+    const activeVec = vectorFromArray([true, false], new Bool());
+    const idVec = vectorFromArray([10n, null], new Int64());
+    const tsVec = vectorFromArray(
+      [new Date('2024-01-02T00:00:00Z'), null],
+      new TimestampMillisecond(),
+    );
+
+    const records = recordsFromArrowTable(
+      tableFromColumns([
+        { field: new Field('name', new Utf8(), true), data: nameVec.data[0] },
+        { field: new Field('count', new Int32(), true), data: countVec.data[0] },
+        { field: new Field('active', new Bool(), true), data: activeVec.data[0] },
+        { field: new Field('id', new Int64(), true), data: idVec.data[0] },
+        { field: new Field('ts', new TimestampMillisecond(), true), data: tsVec.data[0] },
+      ]),
+    );
+
+    expect(records[0]).toEqual({
+      name: 'alpha',
+      count: 1,
+      active: true,
+      id: 10,
+      ts: new Date('2024-01-02T00:00:00.000Z'),
+    });
+    expect(records[1]).toEqual({
+      name: 'beta',
+      count: 2,
+      active: false,
+      id: null,
+      ts: null,
+    });
+  });
+
+  it('skips requested columns such as __emap_rowid', () => {
+    const rowidVec = vectorFromArray([0, 1], new Int32());
+    const nameVec = vectorFromArray(['alpha', 'beta'], new Utf8());
+
+    const records = recordsFromArrowTable(
+      tableFromColumns([
+        { field: new Field('__emap_rowid', new Int32(), true), data: rowidVec.data[0] },
+        { field: new Field('name', new Utf8(), true), data: nameVec.data[0] },
+      ]),
+      { skipColumns: ['__emap_rowid'] },
+    );
+
+    expect(records).toEqual([{ name: 'alpha' }, { name: 'beta' }]);
+  });
+
+  it('returns empty records for empty scalar results', () => {
+    const idVec = vectorFromArray([], new Int32());
+
+    expect(
+      recordsFromArrowTable(
+        tableFromColumns([{ field: new Field('id', new Int32(), true), data: idVec.data[0] }]),
+      ),
+    ).toEqual([]);
+  });
+});
 
 describe('fromArrowTable', () => {
   beforeEach(() => resetTableImportWarnings());
