@@ -344,6 +344,24 @@ const withDistance = await distanceDatasetWithDuckDb(parcels, hospitals, {
 });
 ```
 
+#### Restricted SELECT queries
+
+For scalar attribute queries, `queryDatasetWithDuckDb` registers one logical
+table named `input` for the selected layer:
+
+```ts
+import { queryDatasetWithDuckDb } from '@zwishing/emap/duckdb';
+
+const filtered = await queryDatasetWithDuckDb(dataset, {
+  sql: 'SELECT name, population FROM input WHERE population > 100000 ORDER BY population DESC LIMIT 50',
+  outputLayer: 'large_places',
+});
+```
+
+The first batch supports scalar attribute projection, filtering, ordering, and
+limiting. Joins, multiple statements, mutating SQL, and calculated output
+geometry are rejected before DuckDB execution.
+
 For map-like integrations, use the adapter form with a minimal source context:
 
 ```ts
