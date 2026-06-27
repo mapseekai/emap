@@ -235,9 +235,11 @@ export async function queryDatasetWithDuckDb(
   } finally {
     let cleanupError: unknown;
     if (conn) {
-      cleanupError = await conn
-        .query(`DROP TABLE IF EXISTS ${quoteIdentifier(inputTableName)}`)
-        .catch((err) => err);
+      try {
+        await conn.query(`DROP TABLE IF EXISTS ${quoteIdentifier(inputTableName)}`);
+      } catch (err) {
+        cleanupError = err;
+      }
     }
 
     const closeError = await conn?.close?.().catch((err) => err);
