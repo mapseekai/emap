@@ -15,6 +15,16 @@ function validate(sql: string) {
   });
 }
 
+function validateWithColumns(sql: string, availableColumns: readonly string[]) {
+  return validateDuckDbSelectSql(sql, {
+    availableColumns,
+    geometryColumn: 'geometry',
+    inputTableName: 'input',
+    physicalTableName: 'emap_duckdb_query_input_1',
+    rowIdColumn: '__emap_rowid',
+  });
+}
+
 function expectValidationError(sql: string) {
   expect(() => validate(sql)).toThrow(DuckDbOperationError);
   expect(() => validate(sql)).toThrow(/DuckDB query/);
@@ -46,6 +56,24 @@ describe('validateDuckDbSelectSql', () => {
       outputColumns: ['active'],
       rowIdColumn: '__emap_rowid',
       sql: 'SELECT "input"."__emap_rowid" AS "__emap_rowid", "input"."active" AS "active" FROM "emap_duckdb_query_input_1" AS "input" ORDER BY active DESC LIMIT 1',
+    });
+  });
+
+  it('accepts comment-like tokens inside quoted string values', () => {
+    expect(validate("SELECT name FROM input WHERE name = '--not a comment'")).toEqual({
+      outputColumns: ['name'],
+      rowIdColumn: '__emap_rowid',
+      sql: 'SELECT "input"."__emap_rowid" AS "__emap_rowid", "input"."name" AS "name" FROM "emap_duckdb_query_input_1" AS "input" WHERE name = \'--not a comment\'',
+    });
+  });
+
+  it('accepts comment-like tokens inside quoted identifiers', () => {
+    expect(
+      validateWithColumns('SELECT "na--me" FROM input', ['na--me', 'geometry', '__emap_rowid']),
+    ).toEqual({
+      outputColumns: ['na--me'],
+      rowIdColumn: '__emap_rowid',
+      sql: 'SELECT "input"."__emap_rowid" AS "__emap_rowid", "input"."na--me" AS "na--me" FROM "emap_duckdb_query_input_1" AS "input"',
     });
   });
 
@@ -94,6 +122,10 @@ describe('validateDuckDbSelectSql', () => {
     ['union', 'SELECT name FROM input UNION SELECT name FROM input'],
     ['group by', 'SELECT name FROM input GROUP BY name'],
     ['having', 'SELECT name FROM input HAVING count(*) > 1'],
+    ['limit trailing garbage', 'SELECT name FROM input LIMIT 1 foo'],
+    ['where trailing garbage', 'SELECT name FROM input WHERE population > 1 foo'],
+    ['order limit trailing garbage', 'SELECT name FROM input ORDER BY population LIMIT 1 extra'],
+    ['limit expression', 'SELECT name FROM input LIMIT population'],
   ])('rejects %s', (_name, sql) => {
     expectValidationError(sql);
   });

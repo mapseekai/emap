@@ -63,12 +63,12 @@ export function validateDuckDbSelectSql(
   if (trimmed.includes(';')) {
     throwValidation('must contain a single SELECT statement');
   }
-  if (trimmed.includes('--') || trimmed.includes('/*') || trimmed.includes('*/')) {
-    throwValidation('must not contain comments');
-  }
 
   const masked = maskQuotedSegments(trimmed);
   const lowerMasked = masked.toLowerCase();
+  if (masked.includes('--') || masked.includes('/*') || masked.includes('*/')) {
+    throwValidation('must not contain comments');
+  }
 
   if (!/^\s*select\b/i.test(masked)) {
     throwValidation('must start with SELECT');
@@ -95,7 +95,7 @@ export function validateDuckDbSelectSql(
   const tail = trimmed.slice(tableInfo.endIndex);
   const maskedTail = masked.slice(tableInfo.endIndex);
 
-  validateTail(maskedTail);
+  validateTail(tail, maskedTail);
 
   const outputColumns = parseProjection(
     projectionSql,
@@ -158,14 +158,18 @@ function parseProjection(
 }
 
 function splitProjectionItems(projectionSql: string): string[] {
+  return splitCommaSeparated(projectionSql);
+}
+
+function splitCommaSeparated(value: string): string[] {
   const items: string[] = [];
   let start = 0;
   let inDoubleQuote = false;
 
-  for (let index = 0; index < projectionSql.length; index += 1) {
-    const char = projectionSql[index];
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
     if (char === '"') {
-      if (inDoubleQuote && projectionSql[index + 1] === '"') {
+      if (inDoubleQuote && value[index + 1] === '"') {
         index += 1;
       } else {
         inDoubleQuote = !inDoubleQuote;
@@ -173,7 +177,7 @@ function splitProjectionItems(projectionSql: string): string[] {
       continue;
     }
     if (char === ',' && !inDoubleQuote) {
-      items.push(projectionSql.slice(start, index));
+      items.push(value.slice(start, index));
       start = index + 1;
     }
   }
@@ -182,7 +186,7 @@ function splitProjectionItems(projectionSql: string): string[] {
     throwValidation('has an unterminated quoted identifier');
   }
 
-  items.push(projectionSql.slice(start));
+  items.push(value.slice(start));
   return items;
 }
 
@@ -241,7 +245,7 @@ function readInputTable(
   return { endIndex: index };
 }
 
-function validateTail(maskedTail: string): void {
+function validateTail(tail: string, maskedTail: string): void {
   const trimmed = maskedTail.trimStart();
   if (trimmed.length === 0) {
     return;
@@ -258,28 +262,145 @@ function validateTail(maskedTail: string): void {
   if (/\bfrom\b/i.test(maskedTail)) {
     throwValidation('must not read from additional tables');
   }
+
+  const clauses = findTailClauses(maskedTail);
+  const whereClause = clauses.find((clause) => clause.kind === 'where');
+  const orderClause = clauses.find((clause) => clause.kind === 'order');
+  const limitClause = clauses.find((clause) => clause.kind === 'limit');
+
+  if (whereClause) {
+    const endIndex = orderClause?.index ?? limitClause?.index ?? tail.length;
+    validatePredicate(tail.slice(whereClause.endIndex, endIndex));
+  }
+  if (orderClause) {
+    const endIndex = limitClause?.index ?? tail.length;
+    validateOrderBy(tail.slice(orderClause.endIndex, endIndex));
+  }
+  if (limitClause) {
+    validateLimit(tail.slice(limitClause.endIndex));
+  }
 }
 
 function tailClausesAreOrdered(maskedTail: string): boolean {
-  const whereIndex = findKeyword(maskedTail, /\bwhere\b/i);
-  const orderIndex = findKeyword(maskedTail, /\border\s+by\b/i);
-  const limitIndex = findKeyword(maskedTail, /\blimit\b/i);
-  const positions = [
-    { index: whereIndex, order: 0 },
-    { index: orderIndex, order: 1 },
-    { index: limitIndex, order: 2 },
-  ]
-    .filter((position) => position.index !== -1)
-    .sort((left, right) => left.index - right.index);
+  const positions = findTailClauses(maskedTail).sort((left, right) => left.index - right.index);
   let lastOrder = -1;
 
   return positions.every((position) => {
-    if (position.order <= lastOrder) {
+    const order = tailClauseOrder(position.kind);
+    if (order <= lastOrder) {
       return false;
     }
-    lastOrder = position.order;
+    lastOrder = order;
     return true;
   });
+}
+
+interface TailClause {
+  endIndex: number;
+  index: number;
+  kind: 'where' | 'order' | 'limit';
+}
+
+function findTailClauses(maskedTail: string): TailClause[] {
+  const clauses: TailClause[] = [];
+  const pattern = /\b(where|order\s+by|limit)\b/gi;
+  let match = pattern.exec(maskedTail);
+
+  while (match) {
+    clauses.push({
+      endIndex: match.index + match[0].length,
+      index: match.index,
+      kind: tailClauseKind(match[1]),
+    });
+    match = pattern.exec(maskedTail);
+  }
+
+  return clauses;
+}
+
+function tailClauseKind(value: string): TailClause['kind'] {
+  if (/^order/i.test(value)) {
+    return 'order';
+  }
+  if (/^limit/i.test(value)) {
+    return 'limit';
+  }
+  return 'where';
+}
+
+function tailClauseOrder(kind: TailClause['kind']): number {
+  if (kind === 'where') {
+    return 0;
+  }
+  if (kind === 'order') {
+    return 1;
+  }
+  return 2;
+}
+
+function validatePredicate(predicate: string): void {
+  const parts = splitLogicalPredicate(predicate);
+  if (parts.length === 0) {
+    throwValidation('must include a WHERE predicate');
+  }
+
+  for (const part of parts) {
+    if (!matchesComparisonPredicate(part.trim())) {
+      throwValidation('has an unsupported WHERE predicate');
+    }
+  }
+}
+
+function splitLogicalPredicate(predicate: string): string[] {
+  const masked = maskQuotedSegments(predicate);
+  const parts: string[] = [];
+  const pattern = /\b(?:and|or)\b/gi;
+  let start = 0;
+  let match = pattern.exec(masked);
+
+  while (match) {
+    parts.push(predicate.slice(start, match.index));
+    start = match.index + match[0].length;
+    match = pattern.exec(masked);
+  }
+
+  parts.push(predicate.slice(start));
+  return parts;
+}
+
+function matchesComparisonPredicate(predicate: string): boolean {
+  const identifier = identifierPattern();
+  const value = `(?:${identifier}|${literalPattern()})`;
+  return new RegExp(`^${identifier}\\s*(?:=|!=|<>|<=|>=|<|>)\\s*${value}$`, 'i').test(predicate);
+}
+
+function validateOrderBy(orderBy: string): void {
+  const parts = splitCommaSeparated(orderBy);
+  if (parts.length === 0) {
+    throwValidation('must include ORDER BY columns');
+  }
+
+  const identifier = identifierPattern();
+  const orderPattern = new RegExp(`^${identifier}(?:\\s+(?:asc|desc))?$`, 'i');
+  for (const part of parts) {
+    if (!orderPattern.test(part.trim())) {
+      throwValidation('has an unsupported ORDER BY clause');
+    }
+  }
+}
+
+function validateLimit(limit: string): void {
+  if (!/^\s*\d+\s*$/.test(limit)) {
+    throwValidation('must use a non-negative integer LIMIT');
+  }
+}
+
+function identifierPattern(): string {
+  return '(?:[A-Za-z_][A-Za-z0-9_]*|"(?:[^"]|"")+")';
+}
+
+function literalPattern(): string {
+  return "(?:\\d+(?:\\.\\d+)?|'(?:[^']|'')*'|true|false|null)";
 }
 
 function rejectUnsafeKeywords(lowerMasked: string): void {
@@ -305,10 +426,6 @@ function rejectGeometryReference(sql: string, geometryColumn: string): void {
 
 function countKeyword(sql: string, keyword: string): number {
   return sql.match(new RegExp(`\\b${escapeRegex(keyword)}\\b`, 'g'))?.length ?? 0;
-}
-
-function findKeyword(sql: string, pattern: RegExp): number {
-  return pattern.exec(sql)?.index ?? -1;
 }
 
 function maskQuotedSegments(sql: string): string {
