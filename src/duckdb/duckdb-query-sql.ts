@@ -55,17 +55,18 @@ export function validateDuckDbSelectSql(
   const inputTableName = opts.inputTableName ?? DEFAULT_INPUT_TABLE_NAME;
   const rowIdColumn = opts.rowIdColumn ?? DEFAULT_ROW_ID_COLUMN;
   const geometryColumn = opts.geometryColumn ?? DEFAULT_GEOMETRY_COLUMN;
+  const scalarColumns = scalarColumnSet(opts.availableColumns, geometryColumn, rowIdColumn);
   const trimmed = sql.trim();
 
   if (trimmed.length === 0) {
     throwValidation('must not be empty');
   }
-  if (trimmed.includes(';')) {
-    throwValidation('must contain a single SELECT statement');
-  }
 
   const masked = maskQuotedSegments(trimmed);
   const lowerMasked = masked.toLowerCase();
+  if (masked.includes(';')) {
+    throwValidation('must contain a single SELECT statement');
+  }
   if (masked.includes('--') || masked.includes('/*') || masked.includes('*/')) {
     throwValidation('must not contain comments');
   }
@@ -77,7 +78,6 @@ export function validateDuckDbSelectSql(
     throwValidation('must contain exactly one SELECT');
   }
   rejectUnsafeKeywords(lowerMasked);
-  rejectGeometryReference(trimmed, geometryColumn);
 
   const fromMatch = /\bfrom\b/i.exec(masked);
   if (!fromMatch) {
@@ -95,14 +95,9 @@ export function validateDuckDbSelectSql(
   const tail = trimmed.slice(tableInfo.endIndex);
   const maskedTail = masked.slice(tableInfo.endIndex);
 
-  validateTail(tail, maskedTail);
+  validateTail(tail, maskedTail, scalarColumns);
 
-  const outputColumns = parseProjection(
-    projectionSql,
-    opts.availableColumns,
-    geometryColumn,
-    rowIdColumn,
-  );
+  const outputColumns = parseProjection(projectionSql, scalarColumns);
   const selectList = [
     `${quoteIdentifier(inputTableName)}.${quoteIdentifier(rowIdColumn)} AS ${quoteIdentifier(rowIdColumn)}`,
     ...outputColumns.map(
@@ -118,33 +113,24 @@ export function validateDuckDbSelectSql(
   };
 }
 
-function parseProjection(
-  projectionSql: string,
-  availableColumns: readonly string[],
-  geometryColumn: string,
-  rowIdColumn: string,
-): string[] {
+function parseProjection(projectionSql: string, scalarColumns: ReadonlySet<string>): string[] {
   const projection = projectionSql.trim();
   if (projection.length === 0) {
     throwValidation('must include a projection');
   }
   if (projection === '*') {
-    return availableColumns.filter((column) => column !== geometryColumn && column !== rowIdColumn);
+    return [...scalarColumns];
   }
   if (projection.includes('*')) {
     throwValidation('must use either * or column names');
   }
 
-  const available = new Set(availableColumns);
   const seen = new Set<string>();
   const outputColumns: string[] = [];
 
   for (const item of splitProjectionItems(projectionSql)) {
     const column = parseProjectionColumn(item);
-    if (column === geometryColumn || column === rowIdColumn) {
-      throwValidation('must not project geometry or row id columns');
-    }
-    if (!available.has(column)) {
+    if (!scalarColumns.has(column)) {
       throwValidation(`references unknown column ${column}`);
     }
     if (seen.has(column)) {
@@ -195,9 +181,6 @@ function parseProjectionColumn(item: string): string {
   if (trimmed.length === 0) {
     throwValidation('has an empty projection');
   }
-  if (trimmed.includes('.')) {
-    throwValidation('must not use qualified projections');
-  }
   if (
     /\bas\b/i.test(maskQuotedSegments(trimmed)) ||
     /\s/.test(maskQuotedSegments(trimmed).trim())
@@ -245,7 +228,7 @@ function readInputTable(
   return { endIndex: index };
 }
 
-function validateTail(tail: string, maskedTail: string): void {
+function validateTail(tail: string, maskedTail: string, scalarColumns: ReadonlySet<string>): void {
   const trimmed = maskedTail.trimStart();
   if (trimmed.length === 0) {
     return;
@@ -270,11 +253,11 @@ function validateTail(tail: string, maskedTail: string): void {
 
   if (whereClause) {
     const endIndex = orderClause?.index ?? limitClause?.index ?? tail.length;
-    validatePredicate(tail.slice(whereClause.endIndex, endIndex));
+    validatePredicate(tail.slice(whereClause.endIndex, endIndex), scalarColumns);
   }
   if (orderClause) {
     const endIndex = limitClause?.index ?? tail.length;
-    validateOrderBy(tail.slice(orderClause.endIndex, endIndex));
+    validateOrderBy(tail.slice(orderClause.endIndex, endIndex), scalarColumns);
   }
   if (limitClause) {
     validateLimit(tail.slice(limitClause.endIndex));
@@ -338,14 +321,14 @@ function tailClauseOrder(kind: TailClause['kind']): number {
   return 2;
 }
 
-function validatePredicate(predicate: string): void {
+function validatePredicate(predicate: string, scalarColumns: ReadonlySet<string>): void {
   const parts = splitLogicalPredicate(predicate);
   if (parts.length === 0) {
     throwValidation('must include a WHERE predicate');
   }
 
   for (const part of parts) {
-    if (!matchesComparisonPredicate(part.trim())) {
+    if (!validateComparisonPredicate(part.trim(), scalarColumns)) {
       throwValidation('has an unsupported WHERE predicate');
     }
   }
@@ -368,22 +351,45 @@ function splitLogicalPredicate(predicate: string): string[] {
   return parts;
 }
 
-function matchesComparisonPredicate(predicate: string): boolean {
-  const identifier = identifierPattern();
-  const value = `(?:${identifier}|${literalPattern()})`;
-  return new RegExp(`^${identifier}\\s*(?:=|!=|<>|<=|>=|<|>)\\s*${value}$`, 'i').test(predicate);
+function validateComparisonPredicate(
+  predicate: string,
+  scalarColumns: ReadonlySet<string>,
+): boolean {
+  const masked = maskQuotedSegments(predicate);
+  const match = /(?:!=|<>|<=|>=|=|<|>)/.exec(masked);
+  if (!match) {
+    return false;
+  }
+
+  const left = predicate.slice(0, match.index).trim();
+  const right = predicate.slice(match.index + match[0].length).trim();
+  if (!identifierIsAllowed(left, scalarColumns)) {
+    return false;
+  }
+  if (new RegExp(`^${literalPattern()}$`, 'i').test(right)) {
+    return true;
+  }
+  const rightIdentifier = parseSqlIdentifier(right);
+  if (rightIdentifier) {
+    return scalarColumns.has(rightIdentifier);
+  }
+
+  return false;
 }
 
-function validateOrderBy(orderBy: string): void {
+function validateOrderBy(orderBy: string, scalarColumns: ReadonlySet<string>): void {
   const parts = splitCommaSeparated(orderBy);
   if (parts.length === 0) {
     throwValidation('must include ORDER BY columns');
   }
 
-  const identifier = identifierPattern();
-  const orderPattern = new RegExp(`^${identifier}(?:\\s+(?:asc|desc))?$`, 'i');
   for (const part of parts) {
-    if (!orderPattern.test(part.trim())) {
+    const trimmed = part.trim();
+    const directionMatch = /\b(?:asc|desc)\s*$/i.exec(maskQuotedSegments(trimmed));
+    const beforeDirection = directionMatch ? trimmed.slice(0, directionMatch.index) : '';
+    const identifier =
+      directionMatch && /\s$/.test(beforeDirection) ? beforeDirection.trim() : trimmed;
+    if (!identifierIsAllowed(identifier, scalarColumns)) {
       throwValidation('has an unsupported ORDER BY clause');
     }
   }
@@ -395,12 +401,38 @@ function validateLimit(limit: string): void {
   }
 }
 
-function identifierPattern(): string {
-  return '(?:[A-Za-z_][A-Za-z0-9_]*|"(?:[^"]|"")+")';
-}
-
 function literalPattern(): string {
   return "(?:\\d+(?:\\.\\d+)?|'(?:[^']|'')*'|true|false|null)";
+}
+
+function scalarColumnSet(
+  availableColumns: readonly string[],
+  geometryColumn: string,
+  rowIdColumn: string,
+): ReadonlySet<string> {
+  return new Set(
+    availableColumns.filter((column) => column !== geometryColumn && column !== rowIdColumn),
+  );
+}
+
+function identifierIsAllowed(identifier: string, scalarColumns: ReadonlySet<string>): boolean {
+  const column = parseSqlIdentifier(identifier);
+  return column !== undefined && scalarColumns.has(column);
+}
+
+function parseSqlIdentifier(identifier: string): string | undefined {
+  const trimmed = identifier.trim();
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    const column = unquoteIdentifier(trimmed);
+    if (column.length === 0) {
+      return undefined;
+    }
+    return column;
+  }
+  return undefined;
 }
 
 function rejectUnsafeKeywords(lowerMasked: string): void {
@@ -413,14 +445,6 @@ function rejectUnsafeKeywords(lowerMasked: string): void {
     if (pattern.test(lowerMasked)) {
       throwValidation('uses an unsupported SQL clause');
     }
-  }
-}
-
-function rejectGeometryReference(sql: string, geometryColumn: string): void {
-  const maskedStrings = maskSingleQuotedStrings(sql);
-  const escaped = escapeRegex(geometryColumn);
-  if (new RegExp(`(^|[^A-Za-z0-9_])"?${escaped}"?([^A-Za-z0-9_]|$)`, 'i').test(maskedStrings)) {
-    throwValidation('must not reference the geometry column');
   }
 }
 
@@ -454,36 +478,6 @@ function maskQuotedSegments(sql: string): string {
   }
   if (quote) {
     throwValidation('has an unterminated quoted string or identifier');
-  }
-
-  return chars.join('');
-}
-
-function maskSingleQuotedStrings(sql: string): string {
-  const chars = sql.split('');
-  let inString = false;
-
-  for (let index = 0; index < chars.length; index += 1) {
-    const char = chars[index];
-    if (!inString && char === "'") {
-      inString = true;
-      chars[index] = ' ';
-      continue;
-    }
-    if (inString) {
-      chars[index] = ' ';
-      if (char === "'") {
-        if (sql[index + 1] === "'") {
-          chars[index + 1] = ' ';
-          index += 1;
-        } else {
-          inString = false;
-        }
-      }
-    }
-  }
-  if (inString) {
-    throwValidation('has an unterminated quoted string');
   }
 
   return chars.join('');

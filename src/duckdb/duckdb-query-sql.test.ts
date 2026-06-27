@@ -30,6 +30,11 @@ function expectValidationError(sql: string) {
   expect(() => validate(sql)).toThrow(/DuckDB query/);
 }
 
+function expectValidationErrorWithColumns(sql: string, availableColumns: readonly string[]) {
+  expect(() => validateWithColumns(sql, availableColumns)).toThrow(DuckDbOperationError);
+  expect(() => validateWithColumns(sql, availableColumns)).toThrow(/DuckDB query/);
+}
+
 describe('validateDuckDbSelectSql', () => {
   it('expands star projections and rewrites the input table', () => {
     expect(validate('SELECT * FROM input')).toEqual({
@@ -77,6 +82,62 @@ describe('validateDuckDbSelectSql', () => {
     });
   });
 
+  it('accepts semicolons inside quoted string values', () => {
+    expect(validate("SELECT name FROM input WHERE name = 'a;b'")).toEqual({
+      outputColumns: ['name'],
+      rowIdColumn: '__emap_rowid',
+      sql: 'SELECT "input"."__emap_rowid" AS "__emap_rowid", "input"."name" AS "name" FROM "emap_duckdb_query_input_1" AS "input" WHERE name = \'a;b\'',
+    });
+  });
+
+  it('accepts semicolons inside quoted identifiers', () => {
+    expect(
+      validateWithColumns('SELECT "semi;col" FROM input', ['semi;col', 'geometry', '__emap_rowid']),
+    ).toEqual({
+      outputColumns: ['semi;col'],
+      rowIdColumn: '__emap_rowid',
+      sql: 'SELECT "input"."__emap_rowid" AS "__emap_rowid", "input"."semi;col" AS "semi;col" FROM "emap_duckdb_query_input_1" AS "input"',
+    });
+  });
+
+  it('accepts quoted where and order by identifiers', () => {
+    expect(
+      validate('SELECT name FROM input WHERE "name" = \'alpha\' ORDER BY "population" DESC'),
+    ).toEqual({
+      outputColumns: ['name'],
+      rowIdColumn: '__emap_rowid',
+      sql: 'SELECT "input"."__emap_rowid" AS "__emap_rowid", "input"."name" AS "name" FROM "emap_duckdb_query_input_1" AS "input" WHERE "name" = \'alpha\' ORDER BY "population" DESC',
+    });
+  });
+
+  it('accepts quoted projection identifiers containing dots', () => {
+    expect(
+      validateWithColumns('SELECT "admin.level" FROM input', [
+        'admin.level',
+        'geometry',
+        '__emap_rowid',
+      ]),
+    ).toEqual({
+      outputColumns: ['admin.level'],
+      rowIdColumn: '__emap_rowid',
+      sql: 'SELECT "input"."__emap_rowid" AS "__emap_rowid", "input"."admin.level" AS "admin.level" FROM "emap_duckdb_query_input_1" AS "input"',
+    });
+  });
+
+  it('accepts non-geometry columns with geometry as a name prefix', () => {
+    expect(
+      validateWithColumns('SELECT "geometry-note" FROM input ORDER BY "geometry-note"', [
+        'geometry-note',
+        'geometry',
+        '__emap_rowid',
+      ]),
+    ).toEqual({
+      outputColumns: ['geometry-note'],
+      rowIdColumn: '__emap_rowid',
+      sql: 'SELECT "input"."__emap_rowid" AS "__emap_rowid", "input"."geometry-note" AS "geometry-note" FROM "emap_duckdb_query_input_1" AS "input" ORDER BY "geometry-note"',
+    });
+  });
+
   it('accepts quoted identifiers and multiline formatting', () => {
     expect(
       validate(`
@@ -97,6 +158,7 @@ describe('validateDuckDbSelectSql', () => {
 
   it.each([
     ['multiple statements', 'SELECT * FROM input; SELECT * FROM input'],
+    ['semicolon outside quotes', "SELECT name FROM input WHERE name = 'a';"],
     ['join', 'SELECT name FROM input JOIN other ON input.id = other.id'],
     ['non-input table', 'SELECT name FROM other'],
     ['cte', 'WITH source AS (SELECT * FROM input) SELECT * FROM source'],
@@ -117,6 +179,7 @@ describe('validateDuckDbSelectSql', () => {
     ['alias projection', 'SELECT name AS label FROM input'],
     ['expression projection', 'SELECT population + 1 FROM input'],
     ['qualified projection', 'SELECT input.name FROM input'],
+    ['quoted table-qualified projection', 'SELECT "input"."name" FROM input'],
     ['table alias as', 'SELECT name FROM input AS i'],
     ['table alias bare', 'SELECT name FROM input i'],
     ['union', 'SELECT name FROM input UNION SELECT name FROM input'],
@@ -126,7 +189,36 @@ describe('validateDuckDbSelectSql', () => {
     ['where trailing garbage', 'SELECT name FROM input WHERE population > 1 foo'],
     ['order limit trailing garbage', 'SELECT name FROM input ORDER BY population LIMIT 1 extra'],
     ['limit expression', 'SELECT name FROM input LIMIT population'],
+    ['missing where column', 'SELECT name FROM input WHERE missing = 1'],
+    ['geometry where column', 'SELECT name FROM input WHERE geometry = 1'],
+    ['row id where column', 'SELECT name FROM input WHERE __emap_rowid = 1'],
+    ['missing order by column', 'SELECT name FROM input ORDER BY missing'],
+    ['geometry order by column', 'SELECT name FROM input ORDER BY geometry'],
+    ['row id order by column', 'SELECT name FROM input ORDER BY __emap_rowid'],
   ])('rejects %s', (_name, sql) => {
     expectValidationError(sql);
+  });
+
+  it('rejects exact geometry columns while allowing geometry-prefixed names', () => {
+    expectValidationErrorWithColumns('SELECT geometry FROM input', [
+      'geometry-note',
+      'geometry',
+      '__emap_rowid',
+    ]);
+    expectValidationErrorWithColumns('SELECT "geometry" FROM input', [
+      'geometry-note',
+      'geometry',
+      '__emap_rowid',
+    ]);
+    expectValidationErrorWithColumns('SELECT "geometry-note" FROM input WHERE geometry = 1', [
+      'geometry-note',
+      'geometry',
+      '__emap_rowid',
+    ]);
+    expectValidationErrorWithColumns('SELECT "geometry-note" FROM input ORDER BY geometry', [
+      'geometry-note',
+      'geometry',
+      '__emap_rowid',
+    ]);
   });
 });
