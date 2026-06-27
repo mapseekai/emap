@@ -96,6 +96,30 @@ function resultTable(rowIds: unknown[], names: string[] = []): Table {
   });
 }
 
+function findFirstCoordinateArray(shape: unknown): number[] | undefined {
+  if (
+    Array.isArray(shape) &&
+    shape.length >= 2 &&
+    typeof shape[0] === 'number' &&
+    typeof shape[1] === 'number'
+  ) {
+    return shape as number[];
+  }
+  if (Array.isArray(shape)) {
+    for (const child of shape) {
+      const found = findFirstCoordinateArray(child);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+function firstCoordinateArray(shape: unknown): number[] {
+  const found = findFirstCoordinateArray(shape);
+  if (found) return found;
+  throw new Error('Expected shape to contain coordinates');
+}
+
 async function expectDuckDbError(
   promise: Promise<unknown>,
   kind: DuckDbOperationError['kind'],
@@ -144,6 +168,24 @@ describe('queryDatasetWithDuckDb', () => {
     ]);
     expect(result.layers[0]?.shapes?.[0]).not.toBe(dataset.layers[0]?.shapes?.[2]);
     expect(result.info?.crs_string).toBe('EPSG:4326');
+  });
+
+  it('does not alias output shape coordinate arrays to the source dataset', async () => {
+    const dataset = await pointDataset();
+    const runtime = new FakeRuntime(resultTable([0], ['alpha']));
+    const sourceCoord = firstCoordinateArray(dataset.layers[0]?.shapes?.[0]);
+    const originalSourceX = sourceCoord[0];
+
+    const result = await queryDatasetWithDuckDb(
+      dataset,
+      { sql: 'SELECT name FROM input LIMIT 1' },
+      runtime,
+    );
+
+    const resultCoord = firstCoordinateArray(result.layers[0]?.shapes?.[0]);
+    resultCoord[0] = 99;
+
+    expect(sourceCoord[0]).toBe(originalSourceX);
   });
 
   it('maps a null runtime to runtime-unavailable', async () => {

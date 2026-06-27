@@ -132,9 +132,16 @@ function resultRowIds(table: Table, rowIdColumn: string, rowCount: number): numb
   return rowIds;
 }
 
-function cloneShapeTopLevel(shape: FeatureShape | null): FeatureShape | null {
-  if (!Array.isArray(shape)) return shape;
-  return [...shape] as FeatureShape;
+type ShapeNode = number | ShapeNode[];
+
+function cloneShapeNode(node: ShapeNode): ShapeNode {
+  if (!Array.isArray(node)) return node;
+  return node.map((child) => cloneShapeNode(child));
+}
+
+function cloneShape(shape: FeatureShape | null): FeatureShape | null {
+  if (shape === null) return null;
+  return cloneShapeNode(shape as ShapeNode) as FeatureShape;
 }
 
 function rebuildShapes(
@@ -142,7 +149,7 @@ function rebuildShapes(
   rowIds: readonly number[],
 ): (FeatureShape | null)[] | null {
   if (!layer.shapes) return null;
-  return rowIds.map((rowId) => cloneShapeTopLevel(layer.shapes![rowId] ?? null));
+  return rowIds.map((rowId) => cloneShape(layer.shapes![rowId] ?? null));
 }
 
 export async function queryDatasetWithDuckDb(
