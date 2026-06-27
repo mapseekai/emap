@@ -233,13 +233,18 @@ export async function queryDatasetWithDuckDb(
     primaryError = wrapped;
     throw wrapped;
   } finally {
+    let cleanupError: unknown;
     if (conn) {
-      await conn
+      cleanupError = await conn
         .query(`DROP TABLE IF EXISTS ${quoteIdentifier(inputTableName)}`)
-        .catch(() => undefined);
+        .catch((err) => err);
     }
 
     const closeError = await conn?.close?.().catch((err) => err);
-    if (closeError && !primaryError) throw closeError;
+    if ((cleanupError || closeError) && !primaryError) {
+      throw new DuckDbOperationError('query-failed', 'DuckDB query cleanup failed', {
+        cause: cleanupError ?? closeError,
+      });
+    }
   }
 }

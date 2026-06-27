@@ -30,6 +30,7 @@ const POINTS_FC = {
 
 type FakeRuntimeOptions = {
   closeError?: unknown;
+  dropError?: unknown;
   queryError?: unknown;
 };
 
@@ -49,6 +50,9 @@ class FakeConnection implements DuckDbConnection {
 
   async query(sql: string): Promise<Table> {
     this.queries.push(sql);
+    if (sql.startsWith('DROP TABLE IF EXISTS') && this.options.dropError) {
+      throw this.options.dropError;
+    }
     if (!sql.startsWith('DROP TABLE IF EXISTS') && this.options.queryError) {
       throw this.options.queryError;
     }
@@ -194,6 +198,22 @@ describe('queryDatasetWithDuckDb', () => {
     );
 
     expect(err.message).toMatch(/query failed/i);
+    expect(runtime.connection.closed).toBe(true);
+  });
+
+  it('maps cleanup DROP failures after a successful query to query-failed and still closes', async () => {
+    const dataset = await pointDataset();
+    const runtime = new FakeRuntime(resultTable([0], ['alpha']), {
+      dropError: new Error('drop failed'),
+    });
+
+    const err = await expectDuckDbError(
+      queryDatasetWithDuckDb(dataset, { sql: 'SELECT name FROM input' }, runtime),
+      'query-failed',
+    );
+
+    expect(err.message).toMatch(/cleanup failed/i);
+    expect(runtime.connection.queries.at(-1)).toMatch(/^DROP TABLE IF EXISTS "/);
     expect(runtime.connection.closed).toBe(true);
   });
 
