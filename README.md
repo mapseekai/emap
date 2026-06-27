@@ -358,9 +358,12 @@ const filtered = await queryDatasetWithDuckDb(dataset, {
 });
 ```
 
-The first batch supports scalar attribute projection, filtering, ordering, and
-limiting. Joins, multiple statements, mutating SQL, and calculated output
-geometry are rejected before DuckDB execution.
+The first batch supports scalar attribute projection, simple scalar `WHERE`
+comparisons joined by `AND`/`OR`, scalar `ORDER BY`, and integer `LIMIT`.
+Joins, multiple statements, mutating SQL, and calculated output geometry are
+rejected before DuckDB execution. `validateDuckDbSelectSql` is also exported for
+callers that need to preflight the same restricted SQL contract; it is
+intentionally conservative and evolves with this first-batch query surface.
 
 For map-like integrations, use the adapter form with a minimal source context:
 
