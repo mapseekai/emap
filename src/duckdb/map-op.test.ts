@@ -1,4 +1,4 @@
-import type { Table } from 'apache-arrow';
+import { tableFromArrays, type Table } from 'apache-arrow';
 import { describe, expect, it } from 'vitest';
 import { toArrowTable } from '../formats/dataset-to-table';
 import { datasetFromGeoJSON } from '../formats/test-utils';
@@ -7,6 +7,7 @@ import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
 import {
   duckDbBufferLayer,
   duckDbGeometryLayer,
+  duckDbQueryLayer,
   duckDbRelationLayer,
   type DuckDbMapOpContext,
   type DuckDbMapOpSource,
@@ -280,6 +281,100 @@ describe('duckDbGeometryLayer', () => {
 
     expect(result.ok).toBe(false);
     expect(ctx.outputDatasets.has('centroids')).toBe(false);
+  });
+});
+
+describe('duckDbQueryLayer', () => {
+  it('writes an output source dataset after a successful SELECT query', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+    const runtime = new FakeRuntime(tableFromArrays({ __emap_rowid: [0], name: ['a'] }));
+
+    const result = await duckDbQueryLayer(ctx, {
+      src: 'src',
+      sql: 'SELECT name FROM input',
+      output: { sourceId: 'query' },
+      runtime,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(ctx.outputDatasets.has('query')).toBe(true);
+    if (result.ok) {
+      expect(result.value.sourceId).toBe('query');
+      expect(result.value.dataset).toBe(ctx.outputDatasets.get('query'));
+      expect(result.value.dataset.layers[0]!.data?.getRecords()).toEqual([{ name: 'a' }]);
+    }
+  });
+
+  it('returns not-found when the input source is missing', async () => {
+    const ctx = new FakeContext();
+
+    const result = await duckDbQueryLayer(ctx, {
+      src: 'missing',
+      sql: 'SELECT name FROM input',
+      output: { sourceId: 'query' },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: 'not-found', what: 'source', id: 'missing' },
+    });
+  });
+
+  it('returns validation when output source id is missing', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+
+    const result = await duckDbQueryLayer(ctx, {
+      src: 'src',
+      sql: 'SELECT name FROM input',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'output.sourceId',
+        reason: 'DuckDB operation requires output.sourceId',
+      },
+    });
+  });
+
+  it('maps SQL validation errors to validation results', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+
+    const result = await duckDbQueryLayer(ctx, {
+      src: 'src',
+      sql: 'DELETE FROM input',
+      output: { sourceId: 'query' },
+      runtime: new FakeRuntime(tableFromArrays({ __emap_rowid: [0], name: ['a'] })),
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { kind: 'validation', field: 'sql' },
+    });
+    expect(ctx.outputDatasets.has('query')).toBe(false);
+  });
+
+  it('does not create output source when query processing fails', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+    const runtime = new FakeRuntime(
+      tableFromArrays({ __emap_rowid: [0], name: ['a'] }),
+      new Error('query failed'),
+    );
+
+    const result = await duckDbQueryLayer(ctx, {
+      src: 'src',
+      sql: 'SELECT name FROM input',
+      output: { sourceId: 'query' },
+      runtime,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(ctx.outputDatasets.has('query')).toBe(false);
   });
 });
 

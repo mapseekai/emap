@@ -47,6 +47,7 @@ import {
 } from './duckdb-relation-ops';
 import type { DuckDbRuntime } from './duckdb-runtime';
 import type { DuckDbUnaryGeometryOptions } from './duckdb-geometry-op';
+import { queryDatasetWithDuckDb, type DuckDbQueryOptions } from './duckdb-query-op';
 
 export interface DuckDbMapOpSource {
   getDataset(): MapshaperDataset | null | undefined;
@@ -88,6 +89,12 @@ export interface DuckDbRelationLayerOptions extends DuckDbRelationHelperOptions 
   runtime?: DuckDbRuntime;
 }
 
+export interface DuckDbQueryLayerOptions extends DuckDbQueryOptions {
+  src: string;
+  output?: { sourceId: string };
+  runtime?: DuckDbRuntime;
+}
+
 interface DuckDbLayerSuccess {
   sourceId: string;
   dataset: MapshaperDataset;
@@ -97,6 +104,7 @@ export type DuckDbBufferLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbGeometryLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbAttributeLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbRelationLayerResult = OpResult<DuckDbLayerSuccess>;
+export type DuckDbQueryLayerResult = OpResult<DuckDbLayerSuccess>;
 
 function duckDbErrorToOpResult(err: unknown, operation: string): OpResult<never> {
   if (err instanceof DuckDbOperationError && err.kind === 'validation') {
@@ -147,6 +155,25 @@ export async function duckDbBufferLayer(
     return okValue({ sourceId, dataset });
   } catch (err) {
     return duckDbErrorToOpResult(err, 'duckdb-buffer');
+  }
+}
+
+export async function duckDbQueryLayer(
+  ctx: DuckDbMapOpContext,
+  opts: DuckDbQueryLayerOptions,
+): Promise<DuckDbQueryLayerResult> {
+  const input = readInputDataset(ctx, opts.src);
+  if (!input.ok) return input.result;
+
+  const sourceId = outputSourceId(opts.output);
+  if (typeof sourceId !== 'string') return sourceId;
+
+  try {
+    const dataset = await queryDatasetWithDuckDb(input.dataset, opts, opts.runtime);
+    await ctx.setSourceDataset(sourceId, dataset);
+    return okValue({ sourceId, dataset });
+  } catch (err) {
+    return duckDbErrorToOpResult(err, 'duckdb-query');
   }
 }
 
