@@ -208,12 +208,15 @@ import {
   duckDbBufferLayer,
   duckDbGeoParquetQueryLayer,
   duckDbGeometryLayer,
+  duckDbOverlayLayer,
   duckDbRelationLayer,
+  differenceDatasetWithDuckDb,
   envelopeDatasetWithDuckDb,
   geometryTypeDatasetWithDuckDb,
   distanceDatasetWithDuckDb,
   intersectsAttributeDatasetWithDuckDb,
   intersectsDatasetWithDuckDb,
+  intersectionDatasetWithDuckDb,
   simplifyPreserveTopologyDatasetWithDuckDb,
   setDuckDbRuntime,
 } from '@zwishing/emap/duckdb';
@@ -354,6 +357,24 @@ const withDistance = await distanceDatasetWithDuckDb(parcels, hospitals, {
 });
 ```
 
+Overlay helpers create new input-derived geometries from a mask dataset:
+
+```ts
+const clipped = await intersectionDatasetWithDuckDb(parcels, floodplain, {
+  inputLayer: 'parcels',
+  maskLayer: 'floodplain',
+  outputLayer: 'parcels_clipped',
+});
+
+const erased = await differenceDatasetWithDuckDb(parcels, floodplain, {
+  outputLayer: 'parcels_erased',
+});
+```
+
+Mask geometries are unioned before overlay. Output keeps input attributes only;
+mask attributes are not copied. Output CRS metadata inherits from the input
+dataset, so input and mask datasets must already use the same CRS.
+
 #### Restricted SELECT queries
 
 For scalar attribute queries, `queryDatasetWithDuckDb` registers one logical
@@ -430,6 +451,16 @@ await duckDbRelationLayer(ctx, {
   inputLayer: 'parcels',
   maskLayer: 'floodplain',
   output: { sourceId: 'parcels-in-floodplain' },
+});
+
+await duckDbOverlayLayer(ctx, {
+  src: 'parcels',
+  mask: 'floodplain',
+  operation: 'intersection',
+  inputLayer: 'parcels',
+  maskLayer: 'floodplain',
+  outputLayer: 'parcels_clipped',
+  output: { sourceId: 'parcels-clipped' },
 });
 
 await duckDbGeoParquetQueryLayer(ctx, {

@@ -8,6 +8,8 @@ export * from './duckdb-query-op';
 export * from './duckdb-query-sql';
 export * from './duckdb-relation-op';
 export * from './duckdb-relation-ops';
+export * from './duckdb-overlay-op';
+export * from './duckdb-overlay-ops';
 export * from './duckdb-runtime';
 export * from './duckdb-spatial-ops';
 export * from './map-op';
