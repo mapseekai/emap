@@ -247,8 +247,17 @@ setDuckDbRuntime({
       close: () => conn.close(),
     };
   },
+  async registerFileBuffer(name, buffer) {
+    await db.registerFileBuffer(name, buffer);
+  },
+  async dropFile(name) {
+    await db.dropFile?.(name);
+  },
 });
 ```
+
+`registerFileBuffer` is required for GeoParquet byte queries. `dropFile` is
+optional cleanup and is called only when the injected runtime exposes it.
 
 Or create the browser runtime from DuckDB's jsDelivr bundles:
 
@@ -908,6 +917,9 @@ test/examples/               # Manual HTML examples
 - Mapshaper internals must remain isolated behind `MapshaperAdapter`.
 
 ## Development
+
+Repository development and tests require Node.js `^20.19.0` or `>=22.12.0`,
+matching the Vite/Vitest toolchain used by the test runner.
 
 Install dependencies (use `pnpm` locally, or `cmd /c npm install` on Windows
 to avoid the PowerShell shim):
