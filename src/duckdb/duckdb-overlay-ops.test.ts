@@ -114,8 +114,24 @@ describe('DuckDB named overlay dataset helpers', () => {
     });
   });
 
-  it('rejects unsupported overlay operations', () => {
-    expect(() => getDuckDbOverlayOperationSpec('union')).toThrow(DuckDbOperationError);
+  it.each([
+    'union',
+    'toString',
+    'constructor',
+    '__proto__',
+  ])('rejects unsupported overlay operation %s', (operation) => {
+    let caught: unknown;
+    try {
+      getDuckDbOverlayOperationSpec(operation);
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(DuckDbOperationError);
+    expect(caught).toMatchObject({
+      kind: 'validation',
+      message: `Unsupported DuckDB overlay operation: ${operation}`,
+    });
   });
 
   it('runs intersection SQL and preserves the output layer name', async () => {

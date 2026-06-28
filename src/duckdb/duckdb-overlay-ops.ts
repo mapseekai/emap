@@ -23,14 +23,16 @@ const OVERLAY_OPERATION_SPECS = {
 export type DuckDbOverlayHelperOptions = DuckDbOverlayOptions;
 
 export function getDuckDbOverlayOperationSpec(operation: string): DuckDbOverlayOperationSpec {
-  const spec = OVERLAY_OPERATION_SPECS[operation as DuckDbOverlayOperationId];
-  if (!spec) {
-    throw new DuckDbOperationError(
-      'validation',
-      `Unsupported DuckDB overlay operation: ${operation}`,
-    );
+  switch (operation) {
+    case 'intersection':
+    case 'difference':
+      return OVERLAY_OPERATION_SPECS[operation];
+    default:
+      throw new DuckDbOperationError(
+        'validation',
+        `Unsupported DuckDB overlay operation: ${operation}`,
+      );
   }
-  return spec;
 }
 
 function runOverlayHelper(
