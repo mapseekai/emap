@@ -1,5 +1,6 @@
 export * from './duckdb-errors';
 export * from './duckdb-buffer';
+export * from './duckdb-geoparquet-query-op';
 export * from './duckdb-geometry-op';
 export * from './duckdb-attribute-op';
 export * from './duckdb-attribute-ops';
