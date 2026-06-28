@@ -45,6 +45,12 @@ import {
   type DuckDbRelationHelperOptions,
   type DuckDbRelationOperationId,
 } from './duckdb-relation-ops';
+import {
+  differenceDatasetWithDuckDb,
+  intersectionDatasetWithDuckDb,
+  type DuckDbOverlayHelperOptions,
+  type DuckDbOverlayOperationId,
+} from './duckdb-overlay-ops';
 import type { DuckDbRuntime } from './duckdb-runtime';
 import type { DuckDbUnaryGeometryOptions } from './duckdb-geometry-op';
 import { queryDatasetWithDuckDb, type DuckDbQueryOptions } from './duckdb-query-op';
@@ -500,5 +506,72 @@ export async function duckDbGeoParquetQueryLayer(
     return okValue({ sourceId, dataset });
   } catch (err) {
     return duckDbErrorToOpResult(err, 'duckdb-geoparquet-query');
+  }
+}
+
+export interface DuckDbOverlayLayerOptions {
+  src: string;
+  mask: string;
+  operation: DuckDbOverlayOperationId | string;
+  inputLayer?: string | number;
+  maskLayer?: string | number;
+  inputGeometryColumn?: string;
+  maskGeometryColumn?: string;
+  output?: { sourceId: string };
+  runtime?: DuckDbRuntime;
+}
+
+export type DuckDbOverlayLayerResult = OpResult<DuckDbLayerSuccess>;
+
+function overlayOptions(opts: DuckDbOverlayLayerOptions): DuckDbOverlayHelperOptions {
+  return {
+    inputLayer: opts.inputLayer,
+    maskLayer: opts.maskLayer,
+    outputLayer: opts.output?.sourceId,
+    inputGeometryColumn: opts.inputGeometryColumn,
+    maskGeometryColumn: opts.maskGeometryColumn,
+  };
+}
+
+async function runOverlayOperation(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbOverlayLayerOptions,
+): Promise<MapshaperDataset> {
+  const helperOptions = overlayOptions(opts);
+
+  switch (opts.operation) {
+    case 'intersection':
+      return intersectionDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
+    case 'difference':
+      return differenceDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
+    default:
+      throw new DuckDbOperationError(
+        'validation',
+        `Unsupported DuckDB overlay operation: ${String(opts.operation)}`,
+        { field: 'operation' },
+      );
+  }
+}
+
+export async function duckDbOverlayLayer(
+  ctx: DuckDbMapOpContext,
+  opts: DuckDbOverlayLayerOptions,
+): Promise<DuckDbOverlayLayerResult> {
+  const input = readInputDataset(ctx, opts.src);
+  if (!input.ok) return input.result;
+
+  const mask = readInputDataset(ctx, opts.mask, 'mask');
+  if (!mask.ok) return mask.result;
+
+  const sourceId = outputSourceId(opts.output);
+  if (typeof sourceId !== 'string') return sourceId;
+
+  try {
+    const dataset = await runOverlayOperation(input.dataset, mask.dataset, opts);
+    await ctx.setSourceDataset(sourceId, dataset);
+    return okValue({ sourceId, dataset });
+  } catch (err) {
+    return duckDbErrorToOpResult(err, `duckdb-${opts.operation}-overlay`);
   }
 }

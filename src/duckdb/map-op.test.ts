@@ -8,6 +8,7 @@ import {
   duckDbBufferLayer,
   duckDbGeoParquetQueryLayer,
   duckDbGeometryLayer,
+  duckDbOverlayLayer,
   duckDbQueryLayer,
   duckDbRelationLayer,
   type DuckDbMapOpContext,
@@ -722,5 +723,101 @@ describe('duckDbRelationLayer', () => {
 
     expect(result.ok).toBe(true);
     expect(runtime.connection.queries.join('\n')).toContain('12.5');
+  });
+});
+
+describe('duckDbOverlayLayer', () => {
+  it('writes overlay result to output source on success', async () => {
+    const input = await polygonDataset();
+    const mask = await polygonDataset();
+    const ctx = makeContext('src', input);
+    ctx.sources.set('mask', new FakeSource(mask));
+    const runtime = new FakeRuntime(toArrowTable(input, { encoding: 'wkb' }));
+
+    const result = await duckDbOverlayLayer(ctx, {
+      src: 'src',
+      mask: 'mask',
+      operation: 'intersection',
+      output: { sourceId: 'overlay' },
+      runtime,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(ctx.outputDatasets.has('overlay')).toBe(true);
+    if (result.ok) {
+      expect(result.value.sourceId).toBe('overlay');
+      expect(result.value.dataset).toBe(ctx.outputDatasets.get('overlay'));
+    }
+    expect(runtime.connection.inserted).toHaveLength(2);
+    expect(runtime.connection.queries.join('\n')).toContain('ST_Intersection');
+  });
+
+  it('returns not-found and does not write output when mask source is missing', async () => {
+    const input = await polygonDataset();
+    const ctx = makeContext('src', input);
+
+    const result = await duckDbOverlayLayer(ctx, {
+      src: 'src',
+      mask: 'missing',
+      operation: 'intersection',
+      output: { sourceId: 'overlay' },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: 'not-found', what: 'source', id: 'missing' },
+    });
+    expect(ctx.outputDatasets.has('overlay')).toBe(false);
+  });
+
+  it('returns validation and does not write output when output source id is missing', async () => {
+    const input = await polygonDataset();
+    const mask = await polygonDataset();
+    const ctx = makeContext('src', input);
+    ctx.sources.set('mask', new FakeSource(mask));
+
+    const result = await duckDbOverlayLayer(ctx, {
+      src: 'src',
+      mask: 'mask',
+      operation: 'intersection',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'output.sourceId',
+        reason: 'DuckDB operation requires output.sourceId',
+      },
+    });
+    expect(ctx.outputDatasets.size).toBe(0);
+  });
+
+  it('returns failure and does not write output when DuckDB processing fails', async () => {
+    const input = await polygonDataset();
+    const mask = await polygonDataset();
+    const ctx = makeContext('src', input);
+    ctx.sources.set('mask', new FakeSource(mask));
+    const runtime = new FakeRuntime(
+      toArrowTable(input, { encoding: 'wkb' }),
+      new Error('query failed'),
+    );
+
+    const result = await duckDbOverlayLayer(ctx, {
+      src: 'src',
+      mask: 'mask',
+      operation: 'difference',
+      output: { sourceId: 'overlay' },
+      runtime,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatchObject({
+        kind: 'mapshaper',
+        operation: 'duckdb-difference-overlay',
+      });
+    }
+    expect(ctx.outputDatasets.has('overlay')).toBe(false);
   });
 });
