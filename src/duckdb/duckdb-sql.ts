@@ -198,9 +198,7 @@ export function buildOverlaySql(opts: BuildOverlaySqlOptions): string {
   const duckDbFunction = assertSafeDuckDbFunction(opts.duckDbFunction);
   const overlayExpression = `${duckDbFunction}(${inputGeometryColumn}, mask_coverage.mask_geometry)`;
   const emptyMaskPredicate =
-    opts.duckDbFunction === 'ST_Intersection'
-      ? 'mask_coverage.mask_geometry IS NOT NULL'
-      : 'TRUE';
+    opts.duckDbFunction === 'ST_Intersection' ? 'mask_coverage.mask_geometry IS NOT NULL' : 'TRUE';
 
   return [
     'WITH mask_coverage AS (',
