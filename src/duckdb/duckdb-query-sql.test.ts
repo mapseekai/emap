@@ -261,8 +261,8 @@ describe('validateDuckDbSelectSql for GeoParquet results', () => {
   });
 
   it('rejects direct read_parquet calls in user SQL', () => {
-    expect(() =>
-      validateGeoParquet("SELECT geometry FROM read_parquet('file.parquet')"),
-    ).toThrow(DuckDbOperationError);
+    expect(() => validateGeoParquet("SELECT geometry FROM read_parquet('file.parquet')")).toThrow(
+      DuckDbOperationError,
+    );
   });
 });

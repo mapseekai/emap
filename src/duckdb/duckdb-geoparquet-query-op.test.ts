@@ -115,10 +115,7 @@ function invalidWkbResultTable(): Table {
 }
 
 function binaryGeometryResultTable(geometry: Uint8Array): Table {
-  const fields = [
-    new Field('geometry', new Binary(), true),
-    new Field('name', new Utf8(), true),
-  ];
+  const fields = [new Field('geometry', new Binary(), true), new Field('name', new Utf8(), true)];
   const geometryData = makeData({
     type: new Binary(),
     length: 1,

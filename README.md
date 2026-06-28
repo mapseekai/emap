@@ -365,6 +365,26 @@ rejected before DuckDB execution. `validateDuckDbSelectSql` is also exported for
 callers that need to preflight the same restricted SQL contract; it is
 intentionally conservative and evolves with this first-batch query surface.
 
+##### Query GeoParquet bytes with DuckDB
+
+`@zwishing/emap/duckdb` can run the same restricted `SELECT ... FROM input ...`
+contract against GeoParquet bytes. The helper registers the bytes with
+DuckDB-Wasm, exposes them as the logical `input` table, and converts the
+geometry-bearing Arrow result to a `MapshaperDataset`.
+
+```ts
+import { queryGeoParquetWithDuckDb } from '@zwishing/emap/duckdb';
+
+const result = await queryGeoParquetWithDuckDb(bytes, {
+  layerName: 'active_points',
+  sql: 'SELECT geometry, name FROM input WHERE active = true',
+});
+```
+
+The first batch requires the projection to include a detectable geometry column,
+for example `SELECT geometry, name FROM input`. Direct `read_parquet(...)` calls,
+joins, mutations, and multiple statements are rejected by the validator.
+
 For map-like integrations, use the adapter form with a minimal source context:
 
 ```ts

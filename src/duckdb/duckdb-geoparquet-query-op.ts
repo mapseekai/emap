@@ -113,11 +113,9 @@ export async function queryGeoParquetWithDuckDb(
       primaryError = err;
       throw err;
     }
-    const wrapped = new DuckDbOperationError(
-      'query-failed',
-      'DuckDB GeoParquet query failed',
-      { cause: err },
-    );
+    const wrapped = new DuckDbOperationError('query-failed', 'DuckDB GeoParquet query failed', {
+      cause: err,
+    });
     primaryError = wrapped;
     throw wrapped;
   } finally {
@@ -143,11 +141,9 @@ export async function queryGeoParquetWithDuckDb(
     }
 
     if (cleanupError && !primaryError) {
-      throw new DuckDbOperationError(
-        'query-failed',
-        'DuckDB GeoParquet query cleanup failed',
-        { cause: cleanupError },
-      );
+      throw new DuckDbOperationError('query-failed', 'DuckDB GeoParquet query cleanup failed', {
+        cause: cleanupError,
+      });
     }
   }
 }
