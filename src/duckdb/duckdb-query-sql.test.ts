@@ -25,6 +25,17 @@ function validateWithColumns(sql: string, availableColumns: readonly string[]) {
   });
 }
 
+function validateGeoParquet(sql: string) {
+  return validateDuckDbSelectSql(sql, {
+    allowGeometryProjection: true,
+    availableColumns: columns,
+    geometryColumn: 'geometry',
+    inputTableName: 'input',
+    physicalTableName: 'emap_duckdb_geoparquet_input_1',
+    rowIdColumn: null,
+  });
+}
+
 function expectValidationError(sql: string) {
   expect(() => validate(sql)).toThrow(DuckDbOperationError);
   expect(() => validate(sql)).toThrow(/DuckDB query/);
@@ -220,5 +231,38 @@ describe('validateDuckDbSelectSql', () => {
       'geometry',
       '__emap_rowid',
     ]);
+  });
+});
+
+describe('validateDuckDbSelectSql for GeoParquet results', () => {
+  it('allows geometry projection without adding an internal row id', () => {
+    expect(validateGeoParquet('SELECT geometry, name FROM input WHERE population > 10')).toEqual({
+      outputColumns: ['geometry', 'name'],
+      rowIdColumn: null,
+      sql: 'SELECT "input"."geometry" AS "geometry", "input"."name" AS "name" FROM "emap_duckdb_geoparquet_input_1" AS "input" WHERE population > 10',
+    });
+  });
+
+  it('expands star to include geometry when geometry projection is allowed', () => {
+    expect(validateGeoParquet('SELECT * FROM input LIMIT 1')).toEqual({
+      outputColumns: ['name', 'population', 'active', 'geometry'],
+      rowIdColumn: null,
+      sql: 'SELECT "input"."name" AS "name", "input"."population" AS "population", "input"."active" AS "active", "input"."geometry" AS "geometry" FROM "emap_duckdb_geoparquet_input_1" AS "input" LIMIT 1',
+    });
+  });
+
+  it('still rejects geometry in WHERE and ORDER BY clauses', () => {
+    expect(() => validateGeoParquet('SELECT geometry FROM input WHERE geometry = 1')).toThrow(
+      DuckDbOperationError,
+    );
+    expect(() => validateGeoParquet('SELECT geometry FROM input ORDER BY geometry')).toThrow(
+      DuckDbOperationError,
+    );
+  });
+
+  it('rejects direct read_parquet calls in user SQL', () => {
+    expect(() =>
+      validateGeoParquet("SELECT geometry FROM read_parquet('file.parquet')"),
+    ).toThrow(DuckDbOperationError);
   });
 });

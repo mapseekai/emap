@@ -1,17 +1,26 @@
 import { DuckDbOperationError } from './duckdb-errors';
 
 export interface ValidateDuckDbSelectSqlOptions {
+  allowGeometryProjection?: boolean;
   availableColumns: readonly string[];
   geometryColumn?: string;
   inputTableName?: string;
   physicalTableName: string;
-  rowIdColumn?: string;
+  rowIdColumn?: string | null;
 }
 
 export interface ValidatedDuckDbSelectSql {
   outputColumns: string[];
-  rowIdColumn: string;
+  rowIdColumn: string | null;
   sql: string;
+}
+
+export interface ValidatedDuckDbSelectSqlWithRowId extends ValidatedDuckDbSelectSql {
+  rowIdColumn: string;
+}
+
+export interface ValidatedDuckDbSelectSqlWithoutRowId extends ValidatedDuckDbSelectSql {
+  rowIdColumn: null;
 }
 
 const DEFAULT_GEOMETRY_COLUMN = 'geometry';
@@ -46,16 +55,36 @@ const UNSUPPORTED_KEYWORD_PATTERNS = [
   /\bqualify\b/i,
   /\bwindow\b/i,
   /\bover\b/i,
+  /\bread_parquet\s*\(/i,
 ];
 
+export function validateDuckDbSelectSql(
+  sql: string,
+  opts: ValidateDuckDbSelectSqlOptions & { rowIdColumn: null },
+): ValidatedDuckDbSelectSqlWithoutRowId;
+export function validateDuckDbSelectSql(
+  sql: string,
+  opts: ValidateDuckDbSelectSqlOptions & { rowIdColumn?: string },
+): ValidatedDuckDbSelectSqlWithRowId;
 export function validateDuckDbSelectSql(
   sql: string,
   opts: ValidateDuckDbSelectSqlOptions,
 ): ValidatedDuckDbSelectSql {
   const inputTableName = opts.inputTableName ?? DEFAULT_INPUT_TABLE_NAME;
-  const rowIdColumn = opts.rowIdColumn ?? DEFAULT_ROW_ID_COLUMN;
+  const rowIdColumn =
+    opts.rowIdColumn === null ? null : (opts.rowIdColumn ?? DEFAULT_ROW_ID_COLUMN);
+  const reservedRowIdColumn = rowIdColumn ?? DEFAULT_ROW_ID_COLUMN;
   const geometryColumn = opts.geometryColumn ?? DEFAULT_GEOMETRY_COLUMN;
-  const scalarColumns = scalarColumnSet(opts.availableColumns, geometryColumn, rowIdColumn);
+  const scalarColumns = selectableColumnSet(opts.availableColumns, {
+    allowGeometryProjection: false,
+    geometryColumn,
+    rowIdColumn: reservedRowIdColumn,
+  });
+  const projectionColumns = selectableColumnSet(opts.availableColumns, {
+    allowGeometryProjection: opts.allowGeometryProjection === true,
+    geometryColumn,
+    rowIdColumn: reservedRowIdColumn,
+  });
   const trimmed = sql.trim();
 
   if (trimmed.length === 0) {
@@ -97,9 +126,14 @@ export function validateDuckDbSelectSql(
 
   validateTail(tail, maskedTail, scalarColumns);
 
-  const outputColumns = parseProjection(projectionSql, scalarColumns);
+  const outputColumns = parseProjection(projectionSql, projectionColumns);
+  const rowIdSelect = rowIdColumn
+    ? [
+        `${quoteIdentifier(inputTableName)}.${quoteIdentifier(rowIdColumn)} AS ${quoteIdentifier(rowIdColumn)}`,
+      ]
+    : [];
   const selectList = [
-    `${quoteIdentifier(inputTableName)}.${quoteIdentifier(rowIdColumn)} AS ${quoteIdentifier(rowIdColumn)}`,
+    ...rowIdSelect,
     ...outputColumns.map(
       (column) =>
         `${quoteIdentifier(inputTableName)}.${quoteIdentifier(column)} AS ${quoteIdentifier(column)}`,
@@ -405,13 +439,20 @@ function literalPattern(): string {
   return "(?:\\d+(?:\\.\\d+)?|'(?:[^']|'')*'|true|false|null)";
 }
 
-function scalarColumnSet(
+function selectableColumnSet(
   availableColumns: readonly string[],
-  geometryColumn: string,
-  rowIdColumn: string,
+  opts: {
+    allowGeometryProjection: boolean;
+    geometryColumn: string;
+    rowIdColumn: string | null;
+  },
 ): ReadonlySet<string> {
   return new Set(
-    availableColumns.filter((column) => column !== geometryColumn && column !== rowIdColumn),
+    availableColumns.filter((column) => {
+      if (opts.rowIdColumn && column === opts.rowIdColumn) return false;
+      if (!opts.allowGeometryProjection && column === opts.geometryColumn) return false;
+      return true;
+    }),
   );
 }
 
