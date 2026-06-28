@@ -205,25 +205,28 @@ describe('queryGeoParquetWithDuckDb', () => {
     );
   });
 
-  it('maps missing file cleanup support to runtime-unavailable before registration', async () => {
-    let registerCalls = 0;
+  it('supports runtimes without file cleanup support', async () => {
+    const conn = new FakeConnection(schemaOnlyTable(), pointResultTable());
+    const registeredFiles: Array<{ buffer: Uint8Array; name: string }> = [];
     const runtime = {
       async connect() {
-        throw new Error('connect should not be called');
+        return conn;
       },
       async ensureSpatial() {},
-      async registerFileBuffer() {
-        registerCalls += 1;
+      async registerFileBuffer(name: string, buffer: Uint8Array) {
+        registeredFiles.push({ name, buffer });
       },
     } satisfies DuckDbRuntime;
 
-    const err = await expectDuckDbError(
-      queryGeoParquetWithDuckDb(new Uint8Array([1]), { sql: 'SELECT name FROM input' }, runtime),
-      'runtime-unavailable',
+    const result = await queryGeoParquetWithDuckDb(
+      new Uint8Array([1]),
+      { sql: 'SELECT name, geometry FROM input' },
+      runtime,
     );
 
-    expect(err.message).toMatch(/cleanup/);
-    expect(registerCalls).toBe(0);
+    expect(registeredFiles).toHaveLength(1);
+    expect(conn.closed).toBe(true);
+    expect(result.layers[0]?.shapes).toHaveLength(1);
   });
 
   it('blocks direct read_parquet SQL before user-query execution', async () => {

@@ -206,6 +206,7 @@ import {
   createDuckDbRuntimeFromJsDelivr,
   duckDbAttributeLayer,
   duckDbBufferLayer,
+  duckDbGeoParquetQueryLayer,
   duckDbGeometryLayer,
   duckDbRelationLayer,
   envelopeDatasetWithDuckDb,
@@ -265,6 +266,7 @@ const buffered = await bufferDatasetWithDuckDb(dataset, {
   distance: 25,
   outputLayer: 'parcels_buffer',
 });
+```
 
 Unary geometry-to-geometry helpers share the same DuckDB-Wasm path:
 
@@ -290,7 +292,6 @@ Supported unary geometry helpers are centroid, envelope, convex hull, boundary,
 simplify, simplify-preserve-topology, and make-valid. Simplify tolerance uses
 dataset coordinate units and rejects geographic CRS by default; pass
 `failOnGeographicCrs: false` only when degree-based simplification is intentional.
-```
 
 Geometry-to-attribute helpers preserve the input geometry and append scalar
 record columns:
@@ -385,7 +386,9 @@ The first batch requires the projection to include a detectable geometry column,
 for example `SELECT geometry, name FROM input`. Direct `read_parquet(...)` calls,
 joins, mutations, and multiple statements are rejected by the validator.
 
-For map-like integrations, use the adapter form with a minimal source context:
+For map-like integrations, use the adapter form with a minimal source context.
+`duckDbGeoParquetQueryLayer` reads `ctx.getSource(src).getBytes()`; the
+dataset-backed adapters read `getDataset()`.
 
 ```ts
 await duckDbBufferLayer(ctx, {
@@ -418,6 +421,12 @@ await duckDbRelationLayer(ctx, {
   inputLayer: 'parcels',
   maskLayer: 'floodplain',
   output: { sourceId: 'parcels-in-floodplain' },
+});
+
+await duckDbGeoParquetQueryLayer(ctx, {
+  src: 'uploaded-parcels',
+  sql: 'SELECT geometry, name FROM input WHERE active = true',
+  output: { sourceId: 'active-parcels' },
 });
 ```
 

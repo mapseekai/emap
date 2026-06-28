@@ -469,6 +469,50 @@ describe('duckDbGeoParquetQueryLayer', () => {
       },
     });
   });
+
+  it('returns validation and leaves output empty for invalid GeoParquet SQL', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeByteContext('src', new Uint8Array([80, 65, 82, 49]));
+    const runtime = new FakeRuntime(toArrowTable(dataset, { encoding: 'wkb' }));
+
+    const result = await duckDbGeoParquetQueryLayer(ctx, {
+      src: 'src',
+      sql: "SELECT geometry FROM read_parquet('other.parquet')",
+      output: { sourceId: 'query' },
+      runtime,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatchObject({ kind: 'validation', field: 'sql' });
+    }
+    expect(ctx.outputDatasets.has('query')).toBe(false);
+  });
+
+  it('returns mapshaper and leaves output empty when GeoParquet query fails', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeByteContext('src', new Uint8Array([80, 65, 82, 49]));
+    const runtime = new FakeRuntime(
+      toArrowTable(dataset, { encoding: 'wkb' }),
+      new Error('query failed'),
+    );
+
+    const result = await duckDbGeoParquetQueryLayer(ctx, {
+      src: 'src',
+      sql: 'SELECT geometry, name FROM input',
+      output: { sourceId: 'query' },
+      runtime,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatchObject({
+        kind: 'mapshaper',
+        operation: 'duckdb-geoparquet-query',
+      });
+    }
+    expect(ctx.outputDatasets.has('query')).toBe(false);
+  });
 });
 
 describe('duckDbRelationLayer', () => {

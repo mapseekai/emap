@@ -50,12 +50,6 @@ export async function queryGeoParquetWithDuckDb(
       'DuckDB runtime does not support GeoParquet file registration',
     );
   }
-  if (typeof runtime.dropFile !== 'function') {
-    throw new DuckDbOperationError(
-      'runtime-unavailable',
-      'DuckDB runtime does not support GeoParquet file cleanup',
-    );
-  }
 
   const bytes = normalizeBytes(data);
   const { fileName, viewName } = nextDuckDbGeoParquetQueryNames();
@@ -135,7 +129,7 @@ export async function queryGeoParquetWithDuckDb(
     }
 
     try {
-      await runtime.dropFile(fileName);
+      await runtime.dropFile?.(fileName);
     } catch (err) {
       cleanupError ??= err;
     }
