@@ -517,6 +517,7 @@ export interface DuckDbOverlayLayerOptions {
   maskLayer?: string | number;
   inputGeometryColumn?: string;
   maskGeometryColumn?: string;
+  outputLayer?: string;
   output?: { sourceId: string };
   runtime?: DuckDbRuntime;
 }
@@ -527,7 +528,7 @@ function overlayOptions(opts: DuckDbOverlayLayerOptions): DuckDbOverlayHelperOpt
   return {
     inputLayer: opts.inputLayer,
     maskLayer: opts.maskLayer,
-    outputLayer: opts.output?.sourceId,
+    outputLayer: opts.outputLayer,
     inputGeometryColumn: opts.inputGeometryColumn,
     maskGeometryColumn: opts.maskGeometryColumn,
   };

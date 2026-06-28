@@ -125,6 +125,17 @@ function makeByteContext(
   return ctx;
 }
 
+function makeSelectableLayerDataset(
+  dataset: MapshaperDataset,
+  selectedLayerName: string,
+): MapshaperDataset {
+  const baseLayer = dataset.layers[0]!;
+  const defaultLayer = { ...baseLayer, name: 'default' };
+  delete defaultLayer.data;
+  dataset.layers = [defaultLayer, { ...baseLayer, name: selectedLayerName }];
+  return dataset;
+}
+
 describe('duckDbBufferLayer', () => {
   it('reads a source dataset and creates a new output source after success', async () => {
     const dataset = await polygonDataset();
@@ -752,6 +763,52 @@ describe('duckDbOverlayLayer', () => {
     expect(runtime.connection.queries.join('\n')).toContain('ST_Intersection');
   });
 
+  it('forwards layer and geometry options independently from output source id', async () => {
+    const input = makeSelectableLayerDataset(await polygonDataset(), 'parcels');
+    const mask = makeSelectableLayerDataset(await polygonDataset(), 'clip_mask');
+    const ctx = makeContext('src', input);
+    ctx.sources.set('mask', new FakeSource(mask));
+    const runtime = new FakeRuntime(
+      toArrowTable(input, {
+        layer: 'parcels',
+        geometryColumn: 'input_geom',
+        encoding: 'wkb',
+      }),
+    );
+
+    const result = await duckDbOverlayLayer(ctx, {
+      src: 'src',
+      mask: 'mask',
+      operation: 'intersection',
+      inputLayer: 'parcels',
+      maskLayer: 'clip_mask',
+      inputGeometryColumn: 'input_geom',
+      maskGeometryColumn: 'mask_geom',
+      output: { sourceId: 'overlay-source' },
+      outputLayer: 'parcels_clip',
+      runtime,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(ctx.outputDatasets.has('overlay-source')).toBe(true);
+    if (result.ok) {
+      expect(result.value.sourceId).toBe('overlay-source');
+      expect(result.value.dataset).toBe(ctx.outputDatasets.get('overlay-source'));
+      expect(result.value.dataset.layers[0]?.name).toBe('parcels_clip');
+    }
+
+    const inputFields = runtime.connection.inserted[0]!.table.schema.fields.map(
+      (field) => field.name,
+    );
+    const maskFields = runtime.connection.inserted[1]!.table.schema.fields.map(
+      (field) => field.name,
+    );
+    expect(inputFields).toEqual(expect.arrayContaining(['name', 'input_geom']));
+    expect(maskFields).toEqual(expect.arrayContaining(['name', 'mask_geom']));
+    expect(runtime.connection.queries[0]).toContain('i."input_geom"');
+    expect(runtime.connection.queries[0]).toContain('m."mask_geom"');
+  });
+
   it('returns not-found and does not write output when mask source is missing', async () => {
     const input = await polygonDataset();
     const ctx = makeContext('src', input);
@@ -791,6 +848,30 @@ describe('duckDbOverlayLayer', () => {
       },
     });
     expect(ctx.outputDatasets.size).toBe(0);
+  });
+
+  it('returns validation and does not write output for unsupported operations', async () => {
+    const input = await polygonDataset();
+    const mask = await polygonDataset();
+    const ctx = makeContext('src', input);
+    ctx.sources.set('mask', new FakeSource(mask));
+
+    const result = await duckDbOverlayLayer(ctx, {
+      src: 'src',
+      mask: 'mask',
+      operation: 'union',
+      output: { sourceId: 'overlay' },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'operation',
+        reason: 'Unsupported DuckDB overlay operation: union',
+      },
+    });
+    expect(ctx.outputDatasets.has('overlay')).toBe(false);
   });
 
   it('returns failure and does not write output when DuckDB processing fails', async () => {
