@@ -1,7 +1,7 @@
 import type { Table } from 'apache-arrow';
 import { toArrowTable } from '../formats/dataset-to-table';
 import { fromArrowTable } from '../formats/table-to-dataset';
-import type { MapshaperDataset } from '../types/mapshaper-types';
+import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import { DuckDbOperationError } from './duckdb-errors';
 import { getDuckDbRuntime, type DuckDbRuntime } from './duckdb-runtime';
 import { buildOverlaySql, type OverlayDuckDbFunction } from './duckdb-sql';
@@ -36,6 +36,38 @@ function quoteIdentifier(id: string): string {
   return `"${id.replaceAll('"', '""')}"`;
 }
 
+function getSelectedLayer(
+  dataset: MapshaperDataset,
+  selector: string | number | undefined,
+): MapshaperLayer | undefined {
+  const layers = dataset.layers ?? [];
+  if (typeof selector === 'string') {
+    return layers.find((layer) => layer.name === selector || layer.id === selector);
+  }
+  return layers[selector ?? 0];
+}
+
+function datasetWithEmptyMaskGeometry(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbOverlayOptions,
+): MapshaperDataset | null {
+  const inputLayer = getSelectedLayer(inputDataset, opts.inputLayer);
+  const maskLayer = getSelectedLayer(maskDataset, opts.maskLayer);
+  if (!inputLayer?.geometry_type || !maskLayer || maskLayer.geometry_type) return null;
+  if ((maskLayer.shapes?.length ?? 0) !== 0) return null;
+  if ((maskLayer.data?.getRecords?.().length ?? 0) !== 0) return null;
+
+  return {
+    ...maskDataset,
+    layers: (maskDataset.layers ?? []).map((layer) =>
+      layer === maskLayer
+        ? { ...layer, geometry_type: inputLayer.geometry_type, shapes: [] }
+        : layer,
+    ),
+  };
+}
+
 export async function processOverlayWithDuckDb(
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
@@ -58,11 +90,21 @@ export async function processOverlayWithDuckDb(
       encoding: 'wkb',
       geometryColumn: inputGeometryColumn,
     });
-    mask = toArrowTable(maskDataset, {
-      layer: opts.maskLayer,
-      encoding: 'wkb',
-      geometryColumn: maskGeometryColumn,
-    });
+    try {
+      mask = toArrowTable(maskDataset, {
+        layer: opts.maskLayer,
+        encoding: 'wkb',
+        geometryColumn: maskGeometryColumn,
+      });
+    } catch (err) {
+      const emptyMaskDataset = datasetWithEmptyMaskGeometry(inputDataset, maskDataset, opts);
+      if (!emptyMaskDataset) throw err;
+      mask = toArrowTable(emptyMaskDataset, {
+        layer: opts.maskLayer,
+        encoding: 'wkb',
+        geometryColumn: maskGeometryColumn,
+      });
+    }
   } catch (err) {
     throw new DuckDbOperationError(
       'conversion-failed',

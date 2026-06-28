@@ -51,6 +51,11 @@ const MASK_FC = {
   ],
 };
 
+const EMPTY_MASK_FC = {
+  type: 'FeatureCollection',
+  features: [],
+};
+
 const INTERSECTION_SPEC = {
   id: 'intersection',
   duckDbFunction: 'ST_Intersection',
@@ -64,6 +69,10 @@ async function inputDataset(crs = 'EPSG:3857'): Promise<MapshaperDataset> {
 
 async function maskDataset(): Promise<MapshaperDataset> {
   return datasetFromGeoJSON(MASK_FC);
+}
+
+async function emptyMaskDataset(): Promise<MapshaperDataset> {
+  return datasetFromGeoJSON(EMPTY_MASK_FC);
 }
 
 type FakeRuntimeOptions = {
@@ -231,6 +240,18 @@ describe('processOverlayWithDuckDb', () => {
       message: 'DuckDB intersection input could not be converted to Arrow',
     });
     expect(runtime.events).toEqual([]);
+  });
+
+  it('converts an empty no-geometry mask as an empty mask table', async () => {
+    const input = await inputDataset();
+    const mask = await emptyMaskDataset();
+    const resultTable = toArrowTable(input, { encoding: 'wkb' });
+    const runtime = new FakeRuntime(resultTable);
+
+    await processOverlayWithDuckDb(input, mask, {}, INTERSECTION_SPEC, runtime);
+
+    expect(runtime.connection.inserted[1]?.table.numRows).toBe(0);
+    expect(runtime.connection.queries[0]).toContain('ST_Intersection');
   });
 
   it('preserves the primary query error when close also fails', async () => {
