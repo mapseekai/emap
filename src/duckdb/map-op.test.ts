@@ -6,6 +6,7 @@ import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
 import {
   duckDbBufferLayer,
+  duckDbGeoParquetQueryLayer,
   duckDbGeometryLayer,
   duckDbQueryLayer,
   duckDbRelationLayer,
@@ -43,10 +44,17 @@ async function polygonDataset(crs = 'EPSG:3857'): Promise<MapshaperDataset> {
 }
 
 class FakeSource implements DuckDbMapOpSource {
-  constructor(private readonly dataset: MapshaperDataset | null | undefined) {}
+  constructor(
+    private readonly dataset: MapshaperDataset | null | undefined,
+    private readonly bytes?: Uint8Array | ArrayBuffer | null,
+  ) {}
 
   getDataset(): MapshaperDataset | null | undefined {
     return this.dataset;
+  }
+
+  getBytes(): Uint8Array | ArrayBuffer | null | undefined {
+    return this.bytes;
   }
 }
 
@@ -95,11 +103,24 @@ class FakeRuntime implements DuckDbRuntime {
   }
 
   async ensureSpatial(): Promise<void> {}
+
+  async registerFileBuffer(): Promise<void> {}
+
+  async dropFile(): Promise<void> {}
 }
 
 function makeContext(sourceId: string, dataset: MapshaperDataset | null | undefined): FakeContext {
   const ctx = new FakeContext();
   ctx.sources.set(sourceId, new FakeSource(dataset));
+  return ctx;
+}
+
+function makeByteContext(
+  sourceId: string,
+  bytes: Uint8Array | ArrayBuffer | null | undefined,
+): FakeContext {
+  const ctx = new FakeContext();
+  ctx.sources.set(sourceId, new FakeSource(undefined, bytes));
   return ctx;
 }
 
@@ -375,6 +396,78 @@ describe('duckDbQueryLayer', () => {
 
     expect(result.ok).toBe(false);
     expect(ctx.outputDatasets.has('query')).toBe(false);
+  });
+});
+
+describe('duckDbGeoParquetQueryLayer', () => {
+  it('writes an output source dataset after a successful GeoParquet query', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeByteContext('src', new Uint8Array([80, 65, 82, 49]));
+    const runtime = new FakeRuntime(toArrowTable(dataset, { encoding: 'wkb' }));
+
+    const result = await duckDbGeoParquetQueryLayer(ctx, {
+      src: 'src',
+      sql: 'SELECT geometry, name FROM input',
+      output: { sourceId: 'query' },
+      runtime,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(ctx.outputDatasets.has('query')).toBe(true);
+    if (result.ok) {
+      expect(result.value.sourceId).toBe('query');
+      expect(result.value.dataset).toBe(ctx.outputDatasets.get('query'));
+    }
+  });
+
+  it('returns not-found when the byte source is missing', async () => {
+    const result = await duckDbGeoParquetQueryLayer(new FakeContext(), {
+      src: 'missing',
+      sql: 'SELECT geometry FROM input',
+      output: { sourceId: 'query' },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: 'not-found', what: 'source', id: 'missing' },
+    });
+  });
+
+  it('returns validation when the source does not expose bytes', async () => {
+    const ctx = makeContext('src', await polygonDataset());
+
+    const result = await duckDbGeoParquetQueryLayer(ctx, {
+      src: 'src',
+      sql: 'SELECT geometry FROM input',
+      output: { sourceId: 'query' },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'src',
+        reason: "Source 'src' does not expose GeoParquet bytes",
+      },
+    });
+  });
+
+  it('returns validation when output source id is missing', async () => {
+    const ctx = makeByteContext('src', new Uint8Array([1]));
+
+    const result = await duckDbGeoParquetQueryLayer(ctx, {
+      src: 'src',
+      sql: 'SELECT geometry FROM input',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'output.sourceId',
+        reason: 'DuckDB operation requires output.sourceId',
+      },
+    });
   });
 });
 

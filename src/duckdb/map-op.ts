@@ -48,8 +48,13 @@ import {
 import type { DuckDbRuntime } from './duckdb-runtime';
 import type { DuckDbUnaryGeometryOptions } from './duckdb-geometry-op';
 import { queryDatasetWithDuckDb, type DuckDbQueryOptions } from './duckdb-query-op';
+import {
+  queryGeoParquetWithDuckDb,
+  type DuckDbGeoParquetQueryOptions,
+} from './duckdb-geoparquet-query-op';
 
 export interface DuckDbMapOpSource {
+  getBytes?(): Uint8Array | ArrayBuffer | null | undefined;
   getDataset(): MapshaperDataset | null | undefined;
 }
 
@@ -95,6 +100,12 @@ export interface DuckDbQueryLayerOptions extends DuckDbQueryOptions {
   runtime?: DuckDbRuntime;
 }
 
+export interface DuckDbGeoParquetQueryLayerOptions extends DuckDbGeoParquetQueryOptions {
+  src: string;
+  output?: { sourceId: string };
+  runtime?: DuckDbRuntime;
+}
+
 interface DuckDbLayerSuccess {
   sourceId: string;
   dataset: MapshaperDataset;
@@ -105,6 +116,7 @@ export type DuckDbGeometryLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbAttributeLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbRelationLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbQueryLayerResult = OpResult<DuckDbLayerSuccess>;
+export type DuckDbGeoParquetQueryLayerResult = OpResult<DuckDbLayerSuccess>;
 
 function duckDbErrorToOpResult(err: unknown, operation: string): OpResult<never> {
   if (err instanceof DuckDbOperationError && err.kind === 'validation') {
@@ -450,5 +462,43 @@ export async function duckDbAttributeLayer(
     return okValue({ sourceId, dataset });
   } catch (err) {
     return duckDbErrorToOpResult(err, `duckdb-${opts.operation}`);
+  }
+}
+
+function readInputBytes(
+  ctx: DuckDbMapOpContext,
+  src: string,
+  field = 'src',
+): { ok: true; bytes: Uint8Array | ArrayBuffer } | { ok: false; result: OpResult<never> } {
+  const source = ctx.getSource(src);
+  if (!source) return { ok: false, result: Err.notFound('source', src) };
+
+  const bytes = source.getBytes?.();
+  if (!(bytes instanceof Uint8Array) && !(bytes instanceof ArrayBuffer)) {
+    return {
+      ok: false,
+      result: Err.validation(field, `Source '${src}' does not expose GeoParquet bytes`),
+    };
+  }
+
+  return { ok: true, bytes };
+}
+
+export async function duckDbGeoParquetQueryLayer(
+  ctx: DuckDbMapOpContext,
+  opts: DuckDbGeoParquetQueryLayerOptions,
+): Promise<DuckDbGeoParquetQueryLayerResult> {
+  const input = readInputBytes(ctx, opts.src);
+  if (!input.ok) return input.result;
+
+  const sourceId = outputSourceId(opts.output);
+  if (typeof sourceId !== 'string') return sourceId;
+
+  try {
+    const dataset = await queryGeoParquetWithDuckDb(input.bytes, opts, opts.runtime);
+    await ctx.setSourceDataset(sourceId, dataset);
+    return okValue({ sourceId, dataset });
+  } catch (err) {
+    return duckDbErrorToOpResult(err, 'duckdb-geoparquet-query');
   }
 }
