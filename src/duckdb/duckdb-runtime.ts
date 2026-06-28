@@ -9,6 +9,8 @@ export interface DuckDbConnection {
 export interface DuckDbRuntime {
   connect(): Promise<DuckDbConnection>;
   ensureSpatial(): Promise<void>;
+  registerFileBuffer?(name: string, buffer: Uint8Array): Promise<void>;
+  dropFile?(name: string): Promise<void>;
   close?(): Promise<void>;
 }
 
@@ -29,8 +31,10 @@ type DuckDbWasmConnectionLike = {
 };
 
 type DuckDbWasmDatabaseLike = {
-  instantiate(mainModule: string, pthreadWorker?: string): Promise<unknown>;
   connect(): Promise<unknown>;
+  dropFile?(name: string): Promise<unknown>;
+  instantiate(mainModule: string, pthreadWorker?: string): Promise<unknown>;
+  registerFileBuffer?(name: string, buffer: Uint8Array): Promise<void>;
   terminate(): Promise<unknown>;
 };
 
@@ -181,6 +185,15 @@ export async function createDuckDbRuntimeFromJsDelivr(
       };
     },
     ensureSpatial,
+    async registerFileBuffer(name, buffer) {
+      if (typeof db.registerFileBuffer !== 'function') {
+        throw new Error('DuckDB-Wasm runtime does not support registerFileBuffer');
+      }
+      await db.registerFileBuffer(name, buffer);
+    },
+    async dropFile(name) {
+      await db.dropFile?.(name);
+    },
     close() {
       return closeDuckDbRuntime(db, worker);
     },

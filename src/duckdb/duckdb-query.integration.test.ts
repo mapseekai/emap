@@ -83,6 +83,16 @@ async function createBlockingDuckDbRuntime(): Promise<DuckDbRuntime> {
     async ensureSpatial() {
       throw new Error('queryDatasetWithDuckDb should not load the DuckDB spatial extension');
     },
+    async registerFileBuffer(name, buffer) {
+      const fileDb = db as {
+        registerFileBuffer(name: string, buffer: Uint8Array): void;
+      };
+      fileDb.registerFileBuffer(name, buffer);
+    },
+    async dropFile(name) {
+      const fileDb = db as { dropFile?: (name: string) => void };
+      fileDb.dropFile?.(name);
+    },
     async close() {
       await (db as { terminate?: () => Promise<unknown> }).terminate?.();
     },
