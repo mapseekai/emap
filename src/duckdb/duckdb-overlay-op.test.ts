@@ -3,15 +3,21 @@ import { buildOverlaySql } from './duckdb-sql';
 
 describe('buildOverlaySql', () => {
   it('builds intersection SQL that unions mask geometry once', () => {
-    expect(
-      buildOverlaySql({
-        duckDbFunction: 'ST_Intersection',
-        inputGeometryColumn: 'geom',
-        inputTableName: 'input table',
-        maskGeometryColumn: 'mask geom',
-        maskTableName: 'mask table',
-      }),
-    ).toContain('ST_Union_Agg(m."mask geom") AS mask_geometry');
+    const sql = buildOverlaySql({
+      duckDbFunction: 'ST_Intersection',
+      inputGeometryColumn: 'geom',
+      inputTableName: 'input table',
+      maskGeometryColumn: 'mask geom',
+      maskTableName: 'mask table',
+    });
+
+    expect(sql).toContain('ST_Union_Agg(m."mask geom") AS mask_geometry');
+    expect(sql).toContain('FROM "mask table" AS m');
+    expect(sql).toContain('FROM "input table" AS i');
+    expect(sql).toContain('ST_Intersection(i."geom", mask_coverage.mask_geometry)');
+    expect(sql).toContain('WHERE i."geom" IS NOT NULL');
+    expect(sql).toContain('AND mask_coverage.mask_geometry IS NOT NULL');
+    expect(sql).toContain('overlay_geometry IS NOT NULL');
   });
 
   it('builds difference SQL with fixed DuckDB Spatial function names', () => {
@@ -25,6 +31,7 @@ describe('buildOverlaySql', () => {
 
     expect(sql).toContain('ST_Difference(i."geometry", mask_coverage.mask_geometry)');
     expect(sql).toContain('i.* EXCLUDE ("geometry")');
+    expect(sql).toContain('AND TRUE');
     expect(sql).toContain('NOT ST_IsEmpty(overlay.overlay_geometry)');
   });
 
