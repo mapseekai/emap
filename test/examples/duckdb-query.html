@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Emap 示例 - DuckDB 受限 SELECT</title>
+    <link rel="stylesheet" href="../../dist/emap.css" />
+    <style>
+      body {
+        margin: 0;
+        height: 100vh;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      #map {
+        width: 100vw;
+        height: 100vh;
+      }
+
+      .panel {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 10;
+        width: min(460px, calc(100vw - 24px));
+        padding: 12px;
+        background: rgb(255 255 255 / 0.95);
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        box-shadow: 0 8px 24px rgb(15 23 42 / 0.18);
+      }
+
+      .panel h1 {
+        margin: 0 0 10px;
+        font-size: 15px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 112px minmax(0, 1fr);
+        gap: 8px;
+        align-items: center;
+        margin: 8px 0;
+        font-size: 13px;
+      }
+
+      input,
+      button,
+      select,
+      textarea {
+        min-width: 0;
+        font: inherit;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+      }
+
+      button {
+        width: 100%;
+        margin-top: 8px;
+        padding: 7px 10px;
+      }
+
+      #status {
+        margin-top: 10px;
+        min-height: 36px;
+        color: #334155;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "@duckdb/duckdb-wasm": "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/dist/duckdb-browser.mjs",
+          "apache-arrow": "https://cdn.jsdelivr.net/npm/apache-arrow@21.1.0/Arrow.dom.mjs",
+          "flatbuffers": "https://cdn.jsdelivr.net/npm/flatbuffers@25.9.23/mjs/flatbuffers.js",
+          "tslib": "https://cdn.jsdelivr.net/npm/tslib@2.8.1/tslib.es6.mjs"
+        }
+      }
+    </script>
+    <script src="../../dist/mapshaper-vendor.js"></script>
+    <script src="../../dist/emap-dev.js"></script>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div class="panel">
+      <h1>DuckDB-Wasm restricted SELECT</h1>
+      <div class="row">
+        <label for="file">数据文件</label>
+        <input id="file" type="file" accept=".geojson,.json,.topojson,.zip,.kml,.msx" />
+      </div>
+      <div class="row">
+        <label for="target">目标图层</label>
+        <select id="target" disabled></select>
+      </div>
+      <div class="row">
+        <label for="entrypoint">入口</label>
+        <select id="entrypoint">
+          <option value="helper">queryDatasetWithDuckDb</option>
+          <option value="mapop">duckDbQueryLayer</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="output-layer">输出图层</label>
+        <input id="output-layer" type="text" value="duckdb_query_result" />
+      </div>
+      <div class="row">
+        <label for="sql">SQL</label>
+        <textarea id="sql">SELECT * FROM input LIMIT 50</textarea>
+      </div>
+      <button id="run" disabled>运行 SELECT</button>
+      <div id="status">上传数据后，SQL 只能读取 input，并支持 WHERE / ORDER BY / LIMIT。</div>
+    </div>
+    <script type="module">
+      import {
+        createDuckDbRuntimeFromJsDelivr,
+        duckDbQueryLayer,
+        queryDatasetWithDuckDb,
+        setDuckDbRuntime,
+        validateDuckDbSelectSql,
+      } from "../../dist/emap-duckdb.mjs";
+
+      const { Emap, TopologySource, NavigationControl, StatusControl } = emap;
+
+      const SOURCE_ID = "duckdb-query-input";
+      const OUTPUT_ID = "duckdb-query-output";
+
+      const map = new Emap({ container: "map" });
+      map.addControl(new NavigationControl(), "top-left");
+      map.addControl(new StatusControl({ alignment: "right", showEPSG: true }), "bottom-right");
+
+      const fileInput = document.getElementById("file");
+      const targetSelect = document.getElementById("target");
+      const entrypointSelect = document.getElementById("entrypoint");
+      const outputLayerInput = document.getElementById("output-layer");
+      const sqlInput = document.getElementById("sql");
+      const runButton = document.getElementById("run");
+      const status = document.getElementById("status");
+
+      let inputDataset;
+      let runtimePromise;
+      const contextSources = new Map();
+
+      function getLayerId(layer, index) {
+        return String(layer?.name || layer?.id || `layer-${index}`);
+      }
+
+      function removeSourceWithLayers(id) {
+        for (const layer of map.getLayers().filter((layer) => layer.source === id)) {
+          map.removeLayer(layer.id);
+        }
+        if (map.getSource(id)) map.removeSource(id);
+      }
+
+      function addDisplayLayers(sourceId, source, prefix, colors) {
+        source.getLayers().forEach((layer, index) => {
+          const sourceLayer = getLayerId(layer, index);
+          const baseId = `${prefix}-${index}`;
+          if (layer?.geometry_type === "polygon") {
+            map.addLayer({
+              id: `${baseId}-fill`,
+              source: sourceId,
+              "source-layer": sourceLayer,
+              type: "fill",
+              paint: { "fill-color": colors.fill, "fill-opacity": colors.fillOpacity },
+            });
+            map.addLayer({
+              id: `${baseId}-line`,
+              source: sourceId,
+              "source-layer": sourceLayer,
+              type: "line",
+              paint: { "line-color": colors.line, "line-width": colors.lineWidth },
+            });
+          } else if (layer?.geometry_type === "polyline") {
+            map.addLayer({
+              id: `${baseId}-line`,
+              source: sourceId,
+              "source-layer": sourceLayer,
+              type: "line",
+              paint: { "line-color": colors.line, "line-width": colors.lineWidth },
+            });
+          } else if (layer?.geometry_type === "point") {
+            map.addLayer({
+              id: `${baseId}-point`,
+              source: sourceId,
+              "source-layer": sourceLayer,
+              type: "circle",
+              paint: {
+                "circle-color": colors.line,
+                "circle-radius": colors.pointRadius,
+                "circle-stroke-color": "#ffffff",
+                "circle-stroke-width": 1,
+              },
+            });
+          }
+        });
+      }
+
+      function addDatasetSource(id, dataset, prefix, colors) {
+        const source = new TopologySource(id);
+        removeSourceWithLayers(id);
+        source.setDataset(dataset);
+        map.addSource(id, source);
+        addDisplayLayers(id, source, prefix, colors);
+        return source;
+      }
+
+      function populateTargetLayers(source) {
+        targetSelect.innerHTML = "";
+        source.getLayers().forEach((layer, index) => {
+          targetSelect.appendChild(
+            new Option(`${getLayerId(layer, index)} (${layer?.geometry_type ?? "?"})`, String(index)),
+          );
+        });
+        const enabled = targetSelect.options.length > 0;
+        targetSelect.disabled = !enabled;
+        runButton.disabled = !enabled;
+      }
+
+      function selectedLayerIndex() {
+        return Number(targetSelect.value);
+      }
+
+      function selectedLayer() {
+        return inputDataset?.layers?.[selectedLayerIndex()];
+      }
+
+      function selectedLayerFields() {
+        const layer = selectedLayer();
+        if (!layer?.data) return [];
+        return layer.data.getFields?.() ?? Object.keys(layer.data.getRecordAt?.(0) ?? {});
+      }
+
+      function validateSql() {
+        validateDuckDbSelectSql(sqlInput.value, {
+          availableColumns: selectedLayerFields(),
+          physicalTableName: "input_preview",
+          rowIdColumn: "__emap_rowid",
+        });
+      }
+
+      async function getRuntime() {
+        runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
+          setDuckDbRuntime(runtime);
+          return runtime;
+        });
+        return runtimePromise;
+      }
+
+      function createMapOpContext() {
+        return {
+          getSource(id) {
+            if (id === SOURCE_ID) return { getDataset: () => inputDataset };
+            return contextSources.get(id);
+          },
+          setSourceDataset(id, dataset) {
+            contextSources.set(id, { getDataset: () => dataset });
+          },
+        };
+      }
+
+      fileInput.addEventListener("change", async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        runButton.disabled = true;
+        status.textContent = `正在加载 ${file.name}...`;
+        try {
+          const source = new TopologySource(SOURCE_ID);
+          const content = new Uint8Array(await file.arrayBuffer());
+          removeSourceWithLayers(OUTPUT_ID);
+          removeSourceWithLayers(SOURCE_ID);
+          await source.setData({ filename: file.name, content });
+          inputDataset = source.getDataset();
+          if (!inputDataset) throw new Error("文件未生成可用 dataset");
+          map.addSource(SOURCE_ID, source);
+          addDisplayLayers(SOURCE_ID, source, "duckdb-query-input", {
+            fill: "#dbeafe",
+            fillOpacity: 0.48,
+            line: "#1d4ed8",
+            lineWidth: 1.5,
+            pointRadius: 4,
+          });
+          populateTargetLayers(source);
+          map.setExtent(source.getExtent());
+          status.textContent = `已加载 ${file.name}，选择图层并运行受限 SELECT。`;
+        } catch (err) {
+          console.error(err);
+          inputDataset = undefined;
+          targetSelect.innerHTML = "";
+          targetSelect.disabled = true;
+          status.textContent = `加载失败: ${err?.message ?? err}`;
+        } finally {
+          runButton.disabled = !inputDataset || targetSelect.options.length === 0;
+        }
+      });
+
+      runButton.addEventListener("click", async () => {
+        if (!inputDataset) {
+          status.textContent = "请先上传数据文件。";
+          return;
+        }
+        runButton.disabled = true;
+        status.textContent = "DuckDB-Wasm 正在运行 SELECT...";
+        try {
+          validateSql();
+          const runtime = await getRuntime();
+          const opts = {
+            inputLayer: selectedLayerIndex(),
+            sql: sqlInput.value,
+            outputLayer: outputLayerInput.value.trim() || "duckdb_query_result",
+          };
+          let resultDataset;
+          if (entrypointSelect.value === "mapop") {
+            const result = await duckDbQueryLayer(createMapOpContext(), {
+              src: SOURCE_ID,
+              ...opts,
+              output: { sourceId: OUTPUT_ID },
+              runtime,
+            });
+            if (!result.ok) throw new Error(`${result.error.kind}: ${result.error.reason ?? result.error.id}`);
+            resultDataset = result.value.dataset;
+          } else {
+            resultDataset = await queryDatasetWithDuckDb(inputDataset, opts, runtime);
+          }
+          const outputSource = addDatasetSource(OUTPUT_ID, resultDataset, "duckdb-query-output", {
+            fill: "#fef3c7",
+            fillOpacity: 0.56,
+            line: "#b45309",
+            lineWidth: 2.25,
+            pointRadius: 5,
+          });
+          map.setExtent(outputSource.getExtent());
+          const count = resultDataset.layers.reduce(
+            (total, layer) => total + (layer?.shapes?.length ?? 0),
+            0,
+          );
+          status.textContent = `查询完成，输出 ${resultDataset.layers.length} 个图层，${count} 个要素。`;
+        } catch (err) {
+          console.error(err);
+          status.textContent = `查询失败: ${err?.message ?? err}`;
+        } finally {
+          runButton.disabled = !inputDataset || targetSelect.options.length === 0;
+        }
+      });
+
+      window.addEventListener("resize", () => map.resize());
+    </script>
+  </body>
+</html>
