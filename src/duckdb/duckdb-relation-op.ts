@@ -244,15 +244,32 @@ export async function processRelationWithDuckDb(
     primaryError = wrapped;
     throw wrapped;
   } finally {
+    let cleanupError: unknown;
     if (conn && inputTableName) {
-      await conn.query(`DROP TABLE IF EXISTS ${inputTableName}`).catch(() => undefined);
+      try {
+        await conn.query(`DROP TABLE IF EXISTS ${inputTableName}`);
+      } catch (err) {
+        cleanupError = err;
+      }
     }
 
     if (conn && maskTableName) {
-      await conn.query(`DROP TABLE IF EXISTS ${maskTableName}`).catch(() => undefined);
+      try {
+        await conn.query(`DROP TABLE IF EXISTS ${maskTableName}`);
+      } catch (err) {
+        cleanupError ??= err;
+      }
     }
 
-    const closeError = await conn?.close?.().catch((err) => err);
-    if (closeError && !primaryError) throw closeError;
+    try {
+      await conn?.close?.();
+    } catch (err) {
+      cleanupError ??= err;
+    }
+    if (cleanupError && !primaryError) {
+      throw new DuckDbOperationError('query-failed', `DuckDB ${spec.id} cleanup failed`, {
+        cause: cleanupError,
+      });
+    }
   }
 }

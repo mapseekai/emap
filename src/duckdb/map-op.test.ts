@@ -4,6 +4,7 @@ import { toArrowTable } from '../formats/dataset-to-table';
 import { datasetFromGeoJSON } from '../formats/test-utils';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
+import type { DuckDbGeoParquetQuerySource } from './duckdb-geoparquet-query-op';
 import {
   duckDbBufferLayer,
   duckDbGeoParquetQueryLayer,
@@ -48,6 +49,7 @@ class FakeSource implements DuckDbMapOpSource {
   constructor(
     private readonly dataset: MapshaperDataset | null | undefined,
     private readonly bytes?: Uint8Array | ArrayBuffer | null,
+    private readonly querySource?: DuckDbGeoParquetQuerySource | null,
   ) {}
 
   getDataset(): MapshaperDataset | null | undefined {
@@ -56,6 +58,10 @@ class FakeSource implements DuckDbMapOpSource {
 
   getBytes(): Uint8Array | ArrayBuffer | null | undefined {
     return this.bytes;
+  }
+
+  getGeoParquetQuerySource(): DuckDbGeoParquetQuerySource | null | undefined {
+    return this.querySource;
   }
 }
 
@@ -122,6 +128,15 @@ function makeByteContext(
 ): FakeContext {
   const ctx = new FakeContext();
   ctx.sources.set(sourceId, new FakeSource(undefined, bytes));
+  return ctx;
+}
+
+function makeGeoParquetQuerySourceContext(
+  sourceId: string,
+  querySource: DuckDbGeoParquetQuerySource,
+): FakeContext {
+  const ctx = new FakeContext();
+  ctx.sources.set(sourceId, new FakeSource(undefined, null, querySource));
   return ctx;
 }
 
@@ -276,7 +291,7 @@ describe('duckDbGeometryLayer', () => {
     });
   });
 
-  it('returns validation for an unknown operation', async () => {
+  it('returns DuckDB validation for an unknown operation', async () => {
     const dataset = await polygonDataset();
     const ctx = makeContext('src', dataset);
 
@@ -289,7 +304,9 @@ describe('duckDbGeometryLayer', () => {
     expect(result).toEqual({
       ok: false,
       error: {
-        kind: 'validation',
+        kind: 'duckdb',
+        operation: 'duckdb-unknown',
+        duckDbKind: 'validation',
         field: 'operation',
         reason: "Unknown DuckDB geometry operation 'unknown'",
       },
@@ -373,7 +390,7 @@ describe('duckDbQueryLayer', () => {
     });
   });
 
-  it('maps SQL validation errors to validation results', async () => {
+  it('maps SQL validation errors to DuckDB results', async () => {
     const dataset = await polygonDataset();
     const ctx = makeContext('src', dataset);
 
@@ -386,7 +403,12 @@ describe('duckDbQueryLayer', () => {
 
     expect(result).toMatchObject({
       ok: false,
-      error: { kind: 'validation', field: 'sql' },
+      error: {
+        kind: 'duckdb',
+        operation: 'duckdb-query',
+        duckDbKind: 'validation',
+        field: 'sql',
+      },
     });
     expect(ctx.outputDatasets.has('query')).toBe(false);
   });
@@ -430,6 +452,32 @@ describe('duckDbGeoParquetQueryLayer', () => {
       expect(result.value.sourceId).toBe('query');
       expect(result.value.dataset).toBe(ctx.outputDatasets.get('query'));
     }
+  });
+
+  it('queries a reusable GeoParquet query source instead of re-registering bytes', async () => {
+    const dataset = await polygonDataset();
+    const calls: unknown[] = [];
+    const querySource = {
+      async query(opts) {
+        calls.push(opts);
+        return dataset;
+      },
+      async close() {
+        throw new Error('map-op should not own query source cleanup');
+      },
+    } satisfies DuckDbGeoParquetQuerySource;
+    const ctx = makeGeoParquetQuerySourceContext('src', querySource);
+
+    const result = await duckDbGeoParquetQueryLayer(ctx, {
+      src: 'src',
+      sql: 'SELECT geometry, name FROM input',
+      output: { sourceId: 'query' },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ sql: 'SELECT geometry, name FROM input' });
+    expect(ctx.outputDatasets.get('query')).toBe(dataset);
   });
 
   it('returns not-found when the byte source is missing', async () => {
@@ -482,7 +530,7 @@ describe('duckDbGeoParquetQueryLayer', () => {
     });
   });
 
-  it('returns validation and leaves output empty for invalid GeoParquet SQL', async () => {
+  it('returns DuckDB validation and leaves output empty for invalid GeoParquet SQL', async () => {
     const dataset = await polygonDataset();
     const ctx = makeByteContext('src', new Uint8Array([80, 65, 82, 49]));
     const runtime = new FakeRuntime(toArrowTable(dataset, { encoding: 'wkb' }));
@@ -496,12 +544,17 @@ describe('duckDbGeoParquetQueryLayer', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toMatchObject({ kind: 'validation', field: 'sql' });
+      expect(result.error).toMatchObject({
+        kind: 'duckdb',
+        operation: 'duckdb-geoparquet-query',
+        duckDbKind: 'validation',
+        field: 'sql',
+      });
     }
     expect(ctx.outputDatasets.has('query')).toBe(false);
   });
 
-  it('returns mapshaper and leaves output empty when GeoParquet query fails', async () => {
+  it('returns DuckDB failure and leaves output empty when GeoParquet query fails', async () => {
     const dataset = await polygonDataset();
     const ctx = makeByteContext('src', new Uint8Array([80, 65, 82, 49]));
     const runtime = new FakeRuntime(
@@ -519,8 +572,9 @@ describe('duckDbGeoParquetQueryLayer', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toMatchObject({
-        kind: 'mapshaper',
+        kind: 'duckdb',
         operation: 'duckdb-geoparquet-query',
+        duckDbKind: 'query-failed',
       });
     }
     expect(ctx.outputDatasets.has('query')).toBe(false);
@@ -577,7 +631,7 @@ describe('duckDbRelationLayer', () => {
     expect(runtime.connection.queries.join('\n')).toContain('touches_mask');
   });
 
-  it('returns validation for an unknown relation operation', async () => {
+  it('returns DuckDB validation for an unknown relation operation', async () => {
     const dataset = await polygonDataset();
     const ctx = makeContext('src', dataset);
     ctx.sources.set('mask', new FakeSource(dataset));
@@ -592,11 +646,16 @@ describe('duckDbRelationLayer', () => {
 
     expect(result).toMatchObject({
       ok: false,
-      error: { kind: 'validation', field: 'operation' },
+      error: {
+        kind: 'duckdb',
+        operation: 'duckdb-relation-unknown',
+        duckDbKind: 'validation',
+        field: 'operation',
+      },
     });
   });
 
-  it('returns validation when distance is requested in filter mode', async () => {
+  it('returns DuckDB validation when distance is requested in filter mode', async () => {
     const dataset = await polygonDataset();
     const ctx = makeContext('src', dataset);
     ctx.sources.set('mask', new FakeSource(dataset));
@@ -611,11 +670,16 @@ describe('duckDbRelationLayer', () => {
 
     expect(result).toMatchObject({
       ok: false,
-      error: { kind: 'validation', field: 'operation' },
+      error: {
+        kind: 'duckdb',
+        operation: 'duckdb-relation-distance',
+        duckDbKind: 'validation',
+        field: 'operation',
+      },
     });
   });
 
-  it('returns validation for an unknown relation mode', async () => {
+  it('returns DuckDB validation for an unknown relation mode', async () => {
     const dataset = await polygonDataset();
     const ctx = makeContext('src', dataset);
     ctx.sources.set('mask', new FakeSource(dataset));
@@ -630,7 +694,12 @@ describe('duckDbRelationLayer', () => {
 
     expect(result).toMatchObject({
       ok: false,
-      error: { kind: 'validation', field: 'mode' },
+      error: {
+        kind: 'duckdb',
+        operation: 'duckdb-relation-intersects',
+        duckDbKind: 'validation',
+        field: 'mode',
+      },
     });
   });
 
@@ -850,7 +919,7 @@ describe('duckDbOverlayLayer', () => {
     expect(ctx.outputDatasets.size).toBe(0);
   });
 
-  it('returns validation and does not write output for unsupported operations', async () => {
+  it('returns DuckDB validation and does not write output for unsupported operations', async () => {
     const input = await polygonDataset();
     const mask = await polygonDataset();
     const ctx = makeContext('src', input);
@@ -866,7 +935,9 @@ describe('duckDbOverlayLayer', () => {
     expect(result).toEqual({
       ok: false,
       error: {
-        kind: 'validation',
+        kind: 'duckdb',
+        operation: 'duckdb-union-overlay',
+        duckDbKind: 'validation',
         field: 'operation',
         reason: 'Unsupported DuckDB overlay operation: union',
       },
@@ -895,8 +966,9 @@ describe('duckDbOverlayLayer', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toMatchObject({
-        kind: 'mapshaper',
+        kind: 'duckdb',
         operation: 'duckdb-difference-overlay',
+        duckDbKind: 'query-failed',
       });
     }
     expect(ctx.outputDatasets.has('overlay')).toBe(false);

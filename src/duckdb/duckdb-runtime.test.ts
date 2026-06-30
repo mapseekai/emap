@@ -1,6 +1,7 @@
 import type { Table } from 'apache-arrow';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  closeDuckDbRuntime,
   createDuckDbRuntimeFromJsDelivr,
   getDuckDbRuntime,
   setDuckDbRuntime,
@@ -40,6 +41,7 @@ class FakeAsyncDuckDB {
   readonly instantiateCalls: Array<{ mainModule: string; pthreadWorker?: string }> = [];
   readonly queryErrors: unknown[] = [];
   terminateError: unknown;
+  terminateCalls = 0;
   terminated = false;
 
   constructor(
@@ -61,6 +63,7 @@ class FakeAsyncDuckDB {
   }
 
   async terminate(): Promise<void> {
+    this.terminateCalls += 1;
     if (this.terminateError) throw this.terminateError;
     this.terminated = true;
   }
@@ -114,6 +117,54 @@ describe('DuckDB runtime injection', () => {
     setDuckDbRuntime(runtime);
 
     expect(getDuckDbRuntime()).toBe(runtime);
+  });
+
+  it('closes and clears the injected runtime', async () => {
+    const close = vi.fn(async () => undefined);
+    const runtime: DuckDbRuntime = {
+      connect: async () => ({
+        insertArrowTable: async () => undefined,
+        query: async () => {
+          throw new Error('not implemented');
+        },
+      }),
+      ensureSpatial: async () => undefined,
+      close,
+    };
+
+    setDuckDbRuntime(runtime);
+    await closeDuckDbRuntime();
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(getDuckDbRuntime()).toBeNull();
+  });
+
+  it('does not clear a newer injected runtime while closing an older one', async () => {
+    const oldRuntime: DuckDbRuntime = {
+      connect: async () => ({
+        insertArrowTable: async () => undefined,
+        query: async () => {
+          throw new Error('not implemented');
+        },
+      }),
+      ensureSpatial: async () => undefined,
+      close: vi.fn(async () => undefined),
+    };
+    const currentRuntime: DuckDbRuntime = {
+      connect: async () => ({
+        insertArrowTable: async () => undefined,
+        query: async () => {
+          throw new Error('not implemented');
+        },
+      }),
+      ensureSpatial: async () => undefined,
+    };
+
+    setDuckDbRuntime(currentRuntime);
+    await closeDuckDbRuntime(oldRuntime);
+
+    expect(oldRuntime.close).toHaveBeenCalledTimes(1);
+    expect(getDuckDbRuntime()).toBe(currentRuntime);
   });
 });
 
@@ -241,6 +292,29 @@ describe('createDuckDbRuntimeFromJsDelivr', () => {
     await expect(runtime.close?.()).rejects.toThrow('terminate failed');
 
     expect(worker.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes runtime instances idempotently', async () => {
+    const runtime = await makeRuntime();
+    const db = FakeAsyncDuckDB.instances[0]!;
+
+    await runtime.close?.();
+    await runtime.close?.();
+
+    expect(db.terminateCalls).toBe(1);
+    expect(db.terminated).toBe(true);
+  });
+
+  it('rejects runtime operations after close', async () => {
+    const runtime = await makeRuntime();
+
+    await runtime.close?.();
+
+    await expect(runtime.connect()).rejects.toThrow('DuckDB-Wasm runtime is closed');
+    await expect(runtime.ensureSpatial()).rejects.toThrow('DuckDB-Wasm runtime is closed');
+    await expect(runtime.registerFileBuffer?.('x.parquet', new Uint8Array([1]))).rejects.toThrow(
+      'DuckDB-Wasm runtime is closed',
+    );
   });
 
   it('delegates insertArrowTable and query to a DuckDB connection', async () => {

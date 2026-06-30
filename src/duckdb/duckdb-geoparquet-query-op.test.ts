@@ -12,7 +12,10 @@ import {
 } from 'apache-arrow';
 import { describe, expect, it } from 'vitest';
 import { DuckDbOperationError } from './duckdb-errors';
-import { queryGeoParquetWithDuckDb } from './duckdb-geoparquet-query-op';
+import {
+  createDuckDbGeoParquetQuerySource,
+  queryGeoParquetWithDuckDb,
+} from './duckdb-geoparquet-query-op';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
 
 interface FakeRuntimeOptions {
@@ -182,6 +185,33 @@ describe('queryGeoParquetWithDuckDb', () => {
     expect(result.layers[0]?.name).toBe('places');
     expect(result.layers[0]?.data?.getRecords?.()).toEqual([{ name: 'alpha' }]);
     expect(result.layers[0]?.shapes).toHaveLength(1);
+  });
+
+  it('transfers GeoParquet bytes once and reuses the registered query source', async () => {
+    class DetachingRuntime extends FakeRuntime {
+      override async registerFileBuffer(name: string, buffer: Uint8Array): Promise<void> {
+        this.registeredFiles.push({ name, buffer: new Uint8Array(buffer) });
+        structuredClone(buffer.buffer, { transfer: [buffer.buffer] });
+      }
+    }
+
+    const runtime = new DetachingRuntime();
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+
+    const source = await createDuckDbGeoParquetQuerySource(bytes, runtime);
+    const first = await source.query({ sql: 'SELECT name, geometry FROM input' });
+    const second = await source.query({ sql: 'SELECT geometry, name FROM input' });
+    await source.close();
+
+    expect(bytes.byteLength).toBe(0);
+    expect(first.layers[0]?.shapes).toHaveLength(1);
+    expect(second.layers[0]?.shapes).toHaveLength(1);
+    expect(runtime.registeredFiles).toHaveLength(1);
+    expect(Array.from(runtime.registeredFiles[0]!.buffer)).toEqual([1, 2, 3, 4]);
+    expect(runtime.conn.queries.filter((query) => query.startsWith('CREATE VIEW'))).toHaveLength(1);
+    expect(runtime.conn.queries.filter((query) => query.startsWith('DROP VIEW'))).toHaveLength(1);
+    expect(runtime.conn.closed).toBe(true);
+    expect(runtime.droppedFiles).toEqual([runtime.registeredFiles[0]!.name]);
   });
 
   it('maps a null runtime to runtime-unavailable', async () => {

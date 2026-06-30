@@ -18,6 +18,14 @@ export type OpError =
   | { kind: 'not-found'; what: 'source' | 'layer' | 'mask' | 'divider' | 'field'; id: string }
   | { kind: 'validation'; field: string; reason: string }
   | { kind: 'expression-disabled'; operation: string }
+  | {
+      kind: 'duckdb';
+      operation: string;
+      duckDbKind: string;
+      reason: string;
+      field?: string;
+      cause?: unknown;
+    }
   | { kind: 'mapshaper'; cause: unknown; cmd?: string; operation?: string }
   | { kind: 'host-removed' };
 
@@ -49,6 +57,17 @@ export const Err = Object.freeze({
   },
   expressionDisabled(operation: string): OpResult<never> {
     return { ok: false, error: { kind: 'expression-disabled', operation } };
+  },
+  duckdb(
+    operation: string,
+    duckDbKind: string,
+    reason: string,
+    opts?: { field?: string; cause?: unknown },
+  ): OpResult<never> {
+    return {
+      ok: false,
+      error: { kind: 'duckdb', operation, duckDbKind, reason, ...(opts ?? {}) },
+    };
   },
   mapshaper(cause: unknown, opts?: { cmd?: string; operation?: string }): OpResult<never> {
     return { ok: false, error: { kind: 'mapshaper', cause, ...(opts ?? {}) } };

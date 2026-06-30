@@ -48,6 +48,14 @@ export function getDuckDbRuntime(): DuckDbRuntime | null {
   return injectedRuntime;
 }
 
+export async function closeDuckDbRuntime(
+  runtime: DuckDbRuntime | null = injectedRuntime,
+): Promise<void> {
+  if (!runtime) return;
+  if (injectedRuntime === runtime) injectedRuntime = null;
+  await runtime.close?.();
+}
+
 async function loadDuckDbWasm(): Promise<DuckDbWasmModule> {
   return import('@duckdb/duckdb-wasm');
 }
@@ -109,7 +117,7 @@ async function terminateDuckDbAfterFailure(
   }
 }
 
-async function closeDuckDbRuntime(db: DuckDbWasmDatabaseLike, worker: Worker): Promise<void> {
+async function terminateDuckDbRuntime(db: DuckDbWasmDatabaseLike, worker: Worker): Promise<void> {
   try {
     await db.terminate();
   } catch (err) {
@@ -143,6 +151,11 @@ export async function createDuckDbRuntimeFromJsDelivr(
   }
 
   let spatialReady: Promise<void> | null = null;
+  let closed = false;
+
+  function assertOpen(): void {
+    if (closed) throw new Error('DuckDB-Wasm runtime is closed');
+  }
 
   function createSpatialReadyPromise(): Promise<void> {
     const ready = (async () => {
@@ -165,12 +178,14 @@ export async function createDuckDbRuntimeFromJsDelivr(
   }
 
   async function ensureSpatial(): Promise<void> {
+    assertOpen();
     spatialReady ??= createSpatialReadyPromise();
     return spatialReady;
   }
 
   return {
     async connect(): Promise<DuckDbConnection> {
+      assertOpen();
       const conn = (await db.connect()) as unknown as DuckDbWasmConnectionLike;
       return {
         insertArrowTable(table, insertOpts) {
@@ -186,16 +201,21 @@ export async function createDuckDbRuntimeFromJsDelivr(
     },
     ensureSpatial,
     async registerFileBuffer(name, buffer) {
+      assertOpen();
       if (typeof db.registerFileBuffer !== 'function') {
         throw new Error('DuckDB-Wasm runtime does not support registerFileBuffer');
       }
       await db.registerFileBuffer(name, buffer);
     },
     async dropFile(name) {
+      assertOpen();
       await db.dropFile?.(name);
     },
-    close() {
-      return closeDuckDbRuntime(db, worker);
+    async close() {
+      if (closed) return;
+      closed = true;
+      spatialReady = null;
+      await terminateDuckDbRuntime(db, worker);
     },
   };
 }

@@ -3,6 +3,13 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const duckDbBundle = readFileSync(resolve(__dirname, '../../dist/emap-duckdb.mjs'), 'utf8');
+const duckDbExamples = [
+  readExample('duckdb-buffer.html'),
+  readExample('duckdb-geoparquet-query.html'),
+  readExample('duckdb-overlay.html'),
+  readExample('duckdb-query.html'),
+  readExample('duckdb-spatial-ops.html'),
+];
 
 function readExample(name: string): string {
   return readFileSync(resolve(__dirname, name), 'utf8');
@@ -46,6 +53,17 @@ describe('DuckDB new feature examples', () => {
     query: readExample('duckdb-query.html'),
   };
 
+  it('uses a reachable browser Arrow ESM entrypoint', () => {
+    for (const html of duckDbExamples) {
+      expect(html).toContain(
+        '"apache-arrow": "https://unpkg.com/apache-arrow@21.1.0/Arrow.dom.mjs"',
+      );
+      expect(html).not.toContain(
+        '"apache-arrow": "https://cdn.jsdelivr.net/npm/apache-arrow@21.1.0/Arrow.dom.mjs"',
+      );
+    }
+  });
+
   it('imports only exported DuckDB browser module names', () => {
     const exported = exportedDuckDbNames();
     for (const [name, html] of Object.entries(examples)) {
@@ -65,11 +83,13 @@ describe('DuckDB new feature examples', () => {
     expect(html).toContain('output: { sourceId: OUTPUT_ID }');
   });
 
-  it('covers GeoParquet byte SELECT helper and map-op entrypoints', () => {
+  it('covers GeoParquet query source and map-op entrypoints', () => {
     const html = examples.geoparquetQuery;
-    expect(html).toContain('queryGeoParquetWithDuckDb');
+    expect(html).toContain('createDuckDbGeoParquetQuerySource');
+    expect(html).toContain('DuckDbGeoParquetQuerySource.query');
     expect(html).toContain('duckDbGeoParquetQueryLayer');
-    expect(html).toContain('getBytes: () => geoParquetBytes');
+    expect(html).toContain('getGeoParquetQuerySource: () => geoParquetQuerySource');
+    expect(html).toContain('resultDataset = await querySource.query(opts)');
     expect(html).toContain('SELECT * FROM input LIMIT 100');
     expect(html).toContain('id="geometry-column" type="text" placeholder="留空自动检测"');
     expect(html).toContain('geometryColumn: geometryColumnInput.value.trim() || undefined');

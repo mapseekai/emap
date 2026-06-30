@@ -10,6 +10,11 @@ export interface DuckDbGeoParquetQueryOptions extends FromArrowTableOptions {
   sql: string;
 }
 
+export interface DuckDbGeoParquetQuerySource {
+  query(opts: DuckDbGeoParquetQueryOptions): Promise<MapshaperDataset>;
+  close(): Promise<void>;
+}
+
 let duckDbGeoParquetQuerySequence = 0;
 
 function nextDuckDbGeoParquetQueryNames(): { fileName: string; viewName: string } {
@@ -36,11 +41,97 @@ function tableFieldNames(table: Table): string[] {
   return table.schema.fields.map((field) => field.name);
 }
 
-export async function queryGeoParquetWithDuckDb(
-  data: Uint8Array | ArrayBuffer,
+async function cleanupGeoParquetQuerySource(
+  runtime: DuckDbRuntime,
+  conn: Awaited<ReturnType<DuckDbRuntime['connect']>> | undefined,
+  fileName: string,
+  viewName: string,
+  primaryError?: unknown,
+): Promise<void> {
+  let cleanupError: unknown;
+  if (conn) {
+    try {
+      await conn.query(`DROP VIEW IF EXISTS ${quoteIdentifier(viewName)}`);
+    } catch (err) {
+      cleanupError = err;
+    }
+  }
+
+  try {
+    await conn?.close?.();
+  } catch (err) {
+    cleanupError ??= err;
+  }
+
+  try {
+    await runtime.dropFile?.(fileName);
+  } catch (err) {
+    cleanupError ??= err;
+  }
+
+  if (cleanupError && !primaryError) {
+    throw new DuckDbOperationError('query-failed', 'DuckDB GeoParquet query cleanup failed', {
+      cause: cleanupError,
+    });
+  }
+}
+
+async function queryGeoParquetViewWithDuckDb(
+  conn: Awaited<ReturnType<DuckDbRuntime['connect']>>,
+  viewName: string,
+  availableColumns: readonly string[],
   opts: DuckDbGeoParquetQueryOptions,
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
+  let resultTable: Table;
+  try {
+    const validated = validateDuckDbSelectSql(opts.sql, {
+      allowGeometryProjection: true,
+      availableColumns,
+      geometryColumn: opts.geometryColumn,
+      physicalTableName: viewName,
+      rowIdColumn: null,
+    });
+    resultTable = await conn.query(validated.sql);
+  } catch (err) {
+    if (err instanceof DuckDbOperationError) throw err;
+    throw new DuckDbOperationError('query-failed', 'DuckDB GeoParquet query failed', {
+      cause: err,
+    });
+  }
+
+  let geometryColumn: string;
+
+  try {
+    const geom = detectGeometryColumn(resultTable, opts.geometryColumn);
+    if (!geom) throw new Error('DuckDB GeoParquet query result is missing a geometry column');
+    geometryColumn = geom.name;
+  } catch (err) {
+    throw new DuckDbOperationError(
+      'conversion-failed',
+      'DuckDB GeoParquet query result could not be converted to a dataset',
+      { cause: err },
+    );
+  }
+
+  try {
+    return fromArrowTable(resultTable, {
+      geometryColumn,
+      layerName: opts.layerName,
+      noTopology: opts.noTopology,
+    });
+  } catch (err) {
+    throw new DuckDbOperationError(
+      'conversion-failed',
+      'DuckDB GeoParquet query result could not be converted to a dataset',
+      { cause: err },
+    );
+  }
+}
+
+export async function createDuckDbGeoParquetQuerySource(
+  data: Uint8Array | ArrayBuffer,
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<DuckDbGeoParquetQuerySource> {
   if (!runtime) {
     throw new DuckDbOperationError('runtime-unavailable', 'DuckDB runtime is not available');
   }
@@ -54,7 +145,7 @@ export async function queryGeoParquetWithDuckDb(
   const bytes = normalizeBytes(data);
   const { fileName, viewName } = nextDuckDbGeoParquetQueryNames();
   let conn: Awaited<ReturnType<DuckDbRuntime['connect']>> | undefined;
-  let primaryError: unknown;
+  let closed = false;
 
   try {
     await runtime.registerFileBuffer(fileName, bytes);
@@ -66,42 +157,47 @@ export async function queryGeoParquetWithDuckDb(
     );
 
     const schemaTable = await conn.query(`SELECT * FROM ${quoteIdentifier(viewName)} LIMIT 0`);
-    const validated = validateDuckDbSelectSql(opts.sql, {
-      allowGeometryProjection: true,
-      availableColumns: tableFieldNames(schemaTable),
-      geometryColumn: opts.geometryColumn,
-      physicalTableName: viewName,
-      rowIdColumn: null,
-    });
+    const availableColumns = tableFieldNames(schemaTable);
 
-    const resultTable = await conn.query(validated.sql);
-    let geometryColumn: string;
+    return {
+      async query(opts): Promise<MapshaperDataset> {
+        if (closed) {
+          throw new DuckDbOperationError(
+            'runtime-unavailable',
+            'DuckDB GeoParquet query source is closed',
+          );
+        }
+        return queryGeoParquetViewWithDuckDb(conn!, viewName, availableColumns, opts);
+      },
+      async close(): Promise<void> {
+        if (closed) return;
+        closed = true;
+        await cleanupGeoParquetQuerySource(runtime, conn, fileName, viewName);
+      },
+    };
+  } catch (err) {
+    const primaryError =
+      err instanceof DuckDbOperationError
+        ? err
+        : new DuckDbOperationError('query-failed', 'DuckDB GeoParquet query failed', {
+            cause: err,
+          });
+    await cleanupGeoParquetQuerySource(runtime, conn, fileName, viewName, primaryError);
+    throw primaryError;
+  }
+}
 
-    try {
-      const geom = detectGeometryColumn(resultTable, opts.geometryColumn);
-      if (!geom) throw new Error('DuckDB GeoParquet query result is missing a geometry column');
-      geometryColumn = geom.name;
-    } catch (err) {
-      throw new DuckDbOperationError(
-        'conversion-failed',
-        'DuckDB GeoParquet query result could not be converted to a dataset',
-        { cause: err },
-      );
-    }
+export async function queryGeoParquetWithDuckDb(
+  data: Uint8Array | ArrayBuffer,
+  opts: DuckDbGeoParquetQueryOptions,
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  let source: DuckDbGeoParquetQuerySource | undefined;
+  let primaryError: unknown;
 
-    try {
-      return fromArrowTable(resultTable, {
-        geometryColumn,
-        layerName: opts.layerName,
-        noTopology: opts.noTopology,
-      });
-    } catch (err) {
-      throw new DuckDbOperationError(
-        'conversion-failed',
-        'DuckDB GeoParquet query result could not be converted to a dataset',
-        { cause: err },
-      );
-    }
+  try {
+    source = await createDuckDbGeoParquetQuerySource(data, runtime);
+    return await source.query(opts);
   } catch (err) {
     if (err instanceof DuckDbOperationError) {
       primaryError = err;
@@ -113,31 +209,12 @@ export async function queryGeoParquetWithDuckDb(
     primaryError = wrapped;
     throw wrapped;
   } finally {
-    let cleanupError: unknown;
-    if (conn) {
+    if (source) {
       try {
-        await conn.query(`DROP VIEW IF EXISTS ${quoteIdentifier(viewName)}`);
+        await source.close();
       } catch (err) {
-        cleanupError = err;
+        if (!primaryError) throw err;
       }
-    }
-
-    try {
-      await conn?.close?.();
-    } catch (err) {
-      cleanupError ??= err;
-    }
-
-    try {
-      await runtime.dropFile?.(fileName);
-    } catch (err) {
-      cleanupError ??= err;
-    }
-
-    if (cleanupError && !primaryError) {
-      throw new DuckDbOperationError('query-failed', 'DuckDB GeoParquet query cleanup failed', {
-        cause: cleanupError,
-      });
     }
   }
 }

@@ -98,7 +98,7 @@ describe('duckDbAttributeLayer', () => {
     );
   });
 
-  it('returns validation for unknown attribute operations', async () => {
+  it('returns DuckDB validation for unknown attribute operations', async () => {
     const dataset = await pointDataset();
     const runtime = new FakeRuntime(toArrowTable(dataset, { encoding: 'wkb' }));
     const ctx = new FakeContext('src', dataset);
@@ -113,7 +113,9 @@ describe('duckDbAttributeLayer', () => {
     expect(result).toEqual({
       ok: false,
       error: {
-        kind: 'validation',
+        kind: 'duckdb',
+        operation: 'duckdb-nope',
+        duckDbKind: 'validation',
         field: 'operation',
         reason: "Unknown DuckDB attribute operation 'nope'",
       },

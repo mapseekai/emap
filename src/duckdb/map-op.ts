@@ -55,6 +55,7 @@ import type { DuckDbRuntime } from './duckdb-runtime';
 import type { DuckDbUnaryGeometryOptions } from './duckdb-geometry-op';
 import { queryDatasetWithDuckDb, type DuckDbQueryOptions } from './duckdb-query-op';
 import {
+  type DuckDbGeoParquetQuerySource,
   queryGeoParquetWithDuckDb,
   type DuckDbGeoParquetQueryOptions,
 } from './duckdb-geoparquet-query-op';
@@ -62,6 +63,7 @@ import {
 export interface DuckDbMapOpSource {
   getBytes?(): Uint8Array | ArrayBuffer | null | undefined;
   getDataset(): MapshaperDataset | null | undefined;
+  getGeoParquetQuerySource?(): DuckDbGeoParquetQuerySource | null | undefined;
 }
 
 export interface DuckDbMapOpContext {
@@ -125,8 +127,11 @@ export type DuckDbQueryLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbGeoParquetQueryLayerResult = OpResult<DuckDbLayerSuccess>;
 
 function duckDbErrorToOpResult(err: unknown, operation: string): OpResult<never> {
-  if (err instanceof DuckDbOperationError && err.kind === 'validation') {
-    return Err.validation(err.field ?? 'duckdb', err.message);
+  if (err instanceof DuckDbOperationError) {
+    return Err.duckdb(operation, err.kind, err.message, {
+      field: err.field,
+      cause: err.cause,
+    });
   }
   return Err.mapshaper(err, { operation });
 }
@@ -475,9 +480,15 @@ function readInputBytes(
   ctx: DuckDbMapOpContext,
   src: string,
   field = 'src',
-): { ok: true; bytes: Uint8Array | ArrayBuffer } | { ok: false; result: OpResult<never> } {
+):
+  | { ok: true; bytes: Uint8Array | ArrayBuffer; querySource?: undefined }
+  | { ok: true; bytes?: undefined; querySource: DuckDbGeoParquetQuerySource }
+  | { ok: false; result: OpResult<never> } {
   const source = ctx.getSource(src);
   if (!source) return { ok: false, result: Err.notFound('source', src) };
+
+  const querySource = source.getGeoParquetQuerySource?.();
+  if (querySource) return { ok: true, querySource };
 
   const bytes = source.getBytes?.();
   if (!(bytes instanceof Uint8Array) && !(bytes instanceof ArrayBuffer)) {
@@ -501,7 +512,9 @@ export async function duckDbGeoParquetQueryLayer(
   if (typeof sourceId !== 'string') return sourceId;
 
   try {
-    const dataset = await queryGeoParquetWithDuckDb(input.bytes, opts, opts.runtime);
+    const dataset = input.querySource
+      ? await input.querySource.query(opts)
+      : await queryGeoParquetWithDuckDb(input.bytes, opts, opts.runtime);
     await ctx.setSourceDataset(sourceId, dataset);
     return okValue({ sourceId, dataset });
   } catch (err) {

@@ -104,6 +104,24 @@ function makePointPainter(fillCalls: string[], arcCalls: unknown[] = []) {
 }
 
 describe('CanvasPainter batching', () => {
+  it('requests a read-optimized 2d context', () => {
+    const calls: unknown[][] = [];
+    const ctx: any = {};
+    const canvas = {
+      getContext(...args: unknown[]) {
+        calls.push(args);
+        return ctx;
+      },
+      width: 100,
+      height: 100,
+      style: {},
+    };
+
+    new CanvasPainter(canvas as any);
+
+    expect(calls).toEqual([['2d', { willReadFrequently: true }]]);
+  });
+
   it('flushes drawArcs every 100 arcs plus a final stroke', () => {
     const strokes: string[] = [];
     const painter = makePainter(strokes);

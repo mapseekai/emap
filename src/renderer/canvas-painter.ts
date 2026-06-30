@@ -81,7 +81,7 @@ export class CanvasPainter implements Painter {
   private _pixelRatio: number = window.devicePixelRatio || 1;
 
   constructor(private _canvas: HTMLCanvasElement) {
-    const ctx = _canvas.getContext('2d');
+    const ctx = _canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) throw new Error('Failed to get 2D context');
     this._ctx = ctx;
   }

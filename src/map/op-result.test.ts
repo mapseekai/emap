@@ -81,6 +81,24 @@ describe('Err.expressionDisabled', () => {
   });
 });
 
+describe('Err.duckdb', () => {
+  it('emits kind=duckdb with operation, DuckDB kind, reason, and optional context', () => {
+    const cause = new Error('query failed');
+    const r = Err.duckdb('duckdb-query', 'query-failed', 'DuckDB query failed', {
+      field: 'sql',
+      cause,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok && r.error.kind === 'duckdb') {
+      expect(r.error.operation).toBe('duckdb-query');
+      expect(r.error.duckDbKind).toBe('query-failed');
+      expect(r.error.reason).toBe('DuckDB query failed');
+      expect(r.error.field).toBe('sql');
+      expect(r.error.cause).toBe(cause);
+    }
+  });
+});
+
 describe('Err.mapshaper', () => {
   it('wraps the underlying cause', () => {
     const cause = new Error('mapshaper barfed');
@@ -138,6 +156,8 @@ describe('discriminated narrowing in TypeScript flow', () => {
           return `v:${r.error.field}`;
         case 'expression-disabled':
           return `ed:${r.error.operation}`;
+        case 'duckdb':
+          return `ddb:${r.error.operation}:${r.error.duckDbKind}`;
         case 'mapshaper':
           return `ms:${r.error.cmd ?? ''}`;
         case 'host-removed':
@@ -148,6 +168,9 @@ describe('discriminated narrowing in TypeScript flow', () => {
     expect(describe(Err.notFound('layer', 'parks'))).toBe('nf:layer:parks');
     expect(describe(Err.validation('field', 'reason'))).toBe('v:field');
     expect(describe(Err.expressionDisabled('op'))).toBe('ed:op');
+    expect(describe(Err.duckdb('duckdb-query', 'query-failed', 'reason'))).toBe(
+      'ddb:duckdb-query:query-failed',
+    );
     expect(describe(Err.mapshaper('cause', { cmd: '-x' }))).toBe('ms:-x');
     expect(describe(Err.hostRemoved())).toBe('hr');
   });

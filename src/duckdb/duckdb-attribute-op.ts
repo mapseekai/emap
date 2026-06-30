@@ -58,11 +58,20 @@ export async function processAttributeWithDuckDb(
     });
   }
 
-  const input = toArrowTable(dataset, {
-    layer: opts.layer,
-    encoding: 'wkb',
-    geometryColumn,
-  });
+  let input: Table;
+  try {
+    input = toArrowTable(dataset, {
+      layer: opts.layer,
+      encoding: 'wkb',
+      geometryColumn,
+    });
+  } catch (err) {
+    throw new DuckDbOperationError(
+      'conversion-failed',
+      `DuckDB ${spec.id} input could not be converted to Arrow`,
+      { cause: err },
+    );
+  }
   const outputColumn = resolveAttributeOutputColumn(input, trimmedOutputColumn);
 
   try {
@@ -77,6 +86,7 @@ export async function processAttributeWithDuckDb(
 
   let conn: Awaited<ReturnType<DuckDbRuntime['connect']>> | undefined;
   let inputTableName: string | undefined;
+  let primaryError: unknown;
   try {
     conn = await runtime.connect();
     inputTableName = nextDuckDbAttributeInputTableName();
@@ -105,14 +115,33 @@ export async function processAttributeWithDuckDb(
       );
     }
   } catch (err) {
-    if (err instanceof DuckDbOperationError) throw err;
-    throw new DuckDbOperationError('query-failed', `DuckDB ${spec.id} query failed`, {
+    if (err instanceof DuckDbOperationError) {
+      primaryError = err;
+      throw err;
+    }
+    const wrapped = new DuckDbOperationError('query-failed', `DuckDB ${spec.id} query failed`, {
       cause: err,
     });
+    primaryError = wrapped;
+    throw wrapped;
   } finally {
+    let cleanupError: unknown;
     if (conn && inputTableName) {
-      await conn.query(`DROP TABLE IF EXISTS ${inputTableName}`).catch(() => undefined);
+      try {
+        await conn.query(`DROP TABLE IF EXISTS ${inputTableName}`);
+      } catch (err) {
+        cleanupError = err;
+      }
     }
-    await conn?.close?.();
+    try {
+      await conn?.close?.();
+    } catch (err) {
+      cleanupError ??= err;
+    }
+    if (cleanupError && !primaryError) {
+      throw new DuckDbOperationError('query-failed', `DuckDB ${spec.id} cleanup failed`, {
+        cause: cleanupError,
+      });
+    }
   }
 }

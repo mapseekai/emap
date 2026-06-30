@@ -84,7 +84,7 @@
       {
         "imports": {
           "@duckdb/duckdb-wasm": "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/dist/duckdb-browser.mjs",
-          "apache-arrow": "https://cdn.jsdelivr.net/npm/apache-arrow@21.1.0/Arrow.dom.mjs",
+          "apache-arrow": "https://unpkg.com/apache-arrow@21.1.0/Arrow.dom.mjs",
           "flatbuffers": "https://cdn.jsdelivr.net/npm/flatbuffers@25.9.23/mjs/flatbuffers.js",
           "tslib": "https://cdn.jsdelivr.net/npm/tslib@2.8.1/tslib.es6.mjs"
         }
@@ -104,7 +104,7 @@
       <div class="row">
         <label for="entrypoint">入口</label>
         <select id="entrypoint">
-          <option value="helper">queryGeoParquetWithDuckDb</option>
+          <option value="helper">DuckDbGeoParquetQuerySource.query</option>
           <option value="mapop">duckDbGeoParquetQueryLayer</option>
         </select>
       </div>
@@ -125,9 +125,10 @@
     </div>
     <script type="module">
       import {
+        closeDuckDbRuntime,
+        createDuckDbGeoParquetQuerySource,
         createDuckDbRuntimeFromJsDelivr,
         duckDbGeoParquetQueryLayer,
-        queryGeoParquetWithDuckDb,
         setDuckDbRuntime,
       } from "../../dist/emap-duckdb.mjs";
 
@@ -149,6 +150,7 @@
       const status = document.getElementById("status");
 
       let geoParquetBytes;
+      let geoParquetQuerySource;
       let geoParquetFileName = "";
       let runtimePromise;
       const contextSources = new Map();
@@ -231,6 +233,24 @@
         return runtimePromise;
       }
 
+      function hasGeoParquetInput() {
+        return Boolean(geoParquetBytes || geoParquetQuerySource);
+      }
+
+      async function closeGeoParquetQuerySource() {
+        const source = geoParquetQuerySource;
+        geoParquetQuerySource = undefined;
+        if (source) await source.close();
+      }
+
+      async function getGeoParquetQuerySource(runtime) {
+        if (geoParquetQuerySource) return geoParquetQuerySource;
+        if (!geoParquetBytes) throw new Error("请先上传 GeoParquet 文件。");
+        geoParquetQuerySource = await createDuckDbGeoParquetQuerySource(geoParquetBytes, runtime);
+        geoParquetBytes = undefined;
+        return geoParquetQuerySource;
+      }
+
       function createMapOpContext() {
         return {
           getSource(id) {
@@ -238,6 +258,7 @@
               return {
                 getBytes: () => geoParquetBytes,
                 getDataset: () => null,
+                getGeoParquetQuerySource: () => geoParquetQuerySource,
               };
             }
             return contextSources.get(id);
@@ -254,29 +275,33 @@
         runButton.disabled = true;
         status.textContent = `正在读取 ${file.name}...`;
         try {
+          await closeGeoParquetQuerySource().catch((err) => console.warn(err));
           geoParquetBytes = new Uint8Array(await file.arrayBuffer());
           geoParquetFileName = file.name;
+          contextSources.clear();
           removeSourceWithLayers(OUTPUT_ID);
           status.textContent = `已读取 ${file.name}，可以运行 DuckDB 查询。`;
         } catch (err) {
           console.error(err);
           geoParquetBytes = undefined;
+          geoParquetQuerySource = undefined;
           geoParquetFileName = "";
           status.textContent = `读取失败: ${err?.message ?? err}`;
         } finally {
-          runButton.disabled = !geoParquetBytes;
+          runButton.disabled = !hasGeoParquetInput();
         }
       });
 
       runButton.addEventListener("click", async () => {
-        if (!geoParquetBytes) {
+        if (!hasGeoParquetInput()) {
           status.textContent = "请先上传 GeoParquet 文件。";
           return;
         }
         runButton.disabled = true;
-        status.textContent = "DuckDB-Wasm 正在查询 GeoParquet bytes...";
+        status.textContent = "DuckDB-Wasm 正在查询 GeoParquet...";
         try {
           const runtime = await getRuntime();
+          const querySource = await getGeoParquetQuerySource(runtime);
           const opts = {
             sql: sqlInput.value,
             layerName: layerNameInput.value.trim() || "duckdb_geoparquet_query",
@@ -293,7 +318,7 @@
             if (!result.ok) throw new Error(`${result.error.kind}: ${result.error.reason ?? result.error.id}`);
             resultDataset = result.value.dataset;
           } else {
-            resultDataset = await queryGeoParquetWithDuckDb(geoParquetBytes, opts, runtime);
+            resultDataset = await querySource.query(opts);
           }
           const outputSource = addDatasetSource(OUTPUT_ID, resultDataset);
           map.setExtent(outputSource.getExtent());
@@ -306,11 +331,16 @@
           console.error(err);
           status.textContent = `查询失败: ${err?.message ?? err}`;
         } finally {
-          runButton.disabled = !geoParquetBytes;
+          runButton.disabled = !hasGeoParquetInput();
         }
       });
 
       window.addEventListener("resize", () => map.resize());
+      window.addEventListener("pagehide", () => {
+        void closeGeoParquetQuerySource().finally(() =>
+          runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime(),
+        );
+      });
     </script>
   </body>
 </html>

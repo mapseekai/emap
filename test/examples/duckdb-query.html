@@ -84,7 +84,7 @@
       {
         "imports": {
           "@duckdb/duckdb-wasm": "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/dist/duckdb-browser.mjs",
-          "apache-arrow": "https://cdn.jsdelivr.net/npm/apache-arrow@21.1.0/Arrow.dom.mjs",
+          "apache-arrow": "https://unpkg.com/apache-arrow@21.1.0/Arrow.dom.mjs",
           "flatbuffers": "https://cdn.jsdelivr.net/npm/flatbuffers@25.9.23/mjs/flatbuffers.js",
           "tslib": "https://cdn.jsdelivr.net/npm/tslib@2.8.1/tslib.es6.mjs"
         }
@@ -125,6 +125,7 @@
     </div>
     <script type="module">
       import {
+        closeDuckDbRuntime,
         createDuckDbRuntimeFromJsDelivr,
         duckDbQueryLayer,
         queryDatasetWithDuckDb,
@@ -356,6 +357,11 @@
       });
 
       window.addEventListener("resize", () => map.resize());
+      window.addEventListener("pagehide", () => {
+        void (
+          runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime()
+        );
+      });
     </script>
   </body>
 </html>
