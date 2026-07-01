@@ -116,7 +116,44 @@ edit command (vertex-edit / editSession / ops.*)
 
 Drag sessions stay cheap: per-frame moves only mark dirty (existing
 `markDisplayArcsDirty` pattern); chunk rebuild and the revision bump land on
-commit/release, not per frame.
+commit/release, not per frame. What the user sees per frame during the drag
+is defined by the edit-session hot path below.
+
+### Edit-session rendering (real-time display consistency)
+
+Retained chunks rebuild asynchronously, so a drag frame can never wait for
+them. During an edit session the affected geometry drops back to an
+immediate-mode hot path while everything else stays retained:
+
+```text
+┌─ unaffected geometry (~99.9%) ─▶ retained chunks keep drawing, untouched
+├─ affected arcs/features ───────▶ hot path: rebuilt each frame from the
+│   (arcIds known at drag start;    live ArcCollection into a small dynamic
+│    shared arcs included, so       buffer (hundreds–thousands of vertices,
+│    both neighbours update)        <1ms) via buffer writes — cursor-accurate
+└─ consistency mask ─────────────▶ affected features are hidden inside the
+     retained chunks: chunk vertices carry a featureId attribute; the
+     shader discards ids listed in a small hidden-id uniform array
+     (edit sessions touch 1–few features, so a uniform list suffices)
+```
+
+Without the mask the retained chunk draws the old position while the hot
+path draws the new one — ghosting. The mask guarantees each feature is drawn
+by exactly one source at any moment.
+
+On release/commit:
+
+1. `revision++` → affected chunks rebuild asynchronously in the worker.
+2. The hot-path overlay keeps drawing until the replacement chunks are
+   ready, then unloads and the mask clears.
+3. Every frame shows a complete picture — overlay or new chunk, never a
+   hole, never a double image.
+
+`arrowCache` consistency: the revision bumps on commit only, never per drag
+frame, so the Arrow table always means "state as of the last committed
+edit". A DuckDB op or export triggered mid-drag sees the last committed
+state — consistent and explainable. The Canvas painter reads live arcs every
+frame and needs none of this.
 
 ### DuckDB ops
 
@@ -176,6 +213,9 @@ Renderer:
 - vertex edit invalidates only affected chunks (existing cache test
   infrastructure).
 - bridge → chunk switchover keeps a model alive at all times (no flash).
+- edit session: hot-path buffer reflects live arc coordinates each frame;
+  masked features are absent from retained chunk draws; mask clears only
+  after replacement chunks are ready (no ghosting, no holes).
 
 Integration:
 
@@ -201,10 +241,12 @@ Each phase leaves the branch healthy and shippable.
 4. v10 whole-table bridge render (@luma.gl/arrow path models)
 5. chunk outputs unified on GeoArrow layout + edit local invalidation wired
    (completes Phase 4 of the retained-binary-chunk-pipeline design)
+6. edit-session hot path + featureId consistency mask (real-time drag
+   feedback over retained chunks)
 ```
 
 Phases 0–1 are pure infrastructure; 2–3 deliver the dual-representation
-dataset value; 4–5 deliver the rendering upgrades.
+dataset value; 4–6 deliver the rendering upgrades.
 
 ## Risks
 
