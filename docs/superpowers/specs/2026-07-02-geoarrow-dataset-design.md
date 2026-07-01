@@ -62,21 +62,38 @@ Two derived layers with different jobs:
 ```ts
 interface TopologySource {
   // ...existing surface unchanged
-  /** Monotonic edit counter. Bumped once per completed edit command. */
-  getRevision(): number;
+  /** Monotonic committed-edit counter (named to distinguish it from the
+   *  existing render-only getRenderRevision()). */
+  getDataRevision(): number;
+  /** Record an in-place data edit; expires derived caches lazily. */
+  markDataEdited(): void;
   /**
-   * GeoArrow table for one layer. Returns the cached table when its
-   * revision matches; otherwise rebuilds through toArrowTable and caches.
+   * GeoArrow table for one layer. Cached per (layer, encoding) — DuckDB
+   * consumes 'wkb', rendering/export consume 'native'. Returns the cached
+   * table when its revision matches; otherwise rebuilds through
+   * toArrowTable and re-caches. Rebuilds reset the render-LOD retained
+   * interval (same discipline as export()) so derived tables always carry
+   * full-detail coordinates.
    */
-  getArrowTable(layer?: number | string): Table;
+  getArrowTable(opts?: { layer?: number | string; encoding?: 'native' | 'wkb' }): unknown;
+  /** Install an externally produced table (import path, DuckDB results)
+   *  as the cache entry for the current data revision. */
+  seedArrowTable(table: unknown, opts: { encoding: 'native' | 'wkb'; layer?: number | string }): void;
 }
 ```
 
-The revision bump hooks into `src/map/ops/_runner.ts` — the same choke point
-where `COMMAND_EFFECTS` already classifies every command — so individual
-commands never need to remember to invalidate caches. `editSession`
-(translate / rotate / scale) and vertex-edit commit paths bump through the
-same source method. `attribute-only` effects also bump (the Arrow table
+The table crosses the core API as `unknown`: the core bundle must not
+depend on apache-arrow, so the formats bundle registers the converter into
+the existing format-registry global slot and typed access lives in
+formats/duckdb code.
+
+The revision bump lands at two choke points that together cover every edit
+path without per-command wiring: `TopologySource.setDataset` (dataset-replace
+ops — everything `_runner.ts` / `COMMAND_EFFECTS` drives lands here via
+`DatasetReplaceCommand`, plus DuckDB results and reproject) and the Map
+history entry points `pushCommand` / `undo` / `redo` (in-place edits:
+vertex move/insert/delete, editSession translate / rotate / scale).
+Double-bumps are harmless — over-invalidation only costs a lazy rebuild. `attribute-only` effects also bump (the Arrow table
 carries attribute columns); `crs-only` / reproject invalidates everything
 including render chunks.
 
