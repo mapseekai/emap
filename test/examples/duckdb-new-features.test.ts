@@ -10,6 +10,10 @@ const duckDbExamples = [
   readExample('duckdb-query.html'),
   readExample('duckdb-spatial-ops.html'),
 ];
+const geoParquetExamples = [
+  readExample('export-geoparquet.html'),
+  readExample('geoparquet-viewer.html'),
+];
 
 function readExample(name: string): string {
   return readFileSync(resolve(__dirname, name), 'utf8');
@@ -61,6 +65,17 @@ describe('DuckDB new feature examples', () => {
       expect(html).not.toContain(
         '"apache-arrow": "https://cdn.jsdelivr.net/npm/apache-arrow@21.1.0/Arrow.dom.mjs"',
       );
+    }
+  });
+
+  it('uses a CORS-enabled parquet-wasm ESM entrypoint', () => {
+    for (const html of geoParquetExamples) {
+      expect(html).toContain(
+        "const parquetWasmBase = 'https://unpkg.com/parquet-wasm@0.7.1/esm/';",
+      );
+      expect(html).toContain("await import(parquetWasmBase + 'parquet_wasm.js')");
+      expect(html).toContain("module_or_path: parquetWasmBase + 'parquet_wasm_bg.wasm'");
+      expect(html).not.toContain('https://cdn.jsdelivr.net/npm/parquet-wasm@0.7.1/esm/');
     }
   });
 

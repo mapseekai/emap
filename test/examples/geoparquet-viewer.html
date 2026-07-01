@@ -91,7 +91,7 @@
     用 <script type="module"> 从 CDN 加载后注入，GeoArrow (.arrow) 无需此步骤。
   -->
   <script type="module">
-    const parquetWasmBase = 'https://cdn.jsdelivr.net/npm/parquet-wasm@0.7.1/esm/';
+    const parquetWasmBase = 'https://unpkg.com/parquet-wasm@0.7.1/esm/';
     const mod = await import(parquetWasmBase + 'parquet_wasm.js');
     await mod.default?.({
       module_or_path: parquetWasmBase + 'parquet_wasm_bg.wasm',
