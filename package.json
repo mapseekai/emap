@@ -115,9 +115,9 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
-    "@luma.gl/core": "^9.3.3",
-    "@luma.gl/engine": "^9.3.3",
-    "@luma.gl/webgl": "^9.3.3",
+    "@luma.gl/core": "9.3.5",
+    "@luma.gl/engine": "9.3.5",
+    "@luma.gl/webgl": "9.3.5",
     "@math.gl/polygon": "^4.1.0",
     "@zwishing/epsg-index": "^3.0.0",
     "apache-arrow": "^21.1.0",
