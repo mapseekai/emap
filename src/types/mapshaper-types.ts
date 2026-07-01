@@ -39,7 +39,10 @@ export interface ArcCollection {
   getArcIter(arcId: number): ArcIterator;
   getShapeIter?(part: number[]): ArcIterator;
   forEachSegment?(cb: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void): void;
-  forEachArcSegment?(arcId: number, cb: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void): void;
+  forEachArcSegment?(
+    arcId: number,
+    cb: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void,
+  ): void;
 
   // Simplification
   setRetainedInterval?(interval: number): ArcCollection;
@@ -217,6 +220,8 @@ export interface PointStyle {
 export interface VertexDotStyle {
   dotColor?: string;
   dotRadius?: number;
+  /** Optional arc-level visibility filter for large topology datasets. */
+  arcFilter?: (arcId: number) => boolean;
   hoverVertex?: [number, number] | null;
   /**
    * Distinguishes a vertex hover (drawn as a circle) from an interpolated

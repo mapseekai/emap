@@ -8,10 +8,7 @@ import { Err, type OpResult } from '../op-result';
 import type { RenameLayerOptions } from '../types';
 import type { OpContext } from './_context';
 
-export async function renameLayer(
-  ctx: OpContext,
-  opts: RenameLayerOptions,
-): Promise<OpResult> {
+export async function renameLayer(ctx: OpContext, opts: RenameLayerOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
   if (!source) return Err.notFound('source', opts.source);
   const dataset = source.getDataset();
@@ -25,9 +22,7 @@ export async function renameLayer(
   // Allow renaming to the same name (no-op-ish), but reject if another
   // layer in this dataset already owns it.
   if (newName !== opts.target) {
-    const collision = dataset.layers.some(
-      (l: any) => (l?.name ?? '') === newName,
-    );
+    const collision = dataset.layers.some((l: any) => (l?.name ?? '') === newName);
     if (collision) return Err.validation('name', `another layer already named '${newName}'`);
   }
   return ctx.runDatasetCommandParsed(

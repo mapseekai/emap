@@ -11,7 +11,11 @@ function makeMap() {
     setOptions: vi.fn(),
     getOptions: vi.fn(() => ({})),
   };
-  const map = { get boxSelect() { return handler; } };
+  const map = {
+    get boxSelect() {
+      return handler;
+    },
+  };
   return { map, handler };
 }
 
@@ -34,7 +38,10 @@ describe('BoxSelectControl (thin shell, DX P2c)', () => {
     });
     const anchor = c.onAdd(map as any);
     expect(handler.setOptions).toHaveBeenCalledWith({
-      layers: ['a'], dragThreshold: 7, dragActivator: 'none', style: { stroke: '#f00' },
+      layers: ['a'],
+      dragThreshold: 7,
+      dragActivator: 'none',
+      style: { stroke: '#f00' },
     });
     expect(handler.enable).toHaveBeenCalledTimes(1);
     expect(anchor.className).toBe('emap-ctrl emap-box-select-anchor');
@@ -45,7 +52,10 @@ describe('BoxSelectControl (thin shell, DX P2c)', () => {
     const c = new BoxSelectControl();
     c.onAdd(map as any);
     expect(handler.setOptions).toHaveBeenCalledWith({
-      layers: undefined, dragThreshold: undefined, dragActivator: undefined, style: undefined,
+      layers: undefined,
+      dragThreshold: undefined,
+      dragActivator: undefined,
+      style: undefined,
     });
     expect(handler.enable).toHaveBeenCalledTimes(1);
   });
@@ -79,7 +89,9 @@ describe('BoxSelectControl (thin shell, DX P2c)', () => {
   });
 
   it('propagates the handler mutual-exclusivity throw from enable()', () => {
-    handler.enable.mockImplementation(() => { throw new Error('cannot enable boxSelect: lassoSelect is enabled'); });
+    handler.enable.mockImplementation(() => {
+      throw new Error('cannot enable boxSelect: lassoSelect is enabled');
+    });
     const c = new BoxSelectControl();
     expect(() => c.onAdd(map as any)).toThrow(/lassoSelect is enabled/);
   });

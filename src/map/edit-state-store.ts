@@ -39,9 +39,15 @@ export class EditStateStore {
 
   constructor(private _onChange: (change: EditStateChange) => void) {}
 
-  get mode(): EditMode { return this._mode; }
-  get vertex(): EditVertexState | null { return this._vertex; }
-  get draw(): EditDrawState | null { return this._draw; }
+  get mode(): EditMode {
+    return this._mode;
+  }
+  get vertex(): EditVertexState | null {
+    return this._vertex;
+  }
+  get draw(): EditDrawState | null {
+    return this._draw;
+  }
 
   setMode(mode: EditMode): void {
     if (mode === this._mode) return;

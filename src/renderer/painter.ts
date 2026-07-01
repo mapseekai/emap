@@ -1,6 +1,7 @@
 import type { AffineTransform } from '../geo/transform';
 import type {
   ArcCollection,
+  FeatureShape,
   StrokeStyle,
   PointStyle,
   VertexDotStyle,
@@ -26,21 +27,31 @@ export interface DrawOverlayState {
   drawColor: string;
 }
 
+export interface PolygonFillOptions {
+  /** Current viewport bbox in data coordinates, used to reject offscreen parts before path iteration. */
+  viewBBox?: readonly [number, number, number, number] | number[] | null;
+}
+
 /**
  * Stateless drawing primitives: enough to render basemap topology, points,
  * polygons, and arc highlights. Anything that paints actual map content
  * should depend on `CorePainter`, not the broader `Painter`/`EditPainter`.
  */
 export interface CorePainter {
-  drawPaths(shapes: any[], style: StrokeStyle, arcs: ArcCollection): void;
+  drawPaths(
+    shapes: readonly (FeatureShape | null | undefined)[],
+    style: StrokeStyle,
+    arcs: ArcCollection,
+  ): void;
   drawArcs(arcs: ArcCollection, style: StrokeStyle, filter?: (i: number) => boolean): void;
-  drawPoints(shapes: any[], style: PointStyle): void;
+  drawPoints(shapes: readonly (FeatureShape | null | undefined)[], style: PointStyle): void;
   drawPolygonFill(
-    shapes: any[],
+    shapes: readonly (FeatureShape | null | undefined)[],
     arcs: ArcCollection,
     fillColor: string,
     filter?: (i: number) => boolean,
     opacity?: number,
+    options?: PolygonFillOptions,
   ): void;
   clear(): void;
   resize(width: number, height: number): void;
@@ -54,7 +65,11 @@ export interface CorePainter {
  * not paint editing affordances should not depend on this interface.
  */
 export interface EditPainter extends CorePainter {
-  drawVertexDots(shapes: any[], arcs: ArcCollection, style: VertexDotStyle): void;
+  drawVertexDots(
+    shapes: readonly (FeatureShape | null | undefined)[],
+    arcs: ArcCollection,
+    style: VertexDotStyle,
+  ): void;
   drawDrawingOverlay(state: DrawOverlayState): void;
 }
 

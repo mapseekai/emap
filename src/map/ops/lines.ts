@@ -8,6 +8,7 @@ import { resolveLayerInList } from '../layer-registry';
 import { Err, type OpResult } from '../op-result';
 import type { LinesOptions } from '../types';
 import type { OpContext } from './_context';
+import { validateFieldList } from './_fields';
 
 export async function linesLayer(ctx: OpContext, opts: LinesOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
@@ -17,12 +18,16 @@ export async function linesLayer(ctx: OpContext, opts: LinesOptions): Promise<Op
   const layer = resolveLayerInList(dataset.layers, opts.target);
   if (!layer) return Err.notFound('layer', opts.target);
   if (layer.geometry_type !== 'polygon') {
-    return Err.validation('target', `expected polygon layer, got ${layer.geometry_type ?? 'unknown'}`);
+    return Err.validation(
+      'target',
+      `expected polygon layer, got ${layer.geometry_type ?? 'unknown'}`,
+    );
   }
 
   const linesOpts: Record<string, unknown> = {};
-  const safeFields = opts.fields?.filter((f) => typeof f === 'string' && !f.includes(','));
-  if (safeFields && safeFields.length > 0) linesOpts.fields = safeFields;
+  const fields = validateFieldList('fields', opts.fields);
+  if (!fields.ok) return fields;
+  if (fields.value.length > 0) linesOpts.fields = fields.value;
   if (opts.name && opts.name.trim()) linesOpts.name = opts.name;
   if (opts.noReplace) linesOpts.no_replace = true;
 

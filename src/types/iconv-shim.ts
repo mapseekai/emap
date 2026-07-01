@@ -2,5 +2,5 @@
 export default {
   encodingExists: () => false,
   decode: (buf: any) => buf.toString(),
-  encode: (str: string) => str
+  encode: (str: string) => str,
 };

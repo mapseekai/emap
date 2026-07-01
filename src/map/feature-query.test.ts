@@ -29,7 +29,10 @@ function makeMockArcs(arcBboxes: number[][]): MockArcs {
     getSimpleShapeBbox: (parts: number[], out: number[]) => {
       // `parts` is an array of (signed) arc ids. Compute union of those
       // arcs' bboxes.
-      let xmin = Infinity, ymin = Infinity, xmax = -Infinity, ymax = -Infinity;
+      let xmin = Infinity,
+        ymin = Infinity,
+        xmax = -Infinity,
+        ymax = -Infinity;
       for (const raw of parts) {
         const id = raw >= 0 ? raw : ~raw;
         const bb = arcBboxes[id];
@@ -39,7 +42,10 @@ function makeMockArcs(arcBboxes: number[][]): MockArcs {
         if (bb[2] > xmax) xmax = bb[2];
         if (bb[3] > ymax) ymax = bb[3];
       }
-      out[0] = xmin; out[1] = ymin; out[2] = xmax; out[3] = ymax;
+      out[0] = xmin;
+      out[1] = ymin;
+      out[2] = xmax;
+      out[3] = ymax;
     },
   };
 }
@@ -69,7 +75,14 @@ describe('FeatureQuery._getOrBuildIndex', () => {
   });
 
   it('returns null for layers with undefined shapes', () => {
-    const result = callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, { shapes: undefined }, undefined);
+    const result = callPrivate<any>(
+      fq,
+      '_getOrBuildIndex',
+      'src1',
+      0,
+      { shapes: undefined },
+      undefined,
+    );
     expect(result).toBeNull();
   });
 
@@ -77,9 +90,12 @@ describe('FeatureQuery._getOrBuildIndex', () => {
     const layer = {
       geometry_type: 'point',
       shapes: [
-        [[0, 0]],         // shape 0: single point at origin
-        [[10, 10]],       // shape 1: single point
-        [[5, 5], [15, 15]], // shape 2: multipoint
+        [[0, 0]], // shape 0: single point at origin
+        [[10, 10]], // shape 1: single point
+        [
+          [5, 5],
+          [15, 15],
+        ], // shape 2: multipoint
       ],
     };
     const result = callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, undefined);
@@ -101,17 +117,17 @@ describe('FeatureQuery._getOrBuildIndex', () => {
 
   it('builds an index for a path layer using arc bboxes', () => {
     const arcs = makeMockArcs([
-      [0, 0, 5, 5],   // arc 0
+      [0, 0, 5, 5], // arc 0
       [10, 10, 20, 20], // arc 1
       [50, 50, 60, 60], // arc 2
     ]);
     const layer = {
       geometry_type: 'polyline',
       shapes: [
-        [[0]],         // shape 0 uses arc 0
-        [[1]],         // shape 1 uses arc 1
-        [[0, 1]],      // shape 2 spans arcs 0 + 1 (one part with two arcs)
-        [[2]],         // shape 3 uses arc 2
+        [[0]], // shape 0 uses arc 0
+        [[1]], // shape 1 uses arc 1
+        [[0, 1]], // shape 2 spans arcs 0 + 1 (one part with two arcs)
+        [[2]], // shape 3 uses arc 2
       ],
     };
     const result = callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs);
@@ -136,7 +152,7 @@ describe('FeatureQuery._getOrBuildIndex', () => {
       geometry_type: 'polyline',
       shapes: [
         [[0]],
-        null,        // null shape
+        null, // null shape
         [[0]],
       ],
     };
@@ -174,7 +190,10 @@ describe('FeatureQuery._getOrBuildIndex', () => {
 
   it('cache invalidates when arc count changes', () => {
     const arcs1 = makeMockArcs([[0, 0, 5, 5]]);
-    const arcs2 = makeMockArcs([[0, 0, 5, 5], [10, 10, 20, 20]]);
+    const arcs2 = makeMockArcs([
+      [0, 0, 5, 5],
+      [10, 10, 20, 20],
+    ]);
     const layer = { geometry_type: 'polyline', shapes: [[[0]]] };
 
     const a = callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs1);
@@ -221,7 +240,7 @@ describe('FeatureQuery.clear', () => {
     expect(cacheSize()).toBe(0);
   });
 
-  it('clear(sourceId) drops only that source\'s entries', () => {
+  it("clear(sourceId) drops only that source's entries", () => {
     buildSomeIndexes();
     expect(cacheSize()).toBe(3);
     fq.clear('src1');
@@ -310,7 +329,9 @@ describe('FeatureQuery editVersion cache invalidation (regression)', () => {
     const layer = { geometry_type: 'polygon', shapes: [[[0]]] };
 
     const a = callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs, undefined);
-    const b = callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs, { /* no editVersion */ });
+    const b = callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs, {
+      /* no editVersion */
+    });
     expect(a).toBe(b); // same cache key
   });
 });

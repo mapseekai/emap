@@ -3,11 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { PointerEventDispatcher } from './pointer-event-dispatcher';
 import type { NormalizedPointerEvent } from './handler';
 
-function ev(
-  kind: NormalizedPointerEvent['kind'],
-  x: number,
-  y: number,
-): NormalizedPointerEvent {
+function ev(kind: NormalizedPointerEvent['kind'], x: number, y: number): NormalizedPointerEvent {
   return {
     kind,
     point: { x, y },

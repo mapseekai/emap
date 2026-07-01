@@ -17,11 +17,7 @@
 // pipeline so they participate in undo / history.
 
 import type { FeatureRef } from './types';
-import type {
-  PathShape,
-  PointShape,
-  LegacyPointShape,
-} from '../types/mapshaper-types';
+import type { PathShape, PointShape, LegacyPointShape } from '../types/mapshaper-types';
 import type { EmapHostInternal } from './emap-host';
 
 /**

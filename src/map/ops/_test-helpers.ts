@@ -19,24 +19,30 @@ export interface StubCtxResult {
   calls: Array<{ sourceId: string; cmds: ParsedCommand[]; label: string }>;
 }
 
-export function makeStubCtx(
-  layers: StubLayerSpec[] = [{ name: 'parks' }],
-): StubCtxResult {
-  const layerObjs: MapshaperLayer[] = layers.map((l) => ({
-    name: l.name,
-    geometry_type: (l.geometry_type ?? 'polygon') as any,
-    shapes: [[[0]]],
-  } as MapshaperLayer));
+export function makeStubCtx(layers: StubLayerSpec[] = [{ name: 'parks' }]): StubCtxResult {
+  const layerObjs: MapshaperLayer[] = layers.map(
+    (l) =>
+      ({
+        name: l.name,
+        geometry_type: (l.geometry_type ?? 'polygon') as any,
+        shapes: [[[0]]],
+      }) as MapshaperLayer,
+  );
   const dataset: MapshaperDataset = { layers: layerObjs, info: {} } as MapshaperDataset;
 
   const calls: StubCtxResult['calls'] = [];
   const ctx: OpContext = {
     host: {
       _removed: false,
-      _sources: new globalThis.Map([['s1', {
-        getDataset: () => dataset,
-        setDataset: () => undefined,
-      } as any]]),
+      _sources: new globalThis.Map([
+        [
+          's1',
+          {
+            getDataset: () => dataset,
+            setDataset: () => undefined,
+          } as any,
+        ],
+      ]),
       _history: null as any,
       _selection: null as any,
       _activeTransaction: null,

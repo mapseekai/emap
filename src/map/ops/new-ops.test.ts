@@ -28,7 +28,9 @@ describe('clipLayer / eraseLayer — bbox extension', () => {
   it('clips against a bbox without a mask layer', async () => {
     const { ctx, calls } = makeStubCtx();
     const r = await clipLayer(ctx, {
-      source: 's1', target: 'parks', bbox: [0, 0, 10, 10],
+      source: 's1',
+      target: 'parks',
+      bbox: [0, 0, 10, 10],
     });
     expect(r.ok).toBe(true);
     expect(calls).toHaveLength(1);
@@ -39,8 +41,11 @@ describe('clipLayer / eraseLayer — bbox extension', () => {
   it('forwards cleanup + removeSlivers to the mapshaper option keys', async () => {
     const { ctx, calls } = makeStubCtx();
     await clipLayer(ctx, {
-      source: 's1', target: 'parks', mask: 'parks',
-      cleanup: true, removeSlivers: true,
+      source: 's1',
+      target: 'parks',
+      mask: 'parks',
+      cleanup: true,
+      removeSlivers: true,
     });
     expect(calls[0].cmds[1].options).toEqual({
       source: 'parks',
@@ -59,7 +64,10 @@ describe('clipLayer / eraseLayer — bbox extension', () => {
   it('rejects when both mask AND bbox are supplied', async () => {
     const { ctx } = makeStubCtx();
     const r = await clipLayer(ctx, {
-      source: 's1', target: 'parks', mask: 'parks', bbox: [0, 0, 1, 1],
+      source: 's1',
+      target: 'parks',
+      mask: 'parks',
+      bbox: [0, 0, 1, 1],
     });
     expect(r.ok).toBe(false);
   });
@@ -67,7 +75,9 @@ describe('clipLayer / eraseLayer — bbox extension', () => {
   it('rejects bbox with xmin >= xmax', async () => {
     const { ctx } = makeStubCtx();
     const r = await clipLayer(ctx, {
-      source: 's1', target: 'parks', bbox: [10, 0, 10, 10],
+      source: 's1',
+      target: 'parks',
+      bbox: [10, 0, 10, 10],
     });
     expect(r.ok).toBe(false);
   });
@@ -88,8 +98,11 @@ describe('filterIslands', () => {
   it('forwards minArea + minVertices + removeEmpty', async () => {
     const { ctx, calls } = makeStubCtx();
     const r = await filterIslands(ctx, {
-      source: 's1', target: 'parks',
-      minArea: 100, minVertices: 5, removeEmpty: true,
+      source: 's1',
+      target: 'parks',
+      minArea: 100,
+      minVertices: 5,
+      removeEmpty: true,
     });
     expect(r.ok).toBe(true);
     expect(calls[0].cmds[1]).toEqual({
@@ -161,11 +174,15 @@ describe('filterGeom', () => {
   it('rejects malformed bbox', async () => {
     const { ctx } = makeStubCtx();
     const r1 = await filterGeom(ctx, {
-      source: 's1', target: 'parks', bbox: [0, 0, 0, 10],
+      source: 's1',
+      target: 'parks',
+      bbox: [0, 0, 0, 10],
     });
     expect(r1.ok).toBe(false);
     const r2 = await filterGeom(ctx, {
-      source: 's1', target: 'parks', bbox: [0, 0, NaN, 10],
+      source: 's1',
+      target: 'parks',
+      bbox: [0, 0, NaN, 10],
     });
     expect(r2.ok).toBe(false);
   });
@@ -179,8 +196,12 @@ describe('affineLayer', () => {
   it('forwards shift / rotate / scale / anchor', async () => {
     const { ctx, calls } = makeStubCtx();
     const r = await affineLayer(ctx, {
-      source: 's1', target: 'parks',
-      shift: [10, 5], rotate: 45, scale: 2, anchor: [0, 0],
+      source: 's1',
+      target: 'parks',
+      shift: [10, 5],
+      rotate: 45,
+      scale: 2,
+      anchor: [0, 0],
     });
     expect(r.ok).toBe(true);
     const c = calls[0].cmds[1];
@@ -227,8 +248,11 @@ describe('dataFill', () => {
   it('forwards field + weightField + contiguous', async () => {
     const { ctx, calls } = makeStubCtx();
     const r = await dataFill(ctx, {
-      source: 's1', target: 'parks',
-      field: 'region', weightField: 'area', contiguous: true,
+      source: 's1',
+      target: 'parks',
+      field: 'region',
+      weightField: 'area',
+      contiguous: true,
     });
     expect(r.ok).toBe(true);
     expect(calls[0].cmds[1]).toEqual({

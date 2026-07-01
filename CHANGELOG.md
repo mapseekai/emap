@@ -7,6 +7,106 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-10
+
+### Performance
+
+- Large topology navigation now follows a stronger fast-nav strategy: slow
+  pan/zoom interactions transform the last committed canvas frame, mark a
+  settle redraw as pending, and defer the real redraw until interaction settle
+  without synchronously blocking pointer-up / wheel-end handlers.
+- Full redraw timing now includes a one-pixel Canvas readback flush when the
+  browser exposes `getImageData()`. This makes the scheduler account for the
+  real Canvas Commit cost that dominates large datasets instead of measuring
+  only JavaScript path construction.
+- Pending settle redraws are tracked separately from normal redraws. A new nav
+  frame can supersede an obsolete settle redraw during continued interaction,
+  while ordinary data/style redraws are still preserved.
+- Line and polygon-outline rendering now bounds `drawArcs()` batches by both
+  arc count and vertex count, reducing worst-case `stroke()` / Canvas Commit
+  stalls when a few arcs contain many vertices.
+- Polygon fill rendering now filters offscreen polygon parts by viewport bounds
+  before path iteration, batches by vertex budget, and avoids per-ring
+  `closePath()` calls.
+- Fill-only polygon layers with `line-width: 0` now skip outline arc-flag
+  construction and stroke rendering entirely.
+- Near-full-extent rendering still applies tiny-arc and viewport arc filtering,
+  preventing dense datasets from sending every invisible or subpixel segment to
+  Canvas.
+
+### Fixed
+
+- Vertex drag snapping and edit-node rendering now stay bounded to the current
+  view/cursor area on large datasets, avoiding unbounded vertex scans and
+  `Set maximum size exceeded` failures during edit interactions.
+
+## [0.3.7] - 2026-06-07
+
+### Fixed
+
+- Large point datasets no longer freeze the renderer. `CanvasPainter.drawPoints()`
+  accumulated every point into one Canvas2D path and filled it once, which is
+  super-linear in Skia (an 80k-point fill measured ~18s and blocked the main
+  thread, so the layer appeared not to render). It now flushes the path every
+  100 points like `drawArcs()` / `drawPaths()`, keeping render time linear
+  (~200ms at 200k points).
+- Point sources whose extent has zero area (a single point, or coincident
+  points) now produce a finite camera transform. `Bounds.fillOut()` expands a
+  degenerate (zero width/height) extent to the target viewport aspect instead
+  of deriving a `NaN` transform, so single-point datasets render centered.
+
+## [0.3.6] - 2026-06-01
+
+### Added
+
+- `vertexEdit` and `transformFeature` now accept `layers?: string[]`, matching
+  the selection handlers' layer-filter option so app-level edit filters can
+  constrain both selection and editing hit-tests.
+- Standard EPSG CRS inputs now resolve through `epsg-index` to Proj.4 before
+  being handed to mapshaper / mproj, so the UI CRS picker can pass values like
+  `EPSG:4490` and `EPSG:32633` to `map.ops.projectLayer()` and `map.reproject()`.
+- Biome is now the project formatting baseline, with `format` and
+  `format:check` npm scripts included in the release verification chain.
+
+### Fixed
+
+- `TopologySource.setData()` now derives import filenames from root-relative
+  and other relative URLs without throwing, so browser calls like
+  `setData('/data/roads.geojson')` keep the correct file extension for
+  mapshaper import.
+- Worker-backed mapshaper operations now clean up pending job state if
+  `Worker.postMessage()` throws synchronously, preventing stuck promises and
+  stale worker load accounting after clone/transfer failures.
+- Worker results now transfer packed binary buffers back to the main thread
+  instead of cloning them, reducing memory pressure on large dataset
+  operations.
+- `DrawFeatureControl` now unregisters its `editmodechange` listener on
+  removal, and delegated feature hover state is cleared when the last
+  `feature:*` listener is removed, avoiding stale event/control state after
+  teardown.
+- `BasemapControl` now guards asynchronous MapLibre initialization against
+  `onRemove()` races and clears container/style references during teardown.
+- Feature hit-testing now routes mapshaper geometry helpers through the
+  `MapshaperAdapter` boundary instead of importing `mapshaper` directly from
+  `FeatureQuery`.
+- `dissolveLayer`, `linesLayer`, `joinTable`, `unionLayers`, and `divideLayer`
+  now reject invalid field lists with structured validation errors instead of
+  silently dropping bad field names and running a partial command.
+- Painter interfaces now use the shared mapshaper shape types instead of
+  `any[]`, tightening the renderer contract without changing rendering
+  behaviour.
+- `map.reproject()` now normalizes common EPSG aliases before calling mapshaper
+  (`EPSG:3857` / `EPSG:900913` / `EPSG:102100` -> `webmercator`,
+  `EPSG:4326` -> `wgs84`), avoiding browser `+init=epsg:*` lookup failures.
+- `map.reproject()` now clears spatial indexes after reprojection so
+  click/box/lasso hit-testing rebuilds against the new coordinate space.
+- `map.reproject()` continues to reset the viewport initial line-scale state
+  before fitting the reprojected extent, preventing outline widths from drifting
+  after switching between degree- and meter-based CRS values.
+- Build output now suppresses only the known `rollup-plugin-polyfill-node`
+  `_stream_*` circular dependency warnings while preserving all other Rollup
+  circular dependency warnings.
+
 ## [0.3.5] - 2026-05-27
 
 ### Changed
@@ -407,7 +507,11 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@zwishing/emap/style.css`).
 
-[Unreleased]: https://github.com/zwishing/emap/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/zwishing/emap/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/zwishing/emap/compare/v0.3.6...v0.4.0
+[0.3.7]: https://github.com/zwishing/emap/compare/v0.3.6...v0.3.7
+[0.3.6]: https://github.com/zwishing/emap/compare/v0.3.5...v0.3.6
+[0.3.5]: https://github.com/zwishing/emap/compare/v0.3.3...v0.3.5
 [0.3.3]: https://github.com/zwishing/emap/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/zwishing/emap/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/zwishing/emap/compare/v0.3.0...v0.3.1

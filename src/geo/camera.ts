@@ -98,7 +98,11 @@ export class Camera {
     return { center: [center[0], center[1]], scale };
   }
 
-  private _payload(s: CameraState): { center: [number, number]; zoom: number; originalEvent: null } {
+  private _payload(s: CameraState): {
+    center: [number, number];
+    zoom: number;
+    originalEvent: null;
+  } {
     // zoom field is best-effort (NaN-safe): consumers that care about a
     // CRS-meaningful zoom can recompute; the camera contract is center+scale.
     return { center: [s.center[0], s.center[1]], zoom: Math.log2(s.scale), originalEvent: null };
@@ -191,19 +195,24 @@ export class Camera {
     tween.start(0, 1, duration);
   }
 
-  setCenter(center: [number, number]): void { this.jumpTo({ center }); }
-  setZoom(zoom: number): void { this.jumpTo({ zoom }); }
-  zoomTo(zoom: number, o: AnimationOptions = {}): void { this.easeTo({ zoom, ...o }); }
-  panTo(center: [number, number], o: AnimationOptions = {}): void { this.easeTo({ center, ...o }); }
+  setCenter(center: [number, number]): void {
+    this.jumpTo({ center });
+  }
+  setZoom(zoom: number): void {
+    this.jumpTo({ zoom });
+  }
+  zoomTo(zoom: number, o: AnimationOptions = {}): void {
+    this.easeTo({ zoom, ...o });
+  }
+  panTo(center: [number, number], o: AnimationOptions = {}): void {
+    this.easeTo({ center, ...o });
+  }
 
   /** Pan by a pixel offset (converted to a data-coord centre shift). */
   panBy(offset: [number, number], o: AnimationOptions = {}): void {
     const { center, scale } = this._host.getCameraState();
     // px → data: dx_data = dpx / mx ; flipY ⇒ dy_data = dpy / my = dpy / -scale
-    const next: [number, number] = [
-      center[0] + offset[0] / scale,
-      center[1] + offset[1] / -scale,
-    ];
+    const next: [number, number] = [center[0] + offset[0] / scale, center[1] + offset[1] / -scale];
     this.easeTo({ center: next, ...o });
   }
 
@@ -237,7 +246,10 @@ export class Camera {
    */
   flyTo(o: FlyToOptions): void {
     const target = this._resolve(o);
-    if (o.animate === false || o.duration === 0) { this.jumpTo(o); return; }
+    if (o.animate === false || o.duration === 0) {
+      this.jumpTo(o);
+      return;
+    }
     let duration = o.duration ?? DEFAULT_DURATION;
     if (!Number.isFinite(duration) || duration < 0) {
       throw new Error('camera: duration must be a finite non-negative number');
@@ -254,10 +266,9 @@ export class Camera {
     const zoomChanged = target.scale !== from.scale;
     // Work in a "world" where 1 unit = 1 px at scale 1: w0/w1 are the
     // viewport widths in data units at the start/end scales.
-    const u1 = Math.hypot(
-      target.center[0] - from.center[0],
-      target.center[1] - from.center[1],
-    ) * Math.max(from.scale, 1e-9); // pixel distance between centres at start scale
+    const u1 =
+      Math.hypot(target.center[0] - from.center[0], target.center[1] - from.center[1]) *
+      Math.max(from.scale, 1e-9); // pixel distance between centres at start scale
     const w0 = width / from.scale;
     const w1 = width / target.scale;
     const rho2 = rho * rho;
@@ -270,8 +281,7 @@ export class Camera {
     }
     const r0 = rCoeff(w0, +1);
     const r1 = rCoeff(w1, -1);
-    const S =
-      u1 < FLY_DEGENERATE_U ? Math.abs(Math.log(w1 / w0)) / rho : (r1 - r0) / rho;
+    const S = u1 < FLY_DEGENERATE_U ? Math.abs(Math.log(w1 / w0)) / rho : (r1 - r0) / rho;
     // `speed` (screenfuls/sec, van-Wijk) overrides duration when set —
     // MapLibre parity: duration = 1000 * S / speed.
     if (o.speed != null) duration = (1000 * S) / o.speed;

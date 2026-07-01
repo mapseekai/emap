@@ -8,10 +8,7 @@ import { Err, type OpResult } from '../op-result';
 import type { FilterIslandsOptions } from '../types';
 import type { OpContext } from './_context';
 
-export async function filterIslands(
-  ctx: OpContext,
-  opts: FilterIslandsOptions,
-): Promise<OpResult> {
+export async function filterIslands(ctx: OpContext, opts: FilterIslandsOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
   if (!source) return Err.notFound('source', opts.source);
   const dataset = source.getDataset();
@@ -19,9 +16,10 @@ export async function filterIslands(
   if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
 
   const hasMinArea = typeof opts.minArea === 'number' && Number.isFinite(opts.minArea);
-  const hasMinVertices = typeof opts.minVertices === 'number'
-    && Number.isInteger(opts.minVertices)
-    && opts.minVertices > 0;
+  const hasMinVertices =
+    typeof opts.minVertices === 'number' &&
+    Number.isInteger(opts.minVertices) &&
+    opts.minVertices > 0;
   if (!hasMinArea && !hasMinVertices) {
     return Err.validation('minArea', 'must supply at least one of `minArea` or `minVertices`');
   }

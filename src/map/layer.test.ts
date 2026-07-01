@@ -5,7 +5,7 @@ import type { LinePaint, FillPaint, CirclePaint } from './layer';
 describe('resolveStrokeStyle', () => {
   it('returns defaults when paint is undefined', () => {
     const style = resolveStrokeStyle(undefined, 1);
-    expect(style).toEqual({ color: '#333', width: 0.8 });
+    expect(style).toEqual({ color: '#1e88e5', width: 0.8 });
   });
 
   it('uses line-color and line-width from LinePaint', () => {
@@ -30,7 +30,7 @@ describe('resolveStrokeStyle', () => {
 describe('resolvePointStyle', () => {
   it('returns defaults when paint is undefined', () => {
     const style = resolvePointStyle(undefined);
-    expect(style).toEqual({ color: '#333', radius: 4, fill: true });
+    expect(style).toEqual({ color: '#1e88e5', radius: 4, fill: true });
   });
 
   it('uses circle paint properties', () => {

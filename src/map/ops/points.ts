@@ -26,19 +26,28 @@ export async function pointsLayer(ctx: OpContext, opts: PointsOptions): Promise<
     case 'centroid':
     case 'inner':
       if (geom !== 'polygon') {
-        return Err.validation('type', `${opts.type} requires polygon target, got ${geom ?? 'unknown'}`);
+        return Err.validation(
+          'type',
+          `${opts.type} requires polygon target, got ${geom ?? 'unknown'}`,
+        );
       }
       break;
     case 'midpoints':
     case 'interpolated':
       if (geom !== 'polyline') {
-        return Err.validation('type', `${opts.type} requires polyline target, got ${geom ?? 'unknown'}`);
+        return Err.validation(
+          'type',
+          `${opts.type} requires polyline target, got ${geom ?? 'unknown'}`,
+        );
       }
       break;
     case 'vertices':
     case 'endpoints':
       if (geom !== 'polygon' && geom !== 'polyline') {
-        return Err.validation('type', `${opts.type} requires polygon/polyline target, got ${geom ?? 'unknown'}`);
+        return Err.validation(
+          'type',
+          `${opts.type} requires polygon/polyline target, got ${geom ?? 'unknown'}`,
+        );
       }
       break;
     default:

@@ -2,15 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRetainedWebGLModel } from './models';
 
 const modelMock = vi.hoisted(() =>
-  vi.fn().mockImplementation(() => ({
-    destroy: vi.fn(),
-    draw: vi.fn(),
-    props: {},
-    setAttributes: vi.fn(),
-    setIndexBuffer: vi.fn(),
-    setInstanceCount: vi.fn(),
-    setVertexCount: vi.fn(),
-  })),
+  // Use a regular function (not an arrow) so `new Model(...)` in models.ts can
+  // construct it — vitest 4 constructs the mock's implementation directly, and
+  // arrow functions are not constructable.
+  vi.fn().mockImplementation(function () {
+    return {
+      destroy: vi.fn(),
+      draw: vi.fn(),
+      props: {},
+      setAttributes: vi.fn(),
+      setIndexBuffer: vi.fn(),
+      setInstanceCount: vi.fn(),
+      setVertexCount: vi.fn(),
+    };
+  }),
 );
 
 vi.mock('@luma.gl/engine', () => ({

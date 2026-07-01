@@ -81,6 +81,24 @@ describe('Err.expressionDisabled', () => {
   });
 });
 
+describe('Err.duckdb', () => {
+  it('emits kind=duckdb with operation, DuckDB kind, reason, and optional context', () => {
+    const cause = new Error('query failed');
+    const r = Err.duckdb('duckdb-query', 'query-failed', 'DuckDB query failed', {
+      field: 'sql',
+      cause,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok && r.error.kind === 'duckdb') {
+      expect(r.error.operation).toBe('duckdb-query');
+      expect(r.error.duckDbKind).toBe('query-failed');
+      expect(r.error.reason).toBe('DuckDB query failed');
+      expect(r.error.field).toBe('sql');
+      expect(r.error.cause).toBe(cause);
+    }
+  });
+});
+
 describe('Err.mapshaper', () => {
   it('wraps the underlying cause', () => {
     const cause = new Error('mapshaper barfed');
@@ -121,7 +139,9 @@ describe('Err.hostRemoved', () => {
 describe('Err is frozen', () => {
   it('cannot be mutated to redirect a factory', () => {
     expect(Object.isFrozen(Err)).toBe(true);
-    expect(() => { (Err as any).notFound = () => null; }).toThrow();
+    expect(() => {
+      (Err as any).notFound = () => null;
+    }).toThrow();
   });
 });
 
@@ -130,17 +150,27 @@ describe('discriminated narrowing in TypeScript flow', () => {
     function describe(r: OpResult): string {
       if (r.ok) return 'success';
       switch (r.error.kind) {
-        case 'not-found': return `nf:${r.error.what}:${r.error.id}`;
-        case 'validation': return `v:${r.error.field}`;
-        case 'expression-disabled': return `ed:${r.error.operation}`;
-        case 'mapshaper': return `ms:${r.error.cmd ?? ''}`;
-        case 'host-removed': return 'hr';
+        case 'not-found':
+          return `nf:${r.error.what}:${r.error.id}`;
+        case 'validation':
+          return `v:${r.error.field}`;
+        case 'expression-disabled':
+          return `ed:${r.error.operation}`;
+        case 'duckdb':
+          return `ddb:${r.error.operation}:${r.error.duckDbKind}`;
+        case 'mapshaper':
+          return `ms:${r.error.cmd ?? ''}`;
+        case 'host-removed':
+          return 'hr';
       }
     }
     expect(describe(OK)).toBe('success');
     expect(describe(Err.notFound('layer', 'parks'))).toBe('nf:layer:parks');
     expect(describe(Err.validation('field', 'reason'))).toBe('v:field');
     expect(describe(Err.expressionDisabled('op'))).toBe('ed:op');
+    expect(describe(Err.duckdb('duckdb-query', 'query-failed', 'reason'))).toBe(
+      'ddb:duckdb-query:query-failed',
+    );
     expect(describe(Err.mapshaper('cause', { cmd: '-x' }))).toBe('ms:-x');
     expect(describe(Err.hostRemoved())).toBe('hr');
   });

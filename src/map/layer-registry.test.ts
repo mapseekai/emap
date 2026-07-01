@@ -69,9 +69,7 @@ describe('resolveLayerInList', () => {
 describe('LayerRegistry.resolve', () => {
   it('resolves through the source registry', () => {
     const a = makeLayer({ name: 'parks' });
-    const sources = new globalThis.Map<string, TopologySource>([
-      ['src1', makeSource([a])],
-    ]);
+    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([a])]]);
     const reg = new LayerRegistry(sources);
     expect(reg.resolve('src1', 'parks')).toBe(a);
   });

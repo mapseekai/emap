@@ -9,12 +9,27 @@ export interface Source extends EventDispatcher {
   getExtent(): Bounds;
 }
 
-/** File formats emap can serialize a dataset to. Mirrors the import format set. */
-export type ExportFormat = 'geojson' | 'topojson' | 'shapefile' | 'msx';
+/**
+ * File formats emap can serialize a dataset to. Mirrors the import format
+ * set. `geoparquet` / `geoarrow` require the optional formats module
+ * (`@zwishing/emap/formats`) to be imported first.
+ */
+export type ExportFormat = 'geojson' | 'topojson' | 'shapefile' | 'msx' | 'geoparquet' | 'geoarrow';
 
 /** Options for {@link TopologySource.export}. */
 export interface ExportOptions {
   format: ExportFormat;
+  /**
+   * Geometry encoding for `geoparquet` / `geoarrow` output.
+   * Defaults: `'wkb'` for geoparquet (max interop — DuckDB, GeoPandas, GDAL),
+   * `'native'` (GeoArrow nested coordinate arrays) for geoarrow.
+   */
+  encoding?: 'wkb' | 'native';
+  /**
+   * Layer to export for single-layer formats (`geoparquet` / `geoarrow`).
+   * Index or layer name; defaults to layer 0.
+   */
+  layer?: number | string;
 }
 
 export interface TopologySource extends Source {
@@ -85,5 +100,5 @@ export interface TopologySource extends Source {
    */
   export(options: ExportOptions): Promise<Blob>;
   getCRS?(): string;
-  reproject?(targetCrs: string): Promise<void>;
+  reproject?(targetCrs: string, targetCrsMetadata?: string): Promise<void>;
 }

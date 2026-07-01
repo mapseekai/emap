@@ -10,8 +10,10 @@ describe('FeaturePropertyChangeCommand', () => {
     const records = [{ name: 'A' }];
     const layer = makeLayer(records);
     const cmd = new FeaturePropertyChangeCommand({
-      layer, featureId: 0,
-      prev: {}, next: { pop: 100 },
+      layer,
+      featureId: 0,
+      prev: {},
+      next: { pop: 100 },
     });
     cmd.do();
     expect(records[0]).toEqual({ name: 'A', pop: 100 });
@@ -23,8 +25,10 @@ describe('FeaturePropertyChangeCommand', () => {
     const records = [{ name: 'A' }];
     const layer = makeLayer(records);
     const cmd = new FeaturePropertyChangeCommand({
-      layer, featureId: 0,
-      prev: { name: 'A' }, next: { name: 'B' },
+      layer,
+      featureId: 0,
+      prev: { name: 'A' },
+      next: { name: 'B' },
     });
     cmd.do();
     expect(records[0]).toEqual({ name: 'B' });
@@ -36,8 +40,10 @@ describe('FeaturePropertyChangeCommand', () => {
     const records = [{ name: 'A', tmp: true }];
     const layer = makeLayer(records);
     const cmd = new FeaturePropertyChangeCommand({
-      layer, featureId: 0,
-      prev: { tmp: true }, next: {},
+      layer,
+      featureId: 0,
+      prev: { tmp: true },
+      next: {},
     });
     cmd.do();
     expect('tmp' in records[0]).toBe(false);
@@ -50,7 +56,8 @@ describe('FeaturePropertyChangeCommand', () => {
     const records = [{ name: 'A', pop: 1, tmp: true }];
     const layer = makeLayer(records);
     const cmd = new FeaturePropertyChangeCommand({
-      layer, featureId: 0,
+      layer,
+      featureId: 0,
       prev: { name: 'A', pop: 1, tmp: true },
       next: { name: 'B', pop: 2 },
     });
@@ -64,8 +71,10 @@ describe('FeaturePropertyChangeCommand', () => {
     const records = [{ name: 'A' }];
     const layer = makeLayer(records);
     const cmd = new FeaturePropertyChangeCommand({
-      layer, featureId: 0,
-      prev: {}, next: {},
+      layer,
+      featureId: 0,
+      prev: {},
+      next: {},
     });
     cmd.do();
     cmd.undo();
@@ -74,13 +83,18 @@ describe('FeaturePropertyChangeCommand', () => {
 
   it('exposes a default label and accepts a custom one', () => {
     const cmd = new FeaturePropertyChangeCommand({
-      layer: makeLayer([]), featureId: 0,
-      prev: {}, next: {},
+      layer: makeLayer([]),
+      featureId: 0,
+      prev: {},
+      next: {},
     });
     expect(cmd.label).toBe('Edit properties');
     const cmd2 = new FeaturePropertyChangeCommand({
-      layer: makeLayer([]), featureId: 0,
-      prev: {}, next: {}, label: 'Set name',
+      layer: makeLayer([]),
+      featureId: 0,
+      prev: {},
+      next: {},
+      label: 'Set name',
     });
     expect(cmd2.label).toBe('Set name');
   });

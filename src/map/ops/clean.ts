@@ -19,9 +19,12 @@ export async function cleanLayer(ctx: OpContext, opts: CleanOptions): Promise<Op
   // error opaquely or silently produce surprising results.
   const validNumOrUnset = (n?: number) =>
     n === undefined || (typeof n === 'number' && Number.isFinite(n) && n >= 0);
-  if (!validNumOrUnset(opts.gapFillArea)) return Err.validation('gapFillArea', 'must be a finite non-negative number');
-  if (!validNumOrUnset(opts.sliverControl)) return Err.validation('sliverControl', 'must be a finite non-negative number');
-  if (!validNumOrUnset(opts.snapInterval)) return Err.validation('snapInterval', 'must be a finite non-negative number');
+  if (!validNumOrUnset(opts.gapFillArea))
+    return Err.validation('gapFillArea', 'must be a finite non-negative number');
+  if (!validNumOrUnset(opts.sliverControl))
+    return Err.validation('sliverControl', 'must be a finite non-negative number');
+  if (!validNumOrUnset(opts.snapInterval))
+    return Err.validation('snapInterval', 'must be a finite non-negative number');
 
   if (opts.overlapRule !== undefined) {
     const allowed = ['min-id', 'max-id', 'min-area', 'max-area'];

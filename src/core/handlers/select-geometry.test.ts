@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import {
-  featureMatchesLasso,
-  pointInPolygon,
-} from './select-geometry';
+import { featureMatchesLasso, pointInPolygon } from './select-geometry';
 
-function makePathSource(layer: { name: string; geometry_type: 'polyline' | 'polygon'; shapes: any[] }, paths: Record<number, Array<[number, number]>>) {
+function makePathSource(
+  layer: { name: string; geometry_type: 'polyline' | 'polygon'; shapes: any[] },
+  paths: Record<number, Array<[number, number]>>,
+) {
   return {
     getDataset: () => ({ layers: [layer] }),
     getArcs: () => ({
@@ -33,7 +33,10 @@ function makePathSource(layer: { name: string; geometry_type: 'polyline' | 'poly
 describe('pointInPolygon', () => {
   // Unit square 0..10 in both dims.
   const square: Array<[number, number]> = [
-    [0, 0], [10, 0], [10, 10], [0, 10],
+    [0, 0],
+    [10, 0],
+    [10, 10],
+    [0, 10],
   ];
 
   it('returns true for points strictly inside', () => {
@@ -50,13 +53,23 @@ describe('pointInPolygon', () => {
   });
 
   it('handles a closed polygon (last == first) the same as open', () => {
-    const closed: Array<[number, number]> = [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]];
+    const closed: Array<[number, number]> = [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+      [0, 0],
+    ];
     expect(pointInPolygon([5, 5], closed)).toBe(true);
     expect(pointInPolygon([15, 5], closed)).toBe(false);
   });
 
   it('triangle: contains its centroid, excludes its outside', () => {
-    const tri: Array<[number, number]> = [[0, 0], [10, 0], [5, 10]];
+    const tri: Array<[number, number]> = [
+      [0, 0],
+      [10, 0],
+      [5, 10],
+    ];
     expect(pointInPolygon([5, 3], tri)).toBe(true);
     expect(pointInPolygon([5, -1], tri)).toBe(false);
     expect(pointInPolygon([0, 8], tri)).toBe(false);
@@ -65,16 +78,27 @@ describe('pointInPolygon', () => {
 
 describe('featureMatchesLasso', () => {
   const lasso: Array<[number, number]> = [
-    [100, 100], [200, 100], [200, 200], [100, 200], [100, 100],
+    [100, 100],
+    [200, 100],
+    [200, 200],
+    [100, 200],
+    [100, 100],
   ];
 
   it('matches a polyline that crosses the lasso when intersecting is enabled', () => {
     const map: any = {
       project: vi.fn((x: number, y: number) => [x, y]),
-      getSource: vi.fn(() => makePathSource(
-        { name: 'l', geometry_type: 'polyline', shapes: [[[0]]] },
-        { 0: [[50, 150], [250, 150]] },
-      )),
+      getSource: vi.fn(() =>
+        makePathSource(
+          { name: 'l', geometry_type: 'polyline', shapes: [[[0]]] },
+          {
+            0: [
+              [50, 150],
+              [250, 150],
+            ],
+          },
+        ),
+      ),
     };
     expect(featureMatchesLasso(map, { source: 's', layer: 'l', id: 0 }, lasso, true)).toBe(true);
     expect(featureMatchesLasso(map, { source: 's', layer: 'l', id: 0 }, lasso, false)).toBe(false);
@@ -83,10 +107,20 @@ describe('featureMatchesLasso', () => {
   it('matches a polygon that fully covers the lasso in intersecting mode', () => {
     const map: any = {
       project: vi.fn((x: number, y: number) => [x, y]),
-      getSource: vi.fn(() => makePathSource(
-        { name: 'l', geometry_type: 'polygon', shapes: [[[0]]] },
-        { 0: [[0, 0], [300, 0], [300, 300], [0, 300], [0, 0]] },
-      )),
+      getSource: vi.fn(() =>
+        makePathSource(
+          { name: 'l', geometry_type: 'polygon', shapes: [[[0]]] },
+          {
+            0: [
+              [0, 0],
+              [300, 0],
+              [300, 300],
+              [0, 300],
+              [0, 0],
+            ],
+          },
+        ),
+      ),
     };
     expect(featureMatchesLasso(map, { source: 's', layer: 'l', id: 0 }, lasso, true)).toBe(true);
     expect(featureMatchesLasso(map, { source: 's', layer: 'l', id: 0 }, lasso, false)).toBe(false);
@@ -97,9 +131,18 @@ describe('featureMatchesLasso', () => {
       project: vi.fn((x: number, y: number) => [x, y]),
       getSource: vi.fn(() => ({
         getDataset: () => ({
-          layers: [{ name: 'l', geometry_type: 'point', shapes: [
-            [[150, 150], [250, 250]],
-          ] }],
+          layers: [
+            {
+              name: 'l',
+              geometry_type: 'point',
+              shapes: [
+                [
+                  [150, 150],
+                  [250, 250],
+                ],
+              ],
+            },
+          ],
         }),
         getArcs: () => undefined,
       })),

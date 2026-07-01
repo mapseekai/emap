@@ -1,4 +1,3 @@
-import typescript from '@rollup/plugin-typescript';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import nodePolyfills from 'rollup-plugin-polyfill-node';
@@ -7,6 +6,7 @@ import alias from '@rollup/plugin-alias';
 import json from '@rollup/plugin-json';
 import postcss from 'rollup-plugin-postcss';
 import { copyFileSync } from 'node:fs';
+import { transform } from 'esbuild';
 
 // `src/ui/controls.css` is a hand-maintained standalone stylesheet — it is
 // NOT imported by any TS module, so postcss never sees it. Ship it as a
@@ -31,7 +31,7 @@ function preferBrowserMapshaperModules() {
   const patterns = [
     {
       from: /"function"==typeof require\?require:"object"==typeof window&&window\.modules\?function\((\w+)\)\{return window\.modules\[\1\]\}:function\(\)\{\}/g,
-      to: '"object"==typeof window&&window.modules?function($1){return window.modules[$1]}:"function"==typeof require?require:function(){}',
+      to: '"object"==typeof window?function($1){var mod=window.modules&&window.modules[$1];return mod||("iconv-lite"===$1?{encodingExists:function(){return false},decode:function(buf){return buf&&buf.toString?buf.toString():buf},encode:function(str){return str}}:void 0)}:"function"==typeof require?require:function(){}',
     },
     {
       // Unminified (dev) vendor: mapshaper emits the loader as an
@@ -41,8 +41,18 @@ function preferBrowserMapshaperModules() {
       // pattern above.
       from: /if \(typeof require == 'function'\) \{[\s\S]*?f = require;[\s\S]*?\} else if \(typeof window == 'object' && window\.modules\) \{[\s\S]*?f = function\s*\((\w+)\) \{\s*return window\.modules\[\1\];\s*\};[\s\S]*?\} else \{[\s\S]*?f = function\s*\(\) \{\};?[\s\S]*?\}/g,
       to: [
-        "if (typeof window == 'object' && window.modules) {",
-        '        f = function ($1) { return window.modules[$1]; };',
+        "if (typeof window == 'object') {",
+        '        f = function ($1) {',
+        '          var mod = window.modules && window.modules[$1];',
+        '          if (mod) return mod;',
+        "          if ($1 === 'iconv-lite') {",
+        '            return {',
+        '              encodingExists: function () { return false; },',
+        '              decode: function (buf) { return buf && buf.toString ? buf.toString() : buf; },',
+        '              encode: function (str) { return str; }',
+        '            };',
+        '          }',
+        '        };',
         "      } else if (typeof require == 'function') {",
         '        f = require;',
         '      } else {',
@@ -87,7 +97,8 @@ function browserSafeMprojInitFallback() {
   return {
     name: 'browser-safe-mproj-init-fallback',
     transform(code, id) {
-      if (!id.includes('/node_modules/mproj/dist/')) return null;
+      const normalizedId = id.replaceAll('\\', '/');
+      if (!normalizedId.includes('/node_modules/mproj/dist/')) return null;
       if (!code.includes('function mproj_read_lib_anycase')) return null;
       const patched = code.replace(readLibPattern, replacement);
       if (patched === code) {
@@ -118,30 +129,81 @@ const lumaExternals = [
   '@luma.gl/webgl',
 ];
 
+function warningIncludesPath(warning, pathPart) {
+  return (
+    warning.message?.includes(pathPart) ||
+    warning.ids?.some((id) => id.replaceAll('\\', '/').includes(pathPart))
+  );
+}
+
+function quietKnownCircularWarnings(warning, warn) {
+  if (
+    warning.code === 'CIRCULAR_DEPENDENCY' &&
+    (warningIncludesPath(warning, 'polyfill-node._stream_') ||
+      warningIncludesPath(warning, '/node_modules/apache-arrow/'))
+  ) {
+    return;
+  }
+  warn(warning);
+}
+
+function esbuildTypeScript() {
+  const tsFilePattern = /\.[cm]?tsx?$/;
+
+  return {
+    name: 'esbuild-typescript',
+    async transform(code, id) {
+      const normalizedId = id.replaceAll('\\', '/');
+      if (!tsFilePattern.test(normalizedId) || normalizedId.includes('/node_modules/')) {
+        return null;
+      }
+
+      const result = await transform(code, {
+        loader: normalizedId.endsWith('x') ? 'tsx' : 'ts',
+        format: 'esm',
+        target: 'esnext',
+        sourcemap: shouldWriteSourcemap,
+        sourcefile: id,
+        tsconfigRaw: {
+          compilerOptions: {
+            useDefineForClassFields: true,
+          },
+        },
+      });
+
+      for (const warning of result.warnings) {
+        this.warn(warning.text);
+      }
+
+      return {
+        code: result.code,
+        map: result.map ? JSON.parse(result.map) : null,
+      };
+    },
+  };
+}
+
 function commonPlugins() {
   return [
     alias({
-      entries: [
-        { find: 'iconv-lite', replacement: 'src/types/iconv-shim.ts' }
-      ]
+      entries: [{ find: 'iconv-lite', replacement: 'src/types/iconv-shim.ts' }],
     }),
     nodeResolve({
       browser: true,
-      preferBuiltins: false
+      preferBuiltins: false,
+      extensions: ['.mjs', '.js', '.json', '.node', '.ts'],
     }),
     commonjs({
-      ignoreDynamicRequires: true
+      ignoreDynamicRequires: true,
     }),
     json(),
     postcss({
-      inject: true,  // Inject CSS into <head>
+      inject: true, // Inject CSS into <head>
       minimize: isProduction,
     }),
     nodePolyfills(),
     browserSafeMprojInitFallback(),
-    typescript({
-      tsconfig: './tsconfig.json'
-    }),
+    esbuildTypeScript(),
     isProduction && terser(),
   ];
 }
@@ -154,6 +216,7 @@ export default [
   // importScripts in the worker output's banner).
   {
     input: 'src/vendor/mapshaper-vendor.ts',
+    onwarn: quietKnownCircularWarnings,
     output: {
       file: vendorOutput,
       format: 'iife',
@@ -167,6 +230,7 @@ export default [
   {
     input: 'src/vendor/mapshaper-vendor-esm.ts',
     external: ['maplibre-gl'],
+    onwarn: quietKnownCircularWarnings,
     output: {
       file: 'dist/mapshaper-vendor.mjs',
       format: 'es',
@@ -181,6 +245,7 @@ export default [
   {
     input: 'src/index.ts',
     external: ['mapshaper'],
+    onwarn: quietKnownCircularWarnings,
     output: {
       file: mainOutput,
       format: 'iife',
@@ -198,6 +263,7 @@ export default [
   {
     input: 'src/index.ts',
     external: ['maplibre-gl', 'mapshaper', ...lumaExternals],
+    onwarn: quietKnownCircularWarnings,
     output: {
       file: moduleOutput,
       format: 'es',
@@ -206,6 +272,86 @@ export default [
     },
     plugins: commonPlugins(),
   },
+  // Formats ESM bundle (`@zwishing/emap/formats`) — optional GeoParquet /
+  // GeoArrow support. apache-arrow is bundled INTO this file (it is not a
+  // core dependency); parquet-wasm stays external and loads lazily via
+  // dynamic import in the consumer's bundler. mapshaper is external and
+  // rewritten to the ESM vendor like the main module bundle.
+  // apache-arrow v21 ships `sideEffects:false` ESM that breaks when
+  // tree-shaken aggressively — keep its module side effects.
+  {
+    input: 'src/formats/index.ts',
+    external: ['maplibre-gl', 'mapshaper', 'parquet-wasm'],
+    onwarn: quietKnownCircularWarnings,
+    treeshake: {
+      // Keep emap's own side effects (plugin registration in the entry) and
+      // apache-arrow's; everything else may be shaken normally.
+      moduleSideEffects: (id) => id.includes('apache-arrow') || !id.includes('node_modules'),
+    },
+    output: {
+      file: 'dist/emap-formats.mjs',
+      format: 'es',
+      sourcemap: shouldWriteSourcemap,
+      paths: { mapshaper: './mapshaper-vendor.mjs' },
+    },
+    plugins: commonPlugins(),
+  },
+  // Formats IIFE bundle for script-tag users (global `emapFormats`).
+  // parquet-wasm cannot be dynamically imported from an IIFE — GeoParquet
+  // users must call setParquetWasm() with a self-initialized module (the
+  // loader's error message says exactly that). GeoArrow needs no wasm.
+  {
+    input: 'src/formats/index.ts',
+    external: ['mapshaper', 'parquet-wasm'],
+    onwarn: quietKnownCircularWarnings,
+    treeshake: {
+      // Keep emap's own side effects (plugin registration in the entry) and
+      // apache-arrow's; everything else may be shaken normally.
+      moduleSideEffects: (id) => id.includes('apache-arrow') || !id.includes('node_modules'),
+    },
+    output: {
+      file: 'dist/emap-formats.js',
+      format: 'iife',
+      name: 'emapFormats',
+      sourcemap: shouldWriteSourcemap,
+      inlineDynamicImports: true,
+      globals: { ...mapshaperGlobal, 'parquet-wasm': 'parquetWasm' },
+    },
+    plugins: commonPlugins(),
+  },
+  // ESM bundle (`@zwishing/emap/duckdb`) — optional DuckDB-Wasm spatial
+  // processing support. Keep DuckDB runtime dependencies external/lazy so
+  // the main and formats bundles stay light.
+  {
+    input: 'src/duckdb/index.ts',
+    external: ['@duckdb/duckdb-wasm', 'apache-arrow'],
+    onwarn: quietKnownCircularWarnings,
+    output: {
+      file: 'dist/emap-duckdb.mjs',
+      format: 'es',
+      sourcemap: shouldWriteSourcemap,
+    },
+    plugins: commonPlugins(),
+  },
+
+  // IIFE bundle for script-tag users (global `emapDuckDb`).
+  {
+    input: 'src/duckdb/index.ts',
+    external: ['@duckdb/duckdb-wasm', 'apache-arrow'],
+    onwarn: quietKnownCircularWarnings,
+    output: {
+      file: 'dist/emap-duckdb.js',
+      format: 'iife',
+      name: 'emapDuckDb',
+      sourcemap: shouldWriteSourcemap,
+      globals: {
+        '@duckdb/duckdb-wasm': 'duckdb',
+        'apache-arrow': 'Arrow',
+      },
+    },
+    plugins: commonPlugins(),
+  },
+
   // Worker bundle. Same external/global treatment, plus a banner that
   // pulls the vendor file in via importScripts at boot — workers don't
   // share the page's <script> globals, so the worker has to re-load
@@ -214,6 +360,7 @@ export default [
   {
     input: 'src/worker/mapshaper-worker.ts',
     external: ['mapshaper'],
+    onwarn: quietKnownCircularWarnings,
     output: {
       file: workerOutput,
       format: 'iife',

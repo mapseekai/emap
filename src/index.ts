@@ -4,7 +4,6 @@
 // tree-shaking is precise and the API surface stays auditable.
 
 import './shim';
-import 'mapshaper';
 
 // ===========================================================================
 // Core orchestrator + types
@@ -159,7 +158,15 @@ export type {
   TopologySourceFromBytesOptions,
   ZipExtractionLimits,
 } from './source/topology-source';
-export type { TopologySource as ITopologySource, ExportFormat, ExportOptions } from './source/source';
+export type {
+  TopologySource as ITopologySource,
+  ExportFormat,
+  ExportOptions,
+} from './source/source';
+// Format-plugin registry (the optional `@zwishing/emap/formats` bundle
+// registers GeoParquet / GeoArrow support through this; arrow-free).
+export { registerFormat } from './source/format-registry';
+export type { DatasetFormatPlugin, ExportedFormatFile } from './source/format-registry';
 
 // ===========================================================================
 // Geometry / projection
@@ -197,7 +204,12 @@ export type { EmapEventMap, CameraEvent } from './core/event-map';
 export type { CameraOptions, AnimationOptions, FlyToOptions, FitBoundsOptions } from './geo/camera';
 export { HandlerManager } from './core/handler-manager';
 export { isHandler } from './core/handler';
-export type { Handler, HandlerResult, NormalizedPointerEvent, PointerModifiers } from './core/handler';
+export type {
+  Handler,
+  HandlerResult,
+  NormalizedPointerEvent,
+  PointerModifiers,
+} from './core/handler';
 export { DragPanHandler } from './core/handlers/drag-pan';
 export type { DragPanOptions } from './core/handlers/drag-pan';
 export { ScrollZoomHandler } from './core/handlers/scroll-zoom';

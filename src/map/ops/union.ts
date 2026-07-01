@@ -8,6 +8,7 @@ import { resolveLayerInList } from '../layer-registry';
 import { Err, type OpResult } from '../op-result';
 import type { UnionOptions } from '../types';
 import type { OpContext } from './_context';
+import { validateFieldList } from './_fields';
 
 export async function unionLayers(ctx: OpContext, opts: UnionOptions): Promise<OpResult> {
   if (!opts.targets || opts.targets.length < 2) {
@@ -30,8 +31,9 @@ export async function unionLayers(ctx: OpContext, opts: UnionOptions): Promise<O
   const targetList = opts.targets.join(',');
   const unionOpts: Record<string, unknown> = {};
   if (opts.fields && opts.fields.length > 0) {
-    const safe = opts.fields.filter((f) => !f.includes(','));
-    if (safe.length > 0) unionOpts.fields = safe;
+    const fields = validateFieldList('fields', opts.fields);
+    if (!fields.ok) return fields;
+    unionOpts.fields = fields.value;
   }
   if (opts.name && opts.name.trim()) unionOpts.name = opts.name;
   if (opts.noReplace) unionOpts.no_replace = true;

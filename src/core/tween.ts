@@ -74,7 +74,7 @@ export class Timer extends EventDispatcher {
       pct,
       done,
       time: now,
-      tickTime: now - this._tickTime
+      tickTime: now - this._tickTime,
     });
 
     this._busy = false;
@@ -117,6 +117,6 @@ export class Tween extends EventDispatcher {
   }
 
   static quadraticOut(n: number): number {
-    return 1 - Math.pow((1 - n), 2);
+    return 1 - Math.pow(1 - n, 2);
   }
 }

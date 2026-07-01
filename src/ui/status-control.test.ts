@@ -7,7 +7,9 @@ import { StatusControl } from './status-control';
 function stubMap() {
   const listeners: Record<string, Function[]> = {};
   return {
-    on: vi.fn((type: string, cb: Function) => { (listeners[type] ??= []).push(cb); }),
+    on: vi.fn((type: string, cb: Function) => {
+      (listeners[type] ??= []).push(cb);
+    }),
     off: vi.fn((type: string, cb: Function) => {
       listeners[type] = (listeners[type] ?? []).filter((c) => c !== cb);
     }),
@@ -38,7 +40,11 @@ describe('StatusControl (thin-shell over map.on(mousemove))', () => {
     const map = stubMap();
     const ctrl = new StatusControl({ showMousePos: true, showEPSG: false });
     const el = ctrl.onAdd(map as any);
-    map._emit('mousemove', { point: { x: 0, y: 0 }, mapCoord: [12.3456789, -7.654321], originalEvent: new Event('pointermove') });
+    map._emit('mousemove', {
+      point: { x: 0, y: 0 },
+      mapCoord: [12.3456789, -7.654321],
+      originalEvent: new Event('pointermove'),
+    });
     await new Promise((r) => requestAnimationFrame(() => r(null)));
     const posEl = el.querySelector('.emap-status-mousepos') as HTMLElement;
     expect(posEl.textContent).toBe(' 12.3457, -7.6543');

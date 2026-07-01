@@ -72,10 +72,11 @@ export class Projection {
   async reproject(
     targetCrs: string,
     sources: globalThis.Map<string, TopologySource>,
+    targetCrsMetadata?: string,
   ): Promise<Bounds> {
     for (const source of sources.values()) {
       if (source.reproject) {
-        await source.reproject(targetCrs);
+        await source.reproject(targetCrs, targetCrsMetadata);
       }
     }
 

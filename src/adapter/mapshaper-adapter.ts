@@ -22,6 +22,7 @@
 
 import type {
   ArcCollection,
+  DataTable,
   MapshaperDataset,
   MapshaperLayer,
 } from '../types/mapshaper-types';
@@ -55,6 +56,12 @@ export interface MapshaperBBox {
   ymax: number;
 }
 
+/** Result from mapshaper.geom.getPointToShapeInfo; only distance is consumed. */
+export interface PointToShapeInfo {
+  distance: number;
+  [key: string]: unknown;
+}
+
 /**
  * One entry in a parsed mapshaper command pipeline. Equivalent to what
  * `parseCommands('-clip source=mask')` returns: a `name` (kebab-case op
@@ -79,6 +86,40 @@ export interface ParsedCommand {
 export type RunnerInputFiles = Record<string, Uint8Array | string>;
 
 /**
+ * Handle over mapshaper's internal `PathImporter` — the same streaming
+ * builder mapshaper's own GeoJSON / Shapefile importers feed. Lets the
+ * formats module construct a dataset directly from coordinate buffers
+ * without a GeoJSON intermediate. Call `startShape` once per feature,
+ * then zero or more import* calls, then `done()`.
+ */
+export interface PathImporterHandle {
+  startShape(properties?: Record<string, unknown>): void;
+  /** Import a polygon ring; mapshaper fixes winding from the signed area. */
+  importRing(points: Array<[number, number]>, isHole?: boolean): void;
+  importLine(points: Array<[number, number]>): void;
+  importPoints(points: Array<[number, number]>): void;
+  done(): MapshaperDataset;
+}
+
+/** One exported path from {@link MapshaperAdapter.exportPathData}. */
+export interface ExportedPath {
+  points: Array<[number, number]>;
+  pointCount: number;
+  /** Signed planar area (polygons only): positive = shell, negative = hole. */
+  area?: number;
+  /** Signed arc ids making up this path (input shape part). */
+  ids?: number[];
+  /** mapshaper Bounds object; callers read xmin/ymin/xmax/ymax. */
+  bounds?: MapshaperBBox;
+}
+
+/** Result of {@link MapshaperAdapter.exportPathData} / `exportPointData`. */
+export interface ExportedPathData {
+  pathData: ExportedPath[];
+  pointCount: number;
+}
+
+/**
  * The mapshaper internal API surface the editor depends on. Methods are
  * grouped by purpose to make it obvious which mapshaper subsystem each one
  * pokes; signatures match the underlying mapshaper functions exactly so the
@@ -92,11 +133,7 @@ export interface MapshaperAdapter {
    * mutates the per-arc `xx`/`yy` slices in place and updates affected arc
    * bounds. Used by VertexMoveCommand for both do() and undo().
    */
-  snapVertices(
-    vertexIds: number[],
-    to: [number, number],
-    arcs: ArcCollection,
-  ): void;
+  snapVertices(vertexIds: number[], to: [number, number], arcs: ArcCollection): void;
 
   /**
    * Insert `point` immediately before the vertex at index `vertexIndex`,
@@ -108,11 +145,7 @@ export interface MapshaperAdapter {
    * from the global vertex index. The tuple-based naming in the plan was
    * inaccurate; this signature matches actual mapshaper.
    */
-  insertVertex(
-    arcs: ArcCollection,
-    vertexIndex: number,
-    point: [number, number],
-  ): void;
+  insertVertex(arcs: ArcCollection, vertexIndex: number, point: [number, number]): void;
 
   /** Remove the vertex at the given global vertex index. */
   deleteVertex(arcs: ArcCollection, vertexIndex: number): void;
@@ -140,11 +173,7 @@ export interface MapshaperAdapter {
    * vertex closest to `point` within the given `shape`. Returns an empty
    * array when no vertex is close enough.
    */
-  findNearestVertices(
-    point: [number, number],
-    shape: number[][],
-    arcs: ArcCollection,
-  ): number[];
+  findNearestVertices(point: [number, number], shape: number[][], arcs: ArcCollection): number[];
 
   /**
    * Resolve a global vertex index back to its parent arc id, given the
@@ -179,9 +208,12 @@ export interface MapshaperAdapter {
    * snap-tolerance argument and is forwarded as-is.
    */
   findClosestPointOnSeg(
-    px: number, py: number,
-    ax: number, ay: number,
-    bx: number, by: number,
+    px: number,
+    py: number,
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
     snapArg: number,
   ): [number, number];
 
@@ -234,6 +266,19 @@ export interface MapshaperAdapter {
    */
   simplifyArcsFast(arcs: ArcCollection, segLength: number): ArcCollection;
 
+  // -- Geometry predicates / measurements ---------------------------------
+
+  distance2D(ax: number, ay: number, bx: number, by: number): number;
+
+  getPointToShapeInfo(
+    x: number,
+    y: number,
+    shape: number[][],
+    arcs: ArcCollection,
+  ): PointToShapeInfo;
+
+  testPointInPolygon(x: number, y: number, shape: number[][], arcs: ArcCollection): boolean;
+
   /**
    * Returns `true` iff the layer carries renderable shape data (a
    * `geometry_type` plus a non-empty `shapes` array). Used by the
@@ -285,10 +330,44 @@ export interface MapshaperAdapter {
   ): Promise<ExportedFile[]>;
 
   /** Plain-text export (GeoJSON / TopoJSON). */
-  exportFileContent(
-    dataset: MapshaperDataset,
-    opts: { format: string },
-  ): ExportedFile[];
+  exportFileContent(dataset: MapshaperDataset, opts: { format: string }): ExportedFile[];
+
+  // -- Format-module bridge (GeoParquet / GeoArrow) -----------------------
+  // Used exclusively by src/formats/* for direct (non-GeoJSON) conversion
+  // between Arrow tables and mapshaper datasets.
+
+  /** New streaming dataset builder (mapshaper's internal `PathImporter`). */
+  createPathImporter(opts?: Record<string, unknown>): PathImporterHandle;
+
+  /**
+   * Post-import cleanup pass (duplicate-point removal, defective-path
+   * dropping) mapshaper's own importers run before topology building.
+   */
+  cleanPathsAfterImport(dataset: MapshaperDataset, opts?: Record<string, unknown>): void;
+
+  /** Convert imported per-ring arcs into shared-arc topology in place. */
+  buildTopology(dataset: MapshaperDataset): void;
+
+  /** Wrap a records array in a mapshaper `DataTable`. */
+  createDataTable(records: Array<Record<string, unknown>>): DataTable;
+
+  /**
+   * Per-feature absolute coordinates for export, traversing arcs in shape
+   * order (reversed arcs walked backwards). `type` selects ring-validity
+   * rules; polygons get a signed `area` per path (shell > 0, hole < 0).
+   */
+  exportPathData(
+    shape: number[][] | null,
+    arcs: ArcCollection,
+    type: 'polygon' | 'polyline',
+  ): ExportedPathData;
+
+  /**
+   * Winding-number test of point (x, y) against the ring formed by the
+   * signed arc ids. Non-zero = inside. Used by the formats module's
+   * hole-to-shell grouping (port of mapshaper's groupPolygonRings).
+   */
+  testPointInRing(x: number, y: number, ids: number[], arcs: ArcCollection): number;
 
   // -- Dataset cloning (used by dataset-replace ops) ---------------------
 
@@ -347,19 +426,11 @@ export interface MapshaperAdapter {
 import mapshaper from 'mapshaper';
 
 export class DefaultMapshaperAdapter implements MapshaperAdapter {
-  snapVertices(
-    vertexIds: number[],
-    to: [number, number],
-    arcs: ArcCollection,
-  ): void {
+  snapVertices(vertexIds: number[], to: [number, number], arcs: ArcCollection): void {
     mapshaper.internal.snapVerticesToPoint(vertexIds, to, arcs);
   }
 
-  insertVertex(
-    arcs: ArcCollection,
-    vertexIndex: number,
-    point: [number, number],
-  ): void {
+  insertVertex(arcs: ArcCollection, vertexIndex: number, point: [number, number]): void {
     mapshaper.internal.insertVertex(arcs, vertexIndex, point);
   }
 
@@ -379,11 +450,7 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     mapshaper.internal.deleteLastArc(arcs);
   }
 
-  findNearestVertices(
-    point: [number, number],
-    shape: number[][],
-    arcs: ArcCollection,
-  ): number[] {
+  findNearestVertices(point: [number, number], shape: number[][], arcs: ArcCollection): number[] {
     return mapshaper.internal.findNearestVertices(point, shape, arcs);
   }
 
@@ -404,9 +471,12 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
   }
 
   findClosestPointOnSeg(
-    px: number, py: number,
-    ax: number, ay: number,
-    bx: number, by: number,
+    px: number,
+    py: number,
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
     snapArg: number,
   ): [number, number] {
     return mapshaper.internal.findClosestPointOnSeg(px, py, ax, ay, bx, by, snapArg);
@@ -442,6 +512,51 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     return mapshaper.internal.simplifyArcsFast(arcs, segLength);
   }
 
+  distance2D(ax: number, ay: number, bx: number, by: number): number {
+    return mapshaper.geom.distance2D(ax, ay, bx, by);
+  }
+
+  getPointToShapeInfo(
+    x: number,
+    y: number,
+    shape: number[][],
+    arcs: ArcCollection,
+  ): PointToShapeInfo {
+    return mapshaper.geom.getPointToShapeInfo(x, y, shape, arcs);
+  }
+
+  testPointInPolygon(x: number, y: number, shape: number[][], arcs: ArcCollection): boolean {
+    return mapshaper.geom.testPointInPolygon(x, y, shape, arcs);
+  }
+
+  createPathImporter(opts?: Record<string, unknown>): PathImporterHandle {
+    return new mapshaper.internal.PathImporter(opts ?? {});
+  }
+
+  cleanPathsAfterImport(dataset: MapshaperDataset, opts?: Record<string, unknown>): void {
+    mapshaper.internal.cleanPathsAfterImport(dataset, opts ?? {});
+  }
+
+  buildTopology(dataset: MapshaperDataset): void {
+    mapshaper.internal.buildTopology(dataset);
+  }
+
+  createDataTable(records: Array<Record<string, unknown>>): DataTable {
+    return new mapshaper.internal.DataTable(records);
+  }
+
+  exportPathData(
+    shape: number[][] | null,
+    arcs: ArcCollection,
+    type: 'polygon' | 'polyline',
+  ): ExportedPathData {
+    return mapshaper.internal.exportPathData(shape, arcs, type);
+  }
+
+  testPointInRing(x: number, y: number, ids: number[], arcs: ArcCollection): number {
+    return mapshaper.geom.testPointInRing(x, y, ids, arcs);
+  }
+
   layerHasGeometry(layer: MapshaperLayer): boolean {
     return mapshaper.internal.layerHasGeometry(layer);
   }
@@ -470,7 +585,9 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     // mapshaper's `.d.ts` insists `datasets` is required on the input; our
     // public `PackedSession` keeps it optional so callers can spread `emap`
     // metadata onto a fresh object. Cast on the way down.
-    return mapshaper.internal.restoreSessionData(packed as { [k: string]: unknown; datasets: unknown[] });
+    return mapshaper.internal.restoreSessionData(
+      packed as { [k: string]: unknown; datasets: unknown[] },
+    );
   }
 
   pack(obj: PackedSession): Uint8Array {
@@ -491,10 +608,7 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     return mapshaper.internal.exportPackedDatasets(datasets, opts ?? {});
   }
 
-  exportFileContent(
-    dataset: MapshaperDataset,
-    opts: { format: string },
-  ): ExportedFile[] {
+  exportFileContent(dataset: MapshaperDataset, opts: { format: string }): ExportedFile[] {
     return mapshaper.internal.exportFileContent(dataset, opts);
   }
 
@@ -502,10 +616,7 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     return mapshaper.internal.copyDataset(dataset);
   }
 
-  runImport(
-    cmd: string,
-    inputFiles: RunnerInputFiles,
-  ): Promise<MapshaperDataset> {
+  runImport(cmd: string, inputFiles: RunnerInputFiles): Promise<MapshaperDataset> {
     const commands = mapshaper.internal.parseCommands(cmd);
     if (commands.length > 0 && commands[0].name === 'i') {
       commands[0].options.input = inputFiles;

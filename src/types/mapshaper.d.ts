@@ -77,8 +77,8 @@ declare module 'mapshaper' {
      */
     findSegmentIntersections(
       arcs: ArcCollection,
-      opts?: { tolerance?: number; stripes?: number;[k: string]: unknown },
-    ): Array<{ x: number; y: number;[k: string]: unknown }>;
+      opts?: { tolerance?: number; stripes?: number; [k: string]: unknown },
+    ): Array<{ x: number; y: number; [k: string]: unknown }>;
 
     /**
      * Build a single multi-point feature whose `shapes[0]` is the array
@@ -87,7 +87,7 @@ declare module 'mapshaper' {
      * materialize `findSegmentIntersections` output as a real point layer.
      */
     getIntersectionLayer(
-      intersections: ReadonlyArray<{ x: number; y: number;[k: string]: unknown }>,
+      intersections: ReadonlyArray<{ x: number; y: number; [k: string]: unknown }>,
       lyr: MapshaperLayer,
       arcs: ArcCollection,
     ): { geometry_type: 'point'; shapes: number[][][] };
@@ -95,21 +95,21 @@ declare module 'mapshaper' {
     // Export — io/mapshaper-export.mjs
     exportFileContent(
       dataset: MapshaperDataset,
-      opts: { format: string;[k: string]: unknown },
+      opts: { format: string; [k: string]: unknown },
     ): Array<{ filename: string; content: string | Uint8Array | ArrayBuffer }>;
 
     // Snapshot pack/unpack — io/mapshaper-pack.mjs / mapshaper-unpack.mjs
     exportPackedDatasets(
       datasets: MapshaperDataset[],
-      opts: { compact?: boolean; file?: string;[k: string]: unknown },
+      opts: { compact?: boolean; file?: string; [k: string]: unknown },
     ): Promise<Array<{ filename: string; content: Uint8Array }>>;
 
     /** Build the unpacked session object. Use {@link pack} to serialize, or
      *  inject extra fields (e.g. emap source IDs) before serializing. */
     exportDatasetsToPack(
       datasets: MapshaperDataset[],
-      opts: { compact?: boolean;[k: string]: unknown },
-    ): Promise<{ version: number; created: string; datasets: unknown[];[k: string]: unknown }>;
+      opts: { compact?: boolean; [k: string]: unknown },
+    ): Promise<{ version: number; created: string; datasets: unknown[]; [k: string]: unknown }>;
 
     /** Serialize an arbitrary value to msgpack bytes. */
     pack(obj: unknown): Uint8Array;
@@ -127,10 +127,7 @@ declare module 'mapshaper' {
     /** Reconstruct Dataset instances from an already-unpacked session object
      *  (the plain-object output of {@link exportDatasetsToPack}). Used by
      *  the Web Worker round-trip — skips the msgpack step. */
-    restoreSessionData(obj: {
-      datasets: unknown[];
-      [k: string]: unknown;
-    }): Promise<{
+    restoreSessionData(obj: { datasets: unknown[]; [k: string]: unknown }): Promise<{
       datasets: MapshaperDataset[];
       [k: string]: unknown;
     }>;
@@ -152,6 +149,39 @@ declare module 'mapshaper' {
     deleteLastArc(arcs: ArcCollection): void;
     findArcIdFromVertexId(vertexId: number, ii: Int32Array | Uint32Array): number;
 
+    // Direct dataset construction — used by the formats module
+    // (GeoParquet / GeoArrow) to build datasets from coordinate buffers
+    // without a GeoJSON intermediate.
+    /** Streaming importer; the class mapshaper's own format readers feed. */
+    PathImporter: new (
+      opts: Record<string, unknown>,
+    ) => {
+      startShape(properties?: Record<string, unknown>): void;
+      importRing(points: Array<[number, number]>, isHole?: boolean): void;
+      importLine(points: Array<[number, number]>): void;
+      importPoints(points: Array<[number, number]>): void;
+      done(): MapshaperDataset;
+    };
+    cleanPathsAfterImport(dataset: MapshaperDataset, opts: Record<string, unknown>): void;
+    buildTopology(dataset: MapshaperDataset): void;
+    DataTable: new (
+      records: Array<Record<string, unknown>>,
+    ) => import('./mapshaper-types').DataTable;
+    exportPathData(
+      shape: number[][] | null,
+      arcs: ArcCollection,
+      type: 'polygon' | 'polyline',
+    ): {
+      pathData: Array<{
+        points: Array<[number, number]>;
+        pointCount: number;
+        area?: number;
+        ids?: number[];
+        bounds?: { xmin: number; ymin: number; xmax: number; ymax: number };
+      }>;
+      pointCount: number;
+    };
+
     // Segment iteration / closest-point
     forEachSegmentInShape(
       shape: number[][],
@@ -159,9 +189,12 @@ declare module 'mapshaper' {
       cb: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void,
     ): void;
     findClosestPointOnSeg(
-      px: number, py: number,
-      ax: number, ay: number,
-      bx: number, by: number,
+      px: number,
+      py: number,
+      ax: number,
+      ay: number,
+      bx: number,
+      by: number,
       snapArg: number,
     ): [number, number];
   }
@@ -170,15 +203,14 @@ declare module 'mapshaper' {
   interface MapshaperGeom {
     distance2D(x1: number, y1: number, x2: number, y2: number): number;
     getPointToShapeInfo(
-      x: number, y: number,
+      x: number,
+      y: number,
       shape: number[][],
       arcs: ArcCollection,
     ): { distance: number };
-    testPointInPolygon(
-      x: number, y: number,
-      shape: number[][],
-      arcs: ArcCollection,
-    ): boolean;
+    testPointInPolygon(x: number, y: number, shape: number[][], arcs: ArcCollection): boolean;
+    /** Winding-number test against the ring formed by signed arc ids. */
+    testPointInRing(x: number, y: number, ids: number[], arcs: ArcCollection): number;
   }
 
   const mapshaper: {

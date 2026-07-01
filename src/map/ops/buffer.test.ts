@@ -56,7 +56,10 @@ describe('bufferLayer — type warning on polygon', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { ctx, calls } = makeStubCtx([{ name: 'parks', geometry_type: 'polygon' }]);
     const r = await bufferLayer(ctx, {
-      source: 's1', target: 'parks', radius: 50, type: 'outer',
+      source: 's1',
+      target: 'parks',
+      radius: 50,
+      type: 'outer',
     });
     expect(r.ok).toBe(true);
     expect(calls).toHaveLength(1);
@@ -69,7 +72,10 @@ describe('bufferLayer — type warning on polygon', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { ctx } = makeStubCtx([{ name: 'roads', geometry_type: 'polyline' }]);
     const r = await bufferLayer(ctx, {
-      source: 's1', target: 'roads', radius: 50, type: 'outer',
+      source: 's1',
+      target: 'roads',
+      radius: 50,
+      type: 'outer',
     });
     expect(r.ok).toBe(true);
     expect(warn).not.toHaveBeenCalled();
@@ -104,7 +110,9 @@ describe('bufferLayer — validation', () => {
   ])('rejects %s with bad value and does not dispatch', async (field, override) => {
     const { ctx, calls } = makeStubCtx();
     const r = await bufferLayer(ctx, {
-      source: 's1', target: 'parks', radius: 50,
+      source: 's1',
+      target: 'parks',
+      radius: 50,
       ...(override as Partial<import('../types').BufferOptions>),
     });
     expect(r.ok).toBe(false);

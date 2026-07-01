@@ -38,13 +38,17 @@ export class HistoryControl implements Control {
       'undo',
       '↶',
       this._options.undoTitle ?? 'Undo (Ctrl+Z)',
-      () => { this._map?.undo(); },
+      () => {
+        this._map?.undo();
+      },
     );
     this._redoBtn = this._createButton(
       'redo',
       '↷',
       this._options.redoTitle ?? 'Redo (Ctrl+Shift+Z)',
-      () => { this._map?.redo(); },
+      () => {
+        this._map?.redo();
+      },
     );
 
     // Initial enabled state — drives off the current map state, not just future events.
@@ -75,7 +79,12 @@ export class HistoryControl implements Control {
     if (this._redoBtn) this._redoBtn.disabled = !canRedo;
   }
 
-  private _createButton(id: string, label: string, title: string, onClick: () => void): HTMLButtonElement {
+  private _createButton(
+    id: string,
+    label: string,
+    title: string,
+    onClick: () => void,
+  ): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.className = `emap-ctrl-${id}`;
     btn.type = 'button';

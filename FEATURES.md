@@ -449,6 +449,7 @@ Advanced exports include:
 - Build and verification:
 
 ```bash
+cmd /c npm run format:check
 cmd /c npm run typecheck
 cmd /c npm run test:run
 cmd /c npm run build

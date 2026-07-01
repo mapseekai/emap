@@ -1,6 +1,6 @@
 {
   "name": "@zwishing/emap",
-  "version": "0.3.5",
+  "version": "0.4.0",
   "description": "A modern, decoupled rendering engine for mapshaper data",
   "main": "dist/emap.mjs",
   "module": "dist/emap.mjs",
@@ -11,6 +11,15 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/emap.mjs"
     },
+    "./formats": {
+      "types": "./dist/formats/index.d.ts",
+      "import": "./dist/emap-formats.mjs"
+    },
+    "./duckdb": {
+      "types": "./dist/duckdb/index.d.ts",
+      "import": "./dist/emap-duckdb.mjs",
+      "default": "./dist/emap-duckdb.mjs"
+    },
     "./style.css": {
       "types": "./style.css.d.ts",
       "default": "./dist/emap.css"
@@ -20,18 +29,24 @@
     "./dist/mapshaper-vendor.js": "./dist/mapshaper-vendor.js",
     "./dist/mapshaper-vendor.mjs": "./dist/mapshaper-vendor.mjs",
     "./dist/emap.js": "./dist/emap.js",
+    "./dist/emap-formats.js": "./dist/emap-formats.js",
+    "./dist/emap-formats.mjs": "./dist/emap-formats.mjs",
     "./package.json": "./package.json"
   },
   "sideEffects": [
     "*.css",
     "./dist/mapshaper-vendor.js",
-    "./dist/mapshaper-vendor.mjs"
+    "./dist/mapshaper-vendor.mjs",
+    "./dist/emap-formats.js",
+    "./dist/emap-formats.mjs"
   ],
   "files": [
     "dist/emap.js",
     "dist/emap.mjs",
     "dist/emap-worker.js",
     "dist/emap-geometry-worker.js",
+    "dist/emap-formats.js",
+    "dist/emap-formats.mjs",
     "dist/mapshaper-vendor.js",
     "dist/mapshaper-vendor.mjs",
     "dist/emap.css",
@@ -52,10 +67,13 @@
     "dev-build": "rollup -c --environment BUILD:development",
     "prebuild": "npm run clean",
     "build": "rollup -c --environment BUILD:production && tsc -p tsconfig.build.json",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "prepublishOnly": "npm run typecheck && npm run build && npm run test:run"
+    "test:duckdb": "DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/duckdb-buffer.integration.test.ts src/duckdb/duckdb-attribute.integration.test.ts src/duckdb/duckdb-relation.integration.test.ts src/duckdb/duckdb-query.integration.test.ts src/duckdb/duckdb-geoparquet-query.integration.test.ts src/duckdb/duckdb-overlay.integration.test.ts",
+    "prepublishOnly": "npm run format:check && npm run typecheck && npm run build && npm run test:run && npm run test:duckdb"
   },
   "keywords": [
     "mapshaper",
@@ -78,27 +96,31 @@
   },
   "homepage": "https://github.com/zwishing/emap#readme",
   "devDependencies": {
+    "@biomejs/biome": "^2.4.16",
     "@rollup/plugin-alias": "^6.0.0",
     "@rollup/plugin-commonjs": "^25.0.0",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.0.0",
-    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-terser": "^1.0.0",
     "@rollup/plugin-typescript": "^11.0.0",
     "@types/earcut": "^3.0.0",
-    "esbuild": "^0.21.5",
+    "esbuild": "^0.25.12",
     "jsdom": "^29.1.0",
     "rollup": "^4.0.0",
     "rollup-plugin-polyfill-node": "^0.13.0",
     "rollup-plugin-postcss": "^4.0.2",
     "tslib": "^2.6.0",
     "typescript": "^5.0.0",
-    "vitest": "^1.0.0"
+    "vite": "^7.3.6",
+    "vitest": "^4.1.9"
   },
   "dependencies": {
     "@luma.gl/core": "^9.3.3",
     "@luma.gl/engine": "^9.3.3",
     "@luma.gl/webgl": "^9.3.3",
     "@math.gl/polygon": "^4.1.0",
+    "@zwishing/epsg-index": "^3.0.0",
+    "apache-arrow": "^21.1.0",
     "earcut": "^3.0.2",
     "fflate": "^0.8.2",
     "flatbush": "^4.5.0",
@@ -106,6 +128,10 @@
     "kdbush": "^4.0.2",
     "maplibre-gl": "^5.17.0",
     "mapshaper": "^0.6.113",
-    "mproj": "^0.1.2"
+    "mproj": "^0.1.2",
+    "parquet-wasm": "^0.7.1"
+  },
+  "optionalDependencies": {
+    "@duckdb/duckdb-wasm": "1.33.1-dev57.0"
   }
 }

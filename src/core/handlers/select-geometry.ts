@@ -1,9 +1,5 @@
 import { normalizePointShape, getLayerId } from '../../source/layer-utils';
-import type {
-  ArcCollection,
-  MapshaperLayer,
-  PathShape,
-} from '../../types/mapshaper-types';
+import type { ArcCollection, MapshaperLayer, PathShape } from '../../types/mapshaper-types';
 import type { Emap, FeatureRef } from '../../map/map';
 
 // ---------------------------------------------------------------------------
@@ -26,8 +22,7 @@ export function pointInPolygon(point: [number, number], polygon: Array<[number, 
     const [xj, yj] = polygon[j];
     // Standard half-open edge test — counts crossings strictly above the
     // ray (y < yi vs y < yj inequality direction differs by edge slope).
-    const intersect = (yi > y) !== (yj > y) &&
-      x < (xj - xi) * (y - yi) / (yj - yi) + xi;
+    const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
     if (intersect) inside = !inside;
   }
   return inside;
@@ -35,7 +30,10 @@ export function pointInPolygon(point: [number, number], polygon: Array<[number, 
 
 /** [xmin, ymin, xmax, ymax] of a 2-D point sequence. */
 export function pathBBox(path: Array<[number, number]>): [number, number, number, number] {
-  let xmin = Infinity, ymin = Infinity, xmax = -Infinity, ymax = -Infinity;
+  let xmin = Infinity,
+    ymin = Infinity,
+    xmax = -Infinity,
+    ymax = -Infinity;
   for (const [x, y] of path) {
     if (x < xmin) xmin = x;
     if (y < ymin) ymin = y;
@@ -82,8 +80,9 @@ function resolveFeatureShape(
   let layer = map.layers?.resolve(ref.source, ref.layer) as MapshaperLayer | null | undefined;
   if (!layer) {
     const dataset = source.getDataset?.();
-    layer = dataset?.layers.find((l: MapshaperLayer, i: number) =>
-      getLayerId(l, i) === ref.layer || l?.name === ref.layer || l?.id === ref.layer,
+    layer = dataset?.layers.find(
+      (l: MapshaperLayer, i: number) =>
+        getLayerId(l, i) === ref.layer || l?.name === ref.layer || l?.id === ref.layer,
     );
   }
   if (!layer?.shapes) return null;
@@ -92,7 +91,11 @@ function resolveFeatureShape(
   return { layer, shape, arcs: source.getArcs?.() };
 }
 
-function pathShapeToPixelParts(map: Emap, shape: PathShape, arcs: ArcCollection): Array<Array<[number, number]>> {
+function pathShapeToPixelParts(
+  map: Emap,
+  shape: PathShape,
+  arcs: ArcCollection,
+): Array<Array<[number, number]>> {
   const parts: Array<Array<[number, number]>> = [];
   for (const part of shape) {
     const points: Array<[number, number]> = [];
@@ -103,7 +106,8 @@ function pathShapeToPixelParts(map: Emap, shape: PathShape, arcs: ArcCollection)
       for (const rawArcId of part) {
         const arcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
         const arcIter = arcs.getArcIter(arcId);
-        while (arcIter.hasNext()) points.push(map.project(arcIter.x, arcIter.y) as [number, number]);
+        while (arcIter.hasNext())
+          points.push(map.project(arcIter.x, arcIter.y) as [number, number]);
       }
     }
     if (points.length > 0) parts.push(points);
@@ -155,7 +159,10 @@ function partSegmentsIntersectPolygon(
   return false;
 }
 
-function pointInMultiPolygon(point: [number, number], parts: Array<Array<[number, number]>>): boolean {
+function pointInMultiPolygon(
+  point: [number, number],
+  parts: Array<Array<[number, number]>>,
+): boolean {
   let inside = false;
   for (const part of parts) {
     if (pointOnPolygonBoundary(point, part)) return true;
@@ -164,11 +171,17 @@ function pointInMultiPolygon(point: [number, number], parts: Array<Array<[number
   return inside;
 }
 
-function pointInPolygonOrOnBoundary(point: [number, number], polygon: Array<[number, number]>): boolean {
+function pointInPolygonOrOnBoundary(
+  point: [number, number],
+  polygon: Array<[number, number]>,
+): boolean {
   return pointOnPolygonBoundary(point, polygon) || pointInPolygon(point, polygon);
 }
 
-function pointOnPolygonBoundary(point: [number, number], polygon: Array<[number, number]>): boolean {
+function pointOnPolygonBoundary(
+  point: [number, number],
+  polygon: Array<[number, number]>,
+): boolean {
   const closed = closePath(polygon);
   for (let i = 0; i < closed.length - 1; i++) {
     if (pointOnSegment(point, closed[i], closed[i + 1])) return true;
@@ -200,15 +213,17 @@ function segmentsIntersect(
   if (isZero(cdA) && pointOnSegment(a, c, d)) return true;
   if (isZero(cdB) && pointOnSegment(b, c, d)) return true;
 
-  return (abC > 0) !== (abD > 0) && (cdA > 0) !== (cdB > 0);
+  return abC > 0 !== abD > 0 && cdA > 0 !== cdB > 0;
 }
 
 function pointOnSegment(p: [number, number], a: [number, number], b: [number, number]): boolean {
   if (!isZero(cross(a, b, p))) return false;
-  return p[0] >= Math.min(a[0], b[0]) - EPSILON &&
+  return (
+    p[0] >= Math.min(a[0], b[0]) - EPSILON &&
     p[0] <= Math.max(a[0], b[0]) + EPSILON &&
     p[1] >= Math.min(a[1], b[1]) - EPSILON &&
-    p[1] <= Math.max(a[1], b[1]) + EPSILON;
+    p[1] <= Math.max(a[1], b[1]) + EPSILON
+  );
 }
 
 function cross(a: [number, number], b: [number, number], c: [number, number]): number {
@@ -227,7 +242,9 @@ const EPSILON = 1e-9;
 
 /** Dedupe `(source, layer, id)` triples — same feature can show up under
  *  multiple visible layers when a source has e.g. fill + line styling. */
-export function dedupeRefs(features: ReadonlyArray<{ source: string; layer: string; id: number }>): FeatureRef[] {
+export function dedupeRefs(
+  features: ReadonlyArray<{ source: string; layer: string; id: number }>,
+): FeatureRef[] {
   const seen = new Set<string>();
   const out: FeatureRef[] = [];
   for (const f of features) {

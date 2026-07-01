@@ -36,14 +36,25 @@ export class DragPanHandler extends EventDispatcher implements Handler<DragPanOp
     this._isHoveringSelected = isHoveringSelected;
   }
 
-  enable(): void { this._enabled = true; }
+  enable(): void {
+    this._enabled = true;
+  }
   disable(): void {
     this._enabled = false;
-    if (this._dragging) { this._dragging = false; this.fire('panend'); }
+    if (this._dragging) {
+      this._dragging = false;
+      this.fire('panend');
+    }
   }
-  isEnabled(): boolean { return this._enabled; }
-  setOptions(opts: Partial<DragPanOptions>): void { this._opts = { ...this._opts, ...opts }; }
-  getOptions(): Readonly<DragPanOptions> { return this._opts; }
+  isEnabled(): boolean {
+    return this._enabled;
+  }
+  setOptions(opts: Partial<DragPanOptions>): void {
+    this._opts = { ...this._opts, ...opts };
+  }
+  getOptions(): Readonly<DragPanOptions> {
+    return this._opts;
+  }
 
   getCursor(): string | null {
     if (!this._enabled) return null;

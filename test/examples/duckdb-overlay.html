@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Emap 示例 - DuckDB Overlay</title>
+    <link rel="stylesheet" href="../../dist/emap.css" />
+    <style>
+      body {
+        margin: 0;
+        height: 100vh;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      #map {
+        width: 100vw;
+        height: 100vh;
+      }
+
+      .panel {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 10;
+        width: min(500px, calc(100vw - 24px));
+        padding: 12px;
+        background: rgb(255 255 255 / 0.95);
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        box-shadow: 0 8px 24px rgb(15 23 42 / 0.18);
+      }
+
+      .panel h1 {
+        margin: 0 0 10px;
+        font-size: 15px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 124px minmax(0, 1fr);
+        gap: 8px;
+        align-items: center;
+        margin: 8px 0;
+        font-size: 13px;
+      }
+
+      input,
+      button,
+      select {
+        min-width: 0;
+        font: inherit;
+      }
+
+      input,
+      select {
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      button {
+        width: 100%;
+        margin-top: 8px;
+        padding: 7px 10px;
+      }
+
+      #status {
+        margin-top: 10px;
+        min-height: 36px;
+        color: #334155;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "@duckdb/duckdb-wasm": "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/dist/duckdb-browser.mjs",
+          "apache-arrow": "https://unpkg.com/apache-arrow@21.1.0/Arrow.dom.mjs",
+          "flatbuffers": "https://cdn.jsdelivr.net/npm/flatbuffers@25.9.23/mjs/flatbuffers.js",
+          "tslib": "https://cdn.jsdelivr.net/npm/tslib@2.8.1/tslib.es6.mjs"
+        }
+      }
+    </script>
+    <script src="../../dist/mapshaper-vendor.js"></script>
+    <script src="../../dist/emap-dev.js"></script>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div class="panel">
+      <h1>DuckDB-Wasm ST_Intersection / ST_Difference</h1>
+      <div class="row">
+        <label for="input-file">输入数据</label>
+        <input id="input-file" type="file" accept=".geojson,.json,.topojson,.zip,.kml,.msx" />
+      </div>
+      <div class="row">
+        <label for="mask-file">Mask 数据</label>
+        <input id="mask-file" type="file" accept=".geojson,.json,.topojson,.zip,.kml,.msx" />
+      </div>
+      <div class="row">
+        <label for="input-layer">输入图层</label>
+        <select id="input-layer" disabled></select>
+      </div>
+      <div class="row">
+        <label for="mask-layer">Mask 图层</label>
+        <select id="mask-layer" disabled></select>
+      </div>
+      <div class="row">
+        <label for="operation">Overlay</label>
+        <select id="operation">
+          <option value="intersection">intersectionDatasetWithDuckDb</option>
+          <option value="difference">differenceDatasetWithDuckDb</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="entrypoint">入口</label>
+        <select id="entrypoint">
+          <option value="helper">dataset helper</option>
+          <option value="mapop">duckDbOverlayLayer</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="output-layer">输出图层</label>
+        <input id="output-layer" type="text" value="duckdb_overlay_result" />
+      </div>
+      <button id="run" disabled>运行 Overlay</button>
+      <div id="status">分别上传输入数据和 mask 数据。两者应使用相同 CRS。</div>
+    </div>
+    <script type="module">
+      import {
+        closeDuckDbRuntime,
+        createDuckDbRuntimeFromJsDelivr,
+        differenceDatasetWithDuckDb,
+        duckDbOverlayLayer,
+        intersectionDatasetWithDuckDb,
+        setDuckDbRuntime,
+      } from "../../dist/emap-duckdb.mjs";
+
+      const { Emap, TopologySource, NavigationControl, StatusControl } = emap;
+
+      const INPUT_SOURCE_ID = "duckdb-overlay-input";
+      const MASK_SOURCE_ID = "duckdb-overlay-mask";
+      const OUTPUT_SOURCE_ID = "duckdb-overlay-output";
+
+      const map = new Emap({ container: "map" });
+      map.addControl(new NavigationControl(), "top-left");
+      map.addControl(new StatusControl({ alignment: "right", showEPSG: true }), "bottom-right");
+
+      const inputFile = document.getElementById("input-file");
+      const maskFile = document.getElementById("mask-file");
+      const inputLayerSelect = document.getElementById("input-layer");
+      const maskLayerSelect = document.getElementById("mask-layer");
+      const operationSelect = document.getElementById("operation");
+      const entrypointSelect = document.getElementById("entrypoint");
+      const outputLayerInput = document.getElementById("output-layer");
+      const runButton = document.getElementById("run");
+      const status = document.getElementById("status");
+
+      let inputDataset;
+      let maskDataset;
+      let runtimePromise;
+      const contextSources = new Map();
+
+      function getLayerId(layer, index) {
+        return String(layer?.name || layer?.id || `layer-${index}`);
+      }
+
+      function removeSourceWithLayers(id) {
+        for (const layer of map.getLayers().filter((layer) => layer.source === id)) {
+          map.removeLayer(layer.id);
+        }
+        if (map.getSource(id)) map.removeSource(id);
+      }
+
+      function clearOverlayOutput() {
+        removeSourceWithLayers(OUTPUT_SOURCE_ID);
+        contextSources.delete(OUTPUT_SOURCE_ID);
+      }
+
+      function addDisplayLayers(sourceId, source, prefix, colors) {
+        source.getLayers().forEach((layer, index) => {
+          const sourceLayer = getLayerId(layer, index);
+          const baseId = `${prefix}-${index}`;
+          if (layer?.geometry_type === "polygon") {
+            map.addLayer({
+              id: `${baseId}-fill`,
+              source: sourceId,
+              "source-layer": sourceLayer,
+              type: "fill",
+              paint: { "fill-color": colors.fill, "fill-opacity": colors.fillOpacity },
+            });
+            map.addLayer({
+              id: `${baseId}-line`,
+              source: sourceId,
+              "source-layer": sourceLayer,
+              type: "line",
+              paint: { "line-color": colors.line, "line-width": colors.lineWidth },
+            });
+          } else if (layer?.geometry_type === "polyline") {
+            map.addLayer({
+              id: `${baseId}-line`,
+              source: sourceId,
+              "source-layer": sourceLayer,
+              type: "line",
+              paint: { "line-color": colors.line, "line-width": colors.lineWidth },
+            });
+          } else if (layer?.geometry_type === "point") {
+            map.addLayer({
+              id: `${baseId}-point`,
+              source: sourceId,
+              "source-layer": sourceLayer,
+              type: "circle",
+              paint: {
+                "circle-color": colors.line,
+                "circle-radius": colors.pointRadius,
+                "circle-stroke-color": "#ffffff",
+                "circle-stroke-width": 1,
+              },
+            });
+          }
+        });
+      }
+
+      function addDatasetSource(id, dataset, prefix, colors) {
+        const source = new TopologySource(id);
+        removeSourceWithLayers(id);
+        source.setDataset(dataset);
+        map.addSource(id, source);
+        addDisplayLayers(id, source, prefix, colors);
+        return source;
+      }
+
+      function populateLayerSelect(select, dataset) {
+        select.innerHTML = "";
+        dataset?.layers?.forEach((layer, index) => {
+          select.appendChild(
+            new Option(`${getLayerId(layer, index)} (${layer?.geometry_type ?? "?"})`, String(index)),
+          );
+        });
+        select.disabled = select.options.length === 0;
+      }
+
+      function updateRunState() {
+        runButton.disabled =
+          !inputDataset ||
+          !maskDataset ||
+          inputLayerSelect.options.length === 0 ||
+          maskLayerSelect.options.length === 0;
+      }
+
+      async function getRuntime() {
+        runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
+          setDuckDbRuntime(runtime);
+          return runtime;
+        });
+        return runtimePromise;
+      }
+
+      function createMapOpContext() {
+        return {
+          getSource(id) {
+            if (id === INPUT_SOURCE_ID) return { getDataset: () => inputDataset };
+            if (id === MASK_SOURCE_ID) return { getDataset: () => maskDataset };
+            return contextSources.get(id);
+          },
+          setSourceDataset(id, dataset) {
+            contextSources.set(id, { getDataset: () => dataset });
+          },
+        };
+      }
+
+      async function loadDatasetFromFile(file, sourceId, prefix, colors) {
+        const source = new TopologySource(sourceId);
+        const content = new Uint8Array(await file.arrayBuffer());
+        removeSourceWithLayers(sourceId);
+        await source.setData({ filename: file.name, content });
+        const dataset = source.getDataset();
+        if (!dataset) throw new Error(`${file.name} 未生成可用 dataset`);
+        map.addSource(sourceId, source);
+        addDisplayLayers(sourceId, source, prefix, colors);
+        return { dataset, source };
+      }
+
+      inputFile.addEventListener("change", async () => {
+        const file = inputFile.files?.[0];
+        if (!file) return;
+        runButton.disabled = true;
+        clearOverlayOutput();
+        status.textContent = `正在加载输入数据 ${file.name}...`;
+        try {
+          const { dataset, source } = await loadDatasetFromFile(file, INPUT_SOURCE_ID, "duckdb-overlay-input", {
+            fill: "#dbeafe",
+            fillOpacity: 0.42,
+            line: "#1d4ed8",
+            lineWidth: 1.5,
+            pointRadius: 4,
+          });
+          inputDataset = dataset;
+          populateLayerSelect(inputLayerSelect, inputDataset);
+          map.setExtent(source.getExtent());
+          status.textContent = `已加载输入数据 ${file.name}。`;
+        } catch (err) {
+          console.error(err);
+          inputDataset = undefined;
+          populateLayerSelect(inputLayerSelect, undefined);
+          status.textContent = `输入数据加载失败: ${err?.message ?? err}`;
+        } finally {
+          updateRunState();
+        }
+      });
+
+      maskFile.addEventListener("change", async () => {
+        const file = maskFile.files?.[0];
+        if (!file) return;
+        runButton.disabled = true;
+        clearOverlayOutput();
+        status.textContent = `正在加载 mask 数据 ${file.name}...`;
+        try {
+          const { dataset } = await loadDatasetFromFile(file, MASK_SOURCE_ID, "duckdb-overlay-mask", {
+            fill: "#fecdd3",
+            fillOpacity: 0.36,
+            line: "#be123c",
+            lineWidth: 2,
+            pointRadius: 4,
+          });
+          maskDataset = dataset;
+          populateLayerSelect(maskLayerSelect, maskDataset);
+          status.textContent = `已加载 mask 数据 ${file.name}。`;
+        } catch (err) {
+          console.error(err);
+          maskDataset = undefined;
+          populateLayerSelect(maskLayerSelect, undefined);
+          status.textContent = `Mask 数据加载失败: ${err?.message ?? err}`;
+        } finally {
+          updateRunState();
+        }
+      });
+
+      runButton.addEventListener("click", async () => {
+        if (!inputDataset || !maskDataset) {
+          status.textContent = "请先上传输入数据和 mask 数据。";
+          return;
+        }
+        runButton.disabled = true;
+        const operation = operationSelect.value;
+        status.textContent = `DuckDB-Wasm 正在运行 ${operation} overlay...`;
+        try {
+          const runtime = await getRuntime();
+          const opts = {
+            inputLayer: Number(inputLayerSelect.value),
+            maskLayer: Number(maskLayerSelect.value),
+            outputLayer: outputLayerInput.value.trim() || `duckdb_${operation}_result`,
+          };
+          let resultDataset;
+          if (entrypointSelect.value === "mapop") {
+            const result = await duckDbOverlayLayer(createMapOpContext(), {
+              src: INPUT_SOURCE_ID,
+              mask: MASK_SOURCE_ID,
+              operation,
+              ...opts,
+              output: { sourceId: OUTPUT_SOURCE_ID },
+              runtime,
+            });
+            if (!result.ok) throw new Error(`${result.error.kind}: ${result.error.reason ?? result.error.id}`);
+            resultDataset = result.value.dataset;
+          } else if (operation === "intersection") {
+            resultDataset = await intersectionDatasetWithDuckDb(inputDataset, maskDataset, opts, runtime);
+          } else {
+            resultDataset = await differenceDatasetWithDuckDb(inputDataset, maskDataset, opts, runtime);
+          }
+          const outputSource = addDatasetSource(OUTPUT_SOURCE_ID, resultDataset, "duckdb-overlay-output", {
+            fill: "#fef3c7",
+            fillOpacity: 0.58,
+            line: "#b45309",
+            lineWidth: 2.5,
+            pointRadius: 5,
+          });
+          map.setExtent(outputSource.getExtent());
+          const count = resultDataset.layers.reduce(
+            (total, layer) => total + (layer?.shapes?.length ?? 0),
+            0,
+          );
+          status.textContent = `${operation} 完成，输出 ${count} 个要素。`;
+        } catch (err) {
+          console.error(err);
+          status.textContent = `Overlay 失败: ${err?.message ?? err}`;
+        } finally {
+          updateRunState();
+        }
+      });
+
+      window.addEventListener("resize", () => map.resize());
+      window.addEventListener("pagehide", () => {
+        void (
+          runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime()
+        );
+      });
+    </script>
+  </body>
+</html>

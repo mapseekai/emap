@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mapshaper from 'mapshaper';
 import { unzipSync, strFromU8, zipSync } from 'fflate';
 import { TopologySource } from './topology-source';
+import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
+import { registerFormat, unregisterFormat } from './format-registry';
 
 function setPrivate(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
@@ -30,7 +32,9 @@ describe('TopologySource.export', () => {
   });
 
   it('forwards the format string verbatim to mapshaper', async () => {
-    const exportSpy = vi.fn(() => [{ filename: 'lyr.json', content: '{"type":"FeatureCollection","features":[]}' }]);
+    const exportSpy = vi.fn(() => [
+      { filename: 'lyr.json', content: '{"type":"FeatureCollection","features":[]}' },
+    ]);
     Reflect.set(mapshaper.internal as object, 'exportFileContent', exportSpy);
 
     const source = new TopologySource('test');
@@ -136,7 +140,9 @@ describe('TopologySource.export', () => {
     Reflect.set(
       mapshaper.internal as object,
       'exportFileContent',
-      vi.fn(() => { throw new Error('boom'); }),
+      vi.fn(() => {
+        throw new Error('boom');
+      }),
     );
 
     const setRetainedInterval = vi.fn();
@@ -236,18 +242,132 @@ describe('TopologySource render revision', () => {
   });
 });
 
+describe('TopologySource.setData', () => {
+  it('derives filenames from root-relative URLs before import', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'Content-Type': 'application/geo+json' }),
+      arrayBuffer: async () => new Uint8Array([123, 125]).buffer,
+    } as Response);
+    const runImport = vi.fn(async () => FAKE_DATASET);
+
+    try {
+      const source = new TopologySource('roads', {
+        mapshaperRunner: { runImport },
+      });
+
+      await source.setData('/data/roads.geojson');
+
+      expect(fetchSpy).toHaveBeenCalledWith('/data/roads.geojson', expect.any(Object));
+      expect(runImport).toHaveBeenCalledTimes(1);
+      expect(runImport.mock.calls[0][0]).toBe('-i "roads.geojson"');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('marks GeoJSON imports as EPSG:4326 when mapshaper provides no CRS metadata', async () => {
+    // RFC 7946 fixes GeoJSON to WGS84 lon/lat; without this the CRS stays
+    // "unknown" and GeoParquet exports write `crs: null`.
+    const runImport = vi.fn(async () => ({ ...FAKE_DATASET, info: {} }));
+    const source = new TopologySource('t', { mapshaperRunner: { runImport } });
+
+    await source.setData({ filename: 'a.geojson', content: new Uint8Array([123, 125]) });
+
+    expect(source.getDataset()?.info?.crs_string).toBe('EPSG:4326');
+  });
+
+  it('does not mark shapefile imports as EPSG:4326 without CRS metadata', async () => {
+    const runImport = vi.fn(async () => ({ ...FAKE_DATASET, info: {} }));
+    const source = new TopologySource('t', { mapshaperRunner: { runImport } });
+
+    await source.setData({ filename: 'a.shp', content: new Uint8Array([0]) });
+
+    expect(source.getDataset()?.info?.crs_string).toBeUndefined();
+  });
+
+  it('does not override CRS metadata already carried by the imported dataset', async () => {
+    const runImport = vi.fn(async () => ({
+      ...FAKE_DATASET,
+      info: { prj: 'PROJCS["X",AUTHORITY["EPSG","3857"]]' },
+    }));
+    const source = new TopologySource('t', { mapshaperRunner: { runImport } });
+
+    await source.setData({ filename: 'a.geojson', content: new Uint8Array([123, 125]) });
+
+    expect(source.getDataset()?.info?.crs_string).toBeUndefined();
+    expect(source.getCRS()).toBe('EPSG:3857');
+  });
+});
+
+describe('TopologySource.reproject', () => {
+  it('resolves EPSG targets before calling mapshaper directly', async () => {
+    const source = new TopologySource('test');
+    const dataset = { ...FAKE_DATASET, info: {} };
+    const resultDataset = { ...FAKE_DATASET, info: {} };
+    setPrivate(source, '_dataset', dataset);
+
+    const adapter = getDefaultMapshaperAdapter();
+    const runOnDatasetSpy = vi.spyOn(adapter, 'runOnDataset').mockResolvedValue(resultDataset);
+
+    try {
+      await source.reproject('EPSG:4490');
+
+      expect(runOnDatasetSpy).toHaveBeenCalledTimes(1);
+      const cmd = runOnDatasetSpy.mock.calls[0][0];
+      expect(cmd).toContain('-proj ');
+      expect(cmd).toContain('+ellps=GRS80');
+      expect(cmd).not.toContain('EPSG:4490');
+      expect(source.getDataset()?.info?.crs_string).toBe('EPSG:4490');
+    } finally {
+      runOnDatasetSpy.mockRestore();
+    }
+  });
+
+  it('uses caller-provided CRS metadata when the projection input is already resolved', async () => {
+    const source = new TopologySource('test');
+    const dataset = { ...FAKE_DATASET, info: { crs_string: 'EPSG:4326' } };
+    const resultDataset = { ...FAKE_DATASET, info: { crs_string: 'EPSG:4326' } };
+    setPrivate(source, '_dataset', dataset);
+
+    const adapter = getDefaultMapshaperAdapter();
+    const runOnDatasetSpy = vi.spyOn(adapter, 'runOnDataset').mockResolvedValue(resultDataset);
+
+    try {
+      await source.reproject('+proj=longlat +ellps=GRS80 +no_defs +type=crs', 'EPSG:4490');
+
+      expect(source.getDataset()?.info?.crs_string).toBe('EPSG:4490');
+      expect(source.getDataset()?.info?.prj).toBeUndefined();
+      expect(source.getDataset()?.info?.wkt1).toBeUndefined();
+    } finally {
+      runOnDatasetSpy.mockRestore();
+    }
+  });
+});
+
 describe('TopologySource snapshot round-trip (real mapshaper)', () => {
   // Tiny single-feature polygon — survives the full Pack→Unpack pipeline.
   const TINY_GEOJSON = JSON.stringify({
     type: 'FeatureCollection',
-    features: [{
-      type: 'Feature',
-      properties: { name: 'box', score: 7 },
-      geometry: {
-        type: 'Polygon',
-        coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]],
+    features: [
+      {
+        type: 'Feature',
+        properties: { name: 'box', score: 7 },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 1],
+              [0, 0],
+            ],
+          ],
+        },
       },
-    }],
+    ],
   });
 
   function importGeoJSON(filename: string, contentString: string): Promise<TopologySource> {
@@ -265,7 +385,7 @@ describe('TopologySource snapshot round-trip (real mapshaper)', () => {
       layerNames: ds.layers.map((l: any) => l.name),
       geoms: ds.layers.map((l: any) => l.geometry_type),
       shapeCounts: ds.layers.map((l: any) => l.shapes?.length ?? 0),
-      arcCount: ds.arcs ? (ds.arcs as any).size?.() ?? null : null,
+      arcCount: ds.arcs ? ((ds.arcs as any).size?.() ?? null) : null,
     };
   }
 
@@ -288,7 +408,9 @@ describe('TopologySource snapshot round-trip (real mapshaper)', () => {
           expect(after.shapeCounts).toEqual(before.shapeCounts);
           expect(after.arcCount).toEqual(before.arcCount);
           resolve();
-        } catch (err) { reject(err); }
+        } catch (err) {
+          reject(err);
+        }
       });
       fresh.on('error', (e: any) => reject(e?.error ?? e));
       fresh.setData({ filename: 'roundtrip.msx', content: bytes });
@@ -304,16 +426,18 @@ describe('TopologySource.setData multi-file', () => {
   let runParsedCommandsSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    parseCommandsSpy = vi.fn((_cmd: string) => [
-      { name: 'i', options: {} },
-    ]) as ReturnType<typeof vi.fn>;
+    parseCommandsSpy = vi.fn((_cmd: string) => [{ name: 'i', options: {} }]) as ReturnType<
+      typeof vi.fn
+    >;
     runParsedCommandsSpy = vi.fn((commands: any[], _job: any, cb: any) => {
       cb(null, {
         catalog: {
-          getDefaultTargets: () => [{
-            // Echo back the inputFiles so the test can assert on them
-            dataset: { layers: [], info: { _injected: commands[0]?.options?.input } },
-          }],
+          getDefaultTargets: () => [
+            {
+              // Echo back the inputFiles so the test can assert on them
+              dataset: { layers: [], info: { _injected: commands[0]?.options?.input } },
+            },
+          ],
         },
       });
     }) as ReturnType<typeof vi.fn>;
@@ -406,9 +530,7 @@ describe('TopologySource.setData multi-file', () => {
 
   it('quotes filenames containing embedded double quotes', async () => {
     const source = new TopologySource('test');
-    source.setData([
-      { filename: 'we"ird.geojson', content: new Uint8Array([1]) },
-    ]);
+    source.setData([{ filename: 'we"ird.geojson', content: new Uint8Array([1]) }]);
     await new Promise((r) => setTimeout(r, 0));
     const cmd = parseCommandsSpy.mock.calls[0][0] as string;
     expect(cmd).toBe('-i "we\\"ird.geojson"');
@@ -499,19 +621,30 @@ describe('TopologySource.setData — race versioning', () => {
     // Async runParsedCommands so the first call's resolution lands AFTER the
     // second setData supersedes it.
     let firstResolve: ((dataset: any) => void) | null = null;
-    Reflect.set(mapshaper.internal as object, 'parseCommands', vi.fn(() => [{ name: 'i', options: {} }]));
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_cmds: any[], _job: any, cb: any) => {
-      // First call: defer; second call: resolve immediately with a marker.
-      if (!firstResolve) {
-        firstResolve = (dataset: any) => cb(null, {
-          catalog: { getDefaultTargets: () => [{ dataset }] },
-        });
-      } else {
-        cb(null, {
-          catalog: { getDefaultTargets: () => [{ dataset: { layers: [], info: { winner: 'B' } } }] },
-        });
-      }
-    }));
+    Reflect.set(
+      mapshaper.internal as object,
+      'parseCommands',
+      vi.fn(() => [{ name: 'i', options: {} }]),
+    );
+    Reflect.set(
+      mapshaper.internal as object,
+      'runParsedCommands',
+      vi.fn((_cmds: any[], _job: any, cb: any) => {
+        // First call: defer; second call: resolve immediately with a marker.
+        if (!firstResolve) {
+          firstResolve = (dataset: any) =>
+            cb(null, {
+              catalog: { getDefaultTargets: () => [{ dataset }] },
+            });
+        } else {
+          cb(null, {
+            catalog: {
+              getDefaultTargets: () => [{ dataset: { layers: [], info: { winner: 'B' } } }],
+            },
+          });
+        }
+      }),
+    );
 
     const source = new TopologySource('t');
     const events: string[] = [];
@@ -568,10 +701,22 @@ describe('TopologySource.setData — awaitable', () => {
   });
 
   it('resolves to the source only after the import completes', async () => {
-    Reflect.set(mapshaper.internal as object, 'parseCommands', vi.fn(() => [{ name: 'i', options: {} }]));
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any[], _j: any, cb: any) => {
-      cb(null, { catalog: { getDefaultTargets: () => [{ dataset: { layers: [{ name: 'L' }], info: {} } }] } });
-    }));
+    Reflect.set(
+      mapshaper.internal as object,
+      'parseCommands',
+      vi.fn(() => [{ name: 'i', options: {} }]),
+    );
+    Reflect.set(
+      mapshaper.internal as object,
+      'runParsedCommands',
+      vi.fn((_c: any[], _j: any, cb: any) => {
+        cb(null, {
+          catalog: {
+            getDefaultTargets: () => [{ dataset: { layers: [{ name: 'L' }], info: {} } }],
+          },
+        });
+      }),
+    );
 
     const source = new TopologySource('await-ok');
     const ret = await source.setData({ filename: 'a.geojson', content: new Uint8Array([1]) });
@@ -585,10 +730,18 @@ describe('TopologySource.setData — awaitable', () => {
   });
 
   it('rejects when the import fails', async () => {
-    Reflect.set(mapshaper.internal as object, 'parseCommands', vi.fn(() => [{ name: 'i', options: {} }]));
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any[], _j: any, cb: any) => {
-      cb(new Error('boom'));
-    }));
+    Reflect.set(
+      mapshaper.internal as object,
+      'parseCommands',
+      vi.fn(() => [{ name: 'i', options: {} }]),
+    );
+    Reflect.set(
+      mapshaper.internal as object,
+      'runParsedCommands',
+      vi.fn((_c: any[], _j: any, cb: any) => {
+        cb(new Error('boom'));
+      }),
+    );
 
     const source = new TopologySource('await-fail');
     await expect(
@@ -598,14 +751,27 @@ describe('TopologySource.setData — awaitable', () => {
 
   it('superseded call resolves early; the winner owns the loaded data', async () => {
     let firstResolve: ((dataset: any) => void) | null = null;
-    Reflect.set(mapshaper.internal as object, 'parseCommands', vi.fn(() => [{ name: 'i', options: {} }]));
-    Reflect.set(mapshaper.internal as object, 'runParsedCommands', vi.fn((_c: any[], _j: any, cb: any) => {
-      if (!firstResolve) {
-        firstResolve = (dataset: any) => cb(null, { catalog: { getDefaultTargets: () => [{ dataset }] } });
-      } else {
-        cb(null, { catalog: { getDefaultTargets: () => [{ dataset: { layers: [], info: { winner: 'B' } } }] } });
-      }
-    }));
+    Reflect.set(
+      mapshaper.internal as object,
+      'parseCommands',
+      vi.fn(() => [{ name: 'i', options: {} }]),
+    );
+    Reflect.set(
+      mapshaper.internal as object,
+      'runParsedCommands',
+      vi.fn((_c: any[], _j: any, cb: any) => {
+        if (!firstResolve) {
+          firstResolve = (dataset: any) =>
+            cb(null, { catalog: { getDefaultTargets: () => [{ dataset }] } });
+        } else {
+          cb(null, {
+            catalog: {
+              getDefaultTargets: () => [{ dataset: { layers: [], info: { winner: 'B' } } }],
+            },
+          });
+        }
+      }),
+    );
 
     const source = new TopologySource('await-race');
     const p1 = source.setData({ filename: 'a.geojson', content: new Uint8Array([1]) });
@@ -617,5 +783,110 @@ describe('TopologySource.setData — awaitable', () => {
     firstResolve?.({ layers: [], info: { winner: 'A' } });
     await new Promise((r) => setTimeout(r, 0));
     expect(source.getDataset()?.info?.winner).toBe('B'); // stale chain never overwrote
+  });
+});
+describe('TopologySource point import', () => {
+  it('loads GeoJSON Point data with point geometry, shapes, and finite extent', async () => {
+    const geojson = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { name: 'a' },
+          geometry: { type: 'Point', coordinates: [120, 30] },
+        },
+      ],
+    };
+    const source = new TopologySource('points');
+
+    await source.setData({
+      filename: 'points.geojson',
+      content: new TextEncoder().encode(JSON.stringify(geojson)),
+    });
+
+    const layers = source.getLayers();
+    expect(layers).toHaveLength(1);
+    expect(layers[0].geometry_type).toBe('point');
+    expect(layers[0].shapes?.[0]).toEqual([[120, 30]]);
+
+    const extent = source.getExtent();
+    expect(Number.isFinite(extent.xmin)).toBe(true);
+    expect(Number.isFinite(extent.ymin)).toBe(true);
+    expect(Number.isFinite(extent.xmax)).toBe(true);
+    expect(Number.isFinite(extent.ymax)).toBe(true);
+  });
+});
+
+describe('TopologySource format plugin routing', () => {
+  const PLUGIN_DATASET = {
+    layers: [{ name: 'plug', geometry_type: 'point' as const, shapes: [[[1, 2]]] }],
+    arcs: undefined,
+    info: {},
+  };
+
+  afterEach(() => {
+    unregisterFormat('test-plugin');
+  });
+
+  function registerTestPlugin() {
+    const importBinary = vi.fn(async () => PLUGIN_DATASET);
+    const exportHandler = vi.fn(async () => [
+      { filename: 'out.parquet', content: new Uint8Array([1, 2, 3]) },
+    ]);
+    registerFormat({
+      name: 'test-plugin',
+      extensions: ['parquet', 'geoparquet', 'arrow', 'arrows', 'feather'],
+      importBinary,
+      exportFormats: { geoparquet: exportHandler, geoarrow: exportHandler },
+    });
+    return { importBinary, exportHandler };
+  }
+
+  it('routes .parquet files to the registered plugin instead of mapshaper', async () => {
+    const { importBinary } = registerTestPlugin();
+    const source = new TopologySource('p');
+    const content = new Uint8Array([0xde, 0xad]);
+    await source.setData({ filename: 'data.parquet', content });
+    expect(importBinary).toHaveBeenCalledWith(content, 'data.parquet');
+    expect(source.getLayers()[0].name).toBe('plug');
+  });
+
+  it('throws a registration hint for plugin extensions when unregistered', async () => {
+    const source = new TopologySource('p');
+    await expect(
+      source.setData({ filename: 'data.parquet', content: new Uint8Array([1]) }),
+    ).rejects.toThrow(/@zwishing\/emap\/formats/);
+  });
+
+  it('rejects mixing plugin files with other inputs', async () => {
+    registerTestPlugin();
+    const source = new TopologySource('p');
+    await expect(
+      source.setData([
+        { filename: 'a.parquet', content: new Uint8Array([1]) },
+        { filename: 'b.geojson', content: new Uint8Array([1]) },
+      ]),
+    ).rejects.toThrow(/cannot be combined/);
+  });
+
+  it('exports plugin formats through the registered handler with correct MIME', async () => {
+    const { exportHandler } = registerTestPlugin();
+    const source = new TopologySource('p');
+    setPrivate(source, '_dataset', FAKE_DATASET);
+    const blob = await source.export({ format: 'geoparquet', encoding: 'wkb' });
+    expect(exportHandler).toHaveBeenCalledWith(
+      FAKE_DATASET,
+      expect.objectContaining({ format: 'geoparquet', encoding: 'wkb' }),
+    );
+    expect(blob.type).toBe('application/vnd.apache.parquet');
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it('throws a registration hint for geoparquet export when unregistered', async () => {
+    const source = new TopologySource('p');
+    setPrivate(source, '_dataset', FAKE_DATASET);
+    await expect(source.export({ format: 'geoparquet' })).rejects.toThrow(
+      /@zwishing\/emap\/formats/,
+    );
   });
 });

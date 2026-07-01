@@ -4,10 +4,7 @@
 
 import type { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import type { AffineMatrix } from '../edit/commands/feature-affine';
-import type {
-  DrawOverlayState,
-  DrawOverlaySnapKind,
-} from '../renderer/painter';
+import type { DrawOverlayState, DrawOverlaySnapKind } from '../renderer/painter';
 
 // `EditDrawState` originally lived here; the canonical definition now sits in
 // `src/renderer/painter.ts` (it is the input to `Painter.drawDrawingOverlay`).
@@ -283,20 +280,19 @@ export interface DissolveOptions {
    */
   field?: string;
   /**
-   * Multi-field group-by. Comma-bearing entries are filtered out (same
-   * pattern as `filterFields`). An empty array is treated as if unset.
+   * Multi-field group-by. Invalid entries are rejected with a validation
+   * error. An empty array is treated as if unset.
    */
   fields?: string[];
   /**
    * Fields whose numeric values should be summed across each dissolved
-   * group (mapshaper's `sum-fields=` option). Comma-bearing entries are
-   * filtered out.
+   * group (mapshaper's `sum-fields=` option). Invalid entries are rejected.
    */
   sumFields?: string[];
   /**
    * Fields whose values should be carried through the dissolve unchanged
    * (mapshaper's `copy-fields=` option). The first feature in each group
-   * provides the value. Comma-bearing entries are filtered out.
+   * provides the value. Invalid entries are rejected.
    */
   copyFields?: string[];
   /**

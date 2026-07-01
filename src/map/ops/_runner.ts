@@ -37,12 +37,7 @@ import { parseCommandHeads, shouldUseWorker, shouldUseWorkerForHeads } from '../
  *   - `unknown`         — no information — fall back to clearing for
  *                         safety. Treated identically to `shape-count`.
  */
-export type OpEffect =
-  | 'shape-count'
-  | 'topology-only'
-  | 'attribute-only'
-  | 'crs-only'
-  | 'unknown';
+export type OpEffect = 'shape-count' | 'topology-only' | 'attribute-only' | 'crs-only' | 'unknown';
 
 /**
  * Mapshaper command head → effect classification. Heads not in the table
@@ -181,13 +176,13 @@ export async function _runDatasetCommand(
     const routing = host._workerRouting;
     useWorker = routing
       ? routing({
-        cmd,
-        heads: parseCommandHeads(cmd),
-        vertexCount,
-        mode: host._workerMode,
-        threshold: host._workerThreshold,
-        defaultDecision,
-      })
+          cmd,
+          heads: parseCommandHeads(cmd),
+          vertexCount,
+          mode: host._workerMode,
+          threshold: host._workerThreshold,
+          defaultDecision,
+        })
       : defaultDecision;
   }
 
@@ -252,16 +247,16 @@ export async function _runDatasetCommandParsed(
     const routing = host._workerRouting;
     useWorker = routing
       ? routing({
-        // The routing hook's `cmd` field is documented as a CLI string;
-        // synthesize a debug-only summary from heads. Hooks that key on
-        // exact options must use the `heads` field instead.
-        cmd: heads.map((h) => `-${h}`).join(' '),
-        heads,
-        vertexCount,
-        mode: host._workerMode,
-        threshold: host._workerThreshold,
-        defaultDecision,
-      })
+          // The routing hook's `cmd` field is documented as a CLI string;
+          // synthesize a debug-only summary from heads. Hooks that key on
+          // exact options must use the `heads` field instead.
+          cmd: heads.map((h) => `-${h}`).join(' '),
+          heads,
+          vertexCount,
+          mode: host._workerMode,
+          threshold: host._workerThreshold,
+          defaultDecision,
+        })
       : defaultDecision;
   }
 
@@ -294,14 +289,16 @@ async function _runViaWorkerParsed(
   }
   const id = host._workerPool.reserveId();
   const datasetVertexCount = dataset.arcs?.getPointCount?.() ?? 0;
-  const startedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   // Synthesize a heads-only debug string for `workerjobstart`'s `cmd`
   // field — listeners use it for telemetry, not parsing.
   const cmdSummary = commands.map((c) => `-${c.name}`).join(' ');
   host.fire('workerjobstart', { id, cmd: cmdSummary, label, datasetVertexCount });
 
   try {
-    const packed = await getDefaultMapshaperAdapter().exportDatasetsToPack([dataset], { compact: false });
+    const packed = await getDefaultMapshaperAdapter().exportDatasetsToPack([dataset], {
+      compact: false,
+    });
     const transferList = collectTransferables(packed);
     const promise = host._workerPool.dispatchWithId(id, commands, packed, inputFiles, transferList);
     const resultPacked = await promise;
@@ -309,11 +306,13 @@ async function _runViaWorkerParsed(
     if (!restored.datasets || restored.datasets.length === 0) {
       throw new Error('worker: no dataset in response');
     }
-    const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+    const durationMs =
+      (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
     host.fire('workerjobend', { id, ok: true, durationMs });
     return restored.datasets[0];
   } catch (err: any) {
-    const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+    const durationMs =
+      (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
     host.fire('workerjobend', {
       id,
       ok: false,
@@ -402,11 +401,13 @@ async function _runViaWorker(
   // Use the pool's id reservation so start/end events stay correlated.
   const id = host._workerPool.reserveId();
   const datasetVertexCount = dataset.arcs?.getPointCount?.() ?? 0;
-  const startedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   host.fire('workerjobstart', { id, cmd, label, datasetVertexCount });
 
   try {
-    const packed = await getDefaultMapshaperAdapter().exportDatasetsToPack([dataset], { compact: false });
+    const packed = await getDefaultMapshaperAdapter().exportDatasetsToPack([dataset], {
+      compact: false,
+    });
     // Collect every Uint8Array buffer in `packed` (mapshaper packs arc
     // storage as TypedArrays) and hand them to postMessage as
     // transferables. Net effect: structured-clone no longer copies
@@ -419,11 +420,13 @@ async function _runViaWorker(
     if (!restored.datasets || restored.datasets.length === 0) {
       throw new Error('worker: no dataset in response');
     }
-    const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+    const durationMs =
+      (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
     host.fire('workerjobend', { id, ok: true, durationMs });
     return restored.datasets[0];
   } catch (err: any) {
-    const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+    const durationMs =
+      (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
     host.fire('workerjobend', {
       id,
       ok: false,

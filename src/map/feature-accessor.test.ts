@@ -33,7 +33,11 @@ function makeHost(layers: globalThis.Map<string, MapshaperLayer | null>): EmapHo
   return host as EmapHostInternal;
 }
 
-function makeLayer(name: string, shapes: unknown[], records?: Array<Record<string, unknown>>): MapshaperLayer {
+function makeLayer(
+  name: string,
+  shapes: unknown[],
+  records?: Array<Record<string, unknown>>,
+): MapshaperLayer {
   return {
     name,
     geometry_type: 'polygon',
@@ -46,13 +50,14 @@ function makeLayer(name: string, shapes: unknown[], records?: Array<Record<strin
 
 describe('FeatureAccessor.get', () => {
   it('returns a Feature for a valid ref', () => {
-    const layer = makeLayer('states', [
-      [[0, 1, 2]],
-      [[3, 4]],
-    ], [
-      { name: 'A', pop: 1 },
-      { name: 'B', pop: 2 },
-    ]);
+    const layer = makeLayer(
+      'states',
+      [[[0, 1, 2]], [[3, 4]]],
+      [
+        { name: 'A', pop: 1 },
+        { name: 'B', pop: 2 },
+      ],
+    );
     const layers = new globalThis.Map<string, MapshaperLayer>([['us/states', layer]]);
     const acc = new FeatureAccessor(makeHost(layers));
 
@@ -93,7 +98,9 @@ describe('FeatureAccessor.get', () => {
 
     const f = acc.get({ source: 's', layer: 'l', id: 0 })!;
     expect(Object.isFrozen(f.properties)).toBe(true);
-    expect(() => { (f.properties as Record<string, unknown>).name = 'B'; }).toThrow();
+    expect(() => {
+      (f.properties as Record<string, unknown>).name = 'B';
+    }).toThrow();
     // Underlying record untouched.
     expect(records[0].name).toBe('A');
   });
@@ -120,9 +127,7 @@ describe('FeatureAccessor.get', () => {
 
 describe('FeatureAccessor.iter', () => {
   it('yields every feature in source order', () => {
-    const layer = makeLayer('l', [[[0]], [[1]], [[2]]], [
-      { i: 0 }, { i: 1 }, { i: 2 },
-    ]);
+    const layer = makeLayer('l', [[[0]], [[1]], [[2]]], [{ i: 0 }, { i: 1 }, { i: 2 }]);
     const layers = new globalThis.Map<string, MapshaperLayer>([['s/l', layer]]);
     const acc = new FeatureAccessor(makeHost(layers));
 

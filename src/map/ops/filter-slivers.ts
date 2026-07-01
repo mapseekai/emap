@@ -10,19 +10,14 @@ import { Err, type OpResult } from '../op-result';
 import type { FilterSliversOptions } from '../types';
 import type { OpContext } from './_context';
 
-export async function filterSlivers(
-  ctx: OpContext,
-  opts: FilterSliversOptions,
-): Promise<OpResult> {
+export async function filterSlivers(ctx: OpContext, opts: FilterSliversOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
   if (!source) return Err.notFound('source', opts.source);
   const dataset = source.getDataset();
   if (!dataset) return Err.notFound('source', opts.source);
   if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
 
-  if (typeof opts.minArea !== 'number'
-    || !Number.isFinite(opts.minArea)
-    || opts.minArea <= 0) {
+  if (typeof opts.minArea !== 'number' || !Number.isFinite(opts.minArea) || opts.minArea <= 0) {
     return Err.validation('minArea', 'must be a positive finite number');
   }
 

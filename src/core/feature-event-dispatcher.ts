@@ -38,7 +38,9 @@ type FType = (typeof TYPES)[number];
 function isFeatureType(t: string): t is FType {
   return (TYPES as readonly string[]).includes(t);
 }
-function keyOf(r: FeatureRef): string { return `${r.source}|${r.layer}|${r.id}`; }
+function keyOf(r: FeatureRef): string {
+  return `${r.source}|${r.layer}|${r.id}`;
+}
 function matches(filter: FeatureEventFilter | undefined, ref: FeatureRef): boolean {
   if (!filter) return true;
   if (filter.source && filter.source !== ref.source) return false;
@@ -54,7 +56,10 @@ function matches(filter: FeatureEventFilter | undefined, ref: FeatureRef): boole
  */
 export class FeatureEventDispatcher {
   private _reg: Record<FType, Entry[]> = {
-    'feature:click': [], 'feature:hover': [], 'feature:enter': [], 'feature:leave': [],
+    'feature:click': [],
+    'feature:hover': [],
+    'feature:enter': [],
+    'feature:leave': [],
   };
   private _lastKey: string | null = null;
   private _lastRef: FeatureRef | null = null;
@@ -96,9 +101,17 @@ export class FeatureEventDispatcher {
   off(type: string, cb: Cb): void {
     if (!isFeatureType(type)) return;
     const wrap = this._onceWrap.get(cb);
-    this._reg[type] = this._reg[type].filter((e) => e.cb !== cb && (wrap === undefined || e.cb !== wrap));
+    this._reg[type] = this._reg[type].filter(
+      (e) => e.cb !== cb && (wrap === undefined || e.cb !== wrap),
+    );
     this._onceWrap.delete(cb);
+    if (!this.hasListeners()) this._clearHoverState();
     this._onChange?.();
+  }
+
+  private _clearHoverState(): void {
+    this._lastKey = null;
+    this._lastRef = null;
   }
 
   /** Topmost hit at a point, restricted to the union of all registered filters' layers. */
@@ -106,7 +119,10 @@ export class FeatureEventDispatcher {
     let layers: string[] | undefined = [];
     for (const t of TYPES) {
       for (const e of this._reg[t]) {
-        if (!e.filter?.layers) { layers = undefined; break; }
+        if (!e.filter?.layers) {
+          layers = undefined;
+          break;
+        }
         layers.push(...e.filter.layers);
       }
       if (layers === undefined) break;
@@ -127,7 +143,9 @@ export class FeatureEventDispatcher {
         const feature = this._host.features.get(ref);
         if (!feature) return;
         built = {
-          type, feature, ref,
+          type,
+          feature,
+          ref,
           point: { x: ev.point.x, y: ev.point.y },
           lngLat: this._host.unproject(ev.point.x, ev.point.y),
           modifiers: { ...ev.modifiers },

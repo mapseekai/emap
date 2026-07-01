@@ -1,10 +1,7 @@
 import type { EditCommand } from '../edit-command';
 import { bumpEditVersion, type ArcCollection } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
-import {
-  getDefaultMapshaperAdapter,
-  type MapshaperAdapter,
-} from '../../adapter/mapshaper-adapter';
+import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
 
 export interface VertexMoveCommandOptions {
   /**

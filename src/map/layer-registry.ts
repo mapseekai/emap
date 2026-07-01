@@ -39,9 +39,7 @@ export function resolveLayerInList(
 }
 
 export class LayerRegistry {
-  constructor(
-    private readonly _sources: globalThis.Map<string, TopologySource>,
-  ) {}
+  constructor(private readonly _sources: globalThis.Map<string, TopologySource>) {}
 
   /**
    * Resolve `(sourceId, layerId)` to the underlying MapshaperLayer, or
@@ -67,10 +65,7 @@ export class LayerRegistry {
    * snapshot the dataset before a mapshaper command runs (the source's
    * registered dataset has already advanced).
    */
-  resolveInLayers(
-    layers: ReadonlyArray<MapshaperLayer>,
-    layerId: string,
-  ): MapshaperLayer | null {
+  resolveInLayers(layers: ReadonlyArray<MapshaperLayer>, layerId: string): MapshaperLayer | null {
     return resolveLayerInList(layers, layerId);
   }
 }

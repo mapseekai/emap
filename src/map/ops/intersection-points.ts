@@ -29,7 +29,10 @@ export async function intersectionPointsLayer(
   const targetLayer = resolveLayerInList(original.layers, opts.target);
   if (!targetLayer) return Err.notFound('layer', opts.target);
   if (targetLayer.geometry_type !== 'polygon' && targetLayer.geometry_type !== 'polyline') {
-    return Err.validation('target', `expected polygon/polyline target, got ${targetLayer.geometry_type ?? 'unknown'}`);
+    return Err.validation(
+      'target',
+      `expected polygon/polyline target, got ${targetLayer.geometry_type ?? 'unknown'}`,
+    );
   }
   if (!original.arcs) return Err.validation('source', 'source has no arcs');
 
@@ -38,7 +41,11 @@ export async function intersectionPointsLayer(
     return Err.validation('name', `another layer already named '${newName}'`);
   }
   if (opts.tolerance !== undefined) {
-    if (typeof opts.tolerance !== 'number' || !Number.isFinite(opts.tolerance) || opts.tolerance <= 0) {
+    if (
+      typeof opts.tolerance !== 'number' ||
+      !Number.isFinite(opts.tolerance) ||
+      opts.tolerance <= 0
+    ) {
       return Err.validation('tolerance', 'must be a positive finite number');
     }
   }

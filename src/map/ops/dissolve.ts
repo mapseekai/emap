@@ -8,6 +8,7 @@ import type { DissolveOptions } from '../types';
 import type { MapshaperLayer } from '../../types/mapshaper-types';
 import type { OpContext } from './_context';
 import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
+import { validateFieldList, validateFieldName } from './_fields';
 
 /** Internal field name used by `mergeSelected`'s discriminator pass. */
 const MERGE_SELECTED_FIELD = '__emap_merge';
@@ -29,8 +30,9 @@ export async function dissolveLayer(ctx: OpContext, opts: DissolveOptions): Prom
   // mapshaper's -dissolve DEFAULT option is `fields` (comma-list, type
   // strings). A field name containing `,` would silently group by N
   // imaginary fields; reject up-front instead.
-  if (opts.field !== undefined && (typeof opts.field !== 'string' || opts.field.includes(','))) {
-    return Err.validation('field', 'field name must be a string without `,`');
+  if (opts.field !== undefined) {
+    const field = validateFieldName('field', opts.field);
+    if (!field.ok) return field;
   }
   if (!ctx.host._allowExpressionEvaluation([opts.calc, opts.where], 'dissolveLayer')) {
     return Err.expressionDisabled('dissolveLayer');
@@ -42,20 +44,18 @@ export async function dissolveLayer(ctx: OpContext, opts: DissolveOptions): Prom
   if (opts.field) {
     dissolveOpts.fields = [opts.field];
   } else if (hasFields) {
-    const safeFields = opts.fields!.filter((f) => typeof f === 'string' && !f.includes(','));
-    if (safeFields.length > 0) dissolveOpts.fields = safeFields;
+    const fields = validateFieldList('fields', opts.fields);
+    if (!fields.ok) return fields;
+    dissolveOpts.fields = fields.value;
   }
 
-  const safeFieldList = (list?: string[]) =>
-    Array.isArray(list)
-      ? list.filter((f) => typeof f === 'string' && !f.includes(','))
-      : [];
+  const sumFields = validateFieldList('sumFields', opts.sumFields);
+  if (!sumFields.ok) return sumFields;
+  if (sumFields.value.length > 0) dissolveOpts.sum_fields = sumFields.value;
 
-  const sumFields = safeFieldList(opts.sumFields);
-  if (sumFields.length > 0) dissolveOpts.sum_fields = sumFields;
-
-  const copyFields = safeFieldList(opts.copyFields);
-  if (copyFields.length > 0) dissolveOpts.copy_fields = copyFields;
+  const copyFields = validateFieldList('copyFields', opts.copyFields);
+  if (!copyFields.ok) return copyFields;
+  if (copyFields.value.length > 0) dissolveOpts.copy_fields = copyFields.value;
 
   if (opts.calc && opts.calc.trim()) dissolveOpts.calc = opts.calc;
   if (opts.where && opts.where.trim()) dissolveOpts.where = opts.where;
@@ -105,7 +105,10 @@ export async function mergeSelected(ctx: OpContext): Promise<OpResult> {
   const layer = ctx.host.layers.resolve(sourceId, layerId);
   if (!layer) return Err.notFound('layer', layerId);
 
-  const ids = refs.map((r: { id: number }) => r.id).slice().sort((a: number, b: number) => a - b);
+  const ids = refs
+    .map((r: { id: number }) => r.id)
+    .slice()
+    .sort((a: number, b: number) => a - b);
 
   if (!stampMergeDiscriminator(layer, ids)) {
     return Err.validation('layer', 'layer has no data table; cannot stamp discriminator');
@@ -146,9 +149,7 @@ function buildMergeDissolveCommands(layerName: string, layer: MapshaperLayer): P
   const dissolveOpts: Record<string, unknown> = { fields: [MERGE_SELECTED_FIELD] };
   const fields = layer.data?.getFields?.();
   if (fields && fields.length > 0) {
-    const safeFields = fields.filter(
-      (f) => f !== MERGE_SELECTED_FIELD && !f.includes(','),
-    );
+    const safeFields = fields.filter((f) => f !== MERGE_SELECTED_FIELD && !f.includes(','));
     if (safeFields.length > 0) dissolveOpts.copy_fields = safeFields;
   }
 

@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Emap 示例 - DuckDB GeoParquet 查询</title>
+    <link rel="stylesheet" href="../../dist/emap.css" />
+    <style>
+      body {
+        margin: 0;
+        height: 100vh;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      #map {
+        width: 100vw;
+        height: 100vh;
+      }
+
+      .panel {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 10;
+        width: min(480px, calc(100vw - 24px));
+        padding: 12px;
+        background: rgb(255 255 255 / 0.95);
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        box-shadow: 0 8px 24px rgb(15 23 42 / 0.18);
+      }
+
+      .panel h1 {
+        margin: 0 0 10px;
+        font-size: 15px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 112px minmax(0, 1fr);
+        gap: 8px;
+        align-items: center;
+        margin: 8px 0;
+        font-size: 13px;
+      }
+
+      input,
+      button,
+      select,
+      textarea {
+        min-width: 0;
+        font: inherit;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      textarea {
+        min-height: 108px;
+        resize: vertical;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+      }
+
+      button {
+        width: 100%;
+        margin-top: 8px;
+        padding: 7px 10px;
+      }
+
+      #status {
+        margin-top: 10px;
+        min-height: 36px;
+        color: #334155;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "@duckdb/duckdb-wasm": "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/dist/duckdb-browser.mjs",
+          "apache-arrow": "https://unpkg.com/apache-arrow@21.1.0/Arrow.dom.mjs",
+          "flatbuffers": "https://cdn.jsdelivr.net/npm/flatbuffers@25.9.23/mjs/flatbuffers.js",
+          "tslib": "https://cdn.jsdelivr.net/npm/tslib@2.8.1/tslib.es6.mjs"
+        }
+      }
+    </script>
+    <script src="../../dist/mapshaper-vendor.js"></script>
+    <script src="../../dist/emap-dev.js"></script>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div class="panel">
+      <h1>DuckDB-Wasm GeoParquet SELECT</h1>
+      <div class="row">
+        <label for="file">GeoParquet</label>
+        <input id="file" type="file" accept=".parquet,.geoparquet" />
+      </div>
+      <div class="row">
+        <label for="entrypoint">入口</label>
+        <select id="entrypoint">
+          <option value="helper">DuckDbGeoParquetQuerySource.query</option>
+          <option value="mapop">duckDbGeoParquetQueryLayer</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="layer-name">输出图层</label>
+        <input id="layer-name" type="text" value="duckdb_geoparquet_query" />
+      </div>
+      <div class="row">
+        <label for="geometry-column">几何列</label>
+        <input id="geometry-column" type="text" placeholder="留空自动检测" />
+      </div>
+      <div class="row">
+        <label for="sql">SQL</label>
+        <textarea id="sql">SELECT * FROM input LIMIT 100</textarea>
+      </div>
+      <button id="run" disabled>查询 GeoParquet</button>
+      <div id="status">上传 GeoParquet 后，查询结果必须包含可识别的几何列。</div>
+    </div>
+    <script type="module">
+      import {
+        closeDuckDbRuntime,
+        createDuckDbGeoParquetQuerySource,
+        createDuckDbRuntimeFromJsDelivr,
+        duckDbGeoParquetQueryLayer,
+        setDuckDbRuntime,
+      } from "../../dist/emap-duckdb.mjs";
+
+      const { Emap, TopologySource, NavigationControl, StatusControl } = emap;
+
+      const SOURCE_ID = "duckdb-geoparquet-bytes";
+      const OUTPUT_ID = "duckdb-geoparquet-output";
+
+      const map = new Emap({ container: "map" });
+      map.addControl(new NavigationControl(), "top-left");
+      map.addControl(new StatusControl({ alignment: "right", showEPSG: true }), "bottom-right");
+
+      const fileInput = document.getElementById("file");
+      const entrypointSelect = document.getElementById("entrypoint");
+      const layerNameInput = document.getElementById("layer-name");
+      const geometryColumnInput = document.getElementById("geometry-column");
+      const sqlInput = document.getElementById("sql");
+      const runButton = document.getElementById("run");
+      const status = document.getElementById("status");
+
+      let geoParquetBytes;
+      let geoParquetQuerySource;
+      let geoParquetFileName = "";
+      let runtimePromise;
+      const contextSources = new Map();
+
+      function getLayerId(layer, index) {
+        return String(layer?.name || layer?.id || `layer-${index}`);
+      }
+
+      function removeSourceWithLayers(id) {
+        for (const layer of map.getLayers().filter((layer) => layer.source === id)) {
+          map.removeLayer(layer.id);
+        }
+        if (map.getSource(id)) map.removeSource(id);
+      }
+
+      function addDisplayLayers(sourceId, source, prefix, colors) {
+        source.getLayers().forEach((layer, index) => {
+          const sourceLayer = getLayerId(layer, index);
+          const baseId = `${prefix}-${index}`;
+          if (layer?.geometry_type === "polygon") {
+            map.addLayer({
+              id: `${baseId}-fill`,
+              source: sourceId,
+              "source-layer": sourceLayer,
+              type: "fill",
+              paint: { "fill-color": colors.fill, "fill-opacity": colors.fillOpacity },
+            });
+            map.addLayer({
+              id: `${baseId}-line`,
+              source: sourceId,
+              "source-layer": sourceLayer,
+              type: "line",
+              paint: { "line-color": colors.line, "line-width": colors.lineWidth },
+            });
+          } else if (layer?.geometry_type === "polyline") {
+            map.addLayer({
+              id: `${baseId}-line`,
+              source: sourceId,
+              "source-layer": sourceLayer,
+              type: "line",
+              paint: { "line-color": colors.line, "line-width": colors.lineWidth },
+            });
+          } else if (layer?.geometry_type === "point") {
+            map.addLayer({
+              id: `${baseId}-point`,
+              source: sourceId,
+              "source-layer": sourceLayer,
+              type: "circle",
+              paint: {
+                "circle-color": colors.line,
+                "circle-radius": colors.pointRadius,
+                "circle-stroke-color": "#ffffff",
+                "circle-stroke-width": 1,
+              },
+            });
+          }
+        });
+      }
+
+      function addDatasetSource(id, dataset) {
+        const source = new TopologySource(id);
+        removeSourceWithLayers(id);
+        source.setDataset(dataset);
+        map.addSource(id, source);
+        addDisplayLayers(id, source, "duckdb-geoparquet-output", {
+          fill: "#dcfce7",
+          fillOpacity: 0.52,
+          line: "#15803d",
+          lineWidth: 2.25,
+          pointRadius: 5,
+        });
+        return source;
+      }
+
+      async function getRuntime() {
+        runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
+          setDuckDbRuntime(runtime);
+          return runtime;
+        });
+        return runtimePromise;
+      }
+
+      function hasGeoParquetInput() {
+        return Boolean(geoParquetBytes || geoParquetQuerySource);
+      }
+
+      async function closeGeoParquetQuerySource() {
+        const source = geoParquetQuerySource;
+        geoParquetQuerySource = undefined;
+        if (source) await source.close();
+      }
+
+      async function getGeoParquetQuerySource(runtime) {
+        if (geoParquetQuerySource) return geoParquetQuerySource;
+        if (!geoParquetBytes) throw new Error("请先上传 GeoParquet 文件。");
+        geoParquetQuerySource = await createDuckDbGeoParquetQuerySource(geoParquetBytes, runtime);
+        geoParquetBytes = undefined;
+        return geoParquetQuerySource;
+      }
+
+      function createMapOpContext() {
+        return {
+          getSource(id) {
+            if (id === SOURCE_ID) {
+              return {
+                getBytes: () => geoParquetBytes,
+                getDataset: () => null,
+                getGeoParquetQuerySource: () => geoParquetQuerySource,
+              };
+            }
+            return contextSources.get(id);
+          },
+          setSourceDataset(id, dataset) {
+            contextSources.set(id, { getDataset: () => dataset });
+          },
+        };
+      }
+
+      fileInput.addEventListener("change", async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        runButton.disabled = true;
+        status.textContent = `正在读取 ${file.name}...`;
+        try {
+          await closeGeoParquetQuerySource().catch((err) => console.warn(err));
+          geoParquetBytes = new Uint8Array(await file.arrayBuffer());
+          geoParquetFileName = file.name;
+          contextSources.clear();
+          removeSourceWithLayers(OUTPUT_ID);
+          status.textContent = `已读取 ${file.name}，可以运行 DuckDB 查询。`;
+        } catch (err) {
+          console.error(err);
+          geoParquetBytes = undefined;
+          geoParquetQuerySource = undefined;
+          geoParquetFileName = "";
+          status.textContent = `读取失败: ${err?.message ?? err}`;
+        } finally {
+          runButton.disabled = !hasGeoParquetInput();
+        }
+      });
+
+      runButton.addEventListener("click", async () => {
+        if (!hasGeoParquetInput()) {
+          status.textContent = "请先上传 GeoParquet 文件。";
+          return;
+        }
+        runButton.disabled = true;
+        status.textContent = "DuckDB-Wasm 正在查询 GeoParquet...";
+        try {
+          const runtime = await getRuntime();
+          const querySource = await getGeoParquetQuerySource(runtime);
+          const opts = {
+            sql: sqlInput.value,
+            layerName: layerNameInput.value.trim() || "duckdb_geoparquet_query",
+            geometryColumn: geometryColumnInput.value.trim() || undefined,
+          };
+          let resultDataset;
+          if (entrypointSelect.value === "mapop") {
+            const result = await duckDbGeoParquetQueryLayer(createMapOpContext(), {
+              src: SOURCE_ID,
+              ...opts,
+              output: { sourceId: OUTPUT_ID },
+              runtime,
+            });
+            if (!result.ok) throw new Error(`${result.error.kind}: ${result.error.reason ?? result.error.id}`);
+            resultDataset = result.value.dataset;
+          } else {
+            resultDataset = await querySource.query(opts);
+          }
+          const outputSource = addDatasetSource(OUTPUT_ID, resultDataset);
+          map.setExtent(outputSource.getExtent());
+          const count = resultDataset.layers.reduce(
+            (total, layer) => total + (layer?.shapes?.length ?? 0),
+            0,
+          );
+          status.textContent = `已查询 ${geoParquetFileName}，输出 ${count} 个要素。`;
+        } catch (err) {
+          console.error(err);
+          status.textContent = `查询失败: ${err?.message ?? err}`;
+        } finally {
+          runButton.disabled = !hasGeoParquetInput();
+        }
+      });
+
+      window.addEventListener("resize", () => map.resize());
+      window.addEventListener("pagehide", () => {
+        void closeGeoParquetQuerySource().finally(() =>
+          runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime(),
+        );
+      });
+    </script>
+  </body>
+</html>

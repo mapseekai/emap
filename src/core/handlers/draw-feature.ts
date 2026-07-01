@@ -67,7 +67,9 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     });
   }
 
-  isEnabled(): boolean { return this._enabled; }
+  isEnabled(): boolean {
+    return this._enabled;
+  }
 
   setOptions(o: Partial<DrawFeatureOptions>): void {
     this._opts = { ...this._opts, ...o };
@@ -117,10 +119,21 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
 
   handlePointer(ev: NormalizedPointerEvent): HandlerResult {
     if (!this._enabled) return 'passthrough';
-    const px = ev.point.x, py = ev.point.y;
-    if (ev.kind === 'move') { this._onMouseMove(px, py); return 'passthrough'; }
-    if (ev.kind === 'click') { if (ev.button !== 0) return 'passthrough'; this._onClick(px, py); return 'consumed'; }
-    if (ev.kind === 'dblclick') { this._onDblClick(ev.originalEvent as MouseEvent); return 'consumed'; }
+    const px = ev.point.x,
+      py = ev.point.y;
+    if (ev.kind === 'move') {
+      this._onMouseMove(px, py);
+      return 'passthrough';
+    }
+    if (ev.kind === 'click') {
+      if (ev.button !== 0) return 'passthrough';
+      this._onClick(px, py);
+      return 'consumed';
+    }
+    if (ev.kind === 'dblclick') {
+      this._onDblClick(ev.originalEvent as MouseEvent);
+      return 'consumed';
+    }
     return 'passthrough';
   }
 
@@ -206,7 +219,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     const map = this._map;
     const sources = this._opts.snapSources ?? [this._opts.source];
     const snapToVertex = this._opts.snapToVertex !== false; // default true
-    const snapToEdge = this._opts.snapToEdge !== false;     // default true
+    const snapToEdge = this._opts.snapToEdge !== false; // default true
 
     // Tracked best across every candidate kind. Vertex wins ties because
     // strict-`<` keeps the earlier match — vertex loop runs before edge.
@@ -257,8 +270,10 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
         // index pairs (i, j) within an arc — never crosses arc boundaries,
         // so we don't accidentally treat unrelated arcs as connected.
         arcs.forEachSegment((i: number, j: number, arcXx: Float64Array, arcYy: Float64Array) => {
-          const ax = arcXx[i], ay = arcYy[i];
-          const bx = arcXx[j], by = arcYy[j];
+          const ax = arcXx[i],
+            ay = arcYy[i];
+          const bx = arcXx[j],
+            by = arcYy[j];
           // Segment AABB vs cursor bbox; reject if disjoint.
           const sMinX = ax < bx ? ax : bx;
           const sMaxX = ax < bx ? bx : ax;
@@ -326,9 +341,10 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
       layer.shapes.push(appendedShape);
     } else {
       // Polyline or polygon: create new arc
-      arcVertices = this._opts.type === 'polygon'
-        ? [...this._vertices, this._vertices[0]]
-        : [...this._vertices];
+      arcVertices =
+        this._opts.type === 'polygon'
+          ? [...this._vertices, this._vertices[0]]
+          : [...this._vertices];
 
       arcs = dataset.arcs;
       if (!arcs) {
@@ -355,15 +371,17 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     source.refreshDisplayArcs();
 
     // Record the creation as an undoable step.
-    this._map.pushCommand(new FeatureCreateCommand({
-      geometryType: this._opts.type,
-      layer,
-      source,
-      appendedShape,
-      appendedRecord,
-      arcVertices,
-      arcs,
-    }));
+    this._map.pushCommand(
+      new FeatureCreateCommand({
+        geometryType: this._opts.type,
+        layer,
+        source,
+        appendedShape,
+        appendedRecord,
+        arcVertices,
+        arcs,
+      }),
+    );
 
     const featureId = layer.shapes.length - 1;
     const layerId = getLayerId(layer, layerIndex >= 0 ? layerIndex : 0);
@@ -393,9 +411,12 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     }
 
     // Find first layer matching the geometry type
-    const mapshaperType = this._opts.type === 'polygon' ? 'polygon'
-      : this._opts.type === 'polyline' ? 'polyline'
-        : 'point';
+    const mapshaperType =
+      this._opts.type === 'polygon'
+        ? 'polygon'
+        : this._opts.type === 'polyline'
+          ? 'polyline'
+          : 'point';
     for (const layer of layers) {
       if (layer.geometry_type === mapshaperType) return layer;
     }
@@ -481,9 +502,12 @@ export function projectPointOnSegment(
   a: [number, number],
   b: [number, number],
 ): { point: [number, number]; dist: number } {
-  const ax = a[0], ay = a[1];
-  const bx = b[0], by = b[1];
-  const px = p[0], py = p[1];
+  const ax = a[0],
+    ay = a[1];
+  const bx = b[0],
+    by = b[1];
+  const px = p[0],
+    py = p[1];
   const abx = bx - ax;
   const aby = by - ay;
   const ab2 = abx * abx + aby * aby;

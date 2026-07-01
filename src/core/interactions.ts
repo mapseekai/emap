@@ -6,13 +6,13 @@ function MouseWheelDirection() {
   let getAvgDir: ((val: number) => number) | null = null;
 
   return function (delta: number, now: number) {
-    const dir = delta > 0 ? 1 : (delta < 0 ? -1 : 0);
+    const dir = delta > 0 ? 1 : delta < 0 ? -1 : 0;
     if (!getAvgDir || now - prevTime > 300) {
       getAvgDir = limitedAverage(3);
     }
     prevTime = now;
     const avg = getAvgDir(dir) || dir;
-    return avg > 0 ? 1 : (avg < 0 ? -1 : 0);
+    return avg > 0 ? 1 : avg < 0 ? -1 : 0;
   };
 }
 
@@ -87,7 +87,10 @@ export class MouseWheel extends EventDispatcher {
     let fadeFactor = 0;
 
     if (tickInterval > this._fadeDelay) {
-      fadeFactor = Math.min(1, (tickInterval - this._fadeDelay) / (this._sustainInterval - this._fadeDelay));
+      fadeFactor = Math.min(
+        1,
+        (tickInterval - this._fadeDelay) / (this._sustainInterval - this._fadeDelay),
+      );
     }
 
     if (evt.done) {
@@ -101,7 +104,7 @@ export class MouseWheel extends EventDispatcher {
         direction: this._wheelDirection,
         multiplier: multiplier,
         x: this._mouseX,
-        y: this._mouseY
+        y: this._mouseY,
       });
     }
   }

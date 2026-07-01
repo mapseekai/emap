@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 导出 GeoParquet / GeoArrow</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    #header {
+      padding: 10px;
+      background: #2c3e50;
+      color: white;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    #header label {
+      font-size: 13px;
+    }
+
+    #header button {
+      padding: 4px 12px;
+      background: #16a085;
+      color: white;
+      border: 0;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    #header button:disabled {
+      background: #7f8c8d;
+      cursor: not-allowed;
+    }
+
+    #header select {
+      font-size: 13px;
+    }
+
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+    }
+
+    #status {
+      font-size: 12px;
+      opacity: 0.85;
+      margin-left: auto;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <strong>Emap 示例</strong>
+    <label>
+      输入文件:
+      <input id="file-input" type="file" disabled
+        accept=".geojson,.json,.topojson,.zip,.parquet,.geoparquet,.arrow,.arrows,.feather" />
+    </label>
+    <label>
+      导出格式:
+      <select id="format">
+        <option value="geoparquet">GeoParquet (.parquet)</option>
+        <option value="geoparquet-native">GeoParquet native 编码 (.parquet)</option>
+        <option value="geoarrow">GeoArrow IPC (.arrow)</option>
+        <option value="geojson">GeoJSON</option>
+        <option value="shapefile">Shapefile (.zip)</option>
+      </select>
+    </label>
+    <button id="export-btn" disabled>导出并下载</button>
+    <span id="status">正在初始化 GeoParquet 支持...</span>
+  </div>
+  <div id="map"></div>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/mapshaper-vendor.js"></script>
+  <script src="../../dist/emap-dev.js"></script>
+  <!-- formats bundle: 注册 geoparquet / geoarrow 插件（副作用） -->
+  <script src="../../dist/emap-formats.js"></script>
+  <!--
+    parquet-wasm 无法通过裸模块标识符在 script-tag 环境下动态 import。
+    用 <script type="module"> 从 CDN 加载后注入，GeoArrow (.arrow) 无需此步骤。
+  -->
+  <script type="module">
+    const parquetWasmBase = 'https://unpkg.com/parquet-wasm@0.7.1/esm/';
+    const mod = await import(parquetWasmBase + 'parquet_wasm.js');
+    await mod.default?.({
+      module_or_path: parquetWasmBase + 'parquet_wasm_bg.wasm',
+    });
+    emapFormats.setParquetWasm(mod);
+    document.getElementById('status').textContent = '加载文件以开始';
+    document.getElementById('file-input').disabled = false;
+  </script>
+  <script>
+    const { Emap, TopologySource, NavigationControl } = emap;
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new emap.BasemapControl(), 'top-right');
+    map.addControl(
+      new emap.StatusControl({ alignment: 'right', showEPSG: true }),
+      'bottom-right',
+    );
+
+    const fileInput = document.getElementById('file-input');
+    const formatSelect = document.getElementById('format');
+    const exportBtn = document.getElementById('export-btn');
+    const status = document.getElementById('status');
+
+    const SOURCE_ID = 'main-source';
+    let activeSource = null;
+
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      status.textContent = `处理 ${file.name} 中...`;
+      exportBtn.disabled = true;
+
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        activeSource = source;
+
+        try {
+          await source.setData({ filename: file.name, content });
+          map.addSource(SOURCE_ID, source);
+          map.setExtent(source.getExtent());
+
+          const layer = source.getDataset()?.layers?.[0];
+          const featureCount = layer?.shapes?.length ?? 0;
+          const geomType = layer?.geometry_type ?? '未知';
+          status.textContent = `已加载 ${file.name} — ${featureCount} 个要素（${geomType}）`;
+          exportBtn.disabled = false;
+        } catch (err) {
+          console.error(err);
+          status.textContent = `处理失败: ${err.message || err}`;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    exportBtn.addEventListener('click', async () => {
+      if (!activeSource) return;
+
+      const value = formatSelect.value;
+      // "geoparquet-native" 是 UI 选项，对应 format=geoparquet + encoding=native
+      const format = value === 'geoparquet-native' ? 'geoparquet' : value;
+      const encoding = value === 'geoparquet-native' ? 'native' : undefined;
+
+      const extMap = {
+        geoparquet: '.parquet',
+        geoarrow: '.arrow',
+        geojson: '.geojson',
+        topojson: '.topojson',
+        shapefile: '.zip',
+      };
+      const filename = 'export' + (extMap[format] ?? '.' + format);
+
+      status.textContent = `正在导出为 ${filename}...`;
+      exportBtn.disabled = true;
+
+      try {
+        const blob = await activeSource.export({ format, encoding });
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+        status.textContent = `已导出 ${blob.size} 字节 → ${filename}`;
+      } catch (err) {
+        console.error(err);
+        status.textContent = `导出失败: ${err.message || err}`;
+      } finally {
+        exportBtn.disabled = false;
+      }
+    });
+
+    window.addEventListener('resize', () => map.resize());
+  </script>
+</body>
+
+</html>

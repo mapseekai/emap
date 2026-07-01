@@ -12,7 +12,9 @@ export class VertexEditControl implements Control {
   private _btn: HTMLButtonElement | null = null;
   private _opts: VertexEditControlOptions;
 
-  constructor(options: VertexEditControlOptions = {}) { this._opts = options; }
+  constructor(options: VertexEditControlOptions = {}) {
+    this._opts = options;
+  }
 
   onAdd(map: Emap): HTMLElement {
     this._map = map;
@@ -42,7 +44,12 @@ export class VertexEditControl implements Control {
   private _toggle(): void {
     if (!this._map) return;
     const ve = this._map.vertexEdit;
-    if (ve.isEnabled()) { ve.disable(); this._btn?.classList.remove('active'); }
-    else { ve.enable(); this._btn?.classList.add('active'); }
+    if (ve.isEnabled()) {
+      ve.disable();
+      this._btn?.classList.remove('active');
+    } else {
+      ve.enable();
+      this._btn?.classList.add('active');
+    }
   }
 }

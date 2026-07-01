@@ -33,26 +33,23 @@ export interface LayerSpecification {
   layout?: LayerLayout;
 }
 
+export const DEFAULT_LAYER_COLOR = '#1e88e5';
+
 export function resolveStrokeStyle(
   paint: LinePaint | FillPaint | undefined,
   lineScale: number,
 ): StrokeStyle {
   const p = paint || {};
   return {
-    color:
-      (p as LinePaint)['line-color'] ||
-      (p as FillPaint)['fill-color'] ||
-      '#333',
+    color: (p as LinePaint)['line-color'] || (p as FillPaint)['fill-color'] || DEFAULT_LAYER_COLOR,
     width: ((p as LinePaint)['line-width'] ?? 0.8) * lineScale,
   };
 }
 
-export function resolvePointStyle(
-  paint: CirclePaint | undefined,
-): PointStyle {
+export function resolvePointStyle(paint: CirclePaint | undefined): PointStyle {
   const p = paint || {};
   return {
-    color: p['circle-color'] || '#333',
+    color: p['circle-color'] || DEFAULT_LAYER_COLOR,
     radius: p['circle-radius'] ?? 4,
     fill: p['circle-fill'] !== false,
   };

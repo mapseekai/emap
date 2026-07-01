@@ -4,10 +4,17 @@ import { VertexEditControl } from './vertex-edit-control';
 
 function fakeMap() {
   let enabled = false;
-  const ve = { isEnabled: () => enabled, enable: vi.fn(() => { enabled = true; }),
-    disable: vi.fn(() => { enabled = false; }), setOptions: vi.fn() };
-  return { vertexEdit: ve,
-    getCanvasContainer: () => document.createElement('div') } as any;
+  const ve = {
+    isEnabled: () => enabled,
+    enable: vi.fn(() => {
+      enabled = true;
+    }),
+    disable: vi.fn(() => {
+      enabled = false;
+    }),
+    setOptions: vi.fn(),
+  };
+  return { vertexEdit: ve, getCanvasContainer: () => document.createElement('div') } as any;
 }
 
 describe('VertexEditControl (thin shell)', () => {

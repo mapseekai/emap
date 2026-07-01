@@ -10,6 +10,21 @@ function vp(): Viewport {
 }
 
 describe('Viewport camera-state primitives', () => {
+  it('creates a finite transform for a zero-area extent', () => {
+    const v = new Viewport();
+    v.updateSize(800, 600);
+    v.setExtent(new Bounds(5, 7, 5, 7));
+
+    const t = v.transform;
+    expect(Number.isFinite(t.mx)).toBe(true);
+    expect(Number.isFinite(t.my)).toBe(true);
+    expect(Number.isFinite(t.bx)).toBe(true);
+    expect(Number.isFinite(t.by)).toBe(true);
+    const projected = v.project(5, 7);
+    expect(projected[0]).toBeCloseTo(400);
+    expect(projected[1]).toBeCloseTo(300);
+  });
+
   it('getCameraState returns center (data coords) + positive scale', () => {
     const v = vp();
     const s = v.getCameraState();
@@ -37,7 +52,7 @@ describe('Viewport camera-state primitives', () => {
 });
 
 describe('Viewport arc filtering', () => {
-  it('passes all arcs near full extent without running per-arc checks', () => {
+  it('filters tiny arcs near full extent before they reach Canvas stroke', () => {
     const v = vp();
     let smallerCalls = 0;
     let bboxCalls = 0;
@@ -52,9 +67,24 @@ describe('Viewport arc filtering', () => {
       },
     });
 
-    expect(filter(0)).toBe(true);
-    expect(smallerCalls).toBe(0);
+    expect(filter(0)).toBe(false);
+    expect(smallerCalls).toBe(1);
     expect(bboxCalls).toBe(0);
+  });
+
+  it('still applies viewport bbox filtering near full extent', () => {
+    const v = vp();
+    let bboxCalls = 0;
+    const filter = v.getArcFilter({
+      arcIsSmaller: () => false,
+      arcIntersectsBBox: () => {
+        bboxCalls++;
+        return false;
+      },
+    });
+
+    expect(filter(0)).toBe(false);
+    expect(bboxCalls).toBe(1);
   });
 
   it('uses the 0.35 pixel path-length threshold once zoomed in', () => {

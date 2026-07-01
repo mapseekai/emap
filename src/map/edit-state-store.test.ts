@@ -101,6 +101,9 @@ describe('EditStateStore — transform mode', () => {
     expect(store.vertex).toBeNull();
     expect(store.draw).toBeNull();
     expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange.mock.calls[0][0]).toMatchObject({ modeChanged: true, current: { mode: 'transform' } });
+    expect(onChange.mock.calls[0][0]).toMatchObject({
+      modeChanged: true,
+      current: { mode: 'transform' },
+    });
   });
 });

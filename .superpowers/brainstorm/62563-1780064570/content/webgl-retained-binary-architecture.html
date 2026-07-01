@@ -1,0 +1,48 @@
+<h2>推荐架构：Retained Binary Chunk Pipeline</h2>
+<p class="subtitle">浏览/交互帧不做几何重建；数据变化时后台构建或局部失效 chunk。</p>
+
+<div class="mockup">
+  <div class="mockup-header">数据流</div>
+  <div class="mockup-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;align-items:stretch">
+      <div class="placeholder" style="min-height:110px">
+        <strong>Topology Source</strong><br>
+        ArcCollection<br>
+        shapes / layers<br>
+        edit revision
+      </div>
+      <div class="placeholder" style="min-height:110px">
+        <strong>Binary Snapshot</strong><br>
+        shared vertexData<br>
+        arc bbox index<br>
+        feature/chunk map
+      </div>
+      <div class="placeholder" style="min-height:110px">
+        <strong>WebGL Draw</strong><br>
+        retained buffers<br>
+        visible chunks only<br>
+        uniform-only nav
+      </div>
+    </div>
+    <div style="text-align:center;margin:18px 0;color:#64748b">↓ heavy work is asynchronous and chunk-scoped ↓</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+      <div class="placeholder">
+        <strong>Point Chunk</strong><br>
+        positions + ids
+      </div>
+      <div class="placeholder">
+        <strong>Line Chunk</strong><br>
+        PathLayer-style segment attributes
+      </div>
+      <div class="placeholder">
+        <strong>Polygon Chunk</strong><br>
+        SolidPolygonLayer-style positions + indices
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>关键约束</h3>
+  <p>ArcCollection 仍然是唯一拓扑真相；binary snapshot 只是渲染派生物。编辑 API 不改，编辑完成后通过受影响 arc/feature 找到 chunk 并失效。</p>
+</div>

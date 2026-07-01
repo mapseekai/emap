@@ -18,6 +18,14 @@ export type OpError =
   | { kind: 'not-found'; what: 'source' | 'layer' | 'mask' | 'divider' | 'field'; id: string }
   | { kind: 'validation'; field: string; reason: string }
   | { kind: 'expression-disabled'; operation: string }
+  | {
+      kind: 'duckdb';
+      operation: string;
+      duckDbKind: string;
+      reason: string;
+      field?: string;
+      cause?: unknown;
+    }
   | { kind: 'mapshaper'; cause: unknown; cmd?: string; operation?: string }
   | { kind: 'host-removed' };
 
@@ -26,9 +34,7 @@ export type OpError =
  * (most ops have nothing to return; some — like `checkGeometry` — carry
  * a report); `ok: false` carries the structured `error`.
  */
-export type OpResult<T = void> =
-  | { ok: true; value: T }
-  | { ok: false; error: OpError };
+export type OpResult<T = void> = { ok: true; value: T } | { ok: false; error: OpError };
 
 /** Singleton "successful, no payload" result. Cheap to return. */
 export const OK: OpResult<void> = Object.freeze({ ok: true, value: undefined });
@@ -43,10 +49,7 @@ export function okValue<T>(value: T): OpResult<T> {
 //    callers that branch on `result.error.kind` get full type narrowing.
 
 export const Err = Object.freeze({
-  notFound(
-    what: 'source' | 'layer' | 'mask' | 'divider' | 'field',
-    id: string,
-  ): OpResult<never> {
+  notFound(what: 'source' | 'layer' | 'mask' | 'divider' | 'field', id: string): OpResult<never> {
     return { ok: false, error: { kind: 'not-found', what, id } };
   },
   validation(field: string, reason: string): OpResult<never> {
@@ -54,6 +57,17 @@ export const Err = Object.freeze({
   },
   expressionDisabled(operation: string): OpResult<never> {
     return { ok: false, error: { kind: 'expression-disabled', operation } };
+  },
+  duckdb(
+    operation: string,
+    duckDbKind: string,
+    reason: string,
+    opts?: { field?: string; cause?: unknown },
+  ): OpResult<never> {
+    return {
+      ok: false,
+      error: { kind: 'duckdb', operation, duckDbKind, reason, ...(opts ?? {}) },
+    };
   },
   mapshaper(cause: unknown, opts?: { cmd?: string; operation?: string }): OpResult<never> {
     return { ok: false, error: { kind: 'mapshaper', cause, ...(opts ?? {}) } };

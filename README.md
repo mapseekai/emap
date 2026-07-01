@@ -151,6 +151,354 @@ Supported inputs:
 - GeoJSON and TopoJSON.
 - ZIP Shapefile archives containing `.shp`, `.dbf`, `.shx`, and optional `.prj`.
 - Mapshaper `.msx` snapshots via `map.loadSnapshot()`.
+- GeoParquet and GeoArrow, with the optional formats module (below).
+
+### GeoParquet / GeoArrow (optional module)
+
+`@zwishing/emap/formats` adds GeoParquet (`.parquet`) and GeoArrow
+(`.arrow` / `.arrows` / `.feather`) support as a separate bundle so the core
+stays small. Conversion is direct (coordinate buffers ↔ mapshaper arcs, no
+GeoJSON intermediate); importing the module registers the formats with
+`setData` / `export` as a side effect:
+
+```ts
+import '@zwishing/emap/formats';
+
+await source.setData({ filename: 'parcels.parquet', content: bytes });
+const blob = await source.export({ format: 'geoparquet' }); // WKB encoding default
+const arrow = await source.export({ format: 'geoarrow' }); // native encoding default
+```
+
+In-memory Arrow tables work without files — this is the duckdb-wasm bridge
+(query results with an `ST_AsWKB(geometry)` column convert directly):
+
+```ts
+import { fromArrowTable, toArrowTable, setArrowTable } from '@zwishing/emap/formats';
+
+setArrowTable(source, duckdbResultTable); // replace a source's dataset
+const table = toArrowTable(source.getDataset()!); // dataset → Arrow table
+```
+
+Notes:
+
+- GeoParquet uses [parquet-wasm](https://github.com/kylebarron/parquet-wasm)
+  (~1.2 MB wasm), loaded lazily on first use via dynamic `import()`. Bundlers
+  that emit wasm assets (Vite, webpack 5) need no configuration. Script-tag /
+  IIFE setups must initialize parquet-wasm themselves and inject it with
+  `setParquetWasm(module)`. GeoArrow needs no wasm at all.
+- GeoParquet export writes spec 1.1 `geo` metadata; geometry encoding is WKB
+  by default (DuckDB / GeoPandas / GDAL compatible), switchable with
+  `{ encoding: 'native' }`. Non-EPSG CRSs export without PROJJSON details.
+- Exports cover one layer per file (`{ layer }` option selects which).
+
+### DuckDB-Wasm Spatial Processing (opt mod)
+
+`@zwishing/emap/duckdb` adds an optional DuckDB-Wasm processing surface. It is
+kept out of the core and formats bundles; import it only where spatial
+processing is needed.
+
+```ts
+import {
+  areaDatasetWithDuckDb,
+  bufferDatasetWithDuckDb,
+  centroidDatasetWithDuckDb,
+  centroidXDatasetWithDuckDb,
+  createDuckDbRuntimeFromJsDelivr,
+  duckDbAttributeLayer,
+  duckDbBufferLayer,
+  duckDbGeoParquetQueryLayer,
+  duckDbGeometryLayer,
+  duckDbOverlayLayer,
+  duckDbRelationLayer,
+  differenceDatasetWithDuckDb,
+  envelopeDatasetWithDuckDb,
+  geometryTypeDatasetWithDuckDb,
+  distanceDatasetWithDuckDb,
+  intersectsAttributeDatasetWithDuckDb,
+  intersectsDatasetWithDuckDb,
+  intersectionDatasetWithDuckDb,
+  simplifyPreserveTopologyDatasetWithDuckDb,
+  setDuckDbRuntime,
+} from '@zwishing/emap/duckdb';
+```
+
+The package declares `@duckdb/duckdb-wasm` as an optional dependency. If your
+package manager does not install optional dependencies by default, install it
+next to `@zwishing/emap`.
+
+```bash
+npm install @duckdb/duckdb-wasm
+```
+
+Use an injected runtime when your app already owns DuckDB-Wasm lifecycle:
+
+```ts
+setDuckDbRuntime({
+  async ensureSpatial() {
+    const conn = await db.connect();
+    try {
+      await conn.query('INSTALL spatial; LOAD spatial;');
+    } finally {
+      await conn.close();
+    }
+  },
+  async connect() {
+    const conn = await db.connect();
+    return {
+      insertArrowTable: (table, opts) => conn.insertArrowTable(table, { ...opts, create: true }),
+      query: (sql) => conn.query(sql),
+      close: () => conn.close(),
+    };
+  },
+  async registerFileBuffer(name, buffer) {
+    await db.registerFileBuffer(name, buffer);
+  },
+  async dropFile(name) {
+    await db.dropFile?.(name);
+  },
+});
+```
+
+`registerFileBuffer` is required for GeoParquet byte queries. `dropFile` is
+optional cleanup and is called only when the injected runtime exposes it.
+
+Or create the browser runtime from DuckDB's jsDelivr bundles:
+
+```ts
+const runtime = await createDuckDbRuntimeFromJsDelivr();
+setDuckDbRuntime(runtime);
+```
+
+Run a dataset-level buffer and display the returned dataset however your app
+manages sources:
+
+```ts
+const buffered = await bufferDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  distance: 25,
+  outputLayer: 'parcels_buffer',
+});
+```
+
+Unary geometry-to-geometry helpers share the same DuckDB-Wasm path:
+
+```ts
+const centroids = await centroidDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  outputLayer: 'parcel_centroids',
+});
+
+const envelopes = await envelopeDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  outputLayer: 'parcel_envelopes',
+});
+
+const simplified = await simplifyPreserveTopologyDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  tolerance: 5,
+  outputLayer: 'parcels_simplified',
+});
+```
+
+Supported unary geometry helpers are centroid, envelope, convex hull, boundary,
+simplify, simplify-preserve-topology, and make-valid. Simplify tolerance uses
+dataset coordinate units and rejects geographic CRS by default; pass
+`failOnGeographicCrs: false` only when degree-based simplification is intentional.
+
+Geometry-to-attribute helpers preserve the input geometry and append scalar
+record columns:
+
+```ts
+const withArea = await areaDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  outputColumn: 'area_m2',
+});
+
+const withGeometryType = await geometryTypeDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  outputColumn: 'geom_type',
+});
+
+const withCentroidX = await centroidXDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  outputColumn: 'centroid_x',
+});
+```
+
+Supported attribute helpers are area, length, perimeter, geometry type, validity,
+empty/simple predicates, point x/y, and centroid x/y. Area, length, and
+perimeter use dataset coordinate units and reject geographic CRS by default.
+
+Relation helpers compare an input dataset against a mask dataset. Topological
+predicates can run on geographic CRS; distance and distanceWithin reject
+geographic CRS by default unless `failOnGeographicCrs: false` is passed.
+
+```ts
+const inFloodplain = await intersectsDatasetWithDuckDb(parcels, floodplain, {
+  inputLayer: 'parcels',
+  maskLayer: 'floodplain',
+  outputLayer: 'parcels_in_floodplain',
+});
+
+const withIntersectFlag = await intersectsAttributeDatasetWithDuckDb(
+  parcels,
+  floodplain,
+  {
+    inputLayer: 'parcels',
+    maskLayer: 'floodplain',
+    outputColumn: 'in_floodplain',
+  },
+);
+
+const withDistance = await distanceDatasetWithDuckDb(parcels, hospitals, {
+  inputLayer: 'parcels',
+  maskLayer: 'hospitals',
+  outputColumn: 'nearest_hospital_m',
+});
+```
+
+Overlay helpers create new input-derived geometries from a mask dataset:
+
+```ts
+const clipped = await intersectionDatasetWithDuckDb(parcels, floodplain, {
+  inputLayer: 'parcels',
+  maskLayer: 'floodplain',
+  outputLayer: 'parcels_clipped',
+});
+
+const erased = await differenceDatasetWithDuckDb(parcels, floodplain, {
+  outputLayer: 'parcels_erased',
+});
+```
+
+Mask geometries are unioned before overlay. Output keeps input attributes only;
+mask attributes are not copied. Output CRS metadata inherits from the input
+dataset, so input and mask datasets must already use the same CRS.
+
+#### Restricted SELECT queries
+
+For scalar attribute queries, `queryDatasetWithDuckDb` registers one logical
+table named `input` for the selected layer:
+
+```ts
+import { queryDatasetWithDuckDb } from '@zwishing/emap/duckdb';
+
+const filtered = await queryDatasetWithDuckDb(dataset, {
+  sql: 'SELECT name, population FROM input WHERE population > 100000 ORDER BY population DESC LIMIT 50',
+  outputLayer: 'large_places',
+});
+```
+
+The first batch supports scalar attribute projection, simple scalar `WHERE`
+comparisons joined by `AND`/`OR`, scalar `ORDER BY`, and integer `LIMIT`.
+Joins, multiple statements, mutating SQL, and calculated output geometry are
+rejected before DuckDB execution. `validateDuckDbSelectSql` is also exported for
+callers that need to preflight the same restricted SQL contract; it is
+intentionally conservative and evolves with this first-batch query surface.
+
+##### Query GeoParquet bytes with DuckDB
+
+`@zwishing/emap/duckdb` can run the same restricted `SELECT ... FROM input ...`
+contract against GeoParquet bytes. The helper registers the bytes with
+DuckDB-Wasm, exposes them as the logical `input` table, and converts the
+geometry-bearing Arrow result to a `MapshaperDataset`.
+
+```ts
+import { queryGeoParquetWithDuckDb } from '@zwishing/emap/duckdb';
+
+const result = await queryGeoParquetWithDuckDb(bytes, {
+  layerName: 'active_points',
+  sql: 'SELECT geometry, name FROM input WHERE active = true',
+});
+```
+
+The first batch requires the projection to include a detectable geometry column,
+for example `SELECT geometry, name FROM input`. Direct `read_parquet(...)` calls,
+joins, mutations, and multiple statements are rejected by the validator.
+
+For map-like integrations, use the adapter form with a minimal source context.
+`duckDbGeoParquetQueryLayer` reads `ctx.getSource(src).getBytes()`; the
+dataset-backed adapters read `getDataset()`.
+
+```ts
+await duckDbBufferLayer(ctx, {
+  src: 'parcels',
+  layer: 'parcels',
+  distance: 25,
+  output: { sourceId: 'parcels-buffer' },
+});
+
+await duckDbGeometryLayer(ctx, {
+  src: 'parcels',
+  operation: 'centroid',
+  layer: 'parcels',
+  output: { sourceId: 'parcel-centroids' },
+});
+
+await duckDbAttributeLayer(ctx, {
+  src: 'parcels',
+  operation: 'area',
+  layer: 'parcels',
+  outputColumn: 'area_m2',
+  output: { sourceId: 'parcels-with-area' },
+});
+
+await duckDbRelationLayer(ctx, {
+  src: 'parcels',
+  mask: 'floodplain',
+  mode: 'filter',
+  operation: 'intersects',
+  inputLayer: 'parcels',
+  maskLayer: 'floodplain',
+  output: { sourceId: 'parcels-in-floodplain' },
+});
+
+await duckDbOverlayLayer(ctx, {
+  src: 'parcels',
+  mask: 'floodplain',
+  operation: 'intersection',
+  inputLayer: 'parcels',
+  maskLayer: 'floodplain',
+  outputLayer: 'parcels_clipped',
+  output: { sourceId: 'parcels-clipped' },
+});
+
+await duckDbGeoParquetQueryLayer(ctx, {
+  src: 'uploaded-parcels',
+  sql: 'SELECT geometry, name FROM input WHERE active = true',
+  output: { sourceId: 'active-parcels' },
+});
+```
+
+Buffer distance uses the dataset coordinate units. `EPSG:4326` and `OGC:CRS84`
+are rejected by default; reproject to a projected CRS before buffering, or pass
+`failOnGeographicCrs: false` only when degree-based buffering is intentional.
+
+#### Security and deployment
+
+The DuckDB surface is **injection-first** by design: `setDuckDbRuntime(...)` lets
+your app own the DuckDB-Wasm lifecycle, and every helper accepts an explicit
+runtime argument. `createDuckDbRuntimeFromJsDelivr()` is a convenience loader for
+demos and prototypes — **prefer an injected, self-hosted runtime in production**.
+
+- **Remote code / supply chain.** `createDuckDbRuntimeFromJsDelivr()` fetches and
+  executes the DuckDB-Wasm worker and `.wasm` from the jsDelivr CDN at runtime,
+  and `INSTALL spatial; LOAD spatial;` downloads the spatial extension from
+  DuckDB's extension repository. For production, self-host the bundles, pin
+  versions / add Subresource Integrity, and point `customExtensionRepository` at
+  a repository you control.
+- **Content-Security-Policy.** The CDN loader needs `script-src` to allow the
+  bundle origin, `worker-src blob:` (the worker is created from a `Blob`), and a
+  WASM-capable policy (`wasm-unsafe-eval` on modern browsers). Self-hosted
+  bundles can use a strict same-origin CSP instead.
+- **Cross-origin isolation.** The multithreaded bundle uses `SharedArrayBuffer`,
+  which requires the page to be cross-origin isolated via `COOP`
+  (`same-origin`) + `COEP` (`require-corp`) response headers. Without these,
+  DuckDB-Wasm silently falls back to the slower single-threaded bundle.
+- **SQL safety.** Helpers parameterize all user-supplied inputs: identifiers are
+  quoted, numeric arguments are validated, and spatial function names are
+  restricted to the `ST_*` namespace. Do not bypass the named helpers by feeding
+  untrusted strings into the low-level `process*`/SQL-builder exports.
 
 ## Layers and Rendering
 
@@ -623,6 +971,9 @@ test/examples/               # Manual HTML examples
 
 ## Development
 
+Repository development and tests require Node.js `^20.19.0` or `>=22.12.0`,
+matching the Vite/Vitest toolchain used by the test runner.
+
 Install dependencies (use `pnpm` locally, or `cmd /c npm install` on Windows
 to avoid the PowerShell shim):
 
@@ -635,6 +986,8 @@ Common tasks (prepend `cmd /c` on Windows):
 ```bash
 npm run dev           # rollup watch + dev server for test/examples/*.html
 npm run dev-build     # one-off dev build (sourcemaps, no minify)
+npm run format:check  # Biome formatting check
+npm run format        # Biome formatting write
 npm run typecheck     # tsc --noEmit
 npm run test:run      # vitest run
 npm run build         # production build → dist/
@@ -665,6 +1018,7 @@ Before publishing a version:
 
 ```bash
 cmd /c npm ci
+cmd /c npm run format:check
 cmd /c npm run typecheck
 cmd /c npm run test:run
 cmd /c npm run build

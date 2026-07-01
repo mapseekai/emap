@@ -18,10 +18,7 @@ describe('FieldAddCommand', () => {
   });
 
   it('skips records that already had the key', () => {
-    const records = [
-      { name: 'A', pop: 100 },
-      { name: 'B' },
-    ];
+    const records = [{ name: 'A', pop: 100 }, { name: 'B' }];
     const layer = makeLayer(records);
     const cmd = new FieldAddCommand({ layer, field: 'pop', defaultValue: 0 });
     cmd.do();
@@ -32,7 +29,7 @@ describe('FieldAddCommand', () => {
   it('undo only removes the keys this command added', () => {
     const records = [
       { name: 'A', pop: 100 }, // pre-existing
-      { name: 'B' },           // newly added
+      { name: 'B' }, // newly added
     ];
     const layer = makeLayer(records);
     const cmd = new FieldAddCommand({ layer, field: 'pop' });

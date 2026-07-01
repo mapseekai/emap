@@ -3,13 +3,25 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { Emap } from './map';
 
 beforeAll(() => {
-  HTMLCanvasElement.prototype.getContext = () => ({
-    scale: () => {}, clearRect: () => {}, fillRect: () => {}, strokeRect: () => {},
-    beginPath: () => {}, moveTo: () => {}, lineTo: () => {}, stroke: () => {},
-    fill: () => {}, arc: () => {}, save: () => {}, restore: () => {},
-    translate: () => {}, setTransform: () => {}, drawImage: () => {},
-    measureText: () => ({ width: 0 }),
-  } as any);
+  HTMLCanvasElement.prototype.getContext = () =>
+    ({
+      scale: () => {},
+      clearRect: () => {},
+      fillRect: () => {},
+      strokeRect: () => {},
+      beginPath: () => {},
+      moveTo: () => {},
+      lineTo: () => {},
+      stroke: () => {},
+      fill: () => {},
+      arc: () => {},
+      save: () => {},
+      restore: () => {},
+      translate: () => {},
+      setTransform: () => {},
+      drawImage: () => {},
+      measureText: () => ({ width: 0 }),
+    }) as any;
 });
 
 function container(): HTMLElement {
@@ -47,13 +59,27 @@ describe('Emap camera facade (DX P9)', () => {
     const map = new Emap({ container: container() });
     const stop = vi.spyOn(map, 'stop');
     const canvas = map.getCanvasContainer();
-    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+    canvas.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 800,
+      height: 600,
+      right: 800,
+      bottom: 600,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    });
     // Start a real long animation, then prove the drag actually terminates it
     // (a dangling moveend would never fire if stop() were a no-op here).
     let ended = false;
-    map.on('moveend', () => { ended = true; });
+    map.on('moveend', () => {
+      ended = true;
+    });
     map.easeTo({ center: [500, 500], scale: 4, duration: 5000 });
-    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 100, clientY: 100, button: 0 }));
+    canvas.dispatchEvent(
+      new PointerEvent('pointerdown', { clientX: 100, clientY: 100, button: 0 }),
+    );
     expect(stop).toHaveBeenCalled();
     expect(ended).toBe(true);
   });

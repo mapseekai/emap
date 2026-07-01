@@ -213,10 +213,16 @@ export class MapshaperWorkerPool {
         msg.commands = cmdOrCommands;
       }
       if (inputFiles) msg.inputFiles = inputFiles;
-      if (transferList && transferList.length > 0) {
-        worker.postMessage(msg, transferList);
-      } else {
-        worker.postMessage(msg);
+      try {
+        if (transferList && transferList.length > 0) {
+          worker.postMessage(msg, transferList);
+        } else {
+          worker.postMessage(msg);
+        }
+      } catch (err) {
+        this._pending.delete(id);
+        slot.pendingCount = Math.max(0, slot.pendingCount - 1);
+        reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
   }
@@ -278,9 +284,9 @@ export class MapshaperWorkerPool {
       const slot = this._slots[idx];
       const spawned = slot.worker !== null;
       const better =
-        slot.pendingCount < bestCount
+        slot.pendingCount < bestCount ||
         // Same load — prefer spawned over un-spawned to avoid spawn cost
-        || (slot.pendingCount === bestCount && spawned && !bestSpawned);
+        (slot.pendingCount === bestCount && spawned && !bestSpawned);
       if (better) {
         bestIndex = idx;
         bestCount = slot.pendingCount;

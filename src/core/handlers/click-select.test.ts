@@ -5,9 +5,11 @@ import type { NormalizedPointerEvent } from '../handler';
 
 function clickEv(x: number, y: number, shift = false, alt = false): NormalizedPointerEvent {
   return {
-    kind: 'click', point: { x, y },
+    kind: 'click',
+    point: { x, y },
     modifiers: { shift, ctrl: false, alt, meta: false },
-    button: 0, originalEvent: new MouseEvent('click'),
+    button: 0,
+    originalEvent: new MouseEvent('click'),
   };
 }
 
@@ -27,12 +29,17 @@ describe('ClickSelectHandler', () => {
   });
 
   it('hit click → select(refs,{mode:replace}) and consumes', () => {
-    const map = fakeMap([{ source: 's', layer: 'l', id: 3 }, { source: 's', layer: 'l', id: 3 }]);
+    const map = fakeMap([
+      { source: 's', layer: 'l', id: 3 },
+      { source: 's', layer: 'l', id: 3 },
+    ]);
     const h = new ClickSelectHandler(map as any);
     h.enable();
     expect(h.handlePointer(clickEv(10, 20))).toBe('consumed');
     expect(map.queryFeatures).toHaveBeenCalledWith([10, 20], undefined);
-    expect(map.select).toHaveBeenCalledWith([{ source: 's', layer: 'l', id: 3 }], { mode: 'replace' });
+    expect(map.select).toHaveBeenCalledWith([{ source: 's', layer: 'l', id: 3 }], {
+      mode: 'replace',
+    });
   });
 
   it('empty click with replace-mode clears selection', () => {

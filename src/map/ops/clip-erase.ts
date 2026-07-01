@@ -38,10 +38,7 @@ async function _runClipErase(
   const hasMask = typeof opts.mask === 'string' && opts.mask.length > 0;
   const hasBbox = Array.isArray(opts.bbox);
   if (hasMask === hasBbox) {
-    return Err.validation(
-      hasMask ? 'mask' : 'bbox',
-      'must supply exactly one of `mask` or `bbox`',
-    );
+    return Err.validation(hasMask ? 'mask' : 'bbox', 'must supply exactly one of `mask` or `bbox`');
   }
   if (hasMask) {
     if (!resolveLayerInList(dataset.layers, opts.mask!)) return Err.notFound('mask', opts.mask!);
@@ -55,9 +52,7 @@ async function _runClipErase(
     }
   }
 
-  const opOpts: Record<string, unknown> = hasMask
-    ? { source: opts.mask! }
-    : { bbox: opts.bbox! };
+  const opOpts: Record<string, unknown> = hasMask ? { source: opts.mask! } : { bbox: opts.bbox! };
   if (opts.cleanup) opOpts.cleanup = true;
   if (opts.removeSlivers) opOpts.remove_slivers = true;
 

@@ -1,0 +1,756 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - DuckDB 空间函数</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    #header {
+      padding: 10px;
+      background: #233142;
+      color: white;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    #header label {
+      font-size: 13px;
+    }
+
+    #header input,
+    #header select {
+      font-size: 13px;
+    }
+
+    #header button {
+      padding: 5px 12px;
+      background: #16817a;
+      color: white;
+      border: 0;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    #header button:disabled {
+      background: #7f8c8d;
+      cursor: not-allowed;
+    }
+
+    #map {
+      flex: 1;
+      background: #ffffff;
+      position: relative;
+    }
+
+    #attribute-panel {
+      position: absolute;
+      right: 12px;
+      bottom: 44px;
+      width: min(360px, calc(100vw - 24px));
+      max-height: min(360px, calc(100vh - 120px));
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+      font: 12px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      z-index: 2;
+    }
+    #attribute-panel strong {
+      font-size: 13px;
+    }
+    #picked-attributes {
+      margin: 0;
+      max-height: 300px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #111827;
+    }
+    #status {
+      font-size: 12px;
+      opacity: 0.9;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <label>
+      文件:
+      <input id="file" type="file" accept=".geojson,.json,.topojson,.zip" />
+    </label>
+    <label>
+      图层:
+      <select id="target" disabled></select>
+    </label>
+    <label>
+      操作:
+      <select id="operation">
+        <option value="centroid">Centroid</option>
+        <option value="envelope">Envelope</option>
+        <option value="convexHull">Convex Hull</option>
+        <option value="boundary">Boundary</option>
+      <option value="simplify">Simplify</option>
+      <option value="simplifyPreserveTopology">Simplify Preserve Topology</option>
+      <option value="makeValid">Make Valid</option>
+      <option value="area">Area Attribute</option>
+      <option value="length">Length Attribute</option>
+      <option value="perimeter">Perimeter Attribute</option>
+      <option value="geometryType">Geometry Type Attribute</option>
+      <option value="isValid">Is Valid Attribute</option>
+      <option value="isEmpty">Is Empty Attribute</option>
+      <option value="isSimple">Is Simple Attribute</option>
+          <option value="x">X Attribute</option>
+          <option value="y">Y Attribute</option>
+          <option value="centroidX">Centroid X Attribute</option>
+          <option value="centroidY">Centroid Y Attribute</option>
+          <option value="intersects">Intersects</option>
+          <option value="contains">Contains</option>
+          <option value="within">Within</option>
+          <option value="touches">Touches</option>
+          <option value="disjoint">Disjoint</option>
+          <option value="distance">Distance</option>
+          <option value="distanceWithin">Distance Within</option>
+        </select>
+      </label>
+      <label id="relation-mode-label" style="display: none">
+        关系模式:
+        <select id="relation-mode">
+          <option value="filter">Filter</option>
+          <option value="attribute">Attribute</option>
+        </select>
+      </label>
+      <label id="mask-layer-label" style="display: none">
+        Mask:
+        <select id="mask-layer"></select>
+      </label>
+      <label id="distance-label" style="display: none">
+        距离:
+        <input id="distance" type="number" value="0" min="0" step="1" style="width: 72px" />
+      </label>
+      <label id="tolerance-label">
+        容差:
+        <input id="tolerance" type="number" value="10" min="0" step="1" style="width: 72px" />
+      </label>
+    <label>
+      CRS:
+      <input id="crs" type="text" value="EPSG:3857" style="width: 92px" />
+    </label>
+    <label>
+      <input id="allow-geographic" type="checkbox" />
+      允许经纬度简化
+    </label>
+    <button id="run" disabled>运行 DuckDB</button>
+    <span id="status">加载文件后选择空间函数。</span>
+  </div>
+  <div id="map"></div>
+  <aside id="attribute-panel" aria-label="拾取属性">
+    <strong>点击拾取属性</strong>
+    <pre id="picked-attributes">(点击地图上的要素)</pre>
+  </aside>
+
+  <link rel="stylesheet" href="../../src/ui/controls.css" />
+  <script src="../../dist/mapshaper-vendor.js"></script>
+  <script src="../../dist/emap-dev.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+        "@duckdb/duckdb-wasm": "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/dist/duckdb-browser.mjs",
+          "apache-arrow": "https://unpkg.com/apache-arrow@21.1.0/Arrow.dom.mjs",
+          "flatbuffers": "https://cdn.jsdelivr.net/npm/flatbuffers@25.9.23/mjs/flatbuffers.js",
+          "tslib": "https://cdn.jsdelivr.net/npm/tslib@2.8.1/tslib.es6.mjs"
+        }
+      }
+    </script>
+  <script type="module">
+    import {
+      areaDatasetWithDuckDb,
+      closeDuckDbRuntime,
+        boundaryDatasetWithDuckDb,
+        centroidDatasetWithDuckDb,
+        centroidXDatasetWithDuckDb,
+        centroidYDatasetWithDuckDb,
+      convexHullDatasetWithDuckDb,
+      createDuckDbRuntimeFromJsDelivr,
+      envelopeDatasetWithDuckDb,
+      geometryTypeDatasetWithDuckDb,
+      isEmptyDatasetWithDuckDb,
+      isSimpleDatasetWithDuckDb,
+      isValidDatasetWithDuckDb,
+        lengthDatasetWithDuckDb,
+      makeValidDatasetWithDuckDb,
+      perimeterDatasetWithDuckDb,
+      runRelationOperation as runDuckDbRelationOperation,
+      setDuckDbRuntime,
+      simplifyDatasetWithDuckDb,
+      simplifyPreserveTopologyDatasetWithDuckDb,
+      xDatasetWithDuckDb,
+      yDatasetWithDuckDb,
+    } from '../../dist/emap-duckdb.mjs';
+
+    const { Emap, TopologySource, NavigationControl, StatusControl } = emap;
+
+      const SOURCE_ID = 'duckdb-spatial-input';
+      const OUTPUT_ID = 'duckdb-spatial-output';
+      const MASK_ID = 'duckdb-spatial-mask';
+      const RELATION_OPERATIONS = new Set([
+        'intersects',
+        'contains',
+        'within',
+        'touches',
+        'disjoint',
+        'distance',
+        'distanceWithin',
+      ]);
+    const OPERATION_LABELS = {
+      centroid: 'Centroid',
+      envelope: 'Envelope',
+      convexHull: 'Convex Hull',
+      boundary: 'Boundary',
+      simplify: 'Simplify',
+      simplifyPreserveTopology: 'Simplify Preserve Topology',
+      makeValid: 'Make Valid',
+      area: 'Area Attribute',
+      length: 'Length Attribute',
+      perimeter: 'Perimeter Attribute',
+      geometryType: 'Geometry Type Attribute',
+      isValid: 'Is Valid Attribute',
+      isEmpty: 'Is Empty Attribute',
+      isSimple: 'Is Simple Attribute',
+        x: 'X Attribute',
+        y: 'Y Attribute',
+        centroidX: 'Centroid X Attribute',
+        centroidY: 'Centroid Y Attribute',
+        intersects: 'Intersects',
+        contains: 'Contains',
+        within: 'Within',
+        touches: 'Touches',
+        disjoint: 'Disjoint',
+        distance: 'Distance',
+        distanceWithin: 'Distance Within',
+      };
+
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new StatusControl({ alignment: 'right', showEPSG: true }), 'bottom-right');
+
+    const fileInput = document.getElementById('file');
+      const targetSelect = document.getElementById('target');
+      const operationSelect = document.getElementById('operation');
+      const relationModeSelect = document.getElementById('relation-mode');
+      const relationModeLabel = document.getElementById('relation-mode-label');
+      const maskLayerSelect = document.getElementById('mask-layer');
+      const maskLayerLabel = document.getElementById('mask-layer-label');
+      const distanceInput = document.getElementById('distance');
+      const distanceLabel = document.getElementById('distance-label');
+      const toleranceInput = document.getElementById('tolerance');
+      const toleranceLabel = document.getElementById('tolerance-label');
+    const crsInput = document.getElementById('crs');
+    const allowGeographicInput = document.getElementById('allow-geographic');
+    const runBtn = document.getElementById('run');
+    const status = document.getElementById('status');
+    const pickedAttributes = document.getElementById('picked-attributes');
+    const mapContainer = map.getCanvasContainer();
+
+    let inputDataset;
+    let outputDataset;
+    let runtimePromise;
+    let layerPickerEntries = [];
+
+    function getLayerId(layer, index) {
+      return String(layer?.name || layer?.id || `layer-${index}`);
+    }
+
+    function removeSourceWithLayers(id) {
+      for (const layer of map.getLayers().filter((layer) => layer.source === id)) {
+        map.removeLayer(layer.id);
+      }
+      if (map.getSource(id)) map.removeSource(id);
+    }
+
+    function addDisplayLayers(sourceId, source, prefix, colors) {
+      const layers = source.getLayers();
+      for (let i = 0; i < layers.length; i += 1) {
+        const layer = layers[i];
+        const sourceLayer = getLayerId(layer, i);
+        const baseId = `${prefix}-${i}`;
+
+        if (layer?.geometry_type === 'polygon') {
+          map.addLayer({
+            id: `${baseId}-fill`,
+            source: sourceId,
+            'source-layer': sourceLayer,
+            type: 'fill',
+            paint: {
+              'fill-color': colors.fill,
+              'fill-opacity': colors.fillOpacity,
+            },
+          });
+          map.addLayer({
+            id: `${baseId}-line`,
+            source: sourceId,
+            'source-layer': sourceLayer,
+            type: 'line',
+            paint: {
+              'line-color': colors.line,
+              'line-width': colors.lineWidth,
+            },
+          });
+        } else if (layer?.geometry_type === 'polyline') {
+          map.addLayer({
+            id: `${baseId}-line`,
+            source: sourceId,
+            'source-layer': sourceLayer,
+            type: 'line',
+            paint: {
+              'line-color': colors.line,
+              'line-width': colors.lineWidth,
+            },
+          });
+        } else if (layer?.geometry_type === 'point') {
+          map.addLayer({
+            id: `${baseId}-point`,
+            source: sourceId,
+            'source-layer': sourceLayer,
+            type: 'circle',
+            paint: {
+              'circle-radius': colors.pointRadius,
+              'circle-color': colors.line,
+              'circle-stroke-color': '#ffffff',
+              'circle-stroke-width': 1,
+            },
+          });
+        }
+      }
+    }
+
+    function displayLayerIds(prefix, layer, index) {
+      const baseId = `${prefix}-${index}`;
+      if (layer?.geometry_type === 'polygon') return [`${baseId}-fill`, `${baseId}-line`];
+      if (layer?.geometry_type === 'polyline') return [`${baseId}-line`];
+      if (layer?.geometry_type === 'point') return [`${baseId}-point`];
+      return [];
+    }
+
+    function appendLayerPickerOptions(source, { sourceId, prefix, labelPrefix = '' }) {
+      source.getLayers().forEach((layer, index) => {
+        const value = `${sourceId}:${index}`;
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = `${labelPrefix}${getLayerId(layer, index)}`;
+        targetSelect.appendChild(option);
+        layerPickerEntries.push({
+          value,
+          sourceId,
+          layerIndex: index,
+          layerIds: displayLayerIds(prefix, layer, index),
+        });
+      });
+    }
+
+    function populateLayerPicker(source, { sourceId, prefix }) {
+      targetSelect.innerHTML = '';
+      layerPickerEntries = [];
+      appendLayerPickerOptions(source, { sourceId, prefix });
+      targetSelect.disabled = layerPickerEntries.length === 0;
+      if (layerPickerEntries.length > 0) {
+        targetSelect.value = layerPickerEntries[0].value;
+        setCurrentLayerVisibility(targetSelect.value);
+      }
+    }
+
+      function selectedLayerEntry() {
+        return layerPickerEntries.find((entry) => entry.value === targetSelect.value) ?? null;
+      }
+
+      function populateMaskLayerPicker() {
+        const currentValue = maskLayerSelect.value;
+        maskLayerSelect.innerHTML = '';
+        layerPickerEntries.forEach((entry) => {
+          const option = document.createElement('option');
+          const targetOption = Array.from(targetSelect.options).find(
+            (item) => item.value === entry.value,
+          );
+          option.value = entry.value;
+          option.textContent = targetOption?.textContent ?? entry.value;
+          maskLayerSelect.appendChild(option);
+        });
+
+        if (layerPickerEntries.some((entry) => entry.value === currentValue)) {
+          maskLayerSelect.value = currentValue;
+        } else if (layerPickerEntries.length > 0) {
+          maskLayerSelect.value = layerPickerEntries[0].value;
+        }
+
+        maskLayerSelect.disabled = layerPickerEntries.length === 0;
+      }
+
+      function selectedMaskLayerEntry() {
+        return layerPickerEntries.find((entry) => entry.value === maskLayerSelect.value) ?? null;
+      }
+
+      function datasetForLayerEntry(entry) {
+        return entry?.sourceId === OUTPUT_ID ? outputDataset : inputDataset;
+      }
+
+      function selectedOperationDataset() {
+        const entry = selectedLayerEntry();
+        if (!entry) return null;
+        return datasetForLayerEntry(entry);
+      }
+
+    function setCurrentLayerVisibility(selectedValue) {
+      layerPickerEntries.forEach(({ value, layerIds }) => {
+        const visible = value === selectedValue;
+        layerIds.forEach((layerId) => {
+          if (map.getLayer(layerId)) {
+            map.setLayerVisibility(layerId, visible ? 'visible' : 'none');
+          }
+        });
+      });
+      pickedAttributes.textContent = '(点击地图上的要素)';
+      map.clearHighlightedFeatures();
+    }
+
+    function applyInputCrs() {
+      if (!inputDataset) return;
+      const crs = crsInput.value.trim();
+      inputDataset.info = {
+        ...inputDataset.info,
+        crs_string: crs || undefined,
+      };
+    }
+
+    async function ensureDuckDbRuntime() {
+      runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
+        setDuckDbRuntime(runtime);
+        return runtime;
+      });
+      return runtimePromise;
+    }
+
+      function operationNeedsTolerance(operation) {
+        return operation === 'simplify' || operation === 'simplifyPreserveTopology';
+      }
+
+      function operationIsRelation(operation) {
+        return RELATION_OPERATIONS.has(operation);
+      }
+
+      function operationNeedsDistance(operation) {
+        return operation === 'distance' || operation === 'distanceWithin';
+      }
+
+      function updateOperationControls() {
+        const operation = operationSelect.value;
+        const needsTolerance = operationNeedsTolerance(operation);
+        const isRelation = operationIsRelation(operation);
+        const needsDistance = operationNeedsDistance(operationSelect.value);
+        toleranceLabel.style.display = needsTolerance ? 'inline-flex' : 'none';
+        toleranceInput.disabled = !needsTolerance;
+        allowGeographicInput.disabled = !needsTolerance;
+        relationModeLabel.style.display = isRelation ? 'inline-flex' : 'none';
+        maskLayerLabel.style.display = isRelation ? 'inline-flex' : 'none';
+        distanceLabel.style.display = needsDistance ? 'inline-flex' : 'none';
+        relationModeSelect.disabled = !isRelation || operation === 'distance';
+        maskLayerSelect.disabled = !isRelation || layerPickerEntries.length === 0;
+        distanceInput.disabled = !needsDistance;
+        if (operation === 'distance') relationModeSelect.value = 'attribute';
+      }
+
+    function renderPickedAttributes(features) {
+      if (!features.length) {
+        pickedAttributes.textContent = '(未命中要素)';
+        map.clearHighlightedFeatures();
+        return;
+      }
+
+      map.clearHighlightedFeatures();
+      map.setHighlightedFeatures(features, {
+        color: '#dc2626',
+        width: 3,
+        radius: 7,
+        fill: true,
+      });
+      pickedAttributes.textContent =
+        `命中 ${features.length} 个要素\n\n` + JSON.stringify(features[0].properties, null, 2);
+    }
+
+      function makeOperationOptions() {
+        const operation = operationSelect.value;
+        const entry = selectedLayerEntry();
+        const dataset = selectedOperationDataset();
+        if (!entry || !dataset) throw new Error('请选择可处理的图层。');
+      const opts = {
+        layer: entry.layerIndex,
+        outputLayer: `${getLayerId(dataset.layers[entry.layerIndex], entry.layerIndex)}_${operation}`,
+      };
+
+      if (!operationNeedsTolerance(operation)) return opts;
+
+      const tolerance = Number(toleranceInput.value);
+      if (!Number.isFinite(tolerance) || tolerance < 0) {
+        throw new Error('请输入大于等于 0 的简化容差。');
+      }
+
+      return {
+        ...opts,
+        tolerance,
+          failOnGeographicCrs: !allowGeographicInput.checked,
+        };
+      }
+
+      function createMaskSourceFromEntry(entry) {
+        const dataset = datasetForLayerEntry(entry);
+        const layer = dataset?.layers?.[entry?.layerIndex];
+        if (!entry || !dataset || !layer) throw new Error('请选择 Mask 图层。');
+        const maskDataset = {
+          ...dataset,
+          layers: [layer],
+        };
+        const maskSource = new TopologySource(MASK_ID);
+        maskSource.setDataset(maskDataset);
+        return maskSource;
+      }
+
+      function makeRelationOptions() {
+        const operation = operationSelect.value;
+        const inputEntry = selectedLayerEntry();
+        const inputDataset = selectedOperationDataset();
+        const maskEntry = selectedMaskLayerEntry();
+        const maskSource = createMaskSourceFromEntry(maskEntry);
+        const maskDataset = maskSource.getDataset();
+        if (!inputEntry || !inputDataset || !maskDataset) throw new Error('请选择可处理的图层。');
+
+        const opts = {
+          layer: inputEntry.layerIndex,
+          maskLayer: 0,
+          outputLayer: `${getLayerId(inputDataset.layers[inputEntry.layerIndex], inputEntry.layerIndex)}_${operation}`,
+          failOnGeographicCrs: !allowGeographicInput.checked,
+        };
+
+        if (!operationNeedsDistance(operation)) return { inputDataset, maskDataset, opts };
+
+        const distance = Number(distanceInput.value);
+        if (!Number.isFinite(distance) || distance < 0) {
+          throw new Error('请输入大于等于 0 的关系距离。');
+        }
+
+        return {
+          inputDataset,
+          maskDataset,
+          opts: {
+            ...opts,
+            distance,
+          },
+        };
+      }
+
+      async function runOperation(dataset, operation, opts, runtime) {
+        switch (operation) {
+        case 'centroid':
+          return centroidDatasetWithDuckDb(dataset, opts, runtime);
+        case 'envelope':
+          return envelopeDatasetWithDuckDb(dataset, opts, runtime);
+        case 'convexHull':
+          return convexHullDatasetWithDuckDb(dataset, opts, runtime);
+        case 'boundary':
+          return boundaryDatasetWithDuckDb(dataset, opts, runtime);
+        case 'simplify':
+          return simplifyDatasetWithDuckDb(dataset, opts, runtime);
+        case 'simplifyPreserveTopology':
+          return simplifyPreserveTopologyDatasetWithDuckDb(dataset, opts, runtime);
+        case 'makeValid':
+          return makeValidDatasetWithDuckDb(dataset, opts, runtime);
+        case 'area':
+          return areaDatasetWithDuckDb(dataset, opts, runtime);
+        case 'length':
+          return lengthDatasetWithDuckDb(dataset, opts, runtime);
+        case 'perimeter':
+          return perimeterDatasetWithDuckDb(dataset, opts, runtime);
+        case 'geometryType':
+          return geometryTypeDatasetWithDuckDb(dataset, opts, runtime);
+        case 'isValid':
+          return isValidDatasetWithDuckDb(dataset, opts, runtime);
+        case 'isEmpty':
+          return isEmptyDatasetWithDuckDb(dataset, opts, runtime);
+        case 'isSimple':
+          return isSimpleDatasetWithDuckDb(dataset, opts, runtime);
+      case 'x':
+        return xDatasetWithDuckDb(dataset, opts, runtime);
+      case 'y':
+        return yDatasetWithDuckDb(dataset, opts, runtime);
+      case 'centroidX':
+        return centroidXDatasetWithDuckDb(dataset, opts, runtime);
+      case 'centroidY':
+        return centroidYDatasetWithDuckDb(dataset, opts, runtime);
+          default:
+            throw new Error(`未知空间函数: ${operation}`);
+        }
+      }
+
+      async function runRelationOperation(inputDataset, maskDataset, operation, mode, opts, runtime) {
+      return runDuckDbRelationOperation(inputDataset, maskDataset, {
+        ...opts,
+        operation,
+        mode,
+        runtime,
+      });
+    }
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+
+    runBtn.disabled = true;
+    targetSelect.disabled = true;
+    status.textContent = `正在加载 ${file.name}...`;
+    pickedAttributes.textContent = '(点击地图上的要素)';
+    map.clearHighlightedFeatures();
+
+      try {
+        const source = new TopologySource(SOURCE_ID);
+        const content = new Uint8Array(await file.arrayBuffer());
+        removeSourceWithLayers(OUTPUT_ID);
+        outputDataset = undefined;
+        removeSourceWithLayers(SOURCE_ID);
+
+        await source.setData({ filename: file.name, content });
+        inputDataset = source.getDataset();
+        if (!inputDataset) throw new Error('文件未生成可用 dataset');
+
+        applyInputCrs();
+        map.addSource(SOURCE_ID, source);
+        addDisplayLayers(SOURCE_ID, source, 'duckdb-spatial-input', {
+          fill: '#dbeafe',
+          fillOpacity: 0.45,
+          line: '#1d4ed8',
+          lineWidth: 1.5,
+          pointRadius: 4,
+        });
+          populateLayerPicker(source, { sourceId: SOURCE_ID, prefix: 'duckdb-spatial-input' });
+          populateMaskLayerPicker();
+          updateOperationControls();
+          map.setExtent(source.getExtent());
+
+        const featureCount = source
+          .getLayers()
+          .reduce((total, layer) => total + (layer?.shapes?.length ?? 0), 0);
+        status.textContent = `已加载 ${file.name}，${source.getLayers().length} 个图层，${featureCount} 个要素。`;
+      } catch (err) {
+        console.error(err);
+        inputDataset = undefined;
+        status.textContent = `加载失败: ${err?.message ?? err}`;
+      } finally {
+        runBtn.disabled = !inputDataset || targetSelect.options.length === 0;
+        targetSelect.disabled = !inputDataset || targetSelect.options.length === 0;
+      }
+    });
+
+    runBtn.addEventListener('click', async () => {
+      if (!inputDataset) {
+        status.textContent = '请先上传数据文件。';
+        return;
+      }
+
+    runBtn.disabled = true;
+    const operation = operationSelect.value;
+    status.textContent = `正在加载 DuckDB-Wasm 并运行 ${OPERATION_LABELS[operation]}...`;
+    pickedAttributes.textContent = '(点击地图上的要素)';
+    map.clearHighlightedFeatures();
+
+    try {
+          applyInputCrs();
+          const runtime = await ensureDuckDbRuntime();
+          let result;
+          if (operationIsRelation(operation)) {
+            const { inputDataset, maskDataset, opts } = makeRelationOptions();
+            result = await runRelationOperation(
+              inputDataset,
+              maskDataset,
+              operation,
+              relationModeSelect.value,
+              opts,
+              runtime,
+            );
+          } else {
+            const operationDataset = selectedOperationDataset();
+            if (!operationDataset) throw new Error('请选择可处理的图层。');
+            result = await runOperation(operationDataset, operation, makeOperationOptions(), runtime);
+          }
+          const outputSource = new TopologySource(OUTPUT_ID);
+      outputDataset = result;
+      outputSource.setDataset(result);
+
+      removeSourceWithLayers(OUTPUT_ID);
+      map.addSource(OUTPUT_ID, outputSource);
+        addDisplayLayers(OUTPUT_ID, outputSource, 'duckdb-spatial-output', {
+          fill: '#fef3c7',
+          fillOpacity: 0.5,
+          line: '#b45309',
+        lineWidth: 2.5,
+        pointRadius: 5,
+      });
+      layerPickerEntries = layerPickerEntries.filter((entry) => entry.sourceId !== OUTPUT_ID);
+      targetSelect.querySelectorAll(`option[value^="${OUTPUT_ID}:"]`).forEach((option) => option.remove());
+        appendLayerPickerOptions(outputSource, {
+          sourceId: OUTPUT_ID,
+          prefix: 'duckdb-spatial-output',
+          labelPrefix: '输出 / ',
+        });
+        populateMaskLayerPicker();
+        updateOperationControls();
+        const firstOutputEntry = layerPickerEntries.find((entry) => entry.sourceId === OUTPUT_ID);
+      if (firstOutputEntry) {
+        targetSelect.value = firstOutputEntry.value;
+        setCurrentLayerVisibility(targetSelect.value);
+      }
+
+      const resultCount = result.layers.reduce(
+          (total, layer) => total + (layer?.shapes?.length ?? 0),
+          0,
+        );
+        status.textContent = `${OPERATION_LABELS[operation]} 完成，输出 ${result.layers.length} 个图层，${resultCount} 个要素。`;
+      } catch (err) {
+        console.error(err);
+        status.textContent = `DuckDB 空间处理失败: ${err?.message ?? err}`;
+      } finally {
+        runBtn.disabled = !inputDataset || targetSelect.options.length === 0;
+      }
+    });
+
+  operationSelect.addEventListener('change', updateOperationControls);
+  targetSelect.addEventListener('change', () => {
+    setCurrentLayerVisibility(targetSelect.value);
+  });
+  crsInput.addEventListener('change', applyInputCrs);
+  mapContainer.addEventListener('click', (e) => {
+    const rect = mapContainer.getBoundingClientRect();
+    const point = [e.clientX - rect.left, e.clientY - rect.top];
+    const features = map.queryFeatures(point);
+    renderPickedAttributes(features);
+  });
+  window.addEventListener('pagehide', () => {
+    void (runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime());
+  });
+  updateOperationControls();
+  </script>
+</body>
+
+</html>

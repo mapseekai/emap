@@ -14,6 +14,12 @@ import { Err, type OpResult } from '../op-result';
 import type { ProjectOptions } from '../types';
 import type { OpContext } from './_context';
 import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
+import {
+  EpsgProjectionError,
+  normalizeProjectCrsMetadata,
+  resolveProjectCrs,
+  setDatasetCrsMetadata,
+} from '../../geo/crs-resolver';
 
 export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promise<OpResult> {
   const source = ctx.host._sources.get(opts.source);
@@ -23,11 +29,28 @@ export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promis
   if (opts.target !== undefined) {
     if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
   }
-  const crs = normalizeProjectCrs(opts.crs ?? '');
-  if (crs.length === 0) return Err.validation('crs', 'must be a non-empty CRS string');
+  const rawCrs = opts.crs ?? '';
+  if (rawCrs.trim().length === 0) return Err.validation('crs', 'must be a non-empty CRS string');
+
+  let crs: string;
+  let init: string | undefined;
+  try {
+    crs = await resolveProjectCrs(rawCrs);
+  } catch (err) {
+    if (err instanceof EpsgProjectionError) return Err.validation('crs', err.message);
+    throw err;
+  }
+  if (opts.init && opts.init.trim()) {
+    try {
+      init = await resolveProjectCrs(opts.init);
+    } catch (err) {
+      if (err instanceof EpsgProjectionError) return Err.validation('init', err.message);
+      throw err;
+    }
+  }
 
   const projOpts: Record<string, unknown> = { crs };
-  if (opts.init && opts.init.trim()) projOpts.init = normalizeProjectCrs(opts.init);
+  if (init) projOpts.init = init;
   if (opts.densify) projOpts.densify = true;
 
   const commands: ParsedCommand[] = [];
@@ -37,20 +60,9 @@ export async function projectLayer(ctx: OpContext, opts: ProjectOptions): Promis
   commands.push({ name: 'proj', options: projOpts });
 
   const label = `Project ${opts.target ?? opts.source}`;
-  return ctx.runDatasetCommandParsed(opts.source, commands, label);
-}
-
-// Outbound boundary translation: canonical EPSG → mapshaper's preferred alias.
-// Mirror of `normalizeCrsString` in `geo/crs-resolver.ts`, which goes the
-// other way (raw metadata → canonical EPSG) when reading datasets in.
-function normalizeProjectCrs(crs: string): string {
-  const trimmed = crs.trim();
-  const lower = trimmed.toLowerCase();
-  if (lower === 'epsg:3857' || lower === 'epsg:900913' || lower === 'epsg:102100') {
-    return 'webmercator';
+  const result = await ctx.runDatasetCommandParsed(opts.source, commands, label);
+  if (result.ok && !opts.target) {
+    setDatasetCrsMetadata(source.getDataset(), normalizeProjectCrsMetadata(rawCrs));
   }
-  if (lower === 'epsg:4326') {
-    return 'wgs84';
-  }
-  return trimmed;
+  return result;
 }

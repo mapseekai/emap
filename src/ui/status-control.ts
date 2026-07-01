@@ -26,7 +26,7 @@ export class StatusControl implements Control {
       showMousePos: true,
       showEPSG: true,
       alignment: 'left',
-      ...options
+      ...options,
     };
     this._onMoveBound = this._onMove.bind(this);
     this._onUpdateEPSGBound = this._updateEPSG.bind(this);

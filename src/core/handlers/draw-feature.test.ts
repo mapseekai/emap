@@ -42,7 +42,14 @@ function createMockMap(sources?: Record<string, unknown>) {
 
 function createMockSource(options?: {
   layers?: unknown[];
-  vertexData?: { xx: Float64Array; yy: Float64Array; nn: Int32Array; ii: Int32Array; zz: null; bb: Float64Array };
+  vertexData?: {
+    xx: Float64Array;
+    yy: Float64Array;
+    nn: Int32Array;
+    ii: Int32Array;
+    zz: null;
+    bb: Float64Array;
+  };
 }) {
   const updateVertexData = vi.fn();
   return {
@@ -52,26 +59,30 @@ function createMockSource(options?: {
     off: vi.fn(),
     fire: vi.fn(),
     getArcs: vi.fn(() => ({
-      getVertexData: () => options?.vertexData || {
-        xx: new Float64Array([0, 10, 20]),
-        yy: new Float64Array([0, 10, 20]),
-        nn: new Int32Array([3]),
-        ii: new Int32Array([0]),
-        zz: null,
-        bb: new Float64Array([0, 0, 20, 20]),
-      },
+      getVertexData: () =>
+        options?.vertexData || {
+          xx: new Float64Array([0, 10, 20]),
+          yy: new Float64Array([0, 10, 20]),
+          nn: new Int32Array([3]),
+          ii: new Int32Array([0]),
+          zz: null,
+          bb: new Float64Array([0, 0, 20, 20]),
+        },
       updateVertexData,
-      size: () => (options?.vertexData?.nn.length || 1),
+      size: () => options?.vertexData?.nn.length || 1,
       transformPoints: vi.fn(),
     })),
-    getLayers: vi.fn(() => options?.layers || [
-      {
-        name: 'test-layer',
-        geometry_type: 'polygon',
-        shapes: [],
-        data: { getRecords: () => [] },
-      },
-    ]),
+    getLayers: vi.fn(
+      () =>
+        options?.layers || [
+          {
+            name: 'test-layer',
+            geometry_type: 'polygon',
+            shapes: [],
+            data: { getRecords: () => [] },
+          },
+        ],
+    ),
     getDataset: vi.fn(() => ({
       layers: options?.layers || [
         {
@@ -82,14 +93,15 @@ function createMockSource(options?: {
         },
       ],
       arcs: {
-        getVertexData: () => options?.vertexData || {
-          xx: new Float64Array([0, 10, 20]),
-          yy: new Float64Array([0, 10, 20]),
-          nn: new Int32Array([3]),
-          ii: new Int32Array([0]),
-          zz: null,
-          bb: new Float64Array([0, 0, 20, 20]),
-        },
+        getVertexData: () =>
+          options?.vertexData || {
+            xx: new Float64Array([0, 10, 20]),
+            yy: new Float64Array([0, 10, 20]),
+            nn: new Int32Array([3]),
+            ii: new Int32Array([0]),
+            zz: null,
+            bb: new Float64Array([0, 0, 20, 20]),
+          },
         updateVertexData,
         size: () => 1,
         transformPoints: vi.fn(),
@@ -105,7 +117,7 @@ describe('DrawFeatureHandler', () => {
   describe('vertex placement', () => {
     it('adds a vertex on click for polygon mode', () => {
       const source = createMockSource();
-      const map = createMockMap({ 'src1': source });
+      const map = createMockMap({ src1: source });
       const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'polygon' });
 
       setPrivate(handler, '_map', map);
@@ -127,7 +139,7 @@ describe('DrawFeatureHandler', () => {
         data: { getRecords: () => [] as Record<string, unknown>[] },
       };
       const source = createMockSource({ layers: [layer] });
-      const map = createMockMap({ 'src1': source });
+      const map = createMockMap({ src1: source });
       const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'point' });
 
       setPrivate(handler, '_map', map);
@@ -159,17 +171,22 @@ describe('DrawFeatureHandler', () => {
           bb: new Float64Array([100, 100, 200, 200]),
         },
       });
-      const map = createMockMap({ 'src1': source });
+      const map = createMockMap({ src1: source });
       // project returns identity
       map.project.mockImplementation((x: number, y: number) => [x, y]);
 
-      const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'polygon', snapThreshold: 15 });
+      const handler = new DrawFeatureHandler(map as any, {
+        source: 'src1',
+        type: 'polygon',
+        snapThreshold: 15,
+      });
       setPrivate(handler, '_map', map);
 
       // Cursor at (105, 105) — within 15px of (100, 100)
-      const snap = callPrivate(handler, '_findSnapTarget', 105, 105) as
-        | { coord: [number, number]; kind: 'vertex' | 'edge' | null }
-        | null;
+      const snap = callPrivate(handler, '_findSnapTarget', 105, 105) as {
+        coord: [number, number];
+        kind: 'vertex' | 'edge' | null;
+      } | null;
       expect(snap).not.toBeNull();
       expect(snap!.coord[0]).toBe(100);
       expect(snap!.coord[1]).toBe(100);
@@ -187,10 +204,14 @@ describe('DrawFeatureHandler', () => {
           bb: new Float64Array([100, 100, 100, 100]),
         },
       });
-      const map = createMockMap({ 'src1': source });
+      const map = createMockMap({ src1: source });
       map.project.mockImplementation((x: number, y: number) => [x, y]);
 
-      const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'polygon', snapThreshold: 5 });
+      const handler = new DrawFeatureHandler(map as any, {
+        source: 'src1',
+        type: 'polygon',
+        snapThreshold: 5,
+      });
       setPrivate(handler, '_map', map);
 
       const snap = callPrivate(handler, '_findSnapTarget', 120, 120) as [number, number] | null;
@@ -247,20 +268,28 @@ describe('DrawFeatureHandler', () => {
     // Edge snap — perpendicular projection onto segments
     // -----------------------------------------------------------------------
 
-    function makeSourceWithSegment(
-      from: [number, number],
-      to: [number, number],
-    ): any {
+    function makeSourceWithSegment(from: [number, number], to: [number, number]): any {
       const xx = new Float64Array([from[0], to[0]]);
       const yy = new Float64Array([from[1], to[1]]);
       return {
         id: 'seg',
         type: 'topology' as const,
-        on: vi.fn(), off: vi.fn(), fire: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+        fire: vi.fn(),
         getArcs: vi.fn(() => ({
-          getVertexData: () => ({ xx, yy, nn: new Int32Array([2]), ii: new Int32Array([0]), zz: null, bb: new Float64Array([from[0], from[1], to[0], to[1]]) }),
+          getVertexData: () => ({
+            xx,
+            yy,
+            nn: new Int32Array([2]),
+            ii: new Int32Array([0]),
+            zz: null,
+            bb: new Float64Array([from[0], from[1], to[0], to[1]]),
+          }),
           // One segment — call the callback once with vertex indices 0,1.
-          forEachSegment: (cb: (i: number, j: number, xx2: Float64Array, yy2: Float64Array) => void) => {
+          forEachSegment: (
+            cb: (i: number, j: number, xx2: Float64Array, yy2: Float64Array) => void,
+          ) => {
             cb(0, 1, xx, yy);
           },
           size: () => 1,
@@ -276,12 +305,15 @@ describe('DrawFeatureHandler', () => {
       const map = createMockMap({ src1: makeSourceWithSegment([0, 0], [100, 0]) });
       map.project.mockImplementation((x: number, y: number) => [x, y]);
       const handler = new DrawFeatureHandler(map as any, {
-        source: 'src1', type: 'polyline', snapThreshold: 10,
+        source: 'src1',
+        type: 'polyline',
+        snapThreshold: 10,
       });
       setPrivate(handler, '_map', map);
-      const snap = callPrivate(handler, '_findSnapTarget', 50, 3) as
-        | { coord: [number, number]; kind: 'vertex' | 'edge' | null }
-        | null;
+      const snap = callPrivate(handler, '_findSnapTarget', 50, 3) as {
+        coord: [number, number];
+        kind: 'vertex' | 'edge' | null;
+      } | null;
       expect(snap).not.toBeNull();
       expect(snap!.kind).toBe('edge');
       expect(snap!.coord[0]).toBe(50);
@@ -294,7 +326,9 @@ describe('DrawFeatureHandler', () => {
       const map = createMockMap({ src1: makeSourceWithSegment([0, 0], [100, 0]) });
       map.project.mockImplementation((x: number, y: number) => [x, y]);
       const handler = new DrawFeatureHandler(map as any, {
-        source: 'src1', type: 'polyline', snapThreshold: 5,
+        source: 'src1',
+        type: 'polyline',
+        snapThreshold: 5,
       });
       setPrivate(handler, '_map', map);
       const snap = callPrivate(handler, '_findSnapTarget', 150, 3);
@@ -309,12 +343,15 @@ describe('DrawFeatureHandler', () => {
       const map = createMockMap({ src1: makeSourceWithSegment([0, 0], [100, 0]) });
       map.project.mockImplementation((x: number, y: number) => [x, y]);
       const handler = new DrawFeatureHandler(map as any, {
-        source: 'src1', type: 'polyline', snapThreshold: 10,
+        source: 'src1',
+        type: 'polyline',
+        snapThreshold: 10,
       });
       setPrivate(handler, '_map', map);
-      const snap = callPrivate(handler, '_findSnapTarget', 0, 0) as
-        | { coord: [number, number]; kind: 'vertex' | 'edge' | null }
-        | null;
+      const snap = callPrivate(handler, '_findSnapTarget', 0, 0) as {
+        coord: [number, number];
+        kind: 'vertex' | 'edge' | null;
+      } | null;
       expect(snap).not.toBeNull();
       expect(snap!.kind).toBe('vertex');
       expect(snap!.coord).toEqual([0, 0]);
@@ -326,7 +363,9 @@ describe('DrawFeatureHandler', () => {
       const map = createMockMap({ src1: makeSourceWithSegment([0, 0], [100, 0]) });
       map.project.mockImplementation((x: number, y: number) => [x, y]);
       const handler = new DrawFeatureHandler(map as any, {
-        source: 'src1', type: 'polyline', snapThreshold: 10,
+        source: 'src1',
+        type: 'polyline',
+        snapThreshold: 10,
         snapToEdge: false,
       });
       setPrivate(handler, '_map', map);
@@ -340,13 +379,16 @@ describe('DrawFeatureHandler', () => {
       const map = createMockMap({ src1: makeSourceWithSegment([0, 0], [100, 0]) });
       map.project.mockImplementation((x: number, y: number) => [x, y]);
       const handler = new DrawFeatureHandler(map as any, {
-        source: 'src1', type: 'polyline', snapThreshold: 10,
+        source: 'src1',
+        type: 'polyline',
+        snapThreshold: 10,
         snapToVertex: false,
       });
       setPrivate(handler, '_map', map);
-      const snap = callPrivate(handler, '_findSnapTarget', 1, 1) as
-        | { coord: [number, number]; kind: 'vertex' | 'edge' | null }
-        | null;
+      const snap = callPrivate(handler, '_findSnapTarget', 1, 1) as {
+        coord: [number, number];
+        kind: 'vertex' | 'edge' | null;
+      } | null;
       expect(snap).not.toBeNull();
       expect(snap!.kind).toBe('edge');
     });
@@ -359,13 +401,16 @@ describe('DrawFeatureHandler', () => {
       });
       map.project.mockImplementation((x: number, y: number) => [x, y]);
       const handler = new DrawFeatureHandler(map as any, {
-        source: 'src1', type: 'polyline', snapThreshold: 10,
+        source: 'src1',
+        type: 'polyline',
+        snapThreshold: 10,
         snapSources: ['src1', 'src2'],
       });
       setPrivate(handler, '_map', map);
-      const snap = callPrivate(handler, '_findSnapTarget', 50, 3) as
-        | { coord: [number, number]; kind: 'vertex' | 'edge' | null }
-        | null;
+      const snap = callPrivate(handler, '_findSnapTarget', 50, 3) as {
+        coord: [number, number];
+        kind: 'vertex' | 'edge' | null;
+      } | null;
       expect(snap).not.toBeNull();
       expect(snap!.coord).toEqual([50, 0]); // src2's segment
     });
@@ -376,7 +421,9 @@ describe('DrawFeatureHandler', () => {
       });
       map.project.mockImplementation((x: number, y: number) => [x, y]);
       const handler = new DrawFeatureHandler(map as any, {
-        source: 'src1', type: 'polyline', snapThreshold: 10,
+        source: 'src1',
+        type: 'polyline',
+        snapThreshold: 10,
         snapSources: ['src1', 'nonexistent', 'also-missing'],
       });
       setPrivate(handler, '_map', map);
@@ -431,7 +478,7 @@ describe('DrawFeatureHandler', () => {
         data: { getRecords: () => [] as Record<string, unknown>[] },
       };
       const source = createMockSource({ layers: [layer] });
-      const map = createMockMap({ 'src1': source });
+      const map = createMockMap({ src1: source });
       const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'polygon' });
 
       setPrivate(handler, '_map', map);
@@ -458,15 +505,12 @@ describe('DrawFeatureHandler', () => {
 
     it('does not commit polygon with fewer than 3 vertices', () => {
       const source = createMockSource();
-      const map = createMockMap({ 'src1': source });
+      const map = createMockMap({ src1: source });
       const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'polygon' });
 
       setPrivate(handler, '_map', map);
       setPrivate(handler, '_enabled', true);
-      setPrivate(handler, '_vertices', [
-        [0, 0] as [number, number],
-        [10, 0] as [number, number],
-      ]);
+      setPrivate(handler, '_vertices', [[0, 0] as [number, number], [10, 0] as [number, number]]);
 
       callPrivate(handler, '_onDblClick', {
         preventDefault: vi.fn(),
@@ -486,15 +530,12 @@ describe('DrawFeatureHandler', () => {
         data: { getRecords: () => [] as Record<string, unknown>[] },
       };
       const source = createMockSource({ layers: [layer] });
-      const map = createMockMap({ 'src1': source });
+      const map = createMockMap({ src1: source });
       const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'polyline' });
 
       setPrivate(handler, '_map', map);
       setPrivate(handler, '_enabled', true);
-      setPrivate(handler, '_vertices', [
-        [0, 0] as [number, number],
-        [10, 10] as [number, number],
-      ]);
+      setPrivate(handler, '_vertices', [[0, 0] as [number, number], [10, 10] as [number, number]]);
 
       callPrivate(handler, '_onDblClick', {
         preventDefault: vi.fn(),
@@ -514,15 +555,12 @@ describe('DrawFeatureHandler', () => {
   describe('escape cancels drawing', () => {
     it('clears vertices on Escape key', () => {
       const source = createMockSource();
-      const map = createMockMap({ 'src1': source });
+      const map = createMockMap({ src1: source });
       const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'polygon' });
 
       setPrivate(handler, '_map', map);
       setPrivate(handler, '_enabled', true);
-      setPrivate(handler, '_vertices', [
-        [0, 0] as [number, number],
-        [10, 0] as [number, number],
-      ]);
+      setPrivate(handler, '_vertices', [[0, 0] as [number, number], [10, 0] as [number, number]]);
 
       callPrivate(handler, '_onKeyDown', { key: 'Escape' } as KeyboardEvent);
 
@@ -535,7 +573,7 @@ describe('DrawFeatureHandler', () => {
   describe('arc appending', () => {
     it('appends arc vertices to existing arc collection', () => {
       const source = createMockSource();
-      const map = createMockMap({ 'src1': source });
+      const map = createMockMap({ src1: source });
       const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'polyline' });
       setPrivate(handler, '_map', map);
 
@@ -574,7 +612,7 @@ describe('DrawFeatureHandler', () => {
 
     it('preserves zz array with Infinity for new vertices', () => {
       const source = createMockSource();
-      const map = createMockMap({ 'src1': source });
+      const map = createMockMap({ src1: source });
       const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'polyline' });
       setPrivate(handler, '_map', map);
 
@@ -592,9 +630,7 @@ describe('DrawFeatureHandler', () => {
         transformPoints: vi.fn(),
       };
 
-      callPrivate(handler, '_appendArc', mockArcs, [
-        [5, 5] as [number, number],
-      ]);
+      callPrivate(handler, '_appendArc', mockArcs, [[5, 5] as [number, number]]);
 
       const [, , , zz] = updateVertexData.mock.calls[0];
       expect(zz).not.toBeNull();
@@ -618,9 +654,7 @@ describe('DrawFeatureHandler', () => {
     it('falls back to first layer when no match', () => {
       const map = createMockMap();
       const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'point' });
-      const layers = [
-        { name: 'polys', geometry_type: 'polygon', shapes: [] },
-      ];
+      const layers = [{ name: 'polys', geometry_type: 'polygon', shapes: [] }];
       const result = callPrivate(handler, '_resolveTargetLayer', layers);
       expect(result).toBe(layers[0]);
     });

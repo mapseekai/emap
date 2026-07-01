@@ -110,7 +110,7 @@ describe('TransformFeatureHandler', () => {
     expect(h.isEnabled()).toBe(false);
   });
 
-  it('down on an UNSELECTED hit passes through — no session, no select (selection is clickSelect\'s job)', () => {
+  it("down on an UNSELECTED hit passes through — no session, no select (selection is clickSelect's job)", () => {
     const { map, translateStub } = makeMap();
     // isSelected default false → not already selected.
     const h = new TransformFeatureHandler(map as any);
@@ -169,6 +169,20 @@ describe('TransformFeatureHandler', () => {
     expect(h.handlePointer(pointer('down', 1, 1))).toBe('passthrough');
     expect(map.select).not.toHaveBeenCalled();
     expect(map.editSession.beginTranslateSession).not.toHaveBeenCalled();
+  });
+
+  it('passes configured layers to down and hover hit-testing', () => {
+    const { map } = makeMap();
+    map.queryFeatures.mockReturnValue([]);
+    const h = new TransformFeatureHandler(map as any);
+    h.setOptions({ layers: ['editable-roads'] });
+    h.enable();
+
+    h.handlePointer(pointer('down', 10, 20));
+    h.handlePointer(pointer('move', 30, 40));
+
+    expect(map.queryFeatures).toHaveBeenNthCalledWith(1, [10, 20], { layers: ['editable-roads'] });
+    expect(map.queryFeatures).toHaveBeenNthCalledWith(2, [30, 40], { layers: ['editable-roads'] });
   });
 
   it('down with non-left button passes through', () => {

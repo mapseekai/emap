@@ -9,7 +9,13 @@ type MockMap = {
   setEditVertexState: (state: unknown) => void;
   render: () => void;
   fire: (type: string, payload: unknown) => void;
-  getSource?: (id: string) => { refreshDisplayArcs?: () => void; markDisplayArcsDirty?: () => void } | undefined;
+  getSource?: (id: string) =>
+    | {
+        refreshDisplayArcs?: () => void;
+        markDisplayArcsDirty?: () => void;
+        getDataset?: () => unknown;
+      }
+    | undefined;
 };
 
 function setPrivate(target: object, key: string, value: unknown): void {
@@ -24,33 +30,83 @@ function callPrivate(target: object, key: string, ...args: unknown[]): unknown {
   return (fn as (...input: unknown[]) => unknown).apply(target, args);
 }
 
+function makeArcIter(points: Array<[number, number]>): {
+  x: number;
+  y: number;
+  hasNext(): boolean;
+} {
+  let i = -1;
+  return {
+    get x() {
+      return points[i]?.[0] ?? 0;
+    },
+    get y() {
+      return points[i]?.[1] ?? 0;
+    },
+    hasNext() {
+      i++;
+      return i < points.length;
+    },
+  };
+}
+
 describe('VertexEditHandler', () => {
-  const originalFindNearestVertices = Reflect.get(mapshaper.internal as object, 'findNearestVertices');
-  const originalSnapVerticesToPoint = Reflect.get(mapshaper.internal as object, 'snapVerticesToPoint');
-  const originalForEachSegmentInShape = Reflect.get(mapshaper.internal as object, 'forEachSegmentInShape');
-  const originalFindClosestPointOnSeg = Reflect.get(mapshaper.internal as object, 'findClosestPointOnSeg');
+  const originalFindNearestVertices = Reflect.get(
+    mapshaper.internal as object,
+    'findNearestVertices',
+  );
+  const originalSnapVerticesToPoint = Reflect.get(
+    mapshaper.internal as object,
+    'snapVerticesToPoint',
+  );
+  const originalForEachSegmentInShape = Reflect.get(
+    mapshaper.internal as object,
+    'forEachSegmentInShape',
+  );
+  const originalFindClosestPointOnSeg = Reflect.get(
+    mapshaper.internal as object,
+    'findClosestPointOnSeg',
+  );
 
   beforeEach(() => {
-    Reflect.set(mapshaper.internal as object, 'findNearestVertices', vi.fn(() => []));
+    Reflect.set(
+      mapshaper.internal as object,
+      'findNearestVertices',
+      vi.fn(() => []),
+    );
     Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', vi.fn());
   });
 
   afterEach(() => {
     Reflect.set(mapshaper.internal as object, 'findNearestVertices', originalFindNearestVertices);
     Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', originalSnapVerticesToPoint);
-    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', originalForEachSegmentInShape);
-    Reflect.set(mapshaper.internal as object, 'findClosestPointOnSeg', originalFindClosestPointOnSeg);
+    Reflect.set(
+      mapshaper.internal as object,
+      'forEachSegmentInShape',
+      originalForEachSegmentInShape,
+    );
+    Reflect.set(
+      mapshaper.internal as object,
+      'findClosestPointOnSeg',
+      originalFindClosestPointOnSeg,
+    );
+  });
+
+  it('uses a light green polygon fill by default', () => {
+    const handler = new VertexEditHandler({} as any);
+
+    expect(handler.getOptions().polygonFillColor).toBe('rgba(76,175,80,0.2)');
   });
 
   it('moves all shared vertices during drag', () => {
     const mapMock: MockMap = {
       getCanvasContainer: () => ({
-        getBoundingClientRect: () => ({ left: 10, top: 20 })
+        getBoundingClientRect: () => ({ left: 10, top: 20 }),
       }),
       unproject: () => [11, 22],
       setEditVertexState: vi.fn(),
       render: vi.fn(),
-      fire: vi.fn()
+      fire: vi.fn(),
     };
 
     const handler = new VertexEditHandler(mapMock as any);
@@ -66,9 +122,9 @@ describe('VertexEditHandler', () => {
       shape: [[1]],
       arcs: {
         getArcIter: () => ({ x: 0, y: 0, hasNext: () => false }),
-        getVertex2: () => [0, 0]
+        getVertex2: () => [0, 0],
       },
-      geometryType: 'polyline'
+      geometryType: 'polyline',
     });
 
     // clientX:100, clientY:120, rect left:10, top:20 → px=90, py=100
@@ -86,21 +142,36 @@ describe('VertexEditHandler', () => {
     const mapMock = {
       unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
       project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
-      queryFeatures: vi.fn(() => [{ source: 'src-a', layer: 'roads', id: 1, geometryType: 'polyline', properties: {} }]),
+      queryFeatures: vi.fn(() => [
+        { id: 1, source: 'src-a', layer: 'roads', geometryType: 'polyline', properties: {} },
+      ]),
       getSource: vi.fn(() => ({
-        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] }],
-        getArcs: () => ({ getVertex2: () => [0, 0], getSimpleShapeBbox: (_part: number[], out: number[]) => {
-          out[0] = 10; out[1] = 0; out[2] = 20; out[3] = 0;
-        } }),
+        getLayers: () => [
+          { name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] },
+        ],
+        getArcs: () => ({
+          getVertex2: () => [0, 0],
+          getSimpleShapeBbox: (_part: number[], bbox: number[]) => {
+            bbox[0] = 0;
+            bbox[1] = 0;
+            bbox[2] = 20;
+            bbox[3] = 0;
+          },
+        }),
       })),
       setEditVertexState: vi.fn(),
       render: vi.fn(),
     };
     const snapSpy = vi.fn();
     Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
-    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', vi.fn((shape, _arcs, cb) => {
-      if (shape === targetShape || shape[0] === targetShape[0]) cb(2, 3, xx, yy);
-    }));
+    Reflect.set(
+      mapshaper.internal as object,
+      'forEachSegmentInShape',
+      vi.fn((shape, _arcs, cb) => {
+        expect(shape).toEqual(targetShape);
+        cb(2, 3, xx, yy);
+      }),
+    );
 
     const handler = new VertexEditHandler(mapMock as any, { snapThreshold: 5, snapToEdge: false });
     setPrivate(handler, '_map', mapMock);
@@ -118,6 +189,144 @@ describe('VertexEditHandler', () => {
     callPrivate(handler, '_handleDrag', 11, 0);
 
     expect(snapSpy).toHaveBeenCalledWith([0], [10, 0], expect.any(Object));
+    expect(mapMock.queryFeatures).toHaveBeenCalledWith(
+      [
+        [6, -5],
+        [16, 5],
+      ],
+      undefined,
+    );
+  });
+
+  it('limits drag snap scanning to spatial query hits', () => {
+    const movingShape = [[0]];
+    const farShape = [[1]];
+    const targetShape = [[2]];
+    const xx = new Float64Array([0, 0, 1000, 1010, 10, 20]);
+    const yy = new Float64Array([0, 0, 1000, 1010, 0, 0]);
+    const mapMock = {
+      unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
+      project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
+      queryFeatures: vi.fn(() => [
+        { id: 2, source: 'src-a', layer: 'roads', geometryType: 'polyline', properties: {} },
+      ]),
+      getSource: vi.fn(() => ({
+        getLayers: () => [
+          {
+            name: 'roads',
+            geometry_type: 'polyline',
+            shapes: [movingShape, farShape, targetShape],
+          },
+        ],
+        getArcs: () => ({
+          getVertex2: () => [0, 0],
+          getSimpleShapeBbox: (part: number[], bbox: number[]) => {
+            if (part === targetShape[0]) {
+              bbox[0] = 10;
+              bbox[1] = 0;
+              bbox[2] = 20;
+              bbox[3] = 0;
+            } else {
+              bbox[0] = 1000;
+              bbox[1] = 1000;
+              bbox[2] = 1010;
+              bbox[3] = 1010;
+            }
+          },
+        }),
+      })),
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+    const snapSpy = vi.fn();
+    const segmentSpy = vi.fn((shape, _arcs, cb) => {
+      expect(shape).toEqual(targetShape);
+      cb(4, 5, xx, yy);
+    });
+    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
+    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', segmentSpy);
+
+    const handler = new VertexEditHandler(mapMock as any, { snapThreshold: 5, snapToEdge: false });
+    setPrivate(handler, '_map', mapMock);
+    setPrivate(handler, '_hoverVertexIds', [0]);
+    setPrivate(handler, '_hoveredFeature', {
+      id: 0,
+      source: 'src-a',
+      layer: 'roads',
+      shape: movingShape,
+      arcs: { getVertex2: () => [0, 0] },
+      geometryType: 'polyline',
+      allLayers: [],
+    });
+
+    callPrivate(handler, '_handleDrag', 11, 0);
+
+    expect(segmentSpy).toHaveBeenCalledTimes(1);
+    expect(snapSpy).toHaveBeenCalledWith([0], [10, 0], expect.any(Object));
+  });
+
+  it('does not keep an unbounded seen-vertex set while drag snapping', () => {
+    const movingShape = [[0]];
+    const targetShape = [[1]];
+    const xx = new Float64Array([0, 0, 10, 20]);
+    const yy = new Float64Array([0, 0, 0, 0]);
+    const mapMock = {
+      unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
+      project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
+      queryFeatures: vi.fn(() => [
+        { id: 1, source: 'src-a', layer: 'roads', geometryType: 'polyline', properties: {} },
+      ]),
+      getSource: vi.fn(() => ({
+        getLayers: () => [
+          { name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] },
+        ],
+        getArcs: () => ({
+          getVertex2: () => [0, 0],
+          getSimpleShapeBbox: (_part: number[], bbox: number[]) => {
+            bbox[0] = 0;
+            bbox[1] = 0;
+            bbox[2] = 20;
+            bbox[3] = 0;
+          },
+        }),
+      })),
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+    const originalSetAdd = Set.prototype.add;
+    Reflect.set(
+      mapshaper.internal as object,
+      'forEachSegmentInShape',
+      vi.fn((_shape, _arcs, cb) => {
+        cb(2, 3, xx, yy);
+      }),
+    );
+    Set.prototype.add = function add(value: unknown) {
+      if (value !== 0) throw new Error('unexpected unbounded Set.add');
+      return originalSetAdd.call(this, value);
+    };
+
+    try {
+      const handler = new VertexEditHandler(mapMock as any, {
+        snapThreshold: 5,
+        snapToEdge: false,
+      });
+      setPrivate(handler, '_map', mapMock);
+      setPrivate(handler, '_hoverVertexIds', [0]);
+      setPrivate(handler, '_hoveredFeature', {
+        id: 0,
+        source: 'src-a',
+        layer: 'roads',
+        shape: movingShape,
+        arcs: { getVertex2: () => [0, 0] },
+        geometryType: 'polyline',
+        allLayers: [],
+      });
+
+      expect(() => callPrivate(handler, '_findDragSnapTarget', 11, 0)).not.toThrow();
+    } finally {
+      Set.prototype.add = originalSetAdd;
+    }
   });
 
   it('does not drag-snap when vertex and edge drag snapping are disabled', () => {
@@ -128,9 +337,10 @@ describe('VertexEditHandler', () => {
     const mapMock = {
       unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
       project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
-      queryFeatures: vi.fn(() => [{ source: 'src-a', layer: 'roads', id: 1, geometryType: 'polyline', properties: {} }]),
       getSource: vi.fn(() => ({
-        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] }],
+        getLayers: () => [
+          { name: 'roads', geometry_type: 'polyline', shapes: [movingShape, targetShape] },
+        ],
         getArcs: () => ({ getVertex2: () => [0, 0] }),
       })),
       setEditVertexState: vi.fn(),
@@ -138,9 +348,13 @@ describe('VertexEditHandler', () => {
     };
     const snapSpy = vi.fn();
     Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
-    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', vi.fn((shape, _arcs, cb) => {
-      if (shape === targetShape) cb(2, 3, xx, yy);
-    }));
+    Reflect.set(
+      mapshaper.internal as object,
+      'forEachSegmentInShape',
+      vi.fn((shape, _arcs, cb) => {
+        if (shape === targetShape) cb(2, 3, xx, yy);
+      }),
+    );
 
     const handler = new VertexEditHandler(mapMock as any, {
       snapThreshold: 5,
@@ -164,62 +378,7 @@ describe('VertexEditHandler', () => {
     expect(snapSpy).toHaveBeenCalledWith([0], [11, 0], expect.any(Object));
   });
 
-  it('limits drag snapping to spatial-index candidates near the pointer', () => {
-    const movingShape = [[0]];
-    const farShape = [[1]];
-    const nearShape = [[2]];
-    const xx = new Float64Array([0, 0, 1000, 1010, 10, 20]);
-    const yy = new Float64Array([0, 0, 1000, 1010, 0, 0]);
-    const queryFeatures = vi.fn(() => [
-      { source: 'src-a', layer: 'roads', id: 2, geometryType: 'polyline', properties: {} },
-    ]);
-    const mapMock = {
-      unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
-      project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
-      queryFeatures,
-      getSource: vi.fn(() => ({
-        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [movingShape, farShape, nearShape] }],
-        getArcs: () => ({ getVertex2: () => [0, 0], getSimpleShapeBbox: (part: number[], out: number[]) => {
-          if (part[0] === 2) {
-            out[0] = 10; out[1] = 0; out[2] = 20; out[3] = 0;
-          } else {
-            out[0] = 1000; out[1] = 1000; out[2] = 1010; out[3] = 1010;
-          }
-        } }),
-      })),
-      setEditVertexState: vi.fn(),
-      render: vi.fn(),
-    };
-    const snapSpy = vi.fn();
-    const forEachSegmentInShape = vi.fn((shape, _arcs, cb) => {
-      const part = shape[0];
-      if (part[0] === 1) throw new Error('far shape should not be scanned');
-      if (part[0] === 2) cb(4, 5, xx, yy);
-    });
-    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
-    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', forEachSegmentInShape);
-
-    const handler = new VertexEditHandler(mapMock as any, { snapThreshold: 5, snapToEdge: false });
-    setPrivate(handler, '_map', mapMock);
-    setPrivate(handler, '_hoverVertexIds', [0]);
-    setPrivate(handler, '_hoveredFeature', {
-      id: 0,
-      source: 'src-a',
-      layer: 'roads',
-      shape: movingShape,
-      arcs: { getVertex2: () => [0, 0] },
-      geometryType: 'polyline',
-      allLayers: [],
-    });
-
-    callPrivate(handler, '_handleDrag', 11, 0);
-
-    expect(queryFeatures).toHaveBeenCalledWith([[6, -5], [16, 5]]);
-    expect(forEachSegmentInShape).toHaveBeenCalledTimes(1);
-    expect(snapSpy).toHaveBeenCalledWith([0], [10, 0], expect.any(Object));
-  });
-
-  it('fires vertex_moved with compatibility fields and refreshes arc bbox', () => {
+  it('fires vertex_moved and avoids the full-bounds rebuild on finish drag', () => {
     const transformPoints = vi.fn();
     const fireSpy = vi.fn();
     const renderSpy = vi.fn();
@@ -228,13 +387,13 @@ describe('VertexEditHandler', () => {
 
     const mapMock: MockMap = {
       getCanvasContainer: () => ({
-        getBoundingClientRect: () => ({ left: 0, top: 0 })
+        getBoundingClientRect: () => ({ left: 0, top: 0 }),
       }),
       unproject: () => [123.45, 67.89],
       setEditVertexState: vi.fn(),
       render: renderSpy,
       fire: fireSpy,
-      getSource: vi.fn(() => ({ refreshDisplayArcs, markDisplayArcsDirty }))
+      getSource: vi.fn(() => ({ refreshDisplayArcs, markDisplayArcsDirty })),
     };
 
     const handler = new VertexEditHandler(mapMock as any);
@@ -249,17 +408,17 @@ describe('VertexEditHandler', () => {
       arcs: {
         getArcIter: () => ({ x: 0, y: 0, hasNext: () => false }),
         getVertex2: () => [0, 0],
-        transformPoints
+        transformPoints,
       },
-      geometryType: 'polyline'
+      geometryType: 'polyline',
     });
 
     // clientX:1, clientY:2, rect left:0, top:0 → px=1, py=2
     callPrivate(handler, '_finishDrag', 1, 2);
 
-    expect(transformPoints).toHaveBeenCalledTimes(1);
-    expect(markDisplayArcsDirty).toHaveBeenCalledTimes(1);
-    expect(refreshDisplayArcs).not.toHaveBeenCalled();
+    expect(transformPoints).not.toHaveBeenCalled();
+    expect(refreshDisplayArcs).toHaveBeenCalledTimes(1);
+    expect(markDisplayArcsDirty).not.toHaveBeenCalled();
     expect(fireSpy).toHaveBeenCalledWith(
       'vertex_moved',
       expect.objectContaining({
@@ -268,8 +427,8 @@ describe('VertexEditHandler', () => {
         layer: 'roads',
         vertexIndex: 8,
         vertexIds: [8, 20],
-        coords: [123.45, 67.89]
-      })
+        coords: [123.45, 67.89],
+      }),
     );
     expect(renderSpy).toHaveBeenCalled();
   });
@@ -315,12 +474,170 @@ describe('VertexEditHandler', () => {
     expect(clearEditVertexState).toHaveBeenCalled();
     expect(Reflect.get(handler, '_dragging')).toBe(false);
   });
+
+  it('passes configured layers to hover hit-testing', () => {
+    const queryFeatures = vi.fn(() => []);
+    const mapMock = {
+      queryFeatures,
+      clearEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+
+    const handler = new VertexEditHandler(mapMock as any);
+    handler.setOptions({ layers: ['editable-roads'] });
+    setPrivate(handler, '_enabled', true);
+
+    handler.handlePointer({
+      kind: 'move',
+      point: { x: 12, y: 34 },
+      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+      button: 0,
+      originalEvent: { type: 'move' } as unknown as Event,
+    });
+
+    expect(queryFeatures).toHaveBeenCalledWith([12, 34], { layers: ['editable-roads'] });
+  });
+
+  it('skips topology vertex lookup when the pointer is not near a shape vertex', () => {
+    const findNearestSpy = vi.fn(() => [0]);
+    Reflect.set(mapshaper.internal as object, 'findNearestVertices', findNearestSpy);
+    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', vi.fn());
+    const shape = [[0]];
+    const arcs = {
+      getArcIter: () =>
+        makeArcIter([
+          [0, 0],
+          [100, 0],
+        ]),
+      getVertex2: () => [0, 0] as [number, number],
+    };
+    const mapMock = {
+      queryFeatures: vi.fn(() => [
+        { id: 0, source: 'src-a', layer: 'roads', geometryType: 'polyline', properties: {} },
+      ]),
+      getSource: vi.fn(() => ({
+        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [shape] }],
+        getArcs: () => arcs,
+      })),
+      unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
+      project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
+      setEditVertexState: vi.fn(),
+      clearEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+
+    const handler = new VertexEditHandler(mapMock as any);
+    setPrivate(handler, '_enabled', true);
+
+    handler.handlePointer({
+      kind: 'move',
+      point: { x: 50, y: 50 },
+      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+      button: 0,
+      originalEvent: { type: 'move' } as unknown as Event,
+    });
+
+    expect(findNearestSpy).not.toHaveBeenCalled();
+  });
+
+  it('keeps topology vertex lookup when the pointer is near a shape vertex', () => {
+    const findNearestSpy = vi.fn(() => [0]);
+    Reflect.set(mapshaper.internal as object, 'findNearestVertices', findNearestSpy);
+    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', vi.fn());
+    const shape = [[0]];
+    const arcs = {
+      getArcIter: () =>
+        makeArcIter([
+          [0, 0],
+          [100, 0],
+        ]),
+      getVertex2: () => [0, 0] as [number, number],
+    };
+    const mapMock = {
+      queryFeatures: vi.fn(() => [
+        { id: 0, source: 'src-a', layer: 'roads', geometryType: 'polyline', properties: {} },
+      ]),
+      getSource: vi.fn(() => ({
+        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [shape] }],
+        getArcs: () => arcs,
+      })),
+      unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
+      project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
+      setEditVertexState: vi.fn(),
+      clearEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+
+    const handler = new VertexEditHandler(mapMock as any);
+    setPrivate(handler, '_enabled', true);
+
+    handler.handlePointer({
+      kind: 'move',
+      point: { x: 3, y: 4 },
+      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+      button: 0,
+      originalEvent: { type: 'move' } as unknown as Event,
+    });
+
+    expect(findNearestSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not re-render when the hover signature is unchanged', () => {
+    const findNearestSpy = vi.fn(() => [0]);
+    Reflect.set(mapshaper.internal as object, 'findNearestVertices', findNearestSpy);
+    Reflect.set(mapshaper.internal as object, 'forEachSegmentInShape', vi.fn());
+    const shape = [[0]];
+    const arcs = {
+      getArcIter: () =>
+        makeArcIter([
+          [0, 0],
+          [100, 0],
+        ]),
+      getVertex2: () => [0, 0] as [number, number],
+    };
+    const mapMock = {
+      queryFeatures: vi.fn(() => [
+        { id: 0, source: 'src-a', layer: 'roads', geometryType: 'polyline', properties: {} },
+      ]),
+      getSource: vi.fn(() => ({
+        getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [shape] }],
+        getArcs: () => arcs,
+      })),
+      unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
+      project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
+      setEditVertexState: vi.fn(),
+      clearEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+
+    const handler = new VertexEditHandler(mapMock as any);
+    setPrivate(handler, '_enabled', true);
+    const event = {
+      kind: 'move' as const,
+      point: { x: 3, y: 4 },
+      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+      button: 0,
+      originalEvent: { type: 'move' } as unknown as Event,
+    };
+
+    handler.handlePointer(event);
+    handler.handlePointer(event);
+
+    expect(mapMock.setEditVertexState).toHaveBeenCalledTimes(1);
+    expect(mapMock.render).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
   it('_showContextMenu sets class-based DOM and only dynamic position inline', () => {
     document.getElementById('emap-ctx-menu')?.remove();
-    const mapMock = { setEditMode: () => {}, on: () => {}, off: () => {}, render: () => {}, clearEditVertexState: () => {} } as any;
+    const mapMock = {
+      setEditMode: () => {},
+      on: () => {},
+      off: () => {},
+      render: () => {},
+      clearEditVertexState: () => {},
+    } as any;
     const handler = new VertexEditHandler(mapMock);
     Reflect.get(handler, '_showContextMenu').call(handler, 123, 456, () => {});
 
@@ -345,10 +662,18 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
 
   it('_showContextMenu click handler invokes onDelete and removes the menu', () => {
     document.getElementById('emap-ctx-menu')?.remove();
-    const mapMock = { setEditMode: () => {}, on: () => {}, off: () => {}, render: () => {}, clearEditVertexState: () => {} } as any;
+    const mapMock = {
+      setEditMode: () => {},
+      on: () => {},
+      off: () => {},
+      render: () => {},
+      clearEditVertexState: () => {},
+    } as any;
     const handler = new VertexEditHandler(mapMock);
     let called = 0;
-    Reflect.get(handler, '_showContextMenu').call(handler, 10, 20, () => { called++; });
+    Reflect.get(handler, '_showContextMenu').call(handler, 10, 20, () => {
+      called++;
+    });
     const item = document.querySelector('#emap-ctx-menu > div') as HTMLDivElement;
     item.click();
     expect(called).toBe(1);

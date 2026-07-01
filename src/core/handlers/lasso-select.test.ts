@@ -4,11 +4,18 @@ import { LassoSelectHandler } from './lasso-select';
 import type { NormalizedPointerEvent } from '../handler';
 import * as geom from './select-geometry';
 
-function ev(kind: NormalizedPointerEvent['kind'], x: number, y: number, shift = false): NormalizedPointerEvent {
+function ev(
+  kind: NormalizedPointerEvent['kind'],
+  x: number,
+  y: number,
+  shift = false,
+): NormalizedPointerEvent {
   return {
-    kind, point: { x, y },
+    kind,
+    point: { x, y },
     modifiers: { shift, ctrl: false, alt: false, meta: false },
-    button: 0, originalEvent: new MouseEvent('pointerdown'),
+    button: 0,
+    originalEvent: new MouseEvent('pointerdown'),
   };
 }
 function fakeMap() {
@@ -37,8 +44,16 @@ describe('LassoSelectHandler', () => {
     expect(h.handlePointer(ev('move', 0, 40, true))).toBe('exclusive');
     expect(h.handlePointer(ev('move', 40, 40, true))).toBe('exclusive');
     expect(h.handlePointer(ev('up', 40, 0, true))).toBe('passthrough');
-    expect(map.queryFeatures).toHaveBeenCalledWith([[0, 0], [40, 40]], undefined);
-    expect(map.select).toHaveBeenCalledWith([{ source: 's', layer: 'l', id: 1 }], { mode: 'replace' });
+    expect(map.queryFeatures).toHaveBeenCalledWith(
+      [
+        [0, 0],
+        [40, 40],
+      ],
+      undefined,
+    );
+    expect(map.select).toHaveBeenCalledWith([{ source: 's', layer: 'l', id: 1 }], {
+      mode: 'replace',
+    });
     spy.mockRestore();
   });
 

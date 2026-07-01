@@ -6,10 +6,7 @@ import {
   type MapshaperLayer,
 } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
-import {
-  getDefaultMapshaperAdapter,
-  type MapshaperAdapter,
-} from '../../adapter/mapshaper-adapter';
+import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
 
 export type FeatureGeometryType = 'point' | 'polyline' | 'polygon';
 

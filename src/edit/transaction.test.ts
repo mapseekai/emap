@@ -20,7 +20,14 @@ function makeHost(): {
 } {
   const history = new EditHistory();
   const selection = new Selection();
-  const sources = new globalThis.Map<string, { setDataset: (d: MapshaperDataset) => void; getDataset: () => MapshaperDataset; current: MapshaperDataset }>();
+  const sources = new globalThis.Map<
+    string,
+    {
+      setDataset: (d: MapshaperDataset) => void;
+      getDataset: () => MapshaperDataset;
+      current: MapshaperDataset;
+    }
+  >();
   const setDatasetCalls: Array<{ source: string; dataset: MapshaperDataset }> = [];
   const fireHistoryChange = vi.fn();
   const fireSelectionChange = vi.fn();
@@ -56,7 +63,10 @@ function makeHost(): {
       const entry = {
         current: initial,
         getDataset: () => entry.current,
-        setDataset: (d: MapshaperDataset) => { entry.current = d; setDatasetCalls.push({ source: id, dataset: d }); },
+        setDataset: (d: MapshaperDataset) => {
+          entry.current = d;
+          setDatasetCalls.push({ source: id, dataset: d });
+        },
       };
       sources.set(id, entry as any);
     },
@@ -64,10 +74,15 @@ function makeHost(): {
 }
 
 function ds(label: string): MapshaperDataset {
-  return { layers: [{ name: label, shapes: null, geometry_type: 'polygon' } as any], info: {} } as MapshaperDataset;
+  return {
+    layers: [{ name: label, shapes: null, geometry_type: 'polygon' } as any],
+    info: {},
+  } as MapshaperDataset;
 }
 
-function makeCmd(label: string): EditCommand & { do: ReturnType<typeof vi.fn>; undo: ReturnType<typeof vi.fn> } {
+function makeCmd(
+  label: string,
+): EditCommand & { do: ReturnType<typeof vi.fn>; undo: ReturnType<typeof vi.fn> } {
   return { do: vi.fn(), undo: vi.fn(), label };
 }
 
@@ -143,7 +158,13 @@ describe('Transaction', () => {
 
   it('rollback restores the selection if the transaction modified it', () => {
     const ctx = makeHost();
-    ctx.selection.apply([{ source: 's1', layer: 'l', id: 1 }, { source: 's1', layer: 'l', id: 2 }], 'replace');
+    ctx.selection.apply(
+      [
+        { source: 's1', layer: 'l', id: 1 },
+        { source: 's1', layer: 'l', id: 2 },
+      ],
+      'replace',
+    );
     expect(ctx.selection.size).toBe(2);
 
     const tx = new Transaction(ctx.host);

@@ -13,6 +13,7 @@ class MockWorker {
   onmessage: ((e: MessageEvent) => void) | null = null;
   onerror: ((e: ErrorEvent) => void) | null = null;
   posted: any[] = [];
+  transfers: Transferable[][] = [];
   terminateCalled = false;
   static instances: MockWorker[] = [];
   url: string;
@@ -22,8 +23,9 @@ class MockWorker {
     MockWorker.instances.push(this);
   }
 
-  postMessage(msg: any): void {
+  postMessage(msg: any, transfer?: Transferable[]): void {
     this.posted.push(msg);
+    this.transfers.push(transfer ?? []);
   }
 
   terminate(): void {
@@ -105,7 +107,11 @@ describe('MapshaperWorkerPool', () => {
     const pool = makePool();
     const result = pool.run('-clip', { datasets: [] });
     const msg = MockWorker.instances[0].posted[0];
-    MockWorker.instances[0].respond({ id: msg.id, type: 'error', message: 'mapshaper bad command' });
+    MockWorker.instances[0].respond({
+      id: msg.id,
+      type: 'error',
+      message: 'mapshaper bad command',
+    });
     await expect(result).rejects.toThrow(/mapshaper bad command/);
   });
 
@@ -134,7 +140,14 @@ describe('MapshaperWorkerPool', () => {
     MockWorker.instances[0].respond({ id: 99999, type: 'ok', packed: {} });
 
     let settled = false;
-    void result.then(() => { settled = true; }, () => { settled = true; });
+    void result.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
     // microtask flush
     await Promise.resolve();
     expect(settled).toBe(false);
@@ -260,7 +273,9 @@ describe('MapshaperWorkerPool', () => {
       // Should NOT throw synchronously — pool.run is documented to return
       // a Promise, so spawn failure must surface as rejection too.
       let result: Promise<any> | undefined;
-      expect(() => { result = pool.run('-clip', {}); }).not.toThrow();
+      expect(() => {
+        result = pool.run('-clip', {});
+      }).not.toThrow();
       await expect(result!).rejects.toThrow(/Worker constructor not available/);
     } finally {
       (globalThis as any).Worker = originalWorker;
@@ -318,6 +333,35 @@ describe('MapshaperWorkerPool', () => {
     const bMsg = newWorker.posted[0];
     newWorker.respond({ id: bMsg.id, type: 'ok', packed: 'fresh-ok' });
     await expect(b).resolves.toBe('fresh-ok');
+  });
+
+  it('rejects and clears load accounting when postMessage throws', async () => {
+    class ThrowOnceWorker extends MockWorker {
+      static throwsLeft = 1;
+
+      override postMessage(msg: any, transfer?: Transferable[]): void {
+        if (ThrowOnceWorker.throwsLeft > 0) {
+          ThrowOnceWorker.throwsLeft--;
+          throw new Error('clone failed');
+        }
+        super.postMessage(msg, transfer);
+      }
+    }
+
+    const pool = new MapshaperWorkerPool({
+      workerUrl: 'fake-worker.js',
+      WorkerCtor: ThrowOnceWorker as unknown as typeof Worker,
+      poolSize: 2,
+    });
+
+    const failed = pool.run('-clip', {});
+    await expect(failed).rejects.toThrow(/clone failed/);
+
+    const second = pool.run('-dissolve', {});
+    expect(MockWorker.instances).toHaveLength(1);
+    const worker = MockWorker.instances[0];
+    worker.respond({ id: worker.posted[0].id, type: 'ok', packed: 'ok-after-throw' });
+    await expect(second).resolves.toBe('ok-after-throw');
   });
 });
 
@@ -387,7 +431,7 @@ describe('MapshaperWorkerPool — poolSize > 1', () => {
     await a;
   });
 
-  it('isolates worker errors — a single worker crash does not fail other workers\' pending', async () => {
+  it("isolates worker errors — a single worker crash does not fail other workers' pending", async () => {
     const pool = makePool(2);
     const a = pool.run('-clip', {}); // → worker 0
     const b = pool.run('-clip', {}); // → worker 1

@@ -86,8 +86,14 @@ function makeHost(): {
     fire: () => undefined,
   };
   return {
-    host, selection, history, sources,
-    scheduleRender, fireHistoryChange, invalidateShapeCaches, clearSpatialIndexes,
+    host,
+    selection,
+    history,
+    sources,
+    scheduleRender,
+    fireHistoryChange,
+    invalidateShapeCaches,
+    clearSpatialIndexes,
   };
 }
 
@@ -142,10 +148,13 @@ describe('translateSelected', () => {
     const ctx = makeHost();
     ctx.sources.set('s1', makeSource('s1', [makePolyLayer('parks', [[[0]]])], makeArcs(1)));
     ctx.sources.set('s2', makeSource('s2', [makePolyLayer('roads', [[[0]]])], makeArcs(1)));
-    ctx.selection.apply([
-      { source: 's1', layer: 'parks', id: 0 },
-      { source: 's2', layer: 'roads', id: 0 },
-    ], 'replace');
+    ctx.selection.apply(
+      [
+        { source: 's1', layer: 'parks', id: 0 },
+        { source: 's2', layer: 'roads', id: 0 },
+      ],
+      'replace',
+    );
     const sessions = new EditSessions(ctx.host);
     const r = sessions.translateSelected(10, 20);
     expect(r.ok).toBe(true);

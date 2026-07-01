@@ -18,7 +18,10 @@ function makeValidator(
 }
 
 const okReport: ValidationReport = { ok: true, issues: [] };
-const failReport: ValidationReport = { ok: false, issues: [{ severity: 'error', message: 'boom' }] };
+const failReport: ValidationReport = {
+  ok: false,
+  issues: [{ severity: 'error', message: 'boom' }],
+};
 
 describe('ValidatorRegistry', () => {
   it('starts empty', () => {
@@ -77,7 +80,11 @@ describe('ValidatorRegistry', () => {
 
   it('a thrown error from one validator does not poison the rest', async () => {
     const r = new ValidatorRegistry();
-    r.register(makeValidator('throws', () => { throw new Error('exploded'); }));
+    r.register(
+      makeValidator('throws', () => {
+        throw new Error('exploded');
+      }),
+    );
     r.register(makeValidator('ok', okReport));
     const results = await r.runFor('after-commit', fakeHost, { label: '' });
     expect(results).toHaveLength(2);
@@ -93,12 +100,20 @@ describe('ValidatorRegistry', () => {
     r.register({
       name: 'slow',
       phase: 'after-commit',
-      async run() { await sleep(20); order.push('slow'); return okReport; },
+      async run() {
+        await sleep(20);
+        order.push('slow');
+        return okReport;
+      },
     });
     r.register({
       name: 'fast',
       phase: 'after-commit',
-      async run() { await sleep(0); order.push('fast'); return okReport; },
+      async run() {
+        await sleep(0);
+        order.push('fast');
+        return okReport;
+      },
     });
     await r.runFor('after-commit', fakeHost, { label: '' });
     // If sequential, slow would land before fast in registration order.

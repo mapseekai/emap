@@ -13,7 +13,9 @@ export interface SelectHandlerOptions {
 }
 
 const CLICK_DEFAULT_MODS: Partial<Record<SelectMode, ModifierCombo>> = {
-  replace: 'none', add: 'shift', toggle: 'shift+alt',
+  replace: 'none',
+  add: 'shift',
+  toggle: 'shift+alt',
 };
 
 /**
@@ -28,13 +30,25 @@ export class ClickSelectHandler extends EventDispatcher implements Handler<Selec
   private _enabled = false;
   private _opts: SelectHandlerOptions = {};
 
-  constructor(private _map: Emap) { super(); }
+  constructor(private _map: Emap) {
+    super();
+  }
 
-  enable(): void { this._enabled = true; }
-  disable(): void { this._enabled = false; }
-  isEnabled(): boolean { return this._enabled; }
-  setOptions(opts: Partial<SelectHandlerOptions>): void { this._opts = { ...this._opts, ...opts }; }
-  getOptions(): Readonly<SelectHandlerOptions> { return this._opts; }
+  enable(): void {
+    this._enabled = true;
+  }
+  disable(): void {
+    this._enabled = false;
+  }
+  isEnabled(): boolean {
+    return this._enabled;
+  }
+  setOptions(opts: Partial<SelectHandlerOptions>): void {
+    this._opts = { ...this._opts, ...opts };
+  }
+  getOptions(): Readonly<SelectHandlerOptions> {
+    return this._opts;
+  }
 
   handlePointer(ev: NormalizedPointerEvent): HandlerResult {
     if (!this._enabled || ev.kind !== 'click' || ev.button !== 0) return 'passthrough';

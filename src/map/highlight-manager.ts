@@ -3,16 +3,15 @@ import { AffineTransform } from '../geo/transform';
 import { TopologySource } from '../source/source';
 import { getLayerId } from '../source/layer-utils';
 import type { HighlightStyle, HighlightFeatureRef, QueriedFeature } from './map';
+import type { FeatureShape } from '../types/mapshaper-types';
 
 /**
  * Manages feature highlighting state and rendering.
  * Extracted from Emap to isolate highlight concerns.
  */
 export class HighlightManager {
-  private _highlighted: globalThis.Map<
-    string,
-    globalThis.Map<string, Set<number>>
-  > = new globalThis.Map();
+  private _highlighted: globalThis.Map<string, globalThis.Map<string, Set<number>>> =
+    new globalThis.Map();
 
   private _highlightStyle: HighlightStyle = {
     color: '#ff7a00',
@@ -34,8 +33,7 @@ export class HighlightManager {
       this._highlightStyle = { ...this._highlightStyle, ...style };
     }
     for (const feature of features) {
-      const sourceMap =
-        this._highlighted.get(feature.source) || new globalThis.Map();
+      const sourceMap = this._highlighted.get(feature.source) || new globalThis.Map();
       const ids = sourceMap.get(feature.layer) || new Set<number>();
       ids.add(feature.id);
       sourceMap.set(feature.layer, ids);
@@ -73,9 +71,7 @@ export class HighlightManager {
       if (!sourceHighlights) continue;
       const layers = source.getLayers();
       const displayArcs = source.getDisplayArcs();
-      const arcs = displayArcs
-        ? displayArcs.getScaledArcs(pixelSize)
-        : source.getArcs();
+      const arcs = displayArcs ? displayArcs.getScaledArcs(pixelSize) : source.getArcs();
 
       for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
         const layer = layers[layerIndex];
@@ -84,7 +80,7 @@ export class HighlightManager {
         if (visibleLayers && !visibleLayers.has(`${sourceId}:${layerId}`)) continue;
         const ids = sourceHighlights.get(layerId);
         if (!ids || ids.size === 0) continue;
-        const shapes: unknown[] = [];
+        const shapes: FeatureShape[] = [];
         for (const id of ids) {
           const shape = layer.shapes[id];
           if (shape) shapes.push(shape);
@@ -97,11 +93,7 @@ export class HighlightManager {
             fill: highlightFill,
           });
         } else if (arcs) {
-          painter.drawPaths(
-            shapes,
-            { color: highlightColor, width: highlightWidth },
-            arcs,
-          );
+          painter.drawPaths(shapes, { color: highlightColor, width: highlightWidth }, arcs);
         }
       }
     }
