@@ -1,6 +1,7 @@
 import { Field, RecordBatch, Schema, Table, tableFromIPC, tableToIPC } from 'apache-arrow';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import { resolveDatasetCRSMetadata } from '../geo/crs-resolver';
+import { detectGeometryColumn } from './geometry-column';
 import { fromArrowTable, type FromArrowTableOptions } from './table-to-dataset';
 import { toArrowTable, type ToArrowTableOptions } from './dataset-to-table';
 import { initParquetWasm, type InitParquetWasmOptions } from './parquet-wasm-loader';
@@ -32,11 +33,22 @@ export async function importGeoParquet(
   data: Uint8Array | ArrayBuffer,
   opts: ImportGeoParquetOptions = {},
 ): Promise<MapshaperDataset> {
+  return (await importGeoParquetTable(data, opts)).dataset;
+}
+
+/** Like {@link importGeoParquet}, but also returns the parsed Arrow table
+ * and its geometry encoding so callers can retain it (cache seeding). */
+export async function importGeoParquetTable(
+  data: Uint8Array | ArrayBuffer,
+  opts: ImportGeoParquetOptions = {},
+): Promise<{ table: Table; dataset: MapshaperDataset; encoding: 'native' | 'wkb' }> {
   const wasm = await initParquetWasm(opts);
   const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
   const wasmTable = wasm.readParquet(bytes);
   const table = tableFromIPC(wasmTable.intoIPCStream());
-  return fromArrowTable(table, opts);
+  const geom = detectGeometryColumn(table, opts.geometryColumn);
+  const dataset = fromArrowTable(table, opts);
+  return { table, dataset, encoding: geom?.encoding === 'WKB' ? 'wkb' : 'native' };
 }
 
 /**

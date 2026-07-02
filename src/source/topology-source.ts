@@ -21,6 +21,7 @@ import {
   getFormatForExtension,
   getTableConverter,
   isKnownPluginExtension,
+  type ImportedBinaryDataset,
 } from './format-registry';
 
 export type TopologySourceData = string | { filename: string; content: Uint8Array };
@@ -424,8 +425,15 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       // sized files unusable. Callers run `Emap.ops.cleanLayer()` /
       // `source.simplifyArcs()` explicitly when they need those passes.
       const cmd = `-i ${primaryFiles.map((f) => `"${f.replace(/"/g, '\\"')}"`).join(' ')}`;
+      const imported = pluginImport ? await pluginImport : null;
+      const rich =
+        imported && typeof imported === 'object' && 'dataset' in imported
+          ? (imported as ImportedBinaryDataset)
+          : null;
       const dataset: MapshaperDataset = pluginImport
-        ? await pluginImport
+        ? rich
+          ? rich.dataset
+          : (imported as MapshaperDataset)
         : await this._runner.runImport(cmd, inputFiles);
 
       if (
@@ -448,6 +456,14 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       this._simplifyFloor = this._dataset?.arcs?.getRetainedInterval?.() ?? 0;
       this._bumpRenderRevision();
       this._dataRevision++;
+
+      // Seed the revision-0 Arrow cache with the table the plugin already
+      // parsed — a single-file GeoArrow/GeoParquet load then pays zero
+      // conversion on first DuckDB/export use. Must run after the revision
+      // bump above so the cache entry isn't stamped stale on arrival.
+      if (rich?.arrowTable) {
+        this.seedArrowTable(rich.arrowTable, { encoding: rich.arrowEncoding ?? 'native' });
+      }
 
       this.fire('data', { reason: 'load' });
       this._resolvePending(version);
@@ -495,7 +511,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   private _resolvePluginImport(
     primaryFiles: string[],
     inputFiles: Record<string, Uint8Array | string>,
-  ): Promise<MapshaperDataset> | null {
+  ): Promise<MapshaperDataset | ImportedBinaryDataset> | null {
     const pluginFile = primaryFiles.find((f) => isKnownPluginExtension(getFileExtension(f)));
     if (!pluginFile) return null;
     const ext = getFileExtension(pluginFile);

@@ -16,7 +16,6 @@
  * GeoParquet use.
  */
 import type { Table } from 'apache-arrow';
-import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { TopologySource } from '../source/source';
 import {
   registerFormat,
@@ -25,8 +24,8 @@ import {
 } from '../source/format-registry';
 import { fromArrowTable, type FromArrowTableOptions } from './table-to-dataset';
 import { toArrowTable, type ToArrowTableOptions } from './dataset-to-table';
-import { exportGeoArrow, importGeoArrow } from './geoarrow-io';
-import { exportGeoParquet, importGeoParquet } from './geoparquet-io';
+import { exportGeoArrow, importGeoArrow, importGeoArrowTable } from './geoarrow-io';
+import { exportGeoParquet, importGeoParquet, importGeoParquetTable } from './geoparquet-io';
 
 export { fromArrowTable, toArrowTable, importGeoArrow, exportGeoArrow };
 export type { FromArrowTableOptions, ToArrowTableOptions };
@@ -85,13 +84,15 @@ export function registerArrowFormats(): void {
   registerFormat({
     name: 'geoarrow-formats',
     extensions: ['parquet', 'geoparquet', 'arrow', 'arrows', 'feather'],
-    importBinary: async (content, filename): Promise<MapshaperDataset> => {
+    importBinary: async (content, filename) => {
       const layerName = layerNameFromFilename(filename);
       const ext = filename.toLowerCase();
       if (ext.endsWith('.parquet') || ext.endsWith('.geoparquet')) {
-        return importGeoParquet(content, { layerName });
+        const { table, dataset, encoding } = await importGeoParquetTable(content, { layerName });
+        return { dataset, arrowTable: table, arrowEncoding: encoding };
       }
-      return importGeoArrow(content, { layerName });
+      const { table, dataset, encoding } = importGeoArrowTable(content, { layerName });
+      return { dataset, arrowTable: table, arrowEncoding: encoding };
     },
     exportFormats: {
       geoparquet: async (dataset, options): Promise<ExportedFormatFile[]> => {

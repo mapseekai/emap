@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Table } from 'apache-arrow';
 import '../formats'; // side effect: registers plugin + table converter
+import { exportGeoArrow } from '../formats/geoarrow-io';
 import {
   getTableConverter,
   registerTableConverter,
@@ -86,5 +87,27 @@ describe('TopologySource.getArrowTable', () => {
     source.getArrowTable();
     // reset to 0 for the conversion, then restored to 5
     expect(spy.mock.calls.map((c) => c[0])).toEqual([0, 5]);
+  });
+});
+
+describe('revision-0 cache seeding on import', () => {
+  it('serves the imported table without converting', async () => {
+    // Build .arrow bytes from a known dataset
+    const seedSource = await makeSource();
+    const bytes = exportGeoArrow(seedSource.getDataset()!);
+
+    // Spy on the converter to prove getArrowTable never converts
+    const real = getTableConverter()!;
+    const spy = vi.fn(real.toTable.bind(real));
+    registerTableConverter({ toTable: spy });
+    try {
+      const source = new TopologySource('arrow');
+      await source.setData({ filename: 'a.arrow', content: bytes });
+      const table = source.getArrowTable() as Table; // native: geoarrow default
+      expect(table.numRows).toBe(1);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      registerTableConverter(real);
+    }
   });
 });

@@ -7,6 +7,17 @@ export interface ExportedFormatFile {
 }
 
 /**
+ * Rich import result: the dataset plus the Arrow table it was parsed
+ * from, so TopologySource can seed its revision-0 table cache and
+ * unedited data pays zero conversion on later DuckDB/export use.
+ */
+export interface ImportedBinaryDataset {
+  dataset: MapshaperDataset;
+  arrowTable?: unknown;
+  arrowEncoding?: 'native' | 'wkb';
+}
+
+/**
  * A pluggable dataset format (import and/or export) registered at runtime.
  *
  * Plugins exist so optional, heavyweight format support (GeoParquet /
@@ -21,7 +32,10 @@ export interface DatasetFormatPlugin {
   /** File extensions (lowercase, without dot) routed to {@link importBinary}. */
   extensions: string[];
   /** Parse one binary file into a mapshaper dataset. */
-  importBinary(content: Uint8Array, filename: string): Promise<MapshaperDataset>;
+  importBinary(
+    content: Uint8Array,
+    filename: string,
+  ): Promise<MapshaperDataset | ImportedBinaryDataset>;
   /** Export handlers keyed by `ExportOptions.format` value. */
   exportFormats: Record<
     string,

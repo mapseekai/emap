@@ -33,6 +33,20 @@ describe('formats module registration', () => {
     expect(blob.size).toBeGreaterThan(0);
   });
 
+  it('importBinary returns the parsed Arrow table for cache seeding', async () => {
+    const dataset = await datasetFromGeoJSON({
+      type: 'Feature',
+      properties: { name: 'seed' },
+      geometry: { type: 'Point', coordinates: [1, 2] },
+    });
+    const { exportGeoArrow } = await import('./geoarrow-io');
+    const bytes = exportGeoArrow(dataset);
+    const plugin = getFormatForExtension('arrow')!;
+    const result = await plugin.importBinary(bytes, 'data.arrow');
+    expect(result).toHaveProperty('arrowTable');
+    expect((result as { arrowEncoding?: string }).arrowEncoding).toBe('native');
+  });
+
   it('setArrowTable / toArrowTableFromSource bridge in-memory tables', async () => {
     const dataset = await datasetFromGeoJSON({
       type: 'Feature',
