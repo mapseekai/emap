@@ -324,6 +324,29 @@ describe('duckDbBufferLayer', () => {
       `DROP TABLE IF EXISTS ${inputTableName}`,
     ]);
   });
+
+  it('reseeds the output source cache with the result table', async () => {
+    const dataset = await polygonDataset();
+    const resultTable = toArrowTable(dataset, { encoding: 'wkb' });
+    const runtime = new FakeRuntime(resultTable);
+    const seeded: Array<{ id: string; table: unknown; encoding: string }> = [];
+    const ctx = {
+      getSource: () => new FakeSource(dataset),
+      setSourceDataset: () => {},
+      seedSourceArrowTable: (id: string, table: unknown, encoding: string) =>
+        seeded.push({ id, table, encoding }),
+    };
+
+    await duckDbBufferLayer(ctx, {
+      src: 's',
+      distance: 1,
+      output: { sourceId: 'out' },
+      runtime,
+      failOnGeographicCrs: false,
+    });
+
+    expect(seeded).toEqual([{ id: 'out', table: resultTable, encoding: 'wkb' }]);
+  });
 });
 
 describe('duckDbGeometryLayer', () => {

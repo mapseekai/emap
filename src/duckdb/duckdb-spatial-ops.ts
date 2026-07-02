@@ -67,6 +67,7 @@ function normalizeSimplifyOptions(
     tolerance: opts.tolerance,
     failOnGeographicCrs,
     inputTable: opts.inputTable,
+    onResultTable: opts.onResultTable,
   };
 }
 

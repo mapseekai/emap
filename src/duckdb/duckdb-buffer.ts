@@ -42,6 +42,7 @@ export function normalizeDuckDbBufferOptions(
     geometryColumn: opts.geometryColumn ?? 'geometry',
     failOnGeographicCrs,
     inputTable: opts.inputTable,
+    onResultTable: opts.onResultTable,
   };
 }
 

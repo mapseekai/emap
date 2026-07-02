@@ -18,6 +18,9 @@ export interface DuckDbUnaryGeometryOptions {
    * Callers are responsible for it matching `layer`/`geometryColumn`.
    */
   inputTable?: Table;
+  /** Called with the raw result table right before it is converted to a
+   * dataset — lets callers reseed a source cache without a re-conversion. */
+  onResultTable?: (table: Table) => void;
 }
 
 export interface DuckDbGeometryOperationSpec {
@@ -97,6 +100,7 @@ export async function processGeometryWithDuckDb(
     }
 
     try {
+      opts.onResultTable?.(resultTable);
       const result = fromArrowTable(resultTable, { layerName: opts.outputLayer });
       if (dataset.info?.crs_string) {
         result.info = { ...result.info, crs_string: dataset.info.crs_string };

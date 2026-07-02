@@ -72,6 +72,16 @@ export interface DuckDbMapOpSource {
 export interface DuckDbMapOpContext {
   getSource(id: string): DuckDbMapOpSource | null | undefined;
   setSourceDataset(id: string, dataset: MapshaperDataset): void | Promise<void>;
+  /**
+   * Install a result table as the output source's Arrow cache entry
+   * (TopologySource.seedArrowTable). Must be invoked AFTER
+   * setSourceDataset so the entry stamps the new data revision.
+   */
+  seedSourceArrowTable?(
+    id: string,
+    table: unknown,
+    encoding: 'native' | 'wkb',
+  ): void;
 }
 
 export interface DuckDbBufferLayerOptions extends DuckDbBufferOptions {
@@ -199,12 +209,20 @@ export async function duckDbBufferLayer(
   if (typeof sourceId !== 'string') return sourceId;
 
   try {
+    let resultTable: Table | undefined;
     const dataset = await bufferDatasetWithDuckDb(
       input.dataset,
-      { ...opts, inputTable: input.inputTable },
+      {
+        ...opts,
+        inputTable: input.inputTable,
+        onResultTable: (t) => {
+          resultTable = t;
+        },
+      },
       opts.runtime,
     );
     await ctx.setSourceDataset(sourceId, dataset);
+    if (resultTable) ctx.seedSourceArrowTable?.(sourceId, resultTable, 'wkb');
     return okValue({ sourceId, dataset });
   } catch (err) {
     return duckDbErrorToOpResult(err, 'duckdb-buffer');
@@ -236,6 +254,7 @@ function geometryOptions(opts: DuckDbGeometryLayerOptions): DuckDbUnaryGeometryO
     outputLayer: opts.outputLayer,
     geometryColumn: opts.geometryColumn,
     inputTable: opts.inputTable,
+    onResultTable: opts.onResultTable,
   };
 }
 
@@ -467,11 +486,16 @@ export async function duckDbGeometryLayer(
   if (typeof sourceId !== 'string') return sourceId;
 
   try {
+    let resultTable: Table | undefined;
     const dataset = await runGeometryOperation(input.dataset, {
       ...opts,
       inputTable: input.inputTable,
+      onResultTable: (t) => {
+        resultTable = t;
+      },
     });
     await ctx.setSourceDataset(sourceId, dataset);
+    if (resultTable) ctx.seedSourceArrowTable?.(sourceId, resultTable, 'wkb');
     return okValue({ sourceId, dataset });
   } catch (err) {
     return duckDbErrorToOpResult(err, `duckdb-${opts.operation}`);
