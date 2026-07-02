@@ -18,7 +18,11 @@
 import type { Table } from 'apache-arrow';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { TopologySource } from '../source/source';
-import { registerFormat, type ExportedFormatFile } from '../source/format-registry';
+import {
+  registerFormat,
+  registerTableConverter,
+  type ExportedFormatFile,
+} from '../source/format-registry';
 import { fromArrowTable, type FromArrowTableOptions } from './table-to-dataset';
 import { toArrowTable, type ToArrowTableOptions } from './dataset-to-table';
 import { exportGeoArrow, importGeoArrow } from './geoarrow-io';
@@ -99,6 +103,9 @@ export function registerArrowFormats(): void {
         return [{ filename: 'export.arrow', content: bytes }];
       },
     },
+  });
+  registerTableConverter({
+    toTable: (dataset, opts) => toArrowTable(dataset, opts),
   });
 }
 

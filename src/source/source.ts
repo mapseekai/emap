@@ -105,4 +105,26 @@ export interface TopologySource extends Source {
   export(options: ExportOptions): Promise<Blob>;
   getCRS?(): string;
   reproject?(targetCrs: string, targetCrsMetadata?: string): Promise<void>;
+  /**
+   * GeoArrow table for one layer of the current dataset. Cached per
+   * (layer, encoding); rebuilt lazily when the data revision moved.
+   * Returns `unknown` because the core bundle must not depend on
+   * apache-arrow types — callers cast to `Table`. Throws if the optional
+   * formats module (`@zwishing/emap/formats`) has not been imported.
+   */
+  getArrowTable(opts?: GetArrowTableOptions): unknown;
+  /**
+   * Install an externally produced table as the cache entry for the current
+   * data revision (e.g. import path, DuckDB result tables) so it doesn't get
+   * re-converted on the next {@link getArrowTable} call.
+   */
+  seedArrowTable(table: unknown, opts: { encoding: 'native' | 'wkb'; layer?: number | string }): void;
+}
+
+/** Options for {@link TopologySource.getArrowTable}. */
+export interface GetArrowTableOptions {
+  /** Layer to convert (index or name); defaults to layer 0. */
+  layer?: number | string;
+  /** 'native' (GeoArrow nested arrays; rendering/export default), 'wkb' (DuckDB). */
+  encoding?: 'native' | 'wkb';
 }

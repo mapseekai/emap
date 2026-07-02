@@ -96,3 +96,32 @@ export function getFileExtension(filename: string): string {
   const m = /\.([a-z0-9]+)$/i.exec(filename);
   return m ? m[1].toLowerCase() : '';
 }
+
+/**
+ * Dataset → Arrow-table converter, registered by the formats bundle.
+ * The table crosses this boundary as `unknown` because the core bundle
+ * must not depend on apache-arrow types.
+ */
+export interface DatasetTableConverter {
+  toTable(
+    dataset: MapshaperDataset,
+    opts: { layer?: number | string; encoding: 'native' | 'wkb' },
+  ): unknown;
+}
+
+const CONVERTER_KEY = Symbol.for('emap.tableConverter');
+
+export function registerTableConverter(converter: DatasetTableConverter): void {
+  (globalThis as Record<symbol, unknown>)[CONVERTER_KEY] = converter;
+}
+
+/** Test seam, mirroring {@link unregisterFormat}. */
+export function unregisterTableConverter(): void {
+  delete (globalThis as Record<symbol, unknown>)[CONVERTER_KEY];
+}
+
+export function getTableConverter(): DatasetTableConverter | undefined {
+  return (globalThis as Record<symbol, unknown>)[CONVERTER_KEY] as
+    | DatasetTableConverter
+    | undefined;
+}

@@ -5,7 +5,7 @@ import { unzip, strFromU8, zipSync } from 'fflate';
 import type { UnzipFileInfo, Unzipped } from 'fflate';
 import { DisplayArcs } from './display-arcs';
 import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
-import type { ExportFormat, ExportOptions } from './source';
+import type { ExportFormat, ExportOptions, GetArrowTableOptions } from './source';
 import { getDefaultMapshaperRunner, type MapshaperRunner } from './mapshaper-runner';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import {
@@ -19,6 +19,7 @@ import {
   getExportHandler,
   getFileExtension,
   getFormatForExtension,
+  getTableConverter,
   isKnownPluginExtension,
 } from './format-registry';
 
@@ -175,6 +176,67 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    */
   public markDataEdited(): void {
     this._dataRevision++;
+  }
+
+  /** Derived Arrow tables keyed by `layer|encoding`, stamped with the data
+   * revision they were built from. Bounded: at most layers × 2 entries. */
+  private _arrowCache = new Map<string, { table: unknown; revision: number }>();
+
+  private _arrowCacheKey(layer: number | string | undefined, encoding: string): string {
+    return `${layer ?? 0}|${encoding}`;
+  }
+
+  /**
+   * GeoArrow table for one layer of the current dataset. Cached per
+   * (layer, encoding); rebuilt lazily when the data revision moved.
+   * Returns `unknown` because the core bundle must not name apache-arrow
+   * types — callers in formats/duckdb code cast to `Table`.
+   */
+  public getArrowTable(opts: GetArrowTableOptions = {}): unknown {
+    if (!this._dataset) {
+      throw new Error('TopologySource has no dataset');
+    }
+    const encoding = opts.encoding ?? 'native';
+    const key = this._arrowCacheKey(opts.layer, encoding);
+    const hit = this._arrowCache.get(key);
+    if (hit && hit.revision === this._dataRevision) return hit.table;
+
+    const converter = getTableConverter();
+    if (!converter) {
+      throw new Error(
+        "Arrow table support requires the formats module: import '@zwishing/emap/formats' first",
+      );
+    }
+
+    // Same interval discipline as export(): the render loop may have set a
+    // simplification interval on the live arcs; derived tables must always
+    // carry full-detail coordinates.
+    const arcs = this._dataset.arcs;
+    const savedInterval = arcs?.getRetainedInterval?.() ?? 0;
+    if (savedInterval && arcs?.setRetainedInterval) arcs.setRetainedInterval(0);
+    try {
+      const table = converter.toTable(this._dataset, { layer: opts.layer, encoding });
+      this._arrowCache.set(key, { table, revision: this._dataRevision });
+      return table;
+    } finally {
+      if (savedInterval && arcs?.setRetainedInterval) arcs.setRetainedInterval(savedInterval);
+    }
+  }
+
+  /**
+   * Install an externally produced table as the cache entry for the CURRENT
+   * data revision — the import path (revision 0) and DuckDB result tables
+   * use this so unedited data never pays a conversion. Call AFTER any
+   * setDataset/revision bump for the data the table describes.
+   */
+  public seedArrowTable(
+    table: unknown,
+    opts: { encoding: 'native' | 'wkb'; layer?: number | string },
+  ): void {
+    this._arrowCache.set(this._arrowCacheKey(opts.layer, opts.encoding), {
+      table,
+      revision: this._dataRevision,
+    });
   }
 
   constructor(id: string, options?: TopologySourceOptions) {
