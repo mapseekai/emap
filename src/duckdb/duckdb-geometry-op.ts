@@ -12,6 +12,12 @@ export interface DuckDbUnaryGeometryOptions {
   layer?: string | number;
   outputLayer?: string;
   geometryColumn?: string;
+  /**
+   * Pre-built WKB-encoded Arrow table for the input dataset (e.g. the
+   * TopologySource revision cache). Skips the toArrowTable conversion.
+   * Callers are responsible for it matching `layer`/`geometryColumn`.
+   */
+  inputTable?: Table;
 }
 
 export interface DuckDbGeometryOperationSpec {
@@ -37,18 +43,22 @@ export async function processGeometryWithDuckDb(
 
   const geometryColumn = opts.geometryColumn ?? 'geometry';
   let input: Table;
-  try {
-    input = toArrowTable(dataset, {
-      layer: opts.layer,
-      encoding: 'wkb',
-      geometryColumn,
-    });
-  } catch (err) {
-    throw new DuckDbOperationError(
-      'conversion-failed',
-      `DuckDB ${spec.id} input could not be converted to Arrow`,
-      { cause: err },
-    );
+  if (opts.inputTable) {
+    input = opts.inputTable;
+  } else {
+    try {
+      input = toArrowTable(dataset, {
+        layer: opts.layer,
+        encoding: 'wkb',
+        geometryColumn,
+      });
+    } catch (err) {
+      throw new DuckDbOperationError(
+        'conversion-failed',
+        `DuckDB ${spec.id} input could not be converted to Arrow`,
+        { cause: err },
+      );
+    }
   }
 
   try {

@@ -1,3 +1,4 @@
+import type { Table } from 'apache-arrow';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import { Err, okValue, type OpResult } from '../map/op-result';
 import { DuckDbOperationError } from './duckdb-errors';
@@ -63,6 +64,8 @@ import {
 export interface DuckDbMapOpSource {
   getBytes?(): Uint8Array | ArrayBuffer | null | undefined;
   getDataset(): MapshaperDataset | null | undefined;
+  /** Revision-cached Arrow table (TopologySource.getArrowTable). */
+  getArrowTable?(opts: { layer?: string | number; encoding: 'native' | 'wkb' }): unknown;
   getGeoParquetQuerySource?(): DuckDbGeoParquetQuerySource | null | undefined;
 }
 
@@ -140,7 +143,10 @@ function readInputDataset(
   ctx: DuckDbMapOpContext,
   src: string,
   field = 'src',
-): { ok: true; dataset: MapshaperDataset } | { ok: false; result: OpResult<never> } {
+  tableOpts?: { layer?: string | number; geometryColumn?: string },
+):
+  | { ok: true; dataset: MapshaperDataset; inputTable?: Table }
+  | { ok: false; result: OpResult<never> } {
   const source = ctx.getSource(src);
   if (!source) return { ok: false, result: Err.notFound('source', src) };
 
@@ -152,7 +158,21 @@ function readInputDataset(
     };
   }
 
-  return { ok: true, dataset };
+  let inputTable: Table | undefined;
+  const geometryColumn = tableOpts?.geometryColumn ?? 'geometry';
+  if (geometryColumn === 'geometry' && source.getArrowTable) {
+    try {
+      inputTable = source.getArrowTable({
+        layer: tableOpts?.layer,
+        encoding: 'wkb',
+      }) as Table;
+    } catch {
+      // cache unavailable (formats module not loaded, conversion failure):
+      // fall back to the op's own conversion path
+    }
+  }
+
+  return { ok: true, dataset, inputTable };
 }
 
 function outputSourceId(output: { sourceId: string } | undefined): string | OpResult<never> {
@@ -166,14 +186,21 @@ export async function duckDbBufferLayer(
   ctx: DuckDbMapOpContext,
   opts: DuckDbBufferLayerOptions,
 ): Promise<DuckDbBufferLayerResult> {
-  const input = readInputDataset(ctx, opts.src);
+  const input = readInputDataset(ctx, opts.src, 'src', {
+    layer: opts.layer,
+    geometryColumn: opts.geometryColumn,
+  });
   if (!input.ok) return input.result;
 
   const sourceId = outputSourceId(opts.output);
   if (typeof sourceId !== 'string') return sourceId;
 
   try {
-    const dataset = await bufferDatasetWithDuckDb(input.dataset, opts, opts.runtime);
+    const dataset = await bufferDatasetWithDuckDb(
+      input.dataset,
+      { ...opts, inputTable: input.inputTable },
+      opts.runtime,
+    );
     await ctx.setSourceDataset(sourceId, dataset);
     return okValue({ sourceId, dataset });
   } catch (err) {
@@ -205,6 +232,7 @@ function geometryOptions(opts: DuckDbGeometryLayerOptions): DuckDbUnaryGeometryO
     layer: opts.layer,
     outputLayer: opts.outputLayer,
     geometryColumn: opts.geometryColumn,
+    inputTable: opts.inputTable,
   };
 }
 
@@ -215,6 +243,7 @@ function attributeOptions(opts: DuckDbAttributeLayerOptions): DuckDbAttributeOpe
     geometryColumn: opts.geometryColumn,
     outputColumn: opts.outputColumn,
     failOnGeographicCrs: opts.failOnGeographicCrs,
+    inputTable: opts.inputTable,
   };
 }
 
@@ -420,14 +449,20 @@ export async function duckDbGeometryLayer(
   ctx: DuckDbMapOpContext,
   opts: DuckDbGeometryLayerOptions,
 ): Promise<DuckDbGeometryLayerResult> {
-  const input = readInputDataset(ctx, opts.src);
+  const input = readInputDataset(ctx, opts.src, 'src', {
+    layer: opts.layer,
+    geometryColumn: opts.geometryColumn,
+  });
   if (!input.ok) return input.result;
 
   const sourceId = outputSourceId(opts.output);
   if (typeof sourceId !== 'string') return sourceId;
 
   try {
-    const dataset = await runGeometryOperation(input.dataset, opts);
+    const dataset = await runGeometryOperation(input.dataset, {
+      ...opts,
+      inputTable: input.inputTable,
+    });
     await ctx.setSourceDataset(sourceId, dataset);
     return okValue({ sourceId, dataset });
   } catch (err) {
@@ -461,14 +496,20 @@ export async function duckDbAttributeLayer(
   ctx: DuckDbMapOpContext,
   opts: DuckDbAttributeLayerOptions,
 ): Promise<DuckDbAttributeLayerResult> {
-  const input = readInputDataset(ctx, opts.src);
+  const input = readInputDataset(ctx, opts.src, 'src', {
+    layer: opts.layer,
+    geometryColumn: opts.geometryColumn,
+  });
   if (!input.ok) return input.result;
 
   const sourceId = outputSourceId(opts.output);
   if (typeof sourceId !== 'string') return sourceId;
 
   try {
-    const dataset = await runAttributeOperation(input.dataset, opts);
+    const dataset = await runAttributeOperation(input.dataset, {
+      ...opts,
+      inputTable: input.inputTable,
+    });
     await ctx.setSourceDataset(sourceId, dataset);
     return okValue({ sourceId, dataset });
   } catch (err) {

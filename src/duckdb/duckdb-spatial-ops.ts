@@ -66,6 +66,7 @@ function normalizeSimplifyOptions(
     geometryColumn: opts.geometryColumn ?? 'geometry',
     tolerance: opts.tolerance,
     failOnGeographicCrs,
+    inputTable: opts.inputTable,
   };
 }
 

@@ -211,6 +211,31 @@ describe('duckDbBufferLayer', () => {
     });
   });
 
+  it('passes the source Arrow cache to the op instead of reconverting', async () => {
+    const dataset = await polygonDataset();
+    const cached = toArrowTable(dataset, { encoding: 'wkb', geometryColumn: 'geometry' });
+    const runtime = new FakeRuntime(cached);
+    const ctx = new FakeContext();
+    ctx.sources.set('src', {
+      getDataset: () => dataset,
+      getArrowTable: (opts: { encoding: string }) => {
+        expect(opts.encoding).toBe('wkb');
+        return cached;
+      },
+    });
+
+    const result = await duckDbBufferLayer(ctx, {
+      src: 'src',
+      distance: 1,
+      output: { sourceId: 'out' },
+      runtime,
+      failOnGeographicCrs: false,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(runtime.connection.inserted[0]!.table).toBe(cached);
+  });
+
   it('passes layer and distance options to bufferDatasetWithDuckDb', async () => {
     const dataset = await polygonDataset();
     dataset.layers[0]!.name = 'parcels';

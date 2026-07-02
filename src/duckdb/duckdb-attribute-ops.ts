@@ -126,6 +126,7 @@ async function processNamedAttributeOperation(
       outputLayer: opts.outputLayer,
       geometryColumn: opts.geometryColumn,
       outputColumn: opts.outputColumn ?? spec.defaultOutputColumn,
+      inputTable: opts.inputTable,
     },
     spec,
     runtime,
