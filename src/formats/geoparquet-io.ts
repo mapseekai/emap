@@ -87,32 +87,11 @@ export async function exportGeoParquet(
   opts: ExportGeoParquetOptions = {},
 ): Promise<Uint8Array> {
   const wasm = await initParquetWasm(opts);
-  const sourceCrsString = resolveDatasetCRSMetadata(dataset);
-  const reprojectToWgs84 = opts.reprojectToWgs84 ?? false;
-  const projjsonCrs =
-    reprojectToWgs84 && isWebMercatorCrs(sourceCrsString)
-      ? undefined
-      : await crsStringToProjjsonAsync(
-          sourceCrsString,
-          async (authority, code) => {
-            const explicit = opts.crsProjjsonLookup?.(authority, code);
-            if (explicit !== undefined) return explicit;
-            return findAuthorityProjjsonAsync(authority, code, {
-              baseUrl: opts.baseUrl,
-              fetch: opts.fetch,
-            });
-          },
-          { strict: true },
-        );
+  // A pre-built table (e.g. the source revision cache) is serialized as-is;
+  // dataset conversion AND the async PROJJSON CRS resolution only run on
+  // the rebuild path.
   const table = stripFieldExtensionMetadata(
-    opts.table ??
-      toArrowTable(dataset, {
-        ...opts,
-        encoding: opts.encoding ?? 'wkb',
-        bboxColumn: opts.bboxColumn === undefined ? 'bbox' : opts.bboxColumn,
-        reprojectToWgs84,
-        projjsonCrs,
-      }),
+    opts.table ?? (await buildGeoParquetTable(dataset, opts)),
   );
   const wasmTable = wasm.Table.fromIPCStream(tableToIPC(table, 'stream'));
 
@@ -132,6 +111,38 @@ export async function exportGeoParquet(
 
   const properties = propertiesBuilder.setCompression(compression).build();
   return wasm.writeParquet(wasmTable, properties);
+}
+
+/** Rebuild path: dataset → Arrow table with GeoParquet defaults (WKB
+ * encoding, `bbox` covering column, strict async PROJJSON CRS resolution). */
+async function buildGeoParquetTable(
+  dataset: MapshaperDataset,
+  opts: ExportGeoParquetOptions,
+): Promise<Table> {
+  const sourceCrsString = resolveDatasetCRSMetadata(dataset);
+  const reprojectToWgs84 = opts.reprojectToWgs84 ?? false;
+  const projjsonCrs =
+    reprojectToWgs84 && isWebMercatorCrs(sourceCrsString)
+      ? undefined
+      : await crsStringToProjjsonAsync(
+          sourceCrsString,
+          async (authority, code) => {
+            const explicit = opts.crsProjjsonLookup?.(authority, code);
+            if (explicit !== undefined) return explicit;
+            return findAuthorityProjjsonAsync(authority, code, {
+              baseUrl: opts.baseUrl,
+              fetch: opts.fetch,
+            });
+          },
+          { strict: true },
+        );
+  return toArrowTable(dataset, {
+    ...opts,
+    encoding: opts.encoding ?? 'wkb',
+    bboxColumn: opts.bboxColumn === undefined ? 'bbox' : opts.bboxColumn,
+    reprojectToWgs84,
+    projjsonCrs,
+  });
 }
 
 function isWebMercatorCrs(crsString: string | undefined): boolean {

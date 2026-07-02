@@ -1,7 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Table } from 'apache-arrow';
 import '../formats'; // side effect: registers plugin + table converter
 import { exportGeoArrow } from '../formats/geoarrow-io';
+import { exportGeoParquet, importGeoParquetTable } from '../formats/geoparquet-io';
+import { setParquetWasm } from '../formats/parquet-wasm-loader';
+import { injectParquetWasmForTests } from '../formats/test-utils';
 import * as datasetToTable from '../formats/dataset-to-table';
 import {
   getTableConverter,
@@ -131,5 +134,40 @@ describe('export via arrow cache', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  describe('geoparquet', () => {
+    beforeAll(async () => {
+      await injectParquetWasmForTests();
+    }, 30000);
+
+    afterAll(() => setParquetWasm(null));
+
+    it('exports geoparquet without a second conversion when cached', async () => {
+      const seedSource = await makeSource();
+      const parquetBytes = await exportGeoParquet(seedSource.getDataset()!);
+      const source = new TopologySource('parquet1');
+      await source.setData({ filename: 'c.parquet', content: parquetBytes });
+
+      const spy = vi.spyOn(datasetToTable, 'toArrowTable');
+      try {
+        const blob = await source.export({ format: 'geoparquet' });
+        expect(blob.size).toBeGreaterThan(0);
+        expect(spy).not.toHaveBeenCalled(); // seeded revision-0 wkb table served
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('rebuilds through the geoparquet path (bbox column) on a cache miss', async () => {
+      // GeoJSON import seeds nothing — the export MUST NOT route a generic
+      // converter rebuild into the handler; exportGeoParquet's own rebuild
+      // adds the GeoParquet 1.1 `bbox` covering column by default.
+      const source = await makeSource();
+      const blob = await source.export({ format: 'geoparquet' });
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      const { table } = await importGeoParquetTable(bytes);
+      expect(table.schema.fields.map((f) => f.name)).toContain('bbox');
+    });
   });
 });

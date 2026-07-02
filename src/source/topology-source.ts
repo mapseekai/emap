@@ -187,6 +187,15 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     return `${layer ?? 0}|${encoding}`;
   }
 
+  /** Cached table for (layer, encoding) if it is fresh for the current data
+   * revision; undefined on a miss. Unlike {@link getArrowTable} this never
+   * rebuilds — callers with a richer rebuild path of their own (the
+   * geoparquet/geoarrow export handlers) use it to consume only true hits. */
+  private _peekArrowTable(layer: number | string | undefined, encoding: string): unknown {
+    const hit = this._arrowCache.get(this._arrowCacheKey(layer, encoding));
+    return hit && hit.revision === this._dataRevision ? hit.table : undefined;
+  }
+
   /**
    * GeoArrow table for one layer of the current dataset. Cached per
    * (layer, encoding); rebuilt lazily when the data revision moved.
@@ -710,14 +719,13 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         let handlerOptions: object = options;
         if (options.format === 'geoarrow' || options.format === 'geoparquet') {
           const encoding = options.encoding ?? (options.format === 'geoarrow' ? 'native' : 'wkb');
-          let table: unknown;
-          try {
-            table = this.getArrowTable({ layer: options.layer, encoding });
-          } catch {
-            // formats module missing or conversion failed — the handler
-            // surfaces its own error on the rebuild path
-          }
-          handlerOptions = { ...options, table };
+          // Forward only a fresh cache HIT. On a miss we must NOT call
+          // getArrowTable(): its generic converter rebuild lacks the export
+          // handlers' richer options (geoparquet bbox covering column,
+          // strict PROJJSON CRS resolution) — the handler's own rebuild
+          // path stays authoritative for non-cached data.
+          const table = this._peekArrowTable(options.layer, encoding);
+          if (table !== undefined) handlerOptions = { ...options, table };
         }
         const files = await pluginHandler(this._dataset, handlerOptions);
         return this._filesToBlob(files, options.format);
