@@ -236,6 +236,68 @@ describe('duckDbBufferLayer', () => {
     expect(runtime.connection.inserted[0]!.table).toBe(cached);
   });
 
+  it('bypasses the source Arrow cache when a custom geometry column is requested', async () => {
+    const dataset = await polygonDataset();
+    const runtime = new FakeRuntime(
+      toArrowTable(dataset, { encoding: 'wkb', geometryColumn: 'other' }),
+    );
+    const ctx = new FakeContext();
+    let cacheCalls = 0;
+    ctx.sources.set('src', {
+      getDataset: () => dataset,
+      getArrowTable: () => {
+        cacheCalls += 1;
+        return toArrowTable(dataset, { encoding: 'wkb', geometryColumn: 'geometry' });
+      },
+    });
+
+    const result = await duckDbBufferLayer(ctx, {
+      src: 'src',
+      distance: 1,
+      geometryColumn: 'other',
+      output: { sourceId: 'out' },
+      runtime,
+      failOnGeographicCrs: false,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(cacheCalls).toBe(0);
+    expect(runtime.connection.inserted).toHaveLength(1);
+    expect(runtime.connection.inserted[0]!.table.schema.fields.map((f) => f.name)).toContain(
+      'other',
+    );
+  });
+
+  it('falls back to its own conversion when the source Arrow cache throws', async () => {
+    const dataset = await polygonDataset();
+    const runtime = new FakeRuntime(toArrowTable(dataset, { encoding: 'wkb' }));
+    const ctx = new FakeContext();
+    let cacheCalls = 0;
+    ctx.sources.set('src', {
+      getDataset: () => dataset,
+      getArrowTable: () => {
+        cacheCalls += 1;
+        throw new Error('formats module not loaded');
+      },
+    });
+
+    const result = await duckDbBufferLayer(ctx, {
+      src: 'src',
+      distance: 1,
+      output: { sourceId: 'out' },
+      runtime,
+      failOnGeographicCrs: false,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(cacheCalls).toBe(1);
+    // Freshly converted table (not from the cache, which only ever threw).
+    expect(runtime.connection.inserted).toHaveLength(1);
+    expect(runtime.connection.inserted[0]!.table.schema.fields.map((f) => f.name)).toContain(
+      'geometry',
+    );
+  });
+
   it('passes layer and distance options to bufferDatasetWithDuckDb', async () => {
     const dataset = await polygonDataset();
     dataset.layers[0]!.name = 'parcels';
@@ -997,5 +1059,67 @@ describe('duckDbOverlayLayer', () => {
       });
     }
     expect(ctx.outputDatasets.has('overlay')).toBe(false);
+  });
+});
+
+describe('source Arrow cache gating', () => {
+  function cacheTrackingSource(dataset: MapshaperDataset): {
+    source: DuckDbMapOpSource;
+    calls: () => number;
+  } {
+    let calls = 0;
+    return {
+      source: {
+        getDataset: () => dataset,
+        getArrowTable: () => {
+          calls += 1;
+          return toArrowTable(dataset, { encoding: 'wkb', geometryColumn: 'geometry' });
+        },
+      },
+      calls: () => calls,
+    };
+  }
+
+  it('does not resolve the cache for query, relation, or overlay ops', async () => {
+    const input = cacheTrackingSource(await polygonDataset());
+    const mask = cacheTrackingSource(await polygonDataset());
+
+    const queryCtx = new FakeContext();
+    queryCtx.sources.set('src', input.source);
+    const queryResult = await duckDbQueryLayer(queryCtx, {
+      src: 'src',
+      sql: 'SELECT name FROM input',
+      output: { sourceId: 'query' },
+      runtime: new FakeRuntime(tableFromArrays({ __emap_rowid: [0], name: ['a'] })),
+    });
+    expect(queryResult.ok).toBe(true);
+
+    const relationCtx = new FakeContext();
+    relationCtx.sources.set('src', input.source);
+    relationCtx.sources.set('mask', mask.source);
+    const relationResult = await duckDbRelationLayer(relationCtx, {
+      src: 'src',
+      mask: 'mask',
+      mode: 'filter',
+      operation: 'intersects',
+      output: { sourceId: 'filtered' },
+      runtime: new FakeRuntime(toArrowTable(await polygonDataset(), { encoding: 'wkb' })),
+    });
+    expect(relationResult.ok).toBe(true);
+
+    const overlayCtx = new FakeContext();
+    overlayCtx.sources.set('src', input.source);
+    overlayCtx.sources.set('mask', mask.source);
+    const overlayResult = await duckDbOverlayLayer(overlayCtx, {
+      src: 'src',
+      mask: 'mask',
+      operation: 'intersection',
+      output: { sourceId: 'overlay' },
+      runtime: new FakeRuntime(toArrowTable(await polygonDataset(), { encoding: 'wkb' })),
+    });
+    expect(overlayResult.ok).toBe(true);
+
+    expect(input.calls()).toBe(0);
+    expect(mask.calls()).toBe(0);
   });
 });

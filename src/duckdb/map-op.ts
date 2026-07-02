@@ -158,9 +158,12 @@ function readInputDataset(
     };
   }
 
+  // Only resolve the cache for callers that consume `inputTable` (they pass
+  // `tableOpts`); other callers (query/relation/overlay) convert internally,
+  // so resolving here would just run the WKB conversion twice.
   let inputTable: Table | undefined;
   const geometryColumn = tableOpts?.geometryColumn ?? 'geometry';
-  if (geometryColumn === 'geometry' && source.getArrowTable) {
+  if (tableOpts !== undefined && geometryColumn === 'geometry' && source.getArrowTable) {
     try {
       inputTable = source.getArrowTable({
         layer: tableOpts?.layer,
@@ -236,14 +239,17 @@ function geometryOptions(opts: DuckDbGeometryLayerOptions): DuckDbUnaryGeometryO
   };
 }
 
-function attributeOptions(opts: DuckDbAttributeLayerOptions): DuckDbAttributeOperationOptions {
+function attributeOptions(
+  opts: DuckDbAttributeLayerOptions,
+  inputTable?: Table,
+): DuckDbAttributeOperationOptions {
   return {
     layer: opts.layer,
     outputLayer: opts.outputLayer,
     geometryColumn: opts.geometryColumn,
     outputColumn: opts.outputColumn,
     failOnGeographicCrs: opts.failOnGeographicCrs,
-    inputTable: opts.inputTable,
+    inputTable,
   };
 }
 
@@ -307,30 +313,32 @@ async function runGeometryOperation(
 async function runAttributeOperation(
   dataset: MapshaperDataset,
   opts: DuckDbAttributeLayerOptions,
+  inputTable?: Table,
 ): Promise<MapshaperDataset> {
+  const helperOpts = attributeOptions(opts, inputTable);
   switch (opts.operation) {
     case 'area':
-      return areaDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+      return areaDatasetWithDuckDb(dataset, helperOpts, opts.runtime);
     case 'length':
-      return lengthDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+      return lengthDatasetWithDuckDb(dataset, helperOpts, opts.runtime);
     case 'perimeter':
-      return perimeterDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+      return perimeterDatasetWithDuckDb(dataset, helperOpts, opts.runtime);
     case 'geometryType':
-      return geometryTypeDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+      return geometryTypeDatasetWithDuckDb(dataset, helperOpts, opts.runtime);
     case 'isValid':
-      return isValidDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+      return isValidDatasetWithDuckDb(dataset, helperOpts, opts.runtime);
     case 'isEmpty':
-      return isEmptyDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+      return isEmptyDatasetWithDuckDb(dataset, helperOpts, opts.runtime);
     case 'isSimple':
-      return isSimpleDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+      return isSimpleDatasetWithDuckDb(dataset, helperOpts, opts.runtime);
     case 'x':
-      return xDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+      return xDatasetWithDuckDb(dataset, helperOpts, opts.runtime);
     case 'y':
-      return yDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+      return yDatasetWithDuckDb(dataset, helperOpts, opts.runtime);
     case 'centroidX':
-      return centroidXDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+      return centroidXDatasetWithDuckDb(dataset, helperOpts, opts.runtime);
     case 'centroidY':
-      return centroidYDatasetWithDuckDb(dataset, attributeOptions(opts), opts.runtime);
+      return centroidYDatasetWithDuckDb(dataset, helperOpts, opts.runtime);
     default:
       throw new DuckDbOperationError(
         'validation',
@@ -506,10 +514,7 @@ export async function duckDbAttributeLayer(
   if (typeof sourceId !== 'string') return sourceId;
 
   try {
-    const dataset = await runAttributeOperation(input.dataset, {
-      ...opts,
-      inputTable: input.inputTable,
-    });
+    const dataset = await runAttributeOperation(input.dataset, opts, input.inputTable);
     await ctx.setSourceDataset(sourceId, dataset);
     return okValue({ sourceId, dataset });
   } catch (err) {
