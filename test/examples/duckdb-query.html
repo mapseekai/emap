@@ -269,6 +269,9 @@
           setSourceDataset(id, dataset) {
             contextSources.set(id, { getDataset: () => dataset });
           },
+          seedSourceArrowTable(id, table, encoding) {
+            map.getSource(id)?.seedArrowTable?.(table, { encoding });
+          },
         };
       }
 
