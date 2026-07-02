@@ -1659,6 +1659,7 @@ export class Emap extends EventDispatcher {
    */
   public pushCommand(cmd: EditCommand): void {
     this._history.push(cmd);
+    this._markSourcesDataEdited();
     this._fireHistoryChange();
   }
 
@@ -1669,6 +1670,7 @@ export class Emap extends EventDispatcher {
   public undo(): boolean {
     const cmd = this._history.undo();
     if (!cmd) return false;
+    this._markSourcesDataEdited();
     this._fireHistoryChange();
     // Any command that touched `layer.shapes` (delete/create/...) will have
     // moved feature ids around; invalidate every shape-derived cache rather
@@ -1685,10 +1687,22 @@ export class Emap extends EventDispatcher {
   public redo(): boolean {
     const cmd = this._history.redo();
     if (!cmd) return false;
+    this._markSourcesDataEdited();
     this._fireHistoryChange();
     this._invalidateAllShapeCaches();
     this._scheduleRender();
     return true;
+  }
+
+  /**
+   * Edits arrive as already-applied EditCommands without a uniform source
+   * reference, so bump every topology source. Over-bumping only costs a
+   * lazy rebuild on next derived-data access — correctness is unaffected.
+   */
+  private _markSourcesDataEdited(): void {
+    for (const source of this._sources.values()) {
+      source.markDataEdited();
+    }
   }
 
   /** Drop every shape-derived cache. Used by undo/redo where per-source

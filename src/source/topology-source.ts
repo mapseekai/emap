@@ -144,6 +144,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   private _simplifyFloor: number = 0;
   private _runner: MapshaperRunner;
   private _renderRevision = 0;
+  private _dataRevision = 0;
 
   /** Max-detail threshold the user (or last `-simplify` run) asked for. */
   getSimplifyFloor(): number {
@@ -156,6 +157,24 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
   private _bumpRenderRevision(): void {
     this._renderRevision++;
+  }
+
+  /**
+   * Monotonic counter of committed data changes (edits, dataset replaces,
+   * reprojection). Derived caches (Arrow tables, render chunks) compare
+   * their stamp against this to detect staleness. Render-only churn
+   * (markDisplayArcsDirty / refreshDisplayArcs) does NOT bump it.
+   */
+  public getDataRevision(): number {
+    return this._dataRevision;
+  }
+
+  /**
+   * Record an in-place data edit (vertex move, undo/redo, …). O(1) — no
+   * rebuild happens here; stale caches rebuild lazily on next access.
+   */
+  public markDataEdited(): void {
+    this._dataRevision++;
   }
 
   constructor(id: string, options?: TopologySourceOptions) {
@@ -366,6 +385,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       }
       this._simplifyFloor = this._dataset?.arcs?.getRetainedInterval?.() ?? 0;
       this._bumpRenderRevision();
+      this._dataRevision++;
 
       this.fire('data', { reason: 'load' });
       this._resolvePending(version);
@@ -517,6 +537,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       this._displayArcs = new DisplayArcs(this._dataset.arcs);
     }
     this._bumpRenderRevision();
+    this._dataRevision++;
   }
 
   getExtent(): Bounds {
@@ -577,6 +598,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     // a non-zero `retainedInterval` here; other ops typically leave it at 0.
     this._simplifyFloor = dataset.arcs?.getRetainedInterval?.() ?? 0;
     this._bumpRenderRevision();
+    this._dataRevision++;
     // `replace` distinguishes edit-driven dataset swaps from initial `load` —
     // listeners that auto-fit the viewport should only react to `load`.
     this.fire('data', { reason: 'replace' });

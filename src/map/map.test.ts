@@ -144,6 +144,7 @@ function createMockSource(layers?: unknown[]) {
     getDataset: vi.fn(() => undefined),
     getDisplayArcs: vi.fn(() => null),
     getCRS: vi.fn(() => 'EPSG:4326'),
+    markDataEdited: vi.fn(),
   };
 }
 
@@ -940,6 +941,28 @@ describe('Emap edit history', () => {
   });
 });
 
+describe('Emap data revision wiring', () => {
+  it('bumps every topology source on pushCommand, undo and redo', async () => {
+    const { TopologySource } = await import('../source/topology-source');
+    const map = createBareMap();
+    setPrivate(map, '_history', new EditHistory());
+    const source = new TopologySource('test');
+    map.addSource('test', source);
+
+    const r0 = source.getDataRevision();
+    const cmd = { do: () => {}, undo: () => {} };
+
+    map.pushCommand(cmd);
+    expect(source.getDataRevision()).toBe(r0 + 1);
+
+    map.undo();
+    expect(source.getDataRevision()).toBe(r0 + 2);
+
+    map.redo();
+    expect(source.getDataRevision()).toBe(r0 + 3);
+  });
+});
+
 describe('Emap deleteSelected', () => {
   let map: Emap;
   let layer: { shapes: any[]; data?: { getRecords: () => Record<string, unknown>[] } };
@@ -958,6 +981,7 @@ describe('Emap deleteSelected', () => {
       type: 'topology',
       getLayers: () => [layer],
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
   });
@@ -1061,6 +1085,7 @@ describe('Emap clipLayer / eraseLayer', () => {
       getLayers: () => beforeDataset.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     };
     (map as any)._sources.set('src1', source);
 
@@ -1227,6 +1252,7 @@ describe('Emap dissolveLayer', () => {
       getLayers: () => beforeDataset.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     };
     (map as any)._sources.set('src1', source);
 
@@ -1334,6 +1360,7 @@ describe('Emap attribute editing', () => {
       id: 'src1',
       type: 'topology',
       getLayers: () => [layer],
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
   });
@@ -1518,6 +1545,7 @@ describe('Emap mergeSelected', () => {
       getLayers: () => beforeDataset.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     };
     (map as any)._sources.set('src1', source);
 
@@ -1781,6 +1809,7 @@ describe('Emap mergeSelected end-to-end', () => {
         currentDataset = ds;
       },
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -1825,6 +1854,7 @@ describe('Emap mergeSelected end-to-end', () => {
         currentDataset = ds;
       },
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -1890,6 +1920,7 @@ describe('Emap translateSelected', () => {
       getLayers: () => [polyLayer, pointLayer],
       getArcs: () => arcs,
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     };
     (map as any)._sources.set('src1', source);
   });
@@ -2005,6 +2036,7 @@ describe('Emap translateSelected', () => {
       getLayers: () => [layer2],
       getArcs: () => arcs2,
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     };
     (map as any)._sources.set('src2', src2);
 
@@ -2074,6 +2106,7 @@ describe('Emap bufferLayer', () => {
       getLayers: () => beforeDataset.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -2157,6 +2190,7 @@ describe('Emap applyExpression', () => {
       getLayers: () => beforeDataset.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -2298,6 +2332,7 @@ describe('Emap explodeLayer', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -2359,6 +2394,7 @@ describe('Emap innerlinesLayer', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -2464,6 +2500,7 @@ describe('Emap filterFeatures', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -2577,6 +2614,7 @@ describe('Emap snapLayer', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -2691,6 +2729,7 @@ describe('Emap rotateSelected / scaleSelected', () => {
       getLayers: () => [polyLayer, pointLayer],
       getArcs: () => arcs,
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     };
     (map as any)._sources.set('src1', source);
   });
@@ -2819,6 +2858,7 @@ describe('Emap rotateSelected / scaleSelected', () => {
         getLayers: () => [layer2],
         getArcs: () => arcs2,
         refreshDisplayArcs: vi.fn(),
+        markDataEdited: vi.fn(),
       });
 
       map.select(
@@ -2858,6 +2898,7 @@ describe('Emap mosaicLayer', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -2940,6 +2981,7 @@ describe('Emap unionLayers', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -3063,6 +3105,7 @@ describe('Emap divideLayer', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -3185,6 +3228,7 @@ describe('Emap pointsLayer', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -3353,6 +3397,7 @@ describe('Emap linesLayer', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -3447,6 +3492,7 @@ describe('Emap polygonsLayer', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -3545,6 +3591,7 @@ describe('Emap simplifyLayer', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -3741,6 +3788,7 @@ describe('Emap projectLayer', () => {
         liveDataset = dataset;
       }),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -3944,6 +3992,7 @@ describe('Emap renameLayer', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -4045,6 +4094,7 @@ describe('Emap mergeLayers', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -4149,6 +4199,7 @@ describe('Emap splitLayer', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -4258,6 +4309,7 @@ function setupDataEngineeringMap(): {
     getLayers: () => beforeDs.layers,
     setDataset: vi.fn(),
     refreshDisplayArcs: vi.fn(),
+    markDataEdited: vi.fn(),
   } as any;
   (map as any)._sources.set('src1', source);
 
@@ -4625,6 +4677,7 @@ describe('Emap joinTable', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
 
@@ -4931,6 +4984,7 @@ describe('Emap checkGeometry (mocked mapshaper)', () => {
       getLayers: () => ds.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
       off: vi.fn(),
       on: vi.fn(),
     } as any;
@@ -5169,6 +5223,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
       getLayers: () => ds.layers,
       setDataset: setDatasetSpy,
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
       off: vi.fn(),
       on: vi.fn(),
     } as any;
@@ -5435,6 +5490,7 @@ describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
       getLayers: () => ds?.layers ?? [],
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
       // EventDispatcher surface used by Emap.removeSource
       off: vi.fn(),
       on: vi.fn(),
@@ -5747,6 +5803,7 @@ describe('Emap useWorker routing', () => {
       getLayers: () => beforeDs.layers,
       setDataset: setDatasetSpy,
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
       off: vi.fn(),
       on: vi.fn(),
     } as any;
@@ -5905,6 +5962,7 @@ describe("Emap useWorker: 'auto' thresholding", () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
       off: vi.fn(),
       on: vi.fn(),
     } as any;
@@ -6034,6 +6092,7 @@ describe('Emap workerjobstart / workerjobend events', () => {
       getLayers: () => beforeDs.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
       off: vi.fn(),
       on: vi.fn(),
     } as any;
@@ -6203,6 +6262,7 @@ describe('audit-fix: reject comma-bearing names that would silently split', () =
       getLayers: () => layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
     Reflect.set(
@@ -6292,6 +6352,7 @@ describe('audit-fix: bufferLayer rejects non-positive / non-finite radius', () =
       getLayers: () => layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
     Reflect.set(
@@ -6371,6 +6432,7 @@ describe('audit-fix: simplifyLayer rejects weighting with non-weighted method', 
       getLayers: () => ds.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
     Reflect.set(
@@ -6454,6 +6516,7 @@ describe('audit-fix: linesLayer fields token has a single canonical form', () =>
       getLayers: () => ds.layers,
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     } as any;
     (map as any)._sources.set('src1', source);
     Reflect.set(
@@ -6530,6 +6593,7 @@ function makeMapWithLayer(
     getLayers: () => layers,
     setDataset: vi.fn(),
     refreshDisplayArcs: vi.fn(),
+    markDataEdited: vi.fn(),
   } as any;
   (map as any)._sources.set('src1', source);
   Reflect.set(
@@ -7022,6 +7086,7 @@ describe('Emap.intersectionPointsLayer (mocked mapshaper)', () => {
       getLayers: () => beforeDs.layers,
       setDataset: setDatasetSpy,
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
       off: vi.fn(),
       on: vi.fn(),
     } as any;
@@ -7480,6 +7545,7 @@ describe('Phase-6 integration', () => {
       },
       setDataset: setDatasetSpy,
       refreshDisplayArcs: vi.fn(),
+      markDataEdited: vi.fn(),
     };
     setDatasetSpy.mockImplementation((ds: any) => {
       source._currentDs = ds;

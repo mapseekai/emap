@@ -242,6 +242,47 @@ describe('TopologySource render revision', () => {
   });
 });
 
+describe('TopologySource data revision', () => {
+  function makeDataset(arcs: unknown = {
+    getPointCount: () => 0,
+    getRetainedInterval: () => 0,
+  }) {
+    return {
+      ...FAKE_DATASET,
+      arcs,
+    } as any;
+  }
+
+  it('starts at a stable value and bumps on markDataEdited', () => {
+    const source = new TopologySource('test');
+    const r0 = source.getDataRevision();
+
+    source.markDataEdited();
+
+    expect(source.getDataRevision()).toBe(r0 + 1);
+  });
+
+  it('bumps on setDataset', () => {
+    const source = new TopologySource('test');
+    const r0 = source.getDataRevision();
+
+    source.setDataset(makeDataset());
+
+    expect(source.getDataRevision()).toBeGreaterThan(r0);
+  });
+
+  it('does NOT bump on markDisplayArcsDirty (per-frame drag path)', () => {
+    const source = new TopologySource('test');
+    source.setDataset(makeDataset());
+    const r0 = source.getDataRevision();
+
+    source.markDisplayArcsDirty();
+    source.refreshDisplayArcs();
+
+    expect(source.getDataRevision()).toBe(r0);
+  });
+});
+
 describe('TopologySource.setData', () => {
   it('derives filenames from root-relative URLs before import', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({

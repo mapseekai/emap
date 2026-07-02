@@ -62,6 +62,10 @@ export interface TopologySource extends Source {
    * artifacts built from this source's topology should be considered stale.
    */
   getRenderRevision(): number;
+  /** Monotonic counter of committed data changes. See TopologySource docs. */
+  getDataRevision(): number;
+  /** Record an in-place data edit; expires derived caches lazily. */
+  markDataEdited(): void;
   /**
    * Eagerly re-initialize the LOD copy in DisplayArcs from the current
    * dataset arcs. Use for one-shot mutations that need the new copy ready
