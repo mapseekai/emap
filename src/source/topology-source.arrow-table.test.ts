@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Table } from 'apache-arrow';
 import '../formats'; // side effect: registers plugin + table converter
 import { exportGeoArrow } from '../formats/geoarrow-io';
+import * as datasetToTable from '../formats/dataset-to-table';
 import {
   getTableConverter,
   registerTableConverter,
@@ -108,6 +109,27 @@ describe('revision-0 cache seeding on import', () => {
       expect(spy).not.toHaveBeenCalled();
     } finally {
       registerTableConverter(real);
+    }
+  });
+});
+
+describe('export via arrow cache', () => {
+  it('exports geoarrow without a second conversion when cached', async () => {
+    const seedSource = await makeSource();
+    const bytes = exportGeoArrow(seedSource.getDataset()!);
+    const source = new TopologySource('arrow2');
+    await source.setData({ filename: 'b.arrow', content: bytes });
+
+    // `exportGeoArrow` calls `toArrowTable` directly (not through the
+    // format-registry table converter), so the discriminating seam for
+    // "served from cache, no rebuild" is `toArrowTable` itself.
+    const spy = vi.spyOn(datasetToTable, 'toArrowTable');
+    try {
+      const blob = await source.export({ format: 'geoarrow' });
+      expect(blob.size).toBeGreaterThan(0);
+      expect(spy).not.toHaveBeenCalled(); // seeded revision-0 table served
+    } finally {
+      spy.mockRestore();
     }
   });
 });

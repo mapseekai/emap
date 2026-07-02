@@ -22,6 +22,8 @@ export interface ExportGeoParquetOptions
   encoding?: 'wkb' | 'native';
   /** Parquet page compression; default snappy. */
   compression?: 'snappy' | 'gzip' | 'zstd' | 'none';
+  /** Pre-built table (e.g. the source revision cache); serialized as-is. */
+  table?: Table;
 }
 
 /**
@@ -103,13 +105,14 @@ export async function exportGeoParquet(
           { strict: true },
         );
   const table = stripFieldExtensionMetadata(
-    toArrowTable(dataset, {
-      ...opts,
-      encoding: opts.encoding ?? 'wkb',
-      bboxColumn: opts.bboxColumn === undefined ? 'bbox' : opts.bboxColumn,
-      reprojectToWgs84,
-      projjsonCrs,
-    }),
+    opts.table ??
+      toArrowTable(dataset, {
+        ...opts,
+        encoding: opts.encoding ?? 'wkb',
+        bboxColumn: opts.bboxColumn === undefined ? 'bbox' : opts.bboxColumn,
+        reprojectToWgs84,
+        projjsonCrs,
+      }),
   );
   const wasmTable = wasm.Table.fromIPCStream(tableToIPC(table, 'stream'));
 

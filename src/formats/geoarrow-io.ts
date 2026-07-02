@@ -9,6 +9,8 @@ export type ImportGeoArrowOptions = FromArrowTableOptions;
 export interface ExportGeoArrowOptions extends Omit<ToArrowTableOptions, 'encoding'> {
   /** Geometry encoding; GeoArrow IPC defaults to native nested arrays. */
   encoding?: 'native' | 'wkb';
+  /** Pre-built table (e.g. the source revision cache); serialized as-is. */
+  table?: Table;
 }
 
 /**
@@ -40,6 +42,7 @@ export function exportGeoArrow(
   dataset: MapshaperDataset,
   opts: ExportGeoArrowOptions = {},
 ): Uint8Array {
-  const table: Table = toArrowTable(dataset, { ...opts, encoding: opts.encoding ?? 'native' });
+  const table: Table =
+    opts.table ?? toArrowTable(dataset, { ...opts, encoding: opts.encoding ?? 'native' });
   return tableToIPC(table, 'file');
 }

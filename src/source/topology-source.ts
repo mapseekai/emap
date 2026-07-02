@@ -707,7 +707,19 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       // registered DatasetFormatPlugin, not by mapshaper's exporters.
       const pluginHandler = getExportHandler(options.format);
       if (pluginHandler) {
-        const files = await pluginHandler(this._dataset, options);
+        let handlerOptions: object = options;
+        if (options.format === 'geoarrow' || options.format === 'geoparquet') {
+          const encoding = options.encoding ?? (options.format === 'geoarrow' ? 'native' : 'wkb');
+          let table: unknown;
+          try {
+            table = this.getArrowTable({ layer: options.layer, encoding });
+          } catch {
+            // formats module missing or conversion failed — the handler
+            // surfaces its own error on the rebuild path
+          }
+          handlerOptions = { ...options, table };
+        }
+        const files = await pluginHandler(this._dataset, handlerOptions);
         return this._filesToBlob(files, options.format);
       }
       if (options.format === 'geoparquet' || options.format === 'geoarrow') {
