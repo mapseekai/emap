@@ -31,7 +31,13 @@ export interface DatasetFormatPlugin {
   name: string;
   /** File extensions (lowercase, without dot) routed to {@link importBinary}. */
   extensions: string[];
-  /** Parse one binary file into a mapshaper dataset. */
+  /**
+   * Parse one binary file into a mapshaper dataset. May return either a bare
+   * `MapshaperDataset`, or the richer {@link ImportedBinaryDataset} (dataset
+   * plus the Arrow table it was parsed from) so TopologySource can seed its
+   * revision-0 Arrow cache and skip a redundant conversion on first
+   * DuckDB/export use.
+   */
   importBinary(
     content: Uint8Array,
     filename: string,

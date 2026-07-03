@@ -1,7 +1,11 @@
 import { tableFromArrays, type Table } from 'apache-arrow';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import '../formats'; // side effect: registers plugin + table converter
 import { toArrowTable } from '../formats/dataset-to-table';
-import { datasetFromGeoJSON } from '../formats/test-utils';
+import { exportGeoParquet, importGeoParquetTable } from '../formats/geoparquet-io';
+import { setParquetWasm } from '../formats/parquet-wasm-loader';
+import { datasetFromGeoJSON, injectParquetWasmForTests } from '../formats/test-utils';
+import { TopologySource } from '../source/topology-source';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
 import type { DuckDbGeoParquetQuerySource } from './duckdb-geoparquet-query-op';
@@ -325,16 +329,23 @@ describe('duckDbBufferLayer', () => {
     ]);
   });
 
-  it('reseeds the output source cache with the result table', async () => {
+  it('reseeds the output source cache with the result table, after installing the dataset', async () => {
     const dataset = await polygonDataset();
     const resultTable = toArrowTable(dataset, { encoding: 'wkb' });
     const runtime = new FakeRuntime(resultTable);
-    const seeded: Array<{ id: string; table: unknown; encoding: string }> = [];
+    const calls: string[] = [];
+    let installedDataset: MapshaperDataset | undefined;
+    const seeded: Array<{ id: string; table: unknown; encoding: string; forDataset: unknown }> = [];
     const ctx = {
       getSource: () => new FakeSource(dataset),
-      setSourceDataset: () => {},
-      seedSourceArrowTable: (id: string, table: unknown, encoding: string) =>
-        seeded.push({ id, table, encoding }),
+      setSourceDataset: (_id: string, ds: MapshaperDataset) => {
+        calls.push('setSourceDataset');
+        installedDataset = ds;
+      },
+      seedSourceArrowTable: (id: string, table: unknown, encoding: string, forDataset: unknown) => {
+        calls.push('seedSourceArrowTable');
+        seeded.push({ id, table, encoding, forDataset });
+      },
     };
 
     await duckDbBufferLayer(ctx, {
@@ -345,7 +356,16 @@ describe('duckDbBufferLayer', () => {
       failOnGeographicCrs: false,
     });
 
-    expect(seeded).toEqual([{ id: 'out', table: resultTable, encoding: 'wkb' }]);
+    // setSourceDataset must land before seedSourceArrowTable so the seed
+    // stamps the revision the dataset swap just bumped (see map-op.ts doc
+    // comment on DuckDbMapOpContext.seedSourceArrowTable).
+    expect(calls).toEqual(['setSourceDataset', 'seedSourceArrowTable']);
+    // forDataset is the identity guard's key input: it must be exactly the
+    // dataset just installed via setSourceDataset, not e.g. the input
+    // dataset, so TopologySource.seedArrowTable can detect a stale seed.
+    expect(seeded).toEqual([
+      { id: 'out', table: resultTable, encoding: 'wkb', forDataset: installedDataset },
+    ]);
   });
 });
 
@@ -1144,5 +1164,77 @@ describe('source Arrow cache gating', () => {
 
     expect(input.calls()).toBe(0);
     expect(mask.calls()).toBe(0);
+  });
+});
+
+describe('end-to-end: import parquet -> edit -> duckdb op -> export', () => {
+  beforeAll(async () => {
+    await injectParquetWasmForTests();
+  }, 30000);
+
+  afterAll(() => setParquetWasm(null));
+
+  it('carries geometry and the bbox covering column through a DuckDB op to a fresh geoparquet export', async () => {
+    // Import: a real .parquet file becomes the input source's dataset.
+    const dataset = await polygonDataset();
+    const parquetBytes = await exportGeoParquet(dataset);
+    const inputSource = new TopologySource('chain-in');
+    await inputSource.setData({ filename: 'in.parquet', content: parquetBytes });
+
+    // Edit: an in-place data edit (vertex move / undo-redo) bumps the
+    // revision, invalidating the import-time seed for the next read.
+    inputSource.markDataEdited();
+
+    // DuckDB op (fake runtime): wire a minimal DuckDbMapOpContext over two
+    // real TopologySource instances, mirroring how map-op.ts's contract is
+    // meant to be fulfilled — setSourceDataset installs the op's result
+    // dataset, seedSourceArrowTable seeds the matching Arrow cache entry
+    // with the identity guard's `forDataset`.
+    const outputSource = new TopologySource('chain-out');
+    const ctx: DuckDbMapOpContext = {
+      getSource: (id) =>
+        id === 'chain-in'
+          ? {
+              getDataset: () => inputSource.getDataset(),
+              getArrowTable: (opts: { layer?: string | number; encoding: 'native' | 'wkb' }) =>
+                inputSource.getArrowTable(opts),
+            }
+          : undefined,
+      setSourceDataset: (id, resultDataset) => {
+        if (id === 'chain-out') outputSource.setDataset(resultDataset);
+      },
+      seedSourceArrowTable: (id, table, encoding, forDataset) => {
+        if (id === 'chain-out') outputSource.seedArrowTable(table, { encoding, forDataset });
+      },
+    };
+
+    // The DuckDB result table stands in for what a real ST_Buffer query
+    // would hand back; it already carries a bbox covering column, as a
+    // GeoParquet-aware producer would.
+    const bufferedTable = toArrowTable(inputSource.getDataset()!, {
+      encoding: 'wkb',
+      bboxColumn: 'bbox',
+    });
+    const runtime = new FakeRuntime(bufferedTable);
+
+    const result = await duckDbBufferLayer(ctx, {
+      src: 'chain-in',
+      distance: 1,
+      output: { sourceId: 'chain-out' },
+      runtime,
+      failOnGeographicCrs: false,
+    });
+    expect(result.ok).toBe(true);
+
+    // Export: the seeded result must be served as-is (bbox + geometry
+    // intact), not silently dropped by a converter rebuild for the same
+    // cache slot (the CRITICAL bug this fix closes).
+    const blob = await outputSource.export({ format: 'geoparquet' });
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const { table } = await importGeoParquetTable(bytes);
+    const fieldNames = table.schema.fields.map((f) => f.name);
+    expect(fieldNames).toContain('bbox');
+    expect(fieldNames).toContain('geometry');
+    expect(table.numRows).toBe(1);
   });
 });

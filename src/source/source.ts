@@ -30,6 +30,23 @@ export interface ExportOptions {
    * Index or layer name; defaults to layer 0.
    */
   layer?: number | string;
+  /**
+   * Reproject to WGS84 (EPSG:4326) before writing `geoparquet` / `geoarrow`
+   * output. Content-affecting: setting this (even to `false`) forces a fresh
+   * table rebuild instead of reusing a cached Arrow table, since a cached
+   * table cannot retroactively honor a reprojection request.
+   */
+  reprojectToWgs84?: boolean;
+  /**
+   * Name of the bbox covering column to add for `geoparquet` output, or
+   * `false` to omit it. Content-affecting — see {@link reprojectToWgs84}.
+   */
+  bboxColumn?: string | false;
+  /**
+   * Name of the geometry column in `geoparquet` / `geoarrow` output.
+   * Content-affecting — see {@link reprojectToWgs84}.
+   */
+  geometryColumn?: string;
 }
 
 export interface TopologySource extends Source {
@@ -117,8 +134,16 @@ export interface TopologySource extends Source {
    * Install an externally produced table as the cache entry for the current
    * data revision (e.g. import path, DuckDB result tables) so it doesn't get
    * re-converted on the next {@link getArrowTable} call.
+   *
+   * `forDataset`, when provided, guards against a race where a concurrent
+   * op replaced the dataset between the caller computing `table` and this
+   * call landing: if `forDataset` no longer matches the source's current
+   * dataset, the seed is dropped as a no-op.
    */
-  seedArrowTable(table: unknown, opts: { encoding: 'native' | 'wkb'; layer?: number | string }): void;
+  seedArrowTable(
+    table: unknown,
+    opts: { encoding: 'native' | 'wkb'; layer?: number | string; forDataset?: MapshaperDataset },
+  ): void;
 }
 
 /** Options for {@link TopologySource.getArrowTable}. */

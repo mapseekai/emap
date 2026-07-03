@@ -180,20 +180,37 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   }
 
   /** Derived Arrow tables keyed by `layer|encoding`, stamped with the data
-   * revision they were built from. Bounded: at most layers × 2 entries. */
-  private _arrowCache = new Map<string, { table: unknown; revision: number }>();
+   * revision they were built from. Bounded: at most layers × 2 entries.
+   *
+   * `seeded` records provenance: `true` for tables installed via
+   * {@link seedArrowTable} (import-parsed or DuckDB-result tables, which
+   * already carry the richer bbox/CRS metadata an export handler expects);
+   * `false` for tables built internally by {@link getArrowTable}'s generic
+   * `DatasetTableConverter` fallback, which is good enough for DuckDB SQL
+   * but lacks that enrichment. Only `seeded: true` entries may be served to
+   * `export()` — see {@link _peekArrowTable}.
+   */
+  private _arrowCache = new Map<
+    string,
+    { table: unknown; revision: number; seeded: boolean }
+  >();
 
   private _arrowCacheKey(layer: number | string | undefined, encoding: string): string {
     return `${layer ?? 0}|${encoding}`;
   }
 
   /** Cached table for (layer, encoding) if it is fresh for the current data
-   * revision; undefined on a miss. Unlike {@link getArrowTable} this never
-   * rebuilds — callers with a richer rebuild path of their own (the
-   * geoparquet/geoarrow export handlers) use it to consume only true hits. */
+   * revision AND was installed via {@link seedArrowTable} (`seeded: true`);
+   * undefined otherwise. Unlike {@link getArrowTable} this never rebuilds —
+   * callers with a richer rebuild path of their own (the geoparquet/geoarrow
+   * export handlers) use it to consume only trustworthy hits. A converter-
+   * built entry (`seeded: false`) is deliberately excluded: it lacks the
+   * bbox covering column and strict CRS resolution the export handlers add
+   * on their own rebuild path, so serving it here would silently degrade
+   * export output. */
   private _peekArrowTable(layer: number | string | undefined, encoding: string): unknown {
     const hit = this._arrowCache.get(this._arrowCacheKey(layer, encoding));
-    return hit && hit.revision === this._dataRevision ? hit.table : undefined;
+    return hit && hit.revision === this._dataRevision && hit.seeded ? hit.table : undefined;
   }
 
   /**
@@ -226,7 +243,9 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     if (savedInterval && arcs?.setRetainedInterval) arcs.setRetainedInterval(0);
     try {
       const table = converter.toTable(this._dataset, { layer: opts.layer, encoding });
-      this._arrowCache.set(key, { table, revision: this._dataRevision });
+      // seeded: false — a generic converter rebuild, fine for DuckDB SQL but
+      // not for export() (see _peekArrowTable doc comment).
+      this._arrowCache.set(key, { table, revision: this._dataRevision, seeded: false });
       return table;
     } finally {
       if (savedInterval && arcs?.setRetainedInterval) arcs.setRetainedInterval(savedInterval);
@@ -237,15 +256,26 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * Install an externally produced table as the cache entry for the CURRENT
    * data revision — the import path (revision 0) and DuckDB result tables
    * use this so unedited data never pays a conversion. Call AFTER any
-   * setDataset/revision bump for the data the table describes.
+   * setDataset/revision bump for the data the table describes. Stamped
+   * `seeded: true` so export() may serve it directly (see
+   * {@link _peekArrowTable}).
+   *
+   * `forDataset`, when provided, guards against a race: an async op that
+   * computed `table` for a dataset it is about to install may find that a
+   * concurrent op has already replaced `this._dataset` (and bumped the
+   * revision) by the time this call lands. If `forDataset` no longer matches
+   * `this._dataset`, the seed is stale and is dropped as a no-op instead of
+   * stamping the wrong table onto the current revision.
    */
   public seedArrowTable(
     table: unknown,
-    opts: { encoding: 'native' | 'wkb'; layer?: number | string },
+    opts: { encoding: 'native' | 'wkb'; layer?: number | string; forDataset?: MapshaperDataset },
   ): void {
+    if (opts.forDataset !== undefined && opts.forDataset !== this._dataset) return;
     this._arrowCache.set(this._arrowCacheKey(opts.layer, opts.encoding), {
       table,
       revision: this._dataRevision,
+      seeded: true,
     });
   }
 
@@ -719,12 +749,24 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         let handlerOptions: object = options;
         if (options.format === 'geoarrow' || options.format === 'geoparquet') {
           const encoding = options.encoding ?? (options.format === 'geoarrow' ? 'native' : 'wkb');
-          // Forward only a fresh cache HIT. On a miss we must NOT call
-          // getArrowTable(): its generic converter rebuild lacks the export
+          // Content-affecting options change what the exported table must
+          // contain (reprojected coordinates, a different bbox/geometry
+          // column). A cached table — built without knowledge of this call's
+          // options — cannot honor them, so skip the peek entirely and let
+          // the handler's own rebuild path apply them.
+          const hasContentOptions =
+            options.reprojectToWgs84 !== undefined ||
+            options.bboxColumn !== undefined ||
+            options.geometryColumn !== undefined;
+          // Forward only a fresh, seeded cache HIT. On a miss (or when a
+          // converter-only, non-seeded entry occupies the slot) we must NOT
+          // forward it: a generic converter rebuild lacks the export
           // handlers' richer options (geoparquet bbox covering column,
           // strict PROJJSON CRS resolution) — the handler's own rebuild
-          // path stays authoritative for non-cached data.
-          const table = this._peekArrowTable(options.layer, encoding);
+          // path stays authoritative for non-seeded/non-cached data.
+          const table = hasContentOptions
+            ? undefined
+            : this._peekArrowTable(options.layer, encoding);
           if (table !== undefined) handlerOptions = { ...options, table };
         }
         const files = await pluginHandler(this._dataset, handlerOptions);

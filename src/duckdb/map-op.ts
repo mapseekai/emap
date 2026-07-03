@@ -76,11 +76,16 @@ export interface DuckDbMapOpContext {
    * Install a result table as the output source's Arrow cache entry
    * (TopologySource.seedArrowTable). Must be invoked AFTER
    * setSourceDataset so the entry stamps the new data revision.
+   *
+   * `forDataset` should be the same dataset just passed to
+   * `setSourceDataset` — it lets the source detect and drop a stale seed if
+   * a concurrent op replaced the dataset in between.
    */
   seedSourceArrowTable?(
     id: string,
     table: unknown,
     encoding: 'native' | 'wkb',
+    forDataset: MapshaperDataset,
   ): void;
 }
 
@@ -222,7 +227,7 @@ export async function duckDbBufferLayer(
       opts.runtime,
     );
     await ctx.setSourceDataset(sourceId, dataset);
-    if (resultTable) ctx.seedSourceArrowTable?.(sourceId, resultTable, 'wkb');
+    if (resultTable) ctx.seedSourceArrowTable?.(sourceId, resultTable, 'wkb', dataset);
     return okValue({ sourceId, dataset });
   } catch (err) {
     return duckDbErrorToOpResult(err, 'duckdb-buffer');
@@ -495,7 +500,7 @@ export async function duckDbGeometryLayer(
       },
     });
     await ctx.setSourceDataset(sourceId, dataset);
-    if (resultTable) ctx.seedSourceArrowTable?.(sourceId, resultTable, 'wkb');
+    if (resultTable) ctx.seedSourceArrowTable?.(sourceId, resultTable, 'wkb', dataset);
     return okValue({ sourceId, dataset });
   } catch (err) {
     return duckDbErrorToOpResult(err, `duckdb-${opts.operation}`);

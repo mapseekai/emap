@@ -163,11 +163,88 @@ describe('export via arrow cache', () => {
       // GeoJSON import seeds nothing — the export MUST NOT route a generic
       // converter rebuild into the handler; exportGeoParquet's own rebuild
       // adds the GeoParquet 1.1 `bbox` covering column by default.
+      //
+      // The source CRS is pinned to EPSG:3857 (not the default EPSG:4326)
+      // because crsStringToProjjsonAsync deliberately returns `undefined`
+      // (no `crs` key — GeoParquet's implicit OGC:CRS84 default) for
+      // EPSG:4326/CRS84. A 4326 source would make the CRS assertion below
+      // pass vacuously even if CRS resolution were silently skipped; 3857
+      // always yields an explicit PROJJSON block, making it the real
+      // discriminator for this class of bug.
       const source = await makeSource();
+      source.getDataset()!.info = { ...source.getDataset()!.info, crs_string: 'EPSG:3857' };
+      const blob = await source.export({ format: 'geoparquet' });
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      const { table } = await importGeoParquetTable(bytes);
+      expect(table.schema.fields.map((f) => f.name)).toContain('bbox');
+
+      const geoMetadata = table.schema.metadata.get('geo');
+      expect(geoMetadata).toBeTruthy();
+      const geo = JSON.parse(geoMetadata!);
+      const primaryColumn = geo.columns[geo.primary_column];
+      expect(primaryColumn.crs?.id).toEqual({ authority: 'EPSG', code: 3857 });
+    });
+
+    it('does not serve a converter-built (unseeded) cache entry to export — the bbox column and strict CRS resolution would be silently lost', async () => {
+      // Regression test for the bug where any fresh-revision cache hit was
+      // treated as export-ready, regardless of how it got there. Simulate a
+      // DuckDB-style call planting a generic converter entry under the same
+      // `layer|wkb` key geoparquet export reads by default, then confirm
+      // export still routes through its own rebuild path (bbox column
+      // present) instead of forwarding the converter-built table as-is.
+      const source = await makeSource();
+      source.getArrowTable({ encoding: 'wkb' }); // plants a seeded:false entry
       const blob = await source.export({ format: 'geoparquet' });
       const bytes = new Uint8Array(await blob.arrayBuffer());
       const { table } = await importGeoParquetTable(bytes);
       expect(table.schema.fields.map((f) => f.name)).toContain('bbox');
     });
+
+    it('skips a seeded cache hit and rebuilds when a content-affecting export option is set', async () => {
+      // A cached table was built without knowledge of this export call's
+      // options, so it cannot honor `reprojectToWgs84`/`bboxColumn`/
+      // `geometryColumn`. Setting any of them must force the handler's own
+      // rebuild path even though a seeded (trustworthy) cache hit exists.
+      const seedSource = await makeSource();
+      const parquetBytes = await exportGeoParquet(seedSource.getDataset()!);
+      const source = new TopologySource('parquet-content-opts');
+      await source.setData({ filename: 'd.parquet', content: parquetBytes });
+
+      const spy = vi.spyOn(datasetToTable, 'toArrowTable');
+      try {
+        const blob = await source.export({ format: 'geoparquet', reprojectToWgs84: true });
+        expect(blob.size).toBeGreaterThan(0);
+        expect(spy).toHaveBeenCalled(); // rebuild path ran, seeded table was NOT forwarded as-is
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+});
+
+describe('seedArrowTable forDataset race guard', () => {
+  it('drops a seed whose forDataset no longer matches the current dataset', async () => {
+    const source = await makeSource();
+    const staleDataset = source.getDataset();
+    const before = source.getArrowTable({ encoding: 'wkb' });
+
+    // Simulate a concurrent op replacing the dataset before a stale seed
+    // call lands.
+    await source.setData({
+      filename: 'b.geojson',
+      content: new TextEncoder().encode(GEOJSON),
+    });
+
+    source.seedArrowTable(
+      { fake: 'stale-table' },
+      { encoding: 'wkb', forDataset: staleDataset },
+    );
+
+    // The stale seed must have been dropped: the wkb entry for the new
+    // dataset is untouched (still whatever the new load produced, not the
+    // fake table), so a fresh get either rebuilds or returns something
+    // other than the injected fake.
+    expect(source.getArrowTable({ encoding: 'wkb' })).not.toEqual({ fake: 'stale-table' });
+    expect(source.getArrowTable({ encoding: 'wkb' })).not.toBe(before);
   });
 });
