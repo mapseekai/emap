@@ -7,6 +7,7 @@ engine built on Mapshaper data structures and HTML5 Canvas.
 
 - **Architecture, repo layout, patterns, code conventions, where to make changes** → [README.md — Architecture](README.md#architecture)
 - **Hard rules for AI agents (code search, conventions, GitNexus protocol)** → [CLAUDE.md](CLAUDE.md)
+- **Found a bug / security / performance issue you're not fixing right now?** Record it in Multica (emap project) — see [CLAUDE.md — Issue Tracking (Multica)](CLAUDE.md#issue-tracking-multica). Check for an existing issue first; never leave findings only in chat.
 
 The rules in `CLAUDE.md` apply to all AI agents unchanged. Treat that file as
 authoritative; this file exists only to point you there.
