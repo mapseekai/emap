@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-22
+
+### Added
+
+- Optional `@zwishing/emap/duckdb` browser module, powered by DuckDB-Wasm and its spatial extension. It provides Arrow-backed dataset processing, GeoParquet byte queries, unary geometry operations, geometry-derived attributes, spatial relations, and overlay operations without adding DuckDB to the core bundle.
+
+### Fixed
+
+- `@zwishing/emap/style.css` now resolves its TypeScript declaration through both modern conditional exports and legacy Node-style module resolution.
+
 ## [0.4.0] - 2026-06-10
 
 ### Performance

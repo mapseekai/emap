@@ -32,6 +32,7 @@ or controlled internal workflows first.
 - Undo/redo, transactions, validators, feature accessors, highlighting, and
   full-session snapshots.
 - Optional Web Worker offloading for expensive dataset-replace operations.
+- Optional `@zwishing/emap/duckdb` module for DuckDB-Wasm spatial processing and GeoParquet queries.
 - CSS design tokens for theming built-in UI surfaces.
 
 For the full capability matrix, see [FEATURES.md](FEATURES.md).
@@ -90,6 +91,8 @@ For bundlers, prefer:
 ```ts
 import '@zwishing/emap/style.css';
 ```
+
+TypeScript resolves this CSS import to the bundled declaration file under both modern conditional exports and legacy Node-style module resolution.
 
 For script-tag or static-host deployments, copy the files from
 `node_modules/@zwishing/emap/dist/` into your public assets directory. When

@@ -1,11 +1,18 @@
 {
   "name": "@zwishing/emap",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "A modern, decoupled rendering engine for mapshaper data",
   "main": "dist/emap.mjs",
   "module": "dist/emap.mjs",
   "browser": "dist/emap.js",
   "types": "dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "style.css": [
+        "dist/style.css.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -21,7 +28,7 @@
       "default": "./dist/emap-duckdb.mjs"
     },
     "./style.css": {
-      "types": "./style.css.d.ts",
+      "types": "./dist/style.css.d.ts",
       "default": "./dist/emap.css"
     },
     "./dist/emap-worker.js": "./dist/emap-worker.js",
@@ -45,10 +52,10 @@
     "dist/emap-worker.js",
     "dist/emap-formats.js",
     "dist/emap-formats.mjs",
+    "dist/emap-duckdb.mjs",
     "dist/mapshaper-vendor.js",
     "dist/mapshaper-vendor.mjs",
     "dist/emap.css",
-    "style.css.d.ts",
     "dist/**/*.d.ts",
     "README.md",
     "FEATURES.md",

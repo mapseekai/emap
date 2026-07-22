@@ -17,6 +17,7 @@ function copyControlsCss() {
     name: 'copy-controls-css',
     writeBundle() {
       copyFileSync('src/ui/controls.css', 'dist/emap.css');
+      copyFileSync('src/types/style.css.d.ts', 'dist/style.css.d.ts');
     },
   };
 }

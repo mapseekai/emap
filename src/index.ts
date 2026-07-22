@@ -1,5 +1,5 @@
 // Public entry point. Sections below match the conceptual layers documented
-// in CLAUDE.md (`map.ts orchestrates → painters → sources → edit commands →
+// in AGENTS.md and README.md (`map.ts orchestrates → painters → sources → edit commands →
 // UI controls`). Avoid `export *` — every public name is listed explicitly so
 // tree-shaking is precise and the API surface stays auditable.
 

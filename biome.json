@@ -13,7 +13,6 @@
       "*.css",
       "src/**/*.ts",
       "test/**/*.ts",
-      "style.css.d.ts",
       "!package-lock.json",
       "!pnpm-lock.yaml",
       "!dist/**",
