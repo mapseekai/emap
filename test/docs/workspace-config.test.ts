@@ -9,6 +9,8 @@ describe('documentation workspace config', () => {
     };
 
     const scriptNames = [
+      'docs:clean',
+      'docs:dev',
       'docs:build',
       'api:build',
       'examples:build',
@@ -22,5 +24,18 @@ describe('documentation workspace config', () => {
     for (const scriptName of scriptNames) {
       expect(manifest.scripts?.[scriptName]).toEqual(expect.any(String));
     }
+  });
+
+  it('clears Docusaurus generated metadata before local docs startup', async () => {
+    const manifest = JSON.parse(await readFile(resolve(process.cwd(), 'package.json'), 'utf8')) as {
+      scripts?: Record<string, unknown>;
+    };
+
+    expect(manifest.scripts?.['docs:clean']).toBe(
+      "node -e \"require('node:fs').rmSync('packages/docs/.docusaurus',{recursive:true,force:true})\"",
+    );
+    expect(manifest.scripts?.['docs:dev']).toBe(
+      'pnpm run docs:clean && pnpm --filter @zwishing/emap-docs start',
+    );
   });
 });
