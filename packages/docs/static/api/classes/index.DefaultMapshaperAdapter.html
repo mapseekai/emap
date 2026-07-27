@@ -105,16 +105,12 @@ shared-arc topology. Mutates <code>dataset.arcs</code> in place. Surfaces as
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">dataset</span>: <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></span>
-<div class="tsd-comment tsd-typography"><p>dataset configures addIntersectionCuts. Required; omission is not allowed for this API call. Valid value must satisfy the MapshaperDataset TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for addIntersectionCuts.</p>
+<div class="tsd-comment tsd-typography"><p>dataset accepts <code>MapshaperDataset</code> for addIntersectionCuts. Required; omission is not allowed. Must be assignable to <code>MapshaperDataset</code>.</p>
 </div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">opts</span>: <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">no_snap</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">rebuild_topology</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">snap_interval</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">}</span></span>
-<div class="tsd-comment tsd-typography"><p>opts configures addIntersectionCuts. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the object TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for addIntersectionCuts.</p>
+<div class="tsd-comment tsd-typography"><p>opts accepts <code>object</code> for addIntersectionCuts. Optional; omit to leave unset. Must be assignable to <code>object</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#addintersectioncuts">addIntersectionCuts</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:485</li></ul></aside></div></li></ul></section>
@@ -131,13 +127,9 @@ calls write into it.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures appendEmptyArc. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for appendEmptyArc.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for appendEmptyArc. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#appendemptyarc">appendEmptyArc</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:441</li></ul></aside></div></li></ul></section>
@@ -155,16 +147,12 @@ directly (mapshaper accepts <code>[x, y]</code> rather than separate args).</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures appendVertex. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for appendVertex.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for appendVertex. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">point</span>: <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span></span>
-<div class="tsd-comment tsd-typography"><p>point configures appendVertex. Required; omission is not allowed for this API call. Valid value must satisfy the tuple TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for appendVertex.</p>
+<div class="tsd-comment tsd-typography"><p>point accepts <code>tuple number, number</code> for appendVertex. Required; omission is not allowed. Must be assignable to <code>tuple number, number</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#appendvertex">appendVertex</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:445</li></ul></aside></div></li></ul></section>
@@ -180,13 +168,9 @@ directly (mapshaper accepts <code>[x, y]</code> rather than separate args).</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">dataset</span>: <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></span>
-<div class="tsd-comment tsd-typography"><p>dataset configures buildTopology. Required; omission is not allowed for this API call. Valid value must satisfy the MapshaperDataset TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for buildTopology.</p>
+<div class="tsd-comment tsd-typography"><p>dataset accepts <code>MapshaperDataset</code> for buildTopology. Required; omission is not allowed. Must be assignable to <code>MapshaperDataset</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#buildtopology">buildTopology</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:540</li></ul></aside></div></li></ul></section>
@@ -203,16 +187,12 @@ dropping) mapshaper's own importers run before topology building.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">dataset</span>: <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></span>
-<div class="tsd-comment tsd-typography"><p>dataset configures cleanPathsAfterImport. Required; omission is not allowed for this API call. Valid value must satisfy the MapshaperDataset TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for cleanPathsAfterImport.</p>
+<div class="tsd-comment tsd-typography"><p>dataset accepts <code>MapshaperDataset</code> for cleanPathsAfterImport. Required; omission is not allowed. Must be assignable to <code>MapshaperDataset</code>.</p>
 </div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">opts</span>: <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">&gt;</span></span>
-<div class="tsd-comment tsd-typography"><p>opts configures cleanPathsAfterImport. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the Record TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for cleanPathsAfterImport.</p>
+<div class="tsd-comment tsd-typography"><p>opts accepts <code>Record</code> for cleanPathsAfterImport. Optional; omit to leave unset. Must be assignable to <code>Record</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-5">Example<a href="#example-5" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#cleanpathsafterimport">cleanPathsAfterImport</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:536</li></ul></aside></div></li></ul></section>
@@ -230,13 +210,9 @@ letting the in-place clip / dissolve / buffer pipeline run.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">dataset</span>: <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></span>
-<div class="tsd-comment tsd-typography"><p>dataset configures copyDataset. Required; omission is not allowed for this API call. Valid value must satisfy the MapshaperDataset TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for copyDataset.</p>
+<div class="tsd-comment tsd-typography"><p>dataset accepts <code>MapshaperDataset</code> for copyDataset. Required; omission is not allowed. Must be assignable to <code>MapshaperDataset</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-6">Example<a href="#example-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#copydataset">copyDataset</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:615</li></ul></aside></div></li></ul></section>
@@ -252,13 +228,9 @@ letting the in-place clip / dissolve / buffer pipeline run.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">records</span>: <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">[]</span></span>
-<div class="tsd-comment tsd-typography"><p>records configures createDataTable. Required; omission is not allowed for this API call. Valid value must satisfy the Record array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for createDataTable.</p>
+<div class="tsd-comment tsd-typography"><p>records accepts <code>Record array</code> for createDataTable. Required; omission is not allowed. Must be assignable to <code>Record array</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.DataTable.html" class="tsd-signature-type tsd-kind-interface">DataTable</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-7">Example<a href="#example-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.DataTable.html" class="tsd-signature-type tsd-kind-interface">DataTable</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#createdatatable">createDataTable</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:544</li></ul></aside></div></li></ul></section>
@@ -274,13 +246,9 @@ letting the in-place clip / dissolve / buffer pipeline run.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">opts</span>: <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">&gt;</span></span>
-<div class="tsd-comment tsd-typography"><p>opts configures createPathImporter. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the Record TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for createPathImporter.</p>
+<div class="tsd-comment tsd-typography"><p>opts accepts <code>Record</code> for createPathImporter. Optional; omit to leave unset. Must be assignable to <code>Record</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">PathImporterHandle</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-8">Example<a href="#example-8" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">PathImporterHandle</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#createpathimporter">createPathImporter</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:532</li></ul></aside></div></li></ul></section>
@@ -296,13 +264,9 @@ letting the in-place clip / dissolve / buffer pipeline run.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures deleteLastArc. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for deleteLastArc.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for deleteLastArc. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-9">Example<a href="#example-9" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#deletelastarc">deleteLastArc</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:449</li></ul></aside></div></li></ul></section>
@@ -318,16 +282,12 @@ letting the in-place clip / dissolve / buffer pipeline run.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures deleteVertex. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for deleteVertex.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for deleteVertex. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">vertexIndex</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>vertexIndex configures deleteVertex. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for deleteVertex.</p>
+<div class="tsd-comment tsd-typography"><p>vertexIndex accepts <code>number</code> for deleteVertex. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-10">Example<a href="#example-10" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#deletevertex">deleteVertex</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:437</li></ul></aside></div></li></ul></section>
@@ -343,22 +303,18 @@ letting the in-place clip / dissolve / buffer pipeline run.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">ax</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>ax configures distance2D. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for distance2D.</p>
+<div class="tsd-comment tsd-typography"><p>ax accepts <code>number</code> for distance2D. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">ay</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>ay configures distance2D. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for distance2D.</p>
+<div class="tsd-comment tsd-typography"><p>ay accepts <code>number</code> for distance2D. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">bx</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>bx configures distance2D. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for distance2D.</p>
+<div class="tsd-comment tsd-typography"><p>bx accepts <code>number</code> for distance2D. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">by</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>by configures distance2D. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for distance2D.</p>
+<div class="tsd-comment tsd-typography"><p>by accepts <code>number</code> for distance2D. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-11">Example<a href="#example-11" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#distance2d">distance2D</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:515</li></ul></aside></div></li></ul></section>
@@ -378,16 +334,12 @@ buffers; <code>false</code> skips that for the worker pipeline.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">datasets</span>: <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">[]</span></span>
-<div class="tsd-comment tsd-typography"><p>datasets configures exportDatasetsToPack. Required; omission is not allowed for this API call. Valid value must satisfy the MapshaperDataset array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for exportDatasetsToPack.</p>
+<div class="tsd-comment tsd-typography"><p>datasets accepts <code>MapshaperDataset array</code> for exportDatasetsToPack. Required; omission is not allowed. Must be assignable to <code>MapshaperDataset array</code>.</p>
 </div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">opts</span>: <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">compact</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">}</span></span>
-<div class="tsd-comment tsd-typography"><p>opts configures exportDatasetsToPack. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the object TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for exportDatasetsToPack.</p>
+<div class="tsd-comment tsd-typography"><p>opts accepts <code>object</code> for exportDatasetsToPack. Optional; omit to leave unset. Must be assignable to <code>object</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.PackedSession.html" class="tsd-signature-type tsd-kind-type-alias">PackedSession</a><span class="tsd-signature-symbol">&gt;</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-12">Example<a href="#example-12" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.PackedSession.html" class="tsd-signature-type tsd-kind-type-alias">PackedSession</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#exportdatasetstopack">exportDatasetsToPack</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:577</li></ul></aside></div></li></ul></section>
@@ -403,16 +355,12 @@ buffers; <code>false</code> skips that for the worker pipeline.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">dataset</span>: <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></span>
-<div class="tsd-comment tsd-typography"><p>dataset configures exportFileContent. Required; omission is not allowed for this API call. Valid value must satisfy the MapshaperDataset TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for exportFileContent.</p>
+<div class="tsd-comment tsd-typography"><p>dataset accepts <code>MapshaperDataset</code> for exportFileContent. Required; omission is not allowed. Must be assignable to <code>MapshaperDataset</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">opts</span>: <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">format</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span></span>
-<div class="tsd-comment tsd-typography"><p>opts configures exportFileContent. Required; omission is not allowed for this API call. Valid value must satisfy the object TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for exportFileContent.</p>
+<div class="tsd-comment tsd-typography"><p>opts accepts <code>object</code> for exportFileContent. Required; omission is not allowed. Must be assignable to <code>object</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.ExportedFile.html" class="tsd-signature-type tsd-kind-interface">ExportedFile</a><span class="tsd-signature-symbol">[]</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-13">Example<a href="#example-13" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.ExportedFile.html" class="tsd-signature-type tsd-kind-interface">ExportedFile</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#exportfilecontent">exportFileContent</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:611</li></ul></aside></div></li></ul></section>
@@ -428,16 +376,12 @@ buffers; <code>false</code> skips that for the worker pipeline.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">datasets</span>: <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">[]</span></span>
-<div class="tsd-comment tsd-typography"><p>datasets configures exportPackedDatasets. Required; omission is not allowed for this API call. Valid value must satisfy the MapshaperDataset array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for exportPackedDatasets.</p>
+<div class="tsd-comment tsd-typography"><p>datasets accepts <code>MapshaperDataset array</code> for exportPackedDatasets. Required; omission is not allowed. Must be assignable to <code>MapshaperDataset array</code>.</p>
 </div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">opts</span>: <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">compact</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">}</span></span>
-<div class="tsd-comment tsd-typography"><p>opts configures exportPackedDatasets. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the object TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for exportPackedDatasets.</p>
+<div class="tsd-comment tsd-typography"><p>opts accepts <code>object</code> for exportPackedDatasets. Optional; omit to leave unset. Must be assignable to <code>object</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.ExportedFile.html" class="tsd-signature-type tsd-kind-interface">ExportedFile</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-14">Example<a href="#example-14" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.ExportedFile.html" class="tsd-signature-type tsd-kind-interface">ExportedFile</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#exportpackeddatasets">exportPackedDatasets</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:601</li></ul></aside></div></li></ul></section>
@@ -455,19 +399,15 @@ rules; polygons get a signed <code>area</code> per path (shell &gt; 0, hole &lt;
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">shape</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">[]</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span>
-<div class="tsd-comment tsd-typography"><p>shape configures exportPathData. Required; omission is not allowed for this API call. Valid value must satisfy the number array array | literal TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for exportPathData.</p>
+<div class="tsd-comment tsd-typography"><p>shape accepts <code>number array array | null</code> for exportPathData. Required; omission is not allowed. Must be assignable to <code>number array array | null</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures exportPathData. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for exportPathData.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for exportPathData. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">type</span>: <span class="tsd-signature-type">&quot;polyline&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;polygon&quot;</span></span>
-<div class="tsd-comment tsd-typography"><p>type configures exportPathData. Required; omission is not allowed for this API call. Valid value must satisfy the &quot;polyline&quot; | &quot;polygon&quot; TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for exportPathData.</p>
+<div class="tsd-comment tsd-typography"><p>type accepts <code>&quot;polyline&quot; | &quot;polygon&quot;</code> for exportPathData. Required; omission is not allowed. Must be assignable to <code>&quot;polyline&quot; | &quot;polygon&quot;</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">ExportedPathData</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-15">Example<a href="#example-15" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">ExportedPathData</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#exportpathdata">exportPathData</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:548</li></ul></aside></div></li></ul></section>
@@ -485,16 +425,12 @@ Used by VertexEditControl when mapping a vertex hit to a single arc.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">vertexId</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>vertexId configures findArcIdFromVertexId. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for findArcIdFromVertexId.</p>
+<div class="tsd-comment tsd-typography"><p>vertexId accepts <code>number</code> for findArcIdFromVertexId. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">ii</span>: <span class="tsd-signature-type">Int32Array</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">ArrayBufferLike</span><span class="tsd-signature-symbol">&gt;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Uint32Array</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">ArrayBufferLike</span><span class="tsd-signature-symbol">&gt;</span></span>
-<div class="tsd-comment tsd-typography"><p>ii configures findArcIdFromVertexId. Required; omission is not allowed for this API call. Valid value must satisfy the Int32Array | Uint32Array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for findArcIdFromVertexId.</p>
+<div class="tsd-comment tsd-typography"><p>ii accepts <code>Int32Array | Uint32Array</code> for findArcIdFromVertexId. Required; omission is not allowed. Must be assignable to <code>Int32Array | Uint32Array</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-16">Example<a href="#example-16" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#findarcidfromvertexid">findArcIdFromVertexId</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:457</li></ul></aside></div></li></ul></section>
@@ -513,31 +449,27 @@ snap-tolerance argument and is forwarded as-is.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">px</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>px configures findClosestPointOnSeg. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for findClosestPointOnSeg.</p>
+<div class="tsd-comment tsd-typography"><p>px accepts <code>number</code> for findClosestPointOnSeg. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">py</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>py configures findClosestPointOnSeg. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for findClosestPointOnSeg.</p>
+<div class="tsd-comment tsd-typography"><p>py accepts <code>number</code> for findClosestPointOnSeg. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">ax</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>ax configures findClosestPointOnSeg. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for findClosestPointOnSeg.</p>
+<div class="tsd-comment tsd-typography"><p>ax accepts <code>number</code> for findClosestPointOnSeg. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">ay</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>ay configures findClosestPointOnSeg. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for findClosestPointOnSeg.</p>
+<div class="tsd-comment tsd-typography"><p>ay accepts <code>number</code> for findClosestPointOnSeg. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">bx</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>bx configures findClosestPointOnSeg. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for findClosestPointOnSeg.</p>
+<div class="tsd-comment tsd-typography"><p>bx accepts <code>number</code> for findClosestPointOnSeg. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">by</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>by configures findClosestPointOnSeg. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for findClosestPointOnSeg.</p>
+<div class="tsd-comment tsd-typography"><p>by accepts <code>number</code> for findClosestPointOnSeg. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">snapArg</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>snapArg configures findClosestPointOnSeg. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for findClosestPointOnSeg.</p>
+<div class="tsd-comment tsd-typography"><p>snapArg accepts <code>number</code> for findClosestPointOnSeg. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-17">Example<a href="#example-17" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#findclosestpointonseg">findClosestPointOnSeg</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:473</li></ul></aside></div></li></ul></section>
@@ -555,19 +487,15 @@ array when no vertex is close enough.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">point</span>: <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span></span>
-<div class="tsd-comment tsd-typography"><p>point configures findNearestVertices. Required; omission is not allowed for this API call. Valid value must satisfy the tuple TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for findNearestVertices.</p>
+<div class="tsd-comment tsd-typography"><p>point accepts <code>tuple number, number</code> for findNearestVertices. Required; omission is not allowed. Must be assignable to <code>tuple number, number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">shape</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">[]</span></span>
-<div class="tsd-comment tsd-typography"><p>shape configures findNearestVertices. Required; omission is not allowed for this API call. Valid value must satisfy the number array array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for findNearestVertices.</p>
+<div class="tsd-comment tsd-typography"><p>shape accepts <code>number array array</code> for findNearestVertices. Required; omission is not allowed. Must be assignable to <code>number array array</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures findNearestVertices. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for findNearestVertices.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for findNearestVertices. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-18">Example<a href="#example-18" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#findnearestvertices">findNearestVertices</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:453</li></ul></aside></div></li></ul></section>
@@ -584,16 +512,12 @@ by <code>Emap.ops.checkGeometry</code>. Does NOT mutate the arcs.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures findSegmentIntersections. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for findSegmentIntersections.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for findSegmentIntersections. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">opts</span>: <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">tolerance</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">}</span></span>
-<div class="tsd-comment tsd-typography"><p>opts configures findSegmentIntersections. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the object TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for findSegmentIntersections.</p>
+<div class="tsd-comment tsd-typography"><p>opts accepts <code>object</code> for findSegmentIntersections. Optional; omit to leave unset. Must be assignable to <code>object</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.SegmentIntersection.html" class="tsd-signature-type tsd-kind-interface">SegmentIntersection</a><span class="tsd-signature-symbol">[]</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-19">Example<a href="#example-19" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.SegmentIntersection.html" class="tsd-signature-type tsd-kind-interface">SegmentIntersection</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#findsegmentintersections">findSegmentIntersections</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:492</li></ul></aside></div></li></ul></section>
@@ -612,19 +536,15 @@ the cursor for drag-to-insert.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">shape</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">[]</span></span>
-<div class="tsd-comment tsd-typography"><p>shape configures forEachSegmentInShape. Required; omission is not allowed for this API call. Valid value must satisfy the number array array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for forEachSegmentInShape.</p>
+<div class="tsd-comment tsd-typography"><p>shape accepts <code>number array array</code> for forEachSegmentInShape. Required; omission is not allowed. Must be assignable to <code>number array array</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures forEachSegmentInShape. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for forEachSegmentInShape.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for forEachSegmentInShape. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">cb</span>: <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">i</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">j</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">xx</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Float64Array</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">yy</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Float64Array</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span></span>
-<div class="tsd-comment tsd-typography"><p>cb configures forEachSegmentInShape. Required; omission is not allowed for this API call. Valid value must satisfy the object TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for forEachSegmentInShape.</p>
+<div class="tsd-comment tsd-typography"><p>cb accepts <code>object</code> for forEachSegmentInShape. Required; omission is not allowed. Must be assignable to <code>object</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-20">Example<a href="#example-20" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#foreachsegmentinshape">forEachSegmentInShape</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:465</li></ul></aside></div></li></ul></section>
@@ -641,13 +561,9 @@ the cursor for drag-to-insert.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures getAvgSegment. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for getAvgSegment.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for getAvgSegment. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-21">Example<a href="#example-21" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#getavgsegment">getAvgSegment</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:507</li></ul></aside></div></li></ul></section>
@@ -663,13 +579,9 @@ the cursor for drag-to-insert.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">dataset</span>: <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></span>
-<div class="tsd-comment tsd-typography"><p>dataset configures getDatasetBounds. Required; omission is not allowed for this API call. Valid value must satisfy the MapshaperDataset TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for getDatasetBounds.</p>
+<div class="tsd-comment tsd-typography"><p>dataset accepts <code>MapshaperDataset</code> for getDatasetBounds. Required; omission is not allowed. Must be assignable to <code>MapshaperDataset</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.MapshaperBBox.html" class="tsd-signature-type tsd-kind-interface">MapshaperBBox</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-22">Example<a href="#example-22" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.MapshaperBBox.html" class="tsd-signature-type tsd-kind-interface">MapshaperBBox</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#getdatasetbounds">getDatasetBounds</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:572</li></ul></aside></div></li></ul></section>
@@ -688,19 +600,15 @@ pickable / editable layer.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">intersections</span>: <a href="../interfaces/index.SegmentIntersection.html" class="tsd-signature-type tsd-kind-interface">SegmentIntersection</a><span class="tsd-signature-symbol">[]</span></span>
-<div class="tsd-comment tsd-typography"><p>intersections configures getIntersectionLayer. Required; omission is not allowed for this API call. Valid value must satisfy the SegmentIntersection array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for getIntersectionLayer.</p>
+<div class="tsd-comment tsd-typography"><p>intersections accepts <code>SegmentIntersection array</code> for getIntersectionLayer. Required; omission is not allowed. Must be assignable to <code>SegmentIntersection array</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">target</span>: <a href="../interfaces/index.MapshaperLayer.html" class="tsd-signature-type tsd-kind-interface">MapshaperLayer</a></span>
-<div class="tsd-comment tsd-typography"><p>target configures getIntersectionLayer. Required; omission is not allowed for this API call. Valid value must satisfy the MapshaperLayer TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for getIntersectionLayer.</p>
+<div class="tsd-comment tsd-typography"><p>target accepts <code>MapshaperLayer</code> for getIntersectionLayer. Required; omission is not allowed. Must be assignable to <code>MapshaperLayer</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures getIntersectionLayer. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for getIntersectionLayer.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for getIntersectionLayer. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.MapshaperLayer.html" class="tsd-signature-type tsd-kind-interface">MapshaperLayer</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-23">Example<a href="#example-23" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.MapshaperLayer.html" class="tsd-signature-type tsd-kind-interface">MapshaperLayer</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#getintersectionlayer">getIntersectionLayer</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:499</li></ul></aside></div></li></ul></section>
@@ -718,16 +626,12 @@ caller only reads <code>xmin/ymin/xmax/ymax</code>.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">layer</span>: <a href="../interfaces/index.MapshaperLayer.html" class="tsd-signature-type tsd-kind-interface">MapshaperLayer</a></span>
-<div class="tsd-comment tsd-typography"><p>layer configures getLayerBounds. Required; omission is not allowed for this API call. Valid value must satisfy the MapshaperLayer TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for getLayerBounds.</p>
+<div class="tsd-comment tsd-typography"><p>layer accepts <code>MapshaperLayer</code> for getLayerBounds. Required; omission is not allowed. Must be assignable to <code>MapshaperLayer</code>.</p>
 </div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures getLayerBounds. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for getLayerBounds.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for getLayerBounds. Optional; omit to leave unset. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.MapshaperBBox.html" class="tsd-signature-type tsd-kind-interface">MapshaperBBox</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-24">Example<a href="#example-24" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.MapshaperBBox.html" class="tsd-signature-type tsd-kind-interface">MapshaperBBox</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#getlayerbounds">getLayerBounds</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:564</li></ul></aside></div></li></ul></section>
@@ -743,22 +647,18 @@ caller only reads <code>xmin/ymin/xmax/ymax</code>.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">x</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>x configures getPointToShapeInfo. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for getPointToShapeInfo.</p>
+<div class="tsd-comment tsd-typography"><p>x accepts <code>number</code> for getPointToShapeInfo. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">y</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>y configures getPointToShapeInfo. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for getPointToShapeInfo.</p>
+<div class="tsd-comment tsd-typography"><p>y accepts <code>number</code> for getPointToShapeInfo. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">shape</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">[]</span></span>
-<div class="tsd-comment tsd-typography"><p>shape configures getPointToShapeInfo. Required; omission is not allowed for this API call. Valid value must satisfy the number array array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for getPointToShapeInfo.</p>
+<div class="tsd-comment tsd-typography"><p>shape accepts <code>number array array</code> for getPointToShapeInfo. Required; omission is not allowed. Must be assignable to <code>number array array</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures getPointToShapeInfo. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for getPointToShapeInfo.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for getPointToShapeInfo. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">PointToShapeInfo</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-25">Example<a href="#example-25" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">PointToShapeInfo</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#getpointtoshapeinfo">getPointToShapeInfo</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:519</li></ul></aside></div></li></ul></section>
@@ -780,19 +680,15 @@ inaccurate; this signature matches actual mapshaper.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures insertVertex. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for insertVertex.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for insertVertex. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">vertexIndex</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>vertexIndex configures insertVertex. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for insertVertex.</p>
+<div class="tsd-comment tsd-typography"><p>vertexIndex accepts <code>number</code> for insertVertex. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">point</span>: <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span></span>
-<div class="tsd-comment tsd-typography"><p>point configures insertVertex. Required; omission is not allowed for this API call. Valid value must satisfy the tuple TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for insertVertex.</p>
+<div class="tsd-comment tsd-typography"><p>point accepts <code>tuple number, number</code> for insertVertex. Required; omission is not allowed. Must be assignable to <code>tuple number, number</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-26">Example<a href="#example-26" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#insertvertex">insertVertex</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:433</li></ul></aside></div></li></ul></section>
@@ -811,13 +707,9 @@ extent rebuild.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">layer</span>: <a href="../interfaces/index.MapshaperLayer.html" class="tsd-signature-type tsd-kind-interface">MapshaperLayer</a></span>
-<div class="tsd-comment tsd-typography"><p>layer configures layerHasGeometry. Required; omission is not allowed for this API call. Valid value must satisfy the MapshaperLayer TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for layerHasGeometry.</p>
+<div class="tsd-comment tsd-typography"><p>layer accepts <code>MapshaperLayer</code> for layerHasGeometry. Required; omission is not allowed. Must be assignable to <code>MapshaperLayer</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-27">Example<a href="#example-27" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#layerhasgeometry">layerHasGeometry</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:560</li></ul></aside></div></li></ul></section>
@@ -833,13 +725,9 @@ extent rebuild.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">obj</span>: <a href="../types/index.PackedSession.html" class="tsd-signature-type tsd-kind-type-alias">PackedSession</a></span>
-<div class="tsd-comment tsd-typography"><p>obj configures pack. Required; omission is not allowed for this API call. Valid value must satisfy the PackedSession TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for pack.</p>
+<div class="tsd-comment tsd-typography"><p>obj accepts <code>PackedSession</code> for pack. Required; omission is not allowed. Must be assignable to <code>PackedSession</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Uint8Array</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-28">Example<a href="#example-28" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Uint8Array</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#pack">pack</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:593</li></ul></aside></div></li></ul></section>
@@ -856,13 +744,9 @@ extent rebuild.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">packed</span>: <a href="../types/index.PackedSession.html" class="tsd-signature-type tsd-kind-type-alias">PackedSession</a></span>
-<div class="tsd-comment tsd-typography"><p>packed configures restoreSessionData. Required; omission is not allowed for this API call. Valid value must satisfy the PackedSession TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for restoreSessionData.</p>
+<div class="tsd-comment tsd-typography"><p>packed accepts <code>PackedSession</code> for restoreSessionData. Required; omission is not allowed. Must be assignable to <code>PackedSession</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">datasets</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">[]</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">&gt;</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-29">Example<a href="#example-29" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">datasets</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">[]</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#restoresessiondata">restoreSessionData</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:584</li></ul></aside></div></li></ul></section>
@@ -880,16 +764,12 @@ import command's <code>input</code> option, matching the GUI import path.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">cmd</span>: <span class="tsd-signature-type">string</span></span>
-<div class="tsd-comment tsd-typography"><p>cmd configures runImport. Required; omission is not allowed for this API call. Valid value must satisfy the string TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for runImport.</p>
+<div class="tsd-comment tsd-typography"><p>cmd accepts <code>string</code> for runImport. Required; omission is not allowed. Must be assignable to <code>string</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">inputFiles</span>: <a href="../types/index.RunnerInputFiles.html" class="tsd-signature-type tsd-kind-type-alias">RunnerInputFiles</a></span>
-<div class="tsd-comment tsd-typography"><p>inputFiles configures runImport. Required; omission is not allowed for this API call. Valid value must satisfy the RunnerInputFiles TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for runImport.</p>
+<div class="tsd-comment tsd-typography"><p>inputFiles accepts <code>RunnerInputFiles</code> for runImport. Required; omission is not allowed. Must be assignable to <code>RunnerInputFiles</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">&gt;</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-30">Example<a href="#example-30" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#runimport">runImport</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:619</li></ul></aside></div></li></ul></section>
@@ -909,19 +789,15 @@ relative names. Rejects if mapshaper produced no default target
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">cmd</span>: <span class="tsd-signature-type">string</span></span>
-<div class="tsd-comment tsd-typography"><p>cmd configures runOnDataset. Required; omission is not allowed for this API call. Valid value must satisfy the string TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for runOnDataset.</p>
+<div class="tsd-comment tsd-typography"><p>cmd accepts <code>string</code> for runOnDataset. Required; omission is not allowed. Must be assignable to <code>string</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">dataset</span>: <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></span>
-<div class="tsd-comment tsd-typography"><p>dataset configures runOnDataset. Required; omission is not allowed for this API call. Valid value must satisfy the MapshaperDataset TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for runOnDataset.</p>
+<div class="tsd-comment tsd-typography"><p>dataset accepts <code>MapshaperDataset</code> for runOnDataset. Required; omission is not allowed. Must be assignable to <code>MapshaperDataset</code>.</p>
 </div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">inputFiles</span>: <a href="../types/index.RunnerInputFiles.html" class="tsd-signature-type tsd-kind-type-alias">RunnerInputFiles</a></span>
-<div class="tsd-comment tsd-typography"><p>inputFiles configures runOnDataset. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the RunnerInputFiles TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for runOnDataset.</p>
+<div class="tsd-comment tsd-typography"><p>inputFiles accepts <code>RunnerInputFiles</code> for runOnDataset. Optional; omit to leave unset. Must be assignable to <code>RunnerInputFiles</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">&gt;</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-31">Example<a href="#example-31" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#runondataset">runOnDataset</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:644</li></ul></aside></div></li></ul></section>
@@ -943,19 +819,15 @@ like the string variant, so <code>-join FILE</code> works the same way.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">commands</span>: <span class="tsd-signature-type">ParsedCommand</span><span class="tsd-signature-symbol">[]</span></span>
-<div class="tsd-comment tsd-typography"><p>commands configures runOnDatasetParsed. Required; omission is not allowed for this API call. Valid value must satisfy the ParsedCommand array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for runOnDatasetParsed.</p>
+<div class="tsd-comment tsd-typography"><p>commands accepts <code>ParsedCommand array</code> for runOnDatasetParsed. Required; omission is not allowed. Must be assignable to <code>ParsedCommand array</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">dataset</span>: <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></span>
-<div class="tsd-comment tsd-typography"><p>dataset configures runOnDatasetParsed. Required; omission is not allowed for this API call. Valid value must satisfy the MapshaperDataset TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for runOnDatasetParsed.</p>
+<div class="tsd-comment tsd-typography"><p>dataset accepts <code>MapshaperDataset</code> for runOnDatasetParsed. Required; omission is not allowed. Must be assignable to <code>MapshaperDataset</code>.</p>
 </div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">inputFiles</span>: <a href="../types/index.RunnerInputFiles.html" class="tsd-signature-type tsd-kind-type-alias">RunnerInputFiles</a></span>
-<div class="tsd-comment tsd-typography"><p>inputFiles configures runOnDatasetParsed. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the RunnerInputFiles TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for runOnDatasetParsed.</p>
+<div class="tsd-comment tsd-typography"><p>inputFiles accepts <code>RunnerInputFiles</code> for runOnDatasetParsed. Optional; omit to leave unset. Must be assignable to <code>RunnerInputFiles</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">&gt;</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-32">Example<a href="#example-32" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#runondatasetparsed">runOnDatasetParsed</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:682</li></ul></aside></div></li></ul></section>
@@ -973,16 +845,12 @@ the renderer falls back to at zoomed-out scales.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures simplifyArcsFast. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for simplifyArcsFast.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for simplifyArcsFast. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">segLength</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>segLength configures simplifyArcsFast. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for simplifyArcsFast.</p>
+<div class="tsd-comment tsd-typography"><p>segLength accepts <code>number</code> for simplifyArcsFast. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-33">Example<a href="#example-33" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#simplifyarcsfast">simplifyArcsFast</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:511</li></ul></aside></div></li></ul></section>
@@ -1000,19 +868,15 @@ bounds. Used by VertexMoveCommand for both do() and undo().</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">vertexIds</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span></span>
-<div class="tsd-comment tsd-typography"><p>vertexIds configures snapVertices. Required; omission is not allowed for this API call. Valid value must satisfy the number array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for snapVertices.</p>
+<div class="tsd-comment tsd-typography"><p>vertexIds accepts <code>number array</code> for snapVertices. Required; omission is not allowed. Must be assignable to <code>number array</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">to</span>: <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span></span>
-<div class="tsd-comment tsd-typography"><p>to configures snapVertices. Required; omission is not allowed for this API call. Valid value must satisfy the tuple TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for snapVertices.</p>
+<div class="tsd-comment tsd-typography"><p>to accepts <code>tuple number, number</code> for snapVertices. Required; omission is not allowed. Must be assignable to <code>tuple number, number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures snapVertices. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for snapVertices.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for snapVertices. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-34">Example<a href="#example-34" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#snapvertices">snapVertices</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:429</li></ul></aside></div></li></ul></section>
@@ -1028,22 +892,18 @@ bounds. Used by VertexMoveCommand for both do() and undo().</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">x</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>x configures testPointInPolygon. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for testPointInPolygon.</p>
+<div class="tsd-comment tsd-typography"><p>x accepts <code>number</code> for testPointInPolygon. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">y</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>y configures testPointInPolygon. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for testPointInPolygon.</p>
+<div class="tsd-comment tsd-typography"><p>y accepts <code>number</code> for testPointInPolygon. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">shape</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">[]</span></span>
-<div class="tsd-comment tsd-typography"><p>shape configures testPointInPolygon. Required; omission is not allowed for this API call. Valid value must satisfy the number array array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for testPointInPolygon.</p>
+<div class="tsd-comment tsd-typography"><p>shape accepts <code>number array array</code> for testPointInPolygon. Required; omission is not allowed. Must be assignable to <code>number array array</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures testPointInPolygon. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for testPointInPolygon.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for testPointInPolygon. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-35">Example<a href="#example-35" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#testpointinpolygon">testPointInPolygon</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:528</li></ul></aside></div></li></ul></section>
@@ -1061,22 +921,18 @@ hole-to-shell grouping (port of mapshaper's groupPolygonRings).</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">x</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>x configures testPointInRing. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for testPointInRing.</p>
+<div class="tsd-comment tsd-typography"><p>x accepts <code>number</code> for testPointInRing. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">y</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>y configures testPointInRing. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for testPointInRing.</p>
+<div class="tsd-comment tsd-typography"><p>y accepts <code>number</code> for testPointInRing. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">ids</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span></span>
-<div class="tsd-comment tsd-typography"><p>ids configures testPointInRing. Required; omission is not allowed for this API call. Valid value must satisfy the number array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for testPointInRing.</p>
+<div class="tsd-comment tsd-typography"><p>ids accepts <code>number array</code> for testPointInRing. Required; omission is not allowed. Must be assignable to <code>number array</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures testPointInRing. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for testPointInRing.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for testPointInRing. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-36">Example<a href="#example-36" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#testpointinring">testPointInRing</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:556</li></ul></aside></div></li></ul></section>
@@ -1092,13 +948,9 @@ hole-to-shell grouping (port of mapshaper's groupPolygonRings).</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">bytes</span>: <span class="tsd-signature-type">Uint8Array</span></span>
-<div class="tsd-comment tsd-typography"><p>bytes configures unpackSessionData. Required; omission is not allowed for this API call. Valid value must satisfy the Uint8Array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for unpackSessionData.</p>
+<div class="tsd-comment tsd-typography"><p>bytes accepts <code>Uint8Array</code> for unpackSessionData. Required; omission is not allowed. Must be assignable to <code>Uint8Array</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.PackedSession.html" class="tsd-signature-type tsd-kind-type-alias">PackedSession</a><span class="tsd-signature-symbol">&gt;</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-37">Example<a href="#example-37" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.PackedSession.html" class="tsd-signature-type tsd-kind-type-alias">PackedSession</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#unpacksessiondata">unpackSessionData</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:597</li></ul></aside></div></li></ul></section>
@@ -1116,16 +968,12 @@ deleted without breaking adjacency.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">idx</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>idx configures vertexIsArcEndpoint. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for vertexIsArcEndpoint.</p>
+<div class="tsd-comment tsd-typography"><p>idx accepts <code>number</code> for vertexIsArcEndpoint. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">arcs</span>: <a href="../interfaces/index.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></span>
-<div class="tsd-comment tsd-typography"><p>arcs configures vertexIsArcEndpoint. Required; omission is not allowed for this API call. Valid value must satisfy the ArcCollection TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for vertexIsArcEndpoint.</p>
+<div class="tsd-comment tsd-typography"><p>arcs accepts <code>ArcCollection</code> for vertexIsArcEndpoint. Required; omission is not allowed. Must be assignable to <code>ArcCollection</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-38">Example<a href="#example-38" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/index.MapshaperAdapter.html#vertexisarcendpoint">vertexIsArcEndpoint</a></p>
 <ul>
 <li>Defined in src/adapter/mapshaper-adapter.ts:461</li></ul></aside></div></li></ul></section></section></details></div>

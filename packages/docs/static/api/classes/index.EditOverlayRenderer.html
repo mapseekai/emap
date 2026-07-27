@@ -50,19 +50,13 @@ Painter to a concrete implementation.</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="constructoreditoverlayrenderer"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">EditOverlayRenderer</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">_painter</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">EditPainter</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">EditOverlayRenderer</a><a href="#constructoreditoverlayrenderer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<div class="tsd-comment tsd-typography"><p>EditOverlayRenderer is a public emap call signature documented for package consumers.</p>
-</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">_painter</span>: <span class="tsd-signature-type">EditPainter</span></span>
-<div class="tsd-comment tsd-typography"><p>_painter configures EditOverlayRenderer. Required; omission is not allowed for this API call. Valid value must satisfy the EditPainter TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for EditOverlayRenderer.</p>
+<div class="tsd-comment tsd-typography"><p>_painter accepts <code>EditPainter</code> for EditOverlayRenderer. Required; omission is not allowed. Must be assignable to <code>EditPainter</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">EditOverlayRenderer</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: geoparquet-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">EditOverlayRenderer</a></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/renderer/edit-overlay-renderer.ts:19</li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -81,22 +75,18 @@ Painter to a concrete implementation.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">editMode</span>: <span class="tsd-signature-type">EditMode</span></span>
-<div class="tsd-comment tsd-typography"><p>editMode configures render. Required; omission is not allowed for this API call. Valid value must satisfy the EditMode TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for render.</p>
+<div class="tsd-comment tsd-typography"><p>editMode accepts <code>EditMode</code> for render. Required; omission is not allowed. Must be assignable to <code>EditMode</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">vertexState</span>: <span class="tsd-signature-type">EditVertexState</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span>
-<div class="tsd-comment tsd-typography"><p>vertexState configures render. Required; omission is not allowed for this API call. Valid value must satisfy the EditVertexState | literal TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for render.</p>
+<div class="tsd-comment tsd-typography"><p>vertexState accepts <code>EditVertexState | null</code> for render. Required; omission is not allowed. Must be assignable to <code>EditVertexState | null</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">drawState</span>: <span class="tsd-signature-type">DrawOverlayState</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span>
-<div class="tsd-comment tsd-typography"><p>drawState configures render. Required; omission is not allowed for this API call. Valid value must satisfy the DrawOverlayState | literal TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for render.</p>
+<div class="tsd-comment tsd-typography"><p>drawState accepts <code>DrawOverlayState | null</code> for render. Required; omission is not allowed. Must be assignable to <code>DrawOverlayState | null</code>.</p>
 </div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">vertexArcFilter</span>: <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">arcId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span></span>
-<div class="tsd-comment tsd-typography"><p>vertexArcFilter configures render. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the object TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for render.</p>
+<div class="tsd-comment tsd-typography"><p>vertexArcFilter accepts <code>object</code> for render. Optional; omit to leave unset. Must be assignable to <code>object</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/renderer/edit-overlay-renderer.ts:25</li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">

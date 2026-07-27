@@ -74,11 +74,7 @@ Extracted from Emap to isolate highlight concerns.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>clearHighlightedFeatures is a public emap call signature documented for package consumers.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/highlight-manager.ts:44</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -93,25 +89,21 @@ Extracted from Emap to isolate highlight concerns.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">painter</span>: <span class="tsd-signature-type">CorePainter</span></span>
-<div class="tsd-comment tsd-typography"><p>painter configures renderHighlights. Required; omission is not allowed for this API call. Valid value must satisfy the CorePainter TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for renderHighlights.</p>
+<div class="tsd-comment tsd-typography"><p>painter accepts <code>CorePainter</code> for renderHighlights. Required; omission is not allowed. Must be assignable to <code>CorePainter</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">sources</span>: <span class="tsd-signature-type">Map</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <a href="../interfaces/index.ITopologySource.html" class="tsd-signature-type tsd-kind-interface">ITopologySource</a><span class="tsd-signature-symbol">&gt;</span></span>
-<div class="tsd-comment tsd-typography"><p>sources configures renderHighlights. Required; omission is not allowed for this API call. Valid value must satisfy the Map TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for renderHighlights.</p>
+<div class="tsd-comment tsd-typography"><p>sources accepts <code>Map</code> for renderHighlights. Required; omission is not allowed. Must be assignable to <code>Map</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">transform</span>: <a href="index.AffineTransform.html" class="tsd-signature-type tsd-kind-class">AffineTransform</a></span>
-<div class="tsd-comment tsd-typography"><p>transform configures renderHighlights. Required; omission is not allowed for this API call. Valid value must satisfy the AffineTransform TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for renderHighlights.</p>
+<div class="tsd-comment tsd-typography"><p>transform accepts <code>AffineTransform</code> for renderHighlights. Required; omission is not allowed. Must be assignable to <code>AffineTransform</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">lineScale</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>lineScale configures renderHighlights. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for renderHighlights.</p>
+<div class="tsd-comment tsd-typography"><p>lineScale accepts <code>number</code> for renderHighlights. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">visibleLayers</span>: <span class="tsd-signature-type">Set</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></span>
-<div class="tsd-comment tsd-typography"><p>visibleLayers configures renderHighlights. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the Set TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for renderHighlights.</p>
+<div class="tsd-comment tsd-typography"><p>visibleLayers accepts <code>Set</code> for renderHighlights. Optional; omit to leave unset. Must be assignable to <code>Set</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/highlight-manager.ts:55</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -126,16 +118,12 @@ Extracted from Emap to isolate highlight concerns.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">features</span>: (<a href="../interfaces/index.QueriedFeature.html" class="tsd-signature-type tsd-kind-interface">QueriedFeature</a> <span class="tsd-signature-symbol">|</span> <a href="../interfaces/index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a>)<span class="tsd-signature-symbol">[]</span></span>
-<div class="tsd-comment tsd-typography"><p>features configures setHighlightedFeatures. Required; omission is not allowed for this API call. Valid value must satisfy the QueriedFeature | FeatureRef array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for setHighlightedFeatures.</p>
+<div class="tsd-comment tsd-typography"><p>features accepts <code>QueriedFeature | FeatureRef array</code> for setHighlightedFeatures. Required; omission is not allowed. Must be assignable to <code>QueriedFeature | FeatureRef array</code>.</p>
 </div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">style</span>: <a href="../interfaces/index.HighlightStyle.html" class="tsd-signature-type tsd-kind-interface">HighlightStyle</a></span>
-<div class="tsd-comment tsd-typography"><p>style configures setHighlightedFeatures. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the HighlightStyle TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for setHighlightedFeatures.</p>
+<div class="tsd-comment tsd-typography"><p>style accepts <code>HighlightStyle</code> for setHighlightedFeatures. Optional; omit to leave unset. Must be assignable to <code>HighlightStyle</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/highlight-manager.ts:27</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -150,13 +138,9 @@ Extracted from Emap to isolate highlight concerns.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">style</span>: <a href="../interfaces/index.HighlightStyle.html" class="tsd-signature-type tsd-kind-interface">HighlightStyle</a></span>
-<div class="tsd-comment tsd-typography"><p>style configures setHighlightStyle. Required; omission is not allowed for this API call. Valid value must satisfy the HighlightStyle TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for setHighlightStyle.</p>
+<div class="tsd-comment tsd-typography"><p>style accepts <code>HighlightStyle</code> for setHighlightStyle. Required; omission is not allowed. Must be assignable to <code>HighlightStyle</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/highlight-manager.ts:50</li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">

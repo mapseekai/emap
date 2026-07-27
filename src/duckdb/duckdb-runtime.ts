@@ -44,6 +44,7 @@ export function setDuckDbRuntime(runtime: DuckDbRuntime | null): void {
   injectedRuntime = runtime;
 }
 
+/** Return the injected DuckDB runtime, or `null` when none has been configured. */
 export function getDuckDbRuntime(): DuckDbRuntime | null {
   return injectedRuntime;
 }

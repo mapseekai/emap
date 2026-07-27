@@ -97,6 +97,40 @@ describe('documentation quality checkers', () => {
     expect(outputOf(result)).toContain('@example');
   });
 
+  it('fails when docs front matter names an API without a real example association', async () => {
+    const root = await fixtureRoot();
+    await writeDoc(root, 'packages/docs/docs/reference/load-map.md', {
+      id: 'reference/load-map',
+      slug: '/reference/load-map',
+      title: '加载地图',
+      api: ['loadMap'],
+      examples: [],
+    });
+    await writeCatalog(root, {
+      docs: [],
+      api: [],
+      fixtures: ['inline:tiny.geojson'],
+    });
+    await writeReflections(root, {
+      children: [
+        {
+          name: 'loadMap',
+          variant: 'declaration',
+          kind: 64,
+          sources: [{ fileName: 'src/index.ts' }],
+          comment: {
+            summary: [{ kind: 'text', text: 'Loads a map.' }],
+          },
+        },
+      ],
+    });
+
+    const result = runChecker('scripts/check-docs-api.mjs', root);
+
+    expect(result.status).toBe(1);
+    expect(outputOf(result)).toContain('loadMap: missing public API @example association');
+  });
+
   it('fails the API checker on uncataloged public src reflections', async () => {
     const root = await fixtureRoot();
     await writeCatalog(root, {

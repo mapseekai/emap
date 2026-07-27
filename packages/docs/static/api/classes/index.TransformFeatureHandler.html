@@ -62,19 +62,13 @@ boilerplate previously hand-wired in the transform examples.</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="constructortransformfeaturehandler"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">TransformFeatureHandler</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">_map</span><span class="tsd-signature-symbol">:</span> <a href="index.Emap.html" class="tsd-signature-type tsd-kind-class">Emap</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">TransformFeatureHandler</a><a href="#constructortransformfeaturehandler" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<div class="tsd-comment tsd-typography"><p>TransformFeatureHandler is a public emap call signature documented for package consumers.</p>
-</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">_map</span>: <a href="index.Emap.html" class="tsd-signature-type tsd-kind-class">Emap</a></span>
-<div class="tsd-comment tsd-typography"><p>_map configures TransformFeatureHandler. Required; omission is not allowed for this API call. Valid value must satisfy the Emap TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for TransformFeatureHandler.</p>
+<div class="tsd-comment tsd-typography"><p>_map accepts <code>Emap</code> for TransformFeatureHandler. Required; omission is not allowed. Must be assignable to <code>Emap</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">TransformFeatureHandler</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: box-select, feature-rotate-scale, feature-selection.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">TransformFeatureHandler</a></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/core/handlers/transform-feature.ts:46</li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -84,22 +78,14 @@ boilerplate previously hand-wired in the transform examples.</p>
 <h3 class="tsd-anchor-link" id="_manager"><code class="tsd-tag">Optional</code><span>_<wbr/>manager</span><a href="#_manager" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">_manager</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-call-signature">refreshCursor</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span> <span class="tsd-signature-symbol">}</span></div>
 <div class="tsd-comment tsd-typography"><p>Injected by HandlerManager.register (cursor recompute on mode flips).</p>
-</div>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+</div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/core/handlers/transform-feature.ts:37</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="name"><code class="tsd-tag">Readonly</code><span>name</span><a href="#name" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">name</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;transformFeature&quot;</span><span class="tsd-signature-symbol"> = &#39;transformFeature&#39;</span></div>
 <div class="tsd-comment tsd-typography"><p>name is a public emap API documented for package consumers.</p>
-</div>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+</div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#name">name</a></p>
 <ul>
 <li>Defined in src/core/handlers/transform-feature.ts:29</li></ul></aside></section></section></details>
@@ -114,11 +100,7 @@ boilerplate previously hand-wired in the transform examples.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>disable is a public emap call signature documented for package consumers.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#disable">disable</a></p>
 <ul>
 <li>Defined in src/core/handlers/transform-feature.ts:68</li></ul></aside></div></li></ul></section>
@@ -130,11 +112,7 @@ boilerplate previously hand-wired in the transform examples.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>enable is a public emap call signature documented for package consumers.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-5">Example<a href="#example-5" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#enable">enable</a></p>
 <ul>
 <li>Defined in src/core/handlers/transform-feature.ts:60</li></ul></aside></div></li></ul></section>
@@ -151,11 +129,7 @@ An empty string <code>''</code> is treated the same as <code>null</code> (no opi
 to clear to the page/CSS default, simply have no enabled handler
 with an opinion (HandlerManager writes <code>''</code> itself in that case).</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-6">Example<a href="#example-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#getcursor">getCursor</a></p>
 <ul>
 <li>Defined in src/core/handlers/transform-feature.ts:100</li></ul></aside></div></li></ul></section>
@@ -167,11 +141,7 @@ with an opinion (HandlerManager writes <code>''</code> itself in that case).</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>getOptions is a public emap call signature documented for package consumers.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Readonly</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.TransformFeatureOptions.html" class="tsd-signature-type tsd-kind-interface">TransformFeatureOptions</a><span class="tsd-signature-symbol">&gt;</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-7">Example<a href="#example-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Readonly</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.TransformFeatureOptions.html" class="tsd-signature-type tsd-kind-interface">TransformFeatureOptions</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#getoptions">getOptions</a></p>
 <ul>
 <li>Defined in src/core/handlers/transform-feature.ts:96</li></ul></aside></div></li></ul></section>
@@ -187,13 +157,9 @@ with an opinion (HandlerManager writes <code>''</code> itself in that case).</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">ev</span>: <a href="../interfaces/index.NormalizedPointerEvent.html" class="tsd-signature-type tsd-kind-interface">NormalizedPointerEvent</a></span>
-<div class="tsd-comment tsd-typography"><p>ev configures handlePointer. Required; omission is not allowed for this API call. Valid value must satisfy the NormalizedPointerEvent TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for handlePointer.</p>
+<div class="tsd-comment tsd-typography"><p>ev accepts <code>NormalizedPointerEvent</code> for handlePointer. Required; omission is not allowed. Must be assignable to <code>NormalizedPointerEvent</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../types/index.HandlerResult.html" class="tsd-signature-type tsd-kind-type-alias">HandlerResult</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-8">Example<a href="#example-8" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../types/index.HandlerResult.html" class="tsd-signature-type tsd-kind-type-alias">HandlerResult</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#handlepointer">handlePointer</a></p>
 <ul>
 <li>Defined in src/core/handlers/transform-feature.ts:123</li></ul></aside></div></li></ul></section>
@@ -205,11 +171,7 @@ with an opinion (HandlerManager writes <code>''</code> itself in that case).</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>isEnabled is a public emap call signature documented for package consumers.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-9">Example<a href="#example-9" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#isenabled">isEnabled</a></p>
 <ul>
 <li>Defined in src/core/handlers/transform-feature.ts:88</li></ul></aside></div></li></ul></section>
@@ -225,13 +187,9 @@ with an opinion (HandlerManager writes <code>''</code> itself in that case).</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">o</span>: <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.TransformFeatureOptions.html" class="tsd-signature-type tsd-kind-interface">TransformFeatureOptions</a><span class="tsd-signature-symbol">&gt;</span></span>
-<div class="tsd-comment tsd-typography"><p>o configures setOptions. Required; omission is not allowed for this API call. Valid value must satisfy the Partial TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for setOptions.</p>
+<div class="tsd-comment tsd-typography"><p>o accepts <code>Partial</code> for setOptions. Required; omission is not allowed. Must be assignable to <code>Partial</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-10">Example<a href="#example-10" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#setoptions">setOptions</a></p>
 <ul>
 <li>Defined in src/core/handlers/transform-feature.ts:92</li></ul></aside></div></li></ul></section></section></details></div>

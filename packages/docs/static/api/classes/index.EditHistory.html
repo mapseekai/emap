@@ -60,19 +60,13 @@ redo stack.</li>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="constructoredithistory"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">EditHistory</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?:</span> <a href="../interfaces/index.EditHistoryOptions.html" class="tsd-signature-type tsd-kind-interface">EditHistoryOptions</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">EditHistory</a><a href="#constructoredithistory" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<div class="tsd-comment tsd-typography"><p>EditHistory is a public emap call signature documented for package consumers.</p>
-</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">options</span>: <a href="../interfaces/index.EditHistoryOptions.html" class="tsd-signature-type tsd-kind-interface">EditHistoryOptions</a><span class="tsd-signature-symbol"> = {}</span></span>
-<div class="tsd-comment tsd-typography"><p>options configures EditHistory. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the EditHistoryOptions TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for EditHistory.</p>
+<div class="tsd-comment tsd-typography"><p>options accepts <code>EditHistoryOptions</code> for EditHistory. Defaults to <code>{}</code> when omitted or undefined. Must be assignable to <code>EditHistoryOptions</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">EditHistory</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: attribute-editing, china-editing, draw-snap-clear.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">EditHistory</a></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-history.ts:67</li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -93,11 +87,7 @@ not supported. Pair with <a href="#endcapture" class="tsd-kind-method">endCaptur
 code should call <code>endCapture()</code> from a <code>finally</code>-style path so an
 error in the middle doesn't leave the history stuck in capture mode.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-history.ts:133</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -108,11 +98,7 @@ error in the middle doesn't leave the history stuck in capture mode.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>canRedo is a public emap call signature documented for package consumers.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-history.ts:213</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -123,11 +109,7 @@ error in the middle doesn't leave the history stuck in capture mode.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>canUndo is a public emap call signature documented for package consumers.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-history.ts:209</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -138,11 +120,7 @@ error in the middle doesn't leave the history stuck in capture mode.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Empty both stacks.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-5">Example<a href="#example-5" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-history.ts:203</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -155,11 +133,7 @@ error in the middle doesn't leave the history stuck in capture mode.</p>
 push order. No-op (returns <code>[]</code>) if no capture is active. After this
 call, subsequent <code>push()</code> calls resume normal undo-stack behaviour.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.EditCommand.html" class="tsd-signature-type tsd-kind-interface">EditCommand</a><span class="tsd-signature-symbol">[]</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-6">Example<a href="#example-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.EditCommand.html" class="tsd-signature-type tsd-kind-interface">EditCommand</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-history.ts:145</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -170,11 +144,7 @@ call, subsequent <code>push()</code> calls resume normal undo-stack behaviour.</
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>True iff a <a href="#begincapture" class="tsd-kind-method">beginCapture</a> session is currently active.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-7">Example<a href="#example-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-history.ts:152</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -199,13 +169,9 @@ stale — it remains undoable as the boundary itself.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">cmd</span>: <a href="../interfaces/index.EditCommand.html" class="tsd-signature-type tsd-kind-interface">EditCommand</a></span>
-<div class="tsd-comment tsd-typography"><p>cmd configures push. Required; omission is not allowed for this API call. Valid value must satisfy the EditCommand TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for push.</p>
+<div class="tsd-comment tsd-typography"><p>cmd accepts <code>EditCommand</code> for push. Required; omission is not allowed. Must be assignable to <code>EditCommand</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-8">Example<a href="#example-8" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-history.ts:89</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -220,11 +186,7 @@ stack. Returns the executed command, or <code>null</code> if there was nothing.<
 <code>undo()</code> — the redo is a no-op transition because the captured refs
 are still orphaned even though the entry is moving forward in time.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.EditCommand.html" class="tsd-signature-type tsd-kind-interface">EditCommand</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-9">Example<a href="#example-9" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.EditCommand.html" class="tsd-signature-type tsd-kind-interface">EditCommand</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-history.ts:189</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -235,11 +197,7 @@ are still orphaned even though the entry is moving forward in time.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Number of commands currently in the undo stack.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-10">Example<a href="#example-10" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-history.ts:218</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -250,11 +208,7 @@ are still orphaned even though the entry is moving forward in time.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Snapshot of the public history state, suitable for event payloads.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.HistoryStateSnapshot.html" class="tsd-signature-type tsd-kind-interface">HistoryStateSnapshot</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-11">Example<a href="#example-11" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.HistoryStateSnapshot.html" class="tsd-signature-type tsd-kind-interface">HistoryStateSnapshot</a></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-history.ts:223</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -273,11 +227,7 @@ reflected in the next <a href="#snapshot" class="tsd-kind-method">snapshot</a> v
 <code>undo()</code> still returns the moved command so callers can detect that
 a step was traversed.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.EditCommand.html" class="tsd-signature-type tsd-kind-interface">EditCommand</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-12">Example<a href="#example-12" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.EditCommand.html" class="tsd-signature-type tsd-kind-interface">EditCommand</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-history.ts:168</li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">

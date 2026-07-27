@@ -69,25 +69,19 @@ as before so Emap's viewport wiring is unchanged.</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="constructordragpanhandler"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">DragPanHandler</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">opts</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.DragPanOptions.html" class="tsd-signature-type tsd-kind-interface">DragPanOptions</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">onGestureStart</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">isHoveringSelected</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">point</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Point</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">DragPanHandler</a><a href="#constructordragpanhandler" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<div class="tsd-comment tsd-typography"><p>DragPanHandler is a public emap call signature documented for package consumers.</p>
-</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">opts</span>: <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.DragPanOptions.html" class="tsd-signature-type tsd-kind-interface">DragPanOptions</a><span class="tsd-signature-symbol">&gt;</span></span>
-<div class="tsd-comment tsd-typography"><p>opts configures DragPanHandler. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the Partial TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for DragPanHandler.</p>
+<div class="tsd-comment tsd-typography"><p>opts accepts <code>Partial</code> for DragPanHandler. Optional; omit to leave unset. Must be assignable to <code>Partial</code>.</p>
 </div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">onGestureStart</span>: <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span></span>
-<div class="tsd-comment tsd-typography"><p>onGestureStart configures DragPanHandler. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the object TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for DragPanHandler.</p>
+<div class="tsd-comment tsd-typography"><p>onGestureStart accepts <code>object</code> for DragPanHandler. Optional; omit to leave unset. Must be assignable to <code>object</code>.</p>
 </div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">isHoveringSelected</span>: <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">point</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Point</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span></span>
-<div class="tsd-comment tsd-typography"><p>isHoveringSelected configures DragPanHandler. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the object TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for DragPanHandler.</p>
+<div class="tsd-comment tsd-typography"><p>isHoveringSelected accepts <code>object</code> for DragPanHandler. Optional; omit to leave unset. Must be assignable to <code>object</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">DragPanHandler</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: box-select, feature-rotate-scale, feature-selection.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">DragPanHandler</a></h4><aside class="tsd-sources">
 <p>Overrides <a href="index.EventDispatcher.html">EventDispatcher</a>.<a href="index.EventDispatcher.html#constructor">constructor</a></p>
 <ul>
 <li>Defined in src/core/handlers/drag-pan.ts:28</li></ul></aside></div></li></ul></section></section></details>
@@ -98,11 +92,7 @@ as before so Emap's viewport wiring is unchanged.</p>
 <h3 class="tsd-anchor-link" id="name"><code class="tsd-tag">Readonly</code><span>name</span><a href="#name" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">name</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;dragPan&quot;</span><span class="tsd-signature-symbol"> = &#39;dragPan&#39;</span></div>
 <div class="tsd-comment tsd-typography"><p>name is a public emap API documented for package consumers.</p>
-</div>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+</div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#name">name</a></p>
 <ul>
 <li>Defined in src/core/handlers/drag-pan.ts:19</li></ul></aside></section></section></details>
@@ -117,11 +107,7 @@ as before so Emap's viewport wiring is unchanged.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>disable is a public emap call signature documented for package consumers.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#disable">disable</a></p>
 <ul>
 <li>Defined in src/core/handlers/drag-pan.ts:42</li></ul></aside></div></li></ul></section>
@@ -133,11 +119,7 @@ as before so Emap's viewport wiring is unchanged.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>enable is a public emap call signature documented for package consumers.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#enable">enable</a></p>
 <ul>
 <li>Defined in src/core/handlers/drag-pan.ts:39</li></ul></aside></div></li></ul></section>
@@ -173,11 +155,7 @@ An empty string <code>''</code> is treated the same as <code>null</code> (no opi
 to clear to the page/CSS default, simply have no enabled handler
 with an opinion (HandlerManager writes <code>''</code> itself in that case).</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-5">Example<a href="#example-5" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#getcursor">getCursor</a></p>
 <ul>
 <li>Defined in src/core/handlers/drag-pan.ts:59</li></ul></aside></div></li></ul></section>
@@ -189,11 +167,7 @@ with an opinion (HandlerManager writes <code>''</code> itself in that case).</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>getOptions is a public emap call signature documented for package consumers.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Readonly</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.DragPanOptions.html" class="tsd-signature-type tsd-kind-interface">DragPanOptions</a><span class="tsd-signature-symbol">&gt;</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-6">Example<a href="#example-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Readonly</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.DragPanOptions.html" class="tsd-signature-type tsd-kind-interface">DragPanOptions</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#getoptions">getOptions</a></p>
 <ul>
 <li>Defined in src/core/handlers/drag-pan.ts:55</li></ul></aside></div></li></ul></section>
@@ -209,13 +183,9 @@ with an opinion (HandlerManager writes <code>''</code> itself in that case).</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">ev</span>: <a href="../interfaces/index.NormalizedPointerEvent.html" class="tsd-signature-type tsd-kind-interface">NormalizedPointerEvent</a></span>
-<div class="tsd-comment tsd-typography"><p>ev configures handlePointer. Required; omission is not allowed for this API call. Valid value must satisfy the NormalizedPointerEvent TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for handlePointer.</p>
+<div class="tsd-comment tsd-typography"><p>ev accepts <code>NormalizedPointerEvent</code> for handlePointer. Required; omission is not allowed. Must be assignable to <code>NormalizedPointerEvent</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../types/index.HandlerResult.html" class="tsd-signature-type tsd-kind-type-alias">HandlerResult</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-7">Example<a href="#example-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../types/index.HandlerResult.html" class="tsd-signature-type tsd-kind-type-alias">HandlerResult</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#handlepointer">handlePointer</a></p>
 <ul>
 <li>Defined in src/core/handlers/drag-pan.ts:66</li></ul></aside></div></li></ul></section>
@@ -227,11 +197,7 @@ with an opinion (HandlerManager writes <code>''</code> itself in that case).</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>isEnabled is a public emap call signature documented for package consumers.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-8">Example<a href="#example-8" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#isenabled">isEnabled</a></p>
 <ul>
 <li>Defined in src/core/handlers/drag-pan.ts:49</li></ul></aside></div></li></ul></section>
@@ -308,13 +274,9 @@ synchronously inside the handler is safe.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">opts</span>: <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.DragPanOptions.html" class="tsd-signature-type tsd-kind-interface">DragPanOptions</a><span class="tsd-signature-symbol">&gt;</span></span>
-<div class="tsd-comment tsd-typography"><p>opts configures setOptions. Required; omission is not allowed for this API call. Valid value must satisfy the Partial TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for setOptions.</p>
+<div class="tsd-comment tsd-typography"><p>opts accepts <code>Partial</code> for setOptions. Required; omission is not allowed. Must be assignable to <code>Partial</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-9">Example<a href="#example-9" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#setoptions">setOptions</a></p>
 <ul>
 <li>Defined in src/core/handlers/drag-pan.ts:52</li></ul></aside></div></li></ul></section></section></details></div>

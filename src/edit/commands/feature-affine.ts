@@ -124,6 +124,11 @@ export function rotateMatrix(angleRad: number, ox = 0, oy = 0): AffineMatrix {
  * Scale by `(sx, sy)` around `(ox, oy)`.
  *
  * Combined transform: translate(-ox,-oy) → scale(sx,sy) → translate(ox,oy).
+ *
+ * @param sx X-axis scale factor. Required finite number in source coordinate units.
+ * @param sy Y-axis scale factor. Required finite number in source coordinate units.
+ * @param ox X coordinate of the scale origin. Defaults to `0`.
+ * @param oy Y coordinate of the scale origin. Defaults to `0`.
  */
 export function scaleMatrix(sx: number, sy: number, ox = 0, oy = 0): AffineMatrix {
   return {

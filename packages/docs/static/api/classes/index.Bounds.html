@@ -12,14 +12,14 @@
 <li><a href="" aria-current="page">Bounds</a></li></ul>
 <h1>Class Bounds</h1></div>
 <section class="tsd-panel tsd-comment">
-<div class="tsd-comment tsd-typography"><p>Bounds is a public emap class documented for package consumers.</p>
+<div class="tsd-comment tsd-typography"><p>Mutable axis-aligned bounds in source coordinate units.</p>
 </div>
 <div class="tsd-comment tsd-typography">
 <div class="tsd-tag-example">
 <h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: crs-switch, project.</p>
 </div></div></section><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:1</li></ul></aside>
+<li>Defined in src/geo/bounds.ts:2</li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -62,77 +62,57 @@
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="constructorbounds"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">Bounds</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">xmin</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">ymin</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">xmax</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">ymax</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">Bounds</a><a href="#constructorbounds" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<div class="tsd-comment tsd-typography"><p>Bounds is a public emap call signature documented for package consumers.</p>
+<div class="tsd-comment tsd-typography"><p>Create bounds from explicit min/max coordinates, or an empty extent.</p>
 </div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">xmin</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = Infinity</span></span>
-<div class="tsd-comment tsd-typography"><p>xmin configures Bounds. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for Bounds.</p>
+<div class="tsd-comment tsd-typography"><p>Minimum x coordinate. Defaults to  <code>Infinity</code>  so a new bounds starts empty until points are merged. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">ymin</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = Infinity</span></span>
-<div class="tsd-comment tsd-typography"><p>ymin configures Bounds. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for Bounds.</p>
+<div class="tsd-comment tsd-typography"><p>Minimum y coordinate. Defaults to  <code>Infinity</code>  so a new bounds starts empty until points are merged. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">xmax</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = -Infinity</span></span>
-<div class="tsd-comment tsd-typography"><p>xmax configures Bounds. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for Bounds.</p>
+<div class="tsd-comment tsd-typography"><p>Maximum x coordinate. Defaults to  <code>-Infinity</code>  so a new bounds starts empty until points are merged. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">ymax</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = -Infinity</span></span>
-<div class="tsd-comment tsd-typography"><p>ymax configures Bounds. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for Bounds.</p>
+<div class="tsd-comment tsd-typography"><p>Maximum y coordinate. Defaults to  <code>-Infinity</code>  so a new bounds starts empty until points are merged. Must be assignable to <code>number</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">Bounds</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: crs-switch, project.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">Bounds</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:2</li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in src/geo/bounds.ts:11</li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="xmax"><span>xmax</span><a href="#xmax" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">xmax</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = -Infinity</span></div>
-<div class="tsd-comment tsd-typography"><p>xmax is a public emap API documented for package consumers.</p>
-</div>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<div class="tsd-comment tsd-typography"><p>Maximum x coordinate. Defaults to <code>-Infinity</code> so a new bounds starts empty until points are merged.</p>
+</div><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:5</li></ul></aside></section>
+<li>Defined in src/geo/bounds.ts:14</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="xmin"><span>xmin</span><a href="#xmin" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">xmin</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = Infinity</span></div>
-<div class="tsd-comment tsd-typography"><p>xmin is a public emap API documented for package consumers.</p>
-</div>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<div class="tsd-comment tsd-typography"><p>Minimum x coordinate. Defaults to <code>Infinity</code> so a new bounds starts empty until points are merged.</p>
+</div><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:3</li></ul></aside></section>
+<li>Defined in src/geo/bounds.ts:12</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ymax"><span>ymax</span><a href="#ymax" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">ymax</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = -Infinity</span></div>
-<div class="tsd-comment tsd-typography"><p>ymax is a public emap API documented for package consumers.</p>
-</div>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<div class="tsd-comment tsd-typography"><p>Maximum y coordinate. Defaults to <code>-Infinity</code> so a new bounds starts empty until points are merged.</p>
+</div><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:6</li></ul></aside></section>
+<li>Defined in src/geo/bounds.ts:15</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ymin"><span>ymin</span><a href="#ymin" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">ymin</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = Infinity</span></div>
-<div class="tsd-comment tsd-typography"><p>ymin is a public emap API documented for package consumers.</p>
-</div>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-5">Example<a href="#example-5" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<div class="tsd-comment tsd-typography"><p>Minimum y coordinate. Defaults to <code>Infinity</code> so a new bounds starts empty until points are merged.</p>
+</div><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:4</li></ul></aside></section></section></details>
+<li>Defined in src/geo/bounds.ts:13</li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Accessors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="accessors-1">Accessors<a href="#accessors-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -144,7 +124,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:21</li></ul></aside></div></li></ul></section>
+<li>Defined in src/geo/bounds.ts:30</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="centery"><span>center<wbr/>Y</span><a href="#centery" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -153,7 +133,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:25</li></ul></aside></div></li></ul></section>
+<li>Defined in src/geo/bounds.ts:34</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="height"><span>height</span><a href="#height" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -162,7 +142,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:17</li></ul></aside></div></li></ul></section>
+<li>Defined in src/geo/bounds.ts:26</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="width"><span>width</span><a href="#width" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -171,7 +151,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:13</li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in src/geo/bounds.ts:22</li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -183,13 +163,9 @@
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>clone is a public emap call signature documented for package consumers.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">Bounds</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-6">Example<a href="#example-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">Bounds</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:33</li></ul></aside></div></li></ul></section>
+<li>Defined in src/geo/bounds.ts:42</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="fillout"><span>fill<wbr/>Out</span><a href="#fillout" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -202,21 +178,17 @@
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">aspect</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>aspect configures fillOut. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for fillOut.</p>
+<div class="tsd-comment tsd-typography"><p>aspect accepts <code>number</code> for fillOut. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">focusX</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = 0.5</span></span>
-<div class="tsd-comment tsd-typography"><p>focusX configures fillOut. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for fillOut.</p>
+<div class="tsd-comment tsd-typography"><p>focusX accepts <code>number</code> for fillOut. Defaults to <code>0.5</code> when omitted or undefined. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">focusY</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = 0.5</span></span>
-<div class="tsd-comment tsd-typography"><p>focusY configures fillOut. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for fillOut.</p>
+<div class="tsd-comment tsd-typography"><p>focusY accepts <code>number</code> for fillOut. Defaults to <code>0.5</code> when omitted or undefined. Must be assignable to <code>number</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">this</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-7">Example<a href="#example-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">this</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:52</li></ul></aside></div></li></ul></section>
+<li>Defined in src/geo/bounds.ts:61</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="hasbounds"><span>has<wbr/>Bounds</span><a href="#hasbounds" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -225,13 +197,9 @@
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>hasBounds is a public emap call signature documented for package consumers.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-8">Example<a href="#example-8" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:29</li></ul></aside></div></li></ul></section>
+<li>Defined in src/geo/bounds.ts:38</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="merge"><span>merge</span><a href="#merge" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -244,15 +212,11 @@
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">other</span>: <a href="" class="tsd-signature-type tsd-kind-class">Bounds</a></span>
-<div class="tsd-comment tsd-typography"><p>other configures merge. Required; omission is not allowed for this API call. Valid value must satisfy the Bounds TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for merge.</p>
+<div class="tsd-comment tsd-typography"><p>other accepts <code>Bounds</code> for merge. Required; omission is not allowed. Must be assignable to <code>Bounds</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-9">Example<a href="#example-9" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:44</li></ul></aside></div></li></ul></section>
+<li>Defined in src/geo/bounds.ts:53</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="mergepoint"><span>merge<wbr/>Point</span><a href="#mergepoint" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -265,18 +229,14 @@
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">x</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>x configures mergePoint. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for mergePoint.</p>
+<div class="tsd-comment tsd-typography"><p>x accepts <code>number</code> for mergePoint. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">y</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>y configures mergePoint. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for mergePoint.</p>
+<div class="tsd-comment tsd-typography"><p>y accepts <code>number</code> for mergePoint. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-10">Example<a href="#example-10" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:37</li></ul></aside></div></li></ul></section>
+<li>Defined in src/geo/bounds.ts:46</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="scale"><span>scale</span><a href="#scale" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -289,15 +249,11 @@
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">k</span>: <span class="tsd-signature-type">number</span></span>
-<div class="tsd-comment tsd-typography"><p>k configures scale. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for scale.</p>
+<div class="tsd-comment tsd-typography"><p>k accepts <code>number</code> for scale. Required; omission is not allowed. Must be assignable to <code>number</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-11">Example<a href="#example-11" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:78</li></ul></aside></div></li></ul></section>
+<li>Defined in src/geo/bounds.ts:87</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="fromarray"><code class="tsd-tag">Static</code><span>from<wbr/>Array</span><a href="#fromarray" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -310,15 +266,11 @@
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">arr</span>: <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span></span>
-<div class="tsd-comment tsd-typography"><p>arr configures fromArray. Required; omission is not allowed for this API call. Valid value must satisfy the tuple TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for fromArray.</p>
+<div class="tsd-comment tsd-typography"><p>arr accepts <code>tuple number, number, number, number</code> for fromArray. Required; omission is not allowed. Must be assignable to <code>tuple number, number, number, number</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">Bounds</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-12">Example<a href="#example-12" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">Bounds</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in src/geo/bounds.ts:9</li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in src/geo/bounds.ts:18</li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

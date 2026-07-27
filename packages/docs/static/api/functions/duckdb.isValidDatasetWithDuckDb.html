@@ -29,13 +29,13 @@
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">dataset</span>: <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></span>
-<div class="tsd-comment tsd-typography"><p>dataset configures isValidDatasetWithDuckDb. Required; omission is not allowed for this API call. Valid value must satisfy the MapshaperDataset TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for isValidDatasetWithDuckDb.</p>
+<div class="tsd-comment tsd-typography"><p>dataset accepts <code>MapshaperDataset</code> for isValidDatasetWithDuckDb. Required; omission is not allowed. Must be assignable to <code>MapshaperDataset</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">opts</span>: <a href="../interfaces/duckdb.DuckDbAttributeOperationOptions.html" class="tsd-signature-type tsd-kind-interface">DuckDbAttributeOperationOptions</a><span class="tsd-signature-symbol"> = {}</span></span>
-<div class="tsd-comment tsd-typography"><p>opts configures isValidDatasetWithDuckDb. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the DuckDbAttributeOperationOptions TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for isValidDatasetWithDuckDb.</p>
+<div class="tsd-comment tsd-typography"><p>opts accepts <code>DuckDbAttributeOperationOptions</code> for isValidDatasetWithDuckDb. Defaults to <code>{}</code> when omitted or undefined. Must be assignable to <code>DuckDbAttributeOperationOptions</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">runtime</span>: <a href="../interfaces/duckdb.DuckDbRuntime.html" class="tsd-signature-type tsd-kind-interface">DuckDbRuntime</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol"> = ...</span></span>
-<div class="tsd-comment tsd-typography"><p>runtime configures isValidDatasetWithDuckDb. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the DuckDbRuntime | literal TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for isValidDatasetWithDuckDb.</p>
+<div class="tsd-comment tsd-typography"><p>runtime accepts <code>DuckDbRuntime | null</code> for isValidDatasetWithDuckDb. Defaults to <code>...</code> when omitted or undefined. Must be assignable to <code>DuckDbRuntime | null</code>.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">&gt;</span></h4>
 <div class="tsd-comment tsd-typography">

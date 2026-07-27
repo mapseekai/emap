@@ -79,13 +79,9 @@ remove this exact validator (idempotent).</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">v</span>: <a href="../interfaces/index.Validator.html" class="tsd-signature-type tsd-kind-interface">Validator</a></span>
-<div class="tsd-comment tsd-typography"><p>v configures register. Required; omission is not allowed for this API call. Valid value must satisfy the Validator TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for register.</p>
+<div class="tsd-comment tsd-typography"><p>v accepts <code>Validator</code> for register. Required; omission is not allowed. Must be assignable to <code>Validator</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/validation/registry.ts:44</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -104,19 +100,15 @@ typically filter <code>.report.ok === false</code> to surface failures.</p>
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">phase</span>: <span class="tsd-signature-type">&quot;after-commit&quot;</span></span>
-<div class="tsd-comment tsd-typography"><p>phase configures runFor. Required; omission is not allowed for this API call. Valid value must satisfy the &quot;after-commit&quot; TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for runFor.</p>
+<div class="tsd-comment tsd-typography"><p>phase accepts <code>&quot;after-commit&quot;</code> for runFor. Required; omission is not allowed. Must be assignable to <code>&quot;after-commit&quot;</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">host</span>: <span class="tsd-signature-type">EmapHostInternal</span></span>
-<div class="tsd-comment tsd-typography"><p>host configures runFor. Required; omission is not allowed for this API call. Valid value must satisfy the EmapHostInternal TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for runFor.</p>
+<div class="tsd-comment tsd-typography"><p>host accepts <code>EmapHostInternal</code> for runFor. Required; omission is not allowed. Must be assignable to <code>EmapHostInternal</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">change</span>: <a href="../interfaces/index.ValidationChange.html" class="tsd-signature-type tsd-kind-interface">ValidationChange</a></span>
-<div class="tsd-comment tsd-typography"><p>change configures runFor. Required; omission is not allowed for this API call. Valid value must satisfy the ValidationChange TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for runFor.</p>
+<div class="tsd-comment tsd-typography"><p>change accepts <code>ValidationChange</code> for runFor. Required; omission is not allowed. Must be assignable to <code>ValidationChange</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.ValidatorResult.html" class="tsd-signature-type tsd-kind-interface">ValidatorResult</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.ValidatorResult.html" class="tsd-signature-type tsd-kind-interface">ValidatorResult</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/validation/registry.ts:64</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -127,11 +119,7 @@ typically filter <code>.report.ok === false</code> to surface failures.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Remove every registered validator.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/validation/registry.ts:52</li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">

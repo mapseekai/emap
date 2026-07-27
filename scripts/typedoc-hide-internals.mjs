@@ -4,7 +4,6 @@ import { Application, Comment, CommentTag, ReflectionKind } from 'typedoc';
 
 const INTERNAL_MAP_HOST_SOURCE = 'src/map/map.ts';
 const API_DOCS_ROOT = 'packages/docs/docs';
-const DOCS_EXAMPLE_FALLBACK = 'getting-started/geojson-viewer';
 const SOURCE_FILE_PATTERN = /^(?:src\/|.*\/src\/)/;
 const INTERNAL_HOST_SURFACE_NAMES = [
   '_activeTransaction',
@@ -134,34 +133,77 @@ function typeText(type) {
   if (typeof type.value === 'string' || typeof type.value === 'number' || typeof type.value === 'boolean') {
     return JSON.stringify(type.value);
   }
+  if (type.type === 'literal' && type.value === null) return 'null';
   if (Array.isArray(type.types)) return type.types.map(typeText).join(' | ');
+  if (Array.isArray(type.elements)) return `tuple ${type.elements.map(typeText).join(', ')}`;
   if (type.type === 'array') return `${typeText(type.elementType)} array`;
   if (type.type === 'reflection') return 'object';
   return typeof type.type === 'string' ? type.type : 'the documented TypeScript type';
 }
 
-function exampleText(apiName, examples) {
+function exampleText(examples) {
   const ids = [...(examples ?? [])];
-  const exampleList = (ids.length > 0 ? ids : [DOCS_EXAMPLE_FALLBACK]).slice(0, 3).join(', ');
-  return `Runnable example association: ${exampleList}.`;
+  if (ids.length === 0) return '';
+  return `Runnable example association: ${ids.slice(0, 3).join(', ')}.`;
+}
+
+function explicitAssociation(names, apiToExamples) {
+  for (const name of names) {
+    const examples = apiToExamples.get(name);
+    if (examples?.size > 0) return { apiName: name, examples };
+  }
+  return null;
+}
+
+function isConstructorReflection(reflection) {
+  return reflection.kindOf?.(ReflectionKind.Constructor | ReflectionKind.ConstructorSignature) === true;
+}
+
+function appendTagIfMissing(comment, tagName, text) {
+  if (!text) return;
+  if (!comment.blockTags.some((tag) => tag.tag === tagName && commentText(tag.content))) {
+    comment.blockTags.push(new CommentTag(tagName, [textPart(text)]));
+  }
+}
+
+function hasOwnOrSignatureSummary(reflection) {
+  if (commentText(reflection.comment?.summary)) return true;
+  return reflection.signatures?.some((signature) => commentText(signature.comment?.summary)) === true;
+}
+
+function defaultBehaviorText(parameter) {
+  if (parameter.defaultValue !== undefined) {
+    return `Defaults to \`${parameter.defaultValue}\` when omitted or undefined.`;
+  }
+  if (parameter.flags?.isOptional === true) {
+    return 'Optional; omit to leave unset.';
+  }
+  return 'Required; omission is not allowed.';
+}
+
+function constraintText(parameter) {
+  return `Must be assignable to \`${typeText(parameter.type)}\`.`;
+}
+
+function parameterText(apiName, parameter) {
+  return `${parameter.name} accepts \`${typeText(parameter.type)}\` for ${apiName}. ${defaultBehaviorText(parameter)} ${constraintText(parameter)}`;
 }
 
 function ensureReflectionMetadata(reflection, apiToExamples) {
   if (!isOwnSourceReflection(reflection)) return;
 
   const names = publicApiNames(reflection);
-  const apiName = [...names].find((name) => apiToExamples.has(name)) ?? reflection.name;
-  const examples = apiToExamples.get(apiName);
+  const association = explicitAssociation(names, apiToExamples);
   const comment = ensureComment(reflection);
 
-  if (!commentText(comment.summary)) {
+  if (!hasOwnOrSignatureSummary(reflection) && !isConstructorReflection(reflection)) {
     comment.summary = [
-      textPart(`${apiName} is a public emap ${kindLabel(reflection)} documented for package consumers.`),
+      textPart(`${reflection.name} is a public emap ${kindLabel(reflection)} documented for package consumers.`),
     ];
   }
 
-  if (!comment.blockTags.some((tag) => tag.tag === '@example' && commentText(tag.content))) {
-    comment.blockTags.push(new CommentTag('@example', [textPart(exampleText(apiName, examples))]));
+  if (association && !isConstructorReflection(reflection)) {
+    appendTagIfMissing(comment, '@example', exampleText(association.examples));
   }
 }
 
@@ -169,40 +211,46 @@ function ensureSignatureParameterMetadata(signature, apiToExamples) {
   if (!isOwnSourceReflection(signature)) return;
 
   const names = publicApiNames(signature);
-  const apiName = [...names].find((name) => apiToExamples.has(name)) ?? signature.name;
-  const examples = apiToExamples.get(apiName);
+  const association = explicitAssociation(names, apiToExamples);
+  const apiName = association?.apiName ?? signature.name;
   const signatureComment = ensureComment(signature);
 
-  if (!commentText(signatureComment.summary)) {
+  if (!commentText(signatureComment.summary) && !isConstructorReflection(signature)) {
     signatureComment.summary = [
-      textPart(`${apiName} is a public emap call signature documented for package consumers.`),
+      textPart(`${signature.name} is a public emap call signature documented for package consumers.`),
     ];
   }
-  if (!signatureComment.blockTags.some((tag) => tag.tag === '@example' && commentText(tag.content))) {
-    signatureComment.blockTags.push(new CommentTag('@example', [textPart(exampleText(apiName, examples))]));
+
+  if (association && !isConstructorReflection(signature)) {
+    appendTagIfMissing(signatureComment, '@example', exampleText(association.examples));
   }
 
   for (const parameter of signature.parameters ?? []) {
-    const optional = parameter.flags?.isOptional === true || parameter.defaultValue !== undefined;
     const parameterComment = ensureComment(parameter);
     const existing = commentText(parameterComment.summary);
-    const defaultText = optional
-      ? 'Optional; when omitted or undefined, the API uses its documented default behavior.'
-      : 'Required; omission is not allowed for this API call.';
-    const constraintsText = `Valid value must satisfy the ${typeText(parameter.type)} TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for ${apiName}.`;
-    const generated = `${parameter.name} configures ${apiName}. ${defaultText} ${constraintsText}`;
+    const generated = parameterText(apiName, parameter);
 
     if (!existing) {
       parameterComment.summary = [textPart(generated)];
-    } else if (
-      !/\b(defaults?|omits?|omitted|omission|optional|required|undefined|unset|absent|when not provided)\b/i.test(
-        existing,
-      ) ||
-      !/\b(valid|allowed|one of|must|requires?|constraint|range|positive|negative|non-negative|units?|epsg|crs|geojson|topojson|csv|parquet|arrow|boolean|number|string|array)\b/i.test(
-        existing,
-      )
-    ) {
-      parameterComment.summary = [textPart(`${existing} ${generated}`)];
+    } else {
+      const additions = [];
+      if (
+        !/\b(defaults?|omits?|omitted|omission|optional|required|undefined|unset|absent|when not provided)\b/i.test(
+          existing,
+        )
+      ) {
+        additions.push(defaultBehaviorText(parameter));
+      }
+      if (
+        !/\b(valid|allowed|one of|must|requires?|constraint|range|positive|negative|non-negative|units?|epsg|crs|geojson|topojson|csv|parquet|arrow|boolean|number|string|array)\b/i.test(
+          existing,
+        )
+      ) {
+        additions.push(constraintText(parameter));
+      }
+      if (additions.length > 0) {
+        parameterComment.summary = [textPart(`${existing} ${additions.join(' ')}`)];
+      }
     }
   }
 }

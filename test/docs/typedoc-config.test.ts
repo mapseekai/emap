@@ -121,6 +121,10 @@ function readCommentPartText(value: unknown): string {
   return typeof text === 'string' ? text : '';
 }
 
+function normalizedCommentText(value: unknown): string {
+  return readCommentText(value).replace(/\s+/g, ' ').trim();
+}
+
 describe('TypeDoc public API config', () => {
   it('documents only public package entry points and emits html plus json', async () => {
     const config = JSON.parse(
@@ -188,24 +192,51 @@ describe('TypeDoc public API config', () => {
     expect(html).toContain('Defined in src/map/map.ts');
   });
 
-  it('emits checker-compatible public API example and parameter metadata', async () => {
+  it('emits real public API examples and exact generated parameter metadata', async () => {
     const reflections = JSON.parse(
       await readFile(resolve(process.cwd(), 'packages/docs/static/api/reflections.json'), 'utf8'),
     ) as unknown;
     const nodes = collectReflectionNodes(reflections);
+    const allGeneratedText = nodes.map(readCommentText).join('\n');
     const boundsSignature = nodes.find(
       (node) => node.name === 'Bounds' && Array.isArray(node.parameters),
     );
+    const constructors = nodes.filter((node) => node.name === 'constructor');
 
-    expect(readCommentText(boundsSignature)).toContain('Runnable example association');
+    for (const constructor of constructors) {
+      expect(readCommentText(constructor)).not.toContain('Runnable example association');
+    }
+    expect(allGeneratedText).not.toContain('Valid value must satisfy');
+    expect(allGeneratedText).not.toContain('Optional; when omitted or undefined');
 
     const xmin = (boundsSignature?.parameters as ReflectionNode[] | undefined)?.find(
       (parameter) => parameter.name === 'xmin',
     );
-    const xminComment = readCommentText(xmin);
+    const xminComment = normalizedCommentText(xmin);
 
-    expect(xminComment).toContain('Optional');
-    expect(xminComment).toContain('Valid value');
-    expect(xminComment).toContain('number');
+    expect((xmin as { defaultValue?: unknown } | undefined)?.defaultValue).toBe('Infinity');
+    expect(xminComment).toContain('Minimum x coordinate.');
+    expect(xminComment).toContain('Defaults to `Infinity`');
+    expect(xminComment).toContain('Must be assignable to `number`.');
+
+    const scaleMatrixSignature = nodes.find(
+      (node) => node.name === 'scaleMatrix' && Array.isArray(node.parameters),
+    );
+    const ox = (scaleMatrixSignature?.parameters as ReflectionNode[] | undefined)?.find(
+      (parameter) => parameter.name === 'ox',
+    );
+    const oxComment = normalizedCommentText(ox);
+
+    expect((ox as { defaultValue?: unknown } | undefined)?.defaultValue).toBe('0');
+    expect(oxComment).toContain('X coordinate of the scale origin.');
+    expect(oxComment).toContain('Defaults to `0`');
+    expect(oxComment).toContain('Must be assignable to `number`.');
+
+    const getDuckDbRuntimeSignature = nodes.find(
+      (node) => node.name === 'getDuckDbRuntime' && (node as { kind?: unknown }).kind === 4096,
+    );
+    expect(normalizedCommentText(getDuckDbRuntimeSignature)).toContain(
+      'Return the injected DuckDB runtime, or `null` when none has been configured.',
+    );
   });
 });

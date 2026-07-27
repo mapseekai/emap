@@ -95,16 +95,12 @@ the next operation will act on&quot;), highlight is transient render state
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">refs</span>: <span class="tsd-signature-keyword">readonly</span> <a href="../interfaces/index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a><span class="tsd-signature-symbol">[]</span></span>
-<div class="tsd-comment tsd-typography"><p>refs configures apply. Required; omission is not allowed for this API call. Valid value must satisfy the typeOperator TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for apply.</p>
+<div class="tsd-comment tsd-typography"><p>refs accepts <code>typeOperator</code> for apply. Required; omission is not allowed. Must be assignable to <code>typeOperator</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">mode</span>: <a href="../types/index.SelectMode.html" class="tsd-signature-type tsd-kind-type-alias">SelectMode</a></span>
-<div class="tsd-comment tsd-typography"><p>mode configures apply. Required; omission is not allowed for this API call. Valid value must satisfy the SelectMode TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for apply.</p>
+<div class="tsd-comment tsd-typography"><p>mode accepts <code>SelectMode</code> for apply. Required; omission is not allowed. Must be assignable to <code>SelectMode</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.SelectionDiff.html" class="tsd-signature-type tsd-kind-interface">SelectionDiff</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.SelectionDiff.html" class="tsd-signature-type tsd-kind-interface">SelectionDiff</a></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/selection.ts:90</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -115,11 +111,7 @@ the next operation will act on&quot;), highlight is transient render state
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Remove every entry. Returns the diff of refs that were actually cleared.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.SelectionDiff.html" class="tsd-signature-type tsd-kind-interface">SelectionDiff</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.SelectionDiff.html" class="tsd-signature-type tsd-kind-interface">SelectionDiff</a></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/selection.ts:72</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -130,11 +122,7 @@ the next operation will act on&quot;), highlight is transient render state
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Flat list of every selected ref, in insertion order within each layer.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a><span class="tsd-signature-symbol">[]</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/selection.ts:53</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -149,16 +137,12 @@ the next operation will act on&quot;), highlight is transient render state
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">source</span>: <span class="tsd-signature-type">string</span></span>
-<div class="tsd-comment tsd-typography"><p>source configures getByLayer. Required; omission is not allowed for this API call. Valid value must satisfy the string TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for getByLayer.</p>
+<div class="tsd-comment tsd-typography"><p>source accepts <code>string</code> for getByLayer. Required; omission is not allowed. Must be assignable to <code>string</code>.</p>
 </div></li>
 <li><span><span class="tsd-kind-parameter">layer</span>: <span class="tsd-signature-type">string</span></span>
-<div class="tsd-comment tsd-typography"><p>layer configures getByLayer. Required; omission is not allowed for this API call. Valid value must satisfy the string TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for getByLayer.</p>
+<div class="tsd-comment tsd-typography"><p>layer accepts <code>string</code> for getByLayer. Required; omission is not allowed. Must be assignable to <code>string</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/selection.ts:66</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -173,13 +157,9 @@ the next operation will act on&quot;), highlight is transient render state
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">ref</span>: <a href="../interfaces/index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a></span>
-<div class="tsd-comment tsd-typography"><p>ref configures has. Required; omission is not allowed for this API call. Valid value must satisfy the FeatureRef TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for has.</p>
+<div class="tsd-comment tsd-typography"><p>ref accepts <code>FeatureRef</code> for has. Required; omission is not allowed. Must be assignable to <code>FeatureRef</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-5">Example<a href="#example-5" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/selection.ts:48</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -194,13 +174,9 @@ the next operation will act on&quot;), highlight is transient render state
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">refs</span>: <span class="tsd-signature-keyword">readonly</span> <a href="../interfaces/index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a><span class="tsd-signature-symbol">[]</span></span>
-<div class="tsd-comment tsd-typography"><p>refs configures remove. Required; omission is not allowed for this API call. Valid value must satisfy the typeOperator TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for remove.</p>
+<div class="tsd-comment tsd-typography"><p>refs accepts <code>typeOperator</code> for remove. Required; omission is not allowed. Must be assignable to <code>typeOperator</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.SelectionDiff.html" class="tsd-signature-type tsd-kind-interface">SelectionDiff</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-6">Example<a href="#example-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.SelectionDiff.html" class="tsd-signature-type tsd-kind-interface">SelectionDiff</a></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/selection.ts:121</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -217,13 +193,9 @@ restored state so callers can fire a single <code>selectionchange</code> event.<
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">snap</span>: <a href="../types/index.SelectionSnapshot.html" class="tsd-signature-type tsd-kind-type-alias">SelectionSnapshot</a></span>
-<div class="tsd-comment tsd-typography"><p>snap configures restore. Required; omission is not allowed for this API call. Valid value must satisfy the SelectionSnapshot TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for restore.</p>
+<div class="tsd-comment tsd-typography"><p>snap accepts <code>SelectionSnapshot</code> for restore. Required; omission is not allowed. Must be assignable to <code>SelectionSnapshot</code>.</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.SelectionDiff.html" class="tsd-signature-type tsd-kind-interface">SelectionDiff</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-7">Example<a href="#example-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.SelectionDiff.html" class="tsd-signature-type tsd-kind-interface">SelectionDiff</a></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/selection.ts:147</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -239,11 +211,7 @@ detail and may change.</p>
 <p>Used by <code>Transaction</code> for rollback so a transaction-internal
 operation that clears the selection can be reverted.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <a href="../types/index.SelectionSnapshot.html" class="tsd-signature-type tsd-kind-type-alias">SelectionSnapshot</a></h4>
-<div class="tsd-comment tsd-typography">
-<div class="tsd-tag-example">
-<h4 class="tsd-anchor-link" id="example-8">Example<a href="#example-8" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
-</div></div><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="../types/index.SelectionSnapshot.html" class="tsd-signature-type tsd-kind-type-alias">SelectionSnapshot</a></h4><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/selection.ts:138</li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">

@@ -12,8 +12,6 @@
 <li><a href="" aria-current="page">decodeWkb</a></li></ul>
 <h1>Function decodeWkb</h1></div>
 <section class="tsd-panel tsd-comment">
-<div class="tsd-comment tsd-typography"><p>decodeWkb is a public emap function documented for package consumers.</p>
-</div>
 <div class="tsd-comment tsd-typography">
 <div class="tsd-tag-example">
 <h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: duckdb-geoparquet-query, export-geoparquet, export-roundtrip.</p>
@@ -29,7 +27,7 @@
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">bytes</span>: <span class="tsd-signature-type">Uint8Array</span></span>
-<div class="tsd-comment tsd-typography"><p>bytes configures decodeWkb. Required; omission is not allowed for this API call. Valid value must satisfy the Uint8Array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for decodeWkb.</p>
+<div class="tsd-comment tsd-typography"><p>bytes accepts <code>Uint8Array</code> for decodeWkb. Required; omission is not allowed. Must be assignable to <code>Uint8Array</code>.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="../types/formats.WkbGeometry.html" class="tsd-signature-type tsd-kind-type-alias">WkbGeometry</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4>
 <div class="tsd-comment tsd-typography">

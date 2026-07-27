@@ -1,4 +1,13 @@
+/** Mutable axis-aligned bounds in source coordinate units. */
 export class Bounds {
+  /**
+   * Create bounds from explicit min/max coordinates, or an empty extent.
+   *
+   * @param xmin Minimum x coordinate. Defaults to `Infinity` so a new bounds starts empty until points are merged.
+   * @param ymin Minimum y coordinate. Defaults to `Infinity` so a new bounds starts empty until points are merged.
+   * @param xmax Maximum x coordinate. Defaults to `-Infinity` so a new bounds starts empty until points are merged.
+   * @param ymax Maximum y coordinate. Defaults to `-Infinity` so a new bounds starts empty until points are merged.
+   */
   constructor(
     public xmin: number = Infinity,
     public ymin: number = Infinity,

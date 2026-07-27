@@ -12,8 +12,6 @@
 <li><a href="" aria-current="page">buildGeoMetadata</a></li></ul>
 <h1>Function buildGeoMetadata</h1></div>
 <section class="tsd-panel tsd-comment">
-<div class="tsd-comment tsd-typography"><p>buildGeoMetadata is a public emap function documented for package consumers.</p>
-</div>
 <div class="tsd-comment tsd-typography">
 <div class="tsd-tag-example">
 <h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: duckdb-geoparquet-query, export-geoparquet, export-roundtrip.</p>
@@ -29,7 +27,7 @@
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">opts</span>: <span class="tsd-signature-symbol">{</span><br/>    <span class="tsd-kind-property">bbox</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-property">bboxColumn</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-property">columnName</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-property">crs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-property">encoding</span><span class="tsd-signature-symbol">:</span> <a href="../types/formats.GeoEncoding.html" class="tsd-signature-type tsd-kind-type-alias">GeoEncoding</a><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-property">geometryTypes</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></span>
-<div class="tsd-comment tsd-typography"><p>opts configures buildGeoMetadata. Required; omission is not allowed for this API call. Valid value must satisfy the object TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for buildGeoMetadata.</p>
+<div class="tsd-comment tsd-typography"><p>opts accepts <code>object</code> for buildGeoMetadata. Required; omission is not allowed. Must be assignable to <code>object</code>.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span></h4>
 <div class="tsd-comment tsd-typography">
