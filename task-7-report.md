@@ -68,3 +68,25 @@ Task 7 migrated the remaining original HTML example families into the typed Vite
 ## Commit
 
 Final commit SHA: recorded in the final task response after commit creation. A commit cannot contain its own final SHA in a tracked file without changing that SHA.
+
+## Fix Round 1
+
+Fix commit SHA: `1895e07eedf849394c6d357d78ddf5802c578583`
+
+### Review Findings Fixed
+
+- DuckDB example actions now catch optional dynamic import, DuckDB runtime initialization, validation/query, and operation failures, render an inline `data-state="error"` status with the concrete error message, and reset rejected cached module/runtime promises so a retry can recover.
+- The web-worker example `mode` and `threshold` controls now rebuild the Emap with the selected `useWorker`/`workerThreshold` settings while preserving `workerUrl: '/dist/emap-worker.js'`.
+
+### Verification Evidence
+
+- `npx vitest run test/docs/example-catalog.test.ts` -> 1 file passed, 14 tests passed.
+- `npm run typecheck` -> `tsc --noEmit` passed.
+- `npm run examples:build` -> Vite examples build passed.
+- `npm run examples:check` -> examples checker passed.
+- `npx biome format docs-meta/examples.ts test/docs/example-catalog.test.ts` -> no fixes required after formatting.
+- `git diff --check -- docs-meta/examples.ts test/docs/example-catalog.test.ts` -> passed.
+
+### GitNexus
+
+- `node /Users/zhang/code/emap/.gitnexus/run.cjs detect-changes --scope all --repo emap --limit 80` was attempted from the linked worktree and failed because the runner could not launch the `gitnexus` binary.
