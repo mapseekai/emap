@@ -72,6 +72,8 @@ type RecipeContext = {
   status: HTMLElement;
   container: HTMLElement;
   csvFixture?: string;
+  workerSettings?: WebWorkerSettings;
+  rebuildWebWorker?: (settings: WebWorkerSettings) => Promise<void>;
 };
 
 type RecipeDefinition = Omit<ExampleDefinition, 'load'> & {
@@ -100,6 +102,12 @@ type FileData = {
 
 type DuckDbModule = typeof import('@zwishing/emap/duckdb');
 type DuckDbMapOpContext = Parameters<DuckDbModule['duckDbQueryLayer']>[0];
+type WebWorkerMode = 'auto' | 'on' | 'off';
+
+type WebWorkerSettings = {
+  mode: WebWorkerMode;
+  threshold: number;
+};
 
 let activeMap: Emap | null = null;
 let duckDbModulePromise: Promise<DuckDbModule> | null = null;
@@ -115,6 +123,8 @@ const task6MergeFixture = 'fixtures/task-6-polygons-alt.geojson';
 const task7Fixture = 'fixtures/task-7-polygons.geojson';
 const task7LineFixture = 'fixtures/task-7-lines.geojson';
 const task7MaskFixture = 'fixtures/task-7-mask.geojson';
+const workerUrl = '/dist/emap-worker.js';
+const defaultWebWorkerSettings: WebWorkerSettings = { mode: 'auto', threshold: 1 };
 
 const route = (id: string) => `/examples/${id}/`;
 const originalHtml = (id: string) => `test/examples/${id}.html`;
@@ -888,14 +898,18 @@ async function loadCrsSwitch(): Promise<void> {
 }
 
 async function loadWebWorker(): Promise<void> {
+  return loadWebWorkerWithSettings(defaultWebWorkerSettings);
+}
+
+async function loadWebWorkerWithSettings(settings: WebWorkerSettings): Promise<void> {
   const runtime = createRuntime({
     sourceId: 'worker-demo-source',
     filename: basename(task7Fixture),
     fixture: task7Fixture,
     mapOptions: {
-      useWorker: 'auto',
-      workerThreshold: 1,
-      workerUrl: '/dist/emap-worker.js',
+      useWorker: workerModeToMapOption(settings.mode),
+      workerThreshold: settings.threshold,
+      workerUrl,
     },
   });
   const source = new TopologySource('worker-demo-source');
@@ -912,6 +926,8 @@ async function loadWebWorker(): Promise<void> {
     panel: runtime.panel,
     status: runtime.status,
     container: runtime.container,
+    workerSettings: settings,
+    rebuildWebWorker: loadWebWorkerWithSettings,
   });
 }
 
@@ -1953,12 +1969,15 @@ function setupCrsSwitch(ctx: RecipeContext): void {
 }
 
 function setupWebWorker(ctx: RecipeContext): void {
+  const initialSettings = ctx.workerSettings ?? defaultWebWorkerSettings;
   const mode = addSelect(ctx.toolbar, 'mode', [
     ['auto', 'auto'],
     ['on', 'on'],
     ['off', 'off'],
   ]);
+  mode.value = initialSettings.mode;
   const threshold = addInput(ctx.toolbar, 'threshold', '1');
+  threshold.value = String(initialSettings.threshold);
   const log = document.createElement('pre');
   log.className = 'example-inspector';
   ctx.panel.replaceWith(log);
@@ -1971,8 +1990,13 @@ function setupWebWorker(ctx: RecipeContext): void {
   ctx.map.on('workerjobend', (event) => {
     logEvent(`workerjobend #${event.id}: ${event.ok ? 'ok' : event.errorMessage}`);
   });
-  addButton(ctx.toolbar, 'Rebuild map', () => {
-    ctx.status.textContent = `workerUrl=/dist/emap-worker.js mode=${mode.value} threshold=${threshold.value}`;
+  addButton(ctx.toolbar, 'Rebuild map', async () => {
+    const settings = {
+      mode: workerModeValue(mode.value),
+      threshold: workerThresholdValue(threshold.value),
+    };
+    ctx.status.textContent = `Rebuilding with workerUrl=${workerUrl} mode=${settings.mode} threshold=${settings.threshold}...`;
+    await ctx.rebuildWebWorker?.(settings);
   });
   addButton(ctx.toolbar, 'Dissolve', async () => {
     const result = await ctx.map.ops.dissolveLayer({ source: ctx.sourceId, target: ctx.target });
@@ -1986,7 +2010,23 @@ function setupWebWorker(ctx: RecipeContext): void {
     ctx.map.cancelWorkerJobs();
     logEvent('cancelWorkerJobs()');
   });
-  ctx.status.textContent = 'workerUrl=/dist/emap-worker.js; run a heavy operation to observe worker events.';
+  ctx.status.textContent = `workerUrl=${workerUrl} mode=${initialSettings.mode} threshold=${initialSettings.threshold}; run a heavy operation to observe worker events.`;
+}
+
+function workerModeToMapOption(mode: WebWorkerMode): MapOptions['useWorker'] {
+  if (mode === 'on') return true;
+  if (mode === 'off') return false;
+  return 'auto';
+}
+
+function workerModeValue(value: string): WebWorkerMode {
+  if (value === 'on' || value === 'off') return value;
+  return 'auto';
+}
+
+function workerThresholdValue(value: string): number {
+  const threshold = Number(value);
+  return Number.isFinite(threshold) && threshold >= 0 ? threshold : defaultWebWorkerSettings.threshold;
 }
 
 function setupDuckDbBuffer(ctx: RecipeContext): void {
@@ -1995,21 +2035,19 @@ function setupDuckDbBuffer(ctx: RecipeContext): void {
   const distance = addInput(ctx.toolbar, 'Distance', '1000');
   const allowGeographic = addCheckbox(ctx.toolbar, 'allow geographic CRS', false);
   addButton(ctx.toolbar, 'Generate DuckDB buffer', async () => {
-    const dataset = requireDataset(ctx.source);
-    dataset.info = { ...dataset.info, crs_string: crs.value.trim() || undefined };
-    ctx.status.textContent = 'Loading DuckDB-Wasm optional module for bufferDatasetWithDuckDb...';
-    const duckdb = await loadDuckDbModule((message) => {
-      ctx.status.textContent = message;
+    await runDuckDbExampleAction(ctx, async (duckdb) => {
+      const dataset = requireDataset(ctx.source);
+      dataset.info = { ...dataset.info, crs_string: crs.value.trim() || undefined };
+      const result = await duckdb.bufferDatasetWithDuckDb(dataset, {
+        layer: target.value,
+        distance: Number(distance.value),
+        outputLayer: `${target.value}_buffer`,
+        failOnGeographicCrs: !allowGeographic.checked,
+      });
+      const source = addDatasetAsSource(ctx.map, 'duckdb-buffered', result);
+      setSourceExtent(ctx.map, source);
+      return `DuckDB buffer generated for ${target.value}.`;
     });
-    const result = await duckdb.bufferDatasetWithDuckDb(dataset, {
-      layer: target.value,
-      distance: Number(distance.value),
-      outputLayer: `${target.value}_buffer`,
-      failOnGeographicCrs: !allowGeographic.checked,
-    });
-    const source = addDatasetAsSource(ctx.map, 'duckdb-buffered', result);
-    setSourceExtent(ctx.map, source);
-    ctx.status.textContent = `DuckDB buffer generated for ${target.value}.`;
   });
   addPanelText(ctx.panel, 'DuckDB buffer preserves CRS override, distance, target layer, and failOnGeographicCrs behavior.');
 }
@@ -2043,44 +2081,46 @@ function setupDuckDbGeoParquetQuery(ctx: RecipeContext): void {
   });
 
   addButton(ctx.toolbar, 'Query GeoParquet', async () => {
-    const duckdb = await loadDuckDbModule((message) => {
-      ctx.status.textContent = message;
-    });
     if (!geoParquetQuerySource) {
       if (!geoParquetBytes) {
         ctx.status.textContent = 'Upload a GeoParquet file before querying.';
         return;
       }
-      geoParquetQuerySource = await duckdb.createDuckDbGeoParquetQuerySource(geoParquetBytes);
-      geoParquetBytes = null;
     }
-    const opts = {
-      sql: sql.value,
-      layerName: layerName.value.trim() || 'duckdb_geoparquet_query',
-      geometryColumn: geometryColumn.value.trim() || undefined,
-    };
-    const querySource = geoParquetQuerySource;
-    if (!querySource) throw new Error('GeoParquet query source is not initialized.');
-    const resultDataset = entrypoint.value === 'mapop'
-      ? await runDuckDbGeoParquetMapOp(duckdb, {
-        getSource(id: string) {
-          if (id === ctx.sourceId) {
-            return {
-              getBytes: () => geoParquetBytes,
-              getDataset: () => null,
-              getGeoParquetQuerySource: () => geoParquetQuerySource,
-            };
-          }
-          return contextSources.get(id);
-        },
-        setSourceDataset(id: string, dataset: MapshaperDataset) {
-          contextSources.set(id, { getDataset: () => dataset });
-        },
-      }, ctx.sourceId, opts)
-      : await querySource.query(opts);
-    const output = addDatasetAsSource(ctx.map, 'duckdb-geoparquet-output', resultDataset);
-    setSourceExtent(ctx.map, output);
-    ctx.status.textContent = `GeoParquet query output ${countFeatures(resultDataset)} feature(s).`;
+    await runDuckDbExampleAction(ctx, async (duckdb) => {
+      if (!geoParquetQuerySource) {
+        if (!geoParquetBytes) throw new Error('Upload a GeoParquet file before querying.');
+        geoParquetQuerySource = await duckdb.createDuckDbGeoParquetQuerySource(geoParquetBytes);
+        geoParquetBytes = null;
+      }
+      const opts = {
+        sql: sql.value,
+        layerName: layerName.value.trim() || 'duckdb_geoparquet_query',
+        geometryColumn: geometryColumn.value.trim() || undefined,
+      };
+      const querySource = geoParquetQuerySource;
+      if (!querySource) throw new Error('GeoParquet query source is not initialized.');
+      const resultDataset = entrypoint.value === 'mapop'
+        ? await runDuckDbGeoParquetMapOp(duckdb, {
+          getSource(id: string) {
+            if (id === ctx.sourceId) {
+              return {
+                getBytes: () => geoParquetBytes,
+                getDataset: () => null,
+                getGeoParquetQuerySource: () => geoParquetQuerySource,
+              };
+            }
+            return contextSources.get(id);
+          },
+          setSourceDataset(id: string, dataset: MapshaperDataset) {
+            contextSources.set(id, { getDataset: () => dataset });
+          },
+        }, ctx.sourceId, opts)
+        : await querySource.query(opts);
+      const output = addDatasetAsSource(ctx.map, 'duckdb-geoparquet-output', resultDataset);
+      setSourceExtent(ctx.map, output);
+      return `GeoParquet query output ${countFeatures(resultDataset)} feature(s).`;
+    });
   });
   addPanelText(ctx.panel, 'GeoParquet upload stays user-driven; the optional DuckDB module is loaded only when Query GeoParquet runs.');
 }
@@ -2123,33 +2163,37 @@ async function setupDuckDbOverlay(ctx: RecipeContext): Promise<void> {
   const outputLayer = addInput(ctx.toolbar, 'Output layer', 'duckdb_overlay_result');
   const contextSources = new Map<string, { getDataset(): MapshaperDataset | null }>();
   addButton(ctx.toolbar, 'Run overlay', async () => {
-    const duckdb = await loadDuckDbModule((message) => {
-      ctx.status.textContent = message;
+    await runDuckDbExampleAction(ctx, async (duckdb) => {
+      const inputDataset = requireDataset(ctx.source);
+      const maskDataset = requireDataset(maskSource);
+      const opts = {
+        inputLayer: layerIndexByName(inputDataset, inputLayer.value),
+        maskLayer: layerIndexByName(maskDataset, maskLayer.value),
+        outputLayer: outputLayer.value.trim() || `duckdb_${operation.value}_result`,
+      };
+      const resultDataset = entrypoint.value === 'mapop'
+        ? await runDuckDbOverlayMapOp(duckdb, {
+          getSource(id: string) {
+            if (id === ctx.sourceId) return { getDataset: () => inputDataset };
+            if (id === 'duckdb-overlay-mask') return { getDataset: () => maskDataset };
+            return contextSources.get(id);
+          },
+          setSourceDataset(id: string, dataset: MapshaperDataset) {
+            contextSources.set(id, { getDataset: () => dataset });
+          },
+        },
+          ctx.sourceId,
+          'duckdb-overlay-mask',
+          operation.value,
+          opts,
+        )
+        : operation.value === 'intersection'
+          ? await duckdb.intersectionDatasetWithDuckDb(inputDataset, maskDataset, opts)
+          : await duckdb.differenceDatasetWithDuckDb(inputDataset, maskDataset, opts);
+      const source = addDatasetAsSource(ctx.map, 'duckdb-overlay-output', resultDataset);
+      setSourceExtent(ctx.map, source);
+      return `${operation.value} output ${countFeatures(resultDataset)} feature(s).`;
     });
-    const inputDataset = requireDataset(ctx.source);
-    const maskDataset = requireDataset(maskSource);
-    const opts = {
-      inputLayer: layerIndexByName(inputDataset, inputLayer.value),
-      maskLayer: layerIndexByName(maskDataset, maskLayer.value),
-      outputLayer: outputLayer.value.trim() || `duckdb_${operation.value}_result`,
-    };
-    const resultDataset = entrypoint.value === 'mapop'
-      ? await runDuckDbOverlayMapOp(duckdb, {
-        getSource(id: string) {
-          if (id === ctx.sourceId) return { getDataset: () => inputDataset };
-          if (id === 'duckdb-overlay-mask') return { getDataset: () => maskDataset };
-          return contextSources.get(id);
-        },
-        setSourceDataset(id: string, dataset: MapshaperDataset) {
-          contextSources.set(id, { getDataset: () => dataset });
-        },
-      }, ctx.sourceId, 'duckdb-overlay-mask', operation.value, opts)
-      : operation.value === 'intersection'
-        ? await duckdb.intersectionDatasetWithDuckDb(inputDataset, maskDataset, opts)
-        : await duckdb.differenceDatasetWithDuckDb(inputDataset, maskDataset, opts);
-    const source = addDatasetAsSource(ctx.map, 'duckdb-overlay-output', resultDataset);
-    setSourceExtent(ctx.map, source);
-    ctx.status.textContent = `${operation.value} output ${countFeatures(resultDataset)} feature(s).`;
   });
 }
 
@@ -2182,35 +2226,34 @@ function setupDuckDbQuery(ctx: RecipeContext): void {
   const sql = addTextarea(ctx.toolbar, 'SQL', 'SELECT * FROM input LIMIT 50');
   const contextSources = new Map<string, { getDataset(): MapshaperDataset | null }>();
   addButton(ctx.toolbar, 'Run SELECT', async () => {
-    const duckdb = await loadDuckDbModule((message) => {
-      ctx.status.textContent = message;
+    await runDuckDbExampleAction(ctx, async (duckdb) => {
+      const dataset = requireDataset(ctx.source);
+      const layerIndex = layerIndexByName(dataset, target.value);
+      duckdb.validateDuckDbSelectSql(sql.value, {
+        availableColumns: fieldsForLayer(dataset, layerIndex),
+        physicalTableName: 'input_preview',
+        rowIdColumn: '__emap_rowid',
+      });
+      const opts = {
+        inputLayer: layerIndex,
+        sql: sql.value,
+        outputLayer: outputLayer.value.trim() || 'duckdb_query_result',
+      };
+      const resultDataset = entrypoint.value === 'mapop'
+        ? await runDuckDbQueryMapOp(duckdb, {
+          getSource(id: string) {
+            if (id === ctx.sourceId) return { getDataset: () => dataset };
+            return contextSources.get(id);
+          },
+          setSourceDataset(id: string, nextDataset: MapshaperDataset) {
+            contextSources.set(id, { getDataset: () => nextDataset });
+          },
+        }, ctx.sourceId, opts)
+        : await duckdb.queryDatasetWithDuckDb(dataset, opts);
+      const output = addDatasetAsSource(ctx.map, 'duckdb-query-output', resultDataset);
+      setSourceExtent(ctx.map, output);
+      return `Query output ${countFeatures(resultDataset)} feature(s).`;
     });
-    const dataset = requireDataset(ctx.source);
-    const layerIndex = layerIndexByName(dataset, target.value);
-    duckdb.validateDuckDbSelectSql(sql.value, {
-      availableColumns: fieldsForLayer(dataset, layerIndex),
-      physicalTableName: 'input_preview',
-      rowIdColumn: '__emap_rowid',
-    });
-    const opts = {
-      inputLayer: layerIndex,
-      sql: sql.value,
-      outputLayer: outputLayer.value.trim() || 'duckdb_query_result',
-    };
-    const resultDataset = entrypoint.value === 'mapop'
-      ? await runDuckDbQueryMapOp(duckdb, {
-        getSource(id: string) {
-          if (id === ctx.sourceId) return { getDataset: () => dataset };
-          return contextSources.get(id);
-        },
-        setSourceDataset(id: string, nextDataset: MapshaperDataset) {
-          contextSources.set(id, { getDataset: () => nextDataset });
-        },
-      }, ctx.sourceId, opts)
-      : await duckdb.queryDatasetWithDuckDb(dataset, opts);
-    const output = addDatasetAsSource(ctx.map, 'duckdb-query-output', resultDataset);
-    setSourceExtent(ctx.map, output);
-    ctx.status.textContent = `Query output ${countFeatures(resultDataset)} feature(s).`;
   });
 }
 
@@ -2268,35 +2311,34 @@ function setupDuckDbSpatialOps(ctx: RecipeContext): void {
   const crs = addInput(ctx.toolbar, 'CRS', 'EPSG:3857');
   const allowGeographic = addCheckbox(ctx.toolbar, 'allow geographic simplification', false);
   addButton(ctx.toolbar, 'Run DuckDB', async () => {
-    const duckdb = await loadDuckDbModule((message) => {
-      ctx.status.textContent = message;
-    });
-    const dataset = requireDataset(ctx.source);
-    dataset.info = { ...dataset.info, crs_string: crs.value.trim() || undefined };
-    const layerIndex = layerIndexByName(dataset, target.value);
-    const baseOpts = {
-      layer: layerIndex,
-      outputLayer: `${target.value}_${operation.value}`,
-      tolerance: Number(tolerance.value),
-      failOnGeographicCrs: !allowGeographic.checked,
-    };
-    const resultDataset = relationOperationIds.has(operation.value)
-      ? await duckdb.runRelationOperation(dataset, dataset, {
-        src: ctx.sourceId,
-        mask: ctx.sourceId,
-        inputLayer: layerIndex,
-        maskLayer: layerIndexByName(dataset, maskLayer.value),
+    await runDuckDbExampleAction(ctx, async (duckdb) => {
+      const dataset = requireDataset(ctx.source);
+      dataset.info = { ...dataset.info, crs_string: crs.value.trim() || undefined };
+      const layerIndex = layerIndexByName(dataset, target.value);
+      const baseOpts = {
+        layer: layerIndex,
         outputLayer: `${target.value}_${operation.value}`,
-        operation: operation.value,
-        mode: relationMode.value,
-        distance: Number(distance.value),
+        tolerance: Number(tolerance.value),
         failOnGeographicCrs: !allowGeographic.checked,
-      })
-      : await runDuckDbUnaryOperation(duckdb, dataset, operation.value, baseOpts);
-    const output = addDatasetAsSource(ctx.map, 'duckdb-spatial-output', resultDataset);
-    refreshLayerSelect(target, output);
-    setSourceExtent(ctx.map, output);
-    ctx.status.textContent = `${operation.value} output ${countFeatures(resultDataset)} feature(s).`;
+      };
+      const resultDataset = relationOperationIds.has(operation.value)
+        ? await duckdb.runRelationOperation(dataset, dataset, {
+          src: ctx.sourceId,
+          mask: ctx.sourceId,
+          inputLayer: layerIndex,
+          maskLayer: layerIndexByName(dataset, maskLayer.value),
+          outputLayer: `${target.value}_${operation.value}`,
+          operation: operation.value,
+          mode: relationMode.value,
+          distance: Number(distance.value),
+          failOnGeographicCrs: !allowGeographic.checked,
+        })
+        : await runDuckDbUnaryOperation(duckdb, dataset, operation.value, baseOpts);
+      const output = addDatasetAsSource(ctx.map, 'duckdb-spatial-output', resultDataset);
+      refreshLayerSelect(target, output);
+      setSourceExtent(ctx.map, output);
+      return `${operation.value} output ${countFeatures(resultDataset)} feature(s).`;
+    });
   });
   clickToInspect(ctx);
   addPanelText(ctx.panel, 'DuckDB spatial ops include unary geometry, attribute, and distanceWithin relation operations with click-to-inspect output.');
@@ -2538,14 +2580,37 @@ function fieldsForLayer(dataset: MapshaperDataset, layerIndex: number): string[]
 
 async function loadDuckDbModule(setStatus?: (message: string) => void): Promise<DuckDbModule> {
   setStatus?.('Loading optional DuckDB browser module...');
-  const module = await (duckDbModulePromise ??= import('@zwishing/emap/duckdb'));
-  duckDbRuntimePromise ??= module.createDuckDbRuntimeFromJsDelivr().then((runtime) => {
-    module.setDuckDbRuntime(runtime);
-    return runtime;
-  });
-  await duckDbRuntimePromise;
-  setStatus?.('DuckDB-Wasm runtime is ready.');
-  return module;
+  try {
+    const module = await (duckDbModulePromise ??= import('@zwishing/emap/duckdb'));
+    duckDbRuntimePromise ??= module.createDuckDbRuntimeFromJsDelivr().then((runtime) => {
+      module.setDuckDbRuntime(runtime);
+      return runtime;
+    });
+    await duckDbRuntimePromise;
+    setStatus?.('DuckDB-Wasm runtime is ready.');
+    return module;
+  } catch (error) {
+    duckDbModulePromise = null;
+    duckDbRuntimePromise = null;
+    throw error;
+  }
+}
+
+async function runDuckDbExampleAction(
+  ctx: RecipeContext,
+  action: (duckdb: DuckDbModule) => Promise<string>,
+): Promise<void> {
+  ctx.status.dataset.state = 'loading';
+  try {
+    const duckdb = await loadDuckDbModule((message) => {
+      ctx.status.textContent = message;
+    });
+    ctx.status.textContent = await action(duckdb);
+    ctx.status.dataset.state = 'ready';
+  } catch (error) {
+    ctx.status.textContent = `DuckDB is unavailable or the operation failed: ${duckDbErrorMessage(error)}`;
+    ctx.status.dataset.state = 'error';
+  }
 }
 
 const relationOperationIds = new Set([
@@ -2559,7 +2624,8 @@ const relationOperationIds = new Set([
 ]);
 
 function duckDbErrorMessage(error: unknown): string {
-  return JSON.stringify(error);
+  if (error instanceof Error) return error.message;
+  return JSON.stringify(error) ?? String(error);
 }
 
 async function runDuckDbUnaryOperation(

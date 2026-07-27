@@ -4,6 +4,40 @@ import { join, relative, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const emapRuntime = vi.hoisted(() => {
+  type MockLayer = {
+    id?: string;
+    name: string;
+    source?: string;
+    geometry_type: string;
+    shapes: unknown[];
+    data: {
+      getFields(): string[];
+      getRecords(): Record<string, unknown>[];
+    };
+  };
+
+  type MockDataset = {
+    info: Record<string, unknown>;
+    layers: MockLayer[];
+  };
+
+  function createMockDataset(): MockDataset {
+    return {
+      info: {},
+      layers: [
+        {
+          name: 'polygons',
+          geometry_type: 'polygon',
+          shapes: [[[0, 0]]],
+          data: {
+            getFields: () => ['name'],
+            getRecords: () => [{ name: 'parcel-a' }],
+          },
+        },
+      ],
+    };
+  }
+
   class MockHandler {
     private _enabled = false;
 
@@ -78,28 +112,54 @@ const emapRuntime = vi.hoisted(() => {
   }
 
   class MockTopologySource {
+    private _dataset: MockDataset = createMockDataset();
+
     constructor(readonly id: string) {}
 
-    async setData(): Promise<void> {}
+    async setData(): Promise<void> {
+      this._dataset = createMockDataset();
+    }
+
+    setDataset(dataset: MockDataset): void {
+      this._dataset = dataset;
+    }
+
+    getDataset(): MockDataset {
+      return this._dataset;
+    }
 
     getExtent(): { hasBounds(): boolean } {
       return { hasBounds: () => false };
     }
 
-    getLayers(): { name: string; geometry_type: string }[] {
-      return [{ name: 'polygons', geometry_type: 'polygon' }];
+    getLayers(): MockLayer[] {
+      return this._dataset.layers;
     }
   }
+
+  type MockMapOptions = {
+    container: HTMLElement;
+    useWorker?: boolean | 'auto';
+    workerThreshold?: number;
+    workerUrl?: string;
+  };
 
   class MockMap {
     readonly boxSelect: MockHandler;
     readonly lassoSelect: MockHandler;
     readonly features = { get: () => null };
+    readonly sources = new Map<string, MockTopologySource>();
+    readonly layers: MockLayer[] = [];
+    readonly ops = {
+      dissolveLayer: vi.fn(async () => ({ ok: true })),
+      simplifyLayer: vi.fn(async () => ({ ok: true })),
+    };
 
-    constructor(readonly options: { container: HTMLElement }) {
+    constructor(readonly options: MockMapOptions) {
       this.boxSelect = new MockHandler('boxSelect', () => this.lassoSelect.isEnabled());
       this.lassoSelect = new MockHandler('lassoSelect', () => this.boxSelect.isEnabled());
       lastMap = this;
+      maps.push(this);
     }
 
     addControl(control: { onAdd(map: MockMap): HTMLElement }): void {
@@ -108,17 +168,31 @@ const emapRuntime = vi.hoisted(() => {
 
     bindHistoryShortcuts(): void {}
     remove(): void {}
-    getSource(): null {
-      return null;
+    getSource(id: string): MockTopologySource | null {
+      return this.sources.get(id) ?? null;
     }
-    removeSource(): void {}
-    addSource(): void {}
-    addLayer(): void {}
+    removeSource(id: string): void {
+      this.sources.delete(id);
+    }
+    addSource(id: string, source: MockTopologySource): void {
+      this.sources.set(id, source);
+    }
+    addLayer(layer: MockLayer): void {
+      this.layers.push(layer);
+    }
+    getLayers(): MockLayer[] {
+      return this.layers;
+    }
+    removeLayer(id: string): void {
+      const index = this.layers.findIndex((layer) => layer.id === id);
+      if (index >= 0) this.layers.splice(index, 1);
+    }
     setExtent(): void {}
     on(): void {}
     setHighlightedFeatures(): void {}
     clearHighlightedFeatures(): void {}
     clearSelection(): void {}
+    cancelWorkerJobs(): void {}
     select(): void {}
     queryFeatures(): never[] {
       return [];
@@ -132,11 +206,14 @@ const emapRuntime = vi.hoisted(() => {
   }
 
   let lastMap: MockMap | null = null;
+  const maps: MockMap[] = [];
 
   return {
     getLastMap: () => lastMap,
+    getMaps: () => maps,
     reset: () => {
       lastMap = null;
+      maps.length = 0;
     },
     module: {
       BasemapControl: MockControl,
@@ -159,6 +236,84 @@ const emapRuntime = vi.hoisted(() => {
 
 vi.mock('@zwishing/emap', () => emapRuntime.module);
 vi.mock('@zwishing/emap/formats', () => ({ initParquetWasm: vi.fn() }));
+
+const duckDbRuntime = vi.hoisted(() => {
+  const runtime = { runtime: 'duckdb' };
+  const createDuckDbRuntimeFromJsDelivr = vi.fn();
+  const setDuckDbRuntime = vi.fn();
+  const bufferDatasetWithDuckDb = vi.fn();
+  const createDuckDbGeoParquetQuerySource = vi.fn();
+  const duckDbGeoParquetQueryLayer = vi.fn();
+  const intersectionDatasetWithDuckDb = vi.fn();
+  const differenceDatasetWithDuckDb = vi.fn();
+  const duckDbOverlayLayer = vi.fn();
+  const validateDuckDbSelectSql = vi.fn();
+  const queryDatasetWithDuckDb = vi.fn();
+  const duckDbQueryLayer = vi.fn();
+  const runRelationOperation = vi.fn();
+  const centroidDatasetWithDuckDb = vi.fn();
+
+  function reset(): void {
+    createDuckDbRuntimeFromJsDelivr.mockReset();
+    setDuckDbRuntime.mockReset();
+    bufferDatasetWithDuckDb.mockReset();
+    createDuckDbGeoParquetQuerySource.mockReset();
+    duckDbGeoParquetQueryLayer.mockReset();
+    intersectionDatasetWithDuckDb.mockReset();
+    differenceDatasetWithDuckDb.mockReset();
+    duckDbOverlayLayer.mockReset();
+    validateDuckDbSelectSql.mockReset();
+    queryDatasetWithDuckDb.mockReset();
+    duckDbQueryLayer.mockReset();
+    runRelationOperation.mockReset();
+    centroidDatasetWithDuckDb.mockReset();
+
+    createDuckDbRuntimeFromJsDelivr.mockResolvedValue(runtime);
+    bufferDatasetWithDuckDb.mockImplementation(async (dataset: unknown) => dataset);
+    createDuckDbGeoParquetQuerySource.mockResolvedValue({
+      close: vi.fn(),
+      query: vi.fn(async () => ({ info: {}, layers: [] })),
+    });
+    duckDbGeoParquetQueryLayer.mockResolvedValue({
+      ok: true,
+      value: { dataset: { info: {}, layers: [] } },
+    });
+    intersectionDatasetWithDuckDb.mockImplementation(async (dataset: unknown) => dataset);
+    differenceDatasetWithDuckDb.mockImplementation(async (dataset: unknown) => dataset);
+    duckDbOverlayLayer.mockResolvedValue({
+      ok: true,
+      value: { dataset: { info: {}, layers: [] } },
+    });
+    validateDuckDbSelectSql.mockReturnValue(undefined);
+    queryDatasetWithDuckDb.mockImplementation(async (dataset: unknown) => dataset);
+    duckDbQueryLayer.mockResolvedValue({ ok: true, value: { dataset: { info: {}, layers: [] } } });
+    runRelationOperation.mockImplementation(async (dataset: unknown) => dataset);
+    centroidDatasetWithDuckDb.mockImplementation(async (dataset: unknown) => dataset);
+  }
+
+  return {
+    module: {
+      createDuckDbRuntimeFromJsDelivr,
+      setDuckDbRuntime,
+      bufferDatasetWithDuckDb,
+      createDuckDbGeoParquetQuerySource,
+      duckDbGeoParquetQueryLayer,
+      intersectionDatasetWithDuckDb,
+      differenceDatasetWithDuckDb,
+      duckDbOverlayLayer,
+      validateDuckDbSelectSql,
+      queryDatasetWithDuckDb,
+      duckDbQueryLayer,
+      runRelationOperation,
+      centroidDatasetWithDuckDb,
+    },
+    reset,
+    runtime,
+  };
+});
+
+duckDbRuntime.reset();
+vi.mock('@zwishing/emap/duckdb', () => duckDbRuntime.module);
 
 import { examples } from '../../docs-meta/examples';
 import { resolveExampleId } from '../../packages/examples/src/example-page';
@@ -346,7 +501,11 @@ const task7Matrix = [
   ['snap-layer', [task7LineFixture], ['loadSnapLayer', 'snapLayer', 'export', 'endpoints']],
   ['union', [task7Fixture, task7MaskFixture], ['loadUnion', 'unionLayers', 'selectedTargets']],
   ['crs-switch', [task7Fixture], ['loadCrsSwitch', 'projectLayer', 'Gauss-Kruger', 'setActive']],
-  ['web-worker', [task7Fixture], ['loadWebWorker', 'workerUrl', 'workerjobstart', 'cancelWorkerJobs']],
+  [
+    'web-worker',
+    [task7Fixture],
+    ['loadWebWorker', 'workerUrl', 'workerjobstart', 'cancelWorkerJobs'],
+  ],
   [
     'duckdb-buffer',
     [task7Fixture],
@@ -355,12 +514,21 @@ const task7Matrix = [
   [
     'duckdb-geoparquet-query',
     [],
-    ['loadDuckDbGeoParquetQuery', 'createDuckDbGeoParquetQuerySource', 'duckDbGeoParquetQueryLayer'],
+    [
+      'loadDuckDbGeoParquetQuery',
+      'createDuckDbGeoParquetQuerySource',
+      'duckDbGeoParquetQueryLayer',
+    ],
   ],
   [
     'duckdb-overlay',
     [task7Fixture, task7MaskFixture],
-    ['loadDuckDbOverlay', 'intersectionDatasetWithDuckDb', 'differenceDatasetWithDuckDb', 'duckDbOverlayLayer'],
+    [
+      'loadDuckDbOverlay',
+      'intersectionDatasetWithDuckDb',
+      'differenceDatasetWithDuckDb',
+      'duckDbOverlayLayer',
+    ],
   ],
   [
     'duckdb-query',
@@ -379,6 +547,7 @@ describe('example catalog metadata', () => {
 
   beforeEach(() => {
     emapRuntime.reset();
+    duckDbRuntime.reset();
     document.body.innerHTML = '<div id="example-map"></div>';
     globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
       const path = String(url).replace(/^\//, '');
@@ -577,8 +746,13 @@ describe('example catalog metadata', () => {
     const catalogSource = await readFile(resolve(process.cwd(), 'docs-meta/examples.ts'), 'utf8');
     const duckDbImport = "import('@zwishing/emap/duckdb')";
     const loadDuckDbModule = extractFunction(catalogSource, 'loadDuckDbModule');
+    const runDuckDbExampleAction = extractFunction(catalogSource, 'runDuckDbExampleAction');
 
     expect(loadDuckDbModule).toContain(duckDbImport);
+    expect(loadDuckDbModule).toContain('duckDbModulePromise = null');
+    expect(loadDuckDbModule).toContain('duckDbRuntimePromise = null');
+    expect(runDuckDbExampleAction).toContain('loadDuckDbModule');
+    expect(runDuckDbExampleAction).toContain("dataset.state = 'error'");
 
     for (const name of [
       'setupDuckDbBuffer',
@@ -588,9 +762,88 @@ describe('example catalog metadata', () => {
       'setupDuckDbSpatialOps',
     ]) {
       expect(extractFunction(catalogSource, name), `${name} lazy DuckDB loader`).toContain(
-        'loadDuckDbModule',
+        'runDuckDbExampleAction',
       );
     }
+  });
+
+  it('rebuilds the web-worker example map with selected worker settings', async () => {
+    const example = examples.find((item) => item.id === 'web-worker');
+    expect(example, 'web-worker catalog entry').toBeDefined();
+
+    await expect(example?.load()).resolves.toBeUndefined();
+
+    expect(emapRuntime.getMaps()).toHaveLength(1);
+    expect(emapRuntime.getLastMap()?.options).toMatchObject({
+      useWorker: 'auto',
+      workerThreshold: 1,
+      workerUrl: '/dist/emap-worker.js',
+    });
+
+    const mode = document.querySelector('select');
+    const threshold = document.querySelector('input');
+    expect(mode, 'worker mode select').toBeInstanceOf(HTMLSelectElement);
+    expect(threshold, 'worker threshold input').toBeInstanceOf(HTMLInputElement);
+
+    if (mode instanceof HTMLSelectElement) mode.value = 'on';
+    if (threshold instanceof HTMLInputElement) threshold.value = '12';
+    buttonByText('Rebuild map').click();
+    await settleAsyncWork();
+
+    expect(emapRuntime.getMaps()).toHaveLength(2);
+    expect(emapRuntime.getLastMap()?.options).toMatchObject({
+      useWorker: true,
+      workerThreshold: 12,
+      workerUrl: '/dist/emap-worker.js',
+    });
+    expect(document.querySelector('.example-inline-status')?.textContent).toContain(
+      'mode=on threshold=12',
+    );
+  });
+
+  it('renders DuckDB runtime errors and retries after a rejected cached runtime promise', async () => {
+    duckDbRuntime.module.createDuckDbRuntimeFromJsDelivr
+      .mockRejectedValueOnce(new Error('cdn offline'))
+      .mockResolvedValueOnce(duckDbRuntime.runtime);
+    const example = examples.find((item) => item.id === 'duckdb-buffer');
+    expect(example, 'duckdb-buffer catalog entry').toBeDefined();
+
+    await expect(example?.load()).resolves.toBeUndefined();
+
+    buttonByText('Generate DuckDB buffer').click();
+    await settleAsyncWork();
+
+    const status = document.querySelector('.example-inline-status');
+    expect(status?.getAttribute('data-state')).toBe('error');
+    expect(status?.textContent).toContain('DuckDB is unavailable or the operation failed');
+    expect(status?.textContent).toContain('cdn offline');
+    expect(duckDbRuntime.module.createDuckDbRuntimeFromJsDelivr).toHaveBeenCalledTimes(1);
+    expect(duckDbRuntime.module.bufferDatasetWithDuckDb).not.toHaveBeenCalled();
+
+    buttonByText('Generate DuckDB buffer').click();
+    await settleAsyncWork();
+
+    expect(duckDbRuntime.module.createDuckDbRuntimeFromJsDelivr).toHaveBeenCalledTimes(2);
+    expect(duckDbRuntime.module.setDuckDbRuntime).toHaveBeenCalledWith(duckDbRuntime.runtime);
+    expect(duckDbRuntime.module.bufferDatasetWithDuckDb).toHaveBeenCalledTimes(1);
+    expect(status?.getAttribute('data-state')).toBe('ready');
+    expect(status?.textContent).toContain('DuckDB buffer generated for polygons.');
+  });
+
+  it('renders DuckDB operation errors without rejecting button actions', async () => {
+    duckDbRuntime.module.queryDatasetWithDuckDb.mockRejectedValueOnce(new Error('query failed'));
+    const example = examples.find((item) => item.id === 'duckdb-query');
+    expect(example, 'duckdb-query catalog entry').toBeDefined();
+
+    await expect(example?.load()).resolves.toBeUndefined();
+
+    buttonByText('Run SELECT').click();
+    await settleAsyncWork();
+
+    const status = document.querySelector('.example-inline-status');
+    expect(status?.getAttribute('data-state')).toBe('error');
+    expect(status?.textContent).toContain('DuckDB is unavailable or the operation failed');
+    expect(status?.textContent).toContain('query failed');
   });
 
   it('smoke-loads the lasso example without enabling mutually exclusive controls together', async () => {
@@ -682,6 +935,21 @@ function exampleIdForPath(pathname: string): string | null {
     hash: '',
     pathname,
   } as Location);
+}
+
+function buttonByText(text: string): HTMLButtonElement {
+  const button = Array.from(document.querySelectorAll('button')).find(
+    (item) => item.textContent === text,
+  );
+  expect(button, `${text} button`).toBeInstanceOf(HTMLButtonElement);
+  return button as HTMLButtonElement;
+}
+
+async function settleAsyncWork(): Promise<void> {
+  await Promise.resolve();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await Promise.resolve();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
 function extractFunction(source: string, name: string): string {
