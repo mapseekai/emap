@@ -89,6 +89,14 @@ import {
   type AffineDelta,
 } from './types';
 
+/**
+ * Canvas map engine that owns sources, layers, camera state, controls, and edit history.
+ *
+ * @example
+ * const map = new Emap({ container: 'map' });
+ * map.addSource('example', source);
+ * map.addLayer({ id: 'points', type: 'circle', source: 'example' });
+ */
 export class Emap extends EventDispatcher {
   private _container: HTMLElement;
   private _canvasContainer: HTMLElement;
@@ -254,6 +262,11 @@ export class Emap extends EventDispatcher {
   // `MapOptions` or `setExpressionPolicy('trusted')` at runtime.
   private _expressionPolicy: ExpressionEvaluationPolicy = 'disabled';
 
+  /**
+   * Create a map inside an existing container element.
+   *
+   * @param options Container, interaction, worker, and rendering options for the map.
+   */
   constructor(options: MapOptions) {
     super();
 

@@ -76,10 +76,14 @@ async function resolveRoutePath(id) {
 }
 
 async function fixtureExists(fixture) {
+  const normalizedFixture = fixture.replace(/^fixtures\//, '');
   const candidates = [
     resolve(root, 'packages/examples/public/fixtures', fixture),
+    resolve(root, 'packages/examples/public/fixtures', normalizedFixture),
     resolve(root, 'packages/examples/fixtures', fixture),
+    resolve(root, 'packages/examples/fixtures', normalizedFixture),
     resolve(root, 'test/fixtures', fixture),
+    resolve(root, 'test/fixtures', normalizedFixture),
   ];
 
   for (const candidate of candidates) {

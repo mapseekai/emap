@@ -34,6 +34,10 @@ for (const [rel, zhDoc] of [...zhDocs.entries()].sort(([a], [b]) => a.localeComp
 
   if (!enDoc) continue;
 
+  if (!zhDoc.frontMatter.id && !enDoc.frontMatter.id) {
+    continue;
+  }
+
   const enId = enDoc.frontMatter.id;
   if (!enId) {
     violations.push({

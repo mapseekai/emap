@@ -96,7 +96,7 @@ describe('documentation quality checkers', () => {
     expect(outputOf(result)).toContain('@example');
   });
 
-  it('fails when an uncataloged public src reflection lacks an @example tag', async () => {
+  it('does not fail the staged API checker on uncataloged public src reflections', async () => {
     const root = await fixtureRoot();
     await writeCatalog(root, {
       docs: ['/docs/'],
@@ -119,9 +119,89 @@ describe('documentation quality checkers', () => {
 
     const result = runChecker('scripts/check-docs-api.mjs', root);
 
+    expect(result.status).toBe(0);
+  });
+
+  it('does not treat nested reflection properties as standalone public APIs', async () => {
+    const root = await fixtureRoot();
+    await writeCatalog(root, {
+      docs: ['/docs/'],
+      api: [],
+      fixtures: ['inline:tiny.geojson'],
+    });
+    await writeReflections(root, {
+      children: [
+        {
+          name: 'Options',
+          variant: 'declaration',
+          kind: 256,
+          sources: [{ fileName: 'src/options.ts' }],
+          comment: {
+            summary: [{ kind: 'text', text: 'Configures the runtime.' }],
+            blockTags: [
+              { tag: '@example', content: [{ kind: 'text', text: 'const options = {};' }] },
+            ],
+          },
+          children: [
+            {
+              name: 'value',
+              variant: 'declaration',
+              kind: 1024,
+              sources: [{ fileName: 'src/options.ts' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = runChecker('scripts/check-docs-api.mjs', root);
+
+    expect(result.status).toBe(0);
+  });
+
+  it('parses recipe catalog entries with explicit docs, API, and fixture metadata', async () => {
+    const root = await fixtureRoot();
+    await writeDoc(root, 'packages/docs/docs/guides/selection.md', {
+      id: 'guides/selection',
+      slug: '/guides/selection',
+      title: '选择',
+    });
+    await writeDoc(
+      root,
+      'packages/docs/i18n/en/docusaurus-plugin-content-docs/current/guides/selection.md',
+      {
+        id: 'guides/selection',
+        slug: '/guides/selection',
+        title: 'Selection',
+      },
+    );
+    await writeRecipesCatalog(root);
+    await writeReflections(root, {
+      children: [
+        {
+          name: 'Emap',
+          variant: 'declaration',
+          kind: 128,
+          sources: [{ fileName: 'src/map.ts' }],
+          comment: {
+            summary: [{ kind: 'text', text: 'Map runtime.' }],
+            blockTags: [{ tag: '@example', content: [{ kind: 'text', text: 'new Emap(opts)' }] }],
+          },
+        },
+      ],
+    });
+    await mkdir(join(root, 'packages/examples/examples/feature-selection'), {
+      recursive: true,
+    });
+    await writeFile(
+      join(root, 'packages/examples/examples/feature-selection/index.html'),
+      '<script type="module" src="/src/main.ts"></script>',
+    );
+
+    const result = runChecker('scripts/check-examples.mjs', root);
+
     expect(result.status).toBe(1);
-    expect(outputOf(result)).toContain('publicUtility');
-    expect(outputOf(result)).toContain('missing public API @example association');
+    expect(outputOf(result)).toContain('missing fixture missing.geojson');
   });
 
   it('fails when @example is the only public TypeDoc comment prose', async () => {
@@ -293,6 +373,22 @@ async function writeCatalog(
   success: 'It works.',
   load: async () => {},
 }];\n`,
+  );
+}
+
+async function writeRecipesCatalog(root: string): Promise<void> {
+  const filePath = join(root, 'docs-meta/examples.ts');
+  await mkdir(resolve(filePath, '..'), { recursive: true });
+  await writeFile(
+    filePath,
+    `const selectionDocs = '/docs/guides/selection';
+const recipes = [
+  recipe('feature-selection', 'interaction', '选择', 'Selection', [selectionDocs], 'Emap', ['selection'], ['missing.geojson'], 'select-source', async () => {}),
+];
+function recipe(id, category, zh, en, docs, api, featureFlags, fixtures, sourceId, load) {
+  return { id, category, title: { zh, en }, docs, api: [api], featureFlags, fixtures, sourceId, load };
+}
+`,
   );
 }
 

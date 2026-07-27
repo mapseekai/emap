@@ -1,0 +1,27 @@
+---
+slug: /guides/worker
+title: Web Worker
+---
+
+# Web Worker
+
+Worker routing moves heavy dataset-replace operations off the main thread. It does not route tiny selection edits because serialization overhead is larger than the work.
+
+## Behavior notes
+
+`useWorker: true` routes all eligible operations; `auto` routes by vertex count and command cost; `workerUrl` defaults to `emap-worker.js`.
+
+## API
+
+- [src.MapshaperWorkerPool](https://zwishing.github.io/emap/api/classes/index.MapshaperWorkerPool.html)
+- [src.MapOptions](https://zwishing.github.io/emap/api/interfaces/index.MapOptions.html)
+
+## Runnable examples
+
+- [web-worker](https://zwishing.github.io/emap/examples/web-worker/)
+
+## Minimal snippet
+
+```ts
+const map = new Emap({ container: "map", useWorker: "auto", workerUrl: "/dist/emap-worker.js" })
+```

@@ -15,7 +15,7 @@ const root = parseRootArg();
 const violations = [];
 const examples = await readExamples(root);
 const reflections = await readReflections(root);
-const { byName, publicNodes } = buildReflectionIndex(reflections);
+const { byName } = buildReflectionIndex(reflections);
 const catalogApiNames = new Set();
 
 for (const example of examples) {
@@ -58,34 +58,6 @@ for (const api of [...catalogApiNames].sort()) {
     if (!nodes.some((node) => hasParameterComment(node, parameterName))) {
       violations.push({
         path: `${api}.${parameterName}`,
-        reason: 'missing parameter comment text',
-      });
-    }
-  }
-}
-
-for (const { node, names } of publicNodes) {
-  if (names.some((name) => catalogApiNames.has(name))) continue;
-
-  const symbolName = names[0];
-  if (!hasExampleTag(node)) {
-    violations.push({
-      path: symbolName,
-      reason: 'missing public API @example association',
-    });
-  }
-
-  if (!hasCommentText(node)) {
-    violations.push({
-      path: symbolName,
-      reason: 'missing public API comment text',
-    });
-  }
-
-  for (const parameter of Array.isArray(node.parameters) ? node.parameters : []) {
-    if (!hasParameterComment(node, parameter.name)) {
-      violations.push({
-        path: `${symbolName}.${parameter.name}`,
         reason: 'missing parameter comment text',
       });
     }

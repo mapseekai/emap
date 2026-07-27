@@ -116,7 +116,28 @@ let duckDbRuntimePromise: Promise<
 > | null = null;
 
 const sourceId = 'example';
-const docsIntro = '/docs/';
+const docsEmap = '/docs/concepts/emap';
+const docsSourceLayer = '/docs/concepts/source-layer';
+const docsCrs = '/docs/concepts/coordinates-crs';
+const docsStyling = '/docs/guides/styling';
+const docsEvents = '/docs/guides/events';
+const docsSelection = '/docs/guides/selection';
+const docsEditing = '/docs/guides/editing';
+const docsControls = '/docs/guides/controls';
+const docsWorker = '/docs/guides/worker';
+const docsFormats = '/docs/data/formats';
+const docsAttributes = '/docs/data/attributes';
+const docsOperations = '/docs/data/operations';
+const docsDuckDb = '/docs/data/duckdb';
+const docsFileUpload = '/docs/recipes/file-upload';
+const docsStatusControl = '/docs/recipes/status-control';
+const docsUndoRedo = '/docs/recipes/undo-redo';
+const docsFitBounds = '/docs/recipes/fit-bounds';
+const docsPerformance = '/docs/recipes/performance';
+const docsErrorHandling = '/docs/recipes/error-handling';
+const docsErrors = '/docs/reference/errors';
+const docsCompatibility = '/docs/reference/compatibility';
+const docsMigration = '/docs/reference/migration';
 const task6Fixture = 'fixtures/task-6-polygons.geojson';
 const task6CsvFixture = 'fixtures/task-6-join.csv';
 const task6MergeFixture = 'fixtures/task-6-polygons-alt.geojson';
@@ -128,8 +149,6 @@ const defaultWebWorkerSettings: WebWorkerSettings = { mode: 'auto', threshold: 1
 
 const route = (id: string) => `/examples/${id}/`;
 const originalHtml = (id: string) => `test/examples/${id}.html`;
-const docs = (slug: string) => [`/docs/examples/${slug}`];
-
 const seedMetadata = {
   description: {
     zh: '加载内联 GeoJSON，演示最小化地图初始化和图层渲染路径。',
@@ -149,7 +168,7 @@ const seeds: readonly ExampleSeed[] = [
     category: 'getting-started',
     title: { zh: 'GeoJSON 查看器', en: 'GeoJSON viewer' },
     ...seedMetadata,
-    docs: [docsIntro],
+    docs: [docsEmap, docsSourceLayer, docsFitBounds],
     api: ['Emap'],
     fixtures: ['inline:geojson-viewer.geojson'],
     source: { html: 'packages/examples/examples/getting-started/geojson-viewer/index.html' },
@@ -188,7 +207,7 @@ const seeds: readonly ExampleSeed[] = [
     category: 'getting-started',
     title: { zh: '点图层', en: 'Points' },
     ...seedMetadata,
-    docs: [docsIntro],
+    docs: [docsSourceLayer, docsFileUpload],
     api: ['TopologySource.fromBytes'],
     fixtures: ['inline:points.geojson'],
     source: { html: 'packages/examples/examples/getting-started/points/index.html' },
@@ -226,7 +245,7 @@ const seeds: readonly ExampleSeed[] = [
     category: 'getting-started',
     title: { zh: '线图层', en: 'Lines' },
     ...seedMetadata,
-    docs: [docsIntro],
+    docs: [docsSourceLayer, docsStyling],
     api: ['LayerSpecification'],
     fixtures: ['inline:lines.geojson'],
     source: { html: 'packages/examples/examples/getting-started/lines/index.html' },
@@ -275,7 +294,7 @@ const seeds: readonly ExampleSeed[] = [
     category: 'getting-started',
     title: { zh: '面边界', en: 'Polygons' },
     ...seedMetadata,
-    docs: [docsIntro],
+    docs: [docsStyling],
     api: ['LinePaint'],
     fixtures: ['inline:polygons.geojson'],
     source: { html: 'packages/examples/examples/getting-started/polygons/index.html' },
@@ -330,7 +349,7 @@ const seeds: readonly ExampleSeed[] = [
     category: 'getting-started',
     title: { zh: '面填充', en: 'Polygon fill' },
     ...seedMetadata,
-    docs: [docsIntro],
+    docs: [docsStyling],
     api: ['FillPaint'],
     fixtures: ['inline:polygon-fill.geojson'],
     source: { html: 'packages/examples/examples/getting-started/polygon-fill/index.html' },
@@ -368,53 +387,53 @@ const seeds: readonly ExampleSeed[] = [
 ];
 
 const recipes: readonly RecipeDefinition[] = [
-  recipe('attribute-editing', 'data', '属性编辑', 'Attribute editing', 'FeaturePropertyChangeCommand', ['attributes', 'history'], [task6Fixture], 'attr-source', loadAttributeEditing),
-  recipe('attribute-expressions', 'data', '属性表达式批量更新', 'Attribute expressions', 'MapshaperOps.applyExpression', ['expressions', 'attributes', 'history'], [task6Fixture], 'attribute-expressions-source', loadAttributeExpressions),
-  recipe('data-engineering', 'data', '数据工程批次', 'Data engineering batch', 'MapshaperOps.sortFeatures', ['expressions', 'layer-ops', 'history'], [task6Fixture], 'data-engineering-source', loadDataEngineering),
-  recipe('feature-attributes', 'data', '要素属性查询', 'Feature attributes', 'Emap.queryFeatures', ['query', 'highlight', 'basemap'], [task6Fixture], 'feature-attributes-source', loadFeatureAttributes),
-  recipe('filter-features', 'data', '要素过滤', 'Filter features', 'MapshaperOps.filterFeatures', ['expressions', 'layer-ops', 'history'], [task6Fixture], 'filter-features-source', loadFilterFeatures),
-  recipe('geoparquet-viewer', 'data', 'GeoParquet / GeoArrow 查看器', 'GeoParquet / GeoArrow viewer', 'TopologySource.setData', ['formats', 'basemap'], [], 'parquet-source', loadGeoParquetViewer),
-  recipe('export-geoparquet', 'data', '导出 GeoParquet / GeoArrow', 'Export GeoParquet / GeoArrow', 'TopologySource.export', ['formats', 'export', 'basemap'], [task6Fixture], 'main-source', loadExportGeoparquet),
-  recipe('export-roundtrip', 'data', '导出往返', 'Export roundtrip', 'TopologySource.export', ['export', 'editing'], [task6Fixture], 'export-roundtrip-source', loadExportRoundtrip),
-  recipe('join', 'data', '属性表连接', 'Join table', 'MapshaperOps.joinTable', ['join', 'history'], [task6Fixture, task6CsvFixture], 'join-source', loadJoin),
-  recipe('merge-layers', 'layers', '合并图层', 'Merge layers', 'MapshaperOps.mergeLayers', ['layer-ops', 'history'], [task6Fixture, task6MergeFixture], 'merge-source', loadMergeLayers),
-  recipe('merge-selected', 'layers', '合并选中要素', 'Merge selected features', 'MapshaperOps.mergeSelected', ['selection', 'layer-ops', 'history'], [task6Fixture], 'merge-selected-source', loadMergeSelected),
-  recipe('rename-layer', 'layers', '图层重命名', 'Rename layer', 'MapshaperOps.renameLayer', ['layer-ops', 'history'], [task6Fixture], 'rename-layer-source', loadRenameLayer),
-  recipe('split-layer', 'layers', '图层拆分', 'Split layer', 'MapshaperOps.splitLayer', ['expressions', 'layer-ops', 'history'], [task6Fixture], 'split-layer-source', loadSplitLayer),
-  recipe('interaction-handlers', 'interaction', '交互 Handler', 'Interaction handlers', 'Emap.dragPan', ['handlers'], [task6Fixture], 'interaction-handlers-source', loadInteractionHandlers),
-  recipe('feature-selection', 'interaction', '要素选择', 'Feature selection', 'Emap.select', ['selection', 'history'], [task6Fixture], 'select-source', loadFeatureSelection),
-  recipe('box-select', 'interaction', '拉框选择', 'Box select', 'BoxSelectControl', ['selection', 'box-select', 'history'], [task6Fixture], 'box-select-source', loadBoxSelect),
-  recipe('lasso-select', 'interaction', '拉框 / 套索选择切换', 'Box and lasso select', 'LassoSelectControl', ['selection', 'box-select', 'lasso-select', 'history'], [task6Fixture], 'lasso-select-source', loadLassoSelect),
-  recipe('china-editing', 'editing', '中国行政区划编辑', 'China administrative editing', 'EditToolbar', ['editing', 'basemap'], [task6Fixture], 'china-editing-source', loadChinaEditing),
-  recipe('draw-snap-clear', 'editing', '绘制吸附清理', 'Draw snap and clear', 'Emap.drawFeature', ['drawing', 'snap', 'history'], [task6Fixture], 'draw-snap-clear-source', loadDrawSnapClear),
-  recipe('draw-snap-edge', 'editing', '绘制时吸附顶点 + 边', 'Draw snap to vertex and edge', 'DrawFeatureControl', ['drawing', 'snap', 'history'], [task6Fixture], 'draw-snap-edge-source', loadDrawSnapEdge),
-  recipe('feature-rotate-scale', 'editing', '旋转 / 缩放选中要素', 'Rotate and scale selected feature', 'Emap.editSession.beginAffineSession', ['selection', 'transform', 'history'], [task6Fixture], 'feature-rotate-scale-source', loadFeatureRotateScale),
-  recipe('feature-translate', 'editing', '平移选中要素', 'Translate selected feature', 'Emap.editSession.beginTranslateSession', ['selection', 'transform', 'history'], [task6Fixture], 'feature-translate-source', loadFeatureTranslate),
-  recipe('snapshot', 'editing', '多源快照保存 / 恢复', 'Snapshot save and restore', 'Emap.exportSnapshot', ['snapshot'], [task6Fixture], 'snapshot-source', loadSnapshot),
-  recipe('transaction', 'editing', 'Transaction + Validation', 'Transaction and validation', 'Emap.beginTransaction', ['transaction', 'validation', 'history'], [task6Fixture], 'transaction-source', loadTransaction),
-  recipe('undo-redo', 'editing', '撤销 / 重做', 'Undo and redo', 'HistoryControl', ['editing', 'history'], [task6Fixture], 'undo-redo-source', loadUndoRedo),
-  recipe('vertex-editing', 'editing', '顶点编辑', 'Vertex editing', 'VertexEditControl', ['editing', 'vertex', 'basemap'], [task6Fixture], 'vertex-editing-source', loadVertexEditing),
-  recipe('buffer', 'spatial', '缓冲区', 'Buffer', 'MapshaperOps.bufferLayer', ['spatial', 'history'], [task7Fixture], 'buffer-source', loadBuffer),
-  recipe('check-geometry', 'validation', '几何检查', 'Check geometry', 'MapshaperOps.checkGeometry', ['validation', 'history'], [task7Fixture], 'check-geometry-source', loadCheckGeometry),
-  recipe('clip-erase', 'spatial', '裁剪 / 擦除', 'Clip and erase', 'MapshaperOps.clipLayer', ['spatial', 'overlay', 'history'], [task7Fixture, task7MaskFixture], 'cliperase-source', loadClipErase),
-  recipe('dissolve', 'spatial', '融合', 'Dissolve', 'MapshaperOps.dissolveLayer', ['spatial', 'history'], [task7Fixture], 'dissolve-source', loadDissolve),
-  recipe('divide', 'spatial', '按面切分线', 'Divide lines by polygons', 'MapshaperOps.divideLayer', ['spatial', 'overlay', 'history'], [task7LineFixture, task7MaskFixture], 'divide-source', loadDivide),
-  recipe('explode', 'spatial', '拆分多部件', 'Explode multipart features', 'MapshaperOps.explodeLayer', ['spatial', 'history'], [task7Fixture], 'explode-source', loadExplode),
-  recipe('innerlines', 'spatial', '抽取共享边', 'Innerlines', 'MapshaperOps.innerlinesLayer', ['spatial', 'history'], [task7Fixture], 'inner-source', loadInnerlines),
-  recipe('mosaic', 'spatial', '平展重叠面', 'Mosaic', 'MapshaperOps.mosaicLayer', ['spatial', 'history'], [task7Fixture], 'mosaic-source', loadMosaic),
-  recipe('project', 'crs', '投影转换', 'Project CRS', 'MapshaperOps.projectLayer', ['crs', 'history', 'basemap'], [task7Fixture], 'project-source', loadProject),
-  recipe('rebuild-topology', 'validation', '重建拓扑', 'Rebuild topology', 'MapshaperOps.rebuildTopology', ['validation', 'editing', 'history'], [task7Fixture], 'rebuild-source', loadRebuildTopology),
-  recipe('simplify-control', 'spatial', '简化控件', 'Simplify control', 'SimplifyControl', ['spatial', 'controls', 'history'], [task7Fixture], 'simplify-control-source', loadSimplifyControl),
-  recipe('simplify', 'spatial', '几何简化', 'Simplify geometry', 'MapshaperOps.simplifyLayer', ['spatial', 'history'], [task7Fixture], 'simplify-source', loadSimplify),
-  recipe('snap-layer', 'spatial', '批量吸附', 'Snap layer', 'MapshaperOps.snapLayer', ['spatial', 'export', 'history'], [task7LineFixture], 'snap-source', loadSnapLayer),
-  recipe('union', 'spatial', '面并集', 'Union polygons', 'MapshaperOps.unionLayers', ['spatial', 'overlay', 'history'], [task7Fixture, task7MaskFixture], 'union-source', loadUnion),
-  recipe('crs-switch', 'crs', '坐标系切换', 'CRS switch', 'MapshaperOps.projectLayer', ['crs', 'history', 'basemap'], [task7Fixture], 'crs-demo', loadCrsSwitch),
-  recipe('web-worker', 'platform', 'Web Worker 重命令', 'Web Worker heavy operations', 'MapshaperWorkerPool', ['worker', 'history'], [task7Fixture], 'worker-demo-source', loadWebWorker),
-  recipe('duckdb-buffer', 'duckdb', 'DuckDB 缓冲区', 'DuckDB buffer', 'duckdb.bufferDatasetWithDuckDb', ['duckdb', 'basemap'], [task7Fixture], 'duckdb-input', loadDuckDbBuffer),
-  recipe('duckdb-geoparquet-query', 'duckdb', 'DuckDB GeoParquet 查询', 'DuckDB GeoParquet query', 'duckdb.createDuckDbGeoParquetQuerySource', ['duckdb', 'geoparquet', 'basemap'], [], 'duckdb-geoparquet-bytes', loadDuckDbGeoParquetQuery),
-  recipe('duckdb-overlay', 'duckdb', 'DuckDB Overlay', 'DuckDB overlay', 'duckdb.intersectionDatasetWithDuckDb', ['duckdb', 'overlay', 'basemap'], [task7Fixture, task7MaskFixture], 'duckdb-overlay-input', loadDuckDbOverlay),
-  recipe('duckdb-query', 'duckdb', 'DuckDB 受限 SELECT', 'DuckDB restricted SELECT', 'duckdb.queryDatasetWithDuckDb', ['duckdb', 'query', 'basemap'], [task7Fixture], 'duckdb-query-input', loadDuckDbQuery),
-  recipe('duckdb-spatial-ops', 'duckdb', 'DuckDB 空间函数', 'DuckDB spatial functions', 'duckdb.runRelationOperation', ['duckdb', 'spatial', 'basemap'], [task7Fixture], 'duckdb-spatial-input', loadDuckDbSpatialOps),
+  recipe('attribute-editing', 'data', '属性编辑', 'Attribute editing', [docsAttributes, docsEditing, docsUndoRedo], 'Emap', ['attributes', 'history'], [task6Fixture], 'attr-source', loadAttributeEditing),
+  recipe('attribute-expressions', 'data', '属性表达式批量更新', 'Attribute expressions', [docsAttributes, docsMigration], 'Emap', ['expressions', 'attributes', 'history'], [task6Fixture], 'attribute-expressions-source', loadAttributeExpressions),
+  recipe('data-engineering', 'data', '数据工程批次', 'Data engineering batch', [docsOperations, docsAttributes], 'Emap', ['expressions', 'layer-ops', 'history'], [task6Fixture], 'data-engineering-source', loadDataEngineering),
+  recipe('feature-attributes', 'data', '要素属性查询', 'Feature attributes', [docsAttributes, docsEvents], 'Emap', ['query', 'highlight', 'basemap'], [task6Fixture], 'feature-attributes-source', loadFeatureAttributes),
+  recipe('filter-features', 'data', '要素过滤', 'Filter features', [docsAttributes, docsOperations], 'Emap', ['expressions', 'layer-ops', 'history'], [task6Fixture], 'filter-features-source', loadFilterFeatures),
+  recipe('geoparquet-viewer', 'data', 'GeoParquet / GeoArrow 查看器', 'GeoParquet / GeoArrow viewer', [docsFormats, docsFileUpload, docsCompatibility], 'TopologySource.fromBytes', ['formats', 'basemap'], [], 'parquet-source', loadGeoParquetViewer),
+  recipe('export-geoparquet', 'data', '导出 GeoParquet / GeoArrow', 'Export GeoParquet / GeoArrow', [docsFormats], 'TopologySource.fromBytes', ['formats', 'export', 'basemap'], [task6Fixture], 'main-source', loadExportGeoparquet),
+  recipe('export-roundtrip', 'data', '导出往返', 'Export roundtrip', [docsFormats, docsEditing], 'TopologySource.fromBytes', ['export', 'editing'], [task6Fixture], 'export-roundtrip-source', loadExportRoundtrip),
+  recipe('join', 'data', '属性表连接', 'Join table', [docsAttributes], 'Emap', ['join', 'history'], [task6Fixture, task6CsvFixture], 'join-source', loadJoin),
+  recipe('merge-layers', 'layers', '合并图层', 'Merge layers', [docsSourceLayer, docsOperations], 'Emap', ['layer-ops', 'history'], [task6Fixture, task6MergeFixture], 'merge-source', loadMergeLayers),
+  recipe('merge-selected', 'layers', '合并选中要素', 'Merge selected features', [docsSelection, docsOperations], 'Emap', ['selection', 'layer-ops', 'history'], [task6Fixture], 'merge-selected-source', loadMergeSelected),
+  recipe('rename-layer', 'layers', '图层重命名', 'Rename layer', [docsSourceLayer, docsOperations], 'Emap', ['layer-ops', 'history'], [task6Fixture], 'rename-layer-source', loadRenameLayer),
+  recipe('split-layer', 'layers', '图层拆分', 'Split layer', [docsSourceLayer, docsOperations, docsAttributes], 'Emap', ['expressions', 'layer-ops', 'history'], [task6Fixture], 'split-layer-source', loadSplitLayer),
+  recipe('interaction-handlers', 'interaction', '交互 Handler', 'Interaction handlers', [docsEvents, docsControls], 'Emap', ['handlers'], [task6Fixture], 'interaction-handlers-source', loadInteractionHandlers),
+  recipe('feature-selection', 'interaction', '要素选择', 'Feature selection', [docsSelection], 'Emap', ['selection', 'history'], [task6Fixture], 'select-source', loadFeatureSelection),
+  recipe('box-select', 'interaction', '拉框选择', 'Box select', [docsSelection, docsControls], 'Emap', ['selection', 'box-select', 'history'], [task6Fixture], 'box-select-source', loadBoxSelect),
+  recipe('lasso-select', 'interaction', '拉框 / 套索选择切换', 'Box and lasso select', [docsSelection, docsControls], 'Emap', ['selection', 'box-select', 'lasso-select', 'history'], [task6Fixture], 'lasso-select-source', loadLassoSelect),
+  recipe('china-editing', 'editing', '中国行政区划编辑', 'China administrative editing', [docsEditing, docsControls], 'Emap', ['editing', 'basemap'], [task6Fixture], 'china-editing-source', loadChinaEditing),
+  recipe('draw-snap-clear', 'editing', '绘制吸附清理', 'Draw snap and clear', [docsEditing], 'Emap', ['drawing', 'snap', 'history'], [task6Fixture], 'draw-snap-clear-source', loadDrawSnapClear),
+  recipe('draw-snap-edge', 'editing', '绘制时吸附顶点 + 边', 'Draw snap to vertex and edge', [docsEditing, docsControls], 'Emap', ['drawing', 'snap', 'history'], [task6Fixture], 'draw-snap-edge-source', loadDrawSnapEdge),
+  recipe('feature-rotate-scale', 'editing', '旋转 / 缩放选中要素', 'Rotate and scale selected feature', [docsEditing, docsSelection], 'Emap', ['selection', 'transform', 'history'], [task6Fixture], 'feature-rotate-scale-source', loadFeatureRotateScale),
+  recipe('feature-translate', 'editing', '平移选中要素', 'Translate selected feature', [docsEditing, docsSelection], 'Emap', ['selection', 'transform', 'history'], [task6Fixture], 'feature-translate-source', loadFeatureTranslate),
+  recipe('snapshot', 'editing', '多源快照保存 / 恢复', 'Snapshot save and restore', [docsEditing], 'Emap', ['snapshot'], [task6Fixture], 'snapshot-source', loadSnapshot),
+  recipe('transaction', 'editing', 'Transaction + Validation', 'Transaction and validation', [docsEditing, docsErrors], 'Emap', ['transaction', 'validation', 'history'], [task6Fixture], 'transaction-source', loadTransaction),
+  recipe('undo-redo', 'editing', '撤销 / 重做', 'Undo and redo', [docsUndoRedo, docsEditing], 'Emap', ['editing', 'history'], [task6Fixture], 'undo-redo-source', loadUndoRedo),
+  recipe('vertex-editing', 'editing', '顶点编辑', 'Vertex editing', [docsEditing, docsControls], 'Emap', ['editing', 'vertex', 'basemap'], [task6Fixture], 'vertex-editing-source', loadVertexEditing),
+  recipe('buffer', 'spatial', '缓冲区', 'Buffer', [docsOperations], 'Emap', ['spatial', 'history'], [task7Fixture], 'buffer-source', loadBuffer),
+  recipe('check-geometry', 'validation', '几何检查', 'Check geometry', [docsOperations, docsErrors], 'Emap', ['validation', 'history'], [task7Fixture], 'check-geometry-source', loadCheckGeometry),
+  recipe('clip-erase', 'spatial', '裁剪 / 擦除', 'Clip and erase', [docsOperations], 'Emap', ['spatial', 'overlay', 'history'], [task7Fixture, task7MaskFixture], 'cliperase-source', loadClipErase),
+  recipe('dissolve', 'spatial', '融合', 'Dissolve', [docsOperations], 'Emap', ['spatial', 'history'], [task7Fixture], 'dissolve-source', loadDissolve),
+  recipe('divide', 'spatial', '按面切分线', 'Divide lines by polygons', [docsOperations], 'Emap', ['spatial', 'overlay', 'history'], [task7LineFixture, task7MaskFixture], 'divide-source', loadDivide),
+  recipe('explode', 'spatial', '拆分多部件', 'Explode multipart features', [docsOperations], 'Emap', ['spatial', 'history'], [task7Fixture], 'explode-source', loadExplode),
+  recipe('innerlines', 'spatial', '抽取共享边', 'Innerlines', [docsOperations], 'Emap', ['spatial', 'history'], [task7Fixture], 'inner-source', loadInnerlines),
+  recipe('mosaic', 'spatial', '平展重叠面', 'Mosaic', [docsOperations], 'Emap', ['spatial', 'history'], [task7Fixture], 'mosaic-source', loadMosaic),
+  recipe('project', 'crs', '投影转换', 'Project CRS', [docsCrs, docsOperations], 'Emap', ['crs', 'history', 'basemap'], [task7Fixture], 'project-source', loadProject),
+  recipe('rebuild-topology', 'validation', '重建拓扑', 'Rebuild topology', [docsOperations, docsEditing], 'Emap', ['validation', 'editing', 'history'], [task7Fixture], 'rebuild-source', loadRebuildTopology),
+  recipe('simplify-control', 'spatial', '简化控件', 'Simplify control', [docsOperations, docsControls, docsPerformance], 'Emap', ['spatial', 'controls', 'history'], [task7Fixture], 'simplify-control-source', loadSimplifyControl),
+  recipe('simplify', 'spatial', '几何简化', 'Simplify geometry', [docsOperations, docsPerformance], 'Emap', ['spatial', 'history'], [task7Fixture], 'simplify-source', loadSimplify),
+  recipe('snap-layer', 'spatial', '批量吸附', 'Snap layer', [docsOperations], 'Emap', ['spatial', 'export', 'history'], [task7LineFixture], 'snap-source', loadSnapLayer),
+  recipe('union', 'spatial', '面并集', 'Union polygons', [docsOperations], 'Emap', ['spatial', 'overlay', 'history'], [task7Fixture, task7MaskFixture], 'union-source', loadUnion),
+  recipe('crs-switch', 'crs', '坐标系切换', 'CRS switch', [docsCrs], 'Emap', ['crs', 'history', 'basemap'], [task7Fixture], 'crs-demo', loadCrsSwitch),
+  recipe('web-worker', 'platform', 'Web Worker 重命令', 'Web Worker heavy operations', [docsWorker, docsPerformance], 'Emap', ['worker', 'history'], [task7Fixture], 'worker-demo-source', loadWebWorker),
+  recipe('duckdb-buffer', 'duckdb', 'DuckDB 缓冲区', 'DuckDB buffer', [docsDuckDb, docsErrorHandling], 'Emap', ['duckdb', 'basemap'], [task7Fixture], 'duckdb-input', loadDuckDbBuffer),
+  recipe('duckdb-geoparquet-query', 'duckdb', 'DuckDB GeoParquet 查询', 'DuckDB GeoParquet query', [docsDuckDb, docsFormats, docsStatusControl], 'Emap', ['duckdb', 'geoparquet', 'basemap'], [], 'duckdb-geoparquet-bytes', loadDuckDbGeoParquetQuery),
+  recipe('duckdb-overlay', 'duckdb', 'DuckDB Overlay', 'DuckDB overlay', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'overlay', 'basemap'], [task7Fixture, task7MaskFixture], 'duckdb-overlay-input', loadDuckDbOverlay),
+  recipe('duckdb-query', 'duckdb', 'DuckDB 受限 SELECT', 'DuckDB restricted SELECT', [docsDuckDb, docsStatusControl, docsErrorHandling], 'Emap', ['duckdb', 'query', 'basemap'], [task7Fixture], 'duckdb-query-input', loadDuckDbQuery),
+  recipe('duckdb-spatial-ops', 'duckdb', 'DuckDB 空间函数', 'DuckDB spatial functions', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap'], [task7Fixture], 'duckdb-spatial-input', loadDuckDbSpatialOps),
 ];
 
 export const examples: readonly ExampleDefinition[] = [
@@ -457,6 +476,7 @@ function recipe(
   category: string,
   zh: string,
   en: string,
+  docRefs: readonly string[],
   api: string,
   featureFlags: readonly string[],
   fixtures: readonly string[],
@@ -476,7 +496,7 @@ function recipe(
       zh: [`复现 ${zh} 的数据加载顺序`, `运行 ${api} 相关 API`, '确认页面状态栏中的成功条件'],
       en: [`Reproduce the data-loading order for ${en}`, `Run the ${api} API path`, 'Confirm the success condition in the status bar'],
     },
-    docs: docs(id),
+    docs: docRefs,
     api: [api],
     tags: [category, id, ...featureFlags],
     featureFlags,

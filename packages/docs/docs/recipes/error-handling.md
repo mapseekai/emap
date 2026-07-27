@@ -1,0 +1,30 @@
+---
+slug: /recipes/error-handling
+title: 错误处理
+---
+
+# 错误处理
+
+加载器会在导入错误时 reject，operations 返回 `OpResult`，DuckDB 辅助函数可能抛出带 `kind` 的 `DuckDbOperationError`。
+
+## 行为说明
+
+错误应在应用边界处理：保持地图可用，展示重试说明，不要把失败输出提交到历史。
+
+## API
+
+- [src.OpError](https://zwishing.github.io/emap/api/types/index.OpError.html)
+- [src_duckdb.DuckDbOperationError](https://zwishing.github.io/emap/api/classes/src_duckdb.DuckDbOperationError.html)
+
+## 可运行示例
+
+- [check-geometry](https://zwishing.github.io/emap/examples/check-geometry/)
+- [duckdb-query](https://zwishing.github.io/emap/examples/duckdb-query/)
+- [duckdb-buffer](https://zwishing.github.io/emap/examples/duckdb-buffer/)
+
+## 最小片段
+
+```ts
+const result = await map.ops.checkGeometry({ source: "main" })
+if (!result.ok) setStatus(result.error.message)
+```

@@ -122,13 +122,28 @@ function parseExamples(source) {
     }
   }
 
+  const examples = [];
   const literalArray = arrays.get('seeds') ?? arrays.get('examples');
-  if (!literalArray) return [];
 
-  return literalArray.elements
-    .filter(ts.isObjectLiteralExpression)
-    .map((node) => parseExample(node, constants))
-    .filter((example) => example.id);
+  if (literalArray) {
+    examples.push(
+      ...literalArray.elements
+        .filter(ts.isObjectLiteralExpression)
+        .map((node) => parseExample(node, constants))
+        .filter((example) => example.id),
+    );
+  }
+
+  const recipes = arrays.get('recipes');
+  if (recipes) {
+    examples.push(
+      ...recipes.elements
+        .map((node) => parseRecipeCall(node, constants))
+        .filter((example) => example.id),
+    );
+  }
+
+  return examples;
 }
 
 function parseExample(node, constants) {
@@ -152,6 +167,31 @@ function readStringArrayProperty(node, key, constants) {
   const value = property.initializer;
   if (!ts.isArrayLiteralExpression(value)) return [];
   return value.elements.map((element) => readStringExpression(element, constants)).filter(Boolean);
+}
+
+function parseRecipeCall(node, constants) {
+  if (!ts.isCallExpression(node)) return { id: '', docs: [], api: [], fixtures: [] };
+  if (!ts.isIdentifier(node.expression) || node.expression.text !== 'recipe') {
+    return { id: '', docs: [], api: [], fixtures: [] };
+  }
+
+  return {
+    id: readStringExpression(node.arguments[0], constants),
+    docs: readStringArrayExpression(node.arguments[4], constants),
+    api: [readStringExpression(node.arguments[5], constants)].filter(Boolean),
+    fixtures: readStringArrayExpression(node.arguments[7], constants),
+  };
+}
+
+function readStringArrayExpression(node, constants) {
+  if (!node) return [];
+  if (ts.isArrayLiteralExpression(node)) {
+    return node.elements.map((element) => readStringExpression(element, constants)).filter(Boolean);
+  }
+  if (ts.isIdentifier(node)) {
+    return constants.has(node.text) ? [constants.get(node.text)] : [];
+  }
+  return [];
 }
 
 function findProperty(node, key) {
@@ -192,8 +232,11 @@ export function buildReflectionIndex(reflections) {
     const name = typeof node.name === 'string' ? node.name : '';
     const publicNode = isOwnPublicReflection(node);
     if (name && publicNode) {
-      publicNodes.push({ node, names: reflectionNames(name, ancestors) });
-      for (const reflectionName of reflectionNames(name, ancestors)) {
+      const names = reflectionNames(name, ancestors);
+      if (isModuleLevelPublicReflection(node, ancestors)) {
+        publicNodes.push({ node, names });
+      }
+      for (const reflectionName of names) {
         add(reflectionName, node);
       }
     }
@@ -226,6 +269,13 @@ function isOwnPublicReflection(node) {
   const flags = node.flags ?? {};
   if (flags.isExternal || flags.isInherited || flags.isPrivate || flags.isProtected) return false;
   return Array.isArray(node.sources) && node.sources.some((source) => isSourceFile(source.fileName));
+}
+
+function isModuleLevelPublicReflection(node, ancestors) {
+  if (node.kind === 1024) return false;
+  const meaningfulAncestors = ancestors.filter((ancestor) => !ancestor.startsWith('@'));
+  if (meaningfulAncestors.length > 1) return false;
+  return node.kind !== 2;
 }
 
 function isSourceFile(fileName) {

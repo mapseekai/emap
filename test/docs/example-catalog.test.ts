@@ -570,7 +570,7 @@ describe('example catalog metadata', () => {
 
       expect(example.title.zh.trim(), `${example.id} is missing zh title`).not.toBe('');
       expect(example.title.en.trim(), `${example.id} is missing en title`).not.toBe('');
-      expect(example.docs, `${example.id} docs`).toHaveLength(1);
+      expect(example.docs.length, `${example.id} docs`).toBeGreaterThanOrEqual(1);
       expect(example.api, `${example.id} api`).toHaveLength(1);
       expect(example.success.trim(), `${example.id} success`).not.toBe('');
       expect(example.description.zh.trim(), `${example.id} is missing zh description`).not.toBe('');
