@@ -59,6 +59,7 @@ const routeIds = [
 const htmlInput = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
 export default defineConfig({
+  base: '/emap/examples/',
   build: {
     chunkSizeWarningLimit: 2500,
     emptyOutDir: true,

@@ -89,3 +89,34 @@
 - CodeGraph reported that results came from `/Users/zhang/code/emap` rather
   than this linked worktree, so direct worktree inspection was used for the
   branch-local example regression.
+
+## Final Review Fix Evidence
+
+- Baseline SHA for this fix pass: `d9bf7f7ee2bd15a987642e2e9cb639b2dea28a01`.
+- Added `scripts/compose-docs-release.mjs` and wired `docs:verify` through
+  `docs:compose-examples`; the release build now copies
+  `packages/examples/dist/` into `packages/docs/build/examples/`, which serves
+  at the documented `/emap/examples/` public path.
+- Set the examples Vite `base` to `/emap/examples/` so composed example HTML
+  points at `/emap/examples/assets/...` instead of root `/assets/...`.
+- Added `packages/docs/.docusaurus/` and `packages/docs/build/` to `.gitignore`;
+  after `docs:verify`, generated Docusaurus outputs no longer appear in
+  `git status --short`.
+- Hardened `test/docs/release-checklist.test.ts` to lock every checklist gate
+  against real `package.json` scripts, including `format:check`, `build`, and
+  `docs:compose-examples`.
+
+### Final Review Verification
+
+- `npx vitest run --silent='passed-only' test/docs/release-checklist.test.ts test/docs/workspace-config.test.ts` -> passed; 2 files passed, 3 tests passed.
+- `npm run docs:verify` -> passed; composed examples at
+  `packages/docs/build/examples` for `/emap/examples/`.
+- `test -f packages/docs/build/examples/index.html && test -f packages/docs/build/examples/examples/buffer/index.html && rg -n "/emap/examples/assets/" packages/docs/build/examples/index.html packages/docs/build/examples/examples/buffer/index.html` -> passed; both HTML files reference `/emap/examples/assets/...`.
+- `node scripts/compose-docs-release.mjs --root /private/tmp/emap-compose-missing-root` -> failed as expected with `Missing release input: packages/examples/dist/index.html`.
+- `npm run format:check` -> passed; 286 files checked, no fixes applied.
+- `npm run build` -> passed; production Rollup bundles and TypeScript
+  declarations generated.
+- `npx vitest run --silent='passed-only' test/docs` -> passed; 6 files passed,
+  42 tests passed.
+- `mcp__gitnexus.detect_changes(scope=all, worktree=...)` -> low risk; no
+  affected engine symbols or processes.

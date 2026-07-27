@@ -1,5 +1,7 @@
 node_modules/
 dist/
+packages/docs/.docusaurus/
+packages/docs/build/
 .DS_Store
 *.log
 openspec/

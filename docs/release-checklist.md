@@ -11,8 +11,9 @@ the docs, examples, and API surfaces.
 - English documentation entry: `packages/docs/build/en/index.html`.
 - Static API documentation: `packages/docs/static/api/index.html`, copied into
   the Docusaurus build as `/api/`.
-- Runnable examples site: `packages/examples/dist/`.
-- Example catalog entry: `packages/examples/dist/index.html`.
+- Runnable examples site: `packages/examples/dist/`, composed into the
+  Docusaurus build as `/examples/`.
+- Example catalog entry: `packages/docs/build/examples/index.html`.
 
 ## Required Gates
 
@@ -27,14 +28,15 @@ npm run test:duckdb
 npm run api:build
 npm run examples:build
 npm run docs:build
+npm run docs:compose-examples
 npm run docs:check-i18n
 npm run docs:check-api
 npm run examples:check
 ```
 
 `npm run docs:verify` must also pass because it chains `typecheck`,
-`api:build`, `examples:build`, `docs:build`, `docs:check-i18n`,
-`docs:check-api`, and `examples:check`.
+`api:build`, `examples:build`, `docs:build`, `docs:compose-examples`,
+`docs:check-i18n`, `docs:check-api`, and `examples:check`.
 
 ## Local Preview
 

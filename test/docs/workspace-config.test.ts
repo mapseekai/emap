@@ -12,6 +12,7 @@ describe('documentation workspace config', () => {
       'docs:build',
       'api:build',
       'examples:build',
+      'docs:compose-examples',
       'docs:check-i18n',
       'docs:check-api',
       'examples:check',
