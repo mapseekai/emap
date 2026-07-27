@@ -1,0 +1,33 @@
+{
+  "type": "FeatureCollection",
+  "name": "task-7-lines",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "id": "north-south", "name": "North south corridor", "kind": "arterial" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[-122.455, 37.82], [-122.43, 37.79], [-122.405, 37.75], [-122.38, 37.72]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "west-east", "name": "West east corridor", "kind": "transit" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[-122.47, 37.775], [-122.43, 37.785], [-122.39, 37.78], [-122.35, 37.79]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "loop", "name": "Service loop", "kind": "local" },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [[-122.44, 37.805], [-122.405, 37.805], [-122.405, 37.77], [-122.44, 37.77], [-122.44, 37.805]],
+          [[-122.415, 37.815], [-122.375, 37.805], [-122.37, 37.765]]
+        ]
+      }
+    }
+  ]
+}

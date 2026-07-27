@@ -147,6 +147,7 @@ const emapRuntime = vi.hoisted(() => {
       HistoryControl: MockControl,
       LassoSelectControl: MockLassoSelectControl,
       NavigationControl: MockControl,
+      SimplifyControl: MockControl,
       StatusControl: MockControl,
       TopologySource: MockTopologySource,
       VertexEditControl: MockControl,
@@ -304,6 +305,74 @@ const task6ControlMatrix = {
     'vertex-editing',
   ],
 } as const;
+
+const task7Fixture = 'fixtures/task-7-polygons.geojson';
+const task7LineFixture = 'fixtures/task-7-lines.geojson';
+const task7MaskFixture = 'fixtures/task-7-mask.geojson';
+
+const task7Matrix = [
+  [
+    'buffer',
+    [task7Fixture],
+    ['loadBuffer', 'setupBuffer', 'bufferLayer', 'capStyle', 'arcQuality', 'planar'],
+  ],
+  ['check-geometry', [task7Fixture], ['loadCheckGeometry', 'checkGeometry', 'rebuildTopology']],
+  [
+    'clip-erase',
+    [task7Fixture, task7MaskFixture],
+    ['loadClipErase', 'clipLayer', 'eraseLayer', 'mask'],
+  ],
+  ['dissolve', [task7Fixture], ['loadDissolve', 'dissolveLayer', 'refreshFieldOptions']],
+  [
+    'divide',
+    [task7LineFixture, task7MaskFixture],
+    ['loadDivide', 'divideLayer', 'fields', 'force'],
+  ],
+  ['explode', [task7Fixture], ['loadExplode', 'explodeLayer']],
+  ['innerlines', [task7Fixture], ['loadInnerlines', 'innerlinesLayer', 'noReplace']],
+  ['mosaic', [task7Fixture], ['loadMosaic', 'mosaicLayer', 'snapInterval', 'noSnap']],
+  ['project', [task7Fixture], ['loadProject', 'projectLayer', 'densify', 'EPSG:3857']],
+  [
+    'rebuild-topology',
+    [task7Fixture],
+    ['loadRebuildTopology', 'translateSelected', 'rebuildTopology', 'snapInterval'],
+  ],
+  ['simplify-control', [task7Fixture], ['loadSimplifyControl', 'SimplifyControl']],
+  [
+    'simplify',
+    [task7Fixture],
+    ['loadSimplify', 'simplifyLayer', 'percentage', 'getFilteredPointCount'],
+  ],
+  ['snap-layer', [task7LineFixture], ['loadSnapLayer', 'snapLayer', 'export', 'endpoints']],
+  ['union', [task7Fixture, task7MaskFixture], ['loadUnion', 'unionLayers', 'selectedTargets']],
+  ['crs-switch', [task7Fixture], ['loadCrsSwitch', 'projectLayer', 'Gauss-Kruger', 'setActive']],
+  ['web-worker', [task7Fixture], ['loadWebWorker', 'workerUrl', 'workerjobstart', 'cancelWorkerJobs']],
+  [
+    'duckdb-buffer',
+    [task7Fixture],
+    ['loadDuckDbBuffer', '@zwishing/emap/duckdb', 'bufferDatasetWithDuckDb'],
+  ],
+  [
+    'duckdb-geoparquet-query',
+    [],
+    ['loadDuckDbGeoParquetQuery', 'createDuckDbGeoParquetQuerySource', 'duckDbGeoParquetQueryLayer'],
+  ],
+  [
+    'duckdb-overlay',
+    [task7Fixture, task7MaskFixture],
+    ['loadDuckDbOverlay', 'intersectionDatasetWithDuckDb', 'differenceDatasetWithDuckDb', 'duckDbOverlayLayer'],
+  ],
+  [
+    'duckdb-query',
+    [task7Fixture],
+    ['loadDuckDbQuery', 'queryDatasetWithDuckDb', 'duckDbQueryLayer', 'validateDuckDbSelectSql'],
+  ],
+  [
+    'duckdb-spatial-ops',
+    [task7Fixture],
+    ['loadDuckDbSpatialOps', 'runRelationOperation', 'centroidDatasetWithDuckDb', 'distanceWithin'],
+  ],
+] as const satisfies readonly (readonly [string, readonly string[], readonly string[]])[];
 
 describe('example catalog metadata', () => {
   const originalFetch = globalThis.fetch;
@@ -466,6 +535,61 @@ describe('example catalog metadata', () => {
     }
     for (const id of ['geoparquet-viewer', 'export-geoparquet']) {
       expect(byId.get(id)?.featureFlags, `${id} format status control`).toContain('formats');
+    }
+  });
+
+  it('covers every Task 7 spatial, platform, and DuckDB HTML migration', async () => {
+    const byId = new Map(examples.map((example) => [example.id, example]));
+    const catalogSource = await readFile(resolve(process.cwd(), 'docs-meta/examples.ts'), 'utf8');
+
+    for (const [id, fixtures, loaderMarkers] of task7Matrix) {
+      const example = byId.get(id);
+      expect(example, `${id} is missing from the catalog`).toBeDefined();
+      expect(
+        examples.filter((item) => item.id === id),
+        `${id} duplicates`,
+      ).toHaveLength(1);
+      expect(example?.source.html).toBe(`test/examples/${id}.html`);
+      expect(example?.fixtures, `${id} declared fixtures`).toEqual(fixtures);
+      expect(example?.docs.length, `${id} docs`).toBeGreaterThan(0);
+      expect(example?.title.zh.trim(), `${id} zh title`).not.toBe('');
+      expect(example?.title.en.trim(), `${id} en title`).not.toBe('');
+      expect(example?.description.zh.trim(), `${id} zh description`).not.toBe('');
+      expect(example?.description.en.trim(), `${id} en description`).not.toBe('');
+
+      const originalHtml = await readFile(
+        resolve(process.cwd(), `test/examples/${id}.html`),
+        'utf8',
+      );
+      expect(originalHtml, `${id} original HTML has map surface`).toContain('id="map"');
+
+      for (const fixture of fixtures) {
+        await readFile(resolve(process.cwd(), 'packages/examples/public', fixture), 'utf8');
+      }
+
+      for (const marker of loaderMarkers) {
+        expect(catalogSource, `${id} missing migrated marker ${marker}`).toContain(marker);
+      }
+    }
+  });
+
+  it('keeps Task 7 DuckDB optional imports inside lazy loaders only', async () => {
+    const catalogSource = await readFile(resolve(process.cwd(), 'docs-meta/examples.ts'), 'utf8');
+    const duckDbImport = "import('@zwishing/emap/duckdb')";
+    const loadDuckDbModule = extractFunction(catalogSource, 'loadDuckDbModule');
+
+    expect(loadDuckDbModule).toContain(duckDbImport);
+
+    for (const name of [
+      'setupDuckDbBuffer',
+      'setupDuckDbGeoParquetQuery',
+      'setupDuckDbOverlay',
+      'setupDuckDbQuery',
+      'setupDuckDbSpatialOps',
+    ]) {
+      expect(extractFunction(catalogSource, name), `${name} lazy DuckDB loader`).toContain(
+        'loadDuckDbModule',
+      );
     }
   });
 

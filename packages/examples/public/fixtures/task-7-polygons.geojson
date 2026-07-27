@@ -1,0 +1,30 @@
+{
+  "type": "FeatureCollection",
+  "name": "task-7-polygons",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "id": "west", "name": "West precinct", "group": "A", "pop": 180, "area": 14 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-122.46, 37.76], [-122.42, 37.76], [-122.42, 37.81], [-122.46, 37.81], [-122.46, 37.76]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "central", "name": "Central precinct", "group": "A", "pop": 130, "area": 11 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-122.425, 37.745], [-122.385, 37.745], [-122.385, 37.795], [-122.425, 37.795], [-122.425, 37.745]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "east", "name": "East precinct", "group": "B", "pop": 95, "area": 9 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-122.39, 37.765], [-122.35, 37.765], [-122.35, 37.815], [-122.39, 37.815], [-122.39, 37.765]]]
+      }
+    }
+  ]
+}

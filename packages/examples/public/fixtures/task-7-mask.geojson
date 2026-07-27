@@ -1,0 +1,22 @@
+{
+  "type": "FeatureCollection",
+  "name": "task-7-mask",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "id": "mask-a", "name": "Clip mask", "group": "mask" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-122.445, 37.755], [-122.385, 37.755], [-122.385, 37.805], [-122.445, 37.805], [-122.445, 37.755]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "mask-b", "name": "East mask", "group": "mask" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-122.40, 37.775], [-122.34, 37.775], [-122.34, 37.825], [-122.40, 37.825], [-122.40, 37.775]]]
+      }
+    }
+  ]
+}
