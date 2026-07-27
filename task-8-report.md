@@ -29,7 +29,7 @@
 
 ## Fix Round 2
 
-- Commit: `<to be amended>`
+- Commit: `152e548f4241b5509cb8ee2b9d9490668c5bbadb`
 - Baseline: `23ddaa382359cd04df5a921fff9fa844942ce3d5`
 - Scope: docs API checker and focused docs checker regression test.
 
