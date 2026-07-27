@@ -1,6 +1,164 @@
+// @vitest-environment jsdom
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const emapRuntime = vi.hoisted(() => {
+  class MockHandler {
+    private _enabled = false;
+
+    constructor(
+      private readonly _name: string,
+      private readonly _isBlocked: () => boolean,
+    ) {}
+
+    enable(): void {
+      if (this._isBlocked()) {
+        throw new Error(`cannot enable ${this._name}: the other selection handler is enabled`);
+      }
+      this._enabled = true;
+    }
+
+    disable(): void {
+      this._enabled = false;
+    }
+
+    isEnabled(): boolean {
+      return this._enabled;
+    }
+
+    setOptions(): void {}
+  }
+
+  class MockSelectControl {
+    private _enabled = true;
+    private _handler: MockHandler | null = null;
+
+    constructor(
+      private readonly _handlerName: 'boxSelect' | 'lassoSelect',
+      private readonly _className: string,
+    ) {}
+
+    onAdd(map: MockMap): HTMLElement {
+      const handler = map[this._handlerName];
+      this._handler = handler;
+      handler.setOptions();
+      if (this._enabled) handler.enable();
+      const container = document.createElement('div');
+      container.className = this._className;
+      return container;
+    }
+
+    onRemove(): void {
+      this._handler?.disable();
+      this._handler = null;
+    }
+
+    enable(): void {
+      this._enabled = true;
+      this._handler?.enable();
+    }
+
+    disable(): void {
+      this._enabled = false;
+      this._handler?.disable();
+    }
+  }
+
+  class MockBoxSelectControl extends MockSelectControl {
+    constructor() {
+      super('boxSelect', 'emap-ctrl emap-box-select-anchor');
+    }
+  }
+
+  class MockLassoSelectControl extends MockSelectControl {
+    constructor() {
+      super('lassoSelect', 'emap-ctrl emap-lasso-select-anchor');
+    }
+  }
+
+  class MockTopologySource {
+    constructor(readonly id: string) {}
+
+    async setData(): Promise<void> {}
+
+    getExtent(): { hasBounds(): boolean } {
+      return { hasBounds: () => false };
+    }
+
+    getLayers(): { name: string; geometry_type: string }[] {
+      return [{ name: 'polygons', geometry_type: 'polygon' }];
+    }
+  }
+
+  class MockMap {
+    readonly boxSelect: MockHandler;
+    readonly lassoSelect: MockHandler;
+    readonly features = { get: () => null };
+
+    constructor(readonly options: { container: HTMLElement }) {
+      this.boxSelect = new MockHandler('boxSelect', () => this.lassoSelect.isEnabled());
+      this.lassoSelect = new MockHandler('lassoSelect', () => this.boxSelect.isEnabled());
+      lastMap = this;
+    }
+
+    addControl(control: { onAdd(map: MockMap): HTMLElement }): void {
+      control.onAdd(this);
+    }
+
+    bindHistoryShortcuts(): void {}
+    remove(): void {}
+    getSource(): null {
+      return null;
+    }
+    removeSource(): void {}
+    addSource(): void {}
+    addLayer(): void {}
+    setExtent(): void {}
+    on(): void {}
+    setHighlightedFeatures(): void {}
+    clearHighlightedFeatures(): void {}
+    clearSelection(): void {}
+    select(): void {}
+    queryFeatures(): never[] {
+      return [];
+    }
+  }
+
+  class MockControl {
+    onAdd(): HTMLElement {
+      return document.createElement('div');
+    }
+  }
+
+  let lastMap: MockMap | null = null;
+
+  return {
+    getLastMap: () => lastMap,
+    reset: () => {
+      lastMap = null;
+    },
+    module: {
+      BasemapControl: MockControl,
+      BoxSelectControl: MockBoxSelectControl,
+      DrawFeatureControl: MockControl,
+      EditToolbar: MockControl,
+      Emap: MockMap,
+      HistoryControl: MockControl,
+      LassoSelectControl: MockLassoSelectControl,
+      NavigationControl: MockControl,
+      StatusControl: MockControl,
+      TopologySource: MockTopologySource,
+      VertexEditControl: MockControl,
+      rotateMatrix: () => [1, 0, 0, 1, 0, 0],
+      scaleMatrix: () => [1, 0, 0, 1, 0, 0],
+    },
+  };
+});
+
+vi.mock('@zwishing/emap', () => emapRuntime.module);
+vi.mock('@zwishing/emap/formats', () => ({ initParquetWasm: vi.fn() }));
+
 import { examples } from '../../docs-meta/examples';
 import { resolveExampleId } from '../../packages/examples/src/example-page';
 
@@ -148,6 +306,23 @@ const task6ControlMatrix = {
 } as const;
 
 describe('example catalog metadata', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    emapRuntime.reset();
+    document.body.innerHTML = '<div id="example-map"></div>';
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const path = String(url).replace(/^\//, '');
+      const content = await readFile(resolve(process.cwd(), 'packages/examples/public', path));
+      return new Response(content);
+    });
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    document.body.innerHTML = '';
+  });
+
   it('defines unique, complete runnable example entries', () => {
     const ids = new Set<string>();
 
@@ -292,6 +467,42 @@ describe('example catalog metadata', () => {
     for (const id of ['geoparquet-viewer', 'export-geoparquet']) {
       expect(byId.get(id)?.featureFlags, `${id} format status control`).toContain('formats');
     }
+  });
+
+  it('smoke-loads the lasso example without enabling mutually exclusive controls together', async () => {
+    const example = examples.find((item) => item.id === 'lasso-select');
+    expect(example, 'lasso-select catalog entry').toBeDefined();
+
+    await expect(example?.load()).resolves.toBeUndefined();
+
+    const map = emapRuntime.getLastMap();
+    expect(map?.boxSelect.isEnabled()).toBe(true);
+    expect(map?.lassoSelect.isEnabled()).toBe(false);
+
+    const buttons = Array.from(document.querySelectorAll('button'));
+    const boxButton = buttons.find((button) => button.textContent === 'Box');
+    const lassoButton = buttons.find((button) => button.textContent === 'Lasso');
+    const status = document.querySelector('.example-inline-status');
+
+    expect(boxButton, 'box mode button').toBeDefined();
+    expect(lassoButton, 'lasso mode button').toBeDefined();
+    expect(boxButton?.disabled).toBe(true);
+    expect(lassoButton?.disabled).toBe(false);
+    expect(status?.textContent).toContain('Box select is active');
+
+    lassoButton?.click();
+    expect(map?.boxSelect.isEnabled()).toBe(false);
+    expect(map?.lassoSelect.isEnabled()).toBe(true);
+    expect(boxButton?.disabled).toBe(false);
+    expect(lassoButton?.disabled).toBe(true);
+    expect(status?.textContent).toContain('Lasso select is active');
+
+    boxButton?.click();
+    expect(map?.boxSelect.isEnabled()).toBe(true);
+    expect(map?.lassoSelect.isEnabled()).toBe(false);
+    expect(boxButton?.disabled).toBe(true);
+    expect(lassoButton?.disabled).toBe(false);
+    expect(status?.textContent).toContain('Box select is active');
   });
 
   it('keeps one static route HTML input and Vite route ID for every catalog example', async () => {

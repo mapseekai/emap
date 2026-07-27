@@ -1188,10 +1188,30 @@ function setupBoxSelect(ctx: RecipeContext): void {
 }
 
 function setupLassoSelect(ctx: RecipeContext): void {
-  ctx.map.addControl(new BoxSelectControl(), 'top-left');
-  ctx.map.addControl(new LassoSelectControl(), 'top-left');
+  const boxControl = new BoxSelectControl();
+  const lassoControl = new LassoSelectControl();
+  lassoControl.disable();
+
+  ctx.map.addControl(boxControl, 'top-left');
+  ctx.map.addControl(lassoControl, 'top-left');
   setupFeatureSelection(ctx);
-  ctx.status.textContent = 'Box and lasso controls are active for selection QA.';
+
+  const boxButton = addButton(ctx.toolbar, 'Box', () => {
+    lassoControl.disable();
+    boxControl.enable();
+    boxButton.disabled = true;
+    lassoButton.disabled = false;
+    ctx.status.textContent = 'Box select is active. Drag to select features.';
+  });
+  const lassoButton = addButton(ctx.toolbar, 'Lasso', () => {
+    boxControl.disable();
+    lassoControl.enable();
+    boxButton.disabled = false;
+    lassoButton.disabled = true;
+    ctx.status.textContent = 'Lasso select is active. Draw a lasso to select features.';
+  });
+  boxButton.disabled = true;
+  ctx.status.textContent = 'Box select is active. Drag to select features.';
 }
 
 function setupChinaEditing(ctx: RecipeContext): void {

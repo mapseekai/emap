@@ -69,3 +69,20 @@
 - Docs i18n checker: `npm run docs:check-i18n` passed.
 - Docs API checker: `npm run docs:check-api` failed on the pre-existing public API documentation backlog in the reserved docs/API surface, not on Task 6 files.
 - Manual route probing: local `@zwishing/emap-examples` preview served `/examples/attribute-editing/`, `/examples/box-select/`, and `/examples/feature-translate/` as `200 text/html` with the built main bundle; `/fixtures/task-6-polygons-alt.geojson` served as `200 application/geo+json` and contained feature IDs `D,E`.
+
+## Fix Round 2
+
+- Updated `setupLassoSelect` so it mounts `BoxSelectControl` enabled first and mounts `LassoSelectControl` only after disabling the lasso control instance.
+- Added explicit `Box` and `Lasso` toolbar buttons that switch modes by disabling the opposite control before enabling the requested control, then updating button state and status text.
+- Added an executable catalog smoke test for `loadLassoSelect` with a mocked Emap runtime whose box/lasso handlers throw when both are enabled, covering both loader-time setup and button-driven mode switching.
+
+### Fix Round 2 Verification
+
+- CodeGraph: queried `docs-meta/examples.ts setupLassoSelect loadLassoSelect BoxSelectControl LassoSelectControl`; it reported the available index was for `/Users/zhang/code/emap`, not this linked worktree, so exact edits were made from the worktree files.
+- GitNexus impact: `impact(BoxSelectControl, src/ui/box-select-control.ts)` and `impact(LassoSelectControl, src/ui/lasso-select-control.ts)` both returned LOW risk, 3 direct upstream dependents, 4 impacted symbols, and 0 affected indexed execution flows.
+- Catalog smoke test: `/opt/homebrew/bin/lean-ctx -c "npx vitest run test/docs/example-catalog.test.ts"` passed, 9 tests.
+- Format: `/opt/homebrew/bin/lean-ctx -c "npm run format:check"` passed.
+- Typecheck: `/opt/homebrew/bin/lean-ctx -c "npm run typecheck"` passed.
+- Examples build: `/opt/homebrew/bin/lean-ctx -c "npm run examples:build"` passed.
+- Whitespace check: `/opt/homebrew/bin/lean-ctx -c "git diff --check -- docs-meta/examples.ts test/docs/example-catalog.test.ts .superpowers/sdd/2026-07-27-documentation-platform/task-6-report.md"` passed.
+- GitNexus detect_changes: MCP `detect_changes(scope=all, worktree=/Users/zhang/code/emap/.worktrees/zwishing-documentation-platform)` failed because the GitNexus MCP transport closed; CLI fallback `/opt/homebrew/bin/lean-ctx -c "npx gitnexus detect-changes --scope all --repo emap"` and `/opt/homebrew/bin/lean-ctx -c "npx gitnexus detect-changes --scope unstaged --repo emap --limit 20"` exited 1 with no diagnostic output against the stale main-worktree index.
