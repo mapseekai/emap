@@ -27,12 +27,10 @@ const enDocs = await collectDocs(
 );
 const { byName, publicNodes } = buildReflectionIndex(reflections);
 const catalogApiNames = new Set();
-const exampleApiNames = new Set();
 
 for (const example of examples) {
   for (const api of example.api) {
     catalogApiNames.add(api);
-    exampleApiNames.add(api);
   }
 }
 
@@ -53,8 +51,6 @@ for (const api of [...catalogApiNames].sort()) {
     });
     continue;
   }
-
-  if (!exampleApiNames.has(api)) continue;
 
   if (!nodes.some(hasExampleTag)) {
     violations.push({

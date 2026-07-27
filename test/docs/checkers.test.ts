@@ -256,6 +256,51 @@ describe('documentation quality checkers', () => {
     expect(outputOf(result)).toContain('missing parameter runnable example association');
   });
 
+  it('fully checks public APIs cataloged only from docs front matter', async () => {
+    const root = await fixtureRoot();
+    await writeDoc(root, 'packages/docs/docs/reference/doc-only.md', {
+      id: 'reference/doc-only',
+      slug: '/reference/doc-only',
+      title: '仅文档 API',
+      api: ['docOnlyApi'],
+    });
+    await writeCatalog(root, {
+      docs: ['/docs/'],
+      api: [],
+      fixtures: ['inline:tiny.geojson'],
+    });
+    await writeReflections(root, {
+      children: [
+        {
+          name: 'docOnlyApi',
+          variant: 'declaration',
+          kind: 64,
+          sources: [{ fileName: 'src/doc-only-api.ts' }],
+          signatures: [
+            {
+              name: 'docOnlyApi',
+              variant: 'signature',
+              kind: 4096,
+              sources: [{ fileName: 'src/doc-only-api.ts' }],
+              parameters: [{ name: 'options', variant: 'param', kind: 32768 }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = runChecker('scripts/check-docs-api.mjs', root);
+
+    expect(result.status).toBe(1);
+    expect(outputOf(result)).toContain('docOnlyApi: missing public API @example association');
+    expect(outputOf(result)).toContain('docOnlyApi: missing public API comment text');
+    expect(outputOf(result)).toContain('docOnlyApi.options');
+    expect(outputOf(result)).toContain('missing parameter semantic description');
+    expect(outputOf(result)).toContain('missing parameter default/omission behavior');
+    expect(outputOf(result)).toContain('missing parameter constraints/valid values');
+    expect(outputOf(result)).toContain('missing parameter runnable example association');
+  });
+
   it('parses recipe catalog entries with explicit docs, API, and fixture metadata', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/guides/selection.md', {
