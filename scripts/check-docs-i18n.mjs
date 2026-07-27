@@ -34,8 +34,13 @@ for (const [rel, zhDoc] of [...zhDocs.entries()].sort(([a], [b]) => a.localeComp
 
   if (!enDoc) continue;
 
-  const enId = enDoc.frontMatter.id || rel;
-  if (enId !== zhId) {
+  const enId = enDoc.frontMatter.id;
+  if (!enId) {
+    violations.push({
+      path: relativePath(root, enDoc.path),
+      reason: `missing English id for ${zhId}`,
+    });
+  } else if (enId !== zhId) {
     violations.push({
       path: relativePath(root, enDoc.path),
       reason: `English id ${enId} does not match ${zhId}`,

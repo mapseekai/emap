@@ -68,6 +68,120 @@ describe('documentation quality checkers', () => {
     expect(outputOf(result)).toContain('loadMap.options');
   });
 
+  it('fails when a public TypeDoc reflection lacks an @example tag', async () => {
+    const root = await fixtureRoot();
+    await writeCatalog(root, {
+      docs: ['/docs/'],
+      api: ['loadMap'],
+      fixtures: ['inline:tiny.geojson'],
+    });
+    await writeReflections(root, {
+      children: [
+        {
+          name: 'loadMap',
+          variant: 'declaration',
+          kind: 64,
+          sources: [{ fileName: 'src/index.ts' }],
+          comment: {
+            summary: [{ kind: 'text', text: 'Loads a map.' }],
+          },
+        },
+      ],
+    });
+
+    const result = runChecker('scripts/check-docs-api.mjs', root);
+
+    expect(result.status).toBe(1);
+    expect(outputOf(result)).toContain('loadMap');
+    expect(outputOf(result)).toContain('@example');
+  });
+
+  it('fails when @example is the only public TypeDoc comment prose', async () => {
+    const root = await fixtureRoot();
+    await writeCatalog(root, {
+      docs: ['/docs/'],
+      api: ['loadMap'],
+      fixtures: ['inline:tiny.geojson'],
+    });
+    await writeReflections(root, {
+      children: [
+        {
+          name: 'loadMap',
+          variant: 'declaration',
+          kind: 64,
+          sources: [{ fileName: 'src/index.ts' }],
+          comment: {
+            blockTags: [
+              { tag: '@example', content: [{ kind: 'text', text: 'getting-started/fixture' }] },
+            ],
+          },
+        },
+      ],
+    });
+
+    const result = runChecker('scripts/check-docs-api.mjs', root);
+
+    expect(result.status).toBe(1);
+    expect(outputOf(result)).toContain('loadMap');
+    expect(outputOf(result)).toContain('missing public API comment text');
+  });
+
+  it('fails when an English mirror document has no front matter id', async () => {
+    const root = await fixtureRoot();
+    await writeDoc(root, 'packages/docs/docs/intro.md', {
+      id: 'intro',
+      slug: '/',
+      title: '中文简介',
+    });
+    await writeDoc(root, 'packages/docs/i18n/en/docusaurus-plugin-content-docs/current/intro.md', {
+      slug: '/',
+      title: 'Intro',
+    });
+    await writeCatalog(root, {
+      docs: ['/docs/'],
+      api: ['Emap'],
+      fixtures: ['inline:tiny.geojson'],
+    });
+
+    const result = runChecker('scripts/check-docs-i18n.mjs', root);
+
+    expect(result.status).toBe(1);
+    expect(outputOf(result)).toContain('missing English id for intro');
+  });
+
+  it('parses CRLF Markdown front matter', async () => {
+    const root = await fixtureRoot();
+    await writeDoc(
+      root,
+      'packages/docs/docs/intro.md',
+      {
+        id: 'intro',
+        slug: '/',
+        title: '中文简介',
+      },
+      '\r\n',
+    );
+    await writeDoc(
+      root,
+      'packages/docs/i18n/en/docusaurus-plugin-content-docs/current/intro.md',
+      {
+        id: 'intro',
+        slug: '/',
+        title: 'Intro',
+      },
+      '\r\n',
+    );
+    await writeCatalog(root, {
+      docs: ['/docs/'],
+      api: ['Emap'],
+      fixtures: ['inline:tiny.geojson'],
+    });
+
+    const result = runChecker('scripts/check-docs-i18n.mjs', root);
+
+    expect(result.status).toBe(0);
+  });
+
   it('fails when a catalog item references a missing fixture', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/intro.md', {
@@ -117,13 +231,19 @@ async function fixtureRoot(): Promise<string> {
 async function writeDoc(
   root: string,
   path: string,
-  frontMatter: { id: string; slug: string; title: string },
+  frontMatter: { id?: string; slug: string; title: string },
+  lineEnding = '\n',
 ): Promise<void> {
   const filePath = join(root, path);
   await mkdir(resolve(filePath, '..'), { recursive: true });
+  const frontMatterLines = [
+    frontMatter.id === undefined ? undefined : `id: ${frontMatter.id}`,
+    `slug: ${frontMatter.slug}`,
+    `title: ${frontMatter.title}`,
+  ].filter((line): line is string => line !== undefined);
   await writeFile(
     filePath,
-    `---\nid: ${frontMatter.id}\nslug: ${frontMatter.slug}\ntitle: ${frontMatter.title}\n---\n\n# ${frontMatter.title}\n`,
+    ['---', ...frontMatterLines, '---', '', `# ${frontMatter.title}`, ''].join(lineEnding),
   );
 }
 

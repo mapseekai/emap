@@ -45,12 +45,12 @@ export async function collectFiles(dir, extensions) {
 }
 
 export function parseFrontMatter(markdown) {
-  const match = /^---\n(?<body>[\s\S]*?)\n---/.exec(markdown);
+  const match = /^---\r?\n(?<body>[\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
   if (!match?.groups?.body) return {};
 
   return Object.fromEntries(
     match.groups.body
-      .split('\n')
+      .split(/\r?\n/)
       .map((line) => line.match(/^(?<key>[\w-]+):\s*(?<value>.*)$/))
       .filter((lineMatch) => Boolean(lineMatch?.groups))
       .map((lineMatch) => [lineMatch.groups.key, lineMatch.groups.value.trim()]),
@@ -233,7 +233,7 @@ function isSourceFile(fileName) {
 }
 
 export function hasCommentText(node) {
-  return commentText(node.comment).trim().length > 0;
+  return commentSummaryContentText(node.comment).trim().length > 0;
 }
 
 export function hasExampleTag(node) {
@@ -252,12 +252,15 @@ export function hasParameterComment(signature, parameterName) {
   return (
     Array.isArray(signature.comment?.blockTags) &&
     signature.comment.blockTags.some(
-      (tag) => tag.tag === '@param' && tag.name === parameterName && commentText(tag).trim(),
+      (tag) =>
+        tag.tag === '@param' &&
+        tag.name === parameterName &&
+        commentSummaryContentText(tag).trim(),
     )
   );
 }
 
-function commentText(comment) {
+function commentSummaryContentText(comment) {
   if (!comment || typeof comment !== 'object') return '';
 
   const chunks = [];
@@ -266,9 +269,6 @@ function commentText(comment) {
   }
   if (Array.isArray(comment.content)) {
     chunks.push(...comment.content.map((part) => part.text ?? ''));
-  }
-  if (Array.isArray(comment.blockTags)) {
-    chunks.push(...comment.blockTags.map(commentText));
   }
   return chunks.join(' ');
 }
