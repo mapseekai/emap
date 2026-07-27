@@ -37,6 +37,14 @@ or controlled internal workflows first.
 
 For the full capability matrix, see [FEATURES.md](FEATURES.md).
 
+## Documentation
+
+- Static documentation entry: <https://zwishing.github.io/emap/>
+- English documentation entry: <https://zwishing.github.io/emap/en/>
+- Generated API reference: <https://zwishing.github.io/emap/api/>
+- Runnable examples catalog: <https://zwishing.github.io/emap/examples/>
+- Release verification checklist: [docs/release-checklist.md](docs/release-checklist.md)
+
 ## Install
 
 ```bash

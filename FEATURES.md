@@ -441,7 +441,21 @@ Advanced exports include:
   expression strings.
 - Worker assets must be served by the host app when worker offloading is used.
 
-## 18. Examples and Tests
+## 18. Documentation, Examples, and Tests
+
+Static documentation surfaces:
+
+- Static documentation entry: <https://zwishing.github.io/emap/>
+- English documentation entry: <https://zwishing.github.io/emap/en/>
+- Generated API reference: <https://zwishing.github.io/emap/api/>
+- Runnable examples catalog: <https://zwishing.github.io/emap/examples/>
+- Release verification checklist: [docs/release-checklist.md](docs/release-checklist.md)
+
+Local static outputs:
+
+- Documentation build: `packages/docs/build/`.
+- Generated API artifacts: `packages/docs/static/api/`.
+- Examples build: `packages/examples/dist/`.
 
 - Manual examples: `test/examples/*.html`.
 - Unit tests: `src/**/*.test.ts`.
@@ -453,4 +467,6 @@ cmd /c npm run format:check
 cmd /c npm run typecheck
 cmd /c npm run test:run
 cmd /c npm run build
+cmd /c npm run test:duckdb
+cmd /c npm run docs:verify
 ```

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Release-grade documentation handoff checklist covering static docs, generated
+  API artifacts, runnable examples, bilingual review, and required verification
+  gates for the documentation platform.
+
 ## [0.5.0] - 2026-07-22
 
 ### Added

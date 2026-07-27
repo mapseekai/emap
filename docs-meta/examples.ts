@@ -932,6 +932,7 @@ async function loadWebWorkerWithSettings(settings: WebWorkerSettings): Promise<v
       workerUrl,
     },
   });
+  runtime.status.textContent = `workerUrl=${workerUrl} mode=${settings.mode} threshold=${settings.threshold}; run a heavy operation to observe worker events.`;
   const source = new TopologySource('worker-demo-source');
   const fixture = await loadFixtureBytes(task7Fixture);
   await importSourceData(runtime.map, source, 'worker-demo-source', fixture);
