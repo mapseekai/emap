@@ -1,6 +1,11 @@
 ---
+id: performance
 slug: /recipes/performance
 title: Performance
+api: ["Emap"]
+examples: ["simplify","simplify-control","web-worker"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # Performance

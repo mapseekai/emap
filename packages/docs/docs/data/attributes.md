@@ -1,6 +1,11 @@
 ---
+id: attributes
 slug: /data/attributes
 title: 属性
+api: ["Emap"]
+examples: ["attribute-editing","attribute-expressions","data-engineering","feature-attributes","filter-features","join","split-layer"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # 属性

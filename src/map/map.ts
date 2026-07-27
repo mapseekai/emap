@@ -267,6 +267,19 @@ export class Emap extends EventDispatcher {
    *
    * @param options Container, interaction, worker, and rendering options for the map.
    */
+  /**
+   * Create a map engine in an existing DOM container.
+   *
+   * @param options Required {@link MapOptions} object; must include a valid
+   * container id string or `HTMLElement`. Optional fields may be omitted:
+   * interaction defaults to enabled, expression evaluation defaults to
+   * `'disabled'`, worker routing defaults to main-thread execution, and
+   * `workerThreshold` defaults to `50000` vertices.
+   * @example
+   * ```ts
+   * const map = new Emap({ container: 'map' });
+   * ```
+   */
   constructor(options: MapOptions) {
     super();
 

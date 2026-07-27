@@ -1,6 +1,11 @@
 ---
+id: camera
 slug: /guides/camera
 title: Camera
+api: []
+examples: []
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # Camera

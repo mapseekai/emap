@@ -1,6 +1,11 @@
 ---
+id: events
 slug: /reference/events
 title: Events reference
+api: []
+examples: []
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # Events reference

@@ -1,6 +1,11 @@
 ---
+id: topology
 slug: /concepts/topology
 title: Topology model
+api: []
+examples: []
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # Topology model

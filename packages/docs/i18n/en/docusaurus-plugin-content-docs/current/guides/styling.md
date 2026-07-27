@@ -1,6 +1,11 @@
 ---
+id: styling
 slug: /guides/styling
 title: Styling layers
+api: ["FillPaint","LayerSpecification","LinePaint"]
+examples: ["getting-started/lines","getting-started/polygon-fill","getting-started/polygons"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # Styling layers

@@ -1,6 +1,11 @@
 ---
+id: undo-redo
 slug: /recipes/undo-redo
 title: 撤销与重做
+api: ["Emap"]
+examples: ["attribute-editing","undo-redo"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # 撤销与重做

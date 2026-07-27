@@ -1,6 +1,11 @@
 ---
+id: file-upload
 slug: /recipes/file-upload
 title: 文件上传
+api: ["TopologySource.fromBytes"]
+examples: ["geoparquet-viewer","getting-started/points"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # 文件上传

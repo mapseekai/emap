@@ -1,6 +1,11 @@
 ---
+id: source-layer
 slug: /concepts/source-layer
 title: Sources and layers
+api: ["CirclePaint","DatasetFormatPlugin","Emap","ExportedFormatFile","ExportFormat","ExportOptions","FillPaint","ITopologySource","LayerLayout","LayerPaint","LayerSpecification","LayerType","LinePaint","registerFormat","resolvePointStyle","resolveStrokeStyle","TopologySource","TopologySource.fromBytes","TopologySourceData","TopologySourceFromBytesOptions","TopologySourceInput","TopologySourceOptions","ZipExtractionLimits"]
+examples: ["getting-started/geojson-viewer","getting-started/lines","getting-started/points","merge-layers","rename-layer","split-layer"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # Sources and layers

@@ -1,6 +1,11 @@
 ---
+id: status-control
 slug: /recipes/status-control
 title: Status control
+api: ["Emap"]
+examples: ["duckdb-geoparquet-query","duckdb-query"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # Status control

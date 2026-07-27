@@ -2,6 +2,10 @@
 id: intro
 slug: /
 title: emap Introduction
+api: []
+examples: []
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # emap

@@ -77,8 +77,48 @@ function filterCachedGroups(reflection, removals) {
   reflection.categories = reflection.categories?.filter((category) => category.children.length > 0);
 }
 
+function normalizeSourceFileName(fileName) {
+  if (typeof fileName !== 'string') return fileName;
+  const normalized = fileName.replaceAll('\\', '/');
+  const srcIndex = normalized.lastIndexOf('/src/');
+  if (srcIndex !== -1) return normalized.slice(srcIndex + 1);
+  if (normalized.startsWith('src/')) return normalized;
+
+  const nodeModulesIndex = normalized.lastIndexOf('/node_modules/');
+  if (nodeModulesIndex !== -1) return normalized.slice(nodeModulesIndex + 1);
+  if (normalized.startsWith('node_modules/')) return normalized;
+
+  return normalized.replace(/^.*\.worktrees\/[^/]+\//, '');
+}
+
+function normalizeSourcePaths(value, seen = new WeakSet()) {
+  if (!value || typeof value !== 'object') return;
+  if (seen.has(value)) return;
+  seen.add(value);
+
+  if (typeof value.fileName === 'string') {
+    value.fileName = normalizeSourceFileName(value.fileName);
+  }
+  if (typeof value.fullFileName === 'string') {
+    value.fullFileName = normalizeSourceFileName(value.fullFileName);
+  }
+
+  for (const nested of Object.values(value)) {
+    if (!nested || typeof nested !== 'object') continue;
+    if (Array.isArray(nested)) {
+      for (const item of nested) {
+        normalizeSourcePaths(item, seen);
+      }
+    } else {
+      normalizeSourcePaths(nested, seen);
+    }
+  }
+}
+
 export function load(app) {
   app.on(Application.EVENT_VALIDATE_PROJECT, (project) => {
+    normalizeSourcePaths(project);
+
     const removals = [];
     collectInternalMapHostSurfaces(project, removals);
     const parents = new Set(removals.map((reflection) => reflection.parent).filter(Boolean));

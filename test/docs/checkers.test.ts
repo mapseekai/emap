@@ -29,7 +29,7 @@ describe('documentation quality checkers', () => {
     expect(outputOf(result)).toContain('intro');
   });
 
-  it('fails when a documented TypeDoc parameter lacks comment text', async () => {
+  it('fails when a documented TypeDoc parameter lacks semantic description', async () => {
     const root = await fixtureRoot();
     await writeCatalog(root, {
       docs: ['/docs/'],
@@ -66,6 +66,7 @@ describe('documentation quality checkers', () => {
 
     expect(result.status).toBe(1);
     expect(outputOf(result)).toContain('loadMap.options');
+    expect(outputOf(result)).toContain('missing parameter semantic description');
   });
 
   it('fails when a public TypeDoc reflection lacks an @example tag', async () => {
@@ -96,7 +97,7 @@ describe('documentation quality checkers', () => {
     expect(outputOf(result)).toContain('@example');
   });
 
-  it('does not fail the staged API checker on uncataloged public src reflections', async () => {
+  it('fails the API checker on uncataloged public src reflections', async () => {
     const root = await fixtureRoot();
     await writeCatalog(root, {
       docs: ['/docs/'],
@@ -119,14 +120,16 @@ describe('documentation quality checkers', () => {
 
     const result = runChecker('scripts/check-docs-api.mjs', root);
 
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(1);
+    expect(outputOf(result)).toContain('publicUtility');
+    expect(outputOf(result)).toContain('uncataloged public API reflection');
   });
 
   it('does not treat nested reflection properties as standalone public APIs', async () => {
     const root = await fixtureRoot();
     await writeCatalog(root, {
       docs: ['/docs/'],
-      api: [],
+      api: ['Options'],
       fixtures: ['inline:tiny.geojson'],
     });
     await writeReflections(root, {
@@ -157,6 +160,100 @@ describe('documentation quality checkers', () => {
     const result = runChecker('scripts/check-docs-api.mjs', root);
 
     expect(result.status).toBe(0);
+  });
+
+  it('fails with named diagnostics for incomplete parameter metadata', async () => {
+    const root = await fixtureRoot();
+    await writeCatalog(root, {
+      docs: ['/docs/'],
+      api: ['loadMap'],
+      fixtures: ['inline:tiny.geojson'],
+    });
+    await writeReflections(root, {
+      children: [
+        {
+          name: 'loadMap',
+          variant: 'declaration',
+          kind: 64,
+          sources: [{ fileName: 'src/index.ts' }],
+          signatures: [
+            {
+              name: 'loadMap',
+              variant: 'signature',
+              kind: 4096,
+              sources: [{ fileName: 'src/index.ts' }],
+              comment: {
+                summary: [{ kind: 'text', text: 'Loads a map.' }],
+                blockTags: [
+                  {
+                    tag: '@param',
+                    name: 'options',
+                    content: [{ kind: 'text', text: 'Map options.' }],
+                  },
+                  { tag: '@example', content: [{ kind: 'text', text: 'loadMap({ container });' }] },
+                ],
+              },
+              parameters: [{ name: 'options', variant: 'param', kind: 32768 }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = runChecker('scripts/check-docs-api.mjs', root);
+
+    expect(result.status).toBe(1);
+    expect(outputOf(result)).toContain('missing parameter default/omission behavior');
+    expect(outputOf(result)).toContain('missing parameter constraints/valid values');
+  });
+
+  it('fails when a public parameter lacks a runnable example association', async () => {
+    const root = await fixtureRoot();
+    await writeCatalog(root, {
+      docs: ['/docs/'],
+      api: ['loadMap'],
+      fixtures: ['inline:tiny.geojson'],
+    });
+    await writeReflections(root, {
+      children: [
+        {
+          name: 'loadMap',
+          variant: 'declaration',
+          kind: 64,
+          sources: [{ fileName: 'src/index.ts' }],
+          signatures: [
+            {
+              name: 'loadMap',
+              variant: 'signature',
+              kind: 4096,
+              sources: [{ fileName: 'src/index.ts' }],
+              comment: {
+                summary: [{ kind: 'text', text: 'Loads a map.' }],
+                blockTags: [
+                  {
+                    tag: '@param',
+                    name: 'options',
+                    content: [
+                      {
+                        kind: 'text',
+                        text: 'Map options. Required object; must include a valid container.',
+                      },
+                    ],
+                  },
+                ],
+              },
+              parameters: [{ name: 'options', variant: 'param', kind: 32768 }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = runChecker('scripts/check-docs-api.mjs', root);
+
+    expect(result.status).toBe(1);
+    expect(outputOf(result)).toContain('missing public API @example association');
+    expect(outputOf(result)).toContain('missing parameter runnable example association');
   });
 
   it('parses recipe catalog entries with explicit docs, API, and fixture metadata', async () => {
@@ -242,6 +339,7 @@ describe('documentation quality checkers', () => {
       title: '中文简介',
     });
     await writeDoc(root, 'packages/docs/i18n/en/docusaurus-plugin-content-docs/current/intro.md', {
+      id: undefined,
       slug: '/',
       title: 'Intro',
     });
@@ -255,6 +353,61 @@ describe('documentation quality checkers', () => {
 
     expect(result.status).toBe(1);
     expect(outputOf(result)).toContain('missing English id for intro');
+  });
+
+  it('fails when either locale is missing required Task8 front matter fields', async () => {
+    const root = await fixtureRoot();
+    await writeDoc(root, 'packages/docs/docs/intro.md', {
+      id: 'intro',
+      slug: '/',
+      title: '中文简介',
+      api: undefined,
+    });
+    await writeDoc(root, 'packages/docs/i18n/en/docusaurus-plugin-content-docs/current/intro.md', {
+      id: 'intro',
+      slug: '/',
+      title: 'Intro',
+      examples: undefined,
+    });
+    await writeCatalog(root, {
+      docs: ['/docs/'],
+      api: ['Emap'],
+      fixtures: ['inline:tiny.geojson'],
+    });
+
+    const result = runChecker('scripts/check-docs-i18n.mjs', root);
+
+    expect(result.status).toBe(1);
+    expect(outputOf(result)).toContain('missing Chinese api for intro');
+    expect(outputOf(result)).toContain('missing English examples for intro');
+  });
+
+  it('fails when locale front matter parity differs', async () => {
+    const root = await fixtureRoot();
+    await writeDoc(root, 'packages/docs/docs/intro.md', {
+      id: 'intro',
+      slug: '/',
+      title: '中文简介',
+      api: ['Emap'],
+    });
+    await writeDoc(root, 'packages/docs/i18n/en/docusaurus-plugin-content-docs/current/intro.md', {
+      id: 'intro',
+      slug: '/',
+      title: 'Intro',
+      api: ['TopologySource'],
+    });
+    await writeCatalog(root, {
+      docs: ['/docs/'],
+      api: ['Emap'],
+      fixtures: ['inline:tiny.geojson'],
+    });
+
+    const result = runChecker('scripts/check-docs-i18n.mjs', root);
+
+    expect(result.status).toBe(1);
+    expect(outputOf(result)).toContain(
+      'English api ["TopologySource"] does not match ["Emap"] for intro',
+    );
   });
 
   it('parses CRLF Markdown front matter', async () => {
@@ -339,15 +492,37 @@ async function fixtureRoot(): Promise<string> {
 async function writeDoc(
   root: string,
   path: string,
-  frontMatter: { id?: string; slug: string; title: string },
+  frontMatter: {
+    id?: string;
+    slug?: string;
+    title: string;
+    api?: string[];
+    examples?: string[];
+    stability?: string;
+    verifiedVersion?: string;
+  },
   lineEnding = '\n',
 ): Promise<void> {
   const filePath = join(root, path);
   await mkdir(resolve(filePath, '..'), { recursive: true });
+  const rel = path
+    .replace(/^packages\/docs\/docs\//, '')
+    .replace(/^packages\/docs\/i18n\/en\/docusaurus-plugin-content-docs\/current\//, '')
+    .replace(/\.mdx?$/, '');
+  const id = 'id' in frontMatter ? frontMatter.id : (rel.split('/').at(-1) ?? rel);
+  const slug = 'slug' in frontMatter ? frontMatter.slug : `/${rel}`;
+  const api = 'api' in frontMatter ? frontMatter.api : [];
+  const examples = 'examples' in frontMatter ? frontMatter.examples : [];
+  const stability = 'stability' in frontMatter ? frontMatter.stability : 'stable';
+  const verifiedVersion = 'verifiedVersion' in frontMatter ? frontMatter.verifiedVersion : '0.5.0';
   const frontMatterLines = [
-    frontMatter.id === undefined ? undefined : `id: ${frontMatter.id}`,
-    `slug: ${frontMatter.slug}`,
+    id === undefined ? undefined : `id: ${id}`,
+    slug === undefined ? undefined : `slug: ${slug}`,
     `title: ${frontMatter.title}`,
+    api === undefined ? undefined : `api: ${JSON.stringify(api)}`,
+    examples === undefined ? undefined : `examples: ${JSON.stringify(examples)}`,
+    stability === undefined ? undefined : `stability: ${stability}`,
+    verifiedVersion === undefined ? undefined : `verifiedVersion: ${verifiedVersion}`,
   ].filter((line): line is string => line !== undefined);
   await writeFile(
     filePath,

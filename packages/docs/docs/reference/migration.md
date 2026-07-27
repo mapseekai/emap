@@ -1,6 +1,11 @@
 ---
+id: migration
 slug: /reference/migration
 title: 迁移
+api: ["Emap"]
+examples: ["attribute-expressions"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # 迁移

@@ -1,6 +1,11 @@
 ---
+id: events
 slug: /guides/events
 title: Events
+api: ["CameraEvent","Emap","EmapEventMap","EventDispatcher","EventListener","FeatureEvent","FeatureEventFilter"]
+examples: ["feature-attributes","interaction-handlers"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # Events

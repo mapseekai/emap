@@ -1,6 +1,11 @@
 ---
+id: undo-redo
 slug: /recipes/undo-redo
 title: Undo and redo
+api: ["Emap"]
+examples: ["attribute-editing","undo-redo"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # Undo and redo

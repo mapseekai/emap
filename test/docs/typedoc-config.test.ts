@@ -14,6 +14,7 @@ interface TypeDocConfig {
 
 interface ReflectionNode {
   name?: unknown;
+  sources?: unknown;
   children?: unknown;
   signatures?: unknown;
 }
@@ -52,6 +53,28 @@ function collectReflectionNames(value: unknown, names = new Set<string>()): Set<
   }
   for (const signature of Array.isArray(value.signatures) ? value.signatures : []) {
     collectReflectionNames(signature, names);
+  }
+
+  return names;
+}
+
+function collectSourceFileNames(value: unknown, names = new Set<string>()): Set<string> {
+  if (!isReflectionNode(value)) return names;
+
+  if (Array.isArray(value.sources)) {
+    for (const source of value.sources) {
+      if (typeof source === 'object' && source !== null && 'fileName' in source) {
+        const fileName = source.fileName;
+        if (typeof fileName === 'string') names.add(fileName);
+      }
+    }
+  }
+
+  for (const child of Array.isArray(value.children) ? value.children : []) {
+    collectSourceFileNames(child, names);
+  }
+  for (const signature of Array.isArray(value.signatures) ? value.signatures : []) {
+    collectSourceFileNames(signature, names);
   }
 
   return names;
@@ -96,5 +119,31 @@ describe('TypeDoc public API config', () => {
     for (const internalName of INTERNAL_HOST_SURFACES) {
       expect(html).not.toContain(internalName);
     }
+  });
+
+  it('emits stable source paths in generated reflections', async () => {
+    const reflections = JSON.parse(
+      await readFile(resolve(process.cwd(), 'packages/docs/static/api/reflections.json'), 'utf8'),
+    ) as unknown;
+
+    const sourceFileNames = collectSourceFileNames(reflections);
+    expect([...sourceFileNames].some((fileName) => fileName.startsWith('src/'))).toBe(true);
+
+    for (const fileName of sourceFileNames) {
+      expect(fileName).not.toContain('.worktrees/');
+      if (fileName.includes('src/')) {
+        expect(fileName.startsWith('src/')).toBe(true);
+      }
+    }
+  });
+
+  it('does not leak linked worktree paths in generated HTML', async () => {
+    const html = await readFile(
+      resolve(process.cwd(), 'packages/docs/static/api/classes/index.Emap.html'),
+      'utf8',
+    );
+
+    expect(html).not.toContain('.worktrees/');
+    expect(html).toContain('Defined in src/map/map.ts');
   });
 });

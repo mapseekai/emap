@@ -1,6 +1,11 @@
 ---
+id: faq
 slug: /reference/faq
 title: FAQ
+api: []
+examples: []
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # FAQ

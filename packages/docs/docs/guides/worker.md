@@ -1,6 +1,11 @@
 ---
+id: worker
 slug: /guides/worker
 title: Web Worker
+api: ["Emap"]
+examples: ["web-worker"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # Web Worker

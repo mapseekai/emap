@@ -1,6 +1,11 @@
 ---
+id: installation
 slug: /getting-started/installation
 title: Installation
+api: []
+examples: []
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # Installation

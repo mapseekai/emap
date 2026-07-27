@@ -1,6 +1,11 @@
 ---
+id: file-upload
 slug: /recipes/file-upload
 title: File upload
+api: ["TopologySource.fromBytes"]
+examples: ["geoparquet-viewer","getting-started/points"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # File upload

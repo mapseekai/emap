@@ -182,9 +182,17 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * `<input type="file">`. Resolves after the import succeeds and rejects on
    * the first load error.
    *
-   * @param id Stable source identifier used when registering the source with a map.
-   * @param bytes Raw file bytes to import as GeoJSON, TopoJSON, Shapefile ZIP, or another supported format.
-   * @param options Optional source settings plus the filename used to select the mapshaper parser.
+   * @param id Required source id string; must be a valid unique source id for
+   * the target map. It cannot be omitted because the returned source is
+   * constructed with this id.
+   * @param bytes Required raw file bytes; must be a `Uint8Array` or
+   * `ArrayBuffer` containing GeoJSON, TopoJSON, Shapefile ZIP, or another
+   * supported format. Omitted bytes are invalid because mapshaper needs
+   * content to import.
+   * @param options Optional source settings. When omitted, `filename` defaults
+   * to `${id}.geojson`; when supplied, `filename` must use a supported import
+   * extension such as `.geojson`, `.topojson`, `.json`, `.zip`, `.shp`, `.kml`,
+   * or `.msx`.
    *
    * @example
    * const response = await fetch('/data/points.geojson');

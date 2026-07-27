@@ -1,6 +1,11 @@
 ---
+id: fit-bounds
 slug: /recipes/fit-bounds
 title: Fit bounds
+api: ["Emap"]
+examples: ["getting-started/geojson-viewer"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # Fit bounds

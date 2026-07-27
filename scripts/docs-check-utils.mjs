@@ -57,6 +57,34 @@ export function parseFrontMatter(markdown) {
   );
 }
 
+export function hasFrontMatterField(frontMatter, key) {
+  return Object.prototype.hasOwnProperty.call(frontMatter, key);
+}
+
+export function readFrontMatterString(frontMatter, key) {
+  const value = frontMatter[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+export function readFrontMatterStringList(frontMatter, key) {
+  const value = frontMatter[key];
+  if (Array.isArray(value)) return value.filter((item) => typeof item === 'string');
+  if (typeof value !== 'string') return [];
+
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return [trimmed];
+}
+
 export async function collectDocs(root, docsRoot) {
   const absoluteRoot = resolve(root, docsRoot);
   const files = await collectFiles(absoluteRoot, ['.md', '.mdx']);
@@ -88,8 +116,8 @@ export function buildDocReferenceSet(docs) {
   const references = new Set();
   for (const doc of docs.values()) {
     references.add(doc.rel);
-    const id = doc.frontMatter.id;
-    const slug = doc.frontMatter.slug;
+    const id = readFrontMatterString(doc.frontMatter, 'id');
+    const slug = readFrontMatterString(doc.frontMatter, 'slug');
     if (id) references.add(normalizeDocReference(id));
     if (slug) references.add(normalizeDocReference(slug));
   }
@@ -220,6 +248,7 @@ export async function readReflections(root) {
 export function buildReflectionIndex(reflections) {
   const byName = new Map();
   const publicNodes = [];
+  const publicIds = new Set();
 
   function add(name, node) {
     if (!byName.has(name)) byName.set(name, []);
@@ -234,7 +263,11 @@ export function buildReflectionIndex(reflections) {
     if (name && publicNode) {
       const names = reflectionNames(name, ancestors);
       if (isModuleLevelPublicReflection(node, ancestors)) {
-        publicNodes.push({ node, names });
+        const id = typeof node.id === 'number' ? node.id : undefined;
+        if (id === undefined || !publicIds.has(id)) {
+          if (id !== undefined) publicIds.add(id);
+          publicNodes.push({ node, names });
+        }
       }
       for (const reflectionName of names) {
         add(reflectionName, node);
@@ -272,6 +305,7 @@ function isOwnPublicReflection(node) {
 }
 
 function isModuleLevelPublicReflection(node, ancestors) {
+  if (node.kind === 4096) return false;
   if (node.kind === 1024) return false;
   const meaningfulAncestors = ancestors.filter((ancestor) => !ancestor.startsWith('@'));
   if (meaningfulAncestors.length > 1) return false;
@@ -283,31 +317,79 @@ function isSourceFile(fileName) {
 }
 
 export function hasCommentText(node) {
-  return commentSummaryContentText(node.comment).trim().length > 0;
+  return reflectionCommentText(node).trim().length > 0;
 }
 
 export function hasExampleTag(node) {
   return (
     Array.isArray(node.comment?.blockTags) &&
-    node.comment.blockTags.some((tag) => tag.tag === '@example')
+    node.comment.blockTags.some((tag) => tag.tag === '@example' && commentSummaryContentText(tag).trim())
+  ) || (
+    Array.isArray(node.signatures) &&
+    node.signatures.some((signature) => hasExampleTag(signature))
   );
 }
 
 export function hasParameterComment(signature, parameterName) {
-  const parameter = Array.isArray(signature.parameters)
-    ? signature.parameters.find((item) => item.name === parameterName)
-    : undefined;
-  if (parameter && hasCommentText(parameter)) return true;
+  return parameterCommentText(signature, parameterName).trim().length > 0;
+}
 
-  return (
-    Array.isArray(signature.comment?.blockTags) &&
-    signature.comment.blockTags.some(
-      (tag) =>
-        tag.tag === '@param' &&
-        tag.name === parameterName &&
-        commentSummaryContentText(tag).trim(),
-    )
+export function hasParameterDefaultBehavior(node, parameterName) {
+  return /\b(defaults?|omits?|omitted|omission|optional|required|undefined|unset|absent|when not provided)\b/i.test(
+    parameterCommentText(node, parameterName),
   );
+}
+
+export function hasParameterConstraints(node, parameterName) {
+  return /\b(valid|allowed|one of|must|requires?|constraint|range|positive|negative|non-negative|units?|epsg|crs|geojson|topojson|csv|parquet|arrow|boolean|number|string|array)\b/i.test(
+    parameterCommentText(node, parameterName),
+  );
+}
+
+export function hasParameterRunnableExample(node) {
+  return hasExampleTag(node);
+}
+
+export function getPublicParameterNames(node) {
+  const names = new Set();
+  for (const signature of reflectionAndSignatures(node)) {
+    for (const parameter of Array.isArray(signature.parameters) ? signature.parameters : []) {
+      if (typeof parameter.name === 'string') names.add(parameter.name);
+    }
+  }
+  return [...names];
+}
+
+function parameterCommentText(node, parameterName) {
+  const chunks = [];
+  for (const signature of reflectionAndSignatures(node)) {
+    const parameter = Array.isArray(signature.parameters)
+      ? signature.parameters.find((item) => item.name === parameterName)
+      : undefined;
+    if (parameter) chunks.push(reflectionCommentText(parameter));
+
+    if (Array.isArray(signature.comment?.blockTags)) {
+      chunks.push(
+        ...signature.comment.blockTags
+          .filter((tag) => tag.tag === '@param' && tag.name === parameterName)
+          .map((tag) => commentSummaryContentText(tag)),
+      );
+    }
+  }
+
+  return chunks.join(' ');
+}
+
+function reflectionAndSignatures(node) {
+  return [node, ...(Array.isArray(node.signatures) ? node.signatures : [])];
+}
+
+function reflectionCommentText(node) {
+  const chunks = [commentSummaryContentText(node.comment)];
+  for (const signature of Array.isArray(node.signatures) ? node.signatures : []) {
+    chunks.push(commentSummaryContentText(signature.comment));
+  }
+  return chunks.join(' ');
 }
 
 function commentSummaryContentText(comment) {

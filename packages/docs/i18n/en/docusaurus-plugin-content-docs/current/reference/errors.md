@@ -1,6 +1,11 @@
 ---
+id: errors
 slug: /reference/errors
 title: Errors reference
+api: ["Emap","Err","OK","okValue","OpError","OpResult","topologyValidator","TopologyValidatorOptions","ValidationChange","ValidationIssue","ValidationReport","Validator","ValidatorPhase","ValidatorRegistry","ValidatorResult"]
+examples: ["check-geometry","transaction"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # Errors reference

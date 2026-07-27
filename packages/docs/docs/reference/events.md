@@ -1,6 +1,11 @@
 ---
+id: events
 slug: /reference/events
 title: 事件参考
+api: []
+examples: []
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # 事件参考

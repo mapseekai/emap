@@ -1,6 +1,11 @@
 ---
+id: overview
 slug: /concepts/overview
 title: 核心概念
+api: []
+examples: []
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # 核心概念

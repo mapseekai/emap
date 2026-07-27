@@ -1,6 +1,11 @@
 ---
+id: error-handling
 slug: /recipes/error-handling
 title: 错误处理
+api: ["Emap"]
+examples: ["duckdb-buffer","duckdb-query"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # 错误处理

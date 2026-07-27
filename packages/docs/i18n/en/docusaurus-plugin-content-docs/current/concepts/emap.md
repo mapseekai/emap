@@ -1,6 +1,11 @@
 ---
+id: emap
 slug: /concepts/emap
 title: Emap map instance
+api: ["Emap","Feature","FeatureAccessor","FeatureQuery","findInvalidFieldName","HighlightManager","isValidFieldName","isValidLayerName","quoteCliArg"]
+examples: ["getting-started/geojson-viewer"]
+stability: stable
+verifiedVersion: 0.5.0
 ---
 
 # Emap map instance
