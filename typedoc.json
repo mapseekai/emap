@@ -1,0 +1,10 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts", "src/formats/index.ts", "src/duckdb/index.ts"],
+  "outputs": [
+    { "name": "html", "path": "packages/docs/static/api" },
+    { "name": "json", "path": "packages/docs/static/api/reflections.json" }
+  ],
+  "excludeInternal": true,
+  "readme": "none"
+}
