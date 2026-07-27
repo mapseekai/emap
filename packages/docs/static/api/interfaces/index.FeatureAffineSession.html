@@ -16,7 +16,11 @@
 <code>Emap.beginAffineSession</code>. Same idea as <a href="index.FeatureTranslateSession.html" class="tsd-kind-interface">FeatureTranslateSession</a>:
 every <code>applyDelta(matrix)</code> mutates geometry in place, only <code>commit()</code>
 writes a single history entry built from the cumulative composed matrix.</p>
-</div></section>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: buffer, check-geometry, clip-erase.</p>
+</div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">FeatureAffineSession</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#origin">origin</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#applydelta-1">applyDelta</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">matrix</span><span class="tsd-signature-symbol">:</span> <a href="index.AffineMatrix.html" class="tsd-signature-type tsd-kind-interface">AffineMatrix</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#cancel-1">cancel</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#commit-1">commit</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">label</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getcumulative-1">getCumulative</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.AffineMatrix.html" class="tsd-signature-type tsd-kind-interface">AffineMatrix</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:168</li></ul></aside>
@@ -46,7 +50,11 @@ writes a single history entry built from the cumulative composed matrix.</p>
 Callers should build their delta matrices around this point so all
 frames share a single fixed origin — composing rotations/scales then
 stays equivalent to a single cumulative transform.</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:175</li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -63,8 +71,14 @@ stays equivalent to a single cumulative transform.</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">matrix</span>: <a href="index.AffineMatrix.html" class="tsd-signature-type tsd-kind-interface">AffineMatrix</a></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">matrix</span>: <a href="index.AffineMatrix.html" class="tsd-signature-type tsd-kind-interface">AffineMatrix</a></span>
+<div class="tsd-comment tsd-typography"><p>matrix configures applyDelta. Required; omission is not allowed for this API call. Valid value must satisfy the AffineMatrix TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for applyDelta.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:177</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -75,7 +89,11 @@ stays equivalent to a single cumulative transform.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Roll geometry back to the pre-session state and close. No history entry.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:185</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -91,8 +109,14 @@ to history and close. Returns <code>false</code> when the cumulative is identity
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">label</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">label</span>: <span class="tsd-signature-type">string</span></span>
+<div class="tsd-comment tsd-typography"><p>label configures commit. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the string TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for commit.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:183</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -103,7 +127,11 @@ to history and close. Returns <code>false</code> when the cumulative is identity
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Cumulative composed matrix (a · prev) since the session began.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <a href="index.AffineMatrix.html" class="tsd-signature-type tsd-kind-interface">AffineMatrix</a></h4><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <a href="index.AffineMatrix.html" class="tsd-signature-type tsd-kind-interface">AffineMatrix</a></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-5">Example<a href="#example-5" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:187</li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">

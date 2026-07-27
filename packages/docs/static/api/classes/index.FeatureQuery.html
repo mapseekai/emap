@@ -14,7 +14,11 @@
 <section class="tsd-panel tsd-comment">
 <div class="tsd-comment tsd-typography"><p>Handles spatial feature queries (point hit-testing, bbox selection).
 Extracted from Emap to keep the map class focused on coordination.</p>
-</div></section><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div></section><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/feature-query.ts:31</li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
@@ -41,14 +45,28 @@ Extracted from Emap to keep the map class focused on coordination.</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="constructorfeaturequery"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">FeatureQuery</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">sources</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Map</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <a href="../interfaces/index.ITopologySource.html" class="tsd-signature-type tsd-kind-interface">ITopologySource</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">getTransform</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <a href="index.AffineTransform.html" class="tsd-signature-type tsd-kind-class">AffineTransform</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">getSize</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">height</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">width</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">getInitialMX</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">FeatureQuery</a><a href="#constructorfeaturequery" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>FeatureQuery is a public emap call signature documented for package consumers.</p>
+</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">sources</span>: <span class="tsd-signature-type">Map</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <a href="../interfaces/index.ITopologySource.html" class="tsd-signature-type tsd-kind-interface">ITopologySource</a><span class="tsd-signature-symbol">&gt;</span></span></li>
-<li><span><span class="tsd-kind-parameter">getTransform</span>: <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <a href="index.AffineTransform.html" class="tsd-signature-type tsd-kind-class">AffineTransform</a></span></li>
-<li><span><span class="tsd-kind-parameter">getSize</span>: <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">height</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">width</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">}</span></span></li>
-<li><span><span class="tsd-kind-parameter">getInitialMX</span>: <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">number</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">FeatureQuery</a></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">sources</span>: <span class="tsd-signature-type">Map</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <a href="../interfaces/index.ITopologySource.html" class="tsd-signature-type tsd-kind-interface">ITopologySource</a><span class="tsd-signature-symbol">&gt;</span></span>
+<div class="tsd-comment tsd-typography"><p>sources configures FeatureQuery. Required; omission is not allowed for this API call. Valid value must satisfy the Map TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for FeatureQuery.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">getTransform</span>: <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <a href="index.AffineTransform.html" class="tsd-signature-type tsd-kind-class">AffineTransform</a></span>
+<div class="tsd-comment tsd-typography"><p>getTransform configures FeatureQuery. Required; omission is not allowed for this API call. Valid value must satisfy the object TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for FeatureQuery.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">getSize</span>: <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">height</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">width</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">}</span></span>
+<div class="tsd-comment tsd-typography"><p>getSize configures FeatureQuery. Required; omission is not allowed for this API call. Valid value must satisfy the object TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for FeatureQuery.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">getInitialMX</span>: <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">number</span></span>
+<div class="tsd-comment tsd-typography"><p>getInitialMX configures FeatureQuery. Required; omission is not allowed for this API call. Valid value must satisfy the object TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for FeatureQuery.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">FeatureQuery</a></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/feature-query.ts:52</li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -69,8 +87,14 @@ prefilter-stale results.</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">sourceId</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">sourceId</span>: <span class="tsd-signature-type">string</span></span>
+<div class="tsd-comment tsd-typography"><p>sourceId configures clear. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the string TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for clear.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/feature-query.ts:92</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -87,8 +111,14 @@ in idle time before the first user query.</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">sourceId</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">sourceId</span>: <span class="tsd-signature-type">string</span></span>
+<div class="tsd-comment tsd-typography"><p>sourceId configures prebuild. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the string TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for prebuild.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/feature-query.ts:74</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -97,13 +127,25 @@ in idle time before the first user query.</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="query-1"><span class="tsd-kind-call-signature">query</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">geometryOrOptions</span><span class="tsd-signature-symbol">?:</span><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span><br/>        <span class="tsd-signature-symbol">|</span> <a href="../interfaces/index.QueryFeaturesOptions.html" class="tsd-signature-type tsd-kind-interface">QueryFeaturesOptions</a><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?:</span> <a href="../interfaces/index.QueryFeaturesOptions.html" class="tsd-signature-type tsd-kind-interface">QueryFeaturesOptions</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">visibleLayers</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Set</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/index.QueriedFeature.html" class="tsd-signature-type tsd-kind-interface">QueriedFeature</a><span class="tsd-signature-symbol">[]</span><a href="#query-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>query is a public emap call signature documented for package consumers.</p>
+</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">geometryOrOptions</span>: <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span> <span class="tsd-signature-symbol">|</span> <a href="../interfaces/index.QueryFeaturesOptions.html" class="tsd-signature-type tsd-kind-interface">QueryFeaturesOptions</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">]</span></span></li>
-<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">options</span>: <a href="../interfaces/index.QueryFeaturesOptions.html" class="tsd-signature-type tsd-kind-interface">QueryFeaturesOptions</a></span></li>
-<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">visibleLayers</span>: <span class="tsd-signature-type">Set</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.QueriedFeature.html" class="tsd-signature-type tsd-kind-interface">QueriedFeature</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">geometryOrOptions</span>: <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span> <span class="tsd-signature-symbol">|</span> <a href="../interfaces/index.QueryFeaturesOptions.html" class="tsd-signature-type tsd-kind-interface">QueryFeaturesOptions</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">]</span></span>
+<div class="tsd-comment tsd-typography"><p>geometryOrOptions configures query. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the tuple | QueryFeaturesOptions | tuple TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for query.</p>
+</div></li>
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">options</span>: <a href="../interfaces/index.QueryFeaturesOptions.html" class="tsd-signature-type tsd-kind-interface">QueryFeaturesOptions</a></span>
+<div class="tsd-comment tsd-typography"><p>options configures query. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the QueryFeaturesOptions TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for query.</p>
+</div></li>
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">visibleLayers</span>: <span class="tsd-signature-type">Set</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></span>
+<div class="tsd-comment tsd-typography"><p>visibleLayers configures query. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the Set TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for query.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.QueriedFeature.html" class="tsd-signature-type tsd-kind-interface">QueriedFeature</a><span class="tsd-signature-symbol">[]</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/feature-query.ts:204</li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">

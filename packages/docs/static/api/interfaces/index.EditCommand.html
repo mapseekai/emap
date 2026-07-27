@@ -27,7 +27,11 @@ reverse the change. <code>pushCommand</code> does NOT call <code>do()</code>.</l
 </ul>
 <p>Implementations must capture enough state in their constructor that
 both <code>do()</code> and <code>undo()</code> can run multiple times without diverging.</p>
-</div></section>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: attribute-editing, china-editing, draw-snap-clear.</p>
+</div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">EditCommand</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#invalidatespriorcommands">invalidatesPriorCommands</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#label">label</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#stale">stale</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#do-1">do</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#merge-1">merge</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">next</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-interface">EditCommand</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#mergeable-1">mergeable</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">prev</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-interface">EditCommand</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#undo-1">undo</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
 <section class="tsd-panel">
 <h4>Implemented by</h4>
@@ -80,14 +84,22 @@ out the live dataset object, so commands captured against the OLD
 dataset can no longer mutate the right reference.</p>
 <p>The command itself is NOT stale at push time; only the entries below
 it become stale.</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-command.ts:58</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="label"><code class="tsd-tag">Optional</code> <code class="tsd-tag">Readonly</code><span>label</span><a href="#label" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">label</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Optional human-readable label, surfaced in <code>historychange</code> events.</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-command.ts:24</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
@@ -104,7 +116,11 @@ stack without invoking <code>undo()</code> and surfaces the skip via the
 <code>HistoryStateSnapshot.skippedStale</code> flag on the next change event.
 UIs should treat the boundary as a &quot;history barrier&quot; — visible in
 the list, but un-replayable.</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-command.ts:74</li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -118,7 +134,11 @@ the list, but un-replayable.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Re-apply the operation. Called by <code>EditHistory.redo()</code>.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-command.ts:20</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -137,8 +157,14 @@ reverses the cumulative work.</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">next</span>: <a href="" class="tsd-signature-type tsd-kind-interface">EditCommand</a></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">next</span>: <a href="" class="tsd-signature-type tsd-kind-interface">EditCommand</a></span>
+<div class="tsd-comment tsd-typography"><p>next configures merge. Required; omission is not allowed for this API call. Valid value must satisfy the EditCommand TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for merge.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-5">Example<a href="#example-5" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-command.ts:46</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -159,8 +185,14 @@ fields) and stable (no I/O, no side effects).</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">prev</span>: <a href="" class="tsd-signature-type tsd-kind-interface">EditCommand</a></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">prev</span>: <a href="" class="tsd-signature-type tsd-kind-interface">EditCommand</a></span>
+<div class="tsd-comment tsd-typography"><p>prev configures mergeable. Required; omission is not allowed for this API call. Valid value must satisfy the EditCommand TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for mergeable.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-6">Example<a href="#example-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-command.ts:36</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -171,7 +203,11 @@ fields) and stable (no I/O, no side effects).</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Reverse the operation. Called by <code>EditHistory.undo()</code>.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-7">Example<a href="#example-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/edit-command.ts:22</li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">

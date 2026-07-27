@@ -25,7 +25,11 @@ that batches <code>Emap.translateSelected</code> per keystroke.</p>
 once (correctly per the topology model), which means the unselected
 neighbour's geometry follows along. The proper fix requires cutting
 shared arcs at the selection boundary first; tracked as a follow-up.</p>
-</div></section>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: attribute-editing, china-editing, draw-snap-clear.</p>
+</div></div></section>
 <section class="tsd-panel">
 <h4>Implements</h4>
 <ul class="tsd-hierarchy">
@@ -61,11 +65,19 @@ shared arcs at the selection boundary first; tracked as a follow-up.</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="constructorfeaturetranslatecommand"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">FeatureTranslateCommand</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">opts</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/index.FeatureTranslateCommandOptions.html" class="tsd-signature-type tsd-kind-interface">FeatureTranslateCommandOptions</a><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">FeatureTranslateCommand</a><a href="#constructorfeaturetranslatecommand" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>FeatureTranslateCommand is a public emap call signature documented for package consumers.</p>
+</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">opts</span>: <a href="../interfaces/index.FeatureTranslateCommandOptions.html" class="tsd-signature-type tsd-kind-interface">FeatureTranslateCommandOptions</a></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">FeatureTranslateCommand</a></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">opts</span>: <a href="../interfaces/index.FeatureTranslateCommandOptions.html" class="tsd-signature-type tsd-kind-interface">FeatureTranslateCommandOptions</a></span>
+<div class="tsd-comment tsd-typography"><p>opts configures FeatureTranslateCommand. Required; omission is not allowed for this API call. Valid value must satisfy the FeatureTranslateCommandOptions TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for FeatureTranslateCommand.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">FeatureTranslateCommand</a></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: attribute-editing, china-editing, draw-snap-clear.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/edit/commands/feature-translate.ts:61</li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -75,7 +87,11 @@ shared arcs at the selection boundary first; tracked as a follow-up.</p>
 <h3 class="tsd-anchor-link" id="label"><code class="tsd-tag">Readonly</code><span>label</span><a href="#label" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">label</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Optional human-readable label, surfaced in <code>historychange</code> events.</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.EditCommand.html">EditCommand</a>.<a href="../interfaces/index.EditCommand.html#label">label</a></p>
 <ul>
 <li>Defined in src/edit/commands/feature-translate.ts:57</li></ul></aside></section></section></details>
@@ -90,7 +106,11 @@ shared arcs at the selection boundary first; tracked as a follow-up.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Re-apply the operation. Called by <code>EditHistory.redo()</code>.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.EditCommand.html">EditCommand</a>.<a href="../interfaces/index.EditCommand.html#do">do</a></p>
 <ul>
 <li>Defined in src/edit/commands/feature-translate.ts:66</li></ul></aside></div></li></ul></section>
@@ -110,8 +130,14 @@ reverses the cumulative work.</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">next</span>: <a href="../interfaces/index.EditCommand.html" class="tsd-signature-type tsd-kind-interface">EditCommand</a></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">next</span>: <a href="../interfaces/index.EditCommand.html" class="tsd-signature-type tsd-kind-interface">EditCommand</a></span>
+<div class="tsd-comment tsd-typography"><p>next configures merge. Required; omission is not allowed for this API call. Valid value must satisfy the EditCommand TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for merge.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.EditCommand.html">EditCommand</a>.<a href="../interfaces/index.EditCommand.html#merge">merge</a></p>
 <ul>
 <li>Defined in src/edit/commands/feature-translate.ts:94</li></ul></aside></div></li></ul></section>
@@ -133,8 +159,14 @@ fields) and stable (no I/O, no side effects).</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">prev</span>: <a href="../interfaces/index.EditCommand.html" class="tsd-signature-type tsd-kind-interface">EditCommand</a></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">prev</span>: <a href="../interfaces/index.EditCommand.html" class="tsd-signature-type tsd-kind-interface">EditCommand</a></span>
+<div class="tsd-comment tsd-typography"><p>prev configures mergeable. Required; omission is not allowed for this API call. Valid value must satisfy the EditCommand TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for mergeable.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-5">Example<a href="#example-5" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.EditCommand.html">EditCommand</a>.<a href="../interfaces/index.EditCommand.html#mergeable">mergeable</a></p>
 <ul>
 <li>Defined in src/edit/commands/feature-translate.ts:74</li></ul></aside></div></li></ul></section>
@@ -146,7 +178,11 @@ fields) and stable (no I/O, no side effects).</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Reverse the operation. Called by <code>EditHistory.undo()</code>.</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-6">Example<a href="#example-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.EditCommand.html">EditCommand</a>.<a href="../interfaces/index.EditCommand.html#undo">undo</a></p>
 <ul>
 <li>Defined in src/edit/commands/feature-translate.ts:70</li></ul></aside></div></li></ul></section></section></details></div>

@@ -18,7 +18,11 @@ per-row <code>valueOffsets</code> (length = rowCount + 1).</p>
 <p>Coordinates come from shared <code>xs</code>/<code>ys</code> arrays addressed by [start, end)
 runs — the coord-run model the export pipeline accumulates — so no
 per-vertex array allocation happens on the write path.</p>
-</div></section><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: duckdb-geoparquet-query, export-geoparquet, export-roundtrip.</p>
+</div></div></section><aside class="tsd-sources">
 <ul>
 <li>Defined in src/formats/wkb.ts:181</li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
@@ -49,11 +53,19 @@ per-vertex array allocation happens on the write path.</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="constructorwkbwriter"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">WkbWriter</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">initialSize</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">WkbWriter</a><a href="#constructorwkbwriter" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>WkbWriter is a public emap call signature documented for package consumers.</p>
+</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">initialSize</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = ...</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">WkbWriter</a></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">initialSize</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol"> = ...</span></span>
+<div class="tsd-comment tsd-typography"><p>initialSize configures WkbWriter. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for WkbWriter.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">WkbWriter</a></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: duckdb-geoparquet-query, export-geoparquet, export-roundtrip.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/formats/wkb.ts:187</li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -67,7 +79,11 @@ per-vertex array allocation happens on the write path.</p>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Close the current row; call once per feature (including null/empty).</p>
 </div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/formats/wkb.ts:193</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -76,7 +92,13 @@ per-vertex array allocation happens on the write path.</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="finish-1"><span class="tsd-kind-call-signature">finish</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">bytes</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Uint8Array</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">valueOffsets</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Int32Array</span> <span class="tsd-signature-symbol">}</span><a href="#finish-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">bytes</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Uint8Array</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">valueOffsets</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Int32Array</span> <span class="tsd-signature-symbol">}</span></h4><aside class="tsd-sources">
+<div class="tsd-comment tsd-typography"><p>finish is a public emap call signature documented for package consumers.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">bytes</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Uint8Array</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">valueOffsets</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Int32Array</span> <span class="tsd-signature-symbol">}</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/formats/wkb.ts:266</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -85,14 +107,28 @@ per-vertex array allocation happens on the write path.</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="writelinestring-1"><span class="tsd-kind-call-signature">writeLineString</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">xs</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Float64Array</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">ys</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Float64Array</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">start</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">end</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#writelinestring-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>writeLineString is a public emap call signature documented for package consumers.</p>
+</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">xs</span>: <span class="tsd-signature-type">Float64Array</span></span></li>
-<li><span><span class="tsd-kind-parameter">ys</span>: <span class="tsd-signature-type">Float64Array</span></span></li>
-<li><span><span class="tsd-kind-parameter">start</span>: <span class="tsd-signature-type">number</span></span></li>
-<li><span><span class="tsd-kind-parameter">end</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">xs</span>: <span class="tsd-signature-type">Float64Array</span></span>
+<div class="tsd-comment tsd-typography"><p>xs configures writeLineString. Required; omission is not allowed for this API call. Valid value must satisfy the Float64Array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for writeLineString.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">ys</span>: <span class="tsd-signature-type">Float64Array</span></span>
+<div class="tsd-comment tsd-typography"><p>ys configures writeLineString. Required; omission is not allowed for this API call. Valid value must satisfy the Float64Array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for writeLineString.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">start</span>: <span class="tsd-signature-type">number</span></span>
+<div class="tsd-comment tsd-typography"><p>start configures writeLineString. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for writeLineString.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">end</span>: <span class="tsd-signature-type">number</span></span>
+<div class="tsd-comment tsd-typography"><p>end configures writeLineString. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for writeLineString.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/formats/wkb.ts:213</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -101,13 +137,25 @@ per-vertex array allocation happens on the write path.</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="writemultilinestring-1"><span class="tsd-kind-call-signature">writeMultiLineString</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">xs</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Float64Array</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">ys</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Float64Array</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">paths</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-keyword">readonly</span> (<span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span>)<span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#writemultilinestring-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>writeMultiLineString is a public emap call signature documented for package consumers.</p>
+</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">xs</span>: <span class="tsd-signature-type">Float64Array</span></span></li>
-<li><span><span class="tsd-kind-parameter">ys</span>: <span class="tsd-signature-type">Float64Array</span></span></li>
-<li><span><span class="tsd-kind-parameter">paths</span>: <span class="tsd-signature-keyword">readonly</span> (<span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span>)<span class="tsd-signature-symbol">[]</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">xs</span>: <span class="tsd-signature-type">Float64Array</span></span>
+<div class="tsd-comment tsd-typography"><p>xs configures writeMultiLineString. Required; omission is not allowed for this API call. Valid value must satisfy the Float64Array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for writeMultiLineString.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">ys</span>: <span class="tsd-signature-type">Float64Array</span></span>
+<div class="tsd-comment tsd-typography"><p>ys configures writeMultiLineString. Required; omission is not allowed for this API call. Valid value must satisfy the Float64Array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for writeMultiLineString.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">paths</span>: <span class="tsd-signature-keyword">readonly</span> (<span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span>)<span class="tsd-signature-symbol">[]</span></span>
+<div class="tsd-comment tsd-typography"><p>paths configures writeMultiLineString. Required; omission is not allowed for this API call. Valid value must satisfy the typeOperator TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for writeMultiLineString.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-5">Example<a href="#example-5" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/formats/wkb.ts:220</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -116,11 +164,19 @@ per-vertex array allocation happens on the write path.</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="writemultipoint-1"><span class="tsd-kind-call-signature">writeMultiPoint</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">points</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-keyword">readonly</span> (<span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span>)<span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#writemultipoint-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>writeMultiPoint is a public emap call signature documented for package consumers.</p>
+</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">points</span>: <span class="tsd-signature-keyword">readonly</span> (<span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span>)<span class="tsd-signature-symbol">[]</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">points</span>: <span class="tsd-signature-keyword">readonly</span> (<span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span>)<span class="tsd-signature-symbol">[]</span></span>
+<div class="tsd-comment tsd-typography"><p>points configures writeMultiPoint. Required; omission is not allowed for this API call. Valid value must satisfy the typeOperator TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for writeMultiPoint.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-6">Example<a href="#example-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/formats/wkb.ts:203</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -129,12 +185,22 @@ per-vertex array allocation happens on the write path.</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="writepoint-1"><span class="tsd-kind-call-signature">writePoint</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">x</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">y</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#writepoint-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>writePoint is a public emap call signature documented for package consumers.</p>
+</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">x</span>: <span class="tsd-signature-type">number</span></span></li>
-<li><span><span class="tsd-kind-parameter">y</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">x</span>: <span class="tsd-signature-type">number</span></span>
+<div class="tsd-comment tsd-typography"><p>x configures writePoint. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for writePoint.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">y</span>: <span class="tsd-signature-type">number</span></span>
+<div class="tsd-comment tsd-typography"><p>y configures writePoint. Required; omission is not allowed for this API call. Valid value must satisfy the number TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for writePoint.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-7">Example<a href="#example-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/formats/wkb.ts:197</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -150,10 +216,20 @@ polygon is written as WKB Polygon, multiple as MultiPolygon.</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">xs</span>: <span class="tsd-signature-type">Float64Array</span></span></li>
-<li><span><span class="tsd-kind-parameter">ys</span>: <span class="tsd-signature-type">Float64Array</span></span></li>
-<li><span><span class="tsd-kind-parameter">polygons</span>: <span class="tsd-signature-keyword">readonly</span> (<span class="tsd-signature-keyword">readonly</span> (<span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span>)<span class="tsd-signature-symbol">[]</span>)<span class="tsd-signature-symbol">[]</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">xs</span>: <span class="tsd-signature-type">Float64Array</span></span>
+<div class="tsd-comment tsd-typography"><p>xs configures writePolygons. Required; omission is not allowed for this API call. Valid value must satisfy the Float64Array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for writePolygons.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">ys</span>: <span class="tsd-signature-type">Float64Array</span></span>
+<div class="tsd-comment tsd-typography"><p>ys configures writePolygons. Required; omission is not allowed for this API call. Valid value must satisfy the Float64Array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for writePolygons.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">polygons</span>: <span class="tsd-signature-keyword">readonly</span> (<span class="tsd-signature-keyword">readonly</span> (<span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span>)<span class="tsd-signature-symbol">[]</span>)<span class="tsd-signature-symbol">[]</span></span>
+<div class="tsd-comment tsd-typography"><p>polygons configures writePolygons. Required; omission is not allowed for this API call. Valid value must satisfy the typeOperator TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for writePolygons.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-8">Example<a href="#example-8" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/formats/wkb.ts:241</li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">

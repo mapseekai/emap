@@ -48,3 +48,28 @@
 ### Notes
 
 - `npm run docs:check-api` now fails on existing generated API/docs content because the requested loophole removal exposes front-matter-cataloged public APIs that lack required public prose, `@example`, parameter semantic, default, constraint, or runnable-example diagnostics. Updating those public JSDoc/docs entries is outside this checker/tests/report-only scope.
+
+## Fix Round 3
+
+- Baseline: `8f7f981aa2e53b0a57650c2e17ee3cfe9f88ee47`
+- Scope: TypeDoc public API metadata generation, generated API HTML/JSON, and focused TypeDoc regression coverage. The docs API checker was not weakened or bypassed.
+
+### Evidence
+
+- CodeGraph: worktree-local index was unavailable; it reported results from `/Users/zhang/code/emap`, so direct worktree inspection was used for the linked worktree.
+- GitNexus `impact(target: scripts/typedoc-hide-internals.mjs, direction: upstream, repo: emap)` -> target not indexed; risk `UNKNOWN`.
+- `npm run api:build` -> passed; TypeDoc generated HTML and `reflections.json` with 0 errors and the existing 45-warning set.
+- `npm run docs:check-api` -> passed.
+- `npm run docs:check-i18n` -> passed.
+- `npm run examples:check` -> passed.
+- `npm run docs:build` -> passed for `zh-CN` and `en`; Docusaurus printed the existing non-fatal update-check permission warning.
+- `npm run typecheck` -> passed.
+- `npm run test:run -- test/docs/typedoc-config.test.ts test/docs/checkers.test.ts test/docs/example-catalog.test.ts test/docs/i18n-layout.test.ts` -> passed; 4 files passed, 37 tests passed.
+- `npm run format:check` -> passed.
+- `git diff --check` -> passed.
+- GitNexus `detect_changes(scope: all, worktree: /Users/zhang/code/emap/.worktrees/zwishing-documentation-platform)` -> low risk; 401 changed files, 0 changed indexed symbols, 0 affected processes.
+
+### Notes
+
+- `docs:check-api` initially reported 1,828 failures after fresh TypeDoc generation. The final TypeDoc output now supplies public API prose, `@example` runnable associations from docs front matter, and parameter semantic/default/constraint text for generated reflections.
+- Docusaurus `packages/docs/.docusaurus` and `packages/docs/build` were generated during verification and removed before staging.

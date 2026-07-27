@@ -11,6 +11,13 @@
 <li><a href="../modules/formats.html">formats</a></li>
 <li><a href="" aria-current="page">importGeoArrow</a></li></ul>
 <h1>Function importGeoArrow</h1></div>
+<section class="tsd-panel tsd-comment">
+<div class="tsd-comment tsd-typography"><p>importGeoArrow is a public emap function documented for package consumers.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: duckdb-geoparquet-query, export-geoparquet, export-roundtrip.</p>
+</div></div></section>
 <section class="tsd-panel">
 <ul class="tsd-signatures">
 <li class="">
@@ -22,9 +29,17 @@ accepts both) into a mapshaper dataset.</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">data</span>: <span class="tsd-signature-type">ArrayBuffer</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Uint8Array</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">ArrayBufferLike</span><span class="tsd-signature-symbol">&gt;</span></span></li>
-<li><span><span class="tsd-kind-parameter">opts</span>: <a href="../interfaces/formats.FromArrowTableOptions.html" class="tsd-signature-type tsd-kind-interface">FromArrowTableOptions</a><span class="tsd-signature-symbol"> = {}</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">data</span>: <span class="tsd-signature-type">ArrayBuffer</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Uint8Array</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">ArrayBufferLike</span><span class="tsd-signature-symbol">&gt;</span></span>
+<div class="tsd-comment tsd-typography"><p>data configures importGeoArrow. Required; omission is not allowed for this API call. Valid value must satisfy the ArrayBuffer | Uint8Array TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for importGeoArrow.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">opts</span>: <a href="../interfaces/formats.FromArrowTableOptions.html" class="tsd-signature-type tsd-kind-interface">FromArrowTableOptions</a><span class="tsd-signature-symbol"> = {}</span></span>
+<div class="tsd-comment tsd-typography"><p>opts configures importGeoArrow. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the FromArrowTableOptions TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for importGeoArrow.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: duckdb-geoparquet-query, export-geoparquet, export-roundtrip.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/formats/geoarrow-io.ts:17</li></ul></aside></div></li></ul></section></div>
 <div class="col-sidebar">

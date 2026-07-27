@@ -17,7 +17,11 @@ Returned by every successful <a href="../classes/index.FeatureAccessor.html#get"
 call. The <code>properties</code> object is <code>Object.freeze</code>d so accidental
 mutation by the caller can't bleed back into the underlying dataset
 record.</p>
-</div></section>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Feature</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#geometry">geometry</a><span class="tsd-signature-symbol">:</span> <a href="../types/index.Coord2.html" class="tsd-signature-type tsd-kind-type-alias">Coord2</a> <span class="tsd-signature-symbol">|</span> <a href="../types/index.PathShape.html" class="tsd-signature-type tsd-kind-type-alias">PathShape</a> <span class="tsd-signature-symbol">|</span> <a href="../types/index.PointShape.html" class="tsd-signature-type tsd-kind-type-alias">PointShape</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#properties">properties</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Readonly</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#ref">ref</a><span class="tsd-signature-symbol">:</span> <a href="index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/feature-accessor.ts:30</li></ul></aside>
@@ -41,19 +45,33 @@ record.</p>
 <div class="tsd-comment tsd-typography"><p>Geometry shape for this feature, or <code>null</code> when the feature row
 exists but has no geometry attached (legal in mapshaper for
 data-only layers and for explicit holes in some pipelines).</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/feature-accessor.ts:37</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="properties"><span>properties</span><a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">properties</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Readonly</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">&gt;</span></div>
 <div class="tsd-comment tsd-typography"><p>Frozen view of the row's attribute record (or empty object).</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/feature-accessor.ts:39</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ref"><span>ref</span><a href="#ref" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<div class="tsd-signature"><span class="tsd-kind-property">ref</span><span class="tsd-signature-symbol">:</span> <a href="index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a></div><aside class="tsd-sources">
+<div class="tsd-signature"><span class="tsd-kind-property">ref</span><span class="tsd-signature-symbol">:</span> <a href="index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a></div>
+<div class="tsd-comment tsd-typography"><p>ref is a public emap API documented for package consumers.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/feature-accessor.ts:31</li></ul></aside></section></section></details></div>
 <div class="col-sidebar">

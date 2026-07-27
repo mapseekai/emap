@@ -11,6 +11,13 @@
 <li><a href="../modules/index.html">index</a></li>
 <li><a href="" aria-current="page">resolveMode</a></li></ul>
 <h1>Function resolveMode</h1></div>
+<section class="tsd-panel tsd-comment">
+<div class="tsd-comment tsd-typography"><p>resolveMode is a public emap function documented for package consumers.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: box-select, feature-rotate-scale, feature-selection.</p>
+</div></div></section>
 <section class="tsd-panel">
 <ul class="tsd-signatures">
 <li class="">
@@ -25,10 +32,20 @@ full held chord is matched. Unmatched → <code>'replace'</code>.</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">modifiers</span>: <a href="../interfaces/index.PointerModifiers.html" class="tsd-signature-type tsd-kind-interface">PointerModifiers</a></span></li>
-<li><span><span class="tsd-kind-parameter">table</span>: <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.SelectMode.html" class="tsd-signature-type tsd-kind-type-alias">SelectMode</a><span class="tsd-signature-symbol">,</span> <a href="../types/index.ModifierCombo.html" class="tsd-signature-type tsd-kind-type-alias">ModifierCombo</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">&gt;</span></span></li>
-<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">activator</span>: <a href="../types/index.ModifierCombo.html" class="tsd-signature-type tsd-kind-type-alias">ModifierCombo</a></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../types/index.SelectMode.html" class="tsd-signature-type tsd-kind-type-alias">SelectMode</a></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">modifiers</span>: <a href="../interfaces/index.PointerModifiers.html" class="tsd-signature-type tsd-kind-interface">PointerModifiers</a></span>
+<div class="tsd-comment tsd-typography"><p>modifiers configures resolveMode. Required; omission is not allowed for this API call. Valid value must satisfy the PointerModifiers TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for resolveMode.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">table</span>: <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.SelectMode.html" class="tsd-signature-type tsd-kind-type-alias">SelectMode</a><span class="tsd-signature-symbol">,</span> <a href="../types/index.ModifierCombo.html" class="tsd-signature-type tsd-kind-type-alias">ModifierCombo</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">&gt;</span></span>
+<div class="tsd-comment tsd-typography"><p>table configures resolveMode. Required; omission is not allowed for this API call. Valid value must satisfy the Partial TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for resolveMode.</p>
+</div></li>
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">activator</span>: <a href="../types/index.ModifierCombo.html" class="tsd-signature-type tsd-kind-type-alias">ModifierCombo</a></span>
+<div class="tsd-comment tsd-typography"><p>activator configures resolveMode. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the ModifierCombo TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for resolveMode.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="../types/index.SelectMode.html" class="tsd-signature-type tsd-kind-type-alias">SelectMode</a></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: box-select, feature-rotate-scale, feature-selection.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/core/handlers/select-mode.ts:48</li></ul></aside></div></li></ul></section></div>
 <div class="col-sidebar">

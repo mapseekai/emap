@@ -14,9 +14,11 @@ interface TypeDocConfig {
 
 interface ReflectionNode {
   name?: unknown;
+  comment?: unknown;
   sources?: unknown;
   children?: unknown;
   signatures?: unknown;
+  parameters?: unknown;
 }
 
 const INTERNAL_HOST_SURFACES = [
@@ -78,6 +80,45 @@ function collectSourceFileNames(value: unknown, names = new Set<string>()): Set<
   }
 
   return names;
+}
+
+function collectReflectionNodes(value: unknown, nodes: ReflectionNode[] = []): ReflectionNode[] {
+  if (!isReflectionNode(value)) return nodes;
+
+  nodes.push(value);
+  for (const child of Array.isArray(value.children) ? value.children : []) {
+    collectReflectionNodes(child, nodes);
+  }
+  for (const signature of Array.isArray(value.signatures) ? value.signatures : []) {
+    collectReflectionNodes(signature, nodes);
+  }
+
+  return nodes;
+}
+
+function readCommentText(value: unknown): string {
+  if (!isReflectionNode(value) || !isReflectionNode(value.comment)) return '';
+  const comment = value.comment as { summary?: unknown; blockTags?: unknown };
+  const chunks: string[] = [];
+
+  if (Array.isArray(comment.summary)) {
+    chunks.push(...comment.summary.map(readCommentPartText));
+  }
+  if (Array.isArray(comment.blockTags)) {
+    for (const tag of comment.blockTags) {
+      if (!isReflectionNode(tag)) continue;
+      const content = (tag as { content?: unknown }).content;
+      if (Array.isArray(content)) chunks.push(...content.map(readCommentPartText));
+    }
+  }
+
+  return chunks.join(' ');
+}
+
+function readCommentPartText(value: unknown): string {
+  if (!isReflectionNode(value)) return '';
+  const text = (value as { text?: unknown }).text;
+  return typeof text === 'string' ? text : '';
 }
 
 describe('TypeDoc public API config', () => {
@@ -145,5 +186,26 @@ describe('TypeDoc public API config', () => {
 
     expect(html).not.toContain('.worktrees/');
     expect(html).toContain('Defined in src/map/map.ts');
+  });
+
+  it('emits checker-compatible public API example and parameter metadata', async () => {
+    const reflections = JSON.parse(
+      await readFile(resolve(process.cwd(), 'packages/docs/static/api/reflections.json'), 'utf8'),
+    ) as unknown;
+    const nodes = collectReflectionNodes(reflections);
+    const boundsSignature = nodes.find(
+      (node) => node.name === 'Bounds' && Array.isArray(node.parameters),
+    );
+
+    expect(readCommentText(boundsSignature)).toContain('Runnable example association');
+
+    const xmin = (boundsSignature?.parameters as ReflectionNode[] | undefined)?.find(
+      (parameter) => parameter.name === 'xmin',
+    );
+    const xminComment = readCommentText(xmin);
+
+    expect(xminComment).toContain('Optional');
+    expect(xminComment).toContain('Valid value');
+    expect(xminComment).toContain('number');
   });
 });

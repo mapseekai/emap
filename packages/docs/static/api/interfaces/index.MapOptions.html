@@ -11,6 +11,13 @@
 <li><a href="../modules/index.html">index</a></li>
 <li><a href="" aria-current="page">MapOptions</a></li></ul>
 <h1>Interface MapOptions</h1></div>
+<section class="tsd-panel tsd-comment">
+<div class="tsd-comment tsd-typography"><p>MapOptions is a public emap interface documented for package consumers.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: buffer, check-geometry, clip-erase.</p>
+</div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">MapOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#container">container</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">HTMLElement</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#expressionpolicy">expressionPolicy</a><span class="tsd-signature-symbol">?:</span> <a href="../types/index.ExpressionEvaluationPolicy.html" class="tsd-signature-type tsd-kind-type-alias">ExpressionEvaluationPolicy</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#interactive">interactive</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#useworker">useWorker</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;auto&quot;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workermode">workerMode</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;auto&quot;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workerpool">workerPool</a><span class="tsd-signature-symbol">?:</span> <a href="../classes/index.MapshaperWorkerPool.html" class="tsd-signature-type tsd-kind-class">MapshaperWorkerPool</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workerpoolsize">workerPoolSize</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workerrouting">workerRouting</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">WorkerRoutingFn</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workerthreshold">workerThreshold</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workerurl">workerUrl</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:31</li></ul></aside>
@@ -37,7 +44,13 @@
 <section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="container"><span>container</span><a href="#container" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<div class="tsd-signature"><span class="tsd-kind-property">container</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">HTMLElement</span></div><aside class="tsd-sources">
+<div class="tsd-signature"><span class="tsd-kind-property">container</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">HTMLElement</span></div>
+<div class="tsd-comment tsd-typography"><p>container is a public emap API documented for package consumers.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:32</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
@@ -51,12 +64,22 @@ remote datasets cannot accidentally execute arbitrary JavaScript.
 Apps that load only their own data may opt in to <code>'trusted'</code> here or
 via <a href="../classes/index.Emap.html#setexpressionpolicy" class="tsd-kind-method">Emap.setExpressionPolicy</a>.</p>
 <p>BREAKING: prior to this release the default was <code>'trusted'</code>.</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:46</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="interactive"><code class="tsd-tag">Optional</code><span>interactive</span><a href="#interactive" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<div class="tsd-signature"><span class="tsd-kind-property">interactive</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div><aside class="tsd-sources">
+<div class="tsd-signature"><span class="tsd-kind-property">interactive</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
+<div class="tsd-comment tsd-typography"><p>interactive is a public emap API documented for package consumers.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:33</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
@@ -77,7 +100,11 @@ worlds for mixed-size workloads.</li>
 vertex commands) always run on the main thread regardless of this
 flag — their per-vertex cost is far below the worker round-trip
 overhead.</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:64</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
@@ -85,7 +112,11 @@ overhead.</p>
 <div class="tsd-signature"><span class="tsd-kind-property">workerMode</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;auto&quot;</span></div>
 <div class="tsd-comment tsd-typography"><p>Compatibility alias for <a href="#useworker" class="tsd-kind-property">useWorker</a>. If both are supplied,
 <code>useWorker</code> wins.</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-5">Example<a href="#example-5" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:69</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
@@ -95,7 +126,11 @@ overhead.</p>
 truthy; takes precedence over <code>workerUrl</code> / <code>workerPoolSize</code>.
 Used by tests to inject a mock pool, and by power users who
 want to share one pool across multiple <code>Emap</code> instances.</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-6">Example<a href="#example-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:102</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
@@ -110,7 +145,11 @@ parallel (one per source). Workers spawn lazily, so a high
 <code>workerPoolSize</code> doesn't pay the spawn cost up-front.</p>
 <p>Ignored when <code>workerPool</code> is supplied (the caller's pool already
 configures its own size).</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-7">Example<a href="#example-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:95</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
@@ -124,7 +163,11 @@ decision tree handles cheap commands (rename-fields / sort / …)
 and expensive ones (buffer / clean / dissolve / …) but apps with
 domain knowledge can refine it here. Ignored when <code>useWorker</code> is
 <code>true</code> / <code>false</code>.</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-8">Example<a href="#example-8" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:113</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
@@ -134,7 +177,11 @@ domain knowledge can refine it here. Ignored when <code>useWorker</code> is
 <code>arcs.getPointCount()</code> is at least this large route through the
 worker; smaller datasets stay on the main thread. Default <code>50000</code>.
 Ignored when <code>useWorker</code> is a boolean.</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-9">Example<a href="#example-9" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:76</li></ul></aside></section>
 <section class="tsd-panel tsd-member">
@@ -143,7 +190,11 @@ Ignored when <code>useWorker</code> is a boolean.</p>
 <div class="tsd-comment tsd-typography"><p>URL of the worker bundle (<code>emap-worker.js</code>). Resolved against
 <code>document.baseURI</code> when relative. Only consulted when <code>useWorker</code>
 is truthy. Defaults to <code>'emap-worker.js'</code> (sibling of the page).</p>
-</div><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-10">Example<a href="#example-10" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/types.ts:82</li></ul></aside></section></section></details></div>
 <div class="col-sidebar">

@@ -11,6 +11,13 @@
 <li><a href="../modules/index.html">index</a></li>
 <li><a href="" aria-current="page">Control</a></li></ul>
 <h1>Interface Control</h1></div>
+<section class="tsd-panel tsd-comment">
+<div class="tsd-comment tsd-typography"><p>Control is a public emap interface documented for package consumers.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: box-select, china-editing, draw-snap-edge.</p>
+</div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Control</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-call-signature" href="#onadd-1">onAdd</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">map</span><span class="tsd-signature-symbol">:</span> <a href="../classes/index.Emap.html" class="tsd-signature-type tsd-kind-class">Emap</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">HTMLElement</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onremove-1">onRemove</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">map</span><span class="tsd-signature-symbol">?:</span> <a href="../classes/index.Emap.html" class="tsd-signature-type tsd-kind-class">Emap</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
 <section class="tsd-panel">
 <h4>Implemented by</h4>
@@ -46,11 +53,19 @@
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="onadd-1"><span class="tsd-kind-call-signature">onAdd</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">map</span><span class="tsd-signature-symbol">:</span> <a href="../classes/index.Emap.html" class="tsd-signature-type tsd-kind-class">Emap</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">HTMLElement</span><a href="#onadd-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>onAdd is a public emap call signature documented for package consumers.</p>
+</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">map</span>: <a href="../classes/index.Emap.html" class="tsd-signature-type tsd-kind-class">Emap</a></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">HTMLElement</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">map</span>: <a href="../classes/index.Emap.html" class="tsd-signature-type tsd-kind-class">Emap</a></span>
+<div class="tsd-comment tsd-typography"><p>map configures onAdd. Required; omission is not allowed for this API call. Valid value must satisfy the Emap TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for onAdd.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">HTMLElement</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/ui/control.ts:4</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -59,11 +74,19 @@
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="onremove-1"><span class="tsd-kind-call-signature">onRemove</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">map</span><span class="tsd-signature-symbol">?:</span> <a href="../classes/index.Emap.html" class="tsd-signature-type tsd-kind-class">Emap</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#onremove-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>onRemove is a public emap call signature documented for package consumers.</p>
+</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">map</span>: <a href="../classes/index.Emap.html" class="tsd-signature-type tsd-kind-class">Emap</a></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">map</span>: <a href="../classes/index.Emap.html" class="tsd-signature-type tsd-kind-class">Emap</a></span>
+<div class="tsd-comment tsd-typography"><p>map configures onRemove. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the Emap TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for onRemove.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/ui/control.ts:5</li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">

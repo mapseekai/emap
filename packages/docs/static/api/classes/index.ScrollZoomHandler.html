@@ -16,7 +16,11 @@
 primitive, re-emitting its 'mousewheel' event. When disabled, re-emission
 is suppressed (MouseWheel itself has no enable flag, so the handler gates
 at the boundary).</p>
-</div></section>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: box-select, feature-rotate-scale, feature-selection.</p>
+</div></div></section>
 <section class="tsd-panel tsd-hierarchy" data-refl="3213">
 <h4>Hierarchy (<a href="../hierarchy.html#index.ScrollZoomHandler">View Summary</a>)</h4>
 <ul class="tsd-hierarchy">
@@ -65,12 +69,22 @@ at the boundary).</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="constructorscrollzoomhandler"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">ScrollZoomHandler</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">element</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">HTMLElement</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">onGestureStart</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">ScrollZoomHandler</a><a href="#constructorscrollzoomhandler" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>ScrollZoomHandler is a public emap call signature documented for package consumers.</p>
+</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">element</span>: <span class="tsd-signature-type">HTMLElement</span></span></li>
-<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">onGestureStart</span>: <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">ScrollZoomHandler</a></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">element</span>: <span class="tsd-signature-type">HTMLElement</span></span>
+<div class="tsd-comment tsd-typography"><p>element configures ScrollZoomHandler. Required; omission is not allowed for this API call. Valid value must satisfy the HTMLElement TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for ScrollZoomHandler.</p>
+</div></li>
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">onGestureStart</span>: <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span></span>
+<div class="tsd-comment tsd-typography"><p>onGestureStart configures ScrollZoomHandler. Optional; when omitted or undefined, the API uses its documented default behavior. Valid value must satisfy the object TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for ScrollZoomHandler.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">ScrollZoomHandler</a></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: box-select, feature-rotate-scale, feature-selection.</p>
+</div></div><aside class="tsd-sources">
 <p>Overrides <a href="index.EventDispatcher.html">EventDispatcher</a>.<a href="index.EventDispatcher.html#constructor">constructor</a></p>
 <ul>
 <li>Defined in src/core/handlers/scroll-zoom.ts:27</li></ul></aside></div></li></ul></section></section></details>
@@ -79,7 +93,13 @@ at the boundary).</p>
 <section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="name"><code class="tsd-tag">Readonly</code><span>name</span><a href="#name" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<div class="tsd-signature"><span class="tsd-kind-property">name</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;scrollZoom&quot;</span><span class="tsd-signature-symbol"> = &#39;scrollZoom&#39;</span></div><aside class="tsd-sources">
+<div class="tsd-signature"><span class="tsd-kind-property">name</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;scrollZoom&quot;</span><span class="tsd-signature-symbol"> = &#39;scrollZoom&#39;</span></div>
+<div class="tsd-comment tsd-typography"><p>name is a public emap API documented for package consumers.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#name">name</a></p>
 <ul>
 <li>Defined in src/core/handlers/scroll-zoom.ts:22</li></ul></aside></section></section></details>
@@ -92,7 +112,13 @@ at the boundary).</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="destroy-1"><span class="tsd-kind-call-signature">destroy</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#destroy-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<div class="tsd-comment tsd-typography"><p>destroy is a public emap call signature documented for package consumers.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/core/handlers/scroll-zoom.ts:54</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -101,7 +127,13 @@ at the boundary).</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="disable-1"><span class="tsd-kind-call-signature">disable</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#disable-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<div class="tsd-comment tsd-typography"><p>disable is a public emap call signature documented for package consumers.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#disable">disable</a></p>
 <ul>
 <li>Defined in src/core/handlers/scroll-zoom.ts:40</li></ul></aside></div></li></ul></section>
@@ -111,7 +143,13 @@ at the boundary).</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="enable-1"><span class="tsd-kind-call-signature">enable</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#enable-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<div class="tsd-comment tsd-typography"><p>enable is a public emap call signature documented for package consumers.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-5">Example<a href="#example-5" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#enable">enable</a></p>
 <ul>
 <li>Defined in src/core/handlers/scroll-zoom.ts:37</li></ul></aside></div></li></ul></section>
@@ -140,7 +178,13 @@ at the boundary).</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="getoptions-1"><span class="tsd-kind-call-signature">getOptions</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Readonly</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.ScrollZoomOptions.html" class="tsd-signature-type tsd-kind-interface">ScrollZoomOptions</a><span class="tsd-signature-symbol">&gt;</span><a href="#getoptions-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Readonly</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.ScrollZoomOptions.html" class="tsd-signature-type tsd-kind-interface">ScrollZoomOptions</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<div class="tsd-comment tsd-typography"><p>getOptions is a public emap call signature documented for package consumers.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Readonly</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.ScrollZoomOptions.html" class="tsd-signature-type tsd-kind-interface">ScrollZoomOptions</a><span class="tsd-signature-symbol">&gt;</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-6">Example<a href="#example-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#getoptions">getOptions</a></p>
 <ul>
 <li>Defined in src/core/handlers/scroll-zoom.ts:47</li></ul></aside></div></li></ul></section>
@@ -155,8 +199,14 @@ at the boundary).</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">_ev</span>: <a href="../interfaces/index.NormalizedPointerEvent.html" class="tsd-signature-type tsd-kind-interface">NormalizedPointerEvent</a></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../types/index.HandlerResult.html" class="tsd-signature-type tsd-kind-type-alias">HandlerResult</a></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">_ev</span>: <a href="../interfaces/index.NormalizedPointerEvent.html" class="tsd-signature-type tsd-kind-interface">NormalizedPointerEvent</a></span>
+<div class="tsd-comment tsd-typography"><p>_ev configures handlePointer. Required; omission is not allowed for this API call. Valid value must satisfy the NormalizedPointerEvent TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for handlePointer.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="../types/index.HandlerResult.html" class="tsd-signature-type tsd-kind-type-alias">HandlerResult</a></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-7">Example<a href="#example-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#handlepointer">handlePointer</a></p>
 <ul>
 <li>Defined in src/core/handlers/scroll-zoom.ts:50</li></ul></aside></div></li></ul></section>
@@ -166,7 +216,13 @@ at the boundary).</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="isenabled-1"><span class="tsd-kind-call-signature">isEnabled</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#isenabled-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<div class="tsd-comment tsd-typography"><p>isEnabled is a public emap call signature documented for package consumers.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-8">Example<a href="#example-8" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#isenabled">isEnabled</a></p>
 <ul>
 <li>Defined in src/core/handlers/scroll-zoom.ts:43</li></ul></aside></div></li></ul></section>
@@ -237,11 +293,19 @@ synchronously inside the handler is safe.</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="setoptions-1"><span class="tsd-kind-call-signature">setOptions</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">_opts</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.ScrollZoomOptions.html" class="tsd-signature-type tsd-kind-interface">ScrollZoomOptions</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setoptions-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>setOptions is a public emap call signature documented for package consumers.</p>
+</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">_opts</span>: <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.ScrollZoomOptions.html" class="tsd-signature-type tsd-kind-interface">ScrollZoomOptions</a><span class="tsd-signature-symbol">&gt;</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">_opts</span>: <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.ScrollZoomOptions.html" class="tsd-signature-type tsd-kind-interface">ScrollZoomOptions</a><span class="tsd-signature-symbol">&gt;</span></span>
+<div class="tsd-comment tsd-typography"><p>_opts configures setOptions. Required; omission is not allowed for this API call. Valid value must satisfy the Partial TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for setOptions.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-9">Example<a href="#example-9" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/index.Handler.html">Handler</a>.<a href="../interfaces/index.Handler.html#setoptions">setOptions</a></p>
 <ul>
 <li>Defined in src/core/handlers/scroll-zoom.ts:46</li></ul></aside></div></li></ul></section></section></details></div>

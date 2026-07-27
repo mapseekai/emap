@@ -14,7 +14,11 @@
 <section class="tsd-panel tsd-comment">
 <div class="tsd-comment tsd-typography"><p>Read-only feature lookups. Hangs off <code>Emap.features</code>. Stateless
 beyond the host reference; safe to call from any phase.</p>
-</div></section><aside class="tsd-sources">
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div></section><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/feature-accessor.ts:46</li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
@@ -41,11 +45,19 @@ beyond the host reference; safe to call from any phase.</p>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="constructorfeatureaccessor"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">FeatureAccessor</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">_host</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">EmapHostInternal</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">FeatureAccessor</a><a href="#constructorfeatureaccessor" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>FeatureAccessor is a public emap call signature documented for package consumers.</p>
+</div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">_host</span>: <span class="tsd-signature-type">EmapHostInternal</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">FeatureAccessor</a></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">_host</span>: <span class="tsd-signature-type">EmapHostInternal</span></span>
+<div class="tsd-comment tsd-typography"><p>_host configures FeatureAccessor. Required; omission is not allowed for this API call. Valid value must satisfy the EmapHostInternal TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for FeatureAccessor.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">FeatureAccessor</a></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/feature-accessor.ts:47</li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -62,9 +74,17 @@ beyond the host reference; safe to call from any phase.</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">sourceId</span>: <span class="tsd-signature-type">string</span></span></li>
-<li><span><span class="tsd-kind-parameter">layerId</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">sourceId</span>: <span class="tsd-signature-type">string</span></span>
+<div class="tsd-comment tsd-typography"><p>sourceId configures count. Required; omission is not allowed for this API call. Valid value must satisfy the string TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for count.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">layerId</span>: <span class="tsd-signature-type">string</span></span>
+<div class="tsd-comment tsd-typography"><p>layerId configures count. Required; omission is not allowed for this API call. Valid value must satisfy the string TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for count.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/feature-accessor.ts:86</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -80,8 +100,14 @@ can write <code>if (!f) skip</code> ergonomically.</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">ref</span>: <a href="../interfaces/index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">ref</span>: <a href="../interfaces/index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a></span>
+<div class="tsd-comment tsd-typography"><p>ref configures get. Required; omission is not allowed for this API call. Valid value must satisfy the FeatureRef TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for get.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="../interfaces/index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-3">Example<a href="#example-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/feature-accessor.ts:54</li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
@@ -97,9 +123,17 @@ is a fresh allocation — safe to retain across iterations.</p>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">sourceId</span>: <span class="tsd-signature-type">string</span></span></li>
-<li><span><span class="tsd-kind-parameter">layerId</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">IterableIterator</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<li><span><span class="tsd-kind-parameter">sourceId</span>: <span class="tsd-signature-type">string</span></span>
+<div class="tsd-comment tsd-typography"><p>sourceId configures iter. Required; omission is not allowed for this API call. Valid value must satisfy the string TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for iter.</p>
+</div></li>
+<li><span><span class="tsd-kind-parameter">layerId</span>: <span class="tsd-signature-type">string</span></span>
+<div class="tsd-comment tsd-typography"><p>layerId configures iter. Required; omission is not allowed for this API call. Valid value must satisfy the string TypeScript type and any documented string, number, boolean, array, CRS, GeoJSON, TopoJSON, CSV, Parquet, or Arrow constraints for iter.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">IterableIterator</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">&gt;</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-4">Example<a href="#example-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer.</p>
+</div></div><aside class="tsd-sources">
 <ul>
 <li>Defined in src/map/feature-accessor.ts:71</li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
