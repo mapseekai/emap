@@ -2,7 +2,11 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "paths": {
+      "@zwishing/emap": ["../../src/index.ts"],
+      "@zwishing/emap/style.css": ["../../src/types/style.css.d.ts"]
+    }
   },
-  "include": ["src/**/*.ts", "vite.config.ts"]
+  "include": ["src/**/*.ts", "../../src/types/**/*.d.ts", "vite.config.ts"]
 }
