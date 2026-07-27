@@ -2,7 +2,6 @@
   "name": "@zwishing/emap-docs",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "scripts": {
     "start": "docusaurus start",
     "build": "docusaurus build",
