@@ -39048,7 +39048,7 @@
 											},
 											{
 												"kind": "code",
-												"text": "`_scheduleRender`"
+												"text": "`internal host member`"
 											},
 											{
 												"kind": "text",
@@ -40631,16 +40631,6 @@
 						{
 							"title": "Properties",
 							"children": [
-								696,
-								695,
-								1116,
-								694,
-								652,
-								697,
-								714,
-								713,
-								716,
-								715,
 								693
 							]
 						},
@@ -40665,13 +40655,6 @@
 						{
 							"title": "Methods",
 							"children": [
-								725,
-								1048,
-								1106,
-								1076,
-								1081,
-								1110,
-								993,
 								949,
 								872,
 								855,

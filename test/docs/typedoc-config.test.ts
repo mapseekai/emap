@@ -86,4 +86,15 @@ describe('TypeDoc public API config', () => {
       expect(names.has(internalName)).toBe(false);
     }
   });
+
+  it('omits internal host surfaces from generated Emap HTML', async () => {
+    const html = await readFile(
+      resolve(process.cwd(), 'packages/docs/static/api/classes/index.Emap.html'),
+      'utf8',
+    );
+
+    for (const internalName of INTERNAL_HOST_SURFACES) {
+      expect(html).not.toContain(internalName);
+    }
+  });
 });
