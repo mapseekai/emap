@@ -161,6 +161,75 @@ h2 {
   color: #9b1c31;
 }
 
+.example-tools {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid #d7dccf;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 20px rgba(27, 31, 35, 0.08);
+  font-size: 0.82rem;
+}
+
+.example-tools label {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.example-tools input,
+.example-tools select {
+  min-height: 30px;
+  max-width: 180px;
+  padding: 4px 7px;
+  border: 1px solid #c7cdbf;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1b1f23;
+}
+
+.example-tools button {
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid #244f8f;
+  border-radius: 6px;
+  background: #244f8f;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.example-inline-status {
+  flex: 1 1 220px;
+  color: #3d454d;
+}
+
+.example-inspector {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 20;
+  width: min(360px, calc(100% - 24px));
+  max-height: 42%;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid #d7dccf;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #1b1f23;
+  font: 0.78rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+}
+
 .details-panel {
   padding: 18px;
 }

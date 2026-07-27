@@ -1,0 +1,71 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "A",
+        "name": "North district",
+        "group": "north",
+        "pop": 180,
+        "area": 12
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-122.45, 37.78],
+            [-122.42, 37.78],
+            [-122.42, 37.81],
+            [-122.45, 37.81],
+            [-122.45, 37.78]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "B",
+        "name": "Central district",
+        "group": "central",
+        "pop": 95,
+        "area": 9
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-122.415, 37.77],
+            [-122.385, 37.77],
+            [-122.385, 37.8],
+            [-122.415, 37.8],
+            [-122.415, 37.77]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "C",
+        "name": "South district",
+        "group": "south",
+        "pop": 130,
+        "area": 11
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-122.44, 37.735],
+            [-122.4, 37.735],
+            [-122.4, 37.765],
+            [-122.44, 37.765],
+            [-122.44, 37.735]
+          ]
+        ]
+      }
+    }
+  ]
+}
