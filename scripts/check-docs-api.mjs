@@ -66,9 +66,15 @@ for (const api of [...catalogApiNames].sort()) {
 
 for (const { node, names } of publicNodes) {
   if (names.some((name) => catalogApiNames.has(name))) continue;
-  if (!hasExampleTag(node)) continue;
 
   const symbolName = names[0];
+  if (!hasExampleTag(node)) {
+    violations.push({
+      path: symbolName,
+      reason: 'missing public API @example association',
+    });
+  }
+
   if (!hasCommentText(node)) {
     violations.push({
       path: symbolName,

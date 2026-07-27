@@ -96,6 +96,34 @@ describe('documentation quality checkers', () => {
     expect(outputOf(result)).toContain('@example');
   });
 
+  it('fails when an uncataloged public src reflection lacks an @example tag', async () => {
+    const root = await fixtureRoot();
+    await writeCatalog(root, {
+      docs: ['/docs/'],
+      api: [],
+      fixtures: ['inline:tiny.geojson'],
+    });
+    await writeReflections(root, {
+      children: [
+        {
+          name: 'publicUtility',
+          variant: 'declaration',
+          kind: 64,
+          sources: [{ fileName: 'src/public-utility.ts' }],
+          comment: {
+            summary: [{ kind: 'text', text: 'Formats public utility output.' }],
+          },
+        },
+      ],
+    });
+
+    const result = runChecker('scripts/check-docs-api.mjs', root);
+
+    expect(result.status).toBe(1);
+    expect(outputOf(result)).toContain('publicUtility');
+    expect(outputOf(result)).toContain('missing public API @example association');
+  });
+
   it('fails when @example is the only public TypeDoc comment prose', async () => {
     const root = await fixtureRoot();
     await writeCatalog(root, {

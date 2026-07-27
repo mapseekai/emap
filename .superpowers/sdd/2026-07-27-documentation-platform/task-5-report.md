@@ -60,3 +60,21 @@
 - Scope note:
   - `npm run api:build` and `npx typedoc --options typedoc.json --basePath .` produced broad generated API-doc changes in `packages/docs/static/api`.
   - Additional exploratory fixes in `src/map/layer.ts`, `src/map/map.ts`, `src/source/topology-source.ts`, and two English docs made the stricter real-project checkers pass, but those files were left unstaged per the Task 5 scope handoff.
+
+## Fix Round 2
+
+- Checker/test fix commit SHA: reported in the parent handoff after commit creation.
+- Addressed the final-review gap in:
+  - `scripts/check-docs-api.mjs`
+  - `test/docs/checkers.test.ts`
+- Regression fixture:
+  - Added an uncataloged own public `src/` TypeDoc reflection with summary prose but no `@example`.
+  - `scripts/check-docs-api.mjs --root <fixture>` exits 1 through the Vitest harness and reports `missing public API @example association`.
+- Verification:
+  - `npx vitest run test/docs/checkers.test.ts` -> 1 file passed, 8 tests passed.
+  - `npx biome format scripts/check-docs-api.mjs test/docs/checkers.test.ts` -> exit 0; checked 1 file, no fixes applied.
+  - `npm run typecheck` -> exit 0.
+  - `npm run docs:check-api` -> exit 1 in the current dirty worktree, now surfacing existing missing-example/public-comment coverage gaps for non-catalog public reflections.
+- GitNexus:
+  - Impact requests for `scripts/check-docs-api.mjs` and `check-docs-api` returned `UNKNOWN`/not found because the index predates Task 5 checker scripts.
+  - `detect_changes({ scope: "staged", worktree: "/Users/zhang/code/emap/.worktrees/zwishing-documentation-platform" })` -> 3 changed files, 0 changed indexed symbols, 0 affected processes, risk `low`.
