@@ -5,6 +5,7 @@
     { "name": "html", "path": "packages/docs/static/api" },
     { "name": "json", "path": "packages/docs/static/api/reflections.json" }
   ],
+  "plugin": ["./scripts/typedoc-hide-internals.mjs"],
   "excludeInternal": true,
   "readme": "none"
 }
