@@ -61,3 +61,47 @@ No runtime engine files were changed.
 ## Commit
 
 This report is included in the final Lore commit. The final commit SHA is reported in the task handoff.
+
+## Fix Round 1
+
+### Review Findings Addressed
+
+- Production Vite builds now emit direct static HTML artifacts for each seed example ID under `dist/examples/<id>/index.html`; navigation no longer relies only on hash routes.
+- The catalog regression test now asserts the exact five Task 4 seed IDs and their expected inline fixture associations.
+
+### Changes
+
+- Added static Vite HTML inputs:
+  - `packages/examples/examples/getting-started/geojson-viewer/index.html`
+  - `packages/examples/examples/getting-started/points/index.html`
+  - `packages/examples/examples/getting-started/lines/index.html`
+  - `packages/examples/examples/getting-started/polygons/index.html`
+  - `packages/examples/examples/getting-started/polygon-fill/index.html`
+- Updated `packages/examples/vite.config.ts` to register the root app plus all five route HTML inputs through Rollup input configuration.
+- Extended `test/docs/example-catalog.test.ts` with exact seed/fixture assertions and static route input assertions.
+
+### TDD Evidence
+
+1. Added the new regression assertions first.
+2. Confirmed RED with `npx vitest run test/docs/example-catalog.test.ts`; it failed because `packages/examples/examples` did not exist.
+3. Added route HTML inputs and Vite multi-page input wiring.
+4. Confirmed GREEN with the focused catalog test.
+
+### Verification
+
+- Focused test: `npx vitest run test/docs/example-catalog.test.ts` passed with 3 tests.
+- Examples build: `npm run examples:build` passed and emitted all five direct route HTML files.
+- Built artifact assertion: exact `ls` check passed for:
+  - `packages/examples/dist/examples/getting-started/geojson-viewer/index.html`
+  - `packages/examples/dist/examples/getting-started/points/index.html`
+  - `packages/examples/dist/examples/getting-started/lines/index.html`
+  - `packages/examples/dist/examples/getting-started/polygons/index.html`
+  - `packages/examples/dist/examples/getting-started/polygon-fill/index.html`
+- Examples typecheck: `npx tsc -p packages/examples/tsconfig.json --noEmit` passed.
+- Root typecheck: `npm run typecheck` passed.
+- GitNexus impact: `packages/examples/vite.config.ts` is still not an indexed symbol target, so symbol-level impact remains unavailable.
+- GitNexus detect changes: low risk, no changed indexed symbols, and no affected processes.
+
+### Concerns
+
+- The five route IDs are intentionally duplicated in `vite.config.ts` and the test fixture expectation so Vite can discover static HTML inputs without importing the browser-oriented catalog metadata into Node config evaluation.
