@@ -19,6 +19,7 @@ import {
   type MapshaperLayer,
   type OpResult,
 } from '@zwishing/emap';
+import { initParquetWasm } from '@zwishing/emap/formats';
 
 type LocalizedText = { zh: string; en: string };
 
@@ -68,14 +69,31 @@ type RecipeContext = {
   panel: HTMLElement;
   status: HTMLElement;
   container: HTMLElement;
-  csvFixture: string;
+  csvFixture?: string;
 };
 
 type RecipeDefinition = Omit<ExampleDefinition, 'load'> & {
   sourceId: string;
   filename: string;
+  load: () => Promise<void>;
+};
+
+type RuntimeOptions = {
+  sourceId: string;
+  filename: string;
+  fixture?: string;
+  fixtures?: readonly string[];
   mapOptions?: Omit<MapOptions, 'container'>;
+};
+
+type GeoJsonRuntimeOptions = RuntimeOptions & {
   setup: (ctx: RecipeContext) => void | Promise<void>;
+  csvFixture?: string;
+};
+
+type FileData = {
+  filename: string;
+  content: Uint8Array;
 };
 
 let activeMap: Emap | null = null;
@@ -84,6 +102,7 @@ const sourceId = 'example';
 const docsIntro = '/docs/';
 const task6Fixture = 'fixtures/task-6-polygons.geojson';
 const task6CsvFixture = 'fixtures/task-6-join.csv';
+const task6MergeFixture = 'fixtures/task-6-polygons-alt.geojson';
 
 const route = (id: string) => `/examples/${id}/`;
 const originalHtml = (id: string) => `test/examples/${id}.html`;
@@ -327,32 +346,32 @@ const seeds: readonly ExampleSeed[] = [
 ];
 
 const recipes: readonly RecipeDefinition[] = [
-  recipe('attribute-editing', 'data', '属性编辑', 'Attribute editing', 'FeaturePropertyChangeCommand', ['attributes', 'history'], setupAttributeEditing),
-  recipe('attribute-expressions', 'data', '属性表达式批量更新', 'Attribute expressions', 'MapshaperOps.applyExpression', ['expressions', 'attributes', 'history'], setupAttributeExpressions, { expressionPolicy: 'trusted' }),
-  recipe('data-engineering', 'data', '数据工程批次', 'Data engineering batch', 'MapshaperOps.sortFeatures', ['expressions', 'layer-ops', 'history'], setupDataEngineering, { expressionPolicy: 'trusted' }),
-  recipe('feature-attributes', 'data', '要素属性查询', 'Feature attributes', 'Emap.queryFeatures', ['query', 'highlight'], setupFeatureAttributes),
-  recipe('filter-features', 'data', '要素过滤', 'Filter features', 'MapshaperOps.filterFeatures', ['expressions', 'layer-ops', 'history'], setupFilterFeatures, { expressionPolicy: 'trusted' }),
-  recipe('geoparquet-viewer', 'data', 'GeoParquet / GeoArrow 查看器', 'GeoParquet / GeoArrow viewer', 'TopologySource.setData', ['formats'], setupGeoParquetViewer),
-  recipe('export-geoparquet', 'data', '导出 GeoParquet / GeoArrow', 'Export GeoParquet / GeoArrow', 'TopologySource.export', ['formats', 'export'], setupExportGeoparquet),
-  recipe('export-roundtrip', 'data', '导出往返', 'Export roundtrip', 'TopologySource.export', ['export', 'editing'], setupExportRoundtrip),
-  recipe('join', 'data', '属性表连接', 'Join table', 'MapshaperOps.joinTable', ['join', 'history'], setupJoin, { expressionPolicy: 'trusted' }),
-  recipe('merge-layers', 'layers', '合并图层', 'Merge layers', 'MapshaperOps.mergeLayers', ['layer-ops', 'history'], setupMergeLayers),
-  recipe('merge-selected', 'layers', '合并选中要素', 'Merge selected features', 'MapshaperOps.mergeSelected', ['selection', 'layer-ops', 'history'], setupMergeSelected),
-  recipe('rename-layer', 'layers', '图层重命名', 'Rename layer', 'MapshaperOps.renameLayer', ['layer-ops', 'history'], setupRenameLayer),
-  recipe('split-layer', 'layers', '图层拆分', 'Split layer', 'MapshaperOps.splitLayer', ['expressions', 'layer-ops', 'history'], setupSplitLayer, { expressionPolicy: 'trusted' }),
-  recipe('interaction-handlers', 'interaction', '交互 Handler', 'Interaction handlers', 'Emap.dragPan', ['handlers'], setupInteractionHandlers),
-  recipe('feature-selection', 'interaction', '要素选择', 'Feature selection', 'Emap.select', ['selection', 'history'], setupFeatureSelection),
-  recipe('box-select', 'interaction', '拉框选择', 'Box select', 'BoxSelectControl', ['selection', 'box-select', 'history'], setupBoxSelect),
-  recipe('lasso-select', 'interaction', '拉框 / 套索选择切换', 'Box and lasso select', 'LassoSelectControl', ['selection', 'box-select', 'lasso-select', 'history'], setupLassoSelect),
-  recipe('china-editing', 'editing', '中国行政区划编辑', 'China administrative editing', 'EditToolbar', ['editing', 'basemap'], setupChinaEditing),
-  recipe('draw-snap-clear', 'editing', '绘制吸附清理', 'Draw snap and clear', 'Emap.drawFeature', ['drawing', 'snap', 'history'], setupDrawSnapClear),
-  recipe('draw-snap-edge', 'editing', '绘制时吸附顶点 + 边', 'Draw snap to vertex and edge', 'DrawFeatureControl', ['drawing', 'snap', 'history'], setupDrawSnapEdge),
-  recipe('feature-rotate-scale', 'editing', '旋转 / 缩放选中要素', 'Rotate and scale selected feature', 'Emap.editSession.beginAffineSession', ['selection', 'transform', 'history'], setupFeatureRotateScale),
-  recipe('feature-translate', 'editing', '平移选中要素', 'Translate selected feature', 'Emap.editSession.beginTranslateSession', ['selection', 'transform', 'history'], setupFeatureTranslate),
-  recipe('snapshot', 'editing', '多源快照保存 / 恢复', 'Snapshot save and restore', 'Emap.exportSnapshot', ['snapshot'], setupSnapshot),
-  recipe('transaction', 'editing', 'Transaction + Validation', 'Transaction and validation', 'Emap.beginTransaction', ['transaction', 'validation', 'history'], setupTransaction, { expressionPolicy: 'trusted' }),
-  recipe('undo-redo', 'editing', '撤销 / 重做', 'Undo and redo', 'HistoryControl', ['editing', 'history'], setupUndoRedo),
-  recipe('vertex-editing', 'editing', '顶点编辑', 'Vertex editing', 'VertexEditControl', ['editing', 'vertex', 'basemap'], setupVertexEditing),
+  recipe('attribute-editing', 'data', '属性编辑', 'Attribute editing', 'FeaturePropertyChangeCommand', ['attributes', 'history'], [task6Fixture], 'attr-source', loadAttributeEditing),
+  recipe('attribute-expressions', 'data', '属性表达式批量更新', 'Attribute expressions', 'MapshaperOps.applyExpression', ['expressions', 'attributes', 'history'], [task6Fixture], 'attribute-expressions-source', loadAttributeExpressions),
+  recipe('data-engineering', 'data', '数据工程批次', 'Data engineering batch', 'MapshaperOps.sortFeatures', ['expressions', 'layer-ops', 'history'], [task6Fixture], 'data-engineering-source', loadDataEngineering),
+  recipe('feature-attributes', 'data', '要素属性查询', 'Feature attributes', 'Emap.queryFeatures', ['query', 'highlight', 'basemap'], [task6Fixture], 'feature-attributes-source', loadFeatureAttributes),
+  recipe('filter-features', 'data', '要素过滤', 'Filter features', 'MapshaperOps.filterFeatures', ['expressions', 'layer-ops', 'history'], [task6Fixture], 'filter-features-source', loadFilterFeatures),
+  recipe('geoparquet-viewer', 'data', 'GeoParquet / GeoArrow 查看器', 'GeoParquet / GeoArrow viewer', 'TopologySource.setData', ['formats', 'basemap'], [], 'parquet-source', loadGeoParquetViewer),
+  recipe('export-geoparquet', 'data', '导出 GeoParquet / GeoArrow', 'Export GeoParquet / GeoArrow', 'TopologySource.export', ['formats', 'export', 'basemap'], [task6Fixture], 'main-source', loadExportGeoparquet),
+  recipe('export-roundtrip', 'data', '导出往返', 'Export roundtrip', 'TopologySource.export', ['export', 'editing'], [task6Fixture], 'export-roundtrip-source', loadExportRoundtrip),
+  recipe('join', 'data', '属性表连接', 'Join table', 'MapshaperOps.joinTable', ['join', 'history'], [task6Fixture, task6CsvFixture], 'join-source', loadJoin),
+  recipe('merge-layers', 'layers', '合并图层', 'Merge layers', 'MapshaperOps.mergeLayers', ['layer-ops', 'history'], [task6Fixture, task6MergeFixture], 'merge-source', loadMergeLayers),
+  recipe('merge-selected', 'layers', '合并选中要素', 'Merge selected features', 'MapshaperOps.mergeSelected', ['selection', 'layer-ops', 'history'], [task6Fixture], 'merge-selected-source', loadMergeSelected),
+  recipe('rename-layer', 'layers', '图层重命名', 'Rename layer', 'MapshaperOps.renameLayer', ['layer-ops', 'history'], [task6Fixture], 'rename-layer-source', loadRenameLayer),
+  recipe('split-layer', 'layers', '图层拆分', 'Split layer', 'MapshaperOps.splitLayer', ['expressions', 'layer-ops', 'history'], [task6Fixture], 'split-layer-source', loadSplitLayer),
+  recipe('interaction-handlers', 'interaction', '交互 Handler', 'Interaction handlers', 'Emap.dragPan', ['handlers'], [task6Fixture], 'interaction-handlers-source', loadInteractionHandlers),
+  recipe('feature-selection', 'interaction', '要素选择', 'Feature selection', 'Emap.select', ['selection', 'history'], [task6Fixture], 'select-source', loadFeatureSelection),
+  recipe('box-select', 'interaction', '拉框选择', 'Box select', 'BoxSelectControl', ['selection', 'box-select', 'history'], [task6Fixture], 'box-select-source', loadBoxSelect),
+  recipe('lasso-select', 'interaction', '拉框 / 套索选择切换', 'Box and lasso select', 'LassoSelectControl', ['selection', 'box-select', 'lasso-select', 'history'], [task6Fixture], 'lasso-select-source', loadLassoSelect),
+  recipe('china-editing', 'editing', '中国行政区划编辑', 'China administrative editing', 'EditToolbar', ['editing', 'basemap'], [task6Fixture], 'china-editing-source', loadChinaEditing),
+  recipe('draw-snap-clear', 'editing', '绘制吸附清理', 'Draw snap and clear', 'Emap.drawFeature', ['drawing', 'snap', 'history'], [task6Fixture], 'draw-snap-clear-source', loadDrawSnapClear),
+  recipe('draw-snap-edge', 'editing', '绘制时吸附顶点 + 边', 'Draw snap to vertex and edge', 'DrawFeatureControl', ['drawing', 'snap', 'history'], [task6Fixture], 'draw-snap-edge-source', loadDrawSnapEdge),
+  recipe('feature-rotate-scale', 'editing', '旋转 / 缩放选中要素', 'Rotate and scale selected feature', 'Emap.editSession.beginAffineSession', ['selection', 'transform', 'history'], [task6Fixture], 'feature-rotate-scale-source', loadFeatureRotateScale),
+  recipe('feature-translate', 'editing', '平移选中要素', 'Translate selected feature', 'Emap.editSession.beginTranslateSession', ['selection', 'transform', 'history'], [task6Fixture], 'feature-translate-source', loadFeatureTranslate),
+  recipe('snapshot', 'editing', '多源快照保存 / 恢复', 'Snapshot save and restore', 'Emap.exportSnapshot', ['snapshot'], [task6Fixture], 'snapshot-source', loadSnapshot),
+  recipe('transaction', 'editing', 'Transaction + Validation', 'Transaction and validation', 'Emap.beginTransaction', ['transaction', 'validation', 'history'], [task6Fixture], 'transaction-source', loadTransaction),
+  recipe('undo-redo', 'editing', '撤销 / 重做', 'Undo and redo', 'HistoryControl', ['editing', 'history'], [task6Fixture], 'undo-redo-source', loadUndoRedo),
+  recipe('vertex-editing', 'editing', '顶点编辑', 'Vertex editing', 'VertexEditControl', ['editing', 'vertex', 'basemap'], [task6Fixture], 'vertex-editing-source', loadVertexEditing),
 ];
 
 export const examples: readonly ExampleDefinition[] = [
@@ -386,7 +405,7 @@ export const examples: readonly ExampleDefinition[] = [
     source: item.source,
     route: item.route,
     success: item.success,
-    load: () => loadRecipe(item),
+    load: item.load,
   })),
 ];
 
@@ -397,8 +416,9 @@ function recipe(
   en: string,
   api: string,
   featureFlags: readonly string[],
-  setup: RecipeDefinition['setup'],
-  mapOptions?: Omit<MapOptions, 'container'>,
+  fixtures: readonly string[],
+  sourceId: string,
+  load: () => Promise<void>,
 ): RecipeDefinition {
   const sourceHtml = originalHtml(id);
   return {
@@ -417,14 +437,13 @@ function recipe(
     api: [api],
     tags: [category, id, ...featureFlags],
     featureFlags,
-    fixtures: id === 'join' ? [task6Fixture, task6CsvFixture] : [task6Fixture],
+    fixtures,
     source: { html: sourceHtml },
     route: route(id),
     success: `${en} route loads its fixture and exposes the migrated controls from ${sourceHtml}.`,
-    sourceId: `${id}-source`,
-    filename: basename(task6Fixture),
-    mapOptions,
-    setup,
+    sourceId,
+    filename: fixtures[0] ? basename(fixtures[0]) : '',
+    load,
   };
 }
 
@@ -449,74 +468,433 @@ async function loadSeed(seed: ExampleSeed): Promise<void> {
   }
 }
 
-async function loadRecipe(recipeDef: RecipeDefinition): Promise<void> {
+async function loadAttributeEditing(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'attr-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupAttributeEditing,
+  });
+}
+
+async function loadAttributeExpressions(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'attribute-expressions-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    mapOptions: { expressionPolicy: 'trusted' },
+    setup: setupAttributeExpressions,
+  });
+}
+
+async function loadDataEngineering(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'data-engineering-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    mapOptions: { expressionPolicy: 'trusted' },
+    setup: setupDataEngineering,
+  });
+}
+
+async function loadFeatureAttributes(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'feature-attributes-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupFeatureAttributes,
+  });
+}
+
+async function loadFilterFeatures(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'filter-features-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    mapOptions: { expressionPolicy: 'trusted' },
+    setup: setupFilterFeatures,
+  });
+}
+
+async function loadGeoParquetViewer(): Promise<void> {
+  const runtime = createRuntime({
+    sourceId: 'parquet-source',
+    filename: '',
+  });
+  await setupGeoParquetViewer({
+    map: runtime.map,
+    source: new TopologySource('parquet-source'),
+    sourceId: 'parquet-source',
+    target: '',
+    toolbar: runtime.toolbar,
+    panel: runtime.panel,
+    status: runtime.status,
+    container: runtime.container,
+  });
+}
+
+async function loadExportGeoparquet(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'main-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupExportGeoparquet,
+  });
+}
+
+async function loadExportRoundtrip(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'export-roundtrip-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupExportRoundtrip,
+  });
+}
+
+async function loadJoin(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'join-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    csvFixture: task6CsvFixture,
+    mapOptions: { expressionPolicy: 'trusted' },
+    setup: setupJoin,
+  });
+}
+
+async function loadMergeLayers(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'merge-source',
+    filename: basename(task6Fixture),
+    fixtures: [task6Fixture, task6MergeFixture],
+    setup: setupMergeLayers,
+  });
+}
+
+async function loadMergeSelected(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'merge-selected-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupMergeSelected,
+  });
+}
+
+async function loadRenameLayer(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'rename-layer-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupRenameLayer,
+  });
+}
+
+async function loadSplitLayer(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'split-layer-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    mapOptions: { expressionPolicy: 'trusted' },
+    setup: setupSplitLayer,
+  });
+}
+
+async function loadInteractionHandlers(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'interaction-handlers-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupInteractionHandlers,
+  });
+}
+
+async function loadFeatureSelection(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'select-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupFeatureSelection,
+  });
+}
+
+async function loadBoxSelect(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'box-select-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupBoxSelect,
+  });
+}
+
+async function loadLassoSelect(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'lasso-select-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupLassoSelect,
+  });
+}
+
+async function loadChinaEditing(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'china-editing-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupChinaEditing,
+  });
+}
+
+async function loadDrawSnapClear(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'draw-snap-clear-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupDrawSnapClear,
+  });
+}
+
+async function loadDrawSnapEdge(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'draw-snap-edge-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupDrawSnapEdge,
+  });
+}
+
+async function loadFeatureRotateScale(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'feature-rotate-scale-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupFeatureRotateScale,
+  });
+}
+
+async function loadFeatureTranslate(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'feature-translate-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupFeatureTranslate,
+  });
+}
+
+async function loadSnapshot(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'snapshot-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupSnapshot,
+  });
+}
+
+async function loadTransaction(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'transaction-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    mapOptions: { expressionPolicy: 'trusted' },
+    setup: setupTransaction,
+  });
+}
+
+async function loadUndoRedo(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'undo-redo-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupUndoRedo,
+  });
+}
+
+async function loadVertexEditing(): Promise<void> {
+  return loadGeoJsonExample({
+    sourceId: 'vertex-editing-source',
+    filename: basename(task6Fixture),
+    fixture: task6Fixture,
+    setup: setupVertexEditing,
+  });
+}
+
+async function loadGeoJsonExample(options: GeoJsonRuntimeOptions): Promise<void> {
+  const runtime = createRuntime(options);
+  const source = new TopologySource(options.sourceId);
+  const fixtures = options.fixtures ?? (options.fixture ? [options.fixture] : []);
+  const entries = await Promise.all(fixtures.map(loadFixtureBytes));
+
+  await importSourceData(runtime.map, source, options.sourceId, entries.length === 1 ? entries[0] : entries);
+  addVisibleLayers(runtime.map, source, options.sourceId);
+  setSourceExtent(runtime.map, source);
+
+  const target = primaryLayerName(source);
+  runtime.status.textContent = `Loaded ${options.filename || entries.map((entry) => entry.filename).join(', ')}.`;
+  await options.setup({
+    map: runtime.map,
+    source,
+    sourceId: options.sourceId,
+    target,
+    toolbar: runtime.toolbar,
+    panel: runtime.panel,
+    status: runtime.status,
+    container: runtime.container,
+    csvFixture: options.csvFixture,
+  });
+}
+
+async function loadFixtureBytes(path: string): Promise<FileData> {
+  const response = await fetch(`/${path}`);
+  if (!response.ok) {
+    throw new Error(`Unable to load fixture ${path}`);
+  }
+  return {
+    filename: basename(path),
+    content: new Uint8Array(await response.arrayBuffer()),
+  };
+}
+
+async function importSourceData(
+  map: Emap,
+  source: TopologySource,
+  sourceId: string,
+  data: FileData | FileData[],
+): Promise<void> {
+  if (map.getSource(sourceId)) map.removeSource(sourceId);
+  await source.setData(data);
+  map.addSource(sourceId, source);
+}
+
+function setSourceExtent(map: Emap, source: TopologySource): void {
+  const extent = source.getExtent();
+  if (extent.hasBounds()) {
+    map.setExtent(extent);
+  }
+}
+
+function createRuntime(options: RuntimeOptions): {
+  container: HTMLElement;
+  map: Emap;
+  toolbar: HTMLElement;
+  panel: HTMLElement;
+  status: HTMLElement;
+} {
   const container = getMapContainer();
   activeMap?.remove();
   activeMap = null;
   container.replaceChildren();
 
   const { toolbar, panel, status } = createRecipeChrome(container);
-  const map = new Emap({ container, ...recipeDef.mapOptions });
+  const map = new Emap({ container, ...options.mapOptions });
   activeMap = map;
 
+  const featureFlags = featureFlagsForSource(options.sourceId);
   map.addControl(new NavigationControl(), 'top-left');
-  if (recipeDef.featureFlags.includes('history')) {
+  if (featureFlags.includes('history')) {
     map.addControl(new HistoryControl(), 'top-left');
     map.bindHistoryShortcuts();
   }
-  if (recipeDef.featureFlags.includes('basemap')) {
+  if (featureFlags.includes('basemap')) {
     map.addControl(new BasemapControl(), 'top-right');
   }
-  if (recipeDef.featureFlags.includes('basemap') || recipeDef.featureFlags.includes('formats')) {
+  if (featureFlags.includes('basemap') || featureFlags.includes('formats')) {
     map.addControl(new StatusControl({ alignment: 'right', showEPSG: true }), 'bottom-right');
   }
+  return { container, map, toolbar, panel, status };
+}
 
-  const [geojson, csvFixture] = await Promise.all([loadFixture(recipeDef.fixtures[0]), loadFixture(task6CsvFixture)]);
-  const source = new TopologySource(recipeDef.sourceId);
-  await source.setData({ filename: recipeDef.filename, content: new TextEncoder().encode(geojson) });
-  map.addSource(recipeDef.sourceId, source);
-  addVisibleLayers(map, source, recipeDef.sourceId);
-
-  const extent = source.getExtent();
-  if (extent.hasBounds()) {
-    map.setExtent(extent);
-  }
-
-  const target = primaryLayerName(source);
-  status.textContent = `Loaded ${recipeDef.filename}. ${recipeDef.success}`;
-  await recipeDef.setup({
-    map,
-    source,
-    sourceId: recipeDef.sourceId,
-    target,
-    toolbar,
-    panel,
-    status,
-    container,
-    csvFixture,
-  });
+function featureFlagsForSource(id: string): readonly string[] {
+  return recipes.find((item) => item.sourceId === id)?.featureFlags ?? [];
 }
 
 function setupAttributeEditing(ctx: RecipeContext): void {
-  addPanelText(ctx.panel, 'Click a feature or use the buttons to edit the first record.');
+  let activeRef: FeatureRef | null = null;
+  let activeTarget = ctx.target;
+
+  addUploadControl(ctx, {
+    label: 'File',
+    accept: '.geojson,.json,.topojson,.zip',
+    onLoad: (source) => {
+      activeTarget = primaryLayerName(source);
+      activeRef = null;
+      renderAttributeRows();
+      ctx.status.textContent = 'File loaded. Click a feature to inspect or edit properties.';
+    },
+  });
   const field = addInput(ctx.toolbar, 'New field', 'reviewed');
   addButton(ctx.toolbar, 'Add field', () => {
     const result = ctx.map.attributes.addField({
       source: ctx.sourceId,
-      target: ctx.target,
+      target: activeTarget,
       field: field.value.trim() || 'reviewed',
       defaultValue: 'yes',
     });
     ctx.status.textContent = opStatus(result, 'Field added. Ctrl+Z reverses the schema edit.');
+    renderAttributeRows();
   });
-  addButton(ctx.toolbar, 'Set name', () => {
-    const ref = firstRef(ctx);
-    const result = ctx.map.attributes.setFeatureProperty(ref, 'name', 'Edited feature');
-    ctx.status.textContent = opStatus(result, 'First feature name updated. Ctrl+Z reverses it.');
-    showFeature(ctx, ref);
+  const renameFrom = addInput(ctx.toolbar, 'Rename from', 'name');
+  const renameTo = addInput(ctx.toolbar, 'Rename to', 'label');
+  addButton(ctx.toolbar, 'Rename field', () => {
+    const from = renameFrom.value.trim();
+    const to = renameTo.value.trim();
+    if (!from || !to) return;
+    const result = ctx.map.attributes.renameField({ source: ctx.sourceId, target: activeTarget, from, to });
+    ctx.status.textContent = opStatus(result, `Field ${from} renamed to ${to}. Ctrl+Z reverses it.`);
+    renderAttributeRows();
   });
-  clickToInspect(ctx);
-  showFeature(ctx, firstRef(ctx));
+  const removeField = addInput(ctx.toolbar, 'Remove field', 'area');
+  addButton(ctx.toolbar, 'Remove field', () => {
+    const fieldName = removeField.value.trim();
+    if (!fieldName) return;
+    const result = ctx.map.attributes.removeField({ source: ctx.sourceId, target: activeTarget, field: fieldName });
+    ctx.status.textContent = opStatus(result, `Field ${fieldName} removed. Ctrl+Z reverses it.`);
+    renderAttributeRows();
+  });
+
+  ctx.map.on('historychange', renderAttributeRows);
+  ctx.container.addEventListener('click', (event) => {
+    const features = queryAtEvent(ctx, event, activeTarget);
+    if (!features.length) {
+      ctx.panel.textContent = '(no feature hit)';
+      return;
+    }
+    const feature = features[0];
+    activeRef = { source: feature.source, layer: feature.layer, id: feature.id };
+    activeTarget = feature.layer;
+    renderAttributeRows();
+  });
+  activeRef = firstRef({ ...ctx, target: activeTarget });
+  renderAttributeRows();
+
+  function renderAttributeRows(): void {
+    if (!activeRef) {
+      ctx.panel.textContent = '(click a feature)';
+      return;
+    }
+    const feature = ctx.map.features.get(activeRef);
+    if (!feature) {
+      ctx.panel.textContent = '(selected feature no longer exists)';
+      return;
+    }
+    ctx.panel.replaceChildren();
+    const title = document.createElement('strong');
+    title.textContent = `${activeRef.layer}#${activeRef.id}`;
+    ctx.panel.append(title);
+    for (const [key, value] of Object.entries(feature.properties ?? {})) {
+      const row = document.createElement('label');
+      row.className = 'attribute-row';
+      row.textContent = `${key}: `;
+      const input = document.createElement('input');
+      input.value = value == null ? '' : String(value);
+      input.addEventListener('change', () => {
+        const next = parsePropertyValue(input.value);
+        if (!activeRef) return;
+        const result = ctx.map.attributes.setFeatureProperty(activeRef, key, next === '' ? undefined : next);
+        ctx.status.textContent = opStatus(result, `${key} updated. Ctrl+Z reverses it.`);
+      });
+      row.append(input);
+      ctx.panel.append(row);
+    }
+  }
 }
 
 function setupAttributeExpressions(ctx: RecipeContext): void {
@@ -581,14 +959,43 @@ function setupFilterFeatures(ctx: RecipeContext): void {
   });
 }
 
-function setupGeoParquetViewer(ctx: RecipeContext): void {
-  addPanelText(ctx.panel, 'Format support is flagged for GeoParquet / GeoArrow; the route auto-loads GeoJSON for deterministic catalog QA.');
-  addExportControls(ctx, ['geojson']);
+async function setupGeoParquetViewer(ctx: RecipeContext): Promise<void> {
+  const fileInput = addUploadControl(ctx, {
+    label: 'File',
+    accept: '.parquet,.geoparquet,.arrow,.arrows,.feather',
+    disabled: true,
+    onLoad: (source, file) => {
+      const layer = source.getDataset()?.layers?.[0];
+      const featureCount = layer?.shapes?.length ?? 0;
+      const geomType = layer?.geometry_type ?? 'unknown';
+      ctx.status.textContent = `${file.filename} - ${featureCount} features (${geomType}).`;
+    },
+  });
+  await initFormats((message) => {
+    ctx.status.textContent = message;
+  });
+  fileInput.disabled = false;
+  ctx.status.textContent = 'Upload a .parquet / .arrow file to start.';
+  addExportControls(ctx, ['geoparquet', 'geoarrow', 'geojson']);
+  addPanelText(ctx.panel, 'GeoParquet / GeoArrow formats are registered through @zwishing/emap/formats.');
 }
 
-function setupExportGeoparquet(ctx: RecipeContext): void {
-  addPanelText(ctx.panel, 'Use the export selector after loading. GeoParquet and GeoArrow require the formats feature flag at runtime.');
-  addExportControls(ctx, ['geojson', 'topojson', 'shapefile']);
+async function setupExportGeoparquet(ctx: RecipeContext): Promise<void> {
+  addUploadControl(ctx, {
+    label: 'Input file',
+    accept: '.geojson,.json,.topojson,.zip,.parquet,.geoparquet,.arrow,.arrows,.feather',
+    onLoad: (source, file) => {
+      const layer = source.getDataset()?.layers?.[0];
+      const featureCount = layer?.shapes?.length ?? 0;
+      const geomType = layer?.geometry_type ?? 'unknown';
+      ctx.status.textContent = `Loaded ${file.filename} - ${featureCount} features (${geomType}).`;
+    },
+  });
+  await initFormats((message) => {
+    ctx.status.textContent = message;
+  });
+  addExportControls(ctx, ['geoparquet', 'geoparquet-native', 'geoarrow', 'geojson', 'shapefile']);
+  addPanelText(ctx.panel, 'Export supports GeoParquet, GeoArrow IPC, GeoJSON, and Shapefile after formats registration.');
 }
 
 function setupExportRoundtrip(ctx: RecipeContext): void {
@@ -604,33 +1011,116 @@ function setupExportRoundtrip(ctx: RecipeContext): void {
   addExportControls(ctx, ['geojson', 'topojson', 'shapefile']);
 }
 
-function setupJoin(ctx: RecipeContext): void {
+async function setupJoin(ctx: RecipeContext): Promise<void> {
+  const csv = ctx.csvFixture ? await loadFixture(ctx.csvFixture) : '';
+  addUploadControl(ctx, {
+    label: 'Geometry file',
+    accept: '.geojson,.json,.topojson,.zip',
+    onLoad: () => {
+      ctx.status.textContent = 'Geometry file loaded. Configure CSV keys, then join.';
+    },
+  });
+  const csvInput = addTextarea(ctx.toolbar, 'CSV', csv);
+  const targetKey = addInput(ctx.toolbar, 'Target key', 'id');
+  const sourceKey = addInput(ctx.toolbar, 'Source key', 'id');
+  const fields = addInput(ctx.toolbar, 'Fields', 'score,owner');
+  const prefix = addInput(ctx.toolbar, 'Prefix', 'joined_');
+  const unjoined = addCheckbox(ctx.toolbar, 'unjoined', true);
   addButton(ctx.toolbar, 'Join CSV', async () => {
+    if (!csvInput.value.trim() || !targetKey.value.trim() || !sourceKey.value.trim()) {
+      ctx.status.textContent = 'Fill CSV, target key, and source key before joining.';
+      return;
+    }
     const result = await ctx.map.ops.joinTable({
       source: ctx.sourceId,
       target: ctx.target,
-      data: { csv: ctx.csvFixture },
-      keys: ['id', 'id'],
-      fields: ['score', 'owner'],
-      prefix: 'joined_',
-      unjoined: true,
+      data: { csv: csvInput.value },
+      keys: [targetKey.value.trim(), sourceKey.value.trim()],
+      fields: splitCsvList(fields.value),
+      prefix: prefix.value.trim() || undefined,
+      unjoined: unjoined.checked,
     });
     ctx.status.textContent = opStatus(result, 'CSV attributes joined into the active layer.');
+    showRecords(ctx);
   });
-  addPanelText(ctx.panel, ctx.csvFixture);
+  showRecords(ctx);
 }
 
 function setupMergeLayers(ctx: RecipeContext): void {
-  addButton(ctx.toolbar, 'Merge visible layers', async () => {
-    const layers = ctx.source.getLayers().map(layerName).filter(Boolean);
-    if (layers.length < 2) {
-      ctx.status.textContent = 'The fixture loaded one layer; upload a multi-layer file in the source HTML for a full merge.';
+  const uploaded = new Map<string, Uint8Array>();
+  const layerList = document.createElement('div');
+  layerList.className = 'layer-list';
+  addUploadControl(ctx, {
+    label: 'Files',
+    accept: '.geojson,.json,.topojson,.zip',
+    multiple: true,
+    onFiles: async (files) => {
+      for (const file of files) uploaded.set(file.filename, file.content);
+      await reimport(Array.from(uploaded, ([filename, content]) => ({ filename, content })));
+    },
+  });
+  addButton(ctx.toolbar, 'Clear files', async () => {
+    uploaded.clear();
+    if (ctx.map.getSource(ctx.sourceId)) ctx.map.removeSource(ctx.sourceId);
+    layerList.replaceChildren();
+    ctx.status.textContent = 'Cleared files; upload two or more layers.';
+  });
+  const name = addInput(ctx.toolbar, 'New layer name', 'merged');
+  const force = addCheckbox(ctx.toolbar, 'force', true);
+  const flatten = addCheckbox(ctx.toolbar, 'flatten', false);
+  const mergeButton = addButton(ctx.toolbar, 'Merge', async () => {
+    const targets = selectedTargets();
+    if (targets.length < 2) {
+      ctx.status.textContent = 'Select two or more layers before merging.';
       return;
     }
-    const result = await ctx.map.ops.mergeLayers({ source: ctx.sourceId, targets: layers, name: 'merged', force: true });
-    ctx.status.textContent = opStatus(result, 'Layers merged into a single output.');
+    const result = await ctx.map.ops.mergeLayers({
+      source: ctx.sourceId,
+      targets,
+      name: name.value.trim() || undefined,
+      force: force.checked,
+      flatten: flatten.checked,
+    });
+    ctx.status.textContent = opStatus(result, `Merged ${targets.join(' / ')}. Ctrl+Z reverses it.`);
+    refreshLayerList();
   });
-  addPanelText(ctx.panel, 'Migrated merge controls keep force/flatten semantics from the original HTML.');
+  ctx.toolbar.append(layerList);
+  refreshLayerList();
+  addPanelText(ctx.panel, 'Multi-upload, layer selection, force, and flatten controls match the original merge-layers example.');
+
+  async function reimport(entries: FileData[]): Promise<void> {
+    const source = new TopologySource(ctx.sourceId);
+    await importSourceData(ctx.map, source, ctx.sourceId, entries);
+    addVisibleLayers(ctx.map, source, ctx.sourceId);
+    setSourceExtent(ctx.map, source);
+    ctx.source = source;
+    refreshLayerList();
+    ctx.status.textContent = `Loaded ${entries.length} file(s). Select two or more layers, then merge.`;
+  }
+
+  function refreshLayerList(): void {
+    layerList.replaceChildren();
+    for (const [index, layer] of ctx.source.getLayers().entries()) {
+      const layerValue = layerName(layer) || `layer-${index}`;
+      const label = document.createElement('label');
+      label.className = 'layer-choice active';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = true;
+      input.value = layerValue;
+      input.addEventListener('change', () => {
+        label.classList.toggle('active', input.checked);
+        mergeButton.disabled = selectedTargets().length < 2;
+      });
+      label.append(input, document.createTextNode(`${layerValue} (${layer.geometry_type ?? '?'})`));
+      layerList.append(label);
+    }
+    mergeButton.disabled = selectedTargets().length < 2;
+  }
+
+  function selectedTargets(): string[] {
+    return Array.from(layerList.querySelectorAll('input:checked'), (input) => (input as HTMLInputElement).value);
+  }
 }
 
 function setupMergeSelected(ctx: RecipeContext): void {
@@ -846,7 +1336,7 @@ function setupVertexEditing(ctx: RecipeContext): void {
   addPanelText(ctx.panel, 'Vertex editing toolbar is mounted. Select a feature, then drag vertices on the canvas.');
 }
 
-function addExportControls(ctx: RecipeContext, formats: readonly ExportFormat[]): void {
+function addExportControls(ctx: RecipeContext, formats: readonly (ExportFormat | 'geoparquet-native')[]): void {
   const select = document.createElement('select');
   for (const format of formats) {
     const option = document.createElement('option');
@@ -856,9 +1346,143 @@ function addExportControls(ctx: RecipeContext, formats: readonly ExportFormat[])
   }
   ctx.toolbar.append(select);
   addButton(ctx.toolbar, 'Export', async () => {
-    const blob = await ctx.source.export({ format: select.value as ExportFormat });
-    ctx.status.textContent = `Exported ${blob.size} bytes as ${select.value}.`;
+    const value = select.value;
+    const format = value === 'geoparquet-native' ? 'geoparquet' : (value as ExportFormat);
+    const encoding = value === 'geoparquet-native' ? 'native' : undefined;
+    const ext = extensionForFormat(format);
+    const filename = `export${ext}`;
+    ctx.status.textContent = `Exporting ${filename}...`;
+    const blob = await ctx.source.export({ format, encoding });
+    downloadBlob(blob, filename);
+    ctx.status.textContent = `Exported ${blob.size} bytes as ${filename}.`;
   });
+}
+
+function addUploadControl(
+  ctx: RecipeContext,
+  options: {
+    label: string;
+    accept: string;
+    disabled?: boolean;
+    multiple?: boolean;
+    onLoad?: (source: TopologySource, file: FileData) => void | Promise<void>;
+    onFiles?: (files: FileData[]) => void | Promise<void>;
+  },
+): HTMLInputElement {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = options.accept;
+  input.multiple = options.multiple ?? false;
+  input.disabled = options.disabled ?? false;
+  input.addEventListener('change', () => {
+    void (async () => {
+      const files = await Promise.all(Array.from(input.files ?? []).map(readBrowserFile));
+      input.value = '';
+      if (!files.length) return;
+      if (options.onFiles) {
+        await options.onFiles(files);
+        return;
+      }
+      const source = new TopologySource(ctx.sourceId);
+      await importSourceData(ctx.map, source, ctx.sourceId, files.length === 1 ? files[0] : files);
+      addVisibleLayers(ctx.map, source, ctx.sourceId);
+      setSourceExtent(ctx.map, source);
+      ctx.source = source;
+      ctx.target = primaryLayerName(source);
+      await options.onLoad?.(source, files[0]);
+    })().catch((error: unknown) => {
+      ctx.status.textContent = error instanceof Error ? error.message : 'File load failed.';
+    });
+  });
+
+  const wrapper = document.createElement('label');
+  wrapper.textContent = `${options.label}: `;
+  wrapper.append(input);
+  ctx.toolbar.append(wrapper);
+  return input;
+}
+
+async function readBrowserFile(file: File): Promise<FileData> {
+  return {
+    filename: file.name,
+    content: new Uint8Array(await file.arrayBuffer()),
+  };
+}
+
+async function initFormats(setStatus: (message: string) => void): Promise<void> {
+  setStatus('Initializing GeoParquet / GeoArrow support...');
+  try {
+    await initParquetWasm();
+    setStatus('GeoParquet / GeoArrow support initialized.');
+  } catch (error) {
+    setStatus(`GeoArrow support initialized; GeoParquet needs parquet-wasm (${error instanceof Error ? error.message : error}).`);
+  }
+}
+
+function addTextarea(parent: HTMLElement, label: string, value: string): HTMLTextAreaElement {
+  const wrapper = document.createElement('label');
+  wrapper.textContent = `${label}: `;
+  const input = document.createElement('textarea');
+  input.value = value;
+  wrapper.append(input);
+  parent.append(wrapper);
+  return input;
+}
+
+function addCheckbox(parent: HTMLElement, label: string, checked: boolean): HTMLInputElement {
+  const wrapper = document.createElement('label');
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = checked;
+  wrapper.append(input, document.createTextNode(` ${label}`));
+  parent.append(wrapper);
+  return input;
+}
+
+function splitCsvList(value: string): string[] | undefined {
+  const fields = value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return fields.length ? fields : undefined;
+}
+
+function showRecords(ctx: RecipeContext): void {
+  const dataset = ctx.source.getDataset();
+  const layer = dataset?.layers.find((item) => layerName(item) === ctx.target) ?? dataset?.layers[0];
+  const records = layer?.data?.getRecords?.() ?? [];
+  const fields = layer?.data?.getFields?.() ?? Object.keys(records[0] ?? {});
+  const head = records.slice(0, 6);
+  ctx.panel.textContent = head.length
+    ? [fields.join('\t'), ...head.map((record) => fields.map((field) => record[field]).join('\t'))].join('\n')
+    : '(no records)';
+}
+
+function parsePropertyValue(value: string): number | string {
+  return /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : value;
+}
+
+function extensionForFormat(format: ExportFormat): string {
+  const extensions: Record<ExportFormat, string> = {
+    geojson: '.geojson',
+    topojson: '.topojson',
+    shapefile: '.zip',
+    msx: '.msx',
+    geoparquet: '.parquet',
+    geoarrow: '.arrow',
+  };
+  return extensions[format] ?? `.${format}`;
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function clickToInspect(ctx: RecipeContext): void {
@@ -875,24 +1499,36 @@ function clickToInspect(ctx: RecipeContext): void {
 }
 
 function clickToSelect(ctx: RecipeContext): void {
+  ctx.map.on('selectionchange', (event) => {
+    const refs = event.selected;
+    ctx.panel.textContent = refs.length ? `${refs.length} selected\n${JSON.stringify(refs, null, 2)}` : '(none)';
+    if (refs.length) {
+      ctx.map.setHighlightedFeatures(refs, { color: '#d9480f', width: 3, radius: 6, fill: true });
+    } else {
+      ctx.map.clearHighlightedFeatures();
+    }
+    ctx.status.textContent = `${refs.length} feature(s) selected.`;
+  });
   ctx.container.addEventListener('click', (event) => {
     const features = queryAtEvent(ctx, event);
-    if (!features.length) return;
+    if (!features.length) {
+      if (!event.shiftKey && !event.ctrlKey && !event.metaKey) ctx.map.clearSelection();
+      return;
+    }
     const refs = features.map((feature) => ({
       source: feature.source,
       layer: feature.layer,
       id: feature.id,
     }));
-    ctx.map.select(refs, { mode: 'replace' });
-    ctx.map.setHighlightedFeatures(refs, { color: '#d9480f', width: 3, radius: 6, fill: true });
-    ctx.status.textContent = `${ctx.map.getSelection().length} feature(s) selected.`;
+    const mode = event.shiftKey ? 'add' : event.ctrlKey || event.metaKey ? 'toggle' : 'replace';
+    ctx.map.select(refs, { mode });
   });
 }
 
-function queryAtEvent(ctx: RecipeContext, event: MouseEvent) {
+function queryAtEvent(ctx: RecipeContext, event: MouseEvent, layer = ctx.target) {
   const rect = ctx.container.getBoundingClientRect();
   return ctx.map.queryFeatures([event.clientX - rect.left, event.clientY - rect.top], {
-    layers: [ctx.target],
+    layers: [layer],
   });
 }
 

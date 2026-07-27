@@ -1,0 +1,49 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "D",
+        "name": "West district",
+        "group": "west",
+        "pop": 72,
+        "area": 7
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-122.49, 37.75],
+            [-122.46, 37.75],
+            [-122.46, 37.78],
+            [-122.49, 37.78],
+            [-122.49, 37.75]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "E",
+        "name": "East district",
+        "group": "east",
+        "pop": 118,
+        "area": 10
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-122.375, 37.745],
+            [-122.345, 37.745],
+            [-122.345, 37.775],
+            [-122.375, 37.775],
+            [-122.375, 37.745]
+          ]
+        ]
+      }
+    }
+  ]
+}

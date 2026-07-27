@@ -49,3 +49,23 @@
 
 - Browser automation was not available in this worktree (`playwright` is not installed), and the shell policy blocked launching Chrome via `open`; the verified fallback was direct local-server route and fixture probing.
 - Task8-reserved files under `packages/docs/static/api/**` and reserved source files were not edited, staged, reset, checked out, or deleted.
+
+## Fix Round 1
+
+- Restored per-recipe loader fidelity by giving each Task 6 route an explicit loader, declared fixture matrix, and source ID instead of the shared one-fixture loader.
+- Added `task-6-polygons-alt.geojson` so `merge-layers` starts with two independently imported layers and its declared fixtures match the files its loader fetches.
+- Restored feature-flag-driven controls in the shared recipe runtime: history examples mount `HistoryControl` and bind shortcuts, basemap examples mount `BasemapControl`, and basemap/formats examples mount `StatusControl`.
+- Extended `test/docs/example-catalog.test.ts` to assert the 26-entry fixture/loader marker matrix, merge-only fixture dependency, representative behavior markers, and the Task 6 control feature-flag matrix.
+
+### Fix Round 1 Verification
+
+- CodeGraph: queried Task 6 catalog/test/style context; reported the available index was for `/Users/zhang/code/emap`, not the linked worktree.
+- GitNexus impact: `impact(createRuntime, docs-meta/examples.ts)` returned `Target not found`; treated blast radius as local Task 6 recipe runtime because every Task 6 loader passes through `createRuntime`.
+- Catalog tests: `npx vitest run test/docs/example-catalog.test.ts` passed, 8 tests.
+- Format: `npm run format:check` passed.
+- Typecheck: `npm run typecheck` passed.
+- Examples build: `npm run examples:build` passed.
+- Examples checker: `npm run examples:check` passed.
+- Docs i18n checker: `npm run docs:check-i18n` passed.
+- Docs API checker: `npm run docs:check-api` failed on the pre-existing public API documentation backlog in the reserved docs/API surface, not on Task 6 files.
+- Manual route probing: local `@zwishing/emap-examples` preview served `/examples/attribute-editing/`, `/examples/box-select/`, and `/examples/feature-translate/` as `200 text/html` with the built main bundle; `/fixtures/task-6-polygons-alt.geojson` served as `200 application/geo+json` and contained feature IDs `D,E`.

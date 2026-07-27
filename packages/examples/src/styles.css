@@ -186,7 +186,8 @@ h2 {
 }
 
 .example-tools input,
-.example-tools select {
+.example-tools select,
+.example-tools textarea {
   min-height: 30px;
   max-width: 180px;
   padding: 4px 7px;
@@ -194,6 +195,13 @@ h2 {
   border-radius: 6px;
   background: #ffffff;
   color: #1b1f23;
+}
+
+.example-tools textarea {
+  width: 220px;
+  min-height: 74px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .example-tools button {
@@ -228,6 +236,41 @@ h2 {
   color: #1b1f23;
   font: 0.78rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap;
+}
+
+.attribute-row {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(120px, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.attribute-row input {
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid #c7cdbf;
+  border-radius: 6px;
+}
+
+.layer-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.layer-choice {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: #e8ece0;
+  cursor: pointer;
+}
+
+.layer-choice.active {
+  background: #d5eadb;
 }
 
 .details-panel {
