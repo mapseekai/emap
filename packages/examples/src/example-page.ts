@@ -1,6 +1,7 @@
 import type { ExampleDefinition } from '../../../docs-meta/examples';
 
 const sourceFileUrl = 'https://github.com/zwishing/emap/blob/main/docs-meta/examples.ts';
+const docsBaseUrl = '/emap/';
 
 export function resolveExampleId(location: Location): string | null {
   const hashId = matchExamplePath(location.hash.replace(/^#/, ''));
@@ -23,7 +24,7 @@ export function renderExamplePage(root: HTMLElement, example: ExampleDefinition)
   catalogLink.textContent = 'Example catalog';
 
   const docsLink = document.createElement('a');
-  docsLink.href = example.docs[0];
+  docsLink.href = docsReferenceToPublicHref(example.docs[0]);
   docsLink.textContent = 'Return to docs';
 
   topBar.append(catalogLink, docsLink);
@@ -113,12 +114,20 @@ function renderDetailsPanel(example: ExampleDefinition): HTMLElement {
   links.className = 'link-list';
   links.append(
     linkItem('Source file', sourceFileUrl),
-    linkItem('Documentation', example.docs[0]),
-    linkItem(`API symbol: ${example.api[0]}`, example.docs[0]),
+    linkItem('Documentation', docsReferenceToPublicHref(example.docs[0])),
+    linkItem(`API symbol: ${example.api[0]}`, docsReferenceToPublicHref(example.docs[0])),
   );
 
   panel.append(category, title, localized, stepsTitle, steps, linksTitle, links);
   return panel;
+}
+
+function docsReferenceToPublicHref(reference: string): string {
+  let slug = reference.trim();
+  if (slug.startsWith('/docs/')) slug = slug.slice('/docs/'.length);
+  else slug = slug.replace(/^\/+/, '');
+  slug = slug.replace(/\/index\.html$/, '').replace(/\.mdx?$/, '').replace(/\/+$/, '');
+  return `${docsBaseUrl}${slug ? `${slug}/` : ''}`;
 }
 
 function matchExamplePath(path: string): string | null {

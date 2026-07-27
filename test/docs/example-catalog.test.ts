@@ -316,7 +316,7 @@ duckDbRuntime.reset();
 vi.mock('@zwishing/emap/duckdb', () => duckDbRuntime.module);
 
 import { examples } from '../../docs-meta/examples';
-import { resolveExampleId } from '../../packages/examples/src/example-page';
+import { renderExamplePage, resolveExampleId } from '../../packages/examples/src/example-page';
 
 const expectedExamples = [
   {
@@ -777,7 +777,7 @@ describe('example catalog metadata', () => {
     expect(emapRuntime.getLastMap()?.options).toMatchObject({
       useWorker: 'auto',
       workerThreshold: 1,
-      workerUrl: '/dist/emap-worker.js',
+      workerUrl: '/emap/examples/emap-worker.js',
     });
 
     const mode = document.querySelector('select');
@@ -794,11 +794,35 @@ describe('example catalog metadata', () => {
     expect(emapRuntime.getLastMap()?.options).toMatchObject({
       useWorker: true,
       workerThreshold: 12,
-      workerUrl: '/dist/emap-worker.js',
+      workerUrl: '/emap/examples/emap-worker.js',
     });
     expect(document.querySelector('.example-inline-status')?.textContent).toContain(
       'mode=on threshold=12',
     );
+  });
+
+  it('renders Return to docs links at the Docusaurus public base URL', () => {
+    const root = document.createElement('div');
+    renderExamplePage(root, {
+      ...examples[0],
+      docs: ['/docs/concepts/emap'],
+      load: async () => {},
+    });
+
+    const links = Array.from(root.querySelectorAll('a'));
+    const returnLink = links.find((link) => link.textContent === 'Return to docs');
+    const docsLinks = links.filter((link) =>
+      ['Return to docs', 'Documentation', `API symbol: ${examples[0].api[0]}`].includes(
+        link.textContent ?? '',
+      ),
+    );
+
+    expect(returnLink?.getAttribute('href')).toBe('/emap/concepts/emap/');
+    expect(docsLinks).toHaveLength(3);
+    for (const link of docsLinks) {
+      expect(link.getAttribute('href')).toBe('/emap/concepts/emap/');
+      expect(link.getAttribute('href')).not.toContain('/docs/');
+    }
   });
 
   it('renders DuckDB runtime errors and retries after a rejected cached runtime promise', async () => {

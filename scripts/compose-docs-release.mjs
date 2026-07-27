@@ -8,10 +8,13 @@ const examplesDist = resolve(root, 'packages/examples/dist');
 const docsBuild = resolve(root, 'packages/docs/build');
 const composedExamples = resolve(docsBuild, 'examples');
 
+const workerBundle = resolve(root, 'dist/emap-worker.js');
+
 const requiredInputs = [
   resolve(examplesDist, 'index.html'),
   resolve(examplesDist, 'examples/buffer/index.html'),
   resolve(docsBuild, 'index.html'),
+  workerBundle,
 ];
 
 for (const input of requiredInputs) {
@@ -22,10 +25,12 @@ for (const input of requiredInputs) {
 
 await rm(composedExamples, { recursive: true, force: true });
 await cp(examplesDist, composedExamples, { recursive: true });
+await cp(workerBundle, resolve(composedExamples, 'emap-worker.js'));
 
 const requiredOutputs = [
   resolve(composedExamples, 'index.html'),
   resolve(composedExamples, 'examples/buffer/index.html'),
+  resolve(composedExamples, 'emap-worker.js'),
   resolve(composedExamples, 'assets'),
 ];
 

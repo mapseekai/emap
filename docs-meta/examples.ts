@@ -144,7 +144,7 @@ const task6MergeFixture = 'fixtures/task-6-polygons-alt.geojson';
 const task7Fixture = 'fixtures/task-7-polygons.geojson';
 const task7LineFixture = 'fixtures/task-7-lines.geojson';
 const task7MaskFixture = 'fixtures/task-7-mask.geojson';
-const workerUrl = '/dist/emap-worker.js';
+const workerUrl = '/emap/examples/emap-worker.js';
 const defaultWebWorkerSettings: WebWorkerSettings = { mode: 'auto', threshold: 1 };
 
 const route = (id: string) => `/examples/${id}/`;
