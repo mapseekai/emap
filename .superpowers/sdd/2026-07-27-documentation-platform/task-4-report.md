@@ -105,3 +105,37 @@ This report is included in the final Lore commit. The final commit SHA is report
 ### Concerns
 
 - The five route IDs are intentionally duplicated in `vite.config.ts` and the test fixture expectation so Vite can discover static HTML inputs without importing the browser-oriented catalog metadata into Node config evaluation.
+
+## Fix Round 2
+
+### Review Finding Addressed
+
+- Direct static route URLs now normalize to catalog IDs:
+  - `/examples/getting-started/points`
+  - `/examples/getting-started/points/`
+  - `/examples/getting-started/points/index.html`
+
+### Changes
+
+- Added route-normalization regression coverage in `test/docs/example-catalog.test.ts`.
+- Updated `packages/examples/src/example-page.ts` so `matchExamplePath` strips an optional trailing slash or `/index.html` after decoding the route ID.
+
+### TDD Evidence
+
+1. Added the direct-route normalization regression first.
+2. Confirmed RED with `npx vitest run test/docs/example-catalog.test.ts`; it failed because `/examples/getting-started/points/` resolved to `getting-started/points/`.
+3. Applied the one-line matcher normalization.
+4. Confirmed GREEN with the focused test.
+
+### Verification
+
+- Focused test: `npx vitest run test/docs/example-catalog.test.ts` passed with 4 tests.
+- Examples build: `npm run examples:build` passed and emitted all five direct route HTML files.
+- Built artifact assertion: exact `ls` check passed for all five `packages/examples/dist/examples/getting-started/*/index.html` files.
+- Examples typecheck: `npx tsc -p packages/examples/tsconfig.json --noEmit` passed.
+- Root typecheck: `npm run typecheck` passed.
+- GitNexus detect changes: low risk, no changed indexed symbols, and no affected processes.
+
+### Concerns
+
+- GitNexus still does not index the Task 4 examples shell symbols, so symbol-level impact for `resolveExampleId` / `matchExamplePath` was unavailable.

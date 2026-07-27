@@ -123,7 +123,7 @@ function renderDetailsPanel(example: ExampleDefinition): HTMLElement {
 
 function matchExamplePath(path: string): string | null {
   const match = /(?:^|\/)examples\/([^?#]+)/.exec(path);
-  return match ? decodeURIComponent(match[1]) : null;
+  return match ? decodeURIComponent(match[1]).replace(/(?:\/index\.html|\/)$/, '') : null;
 }
 
 function stepItem(text: string): HTMLLIElement {

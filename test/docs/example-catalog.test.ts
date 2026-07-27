@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { examples } from '../../docs-meta/examples';
+import { resolveExampleId } from '../../packages/examples/src/example-page';
 
 const expectedExamples = [
   {
@@ -65,6 +66,14 @@ describe('example catalog metadata', () => {
       expect(html).toContain('src="/src/main.ts"');
     }
   });
+
+  it('normalizes direct static route paths to catalog IDs', () => {
+    expect(exampleIdForPath('/examples/getting-started/points')).toBe('getting-started/points');
+    expect(exampleIdForPath('/examples/getting-started/points/')).toBe('getting-started/points');
+    expect(exampleIdForPath('/examples/getting-started/points/index.html')).toBe(
+      'getting-started/points',
+    );
+  });
 });
 
 async function collectHtmlFiles(dir: string): Promise<string[]> {
@@ -80,4 +89,11 @@ async function collectHtmlFiles(dir: string): Promise<string[]> {
     }),
   );
   return files.flat().sort();
+}
+
+function exampleIdForPath(pathname: string): string | null {
+  return resolveExampleId({
+    hash: '',
+    pathname,
+  } as Location);
 }
