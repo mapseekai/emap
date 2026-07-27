@@ -12,14 +12,6 @@
 			"variant": "declaration",
 			"kind": 2,
 			"flags": {},
-			"comment": {
-				"summary": [
-					{
-						"kind": "text",
-						"text": "duckdb is a public emap API documented for package consumers."
-					}
-				]
-			},
 			"children": [
 				{
 					"id": 16,
@@ -20145,14 +20137,6 @@
 			"variant": "declaration",
 			"kind": 2,
 			"flags": {},
-			"comment": {
-				"summary": [
-					{
-						"kind": "text",
-						"text": "formats is a public emap API documented for package consumers."
-					}
-				]
-			},
 			"children": [
 				{
 					"id": 4605,
@@ -27200,14 +27184,6 @@
 			"variant": "declaration",
 			"kind": 2,
 			"flags": {},
-			"comment": {
-				"summary": [
-					{
-						"kind": "text",
-						"text": "index is a public emap API documented for package consumers."
-					}
-				]
-			},
 			"children": [
 				{
 					"id": 2671,

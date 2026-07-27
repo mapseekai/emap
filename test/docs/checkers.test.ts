@@ -410,6 +410,46 @@ describe('documentation quality checkers', () => {
     expect(outputOf(result)).toContain('missing public API comment text');
   });
 
+  it('fails when generated module reflections or pages contain filler prose', async () => {
+    const root = await fixtureRoot();
+    await writeCatalog(root, {
+      docs: ['/docs/'],
+      api: [],
+      fixtures: ['inline:tiny.geojson'],
+    });
+    await writeReflections(root, {
+      children: [
+        {
+          name: 'duckdb',
+          variant: 'declaration',
+          kind: 2,
+          sources: [{ fileName: 'src/duckdb/index.ts' }],
+          comment: {
+            summary: [
+              {
+                kind: 'text',
+                text: 'duckdb is a public emap API documented for package consumers.',
+              },
+            ],
+          },
+        },
+      ],
+    });
+    await writeModulePage(
+      root,
+      'duckdb',
+      '<p>duckdb is a public emap API documented for package consumers.</p>',
+    );
+
+    const result = runChecker('scripts/check-docs-api.mjs', root);
+
+    expect(result.status).toBe(1);
+    expect(outputOf(result)).toContain('module:duckdb: generated module filler prose');
+    expect(outputOf(result)).toContain(
+      'packages/docs/static/api/modules/duckdb.html: generated module filler prose',
+    );
+  });
+
   it('fails when an English mirror document has no front matter id', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/intro.md', {
@@ -650,6 +690,12 @@ async function writeReflections(root: string, value: unknown): Promise<void> {
   const filePath = join(root, 'packages/docs/static/api/reflections.json');
   await mkdir(resolve(filePath, '..'), { recursive: true });
   await writeFile(filePath, JSON.stringify(value, null, 2));
+}
+
+async function writeModulePage(root: string, name: string, html: string): Promise<void> {
+  const filePath = join(root, `packages/docs/static/api/modules/${name}.html`);
+  await mkdir(resolve(filePath, '..'), { recursive: true });
+  await writeFile(filePath, html);
 }
 
 function runChecker(script: string, root: string): ReturnType<typeof spawnSync> {

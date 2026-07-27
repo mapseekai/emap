@@ -103,3 +103,29 @@
 - Constructor reflections no longer receive generated runnable-example associations.
 - Generated parameter text now uses exact TypeDoc/JSDoc/source data such as `Bounds.xmin` default `Infinity`, `scaleMatrix.ox` default `0`, and assignable TypeScript type constraints instead of broad regex-satisfying filler.
 - Docusaurus `packages/docs/.docusaurus` and `packages/docs/build` were generated during verification and removed before staging.
+
+## Fix Round 5
+
+- Baseline: `74b1292`
+- Scope: TypeDoc module metadata generation, docs API regression coverage, checker enforcement, and regenerated API HTML/JSON.
+
+### Evidence
+
+- CodeGraph: worktree-local index was unavailable; it reported results from `/Users/zhang/code/emap`, so direct worktree inspection was used for the linked worktree.
+- GitNexus `impact(target: scripts/typedoc-hide-internals.mjs, direction: upstream, repo: emap)` -> target not indexed; risk `UNKNOWN`.
+- `npm run test:run -- test/docs/checkers.test.ts` -> passed; 1 file passed, 17 tests passed.
+- `npm run api:build` -> passed; TypeDoc generated HTML and `reflections.json` with 0 errors and the existing 45-warning set.
+- `npm run docs:check-api` -> passed.
+- Module-only filler assertion over `packages/docs/static/api/reflections.json` module nodes and `packages/docs/static/api/modules/*.html` -> 0 violations.
+- `npm run typecheck` -> passed.
+- `npm run test:run -- test/docs/typedoc-config.test.ts test/docs/checkers.test.ts test/docs/example-catalog.test.ts test/docs/i18n-layout.test.ts` -> passed; 4 files passed, 39 tests passed.
+- `npm run format:check` -> passed.
+- `npm run docs:check-i18n` -> passed.
+- `npm run examples:check` -> passed.
+- `git diff --check` -> passed.
+- GitNexus `detect_changes(scope: all, worktree: /Users/zhang/code/emap/.worktrees/zwishing-documentation-platform)` -> low risk; 8 changed files, 0 changed indexed symbols, 0 affected processes.
+
+### Notes
+
+- `ReflectionKind.Module` is skipped before generated summary, example, or parameter metadata injection while child reflections still recurse normally.
+- Regenerated module pages no longer render the generated module comment panel for `duckdb`, `formats`, or `index`.

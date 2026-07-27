@@ -159,6 +159,10 @@ function isConstructorReflection(reflection) {
   return reflection.kindOf?.(ReflectionKind.Constructor | ReflectionKind.ConstructorSignature) === true;
 }
 
+function isModuleReflection(reflection) {
+  return reflection.kindOf?.(ReflectionKind.Module) === true;
+}
+
 function appendTagIfMissing(comment, tagName, text) {
   if (!text) return;
   if (!comment.blockTags.some((tag) => tag.tag === tagName && commentText(tag.content))) {
@@ -256,9 +260,11 @@ function ensureSignatureParameterMetadata(signature, apiToExamples) {
 }
 
 function ensurePublicApiMetadata(reflection, apiToExamples) {
-  ensureReflectionMetadata(reflection, apiToExamples);
-  for (const signature of reflection.signatures ?? []) {
-    ensureSignatureParameterMetadata(signature, apiToExamples);
+  if (!isModuleReflection(reflection)) {
+    ensureReflectionMetadata(reflection, apiToExamples);
+    for (const signature of reflection.signatures ?? []) {
+      ensureSignatureParameterMetadata(signature, apiToExamples);
+    }
   }
   for (const child of reflection.children ?? []) {
     ensurePublicApiMetadata(child, apiToExamples);
