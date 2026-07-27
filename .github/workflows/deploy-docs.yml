@@ -48,7 +48,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build and verify documentation
-        run: npm run docs:verify
+        run: |
+          npm run build
+          npm run docs:verify
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
