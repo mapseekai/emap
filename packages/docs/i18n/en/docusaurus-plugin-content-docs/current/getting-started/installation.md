@@ -38,7 +38,7 @@ Create the map, load a source, and fit the view to the data extent:
 const map = new Emap({ container: 'map' });
 
 const response = await fetch('/data/china.geojson');
-const content = await response.text();
+const content = new Uint8Array(await response.arrayBuffer());
 const source = new TopologySource('china');
 
 await source.setData({ filename: 'china.geojson', content });

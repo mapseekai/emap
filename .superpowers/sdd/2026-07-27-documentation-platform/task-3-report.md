@@ -31,3 +31,23 @@ Complete.
 
 - Docusaurus 3.10 rejects explicit front matter IDs containing `/`, so nested docs omit `id` and let Docusaurus derive `getting-started/installation` and `concepts/overview` from their filesystem paths.
 - The builds print a Docusaurus update-check warning about `/Users/zhang/.config`; it does not affect the build exit status or link validation.
+
+## Fix Round 1
+
+### Changes
+
+- Updated both Chinese and English first-map installation snippets to pass `Uint8Array` content into `TopologySource.setData(...)` via `new Uint8Array(await response.arrayBuffer())`.
+- Added direct `@docusaurus/types` dependency to `packages/docs/package.json` at `3.10.2`, matching the installed Docusaurus version.
+- Updated `pnpm-lock.yaml` so the `packages/docs` importer records the direct `@docusaurus/types` dependency.
+
+### Verification
+
+- `npx vitest run test/docs/i18n-layout.test.ts` passed: 1 file, 2 tests.
+- `npx tsc --noEmit --skipLibCheck --module ESNext --target ESNext --moduleResolution node packages/docs/docusaurus.config.ts packages/docs/sidebars.ts` passed.
+- `pnpm --filter @zwishing/emap-docs build --locale zh-CN` passed.
+- `pnpm --filter @zwishing/emap-docs build --locale en` passed.
+- `CI=true pnpm install --frozen-lockfile --ignore-scripts --reporter append-only` passed.
+
+### Notes
+
+- `CI=true pnpm install --frozen-lockfile --offline --ignore-scripts --reporter append-only` confirmed the lockfile was up to date but could not complete because the local pnpm store was missing the `@zwishing/epsg-index` tarball; rerunning without `--offline` fetched the missing tarball and passed.
