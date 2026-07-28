@@ -3,6 +3,7 @@ import {
   type RuntimeAssetOptions,
   type RuntimeAssetSet,
 } from './runtime-assets';
+import { fixtureManifest, fixtureUrl } from './fixture-manifest';
 
 export type {
   RuntimeAssetIntegrity,
@@ -11,6 +12,7 @@ export type {
   RuntimeAssetSet,
 } from './runtime-assets';
 export { resolveRuntimeAssets } from './runtime-assets';
+export { fixtureManifest, fixtureUrl, type FixtureBinding } from './fixture-manifest';
 
 declare global {
   var emap: typeof import('@zwishing/emap');
@@ -124,4 +126,72 @@ export async function loadExampleFormats(): Promise<typeof import('@zwishing/ema
 
 export function exampleWorkerUrl(): string {
   return resolveRuntimeAssets().worker;
+}
+
+function fixtureMimeType(path: string): string {
+  if (path.endsWith('.geojson') || path.endsWith('.json')) return 'application/geo+json';
+  if (path.endsWith('.csv')) return 'text/csv';
+  if (path.endsWith('.parquet') || path.endsWith('.geoparquet')) {
+    return 'application/vnd.apache.parquet';
+  }
+  return 'application/octet-stream';
+}
+
+function fixtureName(path: string): string {
+  return path.split('/').pop() || path;
+}
+
+async function fetchFixtureFile(path: string): Promise<File> {
+  const response = await fetch(fixtureUrl(path));
+  if (!response.ok) {
+    throw new Error(`Unable to load fixture ${path} (${response.status})`);
+  }
+  return new File([await response.arrayBuffer()], fixtureName(path), {
+    type: fixtureMimeType(path),
+  });
+}
+
+async function fillJoinDefaults(root: Document): Promise<void> {
+  const csv = root.querySelector<HTMLTextAreaElement>('#csv');
+  const targetKey = root.querySelector<HTMLInputElement>('#target-key');
+  const sourceKey = root.querySelector<HTMLInputElement>('#source-key');
+  if (!csv || !targetKey || !sourceKey) {
+    throw new Error('Unable to load starter data: join controls were not found');
+  }
+  const response = await fetch(fixtureUrl('fixtures/task-6-join.csv'));
+  if (!response.ok) {
+    throw new Error(`Unable to load fixture fixtures/task-6-join.csv (${response.status})`);
+  }
+  csv.value = await response.text();
+  if (!targetKey.value) targetKey.value = 'id';
+  if (!sourceKey.value) sourceKey.value = 'id';
+}
+
+function reportStarterError(root: Document, error: unknown): Error {
+  const cause = error instanceof Error ? error : new Error(String(error));
+  const status = root.querySelector('#status');
+  if (status) status.textContent = `Unable to load starter data: ${cause.message}`;
+  return cause;
+}
+
+export async function autoLoadExampleFixtures(id: string, root: Document = document): Promise<void> {
+  try {
+    const bindings = fixtureManifest[id];
+    if (!bindings) throw new Error(`Unknown example fixture manifest entry: ${id}`);
+    if (id === 'join') await fillJoinDefaults(root);
+
+    for (const binding of bindings) {
+      const input = root.querySelector<HTMLInputElement>(binding.selector);
+      if (!input || input.type !== 'file') {
+        throw new Error(`File input ${binding.selector} was not found for ${id}`);
+      }
+      const transfer = new DataTransfer();
+      const files = await Promise.all(binding.paths.map(fetchFixtureFile));
+      for (const file of files) transfer.items.add(file);
+      input.files = transfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  } catch (error) {
+    throw reportStarterError(root, error);
+  }
 }

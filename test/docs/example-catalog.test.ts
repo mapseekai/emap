@@ -96,7 +96,9 @@ describe('example catalog metadata', () => {
   it('preserves representative fixture and feature associations', () => {
     const byId = new Map(examples.map((example) => [example.id, example]));
 
-    expect(byId.get('getting-started/points')?.fixtures).toEqual(['inline:points.geojson']);
+    expect(byId.get('getting-started/points')?.fixtures).toEqual([
+      'fixtures/getting-started-points.geojson',
+    ]);
     expect(byId.get('join')?.fixtures).toEqual([
       'fixtures/task-6-polygons.geojson',
       'fixtures/task-6-join.csv',
@@ -109,7 +111,12 @@ describe('example catalog metadata', () => {
       'fixtures/task-7-polygons.geojson',
       'fixtures/task-7-mask.geojson',
     ]);
-    expect(byId.get('duckdb-geoparquet-query')?.fixtures).toEqual([]);
+    expect(byId.get('geoparquet-viewer')?.fixtures).toEqual([
+      'fixtures/example-geoparquet.parquet',
+    ]);
+    expect(byId.get('duckdb-geoparquet-query')?.fixtures).toEqual([
+      'fixtures/example-geoparquet.parquet',
+    ]);
     expect(byId.get('web-worker')?.featureFlags).toContain('worker');
     expect(byId.get('geoparquet-viewer')?.featureFlags).toContain('formats');
   });

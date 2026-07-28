@@ -1,0 +1,20 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "North", "rank": 1 },
+      "geometry": { "type": "Point", "coordinates": [-122.42, 37.81] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Central", "rank": 2 },
+      "geometry": { "type": "Point", "coordinates": [-122.41, 37.78] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "South", "rank": 3 },
+      "geometry": { "type": "Point", "coordinates": [-122.39, 37.75] }
+    }
+  ]
+}

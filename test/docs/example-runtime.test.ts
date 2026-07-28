@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { importGeoParquet } from '../../src/formats/geoparquet-io';
+import { setParquetWasm } from '../../src/formats/parquet-wasm-loader';
+import { injectParquetWasmForTests } from '../../src/formats/test-utils';
 import {
+  autoLoadExampleFixtures,
+  fixtureManifest,
+  fixtureUrl,
   loadExampleRuntime,
   resolveRuntimeAssets,
 } from '../../packages/examples/src/example-runtime';
@@ -35,9 +43,47 @@ async function settleDomEvents(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+class TestDataTransfer {
+  readonly #files: File[] = [];
+
+  readonly items = {
+    add: (file: File): File => {
+      this.#files.push(file);
+      return file;
+    },
+  };
+
+  get files(): FileList {
+    return this.#files as unknown as FileList;
+  }
+}
+
+function allowSyntheticFiles(...inputs: HTMLInputElement[]): void {
+  for (const input of inputs) {
+    Object.defineProperty(input, 'files', { configurable: true, writable: true, value: null });
+  }
+}
+
+async function readFileText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => resolve(String(reader.result)), { once: true });
+    reader.addEventListener('error', () => reject(reader.error), { once: true });
+    reader.readAsText(file);
+  });
+}
+
+beforeAll(async () => {
+  await injectParquetWasmForTests();
+}, 30000);
+
+afterAll(() => setParquetWasm(null));
+
 afterEach(() => {
   document.head.replaceChildren();
+  document.body.replaceChildren();
   delete (globalThis as { emap?: unknown }).emap;
+  vi.unstubAllGlobals();
 });
 
 describe('example runtime assets', () => {
@@ -126,4 +172,157 @@ describe('example runtime assets', () => {
     expect(document.head.querySelectorAll('script')).toHaveLength(4);
     expect(document.head.querySelectorAll('link[rel="stylesheet"]')).toHaveLength(2);
   });
+});
+
+describe('example starter fixtures', () => {
+  it('resolves fixture paths below the examples Vite base', () => {
+    expect(fixtureUrl('fixtures/task-6-polygons.geojson', '/emap/examples/')).toBe(
+      '/emap/examples/fixtures/task-6-polygons.geojson',
+    );
+  });
+
+  it('assigns one fetched File and dispatches the existing change handler', async () => {
+    document.body.innerHTML = '<input id="file-input" type="file"><div id="status"></div>';
+    vi.stubGlobal('DataTransfer', TestDataTransfer);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{"type":"FeatureCollection","features":[]}')),
+    );
+    const input = document.querySelector<HTMLInputElement>('#file-input')!;
+    allowSyntheticFiles(input);
+    let received: File | undefined;
+    input.addEventListener('change', () => {
+      received = input.files?.[0];
+    });
+
+    await autoLoadExampleFixtures('attribute-editing', document);
+
+    expect(received?.name).toBe('task-6-polygons.geojson');
+    expect(received?.type).toBe('application/geo+json');
+    await expect(readFileText(received!)).resolves.toBe(
+      '{"type":"FeatureCollection","features":[]}',
+    );
+  });
+
+  it('assigns all files to one multiple input before dispatching change', async () => {
+    document.body.innerHTML = '<input id="file-input" type="file" multiple>';
+    vi.stubGlobal('DataTransfer', TestDataTransfer);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => new Response(String(input))),
+    );
+    const input = document.querySelector<HTMLInputElement>('#file-input')!;
+    allowSyntheticFiles(input);
+    let names: string[] = [];
+    input.addEventListener('change', () => {
+      names = Array.from(input.files ?? [], (file) => file.name);
+    });
+
+    await autoLoadExampleFixtures('merge-layers', document);
+
+    expect(names).toEqual(['task-6-polygons.geojson', 'task-6-polygons-alt.geojson']);
+  });
+
+  it('loads overlay fixtures through their two existing upload controls', async () => {
+    document.body.innerHTML = [
+      '<input id="input-file" type="file">',
+      '<input id="mask-file" type="file">',
+    ].join('');
+    vi.stubGlobal('DataTransfer', TestDataTransfer);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}')),
+    );
+    allowSyntheticFiles(
+      document.querySelector<HTMLInputElement>('#input-file')!,
+      document.querySelector<HTMLInputElement>('#mask-file')!,
+    );
+    const changed: string[] = [];
+    document.querySelector('#input-file')?.addEventListener('change', () => changed.push('input'));
+    document.querySelector('#mask-file')?.addEventListener('change', () => changed.push('mask'));
+
+    await autoLoadExampleFixtures('duckdb-overlay', document);
+
+    expect(changed).toEqual(['input', 'mask']);
+    expect(
+      Array.from(document.querySelectorAll<HTMLInputElement>('input'), (input) =>
+        Array.from(input.files ?? [], (file) => file.name),
+      ),
+    ).toEqual([['task-7-polygons.geojson'], ['task-7-mask.geojson']]);
+  });
+
+  it('fills join CSV and matching key defaults before loading geometry', async () => {
+    document.body.innerHTML = [
+      '<input id="file-input" type="file">',
+      '<textarea id="csv"></textarea>',
+      '<input id="target-key">',
+      '<input id="source-key">',
+    ].join('');
+    vi.stubGlobal('DataTransfer', TestDataTransfer);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async (input: RequestInfo | URL) =>
+          new Response(String(input).endsWith('.csv') ? 'id,score\nA,91\n' : '{}'),
+      ),
+    );
+    allowSyntheticFiles(document.querySelector<HTMLInputElement>('#file-input')!);
+
+    await autoLoadExampleFixtures('join', document);
+
+    expect(document.querySelector<HTMLTextAreaElement>('#csv')?.value).toBe('id,score\nA,91\n');
+    expect(document.querySelector<HTMLInputElement>('#target-key')?.value).toBe('id');
+    expect(document.querySelector<HTMLInputElement>('#source-key')?.value).toBe('id');
+  });
+
+  it('reports a failed starter fetch in the existing status element', async () => {
+    document.body.innerHTML = '<input id="file-input" type="file"><div id="status"></div>';
+    vi.stubGlobal('DataTransfer', TestDataTransfer);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { status: 404 })),
+    );
+
+    await expect(autoLoadExampleFixtures('buffer', document)).rejects.toThrow(
+      /task-7-polygons\.geojson/,
+    );
+    expect(document.querySelector('#status')?.textContent).toMatch(
+      /unable to load starter data.*task-7-polygons\.geojson/i,
+    );
+  });
+
+  it('reports a missing upload control in the existing status element', async () => {
+    document.body.innerHTML = '<div id="status"></div>';
+
+    await expect(autoLoadExampleFixtures('buffer', document)).rejects.toThrow(
+      /file input #file-input was not found/i,
+    );
+    expect(document.querySelector('#status')?.textContent).toMatch(
+      /unable to load starter data.*#file-input/i,
+    );
+  });
+
+  it('declares local fixture bindings for format and introductory examples', () => {
+    expect(fixtureManifest['getting-started/points']).toEqual([
+      { selector: '#file-input', paths: ['fixtures/getting-started-points.geojson'] },
+    ]);
+    expect(fixtureManifest['geoparquet-viewer']).toEqual([
+      { selector: '#file-input', paths: ['fixtures/example-geoparquet.parquet'] },
+    ]);
+    expect(fixtureManifest['duckdb-geoparquet-query']).toEqual([
+      { selector: '#file', paths: ['fixtures/example-geoparquet.parquet'] },
+    ]);
+  });
+
+  it('ships a real GeoParquet fixture that can be imported again', async () => {
+    const bytes = new Uint8Array(
+      await readFile(resolve('packages/examples/public/fixtures/example-geoparquet.parquet')),
+    );
+    expect(new TextDecoder().decode(bytes.subarray(0, 4))).toBe('PAR1');
+
+    const dataset = await importGeoParquet(bytes);
+
+    expect(dataset.layers[0]?.geometry_type).toBe('polygon');
+    expect(dataset.layers[0]?.shapes?.length).toBeGreaterThan(0);
+  }, 30000);
 });

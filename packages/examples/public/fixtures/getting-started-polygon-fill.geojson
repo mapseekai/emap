@@ -1,0 +1,22 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Park" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-122.44, 37.75],
+            [-122.38, 37.75],
+            [-122.37, 37.8],
+            [-122.43, 37.82],
+            [-122.46, 37.78],
+            [-122.44, 37.75]
+          ]
+        ]
+      }
+    }
+  ]
+}

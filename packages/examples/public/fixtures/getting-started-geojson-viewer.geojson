@@ -1,0 +1,21 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Harbor district" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-122.43, 37.77],
+            [-122.39, 37.77],
+            [-122.39, 37.8],
+            [-122.43, 37.8],
+            [-122.43, 37.77]
+          ]
+        ]
+      }
+    }
+  ]
+}

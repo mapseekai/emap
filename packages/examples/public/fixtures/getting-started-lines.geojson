@@ -1,0 +1,31 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "route": "waterfront" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-122.45, 37.78],
+          [-122.43, 37.8],
+          [-122.4, 37.79],
+          [-122.38, 37.81]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "route": "market" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-122.44, 37.76],
+          [-122.42, 37.765],
+          [-122.4, 37.77],
+          [-122.38, 37.775]
+        ]
+      }
+    }
+  ]
+}
