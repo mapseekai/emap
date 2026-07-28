@@ -13,4 +13,5 @@ docs/superpowers/
 .omx/
 .github/
 .superpowers/
+.worktrees/
 .codegraph/
