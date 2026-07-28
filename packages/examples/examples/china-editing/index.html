@@ -156,17 +156,8 @@
 <body>
   <div id="header">
     <strong>Emap</strong>
-    <div class="source-list">
-      <div class="source-item">
-        <button class="load-btn" id="btn-topojson">加载</button>
-        <span class="url">https://geojson.cn/api/china/1.6.3/china.topo.json</span>
-      </div>
-      <div class="source-item">
-        <button class="load-btn" id="btn-geojson">加载</button>
-        <span class="url">https://geojson.cn/api/china/1.6.3/china.json</span>
-      </div>
-    </div>
-    <div class="info" id="status">点击「加载」按钮加载数据</div>
+    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <div class="info" id="status">正在加载本地示例数据...</div>
   </div>
   <div id="map">
     <div id="loading-overlay" class="hidden">
@@ -178,10 +169,10 @@
     </div>
   </div>
 
-  <link rel="stylesheet" href="../../src/ui/controls.css" />
-  <script src="../../dist/mapshaper-vendor.js"></script>
-  <script src="../../dist/emap-dev.js"></script>
-  <script>
+  <script type="module">
+    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+
+    const emap = await loadExampleRuntime();
     const { Emap, TopologySource, EditToolbar } = emap;
 
     const map = new Emap({ container: "map" });
@@ -208,23 +199,10 @@
       logEl.scrollTop = logEl.scrollHeight;
     });
 
-    // ---- 数据源 ----
-    const SOURCES = {
-      topojson: {
-        url: "https://geojson.cn/api/china/1.6.3/china.topo.json",
-        label: "TopoJSON",
-      },
-      geojson: {
-        url: "https://geojson.cn/api/china/1.6.3/china.json",
-        label: "GeoJSON",
-      },
-    };
-
     const status = document.getElementById("status");
     const overlay = document.getElementById("loading-overlay");
     const loadingText = document.getElementById("loading-text");
-    const btnTopo = document.getElementById("btn-topojson");
-    const btnGeo = document.getElementById("btn-geojson");
+    const fileInput = document.getElementById("file-input");
     let currentSourceId = null;
 
     function showLoading(msg) {
@@ -234,60 +212,39 @@
     function hideLoading() {
       overlay.classList.add("hidden");
     }
-    function setActiveButton(id) {
-      btnTopo.classList.toggle("active", id === "topojson");
-      btnGeo.classList.toggle("active", id === "geojson");
-    }
-    function setButtonsDisabled(disabled) {
-      btnTopo.disabled = disabled;
-      btnGeo.disabled = disabled;
-    }
-
-    async function loadFromUrl(sourceId) {
-      if (currentSourceId === sourceId) return;
-      const info = SOURCES[sourceId];
-
-      setButtonsDisabled(true);
-      setActiveButton(sourceId);
-      showLoading(`正在加载 ${info.label}...`);
+    async function loadExampleData(file) {
+      const sourceId = "china-editing-source";
+      fileInput.disabled = true;
+      showLoading(`正在加载 ${file.name}...`);
 
       try {
         if (currentSourceId) {
           try { map.removeSource(currentSourceId); } catch (_) { }
         }
 
-        const source = new TopologySource(sourceId, { data: info.url });
-
-        source.on('data', ({ reason }) => {
-          if (reason === 'load') map.setExtent(source.getExtent());
-          status.textContent = `${info.label} 已加载 — 点击 ✏ 编辑顶点`;
-          hideLoading();
-          setButtonsDisabled(false);
-        });
-
-        source.on('error', (e) => {
-          console.error(e);
-          status.textContent = `错误: ${e.error?.message || '加载失败'}`;
-          setActiveButton(null);
-          hideLoading();
-          setButtonsDisabled(false);
-        });
-
+        const source = new TopologySource(sourceId);
+        const content = new Uint8Array(await file.arrayBuffer());
+        await source.setData({ filename: file.name, content });
         map.addSource(sourceId, source);
+        map.setExtent(source.getExtent());
         currentSourceId = sourceId;
+        status.textContent = `${file.name} 已加载 — 点击 ✏ 编辑顶点`;
       } catch (err) {
         console.error(err);
         status.textContent = `错误: ${err.message}`;
-        setActiveButton(null);
+      } finally {
         hideLoading();
-        setButtonsDisabled(false);
+        fileInput.disabled = false;
       }
     }
 
-    btnTopo.addEventListener("click", () => loadFromUrl("topojson"));
-    btnGeo.addEventListener("click", () => loadFromUrl("geojson"));
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      if (file) void loadExampleData(file);
+    });
 
     window.addEventListener("resize", () => map.resize());
+    await autoLoadExampleFixtures('china-editing');
   </script>
 </body>
 

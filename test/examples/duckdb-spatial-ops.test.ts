@@ -2,12 +2,15 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const html = readFileSync(resolve(__dirname, 'duckdb-spatial-ops.html'), 'utf8');
+const html = readFileSync(
+  resolve(__dirname, '../../packages/examples/examples/duckdb-spatial-ops/index.html'),
+  'utf8',
+);
 const duckDbBundle = readFileSync(resolve(__dirname, '../../dist/emap-duckdb.mjs'), 'utf8');
 
 function importedDuckDbNames(): string[] {
   const importMatch = html.match(
-    /import\s+\{([\s\S]*?)\}\s+from\s+'..\/..\/dist\/emap-duckdb\.mjs'/,
+    /import\s+\{([^}]+)\}\s+from\s+'@zwishing\/emap\/duckdb'/,
   );
   if (!importMatch) throw new Error('DuckDB module import not found');
   return importMatch[1]

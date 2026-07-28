@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { access, readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { examples } from '../../docs-meta/examples';
 import { examplePublicHref, renderCatalog } from '../../packages/examples/src/catalog';
@@ -132,5 +134,31 @@ describe('example catalog metadata', () => {
       expect(link.getAttribute('href')).toBe(`/emap/examples/${examples[index].id}/`);
       expect(link.getAttribute('href')).not.toContain('#');
     }
+  });
+
+  it('ships one canonical runnable HTML page for every metadata entry', async () => {
+    for (const example of examples) {
+      const htmlPath = resolve(example.source.html);
+      await expect(access(htmlPath), `${example.id} HTML exists`).resolves.toBeUndefined();
+      const html = await readFile(htmlPath, 'utf8');
+
+      expect(html, `${example.id} has a map surface`).toContain('id="map"');
+      expect(html, `${example.id} keeps a user upload`).toMatch(/type=["']file["']/);
+      expect(html, `${example.id} avoids source-tree assets`).not.toMatch(
+        /\.\.\/\.\.\/(?:dist|src)\//,
+      );
+      expect(html, `${example.id} uses local starter data`).not.toContain('https://geojson.cn/');
+    }
+  });
+
+  it('removes the draw-snap display layer before replacing uploaded source data', async () => {
+    const html = await readFile(
+      resolve('packages/examples/examples/draw-snap-clear/index.html'),
+      'utf8',
+    );
+
+    expect(html).toMatch(
+      /getLayer\('reference-line'\)[\s\S]*removeLayer\('reference-line'\)[\s\S]*removeSource\(SOURCE_ID\)/,
+    );
   });
 });

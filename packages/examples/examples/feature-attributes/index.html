@@ -92,10 +92,10 @@
     </div>
   </div>
 
-  <link rel="stylesheet" href="../../src/ui/controls.css" />
-  <script src="../../dist/mapshaper-vendor.js"></script>
-  <script src="../../dist/emap-dev.js"></script>
-  <script>
+  <script type="module">
+    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+
+    const emap = await loadExampleRuntime();
     const { Emap, TopologySource } = emap;
 
     const map = new Emap({
@@ -205,6 +205,7 @@
     window.addEventListener("resize", () => {
       map.resize();
     });
+    await autoLoadExampleFixtures('feature-attributes');
   </script>
 </body>
 

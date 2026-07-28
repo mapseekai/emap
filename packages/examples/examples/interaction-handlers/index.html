@@ -35,9 +35,10 @@
   </div>
   <div id="map" tabindex="0"></div>
 
-  <script src="../../dist/mapshaper-vendor.js"></script>
-  <script src="../../dist/emap-dev.js"></script>
-  <script>
+  <script type="module">
+    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+
+    const emap = await loadExampleRuntime();
     const { Emap, TopologySource, NavigationControl } = emap;
     const map = new Emap({ container: 'map' });
     map.addControl(new NavigationControl(), 'top-left');
@@ -115,6 +116,7 @@
     refreshStatus();
 
     window.addEventListener('resize', () => map.resize());
+    await autoLoadExampleFixtures('interaction-handlers');
   </script>
 </body>
 

@@ -96,6 +96,7 @@
     </span>
 
     <span class="group">
+      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
       <button id="btn-reload" class="aux">↺ 重置</button>
     </span>
 
@@ -111,14 +112,13 @@
     <div id="loading-overlay"><span id="loading-text">加载中…</span></div>
   </div>
 
-  <link rel="stylesheet" href="../../src/ui/controls.css" />
-  <script src="../../dist/mapshaper-vendor.js"></script>
-  <script src="../../dist/emap-dev.js"></script>
-  <script>
+  <script type="module">
+    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+
+    const emap = await loadExampleRuntime();
     const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
 
     const SOURCE_ID = 'crs-demo';
-    const DATA_URL = 'https://geojson.cn/api/china/1.6.3/china.json';
 
     const map = new Emap({ container: 'map' });
     map.addControl(new NavigationControl(), 'top-left');
@@ -130,9 +130,11 @@
     const overlay = document.getElementById('loading-overlay');
     const overlayText = document.getElementById('loading-text');
     const buttons = Array.from(document.querySelectorAll('button[data-crs]'));
+    const fileInput = document.getElementById('file-input');
     const reloadBtn = document.getElementById('btn-reload');
 
     let activeKey = null;
+    let currentFile = null;
 
     function showOverlay(msg) { overlayText.textContent = msg; overlay.classList.remove('hidden'); }
     function hideOverlay() { overlay.classList.add('hidden'); }
@@ -147,16 +149,15 @@
       buttons.forEach((b) => b.classList.toggle('active', b.dataset.key === key));
     }
 
-    async function loadFresh() {
+    async function loadFresh(file) {
+      currentFile = file;
       setBusy(true);
-      showOverlay('加载示例数据…');
+      showOverlay(`加载 ${file.name}…`);
       try {
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        const source = new TopologySource(SOURCE_ID, { data: DATA_URL });
-        await new Promise((resolve, reject) => {
-          source.on('data', ({ reason }) => { if (reason === 'load') resolve(); });
-          source.on('error', (e) => reject(e.error ?? new Error('load failed')));
-        });
+        const source = new TopologySource(SOURCE_ID);
+        const content = new Uint8Array(await file.arrayBuffer());
+        await source.setData({ filename: file.name, content });
         map.addSource(SOURCE_ID, source);
         map.setExtent(source.getExtent());
         const resolved = source.getCRS?.() ?? 'unknown';
@@ -215,7 +216,13 @@
     }
 
     buttons.forEach((b) => b.addEventListener('click', () => switchCRS(b)));
-    reloadBtn.addEventListener('click', loadFresh);
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files?.[0];
+      if (file) void loadFresh(file);
+    });
+    reloadBtn.addEventListener('click', () => {
+      if (currentFile) void loadFresh(currentFile);
+    });
 
     // Custom Gauss-Krüger central meridian. Builds a synthetic button on the fly
     // so it reuses the same switchCRS pipeline (busy state, refit, error display).
@@ -234,7 +241,7 @@
     });
     window.addEventListener('resize', () => map.resize());
 
-    loadFresh();
+    await autoLoadExampleFixtures('crs-switch');
   </script>
 </body>
 

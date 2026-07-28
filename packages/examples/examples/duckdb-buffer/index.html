@@ -3,7 +3,6 @@
   <head>
     <meta charset="utf-8" />
     <title>Emap 示例 - DuckDB-Wasm 缓冲区</title>
-    <link rel="stylesheet" href="../../dist/emap.css" />
     <style>
       body {
         margin: 0;
@@ -77,18 +76,6 @@
         line-height: 1.45;
       }
     </style>
-    <script type="importmap">
-      {
-        "imports": {
-          "@duckdb/duckdb-wasm": "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/dist/duckdb-browser.mjs",
-          "apache-arrow": "https://unpkg.com/apache-arrow@21.1.0/Arrow.dom.mjs",
-          "flatbuffers": "https://cdn.jsdelivr.net/npm/flatbuffers@25.9.23/mjs/flatbuffers.js",
-          "tslib": "https://cdn.jsdelivr.net/npm/tslib@2.8.1/tslib.es6.mjs"
-        }
-      }
-    </script>
-    <script src="../../dist/mapshaper-vendor.js"></script>
-    <script src="../../dist/emap-dev.js"></script>
   </head>
   <body>
     <div id="map"></div>
@@ -122,12 +109,16 @@
     </div>
 
     <script type="module">
+      import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+
       import {
         bufferDatasetWithDuckDb,
         closeDuckDbRuntime,
         createDuckDbRuntimeFromJsDelivr,
         setDuckDbRuntime,
-      } from '../../dist/emap-duckdb.mjs';
+      } from '@zwishing/emap/duckdb';
+
+      const emap = await loadExampleRuntime();
 
       const { Emap, TopologySource, NavigationControl, StatusControl } = emap;
 
@@ -345,6 +336,7 @@
           runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime()
         );
       });
+      await autoLoadExampleFixtures('duckdb-buffer');
     </script>
   </body>
 </html>

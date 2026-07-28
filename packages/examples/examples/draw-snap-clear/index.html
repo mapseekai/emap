@@ -19,10 +19,11 @@
 
 <body>
   <div id="header">
+    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
     <button id="draw-line">应用并开启绘制折线</button>
     <button id="cancel" class="secondary">取消绘制</button>
     <label>吸附阈值(px): <input id="threshold" type="number" value="18" min="1" /></label>
-    <span id="status">示例数据已内置。开启绘制后,先不要点击,把鼠标靠近/远离蓝色参考线观察吸附点清理。</span>
+    <span id="status">正在加载本地示例数据...</span>
     <span class="hint">
       <span class="legend">红色圆环 = 顶点吸附,红色方框 = 边吸附。</span>
       预期行为: 鼠标离开阈值后红色吸附标记应立即消失,不会滞留在上一次吸附的位置。
@@ -30,10 +31,10 @@
   </div>
   <div id="map" tabindex="0"></div>
 
-  <link rel="stylesheet" href="../../src/ui/controls.css" />
-  <script src="../../dist/mapshaper-vendor.js"></script>
-  <script src="../../dist/emap-dev.js"></script>
-  <script>
+  <script type="module">
+    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+
+    const emap = await loadExampleRuntime();
     const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
 
     const SOURCE_ID = 'snap-clear-source';
@@ -42,31 +43,14 @@
     map.addControl(new HistoryControl(), 'top-left');
     map.bindHistoryShortcuts();
 
-    const sourceData = {
-      type: 'FeatureCollection',
-      features: [
-        {
-          type: 'Feature',
-          properties: { name: 'reference-line' },
-          geometry: {
-            type: 'LineString',
-            coordinates: [
-              [0, 0],
-              [30, 20],
-              [65, 10],
-              [100, 38],
-            ],
-          },
-        },
-      ],
-    };
-
     let sourceLayer = '';
 
-    async function loadExampleData() {
+    async function loadExampleData(file) {
       const source = new TopologySource(SOURCE_ID);
-      const content = new TextEncoder().encode(JSON.stringify(sourceData));
-      await source.setData({ filename: 'snap-clear.geojson', content });
+      const content = new Uint8Array(await file.arrayBuffer());
+      if (map.getLayer('reference-line')) map.removeLayer('reference-line');
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      await source.setData({ filename: file.name, content });
       map.addSource(SOURCE_ID, source);
       map.setExtent(source.getExtent());
 
@@ -79,6 +63,8 @@
         'source-layer': sourceLayer,
         paint: { 'line-color': '#1e88e5', 'line-width': 3 },
       });
+      document.getElementById('status').textContent =
+        `已加载 ${file.name}。开启绘制后，把鼠标靠近/远离参考线观察吸附点清理。`;
     }
 
     function readThreshold() {
@@ -117,12 +103,19 @@
       document.getElementById('status').textContent = '绘制已取消。';
     });
 
-    loadExampleData()
-      .then(enableDraw)
-      .catch((err) => {
+    document.getElementById('file-input').addEventListener('change', async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      try {
+        await loadExampleData(file);
+        enableDraw();
+      } catch (err) {
         console.error(err);
         document.getElementById('status').textContent = '示例数据加载失败';
-      });
+      }
+    });
+
+    await autoLoadExampleFixtures('draw-snap-clear');
   </script>
 </body>
 

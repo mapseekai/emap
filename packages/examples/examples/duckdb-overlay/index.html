@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Emap 示例 - DuckDB Overlay</title>
-    <link rel="stylesheet" href="../../dist/emap.css" />
     <style>
       body {
         margin: 0;
@@ -71,18 +70,6 @@
         line-height: 1.45;
       }
     </style>
-    <script type="importmap">
-      {
-        "imports": {
-          "@duckdb/duckdb-wasm": "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/dist/duckdb-browser.mjs",
-          "apache-arrow": "https://unpkg.com/apache-arrow@21.1.0/Arrow.dom.mjs",
-          "flatbuffers": "https://cdn.jsdelivr.net/npm/flatbuffers@25.9.23/mjs/flatbuffers.js",
-          "tslib": "https://cdn.jsdelivr.net/npm/tslib@2.8.1/tslib.es6.mjs"
-        }
-      }
-    </script>
-    <script src="../../dist/mapshaper-vendor.js"></script>
-    <script src="../../dist/emap-dev.js"></script>
   </head>
   <body>
     <div id="map"></div>
@@ -126,6 +113,8 @@
       <div id="status">分别上传输入数据和 mask 数据。两者应使用相同 CRS。</div>
     </div>
     <script type="module">
+      import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+
       import {
         closeDuckDbRuntime,
         createDuckDbRuntimeFromJsDelivr,
@@ -133,7 +122,9 @@
         duckDbOverlayLayer,
         intersectionDatasetWithDuckDb,
         setDuckDbRuntime,
-      } from "../../dist/emap-duckdb.mjs";
+      } from '@zwishing/emap/duckdb';
+
+      const emap = await loadExampleRuntime();
 
       const { Emap, TopologySource, NavigationControl, StatusControl } = emap;
 
@@ -394,6 +385,7 @@
           runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime()
         );
       });
+      await autoLoadExampleFixtures('duckdb-overlay');
     </script>
   </body>
 </html>

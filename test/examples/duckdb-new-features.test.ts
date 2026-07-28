@@ -4,24 +4,27 @@ import { describe, expect, it } from 'vitest';
 
 const duckDbBundle = readFileSync(resolve(__dirname, '../../dist/emap-duckdb.mjs'), 'utf8');
 const duckDbExamples = [
-  readExample('duckdb-buffer.html'),
-  readExample('duckdb-geoparquet-query.html'),
-  readExample('duckdb-overlay.html'),
-  readExample('duckdb-query.html'),
-  readExample('duckdb-spatial-ops.html'),
+  readExample('duckdb-buffer'),
+  readExample('duckdb-geoparquet-query'),
+  readExample('duckdb-overlay'),
+  readExample('duckdb-query'),
+  readExample('duckdb-spatial-ops'),
 ];
 const geoParquetExamples = [
-  readExample('export-geoparquet.html'),
-  readExample('geoparquet-viewer.html'),
+  readExample('export-geoparquet'),
+  readExample('geoparquet-viewer'),
 ];
 
-function readExample(name: string): string {
-  return readFileSync(resolve(__dirname, name), 'utf8');
+function readExample(id: string): string {
+  return readFileSync(
+    resolve(__dirname, `../../packages/examples/examples/${id}/index.html`),
+    'utf8',
+  );
 }
 
 function importedDuckDbNames(html: string): string[] {
   const importMatch = html.match(
-    /import\s+\{([\s\S]*?)\}\s+from\s+["']..\/..\/dist\/emap-duckdb\.mjs["']/,
+    /import\s+\{([^}]+)\}\s+from\s+["']@zwishing\/emap\/duckdb["']/,
   );
   if (!importMatch) throw new Error('DuckDB module import not found');
   return importMatch[1]
@@ -52,30 +55,25 @@ function exportedDuckDbNames(): Set<string> {
 
 describe('DuckDB new feature examples', () => {
   const examples = {
-    geoparquetQuery: readExample('duckdb-geoparquet-query.html'),
-    overlay: readExample('duckdb-overlay.html'),
-    query: readExample('duckdb-query.html'),
+    geoparquetQuery: readExample('duckdb-geoparquet-query'),
+    overlay: readExample('duckdb-overlay'),
+    query: readExample('duckdb-query'),
   };
 
-  it('uses a reachable browser Arrow ESM entrypoint', () => {
+  it('lets Vite resolve DuckDB and Arrow dependencies', () => {
     for (const html of duckDbExamples) {
-      expect(html).toContain(
-        '"apache-arrow": "https://unpkg.com/apache-arrow@21.1.0/Arrow.dom.mjs"',
-      );
-      expect(html).not.toContain(
-        '"apache-arrow": "https://cdn.jsdelivr.net/npm/apache-arrow@21.1.0/Arrow.dom.mjs"',
-      );
+      expect(html).toContain("from '@zwishing/emap/duckdb'");
+      expect(html).not.toContain('<script type="importmap">');
+      expect(html).not.toContain('Arrow.dom.mjs');
     }
   });
 
-  it('uses a CORS-enabled parquet-wasm ESM entrypoint', () => {
+  it('initializes formats and parquet-wasm through the Vite-managed module', () => {
     for (const html of geoParquetExamples) {
-      expect(html).toContain(
-        "const parquetWasmBase = 'https://unpkg.com/parquet-wasm@0.7.1/esm/';",
-      );
-      expect(html).toContain("await import(parquetWasmBase + 'parquet_wasm.js')");
-      expect(html).toContain("module_or_path: parquetWasmBase + 'parquet_wasm_bg.wasm'");
-      expect(html).not.toContain('https://cdn.jsdelivr.net/npm/parquet-wasm@0.7.1/esm/');
+      expect(html).toContain('loadExampleFormats');
+      expect(html).toContain('await emapFormats.initParquetWasm()');
+      expect(html).not.toContain('parquet-wasm@');
+      expect(html).not.toContain('emap-formats.js');
     }
   });
 

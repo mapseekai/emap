@@ -84,26 +84,19 @@
   </div>
   <div id="map"></div>
 
-  <link rel="stylesheet" href="../../src/ui/controls.css" />
-  <script src="../../dist/mapshaper-vendor.js"></script>
-  <script src="../../dist/emap-dev.js"></script>
-  <!-- formats bundle: 注册 geoparquet / geoarrow 插件（副作用） -->
-  <script src="../../dist/emap-formats.js"></script>
-  <!--
-    parquet-wasm 无法通过裸模块标识符在 script-tag 环境下动态 import。
-    用 <script type="module"> 从 CDN 加载后注入，GeoArrow (.arrow) 无需此步骤。
-  -->
   <script type="module">
-    const parquetWasmBase = 'https://unpkg.com/parquet-wasm@0.7.1/esm/';
-    const mod = await import(parquetWasmBase + 'parquet_wasm.js');
-    await mod.default?.({
-      module_or_path: parquetWasmBase + 'parquet_wasm_bg.wasm',
-    });
-    emapFormats.setParquetWasm(mod);
+    import {
+      autoLoadExampleFixtures,
+      loadExampleFormats,
+      loadExampleRuntime,
+    } from '/src/example-runtime.ts';
+
+    const emap = await loadExampleRuntime();
+    const emapFormats = await loadExampleFormats();
+    await emapFormats.initParquetWasm();
     document.getElementById('status').textContent = '加载文件以开始';
     document.getElementById('file-input').disabled = false;
-  </script>
-  <script>
+
     const { Emap, TopologySource, NavigationControl } = emap;
 
     const map = new Emap({ container: 'map' });
@@ -197,6 +190,7 @@
     });
 
     window.addEventListener('resize', () => map.resize());
+    await autoLoadExampleFixtures('export-geoparquet');
   </script>
 </body>
 

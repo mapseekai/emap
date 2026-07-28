@@ -53,10 +53,10 @@
     <div id="attrs">attrs preview</div>
   </div>
 
-  <link rel="stylesheet" href="../../src/ui/controls.css" />
-  <script src="../../dist/mapshaper-vendor.js"></script>
-  <script src="../../dist/emap-dev.js"></script>
-  <script>
+  <script type="module">
+    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+
+    const emap = await loadExampleRuntime();
     const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
     // Join supports `where=` / `calc=` expressions; opt in to evaluation.
     // The library default is `'disabled'` for safety.
@@ -166,6 +166,7 @@
     map.on('error', (e) => {
       status.textContent = `错误: ${e?.error?.message ?? e}`;
     });
+    await autoLoadExampleFixtures('join');
   </script>
 </body>
 
