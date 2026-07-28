@@ -18,14 +18,14 @@ Use `on`, `off`, and `once`. Feature events can be filtered by layer; custom app
 
 ## API
 
-- [src.Emap](https://zwishing.github.io/emap/api/classes/index.Emap.html)
-- [src.EmapEventMap](https://zwishing.github.io/emap/api/interfaces/index.EmapEventMap.html)
+- [src.Emap](/emap/api/classes/index.Emap.html)
+- [src.EmapEventMap](/emap/api/interfaces/index.EmapEventMap.html)
 
 ## Runnable examples
 
-- [feature-attributes](https://zwishing.github.io/emap/examples/feature-attributes/)
-- [transaction](https://zwishing.github.io/emap/examples/transaction/)
-- [web-worker](https://zwishing.github.io/emap/examples/web-worker/)
+- [feature-attributes](/emap/examples/feature-attributes/)
+- [transaction](/emap/examples/transaction/)
+- [web-worker](/emap/examples/web-worker/)
 
 ## Minimal snippet
 

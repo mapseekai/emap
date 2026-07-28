@@ -18,13 +18,13 @@ Use `duration: 0` for first load, tests, and examples; use animated durations on
 
 ## API
 
-- [src.Emap](https://zwishing.github.io/emap/api/classes/index.Emap.html)
-- [src.FitBoundsOptions](https://zwishing.github.io/emap/api/interfaces/index.FitBoundsOptions.html)
+- [src.Emap](/emap/api/classes/index.Emap.html)
+- [src.FitBoundsOptions](/emap/api/interfaces/index.FitBoundsOptions.html)
 
 ## Runnable examples
 
-- [getting-started/geojson-viewer](https://zwishing.github.io/emap/examples/getting-started/geojson-viewer/)
-- [getting-started/polygon-fill](https://zwishing.github.io/emap/examples/getting-started/polygon-fill/)
+- [getting-started/geojson-viewer](/emap/examples/getting-started/geojson-viewer/)
+- [getting-started/polygon-fill](/emap/examples/getting-started/polygon-fill/)
 
 ## Minimal snippet
 

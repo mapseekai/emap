@@ -18,16 +18,16 @@ Expression-based changes require `expressionPolicy: "trusted"` because mapshaper
 
 ## API
 
-- [src.Emap](https://zwishing.github.io/emap/api/classes/index.Emap.html)
-- [src.ApplyExpressionOptions](https://zwishing.github.io/emap/api/interfaces/index.ApplyExpressionOptions.html)
-- [src.JoinTableOptions](https://zwishing.github.io/emap/api/interfaces/index.JoinTableOptions.html)
+- [src.Emap](/emap/api/classes/index.Emap.html)
+- [src.ApplyExpressionOptions](/emap/api/interfaces/index.ApplyExpressionOptions.html)
+- [src.JoinTableOptions](/emap/api/interfaces/index.JoinTableOptions.html)
 
 ## Runnable examples
 
-- [feature-attributes](https://zwishing.github.io/emap/examples/feature-attributes/)
-- [attribute-editing](https://zwishing.github.io/emap/examples/attribute-editing/)
-- [attribute-expressions](https://zwishing.github.io/emap/examples/attribute-expressions/)
-- [join](https://zwishing.github.io/emap/examples/join/)
+- [feature-attributes](/emap/examples/feature-attributes/)
+- [attribute-editing](/emap/examples/attribute-editing/)
+- [attribute-expressions](/emap/examples/attribute-expressions/)
+- [join](/emap/examples/join/)
 
 ## Minimal snippet
 

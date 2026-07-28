@@ -18,14 +18,14 @@ CRS metadata is read from imported files when available. Projection operations u
 
 ## API
 
-- [src.Emap](https://zwishing.github.io/emap/api/classes/index.Emap.html)
-- [src.resolveDatasetCRS](https://zwishing.github.io/emap/api/functions/index.resolveDatasetCRS.html)
+- [src.Emap](/emap/api/classes/index.Emap.html)
+- [src.resolveDatasetCRS](/emap/api/functions/index.resolveDatasetCRS.html)
 
 ## Runnable examples
 
-- [project](https://zwishing.github.io/emap/examples/project/)
-- [crs-switch](https://zwishing.github.io/emap/examples/crs-switch/)
-- [duckdb-buffer](https://zwishing.github.io/emap/examples/duckdb-buffer/)
+- [project](/emap/examples/project/)
+- [crs-switch](/emap/examples/crs-switch/)
+- [duckdb-buffer](/emap/examples/duckdb-buffer/)
 
 ## Minimal snippet
 

@@ -18,15 +18,15 @@ Helpers validate restricted SELECT SQL, normalize operation options, preserve CR
 
 ## API
 
-- [src_duckdb.queryDatasetWithDuckDb](https://zwishing.github.io/emap/api/functions/src_duckdb.queryDatasetWithDuckDb.html)
-- [src_duckdb.bufferDatasetWithDuckDb](https://zwishing.github.io/emap/api/functions/src_duckdb.bufferDatasetWithDuckDb.html)
-- [src_duckdb.DuckDbOperationError](https://zwishing.github.io/emap/api/classes/src_duckdb.DuckDbOperationError.html)
+- [src_duckdb.queryDatasetWithDuckDb](/emap/api/functions/src_duckdb.queryDatasetWithDuckDb.html)
+- [src_duckdb.bufferDatasetWithDuckDb](/emap/api/functions/src_duckdb.bufferDatasetWithDuckDb.html)
+- [src_duckdb.DuckDbOperationError](/emap/api/classes/src_duckdb.DuckDbOperationError.html)
 
 ## Runnable examples
 
-- [duckdb-query](https://zwishing.github.io/emap/examples/duckdb-query/)
-- [duckdb-buffer](https://zwishing.github.io/emap/examples/duckdb-buffer/)
-- [duckdb-spatial-ops](https://zwishing.github.io/emap/examples/duckdb-spatial-ops/)
+- [duckdb-query](/emap/examples/duckdb-query/)
+- [duckdb-buffer](/emap/examples/duckdb-buffer/)
+- [duckdb-spatial-ops](/emap/examples/duckdb-spatial-ops/)
 
 ## Minimal snippet
 

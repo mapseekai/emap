@@ -18,13 +18,13 @@ Catch load errors, display a retryable message, and add the source/layer only af
 
 ## API
 
-- [src.TopologySource](https://zwishing.github.io/emap/api/classes/index.TopologySource.html)
-- [src.TopologySourceFromBytesOptions](https://zwishing.github.io/emap/api/interfaces/index.TopologySourceFromBytesOptions.html)
+- [src.TopologySource](/emap/api/classes/index.TopologySource.html)
+- [src.TopologySourceFromBytesOptions](/emap/api/interfaces/index.TopologySourceFromBytesOptions.html)
 
 ## Runnable examples
 
-- [geoparquet-viewer](https://zwishing.github.io/emap/examples/geoparquet-viewer/)
-- [getting-started/points](https://zwishing.github.io/emap/examples/getting-started/points/)
+- [geoparquet-viewer](/emap/examples/geoparquet-viewer/)
+- [getting-started/points](/emap/examples/getting-started/points/)
 
 ## Minimal snippet
 

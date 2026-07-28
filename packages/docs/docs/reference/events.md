@@ -18,13 +18,13 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.EmapEventMap](https://zwishing.github.io/emap/api/interfaces/index.EmapEventMap.html)
-- [src.EventListener](https://zwishing.github.io/emap/api/types/index.EventListener.html)
+- [src.EmapEventMap](/emap/api/interfaces/index.EmapEventMap.html)
+- [src.EventListener](/emap/api/types/index.EventListener.html)
 
 ## 可运行示例
 
-- [web-worker](https://zwishing.github.io/emap/examples/web-worker/)
-- [feature-selection](https://zwishing.github.io/emap/examples/feature-selection/)
+- [web-worker](/emap/examples/web-worker/)
+- [feature-selection](/emap/examples/feature-selection/)
 
 ## 最小片段
 

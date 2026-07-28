@@ -18,12 +18,12 @@ Create it with `{ container }`. `interactive` defaults to `true`; `useWorker` de
 
 ## API
 
-- [src.Emap](https://zwishing.github.io/emap/api/classes/index.Emap.html)
+- [src.Emap](/emap/api/classes/index.Emap.html)
 
 ## Runnable examples
 
-- [getting-started/geojson-viewer](https://zwishing.github.io/emap/examples/getting-started/geojson-viewer/)
-- [interaction-handlers](https://zwishing.github.io/emap/examples/interaction-handlers/)
+- [getting-started/geojson-viewer](/emap/examples/getting-started/geojson-viewer/)
+- [interaction-handlers](/emap/examples/interaction-handlers/)
 
 ## Minimal snippet
 

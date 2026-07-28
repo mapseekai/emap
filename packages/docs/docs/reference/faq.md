@@ -18,13 +18,13 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.Emap](https://zwishing.github.io/emap/api/classes/index.Emap.html)
-- [src.TopologySource](https://zwishing.github.io/emap/api/classes/index.TopologySource.html)
+- [src.Emap](/emap/api/classes/index.Emap.html)
+- [src.TopologySource](/emap/api/classes/index.TopologySource.html)
 
 ## 可运行示例
 
-- [getting-started/geojson-viewer](https://zwishing.github.io/emap/examples/getting-started/geojson-viewer/)
-- [duckdb-query](https://zwishing.github.io/emap/examples/duckdb-query/)
+- [getting-started/geojson-viewer](/emap/examples/getting-started/geojson-viewer/)
+- [duckdb-query](/emap/examples/duckdb-query/)
 
 ## 最小片段
 

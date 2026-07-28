@@ -18,16 +18,16 @@ Use edit sessions for pointer-driven translate/rotate/scale work, controls for m
 
 ## API
 
-- [src.EditHistory](https://zwishing.github.io/emap/api/classes/index.EditHistory.html)
-- [src.EditToolbar](https://zwishing.github.io/emap/api/classes/index.EditToolbar.html)
-- [src.Transaction](https://zwishing.github.io/emap/api/classes/index.Transaction.html)
+- [src.EditHistory](/emap/api/classes/index.EditHistory.html)
+- [src.EditToolbar](/emap/api/classes/index.EditToolbar.html)
+- [src.Transaction](/emap/api/classes/index.Transaction.html)
 
 ## Runnable examples
 
-- [china-editing](https://zwishing.github.io/emap/examples/china-editing/)
-- [vertex-editing](https://zwishing.github.io/emap/examples/vertex-editing/)
-- [feature-translate](https://zwishing.github.io/emap/examples/feature-translate/)
-- [transaction](https://zwishing.github.io/emap/examples/transaction/)
+- [china-editing](/emap/examples/china-editing/)
+- [vertex-editing](/emap/examples/vertex-editing/)
+- [feature-translate](/emap/examples/feature-translate/)
+- [transaction](/emap/examples/transaction/)
 
 ## Minimal snippet
 

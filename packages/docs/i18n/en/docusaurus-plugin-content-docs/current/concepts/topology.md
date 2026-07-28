@@ -18,13 +18,13 @@ emap keeps mapshaper topology intact: shared arcs stay shared, edits route throu
 
 ## API
 
-- [src.TopologySource](https://zwishing.github.io/emap/api/classes/index.TopologySource.html)
-- [src.ITopologySource](https://zwishing.github.io/emap/api/interfaces/index.ITopologySource.html)
+- [src.TopologySource](/emap/api/classes/index.TopologySource.html)
+- [src.ITopologySource](/emap/api/interfaces/index.ITopologySource.html)
 
 ## Runnable examples
 
-- [rebuild-topology](https://zwishing.github.io/emap/examples/rebuild-topology/)
-- [innerlines](https://zwishing.github.io/emap/examples/innerlines/)
+- [rebuild-topology](/emap/examples/rebuild-topology/)
+- [innerlines](/emap/examples/innerlines/)
 
 ## Minimal snippet
 

@@ -18,13 +18,13 @@ Prefer user-facing recovery text near the triggering control and technical error
 
 ## API
 
-- [src.OpError](https://zwishing.github.io/emap/api/types/index.OpError.html)
-- [src_duckdb.DuckDbOperationErrorKind](https://zwishing.github.io/emap/api/types/src_duckdb.DuckDbOperationErrorKind.html)
+- [src.OpError](/emap/api/types/index.OpError.html)
+- [src_duckdb.DuckDbOperationErrorKind](/emap/api/types/src_duckdb.DuckDbOperationErrorKind.html)
 
 ## Runnable examples
 
-- [duckdb-query](https://zwishing.github.io/emap/examples/duckdb-query/)
-- [check-geometry](https://zwishing.github.io/emap/examples/check-geometry/)
+- [duckdb-query](/emap/examples/duckdb-query/)
+- [check-geometry](/emap/examples/check-geometry/)
 
 ## Minimal snippet
 

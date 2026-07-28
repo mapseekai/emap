@@ -18,12 +18,12 @@ Worker 路由把较重的数据集替换操作移出主线程。细小的选择�
 
 ## API
 
-- [src.MapshaperWorkerPool](https://zwishing.github.io/emap/api/classes/index.MapshaperWorkerPool.html)
-- [src.MapOptions](https://zwishing.github.io/emap/api/interfaces/index.MapOptions.html)
+- [src.MapshaperWorkerPool](/emap/api/classes/index.MapshaperWorkerPool.html)
+- [src.MapOptions](/emap/api/interfaces/index.MapOptions.html)
 
 ## 可运行示例
 
-- [web-worker](https://zwishing.github.io/emap/examples/web-worker/)
+- [web-worker](/emap/examples/web-worker/)
 
 ## 最小片段
 

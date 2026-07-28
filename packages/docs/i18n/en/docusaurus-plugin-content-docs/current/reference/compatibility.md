@@ -18,13 +18,13 @@ Worker builds must serve `emap-worker.js` and mapshaper vendor assets from URLs 
 
 ## API
 
-- [src.MapOptions](https://zwishing.github.io/emap/api/interfaces/index.MapOptions.html)
-- [src.MapshaperWorkerPool](https://zwishing.github.io/emap/api/classes/index.MapshaperWorkerPool.html)
+- [src.MapOptions](/emap/api/interfaces/index.MapOptions.html)
+- [src.MapshaperWorkerPool](/emap/api/classes/index.MapshaperWorkerPool.html)
 
 ## Runnable examples
 
-- [web-worker](https://zwishing.github.io/emap/examples/web-worker/)
-- [geoparquet-viewer](https://zwishing.github.io/emap/examples/geoparquet-viewer/)
+- [web-worker](/emap/examples/web-worker/)
+- [geoparquet-viewer](/emap/examples/geoparquet-viewer/)
 
 ## Minimal snippet
 

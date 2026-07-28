@@ -18,14 +18,14 @@ Handle errors at app boundaries: keep the map alive, show retry instructions, an
 
 ## API
 
-- [src.OpError](https://zwishing.github.io/emap/api/types/index.OpError.html)
-- [src_duckdb.DuckDbOperationError](https://zwishing.github.io/emap/api/classes/src_duckdb.DuckDbOperationError.html)
+- [src.OpError](/emap/api/types/index.OpError.html)
+- [src_duckdb.DuckDbOperationError](/emap/api/classes/src_duckdb.DuckDbOperationError.html)
 
 ## Runnable examples
 
-- [check-geometry](https://zwishing.github.io/emap/examples/check-geometry/)
-- [duckdb-query](https://zwishing.github.io/emap/examples/duckdb-query/)
-- [duckdb-buffer](https://zwishing.github.io/emap/examples/duckdb-buffer/)
+- [check-geometry](/emap/examples/check-geometry/)
+- [duckdb-query](/emap/examples/duckdb-query/)
+- [duckdb-buffer](/emap/examples/duckdb-buffer/)
 
 ## Minimal snippet
 

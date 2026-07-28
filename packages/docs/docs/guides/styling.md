@@ -18,14 +18,14 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.FillPaint](https://zwishing.github.io/emap/api/interfaces/index.FillPaint.html)
-- [src.LinePaint](https://zwishing.github.io/emap/api/interfaces/index.LinePaint.html)
-- [src.LayerSpecification](https://zwishing.github.io/emap/api/interfaces/index.LayerSpecification.html)
+- [src.FillPaint](/emap/api/interfaces/index.FillPaint.html)
+- [src.LinePaint](/emap/api/interfaces/index.LinePaint.html)
+- [src.LayerSpecification](/emap/api/interfaces/index.LayerSpecification.html)
 
 ## 可运行示例
 
-- [getting-started/polygons](https://zwishing.github.io/emap/examples/getting-started/polygons/)
-- [getting-started/polygon-fill](https://zwishing.github.io/emap/examples/getting-started/polygon-fill/)
+- [getting-started/polygons](/emap/examples/getting-started/polygons/)
+- [getting-started/polygon-fill](/emap/examples/getting-started/polygon-fill/)
 
 ## 最小片段
 

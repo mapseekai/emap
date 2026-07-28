@@ -18,13 +18,13 @@ If an operation fails, check expression policy, missing fixtures, CRS constraint
 
 ## API
 
-- [src.Emap](https://zwishing.github.io/emap/api/classes/index.Emap.html)
-- [src.TopologySource](https://zwishing.github.io/emap/api/classes/index.TopologySource.html)
+- [src.Emap](/emap/api/classes/index.Emap.html)
+- [src.TopologySource](/emap/api/classes/index.TopologySource.html)
 
 ## Runnable examples
 
-- [getting-started/geojson-viewer](https://zwishing.github.io/emap/examples/getting-started/geojson-viewer/)
-- [duckdb-query](https://zwishing.github.io/emap/examples/duckdb-query/)
+- [getting-started/geojson-viewer](/emap/examples/getting-started/geojson-viewer/)
+- [duckdb-query](/emap/examples/duckdb-query/)
 
 ## Minimal snippet
 

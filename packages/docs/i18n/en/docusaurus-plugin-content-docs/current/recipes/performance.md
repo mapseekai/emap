@@ -18,14 +18,14 @@ Large topology operations should use `useWorker: "auto"` and an appropriate `wor
 
 ## API
 
-- [src.MapOptions](https://zwishing.github.io/emap/api/interfaces/index.MapOptions.html)
-- [src.MapshaperWorkerPool](https://zwishing.github.io/emap/api/classes/index.MapshaperWorkerPool.html)
+- [src.MapOptions](/emap/api/interfaces/index.MapOptions.html)
+- [src.MapshaperWorkerPool](/emap/api/classes/index.MapshaperWorkerPool.html)
 
 ## Runnable examples
 
-- [web-worker](https://zwishing.github.io/emap/examples/web-worker/)
-- [simplify-control](https://zwishing.github.io/emap/examples/simplify-control/)
-- [simplify](https://zwishing.github.io/emap/examples/simplify/)
+- [web-worker](/emap/examples/web-worker/)
+- [simplify-control](/emap/examples/simplify-control/)
+- [simplify](/emap/examples/simplify/)
 
 ## Minimal snippet
 

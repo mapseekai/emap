@@ -18,15 +18,15 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.NavigationControl](https://zwishing.github.io/emap/api/classes/index.NavigationControl.html)
-- [src.HistoryControl](https://zwishing.github.io/emap/api/classes/index.HistoryControl.html)
-- [src.StatusControl](https://zwishing.github.io/emap/api/classes/index.StatusControl.html)
+- [src.NavigationControl](/emap/api/classes/index.NavigationControl.html)
+- [src.HistoryControl](/emap/api/classes/index.HistoryControl.html)
+- [src.StatusControl](/emap/api/classes/index.StatusControl.html)
 
 ## 可运行示例
 
-- [simplify-control](https://zwishing.github.io/emap/examples/simplify-control/)
-- [undo-redo](https://zwishing.github.io/emap/examples/undo-redo/)
-- [interaction-handlers](https://zwishing.github.io/emap/examples/interaction-handlers/)
+- [simplify-control](/emap/examples/simplify-control/)
+- [undo-redo](/emap/examples/undo-redo/)
+- [interaction-handlers](/emap/examples/interaction-handlers/)
 
 ## 最小片段
 

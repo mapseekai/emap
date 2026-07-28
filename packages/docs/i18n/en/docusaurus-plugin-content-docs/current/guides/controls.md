@@ -18,15 +18,15 @@ Common positions are top-left, top-right, bottom-left, and bottom-right. A contr
 
 ## API
 
-- [src.NavigationControl](https://zwishing.github.io/emap/api/classes/index.NavigationControl.html)
-- [src.HistoryControl](https://zwishing.github.io/emap/api/classes/index.HistoryControl.html)
-- [src.StatusControl](https://zwishing.github.io/emap/api/classes/index.StatusControl.html)
+- [src.NavigationControl](/emap/api/classes/index.NavigationControl.html)
+- [src.HistoryControl](/emap/api/classes/index.HistoryControl.html)
+- [src.StatusControl](/emap/api/classes/index.StatusControl.html)
 
 ## Runnable examples
 
-- [simplify-control](https://zwishing.github.io/emap/examples/simplify-control/)
-- [undo-redo](https://zwishing.github.io/emap/examples/undo-redo/)
-- [interaction-handlers](https://zwishing.github.io/emap/examples/interaction-handlers/)
+- [simplify-control](/emap/examples/simplify-control/)
+- [undo-redo](/emap/examples/undo-redo/)
+- [interaction-handlers](/emap/examples/interaction-handlers/)
 
 ## Minimal snippet
 

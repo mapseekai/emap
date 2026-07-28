@@ -18,14 +18,14 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.HistoryControl](https://zwishing.github.io/emap/api/classes/index.HistoryControl.html)
-- [src.EditHistory](https://zwishing.github.io/emap/api/classes/index.EditHistory.html)
+- [src.HistoryControl](/emap/api/classes/index.HistoryControl.html)
+- [src.EditHistory](/emap/api/classes/index.EditHistory.html)
 
 ## 可运行示例
 
-- [undo-redo](https://zwishing.github.io/emap/examples/undo-redo/)
-- [transaction](https://zwishing.github.io/emap/examples/transaction/)
-- [attribute-editing](https://zwishing.github.io/emap/examples/attribute-editing/)
+- [undo-redo](/emap/examples/undo-redo/)
+- [transaction](/emap/examples/transaction/)
+- [attribute-editing](/emap/examples/attribute-editing/)
 
 ## 最小片段
 

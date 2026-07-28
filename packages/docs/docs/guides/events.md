@@ -18,14 +18,14 @@ emap 在引擎层使用 `EventDispatcher` 分发信号。相机、指针、要�
 
 ## API
 
-- [src.Emap](https://zwishing.github.io/emap/api/classes/index.Emap.html)
-- [src.EmapEventMap](https://zwishing.github.io/emap/api/interfaces/index.EmapEventMap.html)
+- [src.Emap](/emap/api/classes/index.Emap.html)
+- [src.EmapEventMap](/emap/api/interfaces/index.EmapEventMap.html)
 
 ## 可运行示例
 
-- [feature-attributes](https://zwishing.github.io/emap/examples/feature-attributes/)
-- [transaction](https://zwishing.github.io/emap/examples/transaction/)
-- [web-worker](https://zwishing.github.io/emap/examples/web-worker/)
+- [feature-attributes](/emap/examples/feature-attributes/)
+- [transaction](/emap/examples/transaction/)
+- [web-worker](/emap/examples/web-worker/)
 
 ## 最小片段
 

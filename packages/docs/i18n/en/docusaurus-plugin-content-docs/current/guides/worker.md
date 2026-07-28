@@ -18,12 +18,12 @@ Worker routing moves heavy dataset-replace operations off the main thread. It do
 
 ## API
 
-- [src.MapshaperWorkerPool](https://zwishing.github.io/emap/api/classes/index.MapshaperWorkerPool.html)
-- [src.MapOptions](https://zwishing.github.io/emap/api/interfaces/index.MapOptions.html)
+- [src.MapshaperWorkerPool](/emap/api/classes/index.MapshaperWorkerPool.html)
+- [src.MapOptions](/emap/api/interfaces/index.MapOptions.html)
 
 ## Runnable examples
 
-- [web-worker](https://zwishing.github.io/emap/examples/web-worker/)
+- [web-worker](/emap/examples/web-worker/)
 
 ## Minimal snippet
 

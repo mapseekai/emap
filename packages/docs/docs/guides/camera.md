@@ -18,14 +18,14 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.Emap](https://zwishing.github.io/emap/api/classes/index.Emap.html)
-- [src.FitBoundsOptions](https://zwishing.github.io/emap/api/interfaces/index.FitBoundsOptions.html)
-- [src.FlyToOptions](https://zwishing.github.io/emap/api/interfaces/index.FlyToOptions.html)
+- [src.Emap](/emap/api/classes/index.Emap.html)
+- [src.FitBoundsOptions](/emap/api/interfaces/index.FitBoundsOptions.html)
+- [src.FlyToOptions](/emap/api/interfaces/index.FlyToOptions.html)
 
 ## 可运行示例
 
-- [getting-started/geojson-viewer](https://zwishing.github.io/emap/examples/getting-started/geojson-viewer/)
-- [crs-switch](https://zwishing.github.io/emap/examples/crs-switch/)
+- [getting-started/geojson-viewer](/emap/examples/getting-started/geojson-viewer/)
+- [crs-switch](/emap/examples/crs-switch/)
 
 ## 最小片段
 

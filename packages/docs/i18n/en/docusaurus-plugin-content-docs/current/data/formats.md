@@ -18,15 +18,15 @@ Pass `filename` when loading bytes because parser selection is extension-based. 
 
 ## API
 
-- [src.TopologySource](https://zwishing.github.io/emap/api/classes/index.TopologySource.html)
-- [src_formats.importGeoParquet](https://zwishing.github.io/emap/api/functions/src_formats.importGeoParquet.html)
-- [src_formats.exportGeoArrow](https://zwishing.github.io/emap/api/functions/src_formats.exportGeoArrow.html)
+- [src.TopologySource](/emap/api/classes/index.TopologySource.html)
+- [src_formats.importGeoParquet](/emap/api/functions/src_formats.importGeoParquet.html)
+- [src_formats.exportGeoArrow](/emap/api/functions/src_formats.exportGeoArrow.html)
 
 ## Runnable examples
 
-- [geoparquet-viewer](https://zwishing.github.io/emap/examples/geoparquet-viewer/)
-- [export-geoparquet](https://zwishing.github.io/emap/examples/export-geoparquet/)
-- [export-roundtrip](https://zwishing.github.io/emap/examples/export-roundtrip/)
+- [geoparquet-viewer](/emap/examples/geoparquet-viewer/)
+- [export-geoparquet](/emap/examples/export-geoparquet/)
+- [export-roundtrip](/emap/examples/export-roundtrip/)
 
 ## Minimal snippet
 

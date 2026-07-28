@@ -18,15 +18,15 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.Emap](https://zwishing.github.io/emap/api/classes/index.Emap.html)
-- [src.BoxSelectControl](https://zwishing.github.io/emap/api/classes/index.BoxSelectControl.html)
-- [src.LassoSelectControl](https://zwishing.github.io/emap/api/classes/index.LassoSelectControl.html)
+- [src.Emap](/emap/api/classes/index.Emap.html)
+- [src.BoxSelectControl](/emap/api/classes/index.BoxSelectControl.html)
+- [src.LassoSelectControl](/emap/api/classes/index.LassoSelectControl.html)
 
 ## 可运行示例
 
-- [feature-selection](https://zwishing.github.io/emap/examples/feature-selection/)
-- [box-select](https://zwishing.github.io/emap/examples/box-select/)
-- [lasso-select](https://zwishing.github.io/emap/examples/lasso-select/)
+- [feature-selection](/emap/examples/feature-selection/)
+- [box-select](/emap/examples/box-select/)
+- [lasso-select](/emap/examples/lasso-select/)
 
 ## 最小片段
 

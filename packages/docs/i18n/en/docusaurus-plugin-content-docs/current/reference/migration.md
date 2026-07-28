@@ -18,13 +18,13 @@ When migrating older examples, explicitly opt into trusted expressions, replace 
 
 ## API
 
-- [src.MapOptions](https://zwishing.github.io/emap/api/interfaces/index.MapOptions.html)
-- [src.Emap](https://zwishing.github.io/emap/api/classes/index.Emap.html)
+- [src.MapOptions](/emap/api/interfaces/index.MapOptions.html)
+- [src.Emap](/emap/api/classes/index.Emap.html)
 
 ## Runnable examples
 
-- [attribute-expressions](https://zwishing.github.io/emap/examples/attribute-expressions/)
-- [filter-features](https://zwishing.github.io/emap/examples/filter-features/)
+- [attribute-expressions](/emap/examples/attribute-expressions/)
+- [filter-features](/emap/examples/filter-features/)
 
 ## Minimal snippet
 

@@ -18,14 +18,14 @@ Status UI should distinguish loading, success, warning, and error states; keep t
 
 ## API
 
-- [src.StatusControl](https://zwishing.github.io/emap/api/classes/index.StatusControl.html)
-- [src.StatusOptions](https://zwishing.github.io/emap/api/interfaces/index.StatusOptions.html)
+- [src.StatusControl](/emap/api/classes/index.StatusControl.html)
+- [src.StatusOptions](/emap/api/interfaces/index.StatusOptions.html)
 
 ## Runnable examples
 
-- [duckdb-query](https://zwishing.github.io/emap/examples/duckdb-query/)
-- [web-worker](https://zwishing.github.io/emap/examples/web-worker/)
-- [geoparquet-viewer](https://zwishing.github.io/emap/examples/geoparquet-viewer/)
+- [duckdb-query](/emap/examples/duckdb-query/)
+- [web-worker](/emap/examples/web-worker/)
+- [geoparquet-viewer](/emap/examples/geoparquet-viewer/)
 
 ## Minimal snippet
 

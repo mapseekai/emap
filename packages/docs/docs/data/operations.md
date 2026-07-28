@@ -18,17 +18,17 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.OpResult](https://zwishing.github.io/emap/api/types/index.OpResult.html)
-- [src.BufferOptions](https://zwishing.github.io/emap/api/interfaces/index.BufferOptions.html)
-- [src.SimplifyOptions](https://zwishing.github.io/emap/api/interfaces/index.SimplifyOptions.html)
+- [src.OpResult](/emap/api/types/index.OpResult.html)
+- [src.BufferOptions](/emap/api/interfaces/index.BufferOptions.html)
+- [src.SimplifyOptions](/emap/api/interfaces/index.SimplifyOptions.html)
 
 ## 可运行示例
 
-- [buffer](https://zwishing.github.io/emap/examples/buffer/)
-- [clip-erase](https://zwishing.github.io/emap/examples/clip-erase/)
-- [dissolve](https://zwishing.github.io/emap/examples/dissolve/)
-- [simplify](https://zwishing.github.io/emap/examples/simplify/)
-- [union](https://zwishing.github.io/emap/examples/union/)
+- [buffer](/emap/examples/buffer/)
+- [clip-erase](/emap/examples/clip-erase/)
+- [dissolve](/emap/examples/dissolve/)
+- [simplify](/emap/examples/simplify/)
+- [union](/emap/examples/union/)
 
 ## 最小片段
 

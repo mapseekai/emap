@@ -18,13 +18,13 @@ emap 保留 mapshaper 拓扑：共享弧保持共享，编辑经过命令系统�
 
 ## API
 
-- [src.TopologySource](https://zwishing.github.io/emap/api/classes/index.TopologySource.html)
-- [src.ITopologySource](https://zwishing.github.io/emap/api/interfaces/index.ITopologySource.html)
+- [src.TopologySource](/emap/api/classes/index.TopologySource.html)
+- [src.ITopologySource](/emap/api/interfaces/index.ITopologySource.html)
 
 ## 可运行示例
 
-- [rebuild-topology](https://zwishing.github.io/emap/examples/rebuild-topology/)
-- [innerlines](https://zwishing.github.io/emap/examples/innerlines/)
+- [rebuild-topology](/emap/examples/rebuild-topology/)
+- [innerlines](/emap/examples/innerlines/)
 
 ## 最小片段
 

@@ -18,13 +18,13 @@ Layer `id` must be stable and unique. `type` is `fill`, `line`, or `circle`. `so
 
 ## API
 
-- [src.TopologySource](https://zwishing.github.io/emap/api/classes/index.TopologySource.html)
-- [src.LayerSpecification](https://zwishing.github.io/emap/api/interfaces/index.LayerSpecification.html)
+- [src.TopologySource](/emap/api/classes/index.TopologySource.html)
+- [src.LayerSpecification](/emap/api/interfaces/index.LayerSpecification.html)
 
 ## Runnable examples
 
-- [getting-started/points](https://zwishing.github.io/emap/examples/getting-started/points/)
-- [merge-layers](https://zwishing.github.io/emap/examples/merge-layers/)
+- [getting-started/points](/emap/examples/getting-started/points/)
+- [merge-layers](/emap/examples/merge-layers/)
 
 ## Minimal snippet
 

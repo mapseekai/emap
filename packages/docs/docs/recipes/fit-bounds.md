@@ -18,13 +18,13 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.Emap](https://zwishing.github.io/emap/api/classes/index.Emap.html)
-- [src.FitBoundsOptions](https://zwishing.github.io/emap/api/interfaces/index.FitBoundsOptions.html)
+- [src.Emap](/emap/api/classes/index.Emap.html)
+- [src.FitBoundsOptions](/emap/api/interfaces/index.FitBoundsOptions.html)
 
 ## 可运行示例
 
-- [getting-started/geojson-viewer](https://zwishing.github.io/emap/examples/getting-started/geojson-viewer/)
-- [getting-started/polygon-fill](https://zwishing.github.io/emap/examples/getting-started/polygon-fill/)
+- [getting-started/geojson-viewer](/emap/examples/getting-started/geojson-viewer/)
+- [getting-started/polygon-fill](/emap/examples/getting-started/polygon-fill/)
 
 ## 最小片段
 
