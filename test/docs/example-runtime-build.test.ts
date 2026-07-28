@@ -77,7 +77,9 @@ describe('example runtime build assets', () => {
       );
       expect(output?.type).toBe('asset');
       if (!output || output.type !== 'asset') throw new Error(`Missing emitted asset: ${fileName}`);
-      expect(Buffer.from(output.source)).toEqual(sourceBytes);
+      const outputBytes = Buffer.from(output.source);
+      expect(outputBytes.byteLength).toBe(sourceBytes.byteLength);
+      expect(outputBytes.equals(sourceBytes)).toBe(true);
     }
   }, 30_000);
 
@@ -103,9 +105,9 @@ describe('example runtime build assets', () => {
     );
     expect(vendorResponse?.statusCode).toBe(200);
     expect(vendorResponse?.headers.get('content-type')).toContain('application/javascript');
-    expect(vendorResponse?.body).toEqual(
-      await readFile(resolve(repoRoot, 'dist/mapshaper-vendor.js')),
-    );
+    const vendorBytes = await readFile(resolve(repoRoot, 'dist/mapshaper-vendor.js'));
+    expect(vendorResponse?.body.byteLength).toBe(vendorBytes.byteLength);
+    expect(vendorResponse?.body.equals(vendorBytes)).toBe(true);
 
     await expect(
       invokeMiddleware(runtimeMiddleware, '/emap/examples/vendor/package.json'),
