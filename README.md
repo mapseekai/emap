@@ -907,7 +907,7 @@ src/
 ├── renderer/                # Painter, CanvasPainter, EditOverlayRenderer
 ├── ui/                      # Controls + CSS
 ├── validation/, worker/, vendor/, types/
-test/examples/               # Manual HTML examples
+packages/examples/examples/ # Canonical runnable HTML examples
 ```
 
 ### Key Patterns
@@ -973,13 +973,16 @@ pnpm install
 Common tasks (prepend `cmd /c` on Windows):
 
 ```bash
-npm run dev           # rollup watch + dev server for test/examples/*.html
-npm run dev-build     # one-off dev build (sourcemaps, no minify)
-npm run format:check  # Biome formatting check
-npm run format        # Biome formatting write
-npm run typecheck     # tsc --noEmit
-npm run test:run      # vitest run
-npm run build         # production build → dist/
+pnpm run dev            # rollup watch for the library
+pnpm run dev-build      # one-off dev build (sourcemaps, no minify)
+pnpm run examples:dev   # canonical examples at /emap/examples/
+pnpm run docs:dev       # fast documentation-only authoring server
+pnpm run docs:preview   # full one-origin docs, API, and examples preview
+pnpm run format:check   # Biome formatting check
+pnpm run format         # Biome formatting write
+pnpm run typecheck      # tsc --noEmit
+pnpm run test:run       # vitest run
+pnpm run build          # production build → dist/
 ```
 
 Targeted test runs:
@@ -989,8 +992,15 @@ npx vitest run src/geo/crs-resolver.test.ts --reporter=dot
 npx vitest run src/map/map.test.ts src/source/topology-source.test.ts
 ```
 
-Manual examples live in `test/examples/*.html` — run `npm run dev-build`
-first, then open any HTML file directly in a browser.
+Runnable examples live in `packages/examples/examples/<id>/index.html`. Run
+`pnpm run build` and `pnpm run examples:dev` to work on those pages against the
+current workspace runtime. `pnpm run docs:dev` is intentionally documentation
+only; use `pnpm run docs:preview` when links between docs, API pages, examples,
+fixtures, vendors, and the worker must be tested on one origin.
+
+`pnpm run examples:build:cdn` is reserved for an exact package version that is
+already published and passes the CDN integrity check. Local development and
+`docs:preview` always use workspace-built runtime assets.
 
 Build outputs:
 

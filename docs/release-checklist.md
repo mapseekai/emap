@@ -40,14 +40,21 @@ npm run examples:check
 
 ## Local Preview
 
-Build both static sites before previewing:
+Build, compose, and serve the documentation, API, examples, fixtures, vendor
+assets, and worker with a single process and port:
 
 ```bash
-npm run docs:build
-npm run examples:build
-pnpm --filter @zwishing/emap-docs serve
-pnpm --filter @zwishing/emap-examples preview
+pnpm run docs:preview
 ```
+
+Open `http://127.0.0.1:3000/emap/`. This command uses the local
+`examples:build`; it does not start a second examples server or depend on CDN
+access.
+
+Use `pnpm run examples:build:cdn` only for an exact package version that is
+already published and has passed the CDN availability and integrity checks.
+After that release build, run `docs:build` and `docs:compose-examples` before
+serving the composed output.
 
 ## Manual Evidence
 
