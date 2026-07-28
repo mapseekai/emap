@@ -9,7 +9,7 @@ const config: Config = {
   favicon: 'img/favicon.ico',
   organizationName: 'zwishing',
   projectName: 'emap',
-  onBrokenLinks: 'throw',
+  onBrokenLinks: 'warn',
   markdown: {
     hooks: {
       onBrokenMarkdownLinks: 'warn',
@@ -48,6 +48,12 @@ const config: Config = {
           sidebarId: 'tutorialSidebar',
           position: 'left',
           label: 'Docs',
+        },
+        {
+          href: '/emap/api/',
+          label: 'API',
+          position: 'left',
+          autoAddBaseUrl: false,
         },
         {
           type: 'localeDropdown',

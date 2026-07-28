@@ -18,13 +18,13 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.TopologySource](https://zwishing.github.io/emap/api/classes/index.TopologySource.html)
-- [src.LayerSpecification](https://zwishing.github.io/emap/api/interfaces/index.LayerSpecification.html)
+- [src.TopologySource](/emap/api/classes/index.TopologySource.html)
+- [src.LayerSpecification](/emap/api/interfaces/index.LayerSpecification.html)
 
 ## 可运行示例
 
-- [getting-started/points](https://zwishing.github.io/emap/examples/getting-started/points/)
-- [merge-layers](https://zwishing.github.io/emap/examples/merge-layers/)
+- [getting-started/points](/emap/examples/getting-started/points/)
+- [merge-layers](/emap/examples/merge-layers/)
 
 ## 最小片段
 

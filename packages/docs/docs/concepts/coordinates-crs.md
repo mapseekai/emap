@@ -18,14 +18,14 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.Emap](https://zwishing.github.io/emap/api/classes/index.Emap.html)
-- [src.resolveDatasetCRS](https://zwishing.github.io/emap/api/functions/index.resolveDatasetCRS.html)
+- [src.Emap](/emap/api/classes/index.Emap.html)
+- [src.resolveDatasetCRS](/emap/api/functions/index.resolveDatasetCRS.html)
 
 ## 可运行示例
 
-- [project](https://zwishing.github.io/emap/examples/project/)
-- [crs-switch](https://zwishing.github.io/emap/examples/crs-switch/)
-- [duckdb-buffer](https://zwishing.github.io/emap/examples/duckdb-buffer/)
+- [project](/emap/examples/project/)
+- [crs-switch](/emap/examples/crs-switch/)
+- [duckdb-buffer](/emap/examples/duckdb-buffer/)
 
 ## 最小片段
 

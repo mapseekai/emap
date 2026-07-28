@@ -18,13 +18,13 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.OpError](https://zwishing.github.io/emap/api/types/index.OpError.html)
-- [src_duckdb.DuckDbOperationErrorKind](https://zwishing.github.io/emap/api/types/src_duckdb.DuckDbOperationErrorKind.html)
+- [src.OpError](/emap/api/types/index.OpError.html)
+- [src_duckdb.DuckDbOperationErrorKind](/emap/api/types/src_duckdb.DuckDbOperationErrorKind.html)
 
 ## 可运行示例
 
-- [duckdb-query](https://zwishing.github.io/emap/examples/duckdb-query/)
-- [check-geometry](https://zwishing.github.io/emap/examples/check-geometry/)
+- [duckdb-query](/emap/examples/duckdb-query/)
+- [check-geometry](/emap/examples/check-geometry/)
 
 ## 最小片段
 
