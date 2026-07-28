@@ -260,30 +260,7 @@
         };
       }
 
-      fileInput.addEventListener("change", async () => {
-        const file = fileInput.files?.[0];
-        if (!file) return;
-        runButton.disabled = true;
-        status.textContent = `正在读取 ${file.name}...`;
-        try {
-          await closeGeoParquetQuerySource().catch((err) => console.warn(err));
-          geoParquetBytes = new Uint8Array(await file.arrayBuffer());
-          geoParquetFileName = file.name;
-          contextSources.clear();
-          removeSourceWithLayers(OUTPUT_ID);
-          status.textContent = `已读取 ${file.name}，可以运行 DuckDB 查询。`;
-        } catch (err) {
-          console.error(err);
-          geoParquetBytes = undefined;
-          geoParquetQuerySource = undefined;
-          geoParquetFileName = "";
-          status.textContent = `读取失败: ${err?.message ?? err}`;
-        } finally {
-          runButton.disabled = !hasGeoParquetInput();
-        }
-      });
-
-      runButton.addEventListener("click", async () => {
+      async function runGeoParquetQuery() {
         if (!hasGeoParquetInput()) {
           status.textContent = "请先上传 GeoParquet 文件。";
           return;
@@ -324,7 +301,32 @@
         } finally {
           runButton.disabled = !hasGeoParquetInput();
         }
+      }
+
+      fileInput.addEventListener("change", async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        runButton.disabled = true;
+        status.textContent = `正在读取 ${file.name}...`;
+        try {
+          await closeGeoParquetQuerySource().catch((err) => console.warn(err));
+          geoParquetBytes = new Uint8Array(await file.arrayBuffer());
+          geoParquetFileName = file.name;
+          contextSources.clear();
+          removeSourceWithLayers(OUTPUT_ID);
+          await runGeoParquetQuery();
+        } catch (err) {
+          console.error(err);
+          geoParquetBytes = undefined;
+          geoParquetQuerySource = undefined;
+          geoParquetFileName = "";
+          status.textContent = `读取失败: ${err?.message ?? err}`;
+        } finally {
+          runButton.disabled = !hasGeoParquetInput();
+        }
       });
+
+      runButton.addEventListener("click", runGeoParquetQuery);
 
       window.addEventListener("resize", () => map.resize());
       window.addEventListener("pagehide", () => {

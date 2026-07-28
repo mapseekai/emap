@@ -109,6 +109,23 @@ describe('DuckDB new feature examples', () => {
     expect(html).toContain('output: { sourceId: OUTPUT_ID }');
   });
 
+  it('queries and renders GeoParquet after fixture injection or a user upload', () => {
+    const html = examples.geoparquetQuery;
+    const queryStart = html.indexOf('async function runGeoParquetQuery()');
+    const changeStart = html.indexOf('fileInput.addEventListener("change"');
+    const buttonStart = html.indexOf('runButton.addEventListener("click"');
+
+    expect(queryStart).toBeGreaterThan(-1);
+    expect(changeStart).toBeGreaterThan(queryStart);
+    expect(buttonStart).toBeGreaterThan(changeStart);
+    expect(html.slice(queryStart, changeStart)).toContain(
+      'const outputSource = addDatasetSource(OUTPUT_ID, resultDataset)',
+    );
+    expect(html.slice(queryStart, changeStart)).toContain('map.setExtent(outputSource.getExtent())');
+    expect(html.slice(changeStart, buttonStart)).toContain('await runGeoParquetQuery()');
+    expect(html).toContain('runButton.addEventListener("click", runGeoParquetQuery)');
+  });
+
   it('covers overlay helper and map-op entrypoints', () => {
     const html = examples.overlay;
     expect(html).toContain('intersectionDatasetWithDuckDb');
