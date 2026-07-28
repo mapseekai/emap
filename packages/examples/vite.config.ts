@@ -1,5 +1,16 @@
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
+import { runtimeAssetsPlugin } from './build/runtime-assets-plugin';
+
+const { version } = JSON.parse(
+  readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+) as { version: string };
+const assetMode = process.env.EMAP_EXAMPLES_ASSET_MODE ?? 'local';
+if (assetMode !== 'local' && assetMode !== 'cdn') {
+  throw new Error(`Unsupported EMAP_EXAMPLES_ASSET_MODE: ${assetMode}`);
+}
+const assetIntegrity = JSON.parse(process.env.EMAP_EXAMPLES_ASSET_INTEGRITY ?? '{}') as unknown;
 
 const routeIds = [
   'getting-started/geojson-viewer',
@@ -60,6 +71,12 @@ const htmlInput = (path: string): string => fileURLToPath(new URL(path, import.m
 
 export default defineConfig({
   base: '/emap/examples/',
+  define: {
+    __EMAP_ASSET_INTEGRITY__: JSON.stringify(assetIntegrity),
+    __EMAP_ASSET_MODE__: JSON.stringify(assetMode),
+    __EMAP_VERSION__: JSON.stringify(version),
+  },
+  plugins: [runtimeAssetsPlugin()],
   build: {
     chunkSizeWarningLimit: 2500,
     emptyOutDir: true,
