@@ -1,5 +1,8 @@
 import type { ExampleDefinition } from '../../../docs-meta/examples';
 
+export const examplePublicHref = (id: string): string =>
+  `/emap/examples/${id.replace(/^\/+|\/+$/g, '')}/`;
+
 export function renderCatalog(root: HTMLElement, examples: readonly ExampleDefinition[]): void {
   root.replaceChildren();
 
@@ -54,7 +57,7 @@ function renderExampleCard(example: ExampleDefinition): HTMLElement {
 
   const link = document.createElement('a');
   link.className = 'primary-link';
-  link.href = `#/examples/${example.id}`;
+  link.href = examplePublicHref(example.id);
   link.textContent = 'Open example';
 
   card.append(category, title, localized, success, link);
