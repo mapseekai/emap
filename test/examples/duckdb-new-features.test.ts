@@ -10,10 +10,7 @@ const duckDbExamples = [
   readExample('duckdb-query'),
   readExample('duckdb-spatial-ops'),
 ];
-const geoParquetExamples = [
-  readExample('export-geoparquet'),
-  readExample('geoparquet-viewer'),
-];
+const geoParquetExamples = [readExample('export-geoparquet'), readExample('geoparquet-viewer')];
 
 function readExample(id: string): string {
   return readFileSync(
@@ -23,9 +20,7 @@ function readExample(id: string): string {
 }
 
 function importedDuckDbNames(html: string): string[] {
-  const importMatch = html.match(
-    /import\s+\{([^}]+)\}\s+from\s+["']@zwishing\/emap\/duckdb["']/,
-  );
+  const importMatch = html.match(/import\s+\{([^}]+)\}\s+from\s+["']@zwishing\/emap\/duckdb["']/);
   if (!importMatch) throw new Error('DuckDB module import not found');
   return importMatch[1]
     .split(',')
@@ -121,7 +116,9 @@ describe('DuckDB new feature examples', () => {
     expect(html.slice(queryStart, changeStart)).toContain(
       'const outputSource = addDatasetSource(OUTPUT_ID, resultDataset)',
     );
-    expect(html.slice(queryStart, changeStart)).toContain('map.setExtent(outputSource.getExtent())');
+    expect(html.slice(queryStart, changeStart)).toContain(
+      'map.setExtent(outputSource.getExtent())',
+    );
     expect(html.slice(changeStart, buttonStart)).toContain('await runGeoParquetQuery()');
     expect(html).toContain('runButton.addEventListener("click", runGeoParquetQuery)');
   });
