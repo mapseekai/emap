@@ -29,6 +29,8 @@ The split has produced three user-visible failures:
 - Serve the catalog, example routes, fixtures, worker bundle, API reference, and
   documentation from one local preview origin.
 - Keep the public route contract `/emap/examples/<id>/`.
+- Allow a published documentation build to load stable core runtime assets from
+  an exact-version CDN URL without making local development depend on that CDN.
 
 ## Non-goals
 
@@ -38,6 +40,8 @@ The split has produced three user-visible failures:
 - Adding a new frontend framework or runtime dependency.
 - Making DuckDB-Wasm binaries part of this migration; only example input data is
   required to be local.
+- Loading fixtures or `emap-worker.js` from a cross-origin CDN.
+- Using floating CDN versions such as `latest`.
 
 ## Canonical Source Layout
 
@@ -57,6 +61,7 @@ packages/examples/
     example-runtime.ts
     fixture-manifest.ts
     main.ts
+    runtime-assets.ts
 ```
 
 The five introductory files map to the existing nested IDs:
@@ -71,23 +76,45 @@ All other filenames map directly to `<id>/index.html`. The HTML files under
 `test/examples` are removed after migration; the TypeScript tests in that
 directory remain tests.
 
-## Browser Runtime
+## Browser Runtime and Asset Policy
 
 The migrated pages retain their markup, controls, and operation code. Their
-root-relative development bundle tags are replaced by an inline module import
-from a shared `example-runtime.ts` module. That module:
+root-relative development bundle tags are replaced by a shared
+`example-runtime.ts` loader. The loader consumes a small runtime asset manifest
+from `runtime-assets.ts` and:
 
-- imports the public `@zwishing/emap` package and stylesheet;
+- loads the Mapshaper vendor bundle before the core `emap` IIFE bundle;
+- loads the matching `emap` stylesheet;
 - exposes the package namespace to the migrated inline scripts;
 - exposes optional formats helpers needed by format examples; and
 - exports the fixture auto-load helper.
 
-DuckDB examples import `@zwishing/emap/duckdb` through Vite instead of reaching
-into `../../dist`. The worker example receives a base-aware worker URL from the
-shared runtime.
+Runtime assets follow these environment-specific rules:
+
+- Vite development and integrated local documentation preview use the current
+  workspace build under `/emap/examples/vendor/`. A source change is therefore
+  exercised by the examples without waiting for a package release.
+- A formal published documentation build may use
+  `https://cdn.jsdelivr.net/npm/@zwishing/emap@<exact-version>/dist/` for
+  `mapshaper-vendor.js`, `emap.js`, and `emap.css` only after that exact package
+  version has been confirmed on npm.
+- Published CDN script and stylesheet URLs are pinned to the exact version from
+  `package.json`, include generated Subresource Integrity metadata, and never
+  use `latest` or a version range.
+- A CDN load failure retries the same exact-version asset from the local
+  `/emap/examples/vendor/` directory and reports the fallback in the console.
+- Fixtures and `emap-worker.js` always remain local and same-origin.
+
+DuckDB examples import `@zwishing/emap/duckdb` through Vite instead of loading
+the raw jsDelivr ESM file, because the bundle retains external DuckDB and Arrow
+dependencies. Format examples also remain Vite-managed where Parquet-Wasm
+initialization is required. The worker example receives a base-aware local
+worker URL from the shared runtime.
 
 This keeps examples representative of package-consumer behavior and removes
-all dependence on a route's filesystem depth.
+all dependence on a route's filesystem depth. It also keeps offline local
+preview deterministic while allowing stable published examples to benefit from
+CDN caching.
 
 ## Starter Data and Upload Flow
 
@@ -136,6 +163,9 @@ packages/examples/dist/
   getting-started/geojson-viewer/index.html
   fixtures/...
   assets/...
+  vendor/mapshaper-vendor.js
+  vendor/emap.js
+  vendor/emap.css
   emap-worker.js
 ```
 
@@ -147,6 +177,11 @@ source HTML so development and production use the same browser URL.
 The documentation composer can then copy the normalized examples artifact
 directly into `packages/docs/build/examples`. There is no nested
 `examples/examples` directory.
+
+The examples build copies the current local runtime files into `dist/vendor`
+for development, integrated preview, offline use, and CDN fallback. Selecting
+CDN-first output is an explicit release-build option; it is not the default for
+repository verification.
 
 ## Local Preview
 
@@ -173,6 +208,10 @@ production changes for these contracts:
 - no migrated HTML depends on `../../dist` or `../../src`;
 - fixture URLs resolve from `/emap/examples/`, not `/fixtures/`;
 - automatic fixture injection dispatches the existing upload change path;
+- local preview resolves runtime assets from `/emap/examples/vendor/`;
+- release CDN URLs use the exact package version and never contain `latest`;
+- CDN failure selects the same exact-version local fallback;
+- fixture and worker URLs remain same-origin in CDN-first builds;
 - the build normalizer produces `dist/<id>/index.html` and removes the nested
   `dist/examples` directory;
 - composition produces `packages/docs/build/examples/<id>/index.html`;
@@ -195,6 +234,8 @@ single-file, multi-file, format, and worker examples.
 - No request is made to `/fixtures/...` or `/emap/examples/examples/...`.
 - The integrated local preview uses one origin for docs, API, examples, fixtures,
   and workers.
+- Local preview works without CDN access and exercises the current workspace build.
+- A CDN-first release uses a confirmed, exact npm package version with SRI and
+  falls back to the matching local runtime assets.
 - The repository contains no duplicate HTML example implementation under
   `test/examples`.
-
