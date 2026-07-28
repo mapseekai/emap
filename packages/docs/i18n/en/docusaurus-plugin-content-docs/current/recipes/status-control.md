@@ -30,5 +30,5 @@ Status UI should distinguish loading, success, warning, and error states; keep t
 ## Minimal snippet
 
 ```ts
-map.addControl(new StatusControl({ text: "Ready" }), "bottom-left")
+map.addControl(new StatusControl({ showMousePos: true, showEPSG: true }), "bottom-left")
 ```

@@ -10,29 +10,176 @@ verifiedVersion: 0.5.0
 
 # Editing
 
-Edits are command-backed so undo/redo, topology caches, and render invalidation stay synchronized.
+emap edits are command-backed. Commands retain the state required for
+restoration, keeping data changes, undo/redo, render caches, and selection
+updates consistent.
 
-## Behavior notes
+## Choose an editing entry point
 
-Use edit sessions for pointer-driven translate/rotate/scale work, controls for mode switching, and transactions when several commands should commit as one user action.
+| Requirement | Recommended entry point |
+|---|---|
+| Change one property | Attribute API or `FeaturePropertyChangeCommand` |
+| Translate a feature | `transformFeature` handler or translate edit session |
+| Rotate or scale | `transformFeature` handler or affine edit session |
+| Edit vertices | `vertexEdit` handler / `VertexEditControl` |
+| Draw a feature | `drawFeature` handler / `DrawFeatureControl` |
+| Delete selection | `map.deleteSelected()` |
+| Process topology in bulk | `map.ops.*` |
+| Group several steps | Transaction |
+
+Do not mutate `source.getDataset()` directly. Bypassing commands skips undo
+snapshots, cache invalidation, and selection maintenance.
+
+## Edit modes
+
+Public modes are `'none'`, `'vertex'`, `'draw'`, and `'transform'`:
+
+```ts
+map.setEditMode('vertex');
+console.log(map.getEditMode());
+```
+
+Mode changes fire `editmodechange`:
+
+```ts
+map.on('editmodechange', ({ mode }) => {
+  updateActiveTool(mode);
+});
+```
+
+Leaving `vertex` or `draw` automatically clears temporary state that belongs to
+that mode.
+
+## Built-in editing controls
+
+```ts
+map.addControl(new EditToolbar(), 'top-left');
+map.addControl(new VertexEditControl(), 'top-left');
+map.addControl(new DrawFeatureControl(), 'top-left');
+```
+
+Controls provide UI and mode switching; map handlers still own pointer
+processing. An application-specific toolbar can enable `map.vertexEdit`,
+`map.drawFeature`, or `map.transformFeature` directly.
+
+## Undo and redo
+
+```ts
+if (map.canUndo()) {
+  map.undo();
+}
+
+if (map.canRedo()) {
+  map.redo();
+}
+```
+
+`undo()` and `redo()` return `false` when no history entry is available and
+`true` after a successful change.
+
+Add the history control:
+
+```ts
+map.addControl(new HistoryControl(), 'top-right');
+```
+
+Bind keyboard shortcuts:
+
+```ts
+const unbindHistory = map.bindHistoryShortcuts();
+
+// When the page is removed or the application takes over shortcuts
+unbindHistory();
+```
+
+The binding supports Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z or Ctrl+Y.
+
+## Transactions
+
+Use a transaction when several operations must become one user action.
+Transactions cannot be nested:
+
+```ts
+const tx = map.beginTransaction();
+
+const simplified = await map.ops.simplifyLayer({
+  source: 'main',
+  percentage: 0.4,
+});
+
+if (!simplified.ok) {
+  tx.rollback();
+  showError(simplified.error);
+} else {
+  const cleaned = await map.ops.cleanLayer({
+    source: 'main',
+  });
+
+  if (!cleaned.ok) {
+    tx.rollback();
+    showError(cleaned.error);
+  } else {
+    const committed = await tx.commit('Simplify and clean');
+    if (!committed.ok) {
+      showError(committed.error);
+    }
+  }
+}
+```
+
+`commit(label)` collapses executed child commands into one history entry.
+`rollback()` restores the first-touch datasets and selection. A committed or
+rolled-back transaction cannot be reused.
+
+## Custom commands
+
+Implement `EditCommand` for undoable changes not covered by a built-in API.
+`do()` is used by redo, `undo()` restores prior state, and the optional `label`
+appears in history snapshots.
+
+The caller must perform the change before `map.pushCommand(command)`;
+`pushCommand` only records the command and does not invoke `command.do()`.
+Capture a complete memento when constructing the command instead of relying on
+a live dataset that may later change.
+
+## Dataset replacement and validation
+
+Simplify, projection, and clip may replace the complete dataset. Run them
+through `map.ops` so history can mark older commands that are no longer safe
+against the new dataset.
+
+After-commit validators can report topology or business-rule failures through
+`validationfailed`. They do not automatically undo:
+
+```ts
+map.on('validationfailed', ({ results, label }) => {
+  showValidationResults(label, results);
+});
+```
+
+The application chooses whether to warn, continue, or invoke undo.
+
+## Troubleshooting
+
+- Accumulate pointer updates in an edit session and commit once at gesture end;
+  do not push a command for every pointermove.
+- On any failed transaction step, call `rollback()` immediately and do not run
+  later operations.
+- Use `getEditMode()` and `editmodechange` as the UI state source rather than a
+  separate button boolean.
 
 ## API
 
-- [src.EditHistory](/emap/api/classes/index.EditHistory.html)
-- [src.EditToolbar](/emap/api/classes/index.EditToolbar.html)
-- [src.Transaction](/emap/api/classes/index.Transaction.html)
+- [EditCommand](/emap/api/interfaces/index.EditCommand.html)
+- [EditHistory](/emap/api/classes/index.EditHistory.html)
+- [Transaction](/emap/api/classes/index.Transaction.html)
+- [EditToolbar](/emap/api/classes/index.EditToolbar.html)
 
 ## Runnable examples
 
-- [china-editing](/emap/examples/china-editing/)
-- [vertex-editing](/emap/examples/vertex-editing/)
-- [feature-translate](/emap/examples/feature-translate/)
-- [transaction](/emap/examples/transaction/)
-
-## Minimal snippet
-
-```ts
-const tx = map.beginTransaction("bulk edit")
-tx.commit()
-map.history.undo()
-```
+- [Editing overview](/emap/examples/china-editing/)
+- [Vertex editing](/emap/examples/vertex-editing/)
+- [Feature translation](/emap/examples/feature-translate/)
+- [Rotate and scale](/emap/examples/feature-rotate-scale/)
+- [Transactions](/emap/examples/transaction/)
+- [Undo and redo](/emap/examples/undo-redo/)

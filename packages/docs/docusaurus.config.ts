@@ -50,10 +50,9 @@ const config: Config = {
           label: 'Docs',
         },
         {
-          href: '/emap/api/',
+          href: 'pathname:///api/',
           label: 'API',
           position: 'left',
-          autoAddBaseUrl: false,
         },
         {
           type: 'localeDropdown',

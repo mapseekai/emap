@@ -10,11 +10,15 @@ verifiedVersion: 0.5.0
 
 # Events reference
 
-Common events include `move`, `moveend`, `zoom`, `zoomend`, `selectionchange`, `historychange`, `validationfailed`, `workerjobstart`, and `workerjobend`.
+Common public events include `move`, `moveend`, `zoom`, `zoomend`,
+`selectionchange`, `historychange`, `validationfailed`, `data`, and feature
+events.
 
 ## Behavior notes
 
-Known event names infer payloads. Unknown names remain available for application-level extension.
+Known event names infer payloads. Unknown names remain available for
+application-level extension. Internal worker-pool `workerjob*` signals are not
+dispatched through `map.on`.
 
 ## API
 
@@ -29,5 +33,5 @@ Known event names infer payloads. Unknown names remain available for application
 ## Minimal snippet
 
 ```ts
-map.once("workerjobend", (event) => console.log(event.ok))
+map.once("moveend", (event) => console.log(event.center, event.zoom))
 ```

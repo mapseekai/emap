@@ -31,5 +31,5 @@ verifiedVersion: 0.5.0
 
 ```ts
 const result = await map.ops.checkGeometry({ source: "main" })
-if (!result.ok) setStatus(result.error.message)
+if (!result.ok) setStatus(result.error.kind)
 ```

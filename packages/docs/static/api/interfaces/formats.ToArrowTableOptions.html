@@ -20,7 +20,7 @@
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">ToArrowTableOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#bboxcolumn">bboxColumn</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">false</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#crsprojjsonlookup">crsProjjsonLookup</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">CrsProjjsonLookup</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#encoding">encoding</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">&quot;wkb&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;native&quot;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#geometrycolumn">geometryColumn</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#layer">layer</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#projjsoncrs">projjsonCrs</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#reprojecttowgs84">reprojectToWgs84</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/formats/dataset-to-table.ts#L37">src/formats/dataset-to-table.ts:37</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/formats/dataset-to-table.ts#L37">src/formats/dataset-to-table.ts:37</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -45,49 +45,49 @@
 <div class="tsd-comment tsd-typography"><p>Optional GeoParquet 1.1 covering bbox struct column name.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/formats/dataset-to-table.ts#L45">src/formats/dataset-to-table.ts:45</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/formats/dataset-to-table.ts#L45">src/formats/dataset-to-table.ts:45</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="crsprojjsonlookup"><code class="tsd-tag">Optional</code><span>crs<wbr/>Projjson<wbr/>Lookup</span><a href="#crsprojjsonlookup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">crsProjjsonLookup</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">CrsProjjsonLookup</span></div>
 <div class="tsd-comment tsd-typography"><p>Optional authority lookup for writing full CRS PROJJSON objects.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/formats/dataset-to-table.ts#L49">src/formats/dataset-to-table.ts:49</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/formats/dataset-to-table.ts#L49">src/formats/dataset-to-table.ts:49</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="encoding"><code class="tsd-tag">Optional</code><span>encoding</span><a href="#encoding" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">encoding</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">&quot;wkb&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;native&quot;</span></div>
 <div class="tsd-comment tsd-typography"><p>Geometry encoding: GeoArrow native nested arrays or WKB binary.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/formats/dataset-to-table.ts#L39">src/formats/dataset-to-table.ts:39</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/formats/dataset-to-table.ts#L39">src/formats/dataset-to-table.ts:39</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="geometrycolumn"><code class="tsd-tag">Optional</code><span>geometry<wbr/>Column</span><a href="#geometrycolumn" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">geometryColumn</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Geometry column name; defaults to 'geometry'.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/formats/dataset-to-table.ts#L43">src/formats/dataset-to-table.ts:43</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/formats/dataset-to-table.ts#L43">src/formats/dataset-to-table.ts:43</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="layer"><code class="tsd-tag">Optional</code><span>layer</span><a href="#layer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">layer</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Layer to export (index or name); defaults to layer 0.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/formats/dataset-to-table.ts#L41">src/formats/dataset-to-table.ts:41</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/formats/dataset-to-table.ts#L41">src/formats/dataset-to-table.ts:41</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="projjsoncrs"><code class="tsd-tag">Optional</code><span>projjson<wbr/>Crs</span><a href="#projjsoncrs" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">projjsonCrs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">unknown</span></div>
 <div class="tsd-comment tsd-typography"><p>Pre-resolved GeoParquet PROJJSON CRS override.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/formats/dataset-to-table.ts#L51">src/formats/dataset-to-table.ts:51</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/formats/dataset-to-table.ts#L51">src/formats/dataset-to-table.ts:51</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="reprojecttowgs84"><code class="tsd-tag">Optional</code><span>reproject<wbr/>To<wbr/>Wgs84</span><a href="#reprojecttowgs84" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">reprojectToWgs84</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
 <div class="tsd-comment tsd-typography"><p>Reproject EPSG:3857 coordinates to GeoParquet's default OGC:CRS84 lon/lat output.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/formats/dataset-to-table.ts#L47">src/formats/dataset-to-table.ts:47</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/formats/dataset-to-table.ts#L47">src/formats/dataset-to-table.ts:47</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

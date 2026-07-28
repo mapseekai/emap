@@ -10,27 +10,192 @@ verifiedVersion: 0.5.0
 
 # DuckDB
 
-The optional DuckDB entry runs SQL and spatial operations in DuckDB-Wasm. Load it lazily so core maps do not pay the optional dependency cost.
+`@zwishing/emap/duckdb` is an optional browser DuckDB-Wasm entry for restricted
+SQL and spatial functions. Core maps do not load it; only applications that
+import the subpath pay its download and initialization cost.
 
-## Behavior notes
+## Install and load
 
-Helpers validate restricted SELECT SQL, normalize operation options, preserve CRS metadata when possible, and return operation-layer results for map display.
+```bash
+pnpm add @duckdb/duckdb-wasm
+```
+
+It is an optional emap dependency. Install it explicitly when the package
+manager skips optional dependencies.
+
+Load lazily:
+
+```ts
+const duckdb = await import('@zwishing/emap/duckdb');
+```
+
+## Initialize the runtime
+
+```ts
+const runtime = await duckdb.createDuckDbRuntimeFromJsDelivr();
+duckdb.setDuckDbRuntime(runtime);
+```
+
+Applications that already own DuckDB-Wasm may inject an adapter through
+`setDuckDbRuntime(...)`. GeoParquet byte queries require
+`registerFileBuffer`; `dropFile` is optional cleanup.
+
+Close a runtime that will not be reused:
+
+```ts
+await duckdb.closeDuckDbRuntime();
+```
+
+## Dataset helpers
+
+The first argument is a `MapshaperDataset`; the second is operation options:
+
+```ts
+const dataset = source.getDataset();
+if (!dataset) throw new Error('Source has no dataset');
+
+const buffered = await duckdb.bufferDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  distance: 25,
+  outputLayer: 'parcels_buffer',
+});
+```
+
+`queryDatasetWithDuckDb({ runtime, source, sql })` is not the current signature.
+Configure the runtime globally and pass the dataset separately.
+
+## Geometry and attribute helpers
+
+```ts
+const centroids = await duckdb.centroidDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  outputLayer: 'parcel_centroids',
+});
+
+const simplified =
+  await duckdb.simplifyPreserveTopologyDatasetWithDuckDb(dataset, {
+    layer: 'parcels',
+    tolerance: 5,
+    outputLayer: 'parcels_simplified',
+  });
+
+const withArea = await duckdb.areaDatasetWithDuckDb(dataset, {
+  layer: 'parcels',
+  outputColumn: 'area_m2',
+});
+```
+
+Geometry helpers include centroid, envelope, convex hull, boundary, simplify,
+simplify-preserve-topology, and make-valid. Attribute helpers preserve geometry
+and append scalar columns.
+
+## Relations and overlay
+
+```ts
+const inside = await duckdb.intersectsDatasetWithDuckDb(
+  parcelsDataset,
+  floodplainDataset,
+  {
+    inputLayer: 'parcels',
+    maskLayer: 'floodplain',
+    outputLayer: 'parcels_in_floodplain',
+  },
+);
+
+const clipped = await duckdb.intersectionDatasetWithDuckDb(
+  parcelsDataset,
+  floodplainDataset,
+  {
+    inputLayer: 'parcels',
+    maskLayer: 'floodplain',
+    outputLayer: 'parcels_clipped',
+  },
+);
+```
+
+Overlay unions mask geometry and preserves input attributes only. Input and
+mask must already use the same CRS.
+
+## Restricted SELECT
+
+```ts
+const filtered = await duckdb.queryDatasetWithDuckDb(dataset, {
+  sql: `
+    SELECT name, population
+    FROM input
+    WHERE population > 100000
+    ORDER BY population DESC
+    LIMIT 50
+  `,
+  outputLayer: 'large_places',
+});
+```
+
+The selected layer is registered as logical table `input`. The validator
+supports scalar projection, simple `WHERE`, `ORDER BY`, and integer `LIMIT`.
+It rejects multiple statements, mutation, joins, other tables, and calculated
+output geometry before execution.
+
+Use `validateDuckDbSelectSql` to preflight the same contract.
+
+## Query GeoParquet bytes
+
+```ts
+const result = await duckdb.queryGeoParquetWithDuckDb(bytes, {
+  layerName: 'active_points',
+  sql: 'SELECT geometry, name FROM input WHERE active = true',
+});
+```
+
+The projection must retain a detectable geometry column. Do not call
+`read_parquet(...)` directly; the helper registers bytes and exposes `input`.
+
+## Add results to a map
+
+Helpers return datasets and do not implicitly replace a source:
+
+```ts
+const output = new TopologySource('buffered');
+output.setDataset(buffered);
+
+map.addSource('buffered', output);
+map.setExtent(output.getExtent());
+```
+
+Choose explicitly between a new source and replacing an existing one. Dataset
+helpers alone do not create map history; use the emap adapter/operation surface
+when history is required.
+
+## CRS and errors
+
+Area, length, perimeter, distance, and buffer use dataset units. Distance-like
+helpers reject geographic CRS by default. Set `failOnGeographicCrs: false` only
+when degree-based behavior is intentional.
+
+```ts
+try {
+  await duckdb.queryDatasetWithDuckDb(dataset, options);
+} catch (error) {
+  if (error instanceof duckdb.DuckDbOperationError) {
+    console.error(error.kind, error.message);
+  }
+}
+```
+
+`DuckDbOperationError.kind` distinguishes runtime, SQL validation, spatial
+extension, and execution failures.
 
 ## API
 
-- [src_duckdb.queryDatasetWithDuckDb](/emap/api/functions/src_duckdb.queryDatasetWithDuckDb.html)
-- [src_duckdb.bufferDatasetWithDuckDb](/emap/api/functions/src_duckdb.bufferDatasetWithDuckDb.html)
-- [src_duckdb.DuckDbOperationError](/emap/api/classes/src_duckdb.DuckDbOperationError.html)
+- [queryDatasetWithDuckDb](/emap/api/functions/duckdb.queryDatasetWithDuckDb.html)
+- [bufferDatasetWithDuckDb](/emap/api/functions/duckdb.bufferDatasetWithDuckDb.html)
+- [createDuckDbRuntimeFromJsDelivr](/emap/api/functions/duckdb.createDuckDbRuntimeFromJsDelivr.html)
+- [DuckDbOperationError](/emap/api/classes/duckdb.DuckDbOperationError.html)
 
 ## Runnable examples
 
-- [duckdb-query](/emap/examples/duckdb-query/)
-- [duckdb-buffer](/emap/examples/duckdb-buffer/)
-- [duckdb-spatial-ops](/emap/examples/duckdb-spatial-ops/)
-
-## Minimal snippet
-
-```ts
-const duckdb = await import("@zwishing/emap/duckdb")
-const result = await duckdb.queryDatasetWithDuckDb({ runtime, source, sql })
-```
+- [DuckDB query](/emap/examples/duckdb-query/)
+- [DuckDB buffer](/emap/examples/duckdb-buffer/)
+- [Spatial operations](/emap/examples/duckdb-spatial-ops/)
+- [Overlay](/emap/examples/duckdb-overlay/)
+- [GeoParquet query](/emap/examples/duckdb-geoparquet-query/)

@@ -30,5 +30,8 @@ verifiedVersion: 0.5.0
 
 ```ts
 const file = input.files?.[0]
-const source = await TopologySource.fromBytes("upload", await file.arrayBuffer(), { filename: file.name })
+if (!file) throw new Error("请选择文件")
+const source = await TopologySource.fromBytes("upload", await file.arrayBuffer(), {
+  filename: file.name,
+})
 ```

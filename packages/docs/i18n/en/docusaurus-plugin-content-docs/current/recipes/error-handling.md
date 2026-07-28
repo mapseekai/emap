@@ -31,5 +31,5 @@ Handle errors at app boundaries: keep the map alive, show retry instructions, an
 
 ```ts
 const result = await map.ops.checkGeometry({ source: "main" })
-if (!result.ok) setStatus(result.error.message)
+if (!result.ok) setStatus(result.error.kind)
 ```

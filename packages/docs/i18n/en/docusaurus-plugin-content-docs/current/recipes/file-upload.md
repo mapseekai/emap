@@ -30,5 +30,8 @@ Catch load errors, display a retryable message, and add the source/layer only af
 
 ```ts
 const file = input.files?.[0]
-const source = await TopologySource.fromBytes("upload", await file.arrayBuffer(), { filename: file.name })
+if (!file) throw new Error("Choose a file")
+const source = await TopologySource.fromBytes("upload", await file.arrayBuffer(), {
+  filename: file.name,
+})
 ```

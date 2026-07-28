@@ -10,25 +10,158 @@ verifiedVersion: 0.5.0
 
 # Emap map instance
 
-`Emap` owns the canvas, camera, registered sources, layer order, controls, handlers, history, and worker routing for one map container.
+`Emap` coordinates one map container. It owns the canvas, camera, registered
+sources, render-layer order, controls, interaction handlers, selection,
+history, and worker routing. Applications normally create one instance and
+interact with it through public methods and events.
 
-## Behavior notes
+## Construct a map
 
-Create it with `{ container }`. `interactive` defaults to `true`; `useWorker` defaults to `false`; `workerThreshold` defaults to `50000`; `expressionPolicy` defaults to `disabled`.
+```ts
+import { Emap } from '@zwishing/emap';
+
+const map = new Emap({
+  container: 'map',
+});
+```
+
+`container` may be a container ID. The element must already exist and have a
+non-zero size.
+
+Common options:
+
+| Option | Default | Purpose |
+|---|---|---|
+| `interactive` | `true` | Enables default browser interaction |
+| `useWorker` | `false` | `true` forces routing; `'auto'` chooses by workload |
+| `workerThreshold` | `50000` | Data-size threshold considered by `'auto'` |
+| `workerUrl` | `emap-worker.js` | Public URL of the worker script |
+| `expressionPolicy` | `'disabled'` | Controls mapshaper expression execution |
+
+Only use `expressionPolicy: 'trusted'` for expressions provided by trusted
+application code. Do not execute user or remote input as a trusted expression.
+
+## Register a source
+
+```ts
+const source = await TopologySource.fromUrl('main', '/data/districts.geojson');
+
+map.addSource('main', source);
+map.setExtent(source.getExtent());
+```
+
+A source can be loaded before registration, or an empty `TopologySource` can be
+registered before an asynchronous `setData(...)` call. The map listens for the
+source `data` event, so either order works.
+
+The map-level source ID must match the `source` used by render layers and
+`map.ops`.
+
+## Add render layers
+
+```ts
+map.addLayer({
+  id: 'district-fill',
+  type: 'fill',
+  source: 'main',
+  paint: {
+    'fill-color': '#60a5fa',
+    'fill-opacity': 0.7,
+  },
+});
+
+map.addLayer({
+  id: 'district-line',
+  type: 'line',
+  source: 'main',
+  paint: {
+    'line-color': '#1e3a8a',
+    'line-width': 1,
+  },
+});
+```
+
+A render-layer ID must be unique and stable. Selection filters, feature events,
+and application state commonly retain that ID.
+
+## Controls and interaction handlers
+
+Controls provide DOM UI; handlers implement the interaction. When using a
+built-in control, give its lifecycle to the map through `addControl`:
+
+```ts
+map.addControl(new NavigationControl(), 'top-left');
+map.addControl(new HistoryControl(), 'top-right');
+```
+
+An application with its own toolbar can enable or disable map handlers directly
+instead of duplicating pointer interaction logic.
+
+## Listen for map state
+
+`Emap` provides event dispatch. Known event names infer their payload:
+
+```ts
+map.on('moveend', (event) => {
+  console.log(event.center, event.zoom);
+});
+
+map.on(
+  'feature:click',
+  { layers: ['district-fill'] },
+  (event) => {
+    console.log(event.ref);
+  },
+);
+
+map.on('historychange', (event) => {
+  console.log(event);
+});
+```
+
+Use `on` for a persistent listener, `once` for one delivery, and `off` with the
+same listener when it is no longer needed.
+
+## Modify data
+
+Choose an entry point according to the scope of the change:
+
+- Selection and highlighting only change interaction state.
+- Feature transforms, vertex edits, and attribute edits use edit commands.
+- Buffer, dissolve, projection, and simplify use `map.ops`.
+- Use a transaction when several commands must become one undo step.
+
+```ts
+const result = await map.ops.simplifyLayer({
+  source: 'main',
+  percentage: 0.25,
+});
+
+if (!result.ok) {
+  console.error(result.error);
+}
+```
+
+Do not bypass these entry points by mutating `source.getDataset()`. The map uses
+command effect classification to update selection, spatial indexes, history,
+and render caches.
+
+## Camera and screen coordinates
+
+Use `jumpTo`, `easeTo`, `flyTo`, `fitBounds`, `panTo`, and `zoomTo` to change
+the view. Use `project` and `unproject` to convert between map coordinates and
+canvas pixels. Do not mutate the viewport or maintain a second matrix in
+application code.
 
 ## API
 
-- [src.Emap](/emap/api/classes/index.Emap.html)
+- [Emap](/emap/api/classes/index.Emap.html)
+- [MapOptions](/emap/api/interfaces/index.MapOptions.html)
+- [EmapEventMap](/emap/api/interfaces/index.EmapEventMap.html)
 
 ## Runnable examples
 
-- [getting-started/geojson-viewer](/emap/examples/getting-started/geojson-viewer/)
-- [interaction-handlers](/emap/examples/interaction-handlers/)
-
-## Minimal snippet
-
-```ts
-new Emap({ container: "map" })
-map.addSource("main", source)
-map.addLayer({ id: "fill", type: "fill", source: "main" })
-```
+- [GeoJSON viewer](/emap/examples/getting-started/geojson-viewer/)
+- [Interaction handlers](/emap/examples/interaction-handlers/)
+- [Undo and redo](/emap/examples/undo-redo/)
+- [Web Worker](/emap/examples/web-worker/)

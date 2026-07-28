@@ -29,8 +29,8 @@ are not delivered via <code>map.on</code>.</p>
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">EmapEventMap</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#crschange">crschange</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">never</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">never</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#data">data</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span><br/>        <span class="tsd-kind-property">reason</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">&quot;replace&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;load&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;edit&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;reproject&quot;</span><span class="tsd-signature-symbol">;</span><br/>        <span class="tsd-kind-property">sourceId</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#editmodechange">editmodechange</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">mode</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">EditMode</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#error">error</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">error</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Error</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#featureclick">&quot;feature:click&quot;</a><span class="tsd-signature-symbol">:</span> <a href="index.FeatureEvent.html" class="tsd-signature-type tsd-kind-interface">FeatureEvent</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#featureenter">&quot;feature:enter&quot;</a><span class="tsd-signature-symbol">:</span> <a href="index.FeatureEvent.html" class="tsd-signature-type tsd-kind-interface">FeatureEvent</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#featurehover">&quot;feature:hover&quot;</a><span class="tsd-signature-symbol">:</span> <a href="index.FeatureEvent.html" class="tsd-signature-type tsd-kind-interface">FeatureEvent</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#featureleave">&quot;feature:leave&quot;</a><span class="tsd-signature-symbol">:</span> <a href="index.FeatureEvent.html" class="tsd-signature-type tsd-kind-interface">FeatureEvent</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#historychange">historychange</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.HistoryStateSnapshot.html" class="tsd-signature-type tsd-kind-interface">HistoryStateSnapshot</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#mousemove">mousemove</a><span class="tsd-signature-symbol">:</span> <a href="index.PointerMoveEvent.html" class="tsd-signature-type tsd-kind-interface">PointerMoveEvent</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#move">move</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.CameraEvent.html" class="tsd-signature-type tsd-kind-interface">CameraEvent</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#moveend">moveend</a><span class="tsd-signature-symbol">:</span> <a href="index.CameraEvent.html" class="tsd-signature-type tsd-kind-interface">CameraEvent</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#movestart">movestart</a><span class="tsd-signature-symbol">:</span> <a href="index.CameraEvent.html" class="tsd-signature-type tsd-kind-interface">CameraEvent</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#myaugmentedevent">myAugmentedEvent</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">detail</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#resize">resize</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">never</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">never</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#selectionchange">selectionchange</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span><br/>        <span class="tsd-kind-property">added</span><span class="tsd-signature-symbol">:</span> <a href="index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>        <span class="tsd-kind-property">removed</span><span class="tsd-signature-symbol">:</span> <a href="index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>        <span class="tsd-kind-property">selected</span><span class="tsd-signature-symbol">:</span> <a href="index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#validationfailed">validationfailed</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">label</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">results</span><span class="tsd-signature-symbol">:</span> <a href="index.ValidatorResult.html" class="tsd-signature-type tsd-kind-interface">ValidatorResult</a><span class="tsd-signature-symbol">[]</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#zoom">zoom</a><span class="tsd-signature-symbol">:</span> <a href="index.CameraEvent.html" class="tsd-signature-type tsd-kind-interface">CameraEvent</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#zoomend">zoomend</a><span class="tsd-signature-symbol">:</span> <a href="index.CameraEvent.html" class="tsd-signature-type tsd-kind-interface">CameraEvent</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#zoomstart">zoomstart</a><span class="tsd-signature-symbol">:</span> <a href="index.CameraEvent.html" class="tsd-signature-type tsd-kind-interface">CameraEvent</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L35">src/core/event-map.ts:35</a></li>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.test-d.ts#L62">src/core/event-map.test-d.ts:62</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L35">src/core/event-map.ts:35</a></li>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.test-d.ts#L62">src/core/event-map.test-d.ts:62</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -68,140 +68,140 @@ are not delivered via <code>map.on</code>.</p>
 <div class="tsd-comment tsd-typography"><p>crschange is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L51">src/core/event-map.ts:51</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L51">src/core/event-map.ts:51</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="data"><span>data</span><a href="#data" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">data</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">reason</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">&quot;replace&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;load&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;edit&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;reproject&quot;</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">sourceId</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span></div>
 <div class="tsd-comment tsd-typography"><p>data is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L53">src/core/event-map.ts:53</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L53">src/core/event-map.ts:53</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="editmodechange"><span>editmodechange</span><a href="#editmodechange" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">editmodechange</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">mode</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">EditMode</span> <span class="tsd-signature-symbol">}</span></div>
 <div class="tsd-comment tsd-typography"><p>editmodechange is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L54">src/core/event-map.ts:54</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L54">src/core/event-map.ts:54</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="error"><span>error</span><a href="#error" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">error</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">error</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Error</span> <span class="tsd-signature-symbol">}</span></div>
 <div class="tsd-comment tsd-typography"><p>error is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L55">src/core/event-map.ts:55</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L55">src/core/event-map.ts:55</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="featureclick"><span>feature:click</span><a href="#featureclick" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">&quot;feature:click&quot;</span><span class="tsd-signature-symbol">:</span> <a href="index.FeatureEvent.html" class="tsd-signature-type tsd-kind-interface">FeatureEvent</a></div>
 <div class="tsd-comment tsd-typography"><p>feature:click is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L65">src/core/event-map.ts:65</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L65">src/core/event-map.ts:65</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="featureenter"><span>feature:enter</span><a href="#featureenter" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">&quot;feature:enter&quot;</span><span class="tsd-signature-symbol">:</span> <a href="index.FeatureEvent.html" class="tsd-signature-type tsd-kind-interface">FeatureEvent</a></div>
 <div class="tsd-comment tsd-typography"><p>feature:enter is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L67">src/core/event-map.ts:67</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L67">src/core/event-map.ts:67</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="featurehover"><span>feature:hover</span><a href="#featurehover" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">&quot;feature:hover&quot;</span><span class="tsd-signature-symbol">:</span> <a href="index.FeatureEvent.html" class="tsd-signature-type tsd-kind-interface">FeatureEvent</a></div>
 <div class="tsd-comment tsd-typography"><p>feature:hover is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L66">src/core/event-map.ts:66</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L66">src/core/event-map.ts:66</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="featureleave"><span>feature:leave</span><a href="#featureleave" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">&quot;feature:leave&quot;</span><span class="tsd-signature-symbol">:</span> <a href="index.FeatureEvent.html" class="tsd-signature-type tsd-kind-interface">FeatureEvent</a></div>
 <div class="tsd-comment tsd-typography"><p>feature:leave is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L68">src/core/event-map.ts:68</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L68">src/core/event-map.ts:68</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="historychange"><span>historychange</span><a href="#historychange" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">historychange</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.HistoryStateSnapshot.html" class="tsd-signature-type tsd-kind-interface">HistoryStateSnapshot</a><span class="tsd-signature-symbol">&gt;</span></div>
 <div class="tsd-comment tsd-typography"><p>historychange is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L57">src/core/event-map.ts:57</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L57">src/core/event-map.ts:57</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="mousemove"><span>mousemove</span><a href="#mousemove" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">mousemove</span><span class="tsd-signature-symbol">:</span> <a href="index.PointerMoveEvent.html" class="tsd-signature-type tsd-kind-interface">PointerMoveEvent</a></div>
 <div class="tsd-comment tsd-typography"><p>mousemove is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L64">src/core/event-map.ts:64</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L64">src/core/event-map.ts:64</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="move"><span>move</span><a href="#move" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">move</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.CameraEvent.html" class="tsd-signature-type tsd-kind-interface">CameraEvent</a><span class="tsd-signature-symbol">&gt;</span></div>
 <div class="tsd-comment tsd-typography"><p>move is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L44">src/core/event-map.ts:44</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L44">src/core/event-map.ts:44</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="moveend"><span>moveend</span><a href="#moveend" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">moveend</span><span class="tsd-signature-symbol">:</span> <a href="index.CameraEvent.html" class="tsd-signature-type tsd-kind-interface">CameraEvent</a></div>
 <div class="tsd-comment tsd-typography"><p>moveend is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L38">src/core/event-map.ts:38</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L38">src/core/event-map.ts:38</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="movestart"><span>movestart</span><a href="#movestart" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">movestart</span><span class="tsd-signature-symbol">:</span> <a href="index.CameraEvent.html" class="tsd-signature-type tsd-kind-interface">CameraEvent</a></div>
 <div class="tsd-comment tsd-typography"><p>movestart is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L37">src/core/event-map.ts:37</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L37">src/core/event-map.ts:37</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="myaugmentedevent"><span>my<wbr/>Augmented<wbr/>Event</span><a href="#myaugmentedevent" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">myAugmentedEvent</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">detail</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span></div>
 <div class="tsd-comment tsd-typography"><p>myAugmentedEvent is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.test-d.ts#L63">src/core/event-map.test-d.ts:63</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.test-d.ts#L63">src/core/event-map.test-d.ts:63</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="resize"><span>resize</span><a href="#resize" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">resize</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">never</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">never</span><span class="tsd-signature-symbol">&gt;</span></div>
 <div class="tsd-comment tsd-typography"><p>resize is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L52">src/core/event-map.ts:52</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L52">src/core/event-map.ts:52</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="selectionchange"><span>selectionchange</span><a href="#selectionchange" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">selectionchange</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span><br/>    <span class="tsd-kind-property">added</span><span class="tsd-signature-symbol">:</span> <a href="index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-property">removed</span><span class="tsd-signature-symbol">:</span> <a href="index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-property">selected</span><span class="tsd-signature-symbol">:</span> <a href="index.FeatureRef.html" class="tsd-signature-type tsd-kind-interface">FeatureRef</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
 <div class="tsd-comment tsd-typography"><p>selectionchange is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L58">src/core/event-map.ts:58</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L58">src/core/event-map.ts:58</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="validationfailed"><span>validationfailed</span><a href="#validationfailed" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">validationfailed</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">label</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">results</span><span class="tsd-signature-symbol">:</span> <a href="index.ValidatorResult.html" class="tsd-signature-type tsd-kind-interface">ValidatorResult</a><span class="tsd-signature-symbol">[]</span> <span class="tsd-signature-symbol">}</span></div>
 <div class="tsd-comment tsd-typography"><p>validationfailed is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L59">src/core/event-map.ts:59</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L59">src/core/event-map.ts:59</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="zoom"><span>zoom</span><a href="#zoom" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">zoom</span><span class="tsd-signature-symbol">:</span> <a href="index.CameraEvent.html" class="tsd-signature-type tsd-kind-interface">CameraEvent</a></div>
 <div class="tsd-comment tsd-typography"><p>zoom is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L40">src/core/event-map.ts:40</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L40">src/core/event-map.ts:40</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="zoomend"><span>zoomend</span><a href="#zoomend" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">zoomend</span><span class="tsd-signature-symbol">:</span> <a href="index.CameraEvent.html" class="tsd-signature-type tsd-kind-interface">CameraEvent</a></div>
 <div class="tsd-comment tsd-typography"><p>zoomend is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L41">src/core/event-map.ts:41</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L41">src/core/event-map.ts:41</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="zoomstart"><span>zoomstart</span><a href="#zoomstart" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">zoomstart</span><span class="tsd-signature-symbol">:</span> <a href="index.CameraEvent.html" class="tsd-signature-type tsd-kind-interface">CameraEvent</a></div>
 <div class="tsd-comment tsd-typography"><p>zoomstart is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/zwishing/emap/blob/b6169a3b1c775c8c7134ca3a7e9b9a84c6987d66/src/core/event-map.ts#L39">src/core/event-map.ts:39</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/zwishing/emap/blob/928899a0dbe88e7052e5abd3d0980e16ad95737b/src/core/event-map.ts#L39">src/core/event-map.ts:39</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

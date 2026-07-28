@@ -8,24 +8,60 @@ stability: stable
 verifiedVersion: 0.5.0
 ---
 
-# Installation
+# Installation and your first map
 
-Install emap with your package manager:
+This page creates a minimal Vite and TypeScript application, loads remote
+TopoJSON, and displays navigation and history controls.
+
+## Requirements
+
+- Node.js `^20.19.0` or `>=22.12.0`, matching the current Vite toolchain.
+- A browser with ES modules, Canvas 2D, and modern JavaScript support.
+- npm, pnpm, or another package manager that supports package exports.
+
+If you already have a frontend application, start at “Install emap.”
+
+## Create an application
+
+```bash
+pnpm create vite emap-demo --template vanilla-ts
+cd emap-demo
+pnpm install
+```
+
+The npm equivalent is:
+
+```bash
+npm create vite@latest emap-demo -- --template vanilla-ts
+cd emap-demo
+npm install
+```
+
+## Install emap
 
 ```bash
 pnpm add @zwishing/emap
 ```
 
-Import the stylesheet at your application entry point and provide a sized map container:
+Or:
 
-```ts
-import { Emap, TopologySource } from '@zwishing/emap';
-import '@zwishing/emap/style.css';
+```bash
+npm install @zwishing/emap
 ```
+
+## Prepare the map container
+
+Replace the body of `index.html` with:
 
 ```html
-<div id="map"></div>
+<body>
+  <div id="map"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
 ```
+
+The map container must have a non-zero width and height. Replace
+`src/style.css` with:
 
 ```css
 html,
@@ -35,20 +71,192 @@ body,
   height: 100%;
   margin: 0;
 }
+
+body {
+  overflow: hidden;
+}
 ```
 
-Create the map, load a source, and fit the view to the data extent:
+A map inside a panel or dialog does not have to fill the page, but its parent
+layout must still give `#map` a computed size. A zero-sized container is the
+most common reason for a blank map without an exception.
+
+## Create the map and load data
+
+Replace `src/main.ts` with:
 
 ```ts
-const map = new Emap({ container: 'map' });
+import {
+  Emap,
+  HistoryControl,
+  NavigationControl,
+  TopologySource,
+} from '@zwishing/emap';
+import '@zwishing/emap/style.css';
+import './style.css';
 
-const response = await fetch('/data/china.geojson');
-const content = new Uint8Array(await response.arrayBuffer());
-const source = new TopologySource('china');
+const map = new Emap({
+  container: 'map',
+});
 
-await source.setData({ filename: 'china.geojson', content });
-map.addSource('china', source);
+map.addControl(new NavigationControl(), 'top-left');
+map.addControl(new HistoryControl(), 'top-left');
+
+async function loadMap(): Promise<void> {
+  try {
+    const source = await TopologySource.fromUrl(
+      'china',
+      'https://geojson.cn/api/china/1.6.3/china.topo.json',
+    );
+
+    map.addSource('china', source);
+    map.setExtent(source.getExtent());
+  } catch (error) {
+    console.error('Failed to load map data', error);
+  }
+}
+
+void loadMap();
+```
+
+Start the development server:
+
+```bash
+pnpm dev
+```
+
+Open the URL printed by Vite. A successful page shows the map and allows
+navigation through the control.
+
+## Execution order
+
+1. `new Emap({ container: 'map' })` creates the canvas and interaction manager.
+2. `TopologySource.fromUrl(...)` downloads, imports, and builds the topology
+   dataset.
+3. `map.addSource(...)` registers source layers for rendering and queries.
+4. `source.getExtent()` returns the data bounds.
+5. `map.setExtent(...)` moves the initial view to those bounds.
+
+Do not assume layers or bounds exist before `TopologySource.fromUrl(...)`
+resolves. Preserve the original error for diagnostics and provide a retry path
+in application UI.
+
+## Load application data
+
+### Load from a URL
+
+Any URL that the browser is allowed to fetch can be used:
+
+```ts
+const source = await TopologySource.fromUrl('roads', '/data/roads.geojson');
+map.addSource('roads', source);
 map.setExtent(source.getExtent());
 ```
 
-`source.setData(...)` waits for the dataset to load. `map.addSource(...)` registers the source with the map, and `map.setExtent(...)` sets the initial view from the source bounds.
+Cross-origin URLs must return CORS headers that allow the application origin.
+
+### Load from binary content
+
+A file upload or an existing `ArrayBuffer` can be passed to `setData`:
+
+```ts
+const response = await fetch('/data/districts.geojson');
+if (!response.ok) {
+  throw new Error(`Data request failed: ${response.status}`);
+}
+
+const source = new TopologySource('districts');
+const content = new Uint8Array(await response.arrayBuffer());
+
+await source.setData({
+  filename: 'districts.geojson',
+  content,
+});
+
+map.addSource('districts', source);
+map.setExtent(source.getExtent());
+```
+
+`filename` matters because the importer uses the extension to distinguish
+GeoJSON, TopoJSON, ZIP, and GeoParquet inputs. `setData(...)` resolves after the
+dataset has been populated and the `data` event has fired.
+
+## Add explicit style layers
+
+After registering a source, add application-specific render layers:
+
+```ts
+map.addLayer({
+  id: 'district-fill',
+  type: 'fill',
+  source: 'districts',
+  paint: {
+    'fill-color': '#5b8ff9',
+    'fill-opacity': 0.65,
+  },
+});
+
+map.addLayer({
+  id: 'district-outline',
+  type: 'line',
+  source: 'districts',
+  paint: {
+    'line-color': '#1d39c4',
+    'line-width': 1.5,
+  },
+});
+```
+
+One source can feed multiple render layers. Later layers are drawn above
+earlier layers.
+
+## Optional worker setup
+
+Enable a worker only when heavier processing should leave the main thread:
+
+```ts
+const map = new Emap({
+  container: 'map',
+  useWorker: 'auto',
+  workerUrl: '/assets/emap-worker.js',
+});
+```
+
+Copy `node_modules/@zwishing/emap/dist/emap-worker.js` and
+`mapshaper-vendor.js` into the public asset directory. Keep them together by
+default because the worker loads the vendor file through a relative URL.
+
+## Common startup problems
+
+### The page is blank
+
+Check these in order:
+
+1. `#map` and its parents have a computed size.
+2. The browser console has no request or CORS error.
+3. The ID passed to `map.addSource(...)` matches the layer `source`.
+4. The application calls `setExtent` or `fitBounds` after loading.
+5. An explicit layer `type` is compatible with the source geometry.
+
+### Controls are unstyled
+
+Confirm the application entry imports:
+
+```ts
+import '@zwishing/emap/style.css';
+```
+
+### The worker returns 404
+
+Open `workerUrl` directly in the browser to verify it is public, then confirm
+that `mapshaper-vendor.js` is available beside it.
+
+## Next steps
+
+- Read [Sources and layers](../concepts/source-layer.md) to distinguish a
+  source layer from a render layer.
+- Read [Styling](../guides/styling.md) to configure point, line, and polygon
+  paint.
+- Read [Events](../guides/events.md) to connect the map to application UI.
+- Open the [runnable examples](/emap/examples/) for complete interaction and
+  data-processing scenarios.

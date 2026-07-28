@@ -31,5 +31,5 @@ verifiedVersion: 0.5.0
 
 ```ts
 map.addControl(new HistoryControl(), "top-right")
-map.history.undo()
+map.undo()
 ```

@@ -31,5 +31,5 @@ Dataset-replace operations should run through `Emap.ops` so history snapshots an
 
 ```ts
 map.addControl(new HistoryControl(), "top-right")
-map.history.undo()
+map.undo()
 ```

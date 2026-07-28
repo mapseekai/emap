@@ -30,5 +30,5 @@ verifiedVersion: 0.5.0
 ## 最小片段
 
 ```ts
-map.addControl(new StatusControl({ text: "Ready" }), "bottom-left")
+map.addControl(new StatusControl({ showMousePos: true, showEPSG: true }), "bottom-left")
 ```
