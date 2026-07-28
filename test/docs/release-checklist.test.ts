@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -21,7 +21,7 @@ async function loadPreviewModule() {
   return import(/* @vite-ignore */ moduleUrl).catch(() => null);
 }
 
-async function requestPreview(handler: PreviewHandler, url: string) {
+async function requestPreview(handler: PreviewHandler, url: string, method = 'GET') {
   const headers = new Map<string, string>();
   const chunks: Buffer[] = [];
   let finish: (result: { status: number; headers: Map<string, string>; body: Buffer }) => void;
@@ -41,7 +41,7 @@ async function requestPreview(handler: PreviewHandler, url: string) {
     },
   };
 
-  await handler({ method: 'GET', url }, response);
+  await handler({ method, url }, response);
   return completed;
 }
 
@@ -173,11 +173,117 @@ describe('release documentation checklist', () => {
     }
   });
 
+  it('serves successful HEAD requests without a response body', async () => {
+    const previewModule = await loadPreviewModule();
+    expect(previewModule).not.toBeNull();
+    if (!previewModule) return;
+
+    const root = await mkdtemp(join(tmpdir(), 'emap-docs-preview-head-'));
+
+    try {
+      await mkdir(resolve(root, 'packages/docs/build'), { recursive: true });
+      await writeFile(resolve(root, 'packages/docs/build/index.html'), '<!doctype html>docs');
+
+      const handler = previewModule.createDocsPreviewHandler({ root }) as PreviewHandler;
+      const response = await requestPreview(handler, '/emap/', 'HEAD');
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
+      expect(response.headers.get('content-length')).toBe('19');
+      expect(response.body).toHaveLength(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('converts a lookup failure into a completed 500 response', async () => {
+    const previewModule = await loadPreviewModule();
+    expect(previewModule).not.toBeNull();
+    if (!previewModule) return;
+
+    const handler = previewModule.createDocsPreviewHandler({
+      root: process.cwd(),
+      fileSystem: {
+        readFile,
+        stat: async () => {
+          throw Object.assign(new Error('lookup unavailable'), { code: 'EIO' });
+        },
+      },
+    }) as PreviewHandler;
+    const response = await requestPreview(handler, '/emap/');
+
+    expect(response.status).toBe(500);
+    expect(response.body.toString()).toContain('lookup unavailable');
+  });
+
+  it('keeps HEAD empty when reading the resolved file fails', async () => {
+    const previewModule = await loadPreviewModule();
+    expect(previewModule).not.toBeNull();
+    if (!previewModule) return;
+
+    const root = await mkdtemp(join(tmpdir(), 'emap-docs-preview-read-error-'));
+
+    try {
+      await mkdir(resolve(root, 'packages/docs/build'), { recursive: true });
+      await writeFile(resolve(root, 'packages/docs/build/index.html'), '<!doctype html>docs');
+      const handler = previewModule.createDocsPreviewHandler({
+        root,
+        fileSystem: {
+          stat,
+          readFile: async () => {
+            throw Object.assign(new Error('read unavailable'), { code: 'EIO' });
+          },
+        },
+      }) as PreviewHandler;
+
+      const getResponse = await requestPreview(handler, '/emap/');
+      const headResponse = await requestPreview(handler, '/emap/', 'HEAD');
+
+      expect(getResponse.status).toBe(500);
+      expect(getResponse.body.toString()).toContain('read unavailable');
+      expect(headResponse.status).toBe(500);
+      expect(headResponse.body).toHaveLength(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('returns 405 with the allowed preview methods', async () => {
+    const previewModule = await loadPreviewModule();
+    expect(previewModule).not.toBeNull();
+    if (!previewModule) return;
+
+    const handler = previewModule.createDocsPreviewHandler({
+      root: process.cwd(),
+    }) as PreviewHandler;
+    const response = await requestPreview(handler, '/emap/', 'POST');
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get('allow')).toBe('GET, HEAD');
+  });
+
+  it.each([
+    '/emap/%',
+    '/emap/%00index.html',
+  ])('rejects malformed preview paths: %s', async (url) => {
+    const previewModule = await loadPreviewModule();
+    expect(previewModule).not.toBeNull();
+    if (!previewModule) return;
+
+    const handler = previewModule.createDocsPreviewHandler({
+      root: process.cwd(),
+    }) as PreviewHandler;
+    const response = await requestPreview(handler, url);
+
+    expect(response.status).toBe(400);
+  });
+
   it.each([
     '/emap/../package.json',
     '/emap/%2e%2e/package.json',
     '/emap/..%2Fpackage.json',
     '/emap/%5c..%5cpackage.json',
+    '/emap/\\..\\package.json',
   ])('rejects preview path traversal: %s', async (url) => {
     const previewModule = await loadPreviewModule();
     expect(

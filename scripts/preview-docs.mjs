@@ -35,26 +35,30 @@ export function createDocsPreviewHandler(options = {}) {
     options.buildDir ?? resolve(options.root ?? process.cwd(), 'packages/docs/build'),
   );
   const basePath = options.basePath ?? DEFAULT_BASE_PATH;
+  const readPreviewFile = options.fileSystem?.readFile ?? readFile;
+  const statPreviewFile = options.fileSystem?.stat ?? stat;
 
   return async function handleDocsPreview(request, response) {
     const method = request.method ?? 'GET';
     if (method !== 'GET' && method !== 'HEAD') {
-      response.statusCode = 405;
       response.setHeader('allow', 'GET, HEAD');
-      response.end('Method Not Allowed');
-      return;
-    }
-
-    const resolution = await resolveRequestPath(request.url ?? '/', buildDir, basePath);
-    if (!resolution.file) {
-      response.statusCode = resolution.status;
-      response.setHeader('content-type', 'text/plain; charset=utf-8');
-      response.end(method === 'HEAD' ? undefined : resolution.message);
+      sendError(response, method, 405, 'Method Not Allowed');
       return;
     }
 
     try {
-      const content = await readFile(resolution.file);
+      const resolution = await resolveRequestPath(
+        request.url ?? '/',
+        buildDir,
+        basePath,
+        statPreviewFile,
+      );
+      if (!resolution.file) {
+        sendError(response, method, resolution.status, resolution.message);
+        return;
+      }
+
+      const content = await readPreviewFile(resolution.file);
       response.statusCode = 200;
       response.setHeader(
         'content-type',
@@ -64,14 +68,13 @@ export function createDocsPreviewHandler(options = {}) {
       response.setHeader('x-content-type-options', 'nosniff');
       response.end(method === 'HEAD' ? undefined : content);
     } catch (error) {
-      response.statusCode = 500;
-      response.setHeader('content-type', 'text/plain; charset=utf-8');
-      response.end(error instanceof Error ? error.message : 'Unable to read preview file');
+      const detail = error instanceof Error ? error.message : 'unknown filesystem error';
+      sendError(response, method, 500, `Unable to serve preview request: ${detail}`);
     }
   };
 }
 
-async function resolveRequestPath(requestUrl, buildDir, basePath) {
+async function resolveRequestPath(requestUrl, buildDir, basePath, statPreviewFile) {
   const rawPath = requestUrl.split(/[?#]/, 1)[0];
   let pathname;
 
@@ -92,29 +95,39 @@ async function resolveRequestPath(requestUrl, buildDir, basePath) {
   const requested = resolve(buildDir, pathname.slice(basePath.length));
   if (!isWithin(buildDir, requested)) return { status: 403, message: 'Forbidden' };
 
-  const requestedStat = await statOrNull(requested);
+  const requestedStat = await statOrNull(requested, statPreviewFile);
   if (requestedStat?.isFile()) return { status: 200, file: requested };
 
   if (requestedStat?.isDirectory()) {
     const indexFile = resolve(requested, 'index.html');
-    if ((await statOrNull(indexFile))?.isFile()) return { status: 200, file: indexFile };
+    if ((await statOrNull(indexFile, statPreviewFile))?.isFile()) {
+      return { status: 200, file: indexFile };
+    }
   }
 
   if (extname(pathname) === '') {
     const spaEntry = resolve(buildDir, 'index.html');
-    if ((await statOrNull(spaEntry))?.isFile()) return { status: 200, file: spaEntry };
+    if ((await statOrNull(spaEntry, statPreviewFile))?.isFile()) {
+      return { status: 200, file: spaEntry };
+    }
   }
 
   return { status: 404, message: 'Not Found' };
 }
 
-async function statOrNull(path) {
+async function statOrNull(path, statPreviewFile) {
   try {
-    return await stat(path);
+    return await statPreviewFile(path);
   } catch (error) {
     if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return null;
     throw error;
   }
+}
+
+function sendError(response, method, status, message) {
+  response.statusCode = status;
+  response.setHeader('content-type', 'text/plain; charset=utf-8');
+  response.end(method === 'HEAD' ? undefined : message);
 }
 
 function isWithin(root, candidate) {
