@@ -189,7 +189,9 @@ describe('TypeDoc public API config', () => {
     );
 
     expect(html).not.toContain('.worktrees/');
-    expect(html).toContain('Defined in src/map/map.ts');
+    expect(html).toMatch(
+      /Defined in <a href="[^"]*\/src\/map\/map\.ts#L\d+">src\/map\/map\.ts:\d+<\/a>/,
+    );
   });
 
   it('emits real public API examples and exact generated parameter metadata', async () => {
