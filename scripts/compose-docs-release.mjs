@@ -7,14 +7,19 @@ const root = parseRootArg();
 const examplesDist = resolve(root, 'packages/examples/dist');
 const docsBuild = resolve(root, 'packages/docs/build');
 const composedExamples = resolve(docsBuild, 'examples');
+const nestedExamplesInput = resolve(examplesDist, 'examples');
 
-const workerBundle = resolve(root, 'dist/emap-worker.js');
+if (await fileExists(nestedExamplesInput)) {
+  throw new Error(
+    `Nested examples directory is not allowed: ${relativePath(root, nestedExamplesInput)}`,
+  );
+}
 
 const requiredInputs = [
   resolve(examplesDist, 'index.html'),
-  resolve(examplesDist, 'examples/buffer/index.html'),
+  resolve(examplesDist, 'buffer/index.html'),
+  resolve(examplesDist, 'emap-worker.js'),
   resolve(docsBuild, 'index.html'),
-  workerBundle,
 ];
 
 for (const input of requiredInputs) {
@@ -25,11 +30,10 @@ for (const input of requiredInputs) {
 
 await rm(composedExamples, { recursive: true, force: true });
 await cp(examplesDist, composedExamples, { recursive: true });
-await cp(workerBundle, resolve(composedExamples, 'emap-worker.js'));
 
 const requiredOutputs = [
   resolve(composedExamples, 'index.html'),
-  resolve(composedExamples, 'examples/buffer/index.html'),
+  resolve(composedExamples, 'buffer/index.html'),
   resolve(composedExamples, 'emap-worker.js'),
   resolve(composedExamples, 'assets'),
 ];
@@ -38,6 +42,13 @@ for (const output of requiredOutputs) {
   if (!(await fileExists(output))) {
     throw new Error(`Missing composed examples output: ${relativePath(root, output)}`);
   }
+}
+
+const nestedExamplesOutput = resolve(composedExamples, 'examples');
+if (await fileExists(nestedExamplesOutput)) {
+  throw new Error(
+    `Nested examples directory is not allowed: ${relativePath(root, nestedExamplesOutput)}`,
+  );
 }
 
 console.log('Composed examples at packages/docs/build/examples for /emap/examples/.');

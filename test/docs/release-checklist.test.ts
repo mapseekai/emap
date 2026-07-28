@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -57,17 +57,16 @@ describe('release documentation checklist', () => {
 
     try {
       await mkdir(resolve(root, 'packages/examples/dist/assets'), { recursive: true });
-      await mkdir(resolve(root, 'packages/examples/dist/examples/buffer'), { recursive: true });
+      await mkdir(resolve(root, 'packages/examples/dist/buffer'), { recursive: true });
       await mkdir(resolve(root, 'packages/docs/build'), { recursive: true });
-      await mkdir(resolve(root, 'dist'), { recursive: true });
 
       await writeFile(resolve(root, 'packages/examples/dist/index.html'), '<!doctype html>');
-      await writeFile(
-        resolve(root, 'packages/examples/dist/examples/buffer/index.html'),
-        '<!doctype html>',
-      );
+      await writeFile(resolve(root, 'packages/examples/dist/buffer/index.html'), '<!doctype html>');
       await writeFile(resolve(root, 'packages/docs/build/index.html'), '<!doctype html>');
-      await writeFile(resolve(root, 'dist/emap-worker.js'), 'self.postMessage("ready");');
+      await writeFile(
+        resolve(root, 'packages/examples/dist/emap-worker.js'),
+        'self.postMessage("ready");',
+      );
       await writeFile(
         resolve(root, 'packages/examples/dist/assets/main.js'),
         [
@@ -92,12 +91,54 @@ describe('release documentation checklist', () => {
         resolve(root, 'packages/docs/build/examples/emap-worker.js'),
         'utf8',
       );
+      const composedBuffer = await readFile(
+        resolve(root, 'packages/docs/build/examples/buffer/index.html'),
+        'utf8',
+      );
 
       expect(composedMain).toContain('/emap/concepts/emap/');
       expect(composedMain).not.toContain('/docs/');
       expect(composedMain).toContain('/emap/examples/emap-worker.js');
       expect(composedMain).not.toContain('/dist/emap-worker.js');
       expect(composedWorker).toBe('self.postMessage("ready");');
+      expect(composedBuffer).toBe('<!doctype html>');
+      await expect(
+        access(resolve(root, 'packages/docs/build/examples/examples')),
+      ).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a nested examples directory instead of publishing a doubled route', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'emap-docs-nested-examples-'));
+
+    try {
+      await mkdir(resolve(root, 'packages/examples/dist/assets'), { recursive: true });
+      await mkdir(resolve(root, 'packages/examples/dist/buffer'), { recursive: true });
+      await mkdir(resolve(root, 'packages/examples/dist/examples/stale'), { recursive: true });
+      await mkdir(resolve(root, 'packages/docs/build'), { recursive: true });
+      await writeFile(resolve(root, 'packages/examples/dist/index.html'), '<!doctype html>');
+      await writeFile(resolve(root, 'packages/examples/dist/buffer/index.html'), 'buffer');
+      await writeFile(resolve(root, 'packages/examples/dist/examples/stale/index.html'), 'stale');
+      await writeFile(resolve(root, 'packages/examples/dist/assets/main.js'), 'export {};');
+      await writeFile(resolve(root, 'packages/docs/build/index.html'), '<!doctype html>');
+      await writeFile(
+        resolve(root, 'packages/examples/dist/emap-worker.js'),
+        'self.postMessage("ready");',
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [resolve(process.cwd(), 'scripts/compose-docs-release.mjs'), '--root', root],
+        { cwd: process.cwd(), encoding: 'utf8' },
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).toMatch(/nested examples directory/i);
+      await expect(
+        access(resolve(root, 'packages/docs/build/examples/examples')),
+      ).rejects.toThrow();
     } finally {
       await rm(root, { recursive: true, force: true });
     }
