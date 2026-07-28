@@ -84,6 +84,7 @@
     "api:build": "typedoc --options typedoc.json",
     "examples:dev": "pnpm --filter @zwishing/emap-examples dev",
     "examples:build": "pnpm --filter @zwishing/emap-examples build",
+    "examples:build:cdn": "node scripts/build-examples-cdn.mjs",
     "docs:compose-examples": "node scripts/compose-docs-release.mjs",
     "docs:check-i18n": "node scripts/check-docs-i18n.mjs",
     "docs:check-api": "node scripts/check-docs-api.mjs",

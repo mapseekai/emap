@@ -1,10 +1,34 @@
 // @vitest-environment node
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin, UserConfig } from 'vite';
 import { describe, expect, it } from 'vitest';
+
+const cdnFiles = {
+  'mapshaper-vendor.js': 'vendor fixture\n',
+  'emap.js': 'core fixture\n',
+  'emap.css': 'css fixture\n',
+} as const;
+
+async function writeCdnFixture(root: string): Promise<string> {
+  const distDir = resolve(root, 'dist');
+  await mkdir(distDir, { recursive: true });
+  await Promise.all(
+    Object.entries(cdnFiles).map(([name, contents]) => writeFile(resolve(distDir, name), contents)),
+  );
+  return distDir;
+}
+
+function matchingCdnFetch(input: string | URL | Request): Promise<Response> {
+  const fileName = new URL(String(input)).pathname.split('/').pop() as keyof typeof cdnFiles;
+  const contents = cdnFiles[fileName];
+  return Promise.resolve(
+    contents === undefined ? new Response(null, { status: 404 }) : new Response(contents),
+  );
+}
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -105,5 +129,231 @@ describe('examples build routes', () => {
 
     expect(request.url).toBe('/examples/getting-started/points/index.html?source=dev');
     expect(nextCalls).toBe(1);
+  });
+});
+
+describe('published examples CDN assets', () => {
+  it('returns literal SHA-384 integrity after exact-version CDN bytes match local dist', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'emap-example-cdn-'));
+
+    try {
+      const distDir = await writeCdnFixture(root);
+      const requestedUrls: string[] = [];
+      const { verifyCdnAssets } = await import('../../scripts/check-example-cdn.mjs');
+
+      const integrity = await verifyCdnAssets({
+        version: '0.5.0',
+        distDir,
+        fetchImpl: async (input) => {
+          requestedUrls.push(String(input));
+          return matchingCdnFetch(input);
+        },
+      });
+
+      expect(integrity).toEqual({
+        vendor: 'sha384-QK9AUNMnVitdP9Hd+4l9gBiJy4R0AfquzWWzRx/wJU2I7t8HxMeknwmsWx41H3/C',
+        core: 'sha384-Syn5ZnYZC3gWeR0Xar9iyUoJZMZoc4weHQL2joi6mBs4IDfTgkuAWEZSJXqAlnT0',
+        css: 'sha384-UBMkxqeDcCTKPzPzjuIeBlUOJFn324DlNqSUk371f8IZnmXGcbPVocOx00EzeR8I',
+      });
+      expect(requestedUrls).toEqual([
+        'https://cdn.jsdelivr.net/npm/@zwishing/emap@0.5.0/dist/mapshaper-vendor.js',
+        'https://cdn.jsdelivr.net/npm/@zwishing/emap@0.5.0/dist/emap.js',
+        'https://cdn.jsdelivr.net/npm/@zwishing/emap@0.5.0/dist/emap.css',
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    'latest',
+    '^0.5.0',
+    '0.5',
+  ])('rejects non-exact version %s before fetching', async (version) => {
+    const root = await mkdtemp(join(tmpdir(), 'emap-example-cdn-version-'));
+
+    try {
+      const distDir = await writeCdnFixture(root);
+      const { verifyCdnAssets } = await import('../../scripts/check-example-cdn.mjs');
+
+      await expect(
+        verifyCdnAssets({
+          version,
+          distDir,
+          fetchImpl: () => {
+            throw new Error('network must not be reached for an invalid version');
+          },
+        }),
+      ).rejects.toThrow(/exact package version/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects an unavailable CDN asset with its status and URL', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'emap-example-cdn-404-'));
+
+    try {
+      const distDir = await writeCdnFixture(root);
+      const { verifyCdnAssets } = await import('../../scripts/check-example-cdn.mjs');
+
+      await expect(
+        verifyCdnAssets({
+          version: '0.5.0',
+          distDir,
+          fetchImpl: async (input) =>
+            String(input).endsWith('/emap.js')
+              ? new Response(null, { status: 404 })
+              : matchingCdnFetch(input),
+        }),
+      ).rejects.toThrow(/emap\.js.*404/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects CDN bytes that differ from the local release asset', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'emap-example-cdn-mismatch-'));
+
+    try {
+      const distDir = await writeCdnFixture(root);
+      const { verifyCdnAssets } = await import('../../scripts/check-example-cdn.mjs');
+
+      await expect(
+        verifyCdnAssets({
+          version: '0.5.0',
+          distDir,
+          fetchImpl: async (input) =>
+            String(input).endsWith('/emap.css')
+              ? new Response('different css\n')
+              : matchingCdnFetch(input),
+        }),
+      ).rejects.toThrow(/emap\.css.*does not match/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a missing local release asset before fetching it from the CDN', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'emap-example-cdn-missing-'));
+
+    try {
+      const distDir = await writeCdnFixture(root);
+      await rm(resolve(distDir, 'emap.css'));
+      const { verifyCdnAssets } = await import('../../scripts/check-example-cdn.mjs');
+
+      await expect(
+        verifyCdnAssets({ version: '0.5.0', distDir, fetchImpl: matchingCdnFetch }),
+      ).rejects.toThrow(/missing local CDN comparison asset.*emap\.css/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('passes one verified integrity map into the CDN examples build', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'emap-example-cdn-build-'));
+    const marker = resolve(root, 'spawn.json');
+
+    try {
+      await writeCdnFixture(root);
+      await writeFile(resolve(root, 'package.json'), JSON.stringify({ version: '0.5.0' }));
+      const { buildExamplesCdn } = await import('../../scripts/build-examples-cdn.mjs');
+
+      await buildExamplesCdn({
+        root,
+        fetchImpl: matchingCdnFetch,
+        spawnImpl(command, args, options) {
+          writeFileSync(
+            marker,
+            JSON.stringify({
+              command,
+              args,
+              mode: options.env.EMAP_EXAMPLES_ASSET_MODE,
+              integrity: JSON.parse(options.env.EMAP_EXAMPLES_ASSET_INTEGRITY),
+            }),
+          );
+          return { status: 0 };
+        },
+      });
+
+      expect(JSON.parse(await readFile(marker, 'utf8'))).toEqual({
+        command: 'pnpm',
+        args: ['--filter', '@zwishing/emap-examples', 'build'],
+        mode: 'cdn',
+        integrity: {
+          vendor: 'sha384-QK9AUNMnVitdP9Hd+4l9gBiJy4R0AfquzWWzRx/wJU2I7t8HxMeknwmsWx41H3/C',
+          core: 'sha384-Syn5ZnYZC3gWeR0Xar9iyUoJZMZoc4weHQL2joi6mBs4IDfTgkuAWEZSJXqAlnT0',
+          css: 'sha384-UBMkxqeDcCTKPzPzjuIeBlUOJFn324DlNqSUk371f8IZnmXGcbPVocOx00EzeR8I',
+        },
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('does not start the examples build when CDN verification fails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'emap-example-cdn-gate-'));
+    const marker = resolve(root, 'spawned');
+
+    try {
+      await writeCdnFixture(root);
+      await writeFile(resolve(root, 'package.json'), JSON.stringify({ version: '0.5.0' }));
+      const { buildExamplesCdn } = await import('../../scripts/build-examples-cdn.mjs');
+
+      await expect(
+        buildExamplesCdn({
+          root,
+          fetchImpl: async (input) =>
+            String(input).endsWith('/emap.js')
+              ? new Response('untrusted core\n')
+              : matchingCdnFetch(input),
+          spawnImpl() {
+            writeFileSync(marker, 'started');
+            return { status: 0 };
+          },
+        }),
+      ).rejects.toThrow(/emap\.js.*does not match/i);
+      await expect(access(marker)).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('reports a failed examples child build with its exit code', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'emap-example-cdn-child-failure-'));
+
+    try {
+      await writeCdnFixture(root);
+      await writeFile(resolve(root, 'package.json'), JSON.stringify({ version: '0.5.0' }));
+      const { buildExamplesCdn } = await import('../../scripts/build-examples-cdn.mjs');
+
+      await expect(
+        buildExamplesCdn({
+          root,
+          fetchImpl: matchingCdnFetch,
+          spawnImpl() {
+            return { status: 23 };
+          },
+        }),
+      ).rejects.toThrow(/examples build failed with exit code 23/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('exposes explicit CDN build scripts while keeping the default build local', async () => {
+    const rootManifest = JSON.parse(await readFile(resolve(process.cwd(), 'package.json'), 'utf8'));
+    const examplesManifest = JSON.parse(
+      await readFile(resolve(process.cwd(), 'packages/examples/package.json'), 'utf8'),
+    );
+
+    expect(rootManifest.scripts['examples:build']).toBe(
+      'pnpm --filter @zwishing/emap-examples build',
+    );
+    expect(rootManifest.scripts['examples:build:cdn']).toBe('node scripts/build-examples-cdn.mjs');
+    expect(examplesManifest.scripts.build).toBe(
+      'vite build && node ../../scripts/normalize-examples-build.mjs',
+    );
+    expect(examplesManifest.scripts['build:cdn']).toBe('node ../../scripts/build-examples-cdn.mjs');
   });
 });
