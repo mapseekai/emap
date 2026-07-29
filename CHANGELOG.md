@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-29
+
 ### Added
 
 - A bilingual Docusaurus documentation site now covers installation, core
@@ -26,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The public package, repository, and documentation deployment moved from
+  `zwishing` to `mapseekai`: install `@mapseekai/emap`, and use the
+  `/mapseekai/emap/` documentation and examples base path.
 - The optional Arrow integration has moved from `@mapseekai/emap/formats` to
   `@mapseekai/emap/arrow`, with source, declarations, bundles, examples, and API
   documentation renamed accordingly. The old module path is no longer exported.
@@ -567,7 +572,8 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@mapseekai/emap/style.css`).
 
-[Unreleased]: https://github.com/mapseekai/emap/compare/0c7ef115bbbb6d59829cd244c683f65ef38f39cd...HEAD
+[Unreleased]: https://github.com/mapseekai/emap/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/mapseekai/emap/compare/0c7ef115bbbb6d59829cd244c683f65ef38f39cd...v0.6.0
 [0.5.0]: https://github.com/mapseekai/emap/compare/v0.4.0...0c7ef115bbbb6d59829cd244c683f65ef38f39cd
 [0.4.0]: https://github.com/mapseekai/emap/compare/v0.3.6...v0.4.0
 [0.3.7]: https://github.com/mapseekai/emap/compare/v0.3.6...v0.3.7
