@@ -9,9 +9,11 @@ import {
   autoLoadExampleFixtures,
   fixtureManifest,
   fixtureUrl,
+  installExampleMapUi,
   loadExampleRuntime,
   resolveRuntimeAssets,
 } from '../../packages/examples/src/example-runtime';
+import type { Control, ControlPosition, Emap } from '../../src';
 
 const integrity = {
   vendor: 'sha384-dmVuZG9y',
@@ -42,6 +44,57 @@ function stylesheetAt(index: number): HTMLLinkElement {
 async function settleDomEvents(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+class ExampleMapStub {
+  crs = 'EPSG:4326';
+  readonly controls: Array<{ control: Control; position: ControlPosition }> = [];
+  readonly reprojectCalls: string[] = [];
+  readonly crsListeners = new Set<() => void>();
+
+  addControl(control: Control, position: ControlPosition): void {
+    this.controls.push({ control, position });
+  }
+
+  removeControl(control: Control): void {
+    const index = this.controls.findIndex((entry) => entry.control === control);
+    if (index !== -1) this.controls.splice(index, 1);
+  }
+
+  getCRS(): string {
+    return this.crs;
+  }
+
+  on(type: string, listener: () => void): void {
+    if (type === 'crschange') this.crsListeners.add(listener);
+  }
+
+  async reproject(crs: string): Promise<void> {
+    this.reprojectCalls.push(crs);
+    this.crs = crs;
+    for (const listener of this.crsListeners) listener();
+  }
+}
+
+class StatusControlStub implements Control {
+  onAdd(): HTMLElement {
+    return document.createElement('div');
+  }
+
+  onRemove(): void {}
+}
+
+class BasemapControlStub implements Control {
+  onAdd(): HTMLElement {
+    return document.createElement('div');
+  }
+
+  onRemove(): void {}
+}
+
+const exampleRuntimeStub = {
+  StatusControl: StatusControlStub,
+  BasemapControl: BasemapControlStub,
+} as unknown as typeof globalThis.emap;
 
 class TestDataTransfer {
   readonly #files: File[] = [];
@@ -171,6 +224,54 @@ describe('example runtime assets', () => {
     await expect(runtimePromise).resolves.toBe(emap);
     expect(document.head.querySelectorAll('script')).toHaveLength(4);
     expect(document.head.querySelectorAll('link[rel="stylesheet"]')).toHaveLength(2);
+  });
+});
+
+describe('shared example map UI', () => {
+  it('keeps the basemap unavailable in 4326 and enables it after switching to 3857', async () => {
+    document.body.innerHTML = '<div id="header"><strong>Example</strong></div>';
+    const map = new ExampleMapStub();
+
+    installExampleMapUi(map as unknown as Emap, exampleRuntimeStub);
+
+    expect(map.controls).toHaveLength(1);
+    expect(map.controls[0]?.control).toBeInstanceOf(StatusControlStub);
+    expect(map.controls[0]?.position).toBe('bottom-right');
+    expect(document.querySelector('.emap-example-basemap-state')?.textContent).toContain('3857');
+
+    const selector = document.querySelector<HTMLSelectElement>('.emap-example-crs-select')!;
+    selector.value = 'EPSG:3857';
+    selector.dispatchEvent(new Event('change'));
+    await settleDomEvents();
+
+    expect(map.reprojectCalls).toEqual(['EPSG:3857']);
+    expect(map.controls).toHaveLength(2);
+    expect(map.controls[1]?.control).toBeInstanceOf(BasemapControlStub);
+    expect(map.controls[1]?.position).toBe('top-right');
+    expect(document.querySelector('.emap-example-basemap-state')?.textContent).toContain('右上角');
+
+    selector.value = 'EPSG:4326';
+    selector.dispatchEvent(new Event('change'));
+    await settleDomEvents();
+
+    expect(map.reprojectCalls).toEqual(['EPSG:3857', 'EPSG:4326']);
+    expect(map.controls).toHaveLength(1);
+    expect(map.controls[0]?.control).toBeInstanceOf(StatusControlStub);
+  });
+
+  it('shows the current nonstandard CRS without duplicating shared controls', () => {
+    document.body.innerHTML = '<div id="header"><strong>Example</strong></div>';
+    const map = new ExampleMapStub();
+    map.crs = 'EPSG:4490';
+
+    installExampleMapUi(map as unknown as Emap, exampleRuntimeStub);
+    installExampleMapUi(map as unknown as Emap, exampleRuntimeStub);
+
+    expect(document.querySelector<HTMLSelectElement>('.emap-example-crs-select')?.value).toBe(
+      'EPSG:4490',
+    );
+    expect(document.querySelectorAll('.emap-example-map-tools')).toHaveLength(1);
+    expect(map.controls).toHaveLength(1);
   });
 });
 

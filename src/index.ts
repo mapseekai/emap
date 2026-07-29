@@ -284,6 +284,8 @@ export type {
   SplitSharedArcsRemap,
   AppendedArc,
 } from './edit/commands/split-shared-arcs';
+export { SplitSharedNodeCommand, planSharedNodeSplit } from './edit/commands/split-shared-node';
+export type { SplitSharedNodePlan } from './edit/commands/split-shared-node';
 
 // dataset-replace + composite envelope
 export { CompositeCommand } from './edit/commands/composite';

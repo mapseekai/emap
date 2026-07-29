@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mapshaper from 'mapshaper';
 import { VertexEditHandler } from './vertex-edit';
+import type { Emap } from '../../map/map';
 
 type MockMap = {
   getCanvasContainer: () => { getBoundingClientRect: () => { left: number; top: number } };
@@ -132,6 +133,42 @@ describe('VertexEditHandler', () => {
 
     expect(snapSpy).toHaveBeenCalledWith([4, 9, 11], [11, 22], expect.any(Object));
     expect(mapMock.render).toHaveBeenCalled();
+  });
+
+  it('moves only the detached feature vertices after splitting a shared node', () => {
+    const splitSharedNode = vi.fn(() => [8, 9]);
+    const mapMock = {
+      editSession: { splitSharedNode },
+      layers: {
+        resolve: () => ({ geometry_type: 'polyline', shapes: [null, null, [[4, 2]]] }),
+      },
+      unproject: () => [3, 4] as [number, number],
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+      fire: vi.fn(),
+    };
+    const handler = new VertexEditHandler(mapMock as unknown as Emap);
+    const snapSpy = vi.fn();
+    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
+    const hoveredFeature = {
+      id: 2,
+      source: 'src-a',
+      layer: 'layer-a',
+      shape: [[1]],
+      arcs: {},
+      geometryType: 'polyline',
+      allLayers: [],
+    };
+    setPrivate(handler, '_hoveredFeature', hoveredFeature);
+    setPrivate(handler, '_hoverVertexCoords', [0, 0]);
+    setPrivate(handler, '_hoverVertexIds', [4, 9]);
+    setPrivate(handler, '_hoverType', 'vertex');
+
+    callPrivate(handler, '_splitHoveredNode', hoveredFeature, 4);
+    callPrivate(handler, '_handleDrag', 30, 40);
+
+    expect(splitSharedNode).toHaveBeenCalledWith({ source: 'src-a', layer: 'layer-a', id: 2 }, 4);
+    expect(snapSpy).toHaveBeenCalledWith([8, 9], [3, 4], expect.any(Object));
   });
 
   it('snaps dragged vertices to other feature vertices when drag snap is enabled', () => {
@@ -475,6 +512,34 @@ describe('VertexEditHandler', () => {
     expect(Reflect.get(handler, '_dragging')).toBe(false);
   });
 
+  it('clears detached hover state when edit history changes', () => {
+    const listeners = new Map<string, (state: { canRedo: boolean }) => void>();
+    const mapMock = {
+      setEditMode: vi.fn(),
+      on: vi.fn((type: string, listener: (state: { canRedo: boolean }) => void) => {
+        listeners.set(type, listener);
+      }),
+      off: vi.fn(),
+      clearEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+    const handler = new VertexEditHandler(mapMock as unknown as Emap);
+    handler.enable();
+    setPrivate(handler, '_hoveredFeature', { id: 0 });
+    setPrivate(handler, '_hoverVertexCoords', [1, 2]);
+    setPrivate(handler, '_hoverVertexIds', [8, 9]);
+    setPrivate(handler, '_detachedNode', { id: 0 });
+
+    const historyListener = listeners.get('historychange');
+    if (!historyListener) throw new Error('historychange listener was not registered');
+    historyListener({ canRedo: true });
+
+    expect(Reflect.get(handler, '_hoveredFeature')).toBeNull();
+    expect(Reflect.get(handler, '_hoverVertexIds')).toEqual([]);
+    expect(Reflect.get(handler, '_detachedNode')).toBeNull();
+    expect(mapMock.clearEditVertexState).toHaveBeenCalledTimes(1);
+  });
+
   it('passes configured layers to hover hit-testing', () => {
     const queryFeatures = vi.fn(() => []);
     const mapMock = {
@@ -519,6 +584,9 @@ describe('VertexEditHandler', () => {
         getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [shape] }],
         getArcs: () => arcs,
       })),
+      layers: {
+        resolve: () => ({ name: 'roads', geometry_type: 'polyline', shapes: [shape] }),
+      },
       unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
       project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
       setEditVertexState: vi.fn(),
@@ -561,6 +629,9 @@ describe('VertexEditHandler', () => {
         getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [shape] }],
         getArcs: () => arcs,
       })),
+      layers: {
+        resolve: () => ({ name: 'roads', geometry_type: 'polyline', shapes: [shape] }),
+      },
       unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
       project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
       setEditVertexState: vi.fn(),
@@ -603,6 +674,9 @@ describe('VertexEditHandler', () => {
         getLayers: () => [{ name: 'roads', geometry_type: 'polyline', shapes: [shape] }],
         getArcs: () => arcs,
       })),
+      layers: {
+        resolve: () => ({ name: 'roads', geometry_type: 'polyline', shapes: [shape] }),
+      },
       unproject: vi.fn((px: number, py: number) => [px, py] as [number, number]),
       project: vi.fn((x: number, y: number) => [x, y] as [number, number]),
       setEditVertexState: vi.fn(),
@@ -629,6 +703,87 @@ describe('VertexEditHandler', () => {
 });
 
 describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
+  it('allows deleting a non-shared arc endpoint', () => {
+    document.getElementById('emap-ctx-menu')?.remove();
+    const originalVertexIsArcEndpoint = Reflect.get(
+      mapshaper.internal as object,
+      'vertexIsArcEndpoint',
+    );
+    Reflect.set(
+      mapshaper.internal as object,
+      'vertexIsArcEndpoint',
+      vi.fn(() => true),
+    );
+    const handler = new VertexEditHandler({} as any);
+    const deleteSpy = vi.fn();
+    const hoveredFeature = { arcs: {} };
+    setPrivate(handler, '_hoverType', 'vertex');
+    setPrivate(handler, '_hoverVertexIds', [4]);
+    setPrivate(handler, '_hoveredFeature', hoveredFeature);
+    setPrivate(handler, '_deleteHoveredVertex', deleteSpy);
+
+    try {
+      callPrivate(
+        handler,
+        '_onContextMenu',
+        new MouseEvent('contextmenu', { clientX: 10, clientY: 20 }),
+      );
+      const item = document.querySelector('#emap-ctx-menu > div') as HTMLDivElement;
+      expect(item.textContent).toBe('删除节点');
+      expect(item.getAttribute('aria-disabled')).toBeNull();
+      setPrivate(handler, '_hoverVertexIds', []);
+      setPrivate(handler, '_hoveredFeature', null);
+      item.click();
+      expect(deleteSpy).toHaveBeenCalledWith(hoveredFeature, 4);
+    } finally {
+      Reflect.set(mapshaper.internal as object, 'vertexIsArcEndpoint', originalVertexIsArcEndpoint);
+      document.getElementById('emap-ctx-menu')?.remove();
+    }
+  });
+
+  it('shows a disabled delete action for a shared topology node', () => {
+    document.getElementById('emap-ctx-menu')?.remove();
+    const originalVertexIsArcEndpoint = Reflect.get(
+      mapshaper.internal as object,
+      'vertexIsArcEndpoint',
+    );
+    Reflect.set(
+      mapshaper.internal as object,
+      'vertexIsArcEndpoint',
+      vi.fn(() => false),
+    );
+    const handler = new VertexEditHandler({} as any);
+    const deleteSpy = vi.fn();
+    const splitSpy = vi.fn();
+    const hoveredFeature = { arcs: {} };
+    setPrivate(handler, '_hoverType', 'vertex');
+    setPrivate(handler, '_hoverVertexIds', [4, 9]);
+    setPrivate(handler, '_hoveredFeature', hoveredFeature);
+    setPrivate(handler, '_deleteHoveredVertex', deleteSpy);
+    setPrivate(handler, '_splitHoveredNode', splitSpy);
+
+    try {
+      callPrivate(
+        handler,
+        '_onContextMenu',
+        new MouseEvent('contextmenu', { clientX: 10, clientY: 20 }),
+      );
+      const items = document.querySelectorAll<HTMLDivElement>('#emap-ctx-menu > div');
+      const item = items[0];
+      expect(item.textContent).toBe('共享节点无法删除');
+      expect(item.getAttribute('aria-disabled')).toBe('true');
+      expect(item.classList.contains('emap-ctx-menu-item--disabled')).toBe(true);
+      item.click();
+      expect(deleteSpy).not.toHaveBeenCalled();
+      expect(items[1].textContent).toBe('分离共享节点');
+      items[1].click();
+      expect(splitSpy).toHaveBeenCalledWith(hoveredFeature, 4);
+    } finally {
+      Reflect.set(mapshaper.internal as object, 'vertexIsArcEndpoint', originalVertexIsArcEndpoint);
+      document.getElementById('emap-ctx-menu')?.remove();
+    }
+  });
+
   it('_showContextMenu sets class-based DOM and only dynamic position inline', () => {
     document.getElementById('emap-ctx-menu')?.remove();
     const mapMock = {

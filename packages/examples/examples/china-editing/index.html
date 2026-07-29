@@ -155,7 +155,7 @@
 
 <body>
   <div id="header">
-    <strong>Emap</strong>
+    <a class="emap-example-banner-brand" href="/emap/examples/" aria-label="Open the emap examples catalog"><img src="/emap/examples/emap.svg" alt="" /><span>emap</span></a>
     <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
     <div class="info" id="status">正在加载本地示例数据...</div>
   </div>
@@ -170,6 +170,7 @@
   </div>
 
   <script type="module">
+    import { installExampleMapUi } from '/src/example-runtime.ts';
     import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
     const emap = await loadExampleRuntime();
@@ -178,12 +179,8 @@
     const map = new Emap({ container: "map" });
 
     map.addControl(new emap.NavigationControl(), "top-left");
+    installExampleMapUi(map, emap);
     map.addControl(new EditToolbar(), "top-left");
-    map.addControl(new emap.BasemapControl(), "top-right");
-    map.addControl(
-      new emap.StatusControl({ alignment: "right", showEPSG: true }),
-      "bottom-right"
-    );
 
     // vertex_moved 事件日志
     const logEl = document.getElementById("event-log");

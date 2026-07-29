@@ -261,6 +261,35 @@ describe('TopologySource.setData', () => {
 });
 
 describe('TopologySource.reproject', () => {
+  it('keeps the source CRS available while real mapshaper projects GeoJSON coordinates', async () => {
+    const source = new TopologySource('test');
+    const content = new TextEncoder().encode(
+      JSON.stringify({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'Point', coordinates: [-122.405, 37.7819] },
+          },
+          {
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'Point', coordinates: [-122.395, 37.7919] },
+          },
+        ],
+      }),
+    );
+
+    await source.setData({ filename: 'points.geojson', content });
+    await source.reproject('EPSG:3857');
+
+    const extent = source.getExtent();
+    expect(source.getCRS()).toBe('EPSG:3857');
+    expect(extent.xmin).toBeLessThan(-10_000_000);
+    expect(extent.ymin).toBeGreaterThan(4_000_000);
+  });
+
   it('resolves EPSG targets before calling mapshaper directly', async () => {
     const source = new TopologySource('test');
     const dataset = { ...FAKE_DATASET, info: {} };
@@ -291,7 +320,12 @@ describe('TopologySource.reproject', () => {
     setPrivate(source, '_dataset', dataset);
 
     const adapter = getDefaultMapshaperAdapter();
-    const runOnDatasetSpy = vi.spyOn(adapter, 'runOnDataset').mockResolvedValue(resultDataset);
+    const runOnDatasetSpy = vi
+      .spyOn(adapter, 'runOnDataset')
+      .mockImplementation(async (_cmd, input) => {
+        expect(input.info?.crs_string).toBe('EPSG:4326');
+        return resultDataset;
+      });
 
     try {
       await source.reproject('+proj=longlat +ellps=GRS80 +no_defs +type=crs', 'EPSG:4490');

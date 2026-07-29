@@ -80,7 +80,11 @@
       }
     </style>
   </head>
-  <body>
+  <body class="emap-example-with-floating-header">
+    <div id="header">
+      <a class="emap-example-banner-brand" href="/emap/examples/" aria-label="Open the emap examples catalog"><img src="/emap/examples/emap.svg" alt="" /><span>emap</span></a>
+      <strong>DuckDB GeoParquet 查询</strong>
+    </div>
     <div id="map"></div>
     <div class="panel">
       <h1>DuckDB-Wasm GeoParquet SELECT</h1>
@@ -111,6 +115,7 @@
       <div id="status">上传 GeoParquet 后，查询结果必须包含可识别的几何列。</div>
     </div>
     <script type="module">
+      import { installExampleMapUi } from '/src/example-runtime.ts';
       import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
       import {
@@ -123,14 +128,14 @@
 
       const emap = await loadExampleRuntime();
 
-      const { Emap, TopologySource, NavigationControl, StatusControl } = emap;
+      const { Emap, TopologySource, NavigationControl } = emap;
 
       const SOURCE_ID = "duckdb-geoparquet-bytes";
       const OUTPUT_ID = "duckdb-geoparquet-output";
 
       const map = new Emap({ container: "map" });
       map.addControl(new NavigationControl(), "top-left");
-      map.addControl(new StatusControl({ alignment: "right", showEPSG: true }), "bottom-right");
+      installExampleMapUi(map, emap);
 
       const fileInput = document.getElementById("file");
       const entrypointSelect = document.getElementById("entrypoint");

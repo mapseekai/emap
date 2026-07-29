@@ -61,6 +61,7 @@
 
 <body>
   <div id="header">
+    <a class="emap-example-banner-brand" href="/emap/examples/" aria-label="Open the emap examples catalog"><img src="/emap/examples/emap.svg" alt="" /><span>emap</span></a>
     <span class="file-group">
       <label>文件 (可一次选多个或多次添加):
         <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple />
@@ -80,6 +81,7 @@
   <div id="map" tabindex="0"></div>
 
   <script type="module">
+    import { installExampleMapUi } from '/src/example-runtime.ts';
     import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
     const emap = await loadExampleRuntime();
@@ -87,6 +89,7 @@
 
     const map = new Emap({ container: 'map' });
     map.addControl(new NavigationControl(), 'top-left');
+    installExampleMapUi(map, emap);
     map.addControl(new HistoryControl(), 'top-left');
     map.bindHistoryShortcuts();
 

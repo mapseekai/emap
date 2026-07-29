@@ -70,6 +70,157 @@ const routeIds = [
 const htmlInput = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
 const routeIdSet = new Set<string>(routeIds);
+const examplesBaseUrl = '/emap/examples/';
+
+function examplesBrandPlugin(): Plugin {
+  const logoUrl = `${examplesBaseUrl}emap.svg`;
+
+  return {
+    name: 'examples-brand',
+    transformIndexHtml: {
+      order: 'pre',
+      handler: () => [
+        {
+          tag: 'link',
+          attrs: { rel: 'icon', type: 'image/svg+xml', href: logoUrl },
+          injectTo: 'head',
+        },
+        {
+          tag: 'style',
+          children: `
+            :root {
+              --emap-banner-bg: #2c3e50;
+              --emap-banner-ink: #ffffff;
+            }
+
+            #header {
+              position: relative;
+              box-sizing: border-box;
+              min-height: 48px;
+              padding-right: 330px !important;
+              background: var(--emap-banner-bg) !important;
+              color: var(--emap-banner-ink) !important;
+              border-bottom: 1px solid #1f2d3a;
+            }
+
+            .emap-example-banner-brand {
+              display: inline-flex;
+              align-items: center;
+              flex: 0 0 auto;
+              gap: 6px;
+              color: inherit;
+              font: 700 14px/1 ui-sans-serif, system-ui, sans-serif;
+              text-decoration: none;
+            }
+
+            .emap-example-banner-brand:hover {
+              color: #b8e0c1;
+            }
+
+            .emap-example-banner-brand:focus-visible {
+              outline: 2px solid #8acb99;
+              outline-offset: 2px;
+            }
+
+            .emap-example-banner-brand img {
+              width: 18px;
+              height: 18px;
+              display: block;
+            }
+
+            .emap-example-map-tools {
+              position: absolute;
+              z-index: 2;
+              top: 10px;
+              right: 14px;
+              display: inline-flex;
+              align-items: center;
+              gap: 10px;
+              order: 999;
+              margin-left: 0;
+              color: var(--emap-banner-ink);
+              font: 12px/1.2 ui-sans-serif, system-ui, sans-serif;
+              white-space: nowrap;
+            }
+
+            .emap-example-crs-field {
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+            }
+
+            .emap-example-crs-select {
+              min-height: 28px;
+              padding: 3px 26px 3px 8px;
+              border: 1px solid #64788c;
+              border-radius: 4px;
+              background: #1f2d3a;
+              color: #ffffff;
+              font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+            }
+
+            .emap-example-crs-select:focus-visible {
+              outline: 2px solid #8acb99;
+              outline-offset: 2px;
+            }
+
+            .emap-example-basemap-state {
+              color: #cbd5df;
+            }
+
+            body.emap-example-with-floating-header {
+              box-sizing: border-box;
+              height: 100vh;
+              padding-top: 48px;
+            }
+
+            body.emap-example-with-floating-header > #header {
+              position: fixed;
+              z-index: 30;
+              top: 0;
+              right: 0;
+              left: 0;
+              box-sizing: border-box;
+              min-height: 48px;
+              padding: 10px 14px;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            }
+
+            body.emap-example-with-floating-header > #map {
+              width: 100%;
+              height: 100%;
+            }
+
+            body.emap-example-with-floating-header > .panel {
+              top: 60px;
+              max-height: calc(100vh - 72px);
+              overflow: auto;
+              box-sizing: border-box;
+            }
+
+            @media (max-width: 720px) {
+              #header {
+                padding-right: 10px !important;
+              }
+
+              .emap-example-map-tools {
+                position: static;
+                margin-left: auto;
+              }
+
+              .emap-example-basemap-state {
+                display: none;
+              }
+            }
+          `,
+          injectTo: 'head',
+        },
+      ],
+    },
+  };
+}
 
 function examplesRouteRewritePlugin(): Plugin {
   return {
@@ -101,7 +252,7 @@ export default defineConfig({
     __EMAP_ASSET_MODE__: JSON.stringify(assetMode),
     __EMAP_VERSION__: JSON.stringify(version),
   },
-  plugins: [examplesRouteRewritePlugin(), runtimeAssetsPlugin()],
+  plugins: [examplesBrandPlugin(), examplesRouteRewritePlugin(), runtimeAssetsPlugin()],
   build: {
     chunkSizeWarningLimit: 2500,
     emptyOutDir: true,

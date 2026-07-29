@@ -69,7 +69,8 @@
 
 <body>
   <div id="header">
-    <strong>Emap 示例</strong>
+    <a class="emap-example-banner-brand" href="/emap/examples/" aria-label="Open the emap examples catalog"><img src="/emap/examples/emap.svg" alt="" /><span>emap</span></a>
+    <strong>示例</strong>
     <input type="file" id="file-input" accept=".json,.geojson,.zip" />
     <label for="layer-select">图层:</label>
     <select id="layer-select">
@@ -93,6 +94,7 @@
   </div>
 
   <script type="module">
+    import { installExampleMapUi } from '/src/example-runtime.ts';
     import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
     const emap = await loadExampleRuntime();
@@ -103,14 +105,7 @@
     });
 
     map.addControl(new emap.NavigationControl(), "top-left");
-    map.addControl(new emap.BasemapControl(), "top-right");
-    map.addControl(
-      new emap.StatusControl({
-        alignment: "right",
-        showEPSG: true,
-      }),
-      "bottom-right",
-    );
+    installExampleMapUi(map, emap);
 
     const fileInput = document.getElementById("file-input");
     const status = document.getElementById("status");

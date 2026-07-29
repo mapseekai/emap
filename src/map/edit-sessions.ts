@@ -16,13 +16,19 @@ import {
   IDENTITY_MATRIX,
 } from '../edit/commands/feature-affine';
 import { SplitSharedArcsCommand, planSharedArcSplit } from '../edit/commands/split-shared-arcs';
+import { SplitSharedNodeCommand, planSharedNodeSplit } from '../edit/commands/split-shared-node';
 import type { EditCommand } from '../edit/edit-command';
 import type { TopologySource } from '../source/source';
 import type { MapshaperLayer } from '../types/mapshaper-types';
 import { normalizePointShape } from '../source/layer-utils';
 import type { EmapHostInternal } from './emap-host';
 import { Err, OK, type OpResult } from './op-result';
-import type { DragSessionOptions, FeatureTranslateSession, FeatureAffineSession } from './types';
+import type {
+  DragSessionOptions,
+  FeatureAffineSession,
+  FeatureRef,
+  FeatureTranslateSession,
+} from './types';
 
 /**
  * Selection-editing manager. Owned by Emap and exposed as `emap.editSession`.
@@ -31,6 +37,28 @@ import type { DragSessionOptions, FeatureTranslateSession, FeatureAffineSession 
  */
 export class EditSessions {
   constructor(private _emap: EmapHostInternal) {}
+
+  splitSharedNode(ref: FeatureRef, vertexId: number): number[] | null {
+    const source = this._emap._sources.get(ref.source);
+    const layer = this._emap.layers.resolve(ref.source, ref.layer);
+    if (!source || !layer) return null;
+    const plan = planSharedNodeSplit(
+      source,
+      layer,
+      ref.id,
+      vertexId,
+      source.getLayers() as MapshaperLayer[],
+    );
+    if (!plan) return null;
+
+    const command = new SplitSharedNodeCommand(plan);
+    command.do();
+    this._emap._history.push(command);
+    this._emap._fireHistoryChange();
+    this._emap._invalidateShapeCachesForSources([ref.source]);
+    this._emap._scheduleRender();
+    return plan.detachedVertexIds.slice();
+  }
 
   translateSelected(dx: number, dy: number): OpResult {
     if (dx === 0 && dy === 0) return Err.validation('offset', 'dx and dy are both 0 (no-op)');

@@ -505,18 +505,14 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       this._dataset.arcs.setRetainedInterval(0);
     }
 
-    // Drop stale CRS identifiers BEFORE projection. Mapshaper's -proj only
-    // updates dataset.info.crs; it leaves crs_string / prj / wkt1 untouched, so
-    // without this reset getCRS() would keep returning the source CRS.
-    if (this._dataset.info) {
-      delete this._dataset.info.crs_string;
-      delete this._dataset.info.prj;
-      delete this._dataset.info.wkt1;
-    }
-
     const cmd = `-proj ${resolvedTargetCrs}`;
 
     const result = await getDefaultMapshaperAdapter().runOnDataset(cmd, this._dataset);
+    if (result.info) {
+      delete result.info.crs_string;
+      delete result.info.prj;
+      delete result.info.wkt1;
+    }
     setDatasetCrsMetadata(result, metadataCrs);
     this._dataset = result;
     // Re-initialize DisplayArcs (including LOD threshold detection) against

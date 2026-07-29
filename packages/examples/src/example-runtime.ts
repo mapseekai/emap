@@ -4,6 +4,7 @@ import {
   type RuntimeAssetSet,
 } from './runtime-assets';
 import { fixtureManifest, fixtureUrl } from './fixture-manifest';
+import type { Control, Emap } from '@zwishing/emap';
 
 export type {
   RuntimeAssetIntegrity,
@@ -19,6 +20,9 @@ declare global {
 }
 
 type RuntimeAssetName = 'vendor' | 'core' | 'css';
+type ExampleUiRuntime = Pick<typeof globalThis.emap, 'BasemapControl' | 'StatusControl'>;
+
+const mapsWithExampleUi = new WeakSet<Emap>();
 
 function applyIntegrity(
   element: HTMLScriptElement | HTMLLinkElement,
@@ -118,6 +122,107 @@ export async function loadExampleRuntime(
     throw new Error('The emap runtime loaded without exposing globalThis.emap');
   }
   return globalThis.emap;
+}
+
+function canonicalExampleCRS(crs: string): string {
+  const normalized = crs.trim().toLowerCase();
+  if (normalized === 'epsg:3857' || normalized === 'webmercator') return 'EPSG:3857';
+  if (normalized === 'epsg:4326' || normalized === 'wgs84') return 'EPSG:4326';
+  return crs;
+}
+
+function selectCurrentCRS(select: HTMLSelectElement, crs: string): void {
+  const canonical = canonicalExampleCRS(crs);
+  const existing = Array.from(select.options).find((option) => option.value === canonical);
+  const custom = select.querySelector<HTMLOptionElement>('option[data-current-crs]');
+
+  if (existing) {
+    custom?.remove();
+  } else if (custom) {
+    custom.value = canonical;
+    custom.textContent = canonical;
+  } else {
+    const option = document.createElement('option');
+    option.dataset.currentCrs = '';
+    option.value = canonical;
+    option.textContent = canonical;
+    select.prepend(option);
+  }
+  select.value = canonical;
+}
+
+export function installExampleMapUi(
+  map: Emap,
+  runtime: ExampleUiRuntime = globalThis.emap,
+  root: Document = document,
+): void {
+  if (mapsWithExampleUi.has(map)) return;
+
+  const header = root.querySelector<HTMLElement>('#header');
+  if (!header) throw new Error('Example pages must provide a #header banner');
+  mapsWithExampleUi.add(map);
+
+  header.querySelector('.emap-example-map-tools')?.remove();
+  const tools = root.createElement('div');
+  tools.className = 'emap-example-map-tools';
+  tools.setAttribute('role', 'group');
+  tools.setAttribute('aria-label', 'Map coordinate system and basemap');
+
+  const crsLabel = root.createElement('label');
+  crsLabel.className = 'emap-example-crs-field';
+  const crsText = root.createElement('span');
+  crsText.textContent = '坐标系';
+  const crsSelect = root.createElement('select');
+  crsSelect.className = 'emap-example-crs-select';
+  crsSelect.setAttribute('aria-label', '切换坐标系');
+  crsSelect.append(new Option('EPSG:3857', 'EPSG:3857'), new Option('EPSG:4326', 'EPSG:4326'));
+  crsLabel.append(crsText, crsSelect);
+
+  const basemapState = root.createElement('span');
+  basemapState.className = 'emap-example-basemap-state';
+  basemapState.setAttribute('aria-live', 'polite');
+  tools.append(crsLabel, basemapState);
+  header.append(tools);
+
+  map.addControl(
+    new runtime.StatusControl({ alignment: 'right', showMousePos: true, showEPSG: true }),
+    'bottom-right',
+  );
+
+  let basemapControl: Control | null = null;
+  const syncUi = (): void => {
+    const currentCRS = canonicalExampleCRS(map.getCRS());
+    selectCurrentCRS(crsSelect, currentCRS);
+    const supportsBasemap = currentCRS === 'EPSG:3857';
+
+    if (supportsBasemap && !basemapControl) {
+      basemapControl = new runtime.BasemapControl();
+      map.addControl(basemapControl, 'top-right');
+    } else if (!supportsBasemap && basemapControl) {
+      map.removeControl(basemapControl);
+      basemapControl = null;
+    }
+    basemapState.textContent = supportsBasemap ? '底图：右上角可选' : '底图：仅 EPSG:3857 可用';
+  };
+
+  map.on('crschange', syncUi);
+  crsSelect.addEventListener('change', async () => {
+    const targetCRS = crsSelect.value;
+    crsSelect.disabled = true;
+    basemapState.textContent = `正在切换到 ${targetCRS}…`;
+    try {
+      await map.reproject(targetCRS);
+      syncUi();
+    } catch (error) {
+      syncUi();
+      const message = error instanceof Error ? error.message : String(error);
+      basemapState.textContent = `坐标系切换失败：${message}`;
+      console.error(error);
+    } finally {
+      crsSelect.disabled = false;
+    }
+  });
+  syncUi();
 }
 
 export async function loadExampleFormats(): Promise<typeof import('@zwishing/emap/formats')> {

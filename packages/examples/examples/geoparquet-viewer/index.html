@@ -63,6 +63,7 @@
 
 <body>
   <div id="header">
+    <a class="emap-example-banner-brand" href="/emap/examples/" aria-label="Open the emap examples catalog"><img src="/emap/examples/emap.svg" alt="" /><span>emap</span></a>
     <strong>GeoParquet / GeoArrow 查看器</strong>
     <label>
       文件:
@@ -82,6 +83,7 @@
   <div id="map"></div>
 
   <script type="module">
+    import { installExampleMapUi } from '/src/example-runtime.ts';
     import {
       autoLoadExampleFixtures,
       loadExampleFormats,
@@ -98,11 +100,7 @@
 
     const map = new Emap({ container: 'map' });
     map.addControl(new emap.NavigationControl(), 'top-left');
-    map.addControl(new emap.BasemapControl(), 'top-right');
-    map.addControl(
-      new emap.StatusControl({ alignment: 'right', showEPSG: true }),
-      'bottom-right',
-    );
+    installExampleMapUi(map, emap);
 
     const fileInput = document.getElementById('file-input');
     const formatSelect = document.getElementById('format');

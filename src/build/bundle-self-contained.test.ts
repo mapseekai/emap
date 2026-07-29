@@ -155,6 +155,19 @@ d('shipped bundles are self-contained', () => {
     await expect(waitForLoad(src, { filename: 't.geojson', content })).resolves.toBeUndefined();
   }, 30_000);
 
+  it('reprojects GeoJSON through the shipped browser ESM bundle', async () => {
+    const { TopologySource } = await loadEmap();
+    const geojson =
+      '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{},' +
+      '"geometry":{"type":"Point","coordinates":[116.4,39.9]}}]}';
+    const content = Uint8Array.from(Buffer.from(geojson, 'utf8'));
+    const src = new TopologySource('projection');
+    await waitForLoad(src, { filename: 'projection.geojson', content });
+
+    await expect(src.reproject('EPSG:3857')).resolves.toBeUndefined();
+    expect(src.getCRS()).toBe('EPSG:3857');
+  }, 30_000);
+
   it('a .dbf shapefile ZIP does not cause a dynamic-require crash', async () => {
     const { TopologySource } = await loadEmap();
     const { zipSync, strToU8 } = await import('fflate');

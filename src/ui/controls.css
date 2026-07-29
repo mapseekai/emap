@@ -189,3 +189,10 @@
 .emap-ctx-menu-item:hover {
   background: var(--emap-hover-bg);
 }
+.emap-ctx-menu-item--disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.emap-ctx-menu-item--disabled:hover {
+  background: transparent;
+}

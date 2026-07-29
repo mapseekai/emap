@@ -101,10 +101,56 @@ function makePolyLayer(name: string, shapes: number[][][]): MapshaperLayer {
   return {
     name,
     geometry_type: 'polygon',
-    shapes: shapes as any,
-    data: null,
-  } as MapshaperLayer;
+    shapes: shapes as unknown as MapshaperLayer['shapes'],
+  };
 }
+
+describe('splitSharedNode', () => {
+  it('executes the split, records history, and returns detached vertex ids', () => {
+    let nn = new Int32Array([2, 2, 2, 2]);
+    let xx = new Float64Array([-1, 0, 0, 1, 1, 1, 0, 0]);
+    let yy = new Float64Array([0, 0, 0, 0, 0, 1, 0, -1]);
+    let ii = new Int32Array([0, 2, 4, 6]);
+    const arcs = {
+      size: () => nn.length,
+      getVertexData: () => ({ xx, yy, nn, ii, zz: null }),
+      updateVertexData(nextNn: Int32Array, nextXx: Float64Array, nextYy: Float64Array) {
+        nn = new Int32Array(nextNn);
+        xx = new Float64Array(nextXx);
+        yy = new Float64Array(nextYy);
+        ii = new Int32Array(nn.length);
+        let offset = 0;
+        for (let i = 0; i < nn.length; i++) {
+          ii[i] = offset;
+          offset += nn[i];
+        }
+      },
+    } as unknown as ArcCollection;
+    const target = makePolyLayer('target', [[[0, 1, 2]]]);
+    const neighbor = makePolyLayer('neighbor', [[[~1, 3]]]);
+    const source = makeSource('src', [target, neighbor], arcs);
+    const ctx = makeHost();
+    ctx.sources.set('src', source);
+    const sessions = new EditSessions(ctx.host);
+
+    const detachedVertexIds = sessions.splitSharedNode(
+      { source: 'src', layer: 'target', id: 0 },
+      1,
+    );
+
+    expect(detachedVertexIds).toEqual([1, 8]);
+    expect(arcs.size()).toBe(5);
+    expect(target.shapes?.[0]).toEqual([[0, 4, 2]]);
+    expect(ctx.history.canUndo()).toBe(true);
+    expect(ctx.fireHistoryChange).toHaveBeenCalledTimes(1);
+    expect(ctx.invalidateShapeCaches).toHaveBeenCalledWith(['src']);
+    expect(ctx.scheduleRender).toHaveBeenCalledTimes(1);
+
+    ctx.history.undo();
+    expect(arcs.size()).toBe(4);
+    expect(target.shapes?.[0]).toEqual([[0, 1, 2]]);
+  });
+});
 
 // ============================================================================
 // translateSelected — synchronous direct API (no session)

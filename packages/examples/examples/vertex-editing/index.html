@@ -73,7 +73,8 @@
 
 <body>
   <div id="header">
-    <strong>Emap</strong> 顶点编辑演示
+    <a class="emap-example-banner-brand" href="/emap/examples/" aria-label="Open the emap examples catalog"><img src="/emap/examples/emap.svg" alt="" /><span>emap</span></a>
+    <strong>顶点编辑演示</strong>
     <input type="file" id="file-input" accept=".json,.geojson,.zip" />
     <div class="info" id="status">上传 GeoJSON 文件开始</div>
   </div>
@@ -84,6 +85,7 @@
   </div>
 
   <script type="module">
+    import { installExampleMapUi } from '/src/example-runtime.ts';
     import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
     const emap = await loadExampleRuntime();
@@ -92,12 +94,9 @@
     const map = new Emap({ container: "map" });
 
     map.addControl(new emap.NavigationControl(), "top-left");
+    installExampleMapUi(map, emap);
     map.addControl(new EditToolbar(), "top-left");
-    map.addControl(new emap.BasemapControl(), "top-right");
-    map.addControl(
-      new emap.StatusControl({ alignment: "right", showEPSG: true }),
-      "bottom-right"
-    );
+    map.bindHistoryShortcuts();
 
     // 记录 vertex_moved 事件
     const logEl = document.getElementById("event-log");
@@ -136,7 +135,7 @@
             await source.setData({ filename: file.name, content });
             map.addSource("test-source", source);
             map.setExtent(source.getExtent());
-            status.textContent = `当前: ${file.name} —— 点击 ✏ 进入编辑模式`;
+            status.textContent = `当前: ${file.name} —— 点击 ✏ 进入编辑模式；右击共享节点可分离；Ctrl/Cmd+Z 撤销`;
           } catch (e) {
             console.error(e);
             status.textContent = "处理文件出错";

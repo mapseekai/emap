@@ -41,6 +41,7 @@
   },
   "sideEffects": [
     "*.css",
+    "./src/shim.ts",
     "./dist/mapshaper-vendor.js",
     "./dist/mapshaper-vendor.mjs",
     "./dist/emap-formats.js",

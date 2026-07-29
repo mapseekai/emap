@@ -24,6 +24,7 @@
 
 <body>
   <div id="header">
+    <a class="emap-example-banner-brand" href="/emap/examples/" aria-label="Open the emap examples catalog"><img src="/emap/examples/emap.svg" alt="" /><span>emap</span></a>
     <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
     <label>目标图层: <select id="target"></select></label>
     <label>表达式: <input id="expr" type="text" value="this.pop > 100" /></label>
@@ -39,6 +40,7 @@
   <div id="map" tabindex="0"></div>
 
   <script type="module">
+    import { installExampleMapUi } from '/src/example-runtime.ts';
     import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
     const emap = await loadExampleRuntime();
@@ -47,6 +49,7 @@
     // default is `'disabled'`.
     const map = new Emap({ container: 'map', expressionPolicy: 'trusted' });
     map.addControl(new NavigationControl(), 'top-left');
+    installExampleMapUi(map, emap);
     map.addControl(new HistoryControl(), 'top-left');
     map.bindHistoryShortcuts();
 

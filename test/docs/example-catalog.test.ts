@@ -141,8 +141,15 @@ describe('example catalog metadata', () => {
       const htmlPath = resolve(example.source.html);
       await expect(access(htmlPath), `${example.id} HTML exists`).resolves.toBeUndefined();
       const html = await readFile(htmlPath, 'utf8');
+      const parsed = new DOMParser().parseFromString(html, 'text/html');
 
       expect(html, `${example.id} has a map surface`).toContain('id="map"');
+      expect(parsed.querySelector('#header'), `${example.id} has a top banner`).not.toBeNull();
+      expect(
+        parsed.querySelector('#header > .emap-example-banner-brand'),
+        `${example.id} places its emap brand first in the banner`,
+      ).toBe(parsed.querySelector('#header')?.firstElementChild);
+      expect(html, `${example.id} installs the shared map UI`).toContain('installExampleMapUi(map');
       expect(html, `${example.id} keeps a user upload`).toMatch(/type=["']file["']/);
       expect(html, `${example.id} avoids source-tree assets`).not.toMatch(
         /\.\.\/\.\.\/(?:dist|src)\//,

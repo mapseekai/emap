@@ -6,7 +6,7 @@ const config: Config = {
   tagline: 'Topology-oriented browser maps',
   url: 'https://zwishing.github.io',
   baseUrl: '/emap/',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/emap.svg',
   organizationName: 'zwishing',
   projectName: 'emap',
   onBrokenLinks: 'warn',
@@ -36,18 +36,33 @@ const config: Config = {
           sidebarPath: './sidebars.ts',
         },
         blog: false,
+        theme: {
+          customCss: './src/css/custom.css',
+        },
       } satisfies Preset.Options,
     ],
   ],
   themeConfig: {
     navbar: {
       title: 'emap',
+      logo: {
+        alt: 'emap logo',
+        src: 'img/emap.svg',
+        srcDark: 'img/emap.svg',
+        width: 22,
+        height: 22,
+      },
       items: [
         {
           type: 'docSidebar',
           sidebarId: 'tutorialSidebar',
           position: 'left',
           label: 'Docs',
+        },
+        {
+          href: 'pathname:///examples/',
+          label: 'Examples',
+          position: 'left',
         },
         {
           href: 'pathname:///api/',
