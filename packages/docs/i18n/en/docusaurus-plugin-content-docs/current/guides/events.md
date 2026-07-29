@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # Events
 
-emap uses `EventDispatcher` at the engine layer. Applications use `map.on`,
+Emap uses `EventDispatcher` at the engine layer. Applications use `map.on`,
 `map.once`, and `map.off` for camera, data, selection, history, validation,
 pointer, and feature changes without subscribing to internal canvas events.
 

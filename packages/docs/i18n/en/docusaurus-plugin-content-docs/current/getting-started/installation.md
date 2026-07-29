@@ -15,7 +15,7 @@ TopoJSON, and displays navigation and history controls.
 
 ## Requirements
 
-- Node.js `^20.19.0` or `>=22.12.0`, matching the current Vite toolchain.
+- Node.js 22 (`>=22 <23`), matching the project's development and build toolchain.
 - A browser with ES modules, Canvas 2D, and modern JavaScript support.
 - npm, pnpm, or another package manager that supports package exports.
 

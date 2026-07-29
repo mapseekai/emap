@@ -4,7 +4,7 @@ import { StatusControl } from './status-control';
 
 /** Minimal Emap stub: on/off registry + getCRS (the exact surface the
  * thin-shell StatusControl now consumes — no raw canvas access). */
-function stubMap() {
+function stubMap(crs = 'EPSG:4326') {
   const listeners: Record<string, Function[]> = {};
   return {
     on: vi.fn((type: string, cb: Function) => {
@@ -13,7 +13,7 @@ function stubMap() {
     off: vi.fn((type: string, cb: Function) => {
       listeners[type] = (listeners[type] ?? []).filter((c) => c !== cb);
     }),
-    getCRS: () => 'EPSG:4326',
+    getCRS: () => crs,
     _emit: (type: string, e: unknown) => (listeners[type] ?? []).forEach((c) => c(e)),
     _count: (type: string) => (listeners[type] ?? []).length,
   };
@@ -48,6 +48,17 @@ describe('StatusControl (thin-shell over map.on(mousemove))', () => {
     await new Promise((r) => requestAnimationFrame(() => r(null)));
     const posEl = el.querySelector('.emap-status-mousepos') as HTMLElement;
     expect(posEl.textContent).toBe(' 12.3457, -7.6543');
+  });
+
+  it.each([
+    ['webmercator', 'EPSG:3857'],
+    ['wgs84', 'EPSG:4326'],
+  ])('displays %s as canonical %s', (crs, expected) => {
+    const map = stubMap(crs);
+    const ctrl = new StatusControl({ showMousePos: false, showEPSG: true });
+    const el = ctrl.onAdd(map as unknown as Parameters<StatusControl['onAdd']>[0]);
+    const epsgEl = el.querySelector('.emap-status-epsg') as HTMLElement;
+    expect(epsgEl.textContent).toBe(` | ${expected}`);
   });
 
   it('onRemove calls map.off(mousemove) with the same bound listener', () => {

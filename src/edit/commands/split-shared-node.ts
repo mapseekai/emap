@@ -13,10 +13,24 @@ import {
   type SplitSharedArcsCommandOptions,
 } from './split-shared-arcs';
 
+/**
+ * Precomputed topology changes required to detach one shared path node.
+ *
+ * In addition to the duplicated arcs and shape remaps consumed by
+ * {@link SplitSharedArcsCommand}, the plan records every vertex id that must
+ * move together after the split.
+ */
 export interface SplitSharedNodePlan extends SplitSharedArcsCommandOptions {
+  /** Vertex ids in the post-split arc collection that represent the detached node. */
   detachedVertexIds: number[];
 }
 
+/**
+ * Undoable command that applies a {@link SplitSharedNodePlan}.
+ *
+ * Executing the command duplicates topology shared with other features;
+ * undo restores the original arc collection and feature shapes.
+ */
 export class SplitSharedNodeCommand implements EditCommand {
   readonly label = 'Split shared node';
   private readonly _delegate: SplitSharedArcsCommand;
@@ -34,6 +48,20 @@ export class SplitSharedNodeCommand implements EditCommand {
   }
 }
 
+/**
+ * Builds the topology rewrite needed to detach a vertex from features that
+ * share the same arcs or node coordinate.
+ *
+ * Returns `null` when the target is not a valid path vertex or is not shared.
+ * The returned plan can be passed to {@link SplitSharedNodeCommand}; use its
+ * `detachedVertexIds` when moving the newly independent node.
+ *
+ * @param source Required topology source that owns the target layer and arcs.
+ * @param layer Required polygon or polyline layer containing the target feature.
+ * @param featureId Required zero-based feature index within `layer.shapes`.
+ * @param vertexId Required zero-based vertex index in the source arc collection.
+ * @param allLayers Required complete layer list from `source`, used to detect sharing.
+ */
 export function planSharedNodeSplit(
   source: TopologySource,
   layer: MapshaperLayer,

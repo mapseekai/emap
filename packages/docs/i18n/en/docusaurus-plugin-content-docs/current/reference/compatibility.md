@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # Compatibility
 
-emap is browser-first and requires a sized DOM container, Canvas, and modern module tooling. Optional formats and DuckDB features require their WASM dependencies.
+Emap is browser-first and requires a sized DOM container, Canvas, and modern module tooling. Optional formats and DuckDB features require their WASM dependencies.
 
 ## Behavior notes
 

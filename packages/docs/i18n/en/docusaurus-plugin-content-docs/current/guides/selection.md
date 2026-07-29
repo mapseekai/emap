@@ -141,7 +141,7 @@ without adding history.
 
 ## Selection and data operations
 
-Data operations may change shape count, topology, attributes, or CRS. emap uses
+Data operations may change shape count, topology, attributes, or CRS. Emap uses
 the operation effect to preserve, remap, or clear selection. Run bulk changes
 through `map.ops`; otherwise feature IDs may become stale.
 

@@ -38,6 +38,10 @@ function exportedDuckDbNames(): Set<string> {
 }
 
 describe('duckdb-spatial-ops example', () => {
+  it('defaults bundled GeoJSON input to WGS84', () => {
+    expect(html).toContain('<input id="crs" type="text" value="EPSG:4326"');
+  });
+
   it('exposes DuckDB attribute operations in the operation picker', () => {
     expect(html).toContain('<option value="area">Area Attribute</option>');
     expect(html).toContain('<option value="geometryType">Geometry Type Attribute</option>');

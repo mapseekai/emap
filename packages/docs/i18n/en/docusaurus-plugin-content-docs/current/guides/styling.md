@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # Styling layers
 
-emap styling maps directly to canvas drawing primitives. It has three render
+Emap styling maps directly to canvas drawing primitives. It has three render
 layer types: `fill`, `line`, and `circle`. It intentionally does not include a
 large style-expression system; data calculation and presentation remain
 separate concerns.

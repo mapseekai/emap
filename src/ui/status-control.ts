@@ -1,6 +1,7 @@
 import { Control } from './control';
 import { Emap } from '../map/map';
 import type { PointerMoveEvent } from '../core/pointer-event-dispatcher';
+import { normalizeCrsString } from '../geo/crs-resolver';
 
 export interface StatusOptions {
   showMousePos?: boolean;
@@ -80,7 +81,7 @@ export class StatusControl implements Control {
 
   private _updateEPSG(): void {
     if (!this._map || !this._epsgEl) return;
-    const epsg = this._map.getCRS();
+    const epsg = normalizeCrsString(this._map.getCRS());
     this._epsgEl.textContent = ` | ${epsg}`;
   }
 

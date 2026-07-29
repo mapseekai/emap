@@ -1,25 +1,25 @@
 ---
 id: intro
 slug: /
-title: emap Introduction
+title: Emap Introduction
 api: []
 examples: []
 stability: stable
 verifiedVersion: 0.5.0
 ---
 
-# emap
+# Emap
 
-emap is a browser-only TypeScript map rendering and editing engine. It keeps
+Emap is a browser-only TypeScript map rendering and editing engine. It keeps
 topology in mapshaper data structures, renders through HTML5 Canvas 2D, and
 connects data loading, layer styling, interaction, edit history, and spatial
 processing behind one frontend API.
 
-emap does not require a backend map service. Data may come from a URL, a file
+Emap does not require a backend map service. Data may come from a URL, a file
 selected by the user, or in-memory bytes; import, inspection, editing, and
 export can all happen in the browser.
 
-## When to use emap
+## When to use Emap
 
 - Build a GIS data viewer for GeoJSON, TopoJSON, or Shapefile ZIP files.
 - Build a browser editor with feature selection, attribute changes, transforms,
@@ -30,7 +30,7 @@ export can all happen in the browser.
   panel, and status UI.
 - Prototype a complete data workflow without deploying a backend GIS service.
 
-emap is not a replacement for tiled basemaps, 3D scenes, or server-side queries
+Emap is not a replacement for tiled basemaps, 3D scenes, or server-side queries
 over datasets that cannot fit in a browser. Its focus is topology data that can
 be loaded and edited as a complete client-side dataset.
 

@@ -413,7 +413,11 @@ describe('VertexEditHandler', () => {
       getLayers: () => [layer],
       refreshDisplayArcs: vi.fn(),
     };
-    Reflect.set(mapshaper.internal as object, 'findNearestVertices', vi.fn(() => [0, 2]));
+    Reflect.set(
+      mapshaper.internal as object,
+      'findNearestVertices',
+      vi.fn(() => [0, 2]),
+    );
     Reflect.set(
       mapshaper.internal as object,
       'snapVerticesToPoint',
@@ -1129,10 +1133,7 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
     const items = document.querySelectorAll<HTMLDivElement>('#emap-ctx-menu > div');
     items[1].click();
 
-    expect(splitSharedNode).toHaveBeenCalledWith(
-      { source: 'src-a', layer: 'roads', id: 0 },
-      1,
-    );
+    expect(splitSharedNode).toHaveBeenCalledWith({ source: 'src-a', layer: 'roads', id: 0 }, 1);
     expect(Reflect.get(handler, '_hoveredFeature')).toBe(hoveredFeature);
     expect(Reflect.get(handler, '_hoverVertexCoords')).toEqual([1, 0]);
     expect(Reflect.get(handler, '_hoverVertexIds')).toEqual([1]);

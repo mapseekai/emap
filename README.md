@@ -960,9 +960,9 @@ packages/examples/examples/ # Canonical runnable HTML examples
 
 ## Development
 
-Repository development and tests require Node.js `^20.19.0` or `>=22.12.0`,
-matching the Vite/Vitest toolchain used by the test runner. The repository pins
-pnpm through the root `packageManager` field; enable Corepack before installing:
+Repository development and tests require Node.js 22 (`>=22 <23`). The
+repository pins Node.js `22.23.1` through `.nvmrc` and pnpm through the root
+`packageManager` field; enable Corepack before installing:
 
 ```bash
 corepack enable
@@ -1020,12 +1020,12 @@ Build outputs:
 Before publishing a version:
 
 ```bash
-cmd /c npm ci
-cmd /c npm run format:check
-cmd /c npm run typecheck
-cmd /c npm run test:run
-cmd /c npm run build
-cmd /c npm pack --dry-run
+pnpm install --frozen-lockfile
+pnpm run format:check
+pnpm run typecheck
+pnpm run test:run
+pnpm run build
+pnpm pack --dry-run
 ```
 
 Then check:

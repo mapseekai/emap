@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Local development and package engines now target Node.js 22, pinned to
+  `22.23.1` through `.nvmrc`.
 - The optional Arrow integration has moved from `@zwishing/emap/formats` to
   `@zwishing/emap/arrow`, with source, declarations, bundles, examples, and API
   documentation renamed accordingly. The old module path is no longer exported.
@@ -51,6 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Default Vitest runs now cap worker concurrency to avoid resource-driven test
+  timeouts, while DuckDB-Wasm integration files run in isolated processes so
+  blocking database instances cannot stall later files.
+- The shared-node editing APIs are now cataloged in both documentation locales
+  with complete public API metadata.
 - Shared topology nodes can now be deleted as one node across shared edges or
   coordinate-matched features. Endpoint deletion inserts shared bridge arcs so
   polygon and polyline rendering keeps every surviving edge, while features

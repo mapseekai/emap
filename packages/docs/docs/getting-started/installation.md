@@ -14,7 +14,7 @@ verifiedVersion: 0.5.0
 
 ## 环境要求
 
-- Node.js `^20.19.0` 或 `>=22.12.0`，与当前 Vite 工具链保持一致。
+- Node.js 22（`>=22 <23`），与项目的开发和打包工具链保持一致。
 - 支持 ES module、Canvas 2D 和现代 JavaScript 的浏览器。
 - npm、pnpm 或其他支持 package exports 的包管理器。
 

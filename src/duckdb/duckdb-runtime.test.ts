@@ -1,4 +1,4 @@
-import type { Table } from 'apache-arrow';
+import { tableFromArrays, tableFromIPC, type Table } from 'apache-arrow';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   closeDuckDbRuntime,
@@ -10,7 +10,8 @@ import {
 } from './index';
 
 class FakeDuckDbConnection {
-  readonly insertCalls: Array<{ table: Table; opts: { name: string; create?: boolean } }> = [];
+  readonly insertCalls: Array<{ buffer: Uint8Array; opts: { name: string; create?: boolean } }> =
+    [];
   readonly queries: string[] = [];
   closed = false;
 
@@ -19,8 +20,11 @@ class FakeDuckDbConnection {
     private readonly queryError?: unknown,
   ) {}
 
-  async insertArrowTable(table: Table, opts: { name: string; create?: boolean }): Promise<void> {
-    this.insertCalls.push({ table, opts });
+  async insertArrowFromIPCStream(
+    buffer: Uint8Array,
+    opts: { name: string; create?: boolean },
+  ): Promise<void> {
+    this.insertCalls.push({ buffer, opts });
   }
 
   async query(sql: string): Promise<Table> {
@@ -317,17 +321,18 @@ describe('createDuckDbRuntimeFromJsDelivr', () => {
     );
   });
 
-  it('delegates insertArrowTable and query to a DuckDB connection', async () => {
+  it('serializes Arrow tables before delegating inserts to a DuckDB connection', async () => {
     const runtime = await makeRuntime();
     const conn = await runtime.connect();
-    const table = {} as Table;
+    const table = tableFromArrays({ id: [1, 2] });
 
     await conn.insertArrowTable(table, { name: 'input' });
     const result = await conn.query('select * from input');
     await conn.close?.();
 
     const duckdbConn = FakeAsyncDuckDB.instances[0]?.connections[0];
-    expect(duckdbConn?.insertCalls).toEqual([{ table, opts: { name: 'input', create: true } }]);
+    expect(duckdbConn?.insertCalls[0]?.opts).toEqual({ name: 'input', create: true });
+    expect(tableFromIPC(duckdbConn!.insertCalls[0]!.buffer).numRows).toBe(2);
     expect(duckdbConn?.queries).toEqual(['select * from input']);
     expect(duckdbConn?.closed).toBe(true);
     expect(result).toBe(duckdbConn?.['resultTable']);

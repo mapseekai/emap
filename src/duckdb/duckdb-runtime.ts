@@ -1,4 +1,4 @@
-import type { Table } from 'apache-arrow';
+import { tableToIPC, type Table } from 'apache-arrow';
 
 export interface DuckDbConnection {
   insertArrowTable(table: Table, opts: { name: string }): Promise<void>;
@@ -25,7 +25,10 @@ export interface CreateDuckDbRuntimeOptions {
 }
 
 type DuckDbWasmConnectionLike = {
-  insertArrowTable(table: Table, opts: { name: string; create?: boolean }): Promise<void>;
+  insertArrowFromIPCStream(
+    buffer: Uint8Array,
+    opts: { name: string; create?: boolean },
+  ): Promise<void>;
   query(sql: string): Promise<Table>;
   close(): Promise<void>;
 };
@@ -190,7 +193,10 @@ export async function createDuckDbRuntimeFromJsDelivr(
       const conn = (await db.connect()) as unknown as DuckDbWasmConnectionLike;
       return {
         insertArrowTable(table, insertOpts) {
-          return conn.insertArrowTable(table, { name: insertOpts.name, create: true });
+          return conn.insertArrowFromIPCStream(tableToIPC(table, 'stream'), {
+            name: insertOpts.name,
+            create: true,
+          });
         },
         query(sql) {
           return conn.query(sql);
