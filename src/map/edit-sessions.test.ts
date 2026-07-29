@@ -150,6 +150,40 @@ describe('splitSharedNode', () => {
     expect(arcs.size()).toBe(4);
     expect(target.shapes?.[0]).toEqual([[0, 1, 2]]);
   });
+
+  it('separates coordinate-only sharing without adding a no-op history entry', () => {
+    let nn = new Int32Array([2, 2]);
+    let xx = new Float64Array([0, 1, 0, 0]);
+    let yy = new Float64Array([0, 0, 0, 1]);
+    let ii = new Int32Array([0, 2]);
+    const arcs = {
+      size: () => nn.length,
+      getVertexData: () => ({ xx, yy, nn, ii, zz: null }),
+      updateVertexData(nextNn: Int32Array, nextXx: Float64Array, nextYy: Float64Array) {
+        nn = new Int32Array(nextNn);
+        xx = new Float64Array(nextXx);
+        yy = new Float64Array(nextYy);
+        ii = new Int32Array([0, nn[0]]);
+      },
+    } as unknown as ArcCollection;
+    const target = makePolyLayer('target', [[[0]]]);
+    const neighbor = makePolyLayer('neighbor', [[[1]]]);
+    const source = makeSource('src', [target, neighbor], arcs);
+    const ctx = makeHost();
+    ctx.sources.set('src', source);
+
+    const detachedVertexIds = new EditSessions(ctx.host).splitSharedNode(
+      { source: 'src', layer: 'target', id: 0 },
+      0,
+    );
+
+    expect(detachedVertexIds).toEqual([0]);
+    expect(arcs.size()).toBe(2);
+    expect(ctx.history.canUndo()).toBe(false);
+    expect(ctx.fireHistoryChange).not.toHaveBeenCalled();
+    expect(ctx.invalidateShapeCaches).not.toHaveBeenCalled();
+    expect(ctx.scheduleRender).not.toHaveBeenCalled();
+  });
 });
 
 // ============================================================================

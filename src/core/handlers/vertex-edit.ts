@@ -2,11 +2,12 @@ import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler'
 import { Emap, EditVertexShape, EditVertexArcs } from '../../map/map';
 import { VertexMoveCommand } from '../../edit/commands/vertex-move';
 import { VertexInsertCommand } from '../../edit/commands/vertex-insert';
-import { VertexDeleteCommand } from '../../edit/commands/vertex-delete';
+import { planTopologyNodeDeletion } from '../../edit/commands/vertex-delete';
 import { bumpEditVersion, isPathLayer, type ArcCollection } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import { getLayerId } from '../../source/layer-utils';
+import { isSharedNode } from '../../edit/commands/split-shared-node';
 
 interface EditableArcs extends EditVertexArcs {
   getVertex2(vertexId: number): [number, number] | null;
@@ -196,11 +197,9 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
   }
 
   /**
-   * Right-click handler: show a context menu to delete the hovered vertex.
-   * Guard rules (same as mapshaper):
-   *   - Must be hovering a vertex (not an interpolated edge point)
-   *   - Not currently dragging
-   *   - Shared topology nodes are shown as unavailable
+   * Right-click handler for topology-node actions.
+   * Shared nodes can be deleted as one topological unit or split first so the
+   * hovered feature can be edited independently.
    */
   private _onContextMenu(e: MouseEvent): void {
     e.preventDefault(); // always suppress browser default right-click menu
@@ -209,29 +208,63 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     if (!this._hoveredFeature) return;
 
     const hoveredFeature = this._hoveredFeature;
-    const vertexId = this._hoverVertexIds[0];
-    const isShared = this._hoverVertexIds.length > 1 && !this._matchesDetachedNode(hoveredFeature);
-    const onDelete =
-      this._hoverVertexIds.length === 1
+    const vertexCoords: [number, number] | null = this._hoverVertexCoords
+      ? [this._hoverVertexCoords[0], this._hoverVertexCoords[1]]
+      : null;
+    const vertexIds = this._hoverVertexIds.slice();
+    const source = this._map.getSource?.(hoveredFeature.source);
+    const layer = this._map.layers?.resolve(hoveredFeature.source, hoveredFeature.layer);
+    const vertexId = source && layer ? this._findHoveredFeatureVertexId() : null;
+    const isShared =
+      !this._matchesDetachedNode(hoveredFeature) &&
+      !!source &&
+      !!layer &&
+      vertexId !== null &&
+      isSharedNode(
+        source as TopologySource,
+        layer,
+        hoveredFeature.id,
+        vertexId,
+        source.getLayers(),
+      );
+    const onDelete = () => {
+      this._deleteHoveredVertex(hoveredFeature, vertexIds);
+    };
+    const onSplit =
+      isShared && vertexId !== null && vertexCoords
         ? () => {
-            this._deleteHoveredVertex(hoveredFeature, vertexId);
+            this._splitHoveredNode(hoveredFeature, vertexId, vertexCoords);
           }
         : null;
-    const onSplit = isShared
-      ? () => {
-          this._splitHoveredNode(hoveredFeature, vertexId);
-        }
-      : null;
-    this._showContextMenu(
-      e.clientX,
-      e.clientY,
-      onDelete,
-      onSplit,
-      isShared ? '共享节点无法删除' : '节点包含多个顶点，无法删除',
-    );
+    this._showContextMenu(e.clientX, e.clientY, onDelete, onSplit);
   }
 
-  private _splitHoveredNode(hoveredFeature: HoveredFeature, vertexId: number): void {
+  private _findHoveredFeatureVertexId(): number | null {
+    const feature = this._hoveredFeature;
+    if (!feature || this._hoverVertexIds.length === 0) return null;
+
+    const featureArcIds = new Set<number>();
+    for (const part of feature.shape) {
+      for (const rawArcId of part) {
+        featureArcIds.add(rawArcId >= 0 ? rawArcId : ~rawArcId);
+      }
+    }
+
+    const data = feature.arcs.getVertexData();
+    const adapter = getDefaultMapshaperAdapter();
+    for (const vertexId of this._hoverVertexIds) {
+      if (vertexId < 0 || vertexId >= data.xx.length) continue;
+      const arcId = adapter.findArcIdFromVertexId(vertexId, data.ii);
+      if (featureArcIds.has(arcId)) return vertexId;
+    }
+    return null;
+  }
+
+  private _splitHoveredNode(
+    hoveredFeature: HoveredFeature,
+    vertexId: number,
+    capturedCoords: [number, number] | null = this._hoverVertexCoords,
+  ): void {
     const detachedVertexIds = this._map.editSession.splitSharedNode(
       {
         source: hoveredFeature.source,
@@ -243,67 +276,58 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     if (!detachedVertexIds || detachedVertexIds.length === 0) return;
     const layer = this._map.layers.resolve(hoveredFeature.source, hoveredFeature.layer);
     const shape = layer?.shapes?.[hoveredFeature.id];
-    if (!shape || !this._hoverVertexCoords) return;
+    if (!shape || !capturedCoords) return;
 
     hoveredFeature.shape = shape as EditVertexShape;
+    this._hoveredFeature = hoveredFeature;
+    this._hoverVertexCoords = [capturedCoords[0], capturedCoords[1]];
     this._hoverVertexIds = detachedVertexIds;
     this._detachedNode = {
       source: hoveredFeature.source,
       layer: hoveredFeature.layer,
       id: hoveredFeature.id,
-      coords: [...this._hoverVertexCoords],
+      coords: [capturedCoords[0], capturedCoords[1]],
       vertexIds: detachedVertexIds.slice(),
     };
+    this._hoverType = 'vertex';
+    this._hoverInsertionId = -1;
     this._neighborShapes = [];
     this._updateEditState();
     this._map.render();
   }
 
-  /** Delete the currently hovered vertex from the arc collection */
+  /** Delete every arc vertex represented by the currently hovered topology node. */
   private _deleteHoveredVertex(
     hoveredFeature: HoveredFeature | null = this._hoveredFeature,
-    vtxId: number | undefined = this._hoverVertexIds[0],
+    vertexIds: readonly number[] = this._hoverVertexIds,
   ): void {
-    if (!hoveredFeature || vtxId === undefined) return;
-    const arcs = hoveredFeature.arcs;
+    if (!hoveredFeature || vertexIds.length === 0) return;
     const sourceId = hoveredFeature.source;
+    const source = this._map.getSource(sourceId);
+    if (!source) return;
+    const deletion = planTopologyNodeDeletion(
+      source as TopologySource,
+      vertexIds,
+      source.getLayers(),
+    );
+    if (!deletion) return;
 
-    // Snapshot the vertex's coordinate BEFORE deletion so undo can re-insert it.
-    const coordsBefore = arcs.getVertex2(vtxId);
-
-    // Delete vertex via the adapter; mapshaper's deleteVertex calls
-    // updateVertexData() internally, which rebuilds all arc bounds via
-    // initBounds(). No explicit updateArcBounds needed.
-    getDefaultMapshaperAdapter().deleteVertex(arcs as unknown as ArcCollection, vtxId);
-
-    // Re-initialize the LOD copy in DisplayArcs since vertex layout changed.
+    deletion.command.do();
+    this._map.pushCommand(deletion.command);
     this._refreshSourceDisplayArcs(sourceId);
-    // Live mutation — bump editVersion so the spatial-index cache
-    // invalidates and the next hit-test against the (potentially
-    // shrunken) bbox reflects the deletion.
-    this._bumpSourceEditVersion(sourceId);
-
-    // Push an undoable VertexDeleteCommand
-    if (coordsBefore) {
-      const source = this._map.getSource(sourceId);
-      if (source) {
-        this._map.pushCommand(
-          new VertexDeleteCommand({
-            vertexIndex: vtxId,
-            coords: [coordsBefore[0], coordsBefore[1]],
-            arcs: arcs as unknown as ArcCollection,
-            source: source as TopologySource,
-          }),
-        );
-      }
+    if (deletion.shapeChanged) {
+      this._map._invalidateShapeCachesForSources([sourceId]);
+    }
+    if (deletion.deletedFeatureCount > 0) {
+      this._map.select([], { mode: 'replace' });
     }
 
-    // Clear hover state (the vertex no longer exists)
     this._hoverVertexCoords = null;
     this._hoverVertexIds = [];
     this._hoverType = null;
     this._hoverInsertionId = -1;
     this._neighborShapes = [];
+    this._detachedNode = null;
     this._map.clearEditVertexState();
     this._map.render();
   }
@@ -394,6 +418,49 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
 
   private _onMouseMove(px: number, py: number): void {
     const previousHoverSignature = this._getHoverSignature();
+
+    // A split node is intentionally pinned to its feature until the pointer
+    // leaves the node. Do not depend on feature hit-testing here: coincident
+    // boundaries may return only the neighboring feature, or no feature at all.
+    const detached = this._detachedNode;
+    if (detached) {
+      const detachedPoint = this._map.project(detached.coords[0], detached.coords[1]);
+      const dx = detachedPoint[0] - px;
+      const dy = detachedPoint[1] - py;
+      if (dx * dx + dy * dy <= VERTEX_HIT_THRESHOLD * VERTEX_HIT_THRESHOLD) {
+        const source = this._map.getSource(detached.source);
+        const layer = this._map.layers.resolve(detached.source, detached.layer);
+        const shape =
+          layer && isPathLayer(layer) && layer.shapes?.[detached.id]
+            ? (layer.shapes[detached.id] as EditVertexShape)
+            : null;
+        const arcs = source?.getArcs() as EditableArcs | undefined;
+        if (source && layer && isPathLayer(layer) && shape && arcs) {
+          this._hoveredFeature = {
+            source: detached.source,
+            layer: detached.layer,
+            id: detached.id,
+            shape,
+            arcs,
+            geometryType: layer.geometry_type,
+            allLayers: source.getLayers() as Array<{ shapes?: EditVertexShape[] }>,
+          };
+          const detachedIds = this._getDetachedVertexIds(detached.coords, arcs);
+          if (detachedIds) {
+            this._hoverVertexCoords = [...detached.coords];
+            this._hoverVertexIds = detachedIds;
+            this._hoverType = 'vertex';
+            this._hoverInsertionId = -1;
+            this._neighborShapes = [];
+            if (this._getHoverSignature() !== previousHoverSignature) {
+              this._updateEditState();
+              this._map.render();
+            }
+            return;
+          }
+        }
+      }
+    }
 
     // Hit test: find feature under pointer
     const hits = this._map.queryFeatures(
@@ -993,13 +1060,18 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
 
     const dataCoords = this._resolveDragCoords(px, py);
     const sourceId = this._hoveredFeature.source;
-    if (this._hoverVertexIds.length > 0) {
+    const movedVertexIds = this._hoverVertexIds.slice();
+    const finishingDetachedNode = this._matchesDetachedNode(this._hoveredFeature);
+    if (movedVertexIds.length > 0) {
       getDefaultMapshaperAdapter().snapVertices(
-        this._hoverVertexIds,
+        movedVertexIds,
         [dataCoords[0], dataCoords[1]],
         this._hoveredFeature.arcs as unknown as ArcCollection,
       );
       this._hoverVertexCoords = [dataCoords[0], dataCoords[1]];
+      if (finishingDetachedNode && this._detachedNode) {
+        this._detachedNode.coords = [dataCoords[0], dataCoords[1]];
+      }
     }
 
     // mapshaper's snapVerticesToPoint already updates the moved arcs' bounds
@@ -1027,21 +1099,46 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     // (A click-without-drag returns the same coord and is not worth recording.)
     const from = this._dragFromCoords;
     const dragMoved = from && (from[0] !== dataCoords[0] || from[1] !== dataCoords[1]);
-    if (dragMoved && this._hoverVertexIds.length > 0) {
-      const source = this._map.getSource(sourceId);
-      if (source) {
-        this._map.pushCommand(
-          new VertexMoveCommand({
-            vertexIds: [...this._hoverVertexIds],
-            from: [from[0], from[1]],
-            to: [dataCoords[0], dataCoords[1]],
-            arcs: arcs as unknown as ArcCollection,
-            source: source as TopologySource,
-          }),
-        );
-      }
+    const source = this._map.getSource(sourceId);
+    if (dragMoved && movedVertexIds.length > 0 && source) {
+      this._map.pushCommand(
+        new VertexMoveCommand({
+          vertexIds: movedVertexIds,
+          from: [from[0], from[1]],
+          to: [dataCoords[0], dataCoords[1]],
+          arcs: arcs as unknown as ArcCollection,
+          source: source as TopologySource,
+        }),
+      );
     }
     this._dragFromCoords = null;
+
+    const coincidentVertexIds = getDefaultMapshaperAdapter().findNearestVertices(
+      dataCoords,
+      this._hoveredFeature.shape,
+      arcs as unknown as ArcCollection,
+    );
+    if (coincidentVertexIds.length > 0) {
+      this._hoverVertexIds = coincidentVertexIds;
+    }
+
+    if (finishingDetachedNode && this._detachedNode && source) {
+      const layer = this._map.layers.resolve(sourceId, this._hoveredFeature.layer);
+      const featureVertexId = this._findHoveredFeatureVertexId();
+      if (
+        layer &&
+        featureVertexId !== null &&
+        isSharedNode(
+          source as TopologySource,
+          layer,
+          this._hoveredFeature.id,
+          featureVertexId,
+          source.getLayers(),
+        )
+      ) {
+        this._detachedNode = null;
+      }
+    }
 
     // Fire vertex_moved event with topology info
     this._map.fire('vertex_moved', {

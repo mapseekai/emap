@@ -51,12 +51,14 @@ export class EditSessions {
     );
     if (!plan) return null;
 
-    const command = new SplitSharedNodeCommand(plan);
-    command.do();
-    this._emap._history.push(command);
-    this._emap._fireHistoryChange();
-    this._emap._invalidateShapeCachesForSources([ref.source]);
-    this._emap._scheduleRender();
+    if (plan.appendedArcs.length > 0) {
+      const command = new SplitSharedNodeCommand(plan);
+      command.do();
+      this._emap._history.push(command);
+      this._emap._fireHistoryChange();
+      this._emap._invalidateShapeCachesForSources([ref.source]);
+      this._emap._scheduleRender();
+    }
     return plan.detachedVertexIds.slice();
   }
 

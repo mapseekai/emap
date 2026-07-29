@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TopologySource } from '../../source/source';
 import type { ArcCollection, MapshaperLayer } from '../../types/mapshaper-types';
-import { planSharedNodeSplit, SplitSharedNodeCommand } from './split-shared-node';
+import { isSharedNode, planSharedNodeSplit, SplitSharedNodeCommand } from './split-shared-node';
 
 function buildFixture() {
   let storedNn = new Int32Array([2, 2, 2, 2]);
@@ -61,6 +61,7 @@ describe('planSharedNodeSplit', () => {
     const plan = planSharedNodeSplit(source, targetLayer, 0, 1, [targetLayer, neighborLayer]);
 
     expect(plan).not.toBeNull();
+    expect(isSharedNode(source, targetLayer, 0, 1, [targetLayer, neighborLayer])).toBe(true);
     expect(plan?.appendedArcs).toHaveLength(1);
     expect(plan?.remaps[0].newShape).toEqual([[0, 4, 2]]);
     expect(plan?.detachedVertexIds).toEqual([1, 8]);
@@ -72,6 +73,7 @@ describe('planSharedNodeSplit', () => {
     const plan = planSharedNodeSplit(source, targetLayer, 0, 0, [targetLayer]);
 
     expect(plan).toBeNull();
+    expect(isSharedNode(source, targetLayer, 0, 0, [targetLayer])).toBe(false);
   });
 
   it('separates features that meet at a coordinate without sharing an arc id', () => {
@@ -82,8 +84,25 @@ describe('planSharedNodeSplit', () => {
 
     expect(plan).not.toBeNull();
     expect(plan?.appendedArcs).toHaveLength(0);
-    expect(plan?.remaps[0].newShape).toEqual([[0, 1, 2]]);
+    expect(plan?.remaps).toHaveLength(0);
     expect(plan?.detachedVertexIds).toEqual([1, 2]);
+  });
+
+  it('keeps the anchored branch separate after snapping onto another node in the same shape', () => {
+    const { arcs, source, targetLayer, neighborLayer } = buildFixture();
+    const data = arcs.getVertexData?.();
+    if (!data) throw new Error('Expected arc vertex data');
+    data.xx[1] = 1;
+    data.yy[1] = 1;
+    data.xx[2] = 1;
+    data.yy[2] = 1;
+
+    const plan = planSharedNodeSplit(source, targetLayer, 0, 1, [targetLayer, neighborLayer]);
+
+    expect(plan).not.toBeNull();
+    expect(plan?.appendedArcs).toHaveLength(1);
+    expect(plan?.remaps[0].newShape).toEqual([[0, 4, 2]]);
+    expect(plan?.detachedVertexIds).toEqual([1, 8]);
   });
 });
 

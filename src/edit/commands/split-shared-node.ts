@@ -1,6 +1,7 @@
 import type { EditCommand } from '../edit-command';
 import {
   isPathLayer,
+  type ArcCollection,
   type ArcVertexData,
   type MapshaperLayer,
   type PathShape,
@@ -38,56 +39,11 @@ export function planSharedNodeSplit(
   layer: MapshaperLayer,
   featureId: number,
   vertexId: number,
-  allLayers: MapshaperLayer[],
+  allLayers: readonly MapshaperLayer[],
 ): SplitSharedNodePlan | null {
-  const arcs = source.getArcs();
-  const data = arcs?.getVertexData?.();
-  const shape = layer.shapes?.[featureId];
-  if (!arcs || !data || !shape || !isPathLayer(layer)) return null;
-  if (vertexId < 0 || vertexId >= data.xx.length) return null;
-
-  const targetX = data.xx[vertexId];
-  const targetY = data.yy[vertexId];
-  const incidentArcIds: number[] = [];
-  const seenIncident = new Set<number>();
-
-  for (const part of shape as PathShape) {
-    for (const rawArcId of part) {
-      const arcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
-      if (seenIncident.has(arcId) || !arcContainsCoordinate(arcId, targetX, targetY, data)) {
-        continue;
-      }
-      seenIncident.add(arcId);
-      incidentArcIds.push(arcId);
-    }
-  }
-  if (incidentArcIds.length === 0) return null;
-
-  const referencedElsewhere = new Uint8Array(arcs.size());
-  let coordinateReferencedElsewhere = false;
-  for (const candidateLayer of allLayers) {
-    if (!candidateLayer.shapes || !isPathLayer(candidateLayer)) continue;
-    for (let candidateId = 0; candidateId < candidateLayer.shapes.length; candidateId++) {
-      if (candidateLayer === layer && candidateId === featureId) continue;
-      const candidateShape = candidateLayer.shapes[candidateId] as PathShape | null;
-      if (!candidateShape) continue;
-      for (const part of candidateShape as PathShape) {
-        for (const rawArcId of part) {
-          const arcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
-          if (arcId >= 0 && arcId < referencedElsewhere.length) referencedElsewhere[arcId] = 1;
-          if (
-            !coordinateReferencedElsewhere &&
-            arcContainsCoordinate(arcId, targetX, targetY, data)
-          ) {
-            coordinateReferencedElsewhere = true;
-          }
-        }
-      }
-    }
-  }
-
-  const sharedArcIds = incidentArcIds.filter((arcId) => referencedElsewhere[arcId] === 1);
-  if (sharedArcIds.length === 0 && !coordinateReferencedElsewhere) return null;
+  const analysis = analyzeSharedNode(source, layer, featureId, vertexId, allLayers);
+  if (!analysis) return null;
+  const { arcs, data, shape, targetX, targetY, incidentArcIds, sharedArcIds } = analysis;
 
   const originalArcCount = arcs.size();
   const oldToNew = new globalThis.Map<number, number>();
@@ -104,15 +60,19 @@ export function planSharedNodeSplit(
     });
   }
 
-  const originalShape = (shape as PathShape).map((part) => part.slice());
-  const newShape: PathShape = originalShape.map((part) =>
-    part.map((rawArcId) => {
-      const arcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
-      const replacement = oldToNew.get(arcId);
-      if (replacement === undefined) return rawArcId;
-      return rawArcId >= 0 ? replacement : ~replacement;
-    }),
-  );
+  const remaps: SplitSharedNodePlan['remaps'] = [];
+  if (sharedArcIds.length > 0) {
+    const originalShape = shape.map((part) => part.slice());
+    const newShape: PathShape = originalShape.map((part) =>
+      part.map((rawArcId) => {
+        const arcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
+        const replacement = oldToNew.get(arcId);
+        if (replacement === undefined) return rawArcId;
+        return rawArcId >= 0 ? replacement : ~replacement;
+      }),
+    );
+    remaps.push({ layer, featureId, originalShape, newShape });
+  }
 
   const detachedVertexIds: number[] = [];
   let appendedOffset = data.xx.length;
@@ -133,10 +93,91 @@ export function planSharedNodeSplit(
 
   return {
     source,
-    remaps: [{ layer, featureId, originalShape, newShape }],
+    remaps,
     appendedArcs,
     originalArcCount,
     detachedVertexIds,
+  };
+}
+
+export function isSharedNode(
+  source: TopologySource,
+  layer: MapshaperLayer,
+  featureId: number,
+  vertexId: number,
+  allLayers: readonly MapshaperLayer[],
+): boolean {
+  return analyzeSharedNode(source, layer, featureId, vertexId, allLayers) !== null;
+}
+
+interface SharedNodeAnalysis {
+  arcs: ArcCollection;
+  data: ArcVertexData;
+  shape: PathShape;
+  targetX: number;
+  targetY: number;
+  incidentArcIds: number[];
+  sharedArcIds: number[];
+}
+
+function analyzeSharedNode(
+  source: TopologySource,
+  layer: MapshaperLayer,
+  featureId: number,
+  vertexId: number,
+  allLayers: readonly MapshaperLayer[],
+): SharedNodeAnalysis | null {
+  const arcs = source.getArcs();
+  const data = arcs?.getVertexData?.();
+  const shape = layer.shapes?.[featureId];
+  if (!arcs || !data || !shape || !isPathLayer(layer)) return null;
+  if (vertexId < 0 || vertexId >= data.xx.length) return null;
+
+  const targetX = data.xx[vertexId];
+  const targetY = data.yy[vertexId];
+  const incidentArcIds = collectAnchoredIncidentArcIds(
+    shape as PathShape,
+    vertexId,
+    targetX,
+    targetY,
+    data,
+    layer.geometry_type === 'polygon',
+  );
+  if (incidentArcIds.length === 0) return null;
+
+  const referencedElsewhere = new Uint8Array(arcs.size());
+  let coordinateReferencedElsewhere = false;
+  for (const candidateLayer of allLayers) {
+    if (!candidateLayer.shapes || !isPathLayer(candidateLayer)) continue;
+    for (let candidateId = 0; candidateId < candidateLayer.shapes.length; candidateId++) {
+      if (candidateLayer === layer && candidateId === featureId) continue;
+      const candidateShape = candidateLayer.shapes[candidateId] as PathShape | null;
+      if (!candidateShape) continue;
+      for (const part of candidateShape) {
+        for (const rawArcId of part) {
+          const arcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
+          if (arcId >= 0 && arcId < referencedElsewhere.length) referencedElsewhere[arcId] = 1;
+          if (
+            !coordinateReferencedElsewhere &&
+            arcContainsCoordinate(arcId, targetX, targetY, data)
+          ) {
+            coordinateReferencedElsewhere = true;
+          }
+        }
+      }
+    }
+  }
+
+  const sharedArcIds = incidentArcIds.filter((arcId) => referencedElsewhere[arcId] === 1);
+  if (sharedArcIds.length === 0 && !coordinateReferencedElsewhere) return null;
+  return {
+    arcs,
+    data,
+    shape: shape as PathShape,
+    targetX,
+    targetY,
+    incidentArcIds,
+    sharedArcIds,
   };
 }
 
@@ -161,4 +202,70 @@ function collectCoordinateVertexIds(
   for (let vertexId = start; vertexId < end; vertexId++) {
     if (data.xx[vertexId] === x && data.yy[vertexId] === y) result.push(vertexId);
   }
+}
+
+function collectAnchoredIncidentArcIds(
+  shape: PathShape,
+  vertexId: number,
+  x: number,
+  y: number,
+  data: ArcVertexData,
+  wrapParts: boolean,
+): number[] {
+  const anchorArcId = findArcIdForVertex(vertexId, data);
+  if (anchorArcId < 0) return [];
+
+  const incidentArcIds: number[] = [];
+  const seen = new Set<number>();
+  const addArc = (arcId: number): void => {
+    if (seen.has(arcId)) return;
+    seen.add(arcId);
+    incidentArcIds.push(arcId);
+  };
+  const addConnectedArc = (part: number[], index: number, endpoint: 'start' | 'end'): void => {
+    if (part.length === 0) return;
+    if (index < 0 || index >= part.length) {
+      if (!wrapParts) return;
+      index = (index + part.length) % part.length;
+    }
+    const rawArcId = part[index];
+    const arcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
+    const start = data.ii[arcId];
+    const end = start + data.nn[arcId] - 1;
+    const endpointVertexId =
+      endpoint === 'start' ? (rawArcId >= 0 ? start : end) : rawArcId >= 0 ? end : start;
+    if (data.xx[endpointVertexId] === x && data.yy[endpointVertexId] === y) addArc(arcId);
+  };
+
+  for (const part of shape) {
+    for (let index = 0; index < part.length; index++) {
+      const rawArcId = part[index];
+      const arcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
+      if (arcId !== anchorArcId) continue;
+
+      addArc(arcId);
+      const start = data.ii[arcId];
+      const end = start + data.nn[arcId] - 1;
+      const traversalStart = rawArcId >= 0 ? start : end;
+      const traversalEnd = rawArcId >= 0 ? end : start;
+      if (vertexId === traversalStart) addConnectedArc(part, index - 1, 'end');
+      if (vertexId === traversalEnd) addConnectedArc(part, index + 1, 'start');
+    }
+  }
+
+  return incidentArcIds;
+}
+
+function findArcIdForVertex(vertexId: number, data: ArcVertexData): number {
+  let low = 0;
+  let high = data.ii.length - 1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const start = data.ii[mid];
+    const end = start + data.nn[mid];
+    if (vertexId < start) high = mid - 1;
+    else if (vertexId >= end) low = mid + 1;
+    else return mid;
+  }
+  return -1;
 }

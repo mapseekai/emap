@@ -171,6 +171,119 @@ describe('VertexEditHandler', () => {
     expect(snapSpy).toHaveBeenCalledWith([8, 9], [3, 4], expect.any(Object));
   });
 
+  it('keeps the detached feature active when shared-node hit order changes', () => {
+    const detachedShape = [[4, 2]];
+    const neighborShape = [[1, 2]];
+    const layer = {
+      geometry_type: 'polyline',
+      shapes: [null, neighborShape, detachedShape],
+    };
+    const arcs = {
+      getVertexData: () => ({
+        xx: new Float64Array(10),
+        yy: new Float64Array(10),
+        nn: new Int32Array([10]),
+        ii: new Int32Array([0]),
+      }),
+    };
+    const splitSharedNode = vi.fn(() => [8, 9]);
+    const mapMock = {
+      editSession: { splitSharedNode },
+      layers: { resolve: () => layer },
+      queryFeatures: vi.fn(() => [
+        { id: 1, source: 'src-a', layer: 'layer-a', geometryType: 'polyline' },
+        { id: 2, source: 'src-a', layer: 'layer-a', geometryType: 'polyline' },
+      ]),
+      getSource: () => ({
+        getLayers: () => [layer],
+        getArcs: () => arcs,
+      }),
+      unproject: (px: number, py: number) => [px / 10, py / 10] as [number, number],
+      project: (x: number, y: number) => [x * 10, y * 10] as [number, number],
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+      fire: vi.fn(),
+    };
+    const handler = new VertexEditHandler(mapMock as unknown as Emap);
+    const snapSpy = vi.fn();
+    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
+    const hoveredFeature = {
+      id: 2,
+      source: 'src-a',
+      layer: 'layer-a',
+      shape: detachedShape,
+      arcs,
+      geometryType: 'polyline',
+      allLayers: [layer],
+    };
+    setPrivate(handler, '_hoveredFeature', hoveredFeature);
+    setPrivate(handler, '_hoverVertexCoords', [0, 0]);
+    setPrivate(handler, '_hoverVertexIds', [4, 9]);
+    setPrivate(handler, '_hoverType', 'vertex');
+    setPrivate(handler, '_findNearestVertices', function (this: object) {
+      const feature = Reflect.get(this, '_hoveredFeature') as { id: number };
+      setPrivate(this, '_hoverVertexCoords', [0, 0]);
+      setPrivate(this, '_hoverVertexIds', feature.id === 2 ? [8, 9] : [4, 8, 9]);
+      setPrivate(this, '_hoverType', 'vertex');
+    });
+    setPrivate(handler, '_findNeighborShapes', vi.fn());
+
+    callPrivate(handler, '_splitHoveredNode', hoveredFeature, 4);
+    callPrivate(handler, '_onMouseMove', 0, 0);
+    callPrivate(handler, '_handleDrag', 30, 40);
+
+    expect(Reflect.get(handler, '_hoveredFeature').id).toBe(2);
+    expect(snapSpy).toHaveBeenCalledWith([8, 9], [3, 4], expect.any(Object));
+  });
+
+  it('keeps a detached node active when the immediate hit test is empty', () => {
+    const detachedShape = [[4, 2]];
+    const layer = {
+      geometry_type: 'polyline',
+      shapes: [null, null, detachedShape],
+    };
+    const xx = new Float64Array(10);
+    const yy = new Float64Array(10);
+    const arcs = {
+      getVertexData: () => ({ xx, yy, nn: new Int32Array([10]), ii: new Int32Array([0]) }),
+    };
+    const splitSharedNode = vi.fn(() => [8, 9]);
+    const mapMock = {
+      editSession: { splitSharedNode },
+      layers: { resolve: () => layer },
+      queryFeatures: vi.fn(() => []),
+      getSource: () => ({
+        getLayers: () => [layer],
+        getArcs: () => arcs,
+      }),
+      project: (x: number, y: number) => [x, y] as [number, number],
+      setEditVertexState: vi.fn(),
+      clearEditVertexState: vi.fn(),
+      render: vi.fn(),
+      fire: vi.fn(),
+    };
+    const handler = new VertexEditHandler(mapMock as unknown as Emap);
+    const hoveredFeature = {
+      id: 2,
+      source: 'src-a',
+      layer: 'layer-a',
+      shape: detachedShape,
+      arcs,
+      geometryType: 'polyline',
+      allLayers: [layer],
+    };
+    setPrivate(handler, '_hoveredFeature', hoveredFeature);
+    setPrivate(handler, '_hoverVertexCoords', [0, 0]);
+    setPrivate(handler, '_hoverVertexIds', [4, 9]);
+    setPrivate(handler, '_hoverType', 'vertex');
+
+    callPrivate(handler, '_splitHoveredNode', hoveredFeature, 4);
+    callPrivate(handler, '_onMouseMove', 0, 0);
+
+    expect(Reflect.get(handler, '_hoveredFeature').id).toBe(2);
+    expect(Reflect.get(handler, '_hoverVertexIds')).toEqual([8, 9]);
+  });
+
   it('snaps dragged vertices to other feature vertices when drag snap is enabled', () => {
     const movingShape = [[0]];
     const targetShape = [[1]];
@@ -233,6 +346,120 @@ describe('VertexEditHandler', () => {
       ],
       undefined,
     );
+  });
+
+  it('adopts all coincident vertex ids after completing a vertex snap', () => {
+    const movingShape = [[0]];
+    const findNearestSpy = vi.fn(() => [0, 2]);
+    const snapSpy = vi.fn();
+    const refreshDisplayArcs = vi.fn();
+    const fireSpy = vi.fn();
+    Reflect.set(mapshaper.internal as object, 'findNearestVertices', findNearestSpy);
+    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapSpy);
+    const mapMock = {
+      unproject: () => [10, 0] as [number, number],
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+      fire: fireSpy,
+      getSource: () => ({ refreshDisplayArcs }),
+    };
+    const handler = new VertexEditHandler(mapMock as unknown as Emap, {
+      snapToVertex: false,
+      snapToEdge: false,
+    });
+    setPrivate(handler, '_dragging', true);
+    setPrivate(handler, '_hoverVertexIds', [0]);
+    setPrivate(handler, '_hoveredFeature', {
+      id: 0,
+      source: 'src-a',
+      layer: 'roads',
+      shape: movingShape,
+      arcs: {},
+      geometryType: 'polyline',
+      allLayers: [],
+    });
+
+    callPrivate(handler, '_finishDrag', 10, 0);
+    callPrivate(handler, '_handleDrag', 12, 0);
+
+    expect(findNearestSpy).toHaveBeenCalledWith([10, 0], movingShape, expect.any(Object));
+    expect(snapSpy).toHaveBeenLastCalledWith([0, 2], [10, 0], expect.any(Object));
+    expect(fireSpy).toHaveBeenCalledWith(
+      'vertex_moved',
+      expect.objectContaining({ vertexIds: [0, 2] }),
+    );
+  });
+
+  it('clears detached state when the node is snapped onto another feature vertex', () => {
+    const movingShape = [[0]];
+    const targetShape = [[1]];
+    const xx = new Float64Array([0, -1, 10, 11]);
+    const yy = new Float64Array([0, 0, 0, 0]);
+    const arcs = {
+      size: () => 2,
+      getVertexData: () => ({
+        xx,
+        yy,
+        nn: new Int32Array([2, 2]),
+        ii: new Int32Array([0, 2]),
+      }),
+    };
+    const layer = {
+      geometry_type: 'polyline',
+      shapes: [movingShape, targetShape],
+    };
+    const source = {
+      getArcs: () => arcs,
+      getLayers: () => [layer],
+      refreshDisplayArcs: vi.fn(),
+    };
+    Reflect.set(mapshaper.internal as object, 'findNearestVertices', vi.fn(() => [0, 2]));
+    Reflect.set(
+      mapshaper.internal as object,
+      'snapVerticesToPoint',
+      vi.fn((vertexIds: number[], to: [number, number]) => {
+        for (const vertexId of vertexIds) {
+          xx[vertexId] = to[0];
+          yy[vertexId] = to[1];
+        }
+      }),
+    );
+    const mapMock = {
+      unproject: () => [10, 0] as [number, number],
+      getSource: () => source,
+      layers: { resolve: () => layer },
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+      fire: vi.fn(),
+    };
+    const handler = new VertexEditHandler(mapMock as unknown as Emap, {
+      snapToVertex: false,
+      snapToEdge: false,
+    });
+    setPrivate(handler, '_dragging', true);
+    setPrivate(handler, '_hoverVertexCoords', [0, 0]);
+    setPrivate(handler, '_hoverVertexIds', [0]);
+    setPrivate(handler, '_hoveredFeature', {
+      id: 0,
+      source: 'src-a',
+      layer: 'roads',
+      shape: movingShape,
+      arcs,
+      geometryType: 'polyline',
+      allLayers: [layer],
+    });
+    setPrivate(handler, '_detachedNode', {
+      id: 0,
+      source: 'src-a',
+      layer: 'roads',
+      coords: [0, 0],
+      vertexIds: [0],
+    });
+
+    callPrivate(handler, '_finishDrag', 10, 0);
+
+    expect(Reflect.get(handler, '_hoverVertexIds')).toEqual([0, 2]);
+    expect(Reflect.get(handler, '_detachedNode')).toBeNull();
   });
 
   it('limits drag snap scanning to spatial query hits', () => {
@@ -734,54 +961,240 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
       setPrivate(handler, '_hoverVertexIds', []);
       setPrivate(handler, '_hoveredFeature', null);
       item.click();
-      expect(deleteSpy).toHaveBeenCalledWith(hoveredFeature, 4);
+      expect(deleteSpy).toHaveBeenCalledWith(hoveredFeature, [4]);
     } finally {
       Reflect.set(mapshaper.internal as object, 'vertexIsArcEndpoint', originalVertexIsArcEndpoint);
       document.getElementById('emap-ctx-menu')?.remove();
     }
   });
 
-  it('shows a disabled delete action for a shared topology node', () => {
+  it('allows deleting a shared topology node and keeps split available', () => {
     document.getElementById('emap-ctx-menu')?.remove();
-    const originalVertexIsArcEndpoint = Reflect.get(
-      mapshaper.internal as object,
-      'vertexIsArcEndpoint',
-    );
-    Reflect.set(
-      mapshaper.internal as object,
-      'vertexIsArcEndpoint',
-      vi.fn(() => false),
-    );
-    const handler = new VertexEditHandler({} as any);
+    const layer = {
+      geometry_type: 'polyline',
+      shapes: [[[0]], [[0]]],
+    };
+    const arcs = {
+      size: () => 1,
+      getVertexData: () => ({
+        xx: new Float64Array([0, 1]),
+        yy: new Float64Array([0, 0]),
+        nn: new Int32Array([2]),
+        ii: new Int32Array([0]),
+      }),
+    };
+    const source = {
+      getArcs: () => arcs,
+      getLayers: () => [layer],
+    };
+    const handler = new VertexEditHandler({
+      getSource: () => source,
+      layers: { resolve: () => layer },
+    } as unknown as Emap);
     const deleteSpy = vi.fn();
     const splitSpy = vi.fn();
-    const hoveredFeature = { arcs: {} };
+    const hoveredFeature = {
+      id: 0,
+      source: 'src-a',
+      layer: 'roads',
+      shape: layer.shapes[0],
+      arcs,
+    };
     setPrivate(handler, '_hoverType', 'vertex');
-    setPrivate(handler, '_hoverVertexIds', [4, 9]);
+    setPrivate(handler, '_hoverVertexCoords', [1, 0]);
+    setPrivate(handler, '_hoverVertexIds', [1]);
     setPrivate(handler, '_hoveredFeature', hoveredFeature);
     setPrivate(handler, '_deleteHoveredVertex', deleteSpy);
     setPrivate(handler, '_splitHoveredNode', splitSpy);
 
-    try {
-      callPrivate(
-        handler,
-        '_onContextMenu',
-        new MouseEvent('contextmenu', { clientX: 10, clientY: 20 }),
-      );
-      const items = document.querySelectorAll<HTMLDivElement>('#emap-ctx-menu > div');
-      const item = items[0];
-      expect(item.textContent).toBe('共享节点无法删除');
-      expect(item.getAttribute('aria-disabled')).toBe('true');
-      expect(item.classList.contains('emap-ctx-menu-item--disabled')).toBe(true);
-      item.click();
-      expect(deleteSpy).not.toHaveBeenCalled();
-      expect(items[1].textContent).toBe('分离共享节点');
-      items[1].click();
-      expect(splitSpy).toHaveBeenCalledWith(hoveredFeature, 4);
-    } finally {
-      Reflect.set(mapshaper.internal as object, 'vertexIsArcEndpoint', originalVertexIsArcEndpoint);
-      document.getElementById('emap-ctx-menu')?.remove();
-    }
+    callPrivate(
+      handler,
+      '_onContextMenu',
+      new MouseEvent('contextmenu', { clientX: 10, clientY: 20 }),
+    );
+    const items = document.querySelectorAll<HTMLDivElement>('#emap-ctx-menu > div');
+    expect(items).toHaveLength(2);
+    items[0].click();
+    expect(deleteSpy).toHaveBeenCalledWith(hoveredFeature, [1]);
+    expect(items[1].textContent).toBe('分离共享节点');
+    items[1].click();
+    expect(splitSpy).toHaveBeenCalledWith(hoveredFeature, 1, [1, 0]);
+    document.getElementById('emap-ctx-menu')?.remove();
+  });
+
+  it('uses a vertex owned by the hovered feature when classifying and splitting', () => {
+    document.getElementById('emap-ctx-menu')?.remove();
+    const targetShape = [[1]];
+    const layer = {
+      geometry_type: 'polyline',
+      shapes: [targetShape, [[0]]],
+    };
+    const arcs = {
+      size: () => 2,
+      getVertexData: () => ({
+        xx: new Float64Array([0, -1, 0, 1]),
+        yy: new Float64Array([0, 0, 0, 0]),
+        nn: new Int32Array([2, 2]),
+        ii: new Int32Array([0, 2]),
+      }),
+    };
+    const source = {
+      getArcs: () => arcs,
+      getLayers: () => [layer],
+    };
+    const handler = new VertexEditHandler({
+      getSource: () => source,
+      layers: { resolve: () => layer },
+    } as unknown as Emap);
+    const splitSpy = vi.fn();
+    const hoveredFeature = {
+      id: 0,
+      source: 'src-a',
+      layer: 'roads',
+      shape: targetShape,
+      arcs,
+      geometryType: 'polyline',
+      allLayers: [layer],
+    };
+    setPrivate(handler, '_hoverType', 'vertex');
+    setPrivate(handler, '_hoverVertexCoords', [0, 0]);
+    setPrivate(handler, '_hoverVertexIds', [0, 2]);
+    setPrivate(handler, '_hoveredFeature', hoveredFeature);
+    setPrivate(handler, '_splitHoveredNode', splitSpy);
+
+    callPrivate(
+      handler,
+      '_onContextMenu',
+      new MouseEvent('contextmenu', { clientX: 10, clientY: 20 }),
+    );
+    const items = document.querySelectorAll<HTMLDivElement>('#emap-ctx-menu > div');
+    expect(items).toHaveLength(2);
+    items[1].click();
+    expect(splitSpy).toHaveBeenCalledWith(hoveredFeature, 2, [0, 0]);
+    document.getElementById('emap-ctx-menu')?.remove();
+  });
+
+  it('restores the split node after pointer movement clears hover while the menu is open', () => {
+    document.getElementById('emap-ctx-menu')?.remove();
+    const shape = [[0]];
+    const layer = {
+      geometry_type: 'polyline',
+      shapes: [shape, [[0]]],
+    };
+    const arcs = {
+      size: () => 1,
+      getVertexData: () => ({
+        xx: new Float64Array([0, 1]),
+        yy: new Float64Array([0, 0]),
+        nn: new Int32Array([2]),
+        ii: new Int32Array([0]),
+      }),
+    };
+    const source = {
+      getArcs: () => arcs,
+      getLayers: () => [layer],
+    };
+    const splitSharedNode = vi.fn(() => [1]);
+    const mapMock = {
+      editSession: { splitSharedNode },
+      getSource: () => source,
+      layers: { resolve: () => layer },
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+    const handler = new VertexEditHandler(mapMock as unknown as Emap);
+    const hoveredFeature = {
+      id: 0,
+      source: 'src-a',
+      layer: 'roads',
+      shape,
+      arcs,
+      geometryType: 'polyline',
+      allLayers: [layer],
+    };
+    setPrivate(handler, '_hoverType', 'vertex');
+    setPrivate(handler, '_hoverVertexCoords', [1, 0]);
+    setPrivate(handler, '_hoverVertexIds', [1]);
+    setPrivate(handler, '_hoveredFeature', hoveredFeature);
+
+    callPrivate(
+      handler,
+      '_onContextMenu',
+      new MouseEvent('contextmenu', { clientX: 10, clientY: 20 }),
+    );
+    setPrivate(handler, '_hoveredFeature', null);
+    setPrivate(handler, '_hoverVertexCoords', null);
+    setPrivate(handler, '_hoverVertexIds', []);
+    setPrivate(handler, '_hoverType', null);
+    const items = document.querySelectorAll<HTMLDivElement>('#emap-ctx-menu > div');
+    items[1].click();
+
+    expect(splitSharedNode).toHaveBeenCalledWith(
+      { source: 'src-a', layer: 'roads', id: 0 },
+      1,
+    );
+    expect(Reflect.get(handler, '_hoveredFeature')).toBe(hoveredFeature);
+    expect(Reflect.get(handler, '_hoverVertexCoords')).toEqual([1, 0]);
+    expect(Reflect.get(handler, '_hoverVertexIds')).toEqual([1]);
+    expect(Reflect.get(handler, '_detachedNode')).toEqual({
+      id: 0,
+      source: 'src-a',
+      layer: 'roads',
+      coords: [1, 0],
+      vertexIds: [1],
+    });
+    document.getElementById('emap-ctx-menu')?.remove();
+  });
+
+  it('does not classify repeated nodes inside one feature as shared', () => {
+    document.getElementById('emap-ctx-menu')?.remove();
+    const layer = {
+      geometry_type: 'polyline',
+      shapes: [[[0, 1]]],
+    };
+    const arcs = {
+      size: () => 2,
+      getVertexData: () => ({
+        xx: new Float64Array([0, 1, 1, 2]),
+        yy: new Float64Array([0, 0, 0, 0]),
+        nn: new Int32Array([2, 2]),
+        ii: new Int32Array([0, 2]),
+      }),
+    };
+    const source = {
+      getArcs: () => arcs,
+      getLayers: () => [layer],
+    };
+    const handler = new VertexEditHandler({
+      getSource: () => source,
+      layers: { resolve: () => layer },
+    } as unknown as Emap);
+    const deleteSpy = vi.fn();
+    const splitSpy = vi.fn();
+    const hoveredFeature = {
+      id: 0,
+      source: 'src-a',
+      layer: 'roads',
+      shape: layer.shapes[0],
+      arcs,
+    };
+    setPrivate(handler, '_hoverType', 'vertex');
+    setPrivate(handler, '_hoverVertexIds', [1, 2]);
+    setPrivate(handler, '_hoveredFeature', hoveredFeature);
+    setPrivate(handler, '_deleteHoveredVertex', deleteSpy);
+    setPrivate(handler, '_splitHoveredNode', splitSpy);
+
+    callPrivate(
+      handler,
+      '_onContextMenu',
+      new MouseEvent('contextmenu', { clientX: 10, clientY: 20 }),
+    );
+    const items = document.querySelectorAll<HTMLDivElement>('#emap-ctx-menu > div');
+    expect(items).toHaveLength(1);
+    items[0].click();
+    expect(deleteSpy).toHaveBeenCalledWith(hoveredFeature, [1, 2]);
+    expect(splitSpy).not.toHaveBeenCalled();
+    document.getElementById('emap-ctx-menu')?.remove();
   });
 
   it('_showContextMenu sets class-based DOM and only dynamic position inline', () => {
