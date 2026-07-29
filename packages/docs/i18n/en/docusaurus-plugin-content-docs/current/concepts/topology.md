@@ -115,14 +115,14 @@ references must not be retained.
 
 ## API
 
-- [TopologySource](/emap/api/classes/index.TopologySource.html)
-- [ITopologySource](/emap/api/interfaces/index.ITopologySource.html)
-- [MapshaperDataset](/emap/api/interfaces/index.MapshaperDataset.html)
-- [ArcCollection](/emap/api/interfaces/index.ArcCollection.html)
+- [TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
+- [ITopologySource](/mapseekai/emap/api/interfaces/index.ITopologySource.html)
+- [MapshaperDataset](/mapseekai/emap/api/interfaces/index.MapshaperDataset.html)
+- [ArcCollection](/mapseekai/emap/api/interfaces/index.ArcCollection.html)
 
 ## Runnable examples
 
-- [Rebuild topology](/emap/examples/rebuild-topology/)
-- [Inner lines](/emap/examples/innerlines/)
-- [Vertex editing](/emap/examples/vertex-editing/)
-- [Simplify](/emap/examples/simplify/)
+- [Rebuild topology](/mapseekai/emap/examples/rebuild-topology/)
+- [Inner lines](/mapseekai/emap/examples/innerlines/)
+- [Vertex editing](/mapseekai/emap/examples/vertex-editing/)
+- [Simplify](/mapseekai/emap/examples/simplify/)

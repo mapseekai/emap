@@ -4,7 +4,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { extname, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const DEFAULT_BASE_PATH = '/emap/';
+const DEFAULT_BASE_PATH = '/mapseekai/emap/';
 const CONTENT_TYPES = new Map([
   ['.arrow', 'application/vnd.apache.arrow.file'],
   ['.css', 'text/css; charset=utf-8'],

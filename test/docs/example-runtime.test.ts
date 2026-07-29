@@ -23,7 +23,7 @@ const integrity = {
 
 const cdnOptions = {
   mode: 'cdn' as const,
-  baseUrl: '/emap/examples/',
+  baseUrl: '/mapseekai/emap/examples/',
   version: '0.5.0',
   integrity,
 };
@@ -141,24 +141,24 @@ afterEach(() => {
 
 describe('example runtime assets', () => {
   it('resolves local runtime and worker assets from the Vite base URL', () => {
-    expect(resolveRuntimeAssets({ mode: 'local', baseUrl: '/emap/examples/' })).toEqual({
-      vendor: '/emap/examples/vendor/mapshaper-vendor.js',
-      core: '/emap/examples/vendor/emap.js',
-      css: '/emap/examples/vendor/emap.css',
-      worker: '/emap/examples/emap-worker.js',
+    expect(resolveRuntimeAssets({ mode: 'local', baseUrl: '/mapseekai/emap/examples/' })).toEqual({
+      vendor: '/mapseekai/emap/examples/vendor/mapshaper-vendor.js',
+      core: '/mapseekai/emap/examples/vendor/emap.js',
+      css: '/mapseekai/emap/examples/vendor/emap.css',
+      worker: '/mapseekai/emap/examples/emap-worker.js',
       integrity: {},
     });
   });
 
   it('pins CDN assets to an exact version while keeping local fallbacks and worker', () => {
     expect(resolveRuntimeAssets(cdnOptions)).toEqual({
-      vendor: 'https://cdn.jsdelivr.net/npm/@zwishing/emap@0.5.0/dist/mapshaper-vendor.js',
-      core: 'https://cdn.jsdelivr.net/npm/@zwishing/emap@0.5.0/dist/emap.js',
-      css: 'https://cdn.jsdelivr.net/npm/@zwishing/emap@0.5.0/dist/emap.css',
-      worker: '/emap/examples/emap-worker.js',
-      fallbackVendor: '/emap/examples/vendor/mapshaper-vendor.js',
-      fallbackCore: '/emap/examples/vendor/emap.js',
-      fallbackCss: '/emap/examples/vendor/emap.css',
+      vendor: 'https://cdn.jsdelivr.net/npm/@mapseekai/emap@0.5.0/dist/mapshaper-vendor.js',
+      core: 'https://cdn.jsdelivr.net/npm/@mapseekai/emap@0.5.0/dist/emap.js',
+      css: 'https://cdn.jsdelivr.net/npm/@mapseekai/emap@0.5.0/dist/emap.css',
+      worker: '/mapseekai/emap/examples/emap-worker.js',
+      fallbackVendor: '/mapseekai/emap/examples/vendor/mapshaper-vendor.js',
+      fallbackCore: '/mapseekai/emap/examples/vendor/emap.js',
+      fallbackCss: '/mapseekai/emap/examples/vendor/emap.css',
       integrity,
     });
   });
@@ -174,7 +174,7 @@ describe('example runtime assets', () => {
     expect(() =>
       resolveRuntimeAssets({
         mode: 'cdn',
-        baseUrl: '/emap/examples/',
+        baseUrl: '/mapseekai/emap/examples/',
         version: '0.5.0',
       }),
     ).toThrow(/integrity/i);
@@ -185,37 +185,39 @@ describe('example runtime assets', () => {
 
     expect(document.head.querySelectorAll('script')).toHaveLength(1);
     expect(scriptAt(0).getAttribute('src')).toBe(
-      'https://cdn.jsdelivr.net/npm/@zwishing/emap@0.5.0/dist/mapshaper-vendor.js',
+      'https://cdn.jsdelivr.net/npm/@mapseekai/emap@0.5.0/dist/mapshaper-vendor.js',
     );
     expect(scriptAt(0).crossOrigin).toBe('anonymous');
     expect(scriptAt(0).integrity).toBe(integrity.vendor);
     expect(stylesheetAt(0).getAttribute('href')).toBe(
-      'https://cdn.jsdelivr.net/npm/@zwishing/emap@0.5.0/dist/emap.css',
+      'https://cdn.jsdelivr.net/npm/@mapseekai/emap@0.5.0/dist/emap.css',
     );
 
     scriptAt(0).dispatchEvent(new Event('error'));
     await settleDomEvents();
     expect(document.head.querySelectorAll('script')).toHaveLength(2);
-    expect(scriptAt(1).getAttribute('src')).toBe('/emap/examples/vendor/mapshaper-vendor.js');
+    expect(scriptAt(1).getAttribute('src')).toBe(
+      '/mapseekai/emap/examples/vendor/mapshaper-vendor.js',
+    );
     expect(scriptAt(1).hasAttribute('integrity')).toBe(false);
 
     scriptAt(1).dispatchEvent(new Event('load'));
     await settleDomEvents();
     expect(document.head.querySelectorAll('script')).toHaveLength(3);
     expect(scriptAt(2).getAttribute('src')).toBe(
-      'https://cdn.jsdelivr.net/npm/@zwishing/emap@0.5.0/dist/emap.js',
+      'https://cdn.jsdelivr.net/npm/@mapseekai/emap@0.5.0/dist/emap.js',
     );
 
     stylesheetAt(0).dispatchEvent(new Event('error'));
     await settleDomEvents();
     expect(document.head.querySelectorAll('link[rel="stylesheet"]')).toHaveLength(2);
-    expect(stylesheetAt(1).getAttribute('href')).toBe('/emap/examples/vendor/emap.css');
+    expect(stylesheetAt(1).getAttribute('href')).toBe('/mapseekai/emap/examples/vendor/emap.css');
     stylesheetAt(1).dispatchEvent(new Event('load'));
 
     scriptAt(2).dispatchEvent(new Event('error'));
     await settleDomEvents();
     expect(document.head.querySelectorAll('script')).toHaveLength(4);
-    expect(scriptAt(3).getAttribute('src')).toBe('/emap/examples/vendor/emap.js');
+    expect(scriptAt(3).getAttribute('src')).toBe('/mapseekai/emap/examples/vendor/emap.js');
 
     const emap = { version: 'test' };
     (globalThis as { emap?: unknown }).emap = emap;
@@ -277,8 +279,8 @@ describe('shared example map UI', () => {
 
 describe('example starter fixtures', () => {
   it('resolves fixture paths below the examples Vite base', () => {
-    expect(fixtureUrl('fixtures/task-6-polygons.geojson', '/emap/examples/')).toBe(
-      '/emap/examples/fixtures/task-6-polygons.geojson',
+    expect(fixtureUrl('fixtures/task-6-polygons.geojson', '/mapseekai/emap/examples/')).toBe(
+      '/mapseekai/emap/examples/fixtures/task-6-polygons.geojson',
     );
   });
 

@@ -18,17 +18,17 @@ Worker 构建必须从页面可访问 URL 提供 `emap-worker.js` 和 mapshaper 
 
 ## API
 
-- [src.MapOptions](/emap/api/interfaces/index.MapOptions.html)
-- [src.MapshaperWorkerPool](/emap/api/classes/index.MapshaperWorkerPool.html)
+- [src.MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
+- [src.MapshaperWorkerPool](/mapseekai/emap/api/classes/index.MapshaperWorkerPool.html)
 
 ## 可运行示例
 
-- [web-worker](/emap/examples/web-worker/)
-- [geoparquet-viewer](/emap/examples/geoparquet-viewer/)
+- [web-worker](/mapseekai/emap/examples/web-worker/)
+- [geoparquet-viewer](/mapseekai/emap/examples/geoparquet-viewer/)
 
 ## 最小片段
 
 ```ts
-import "@zwishing/emap/style.css"
+import "@mapseekai/emap/style.css"
 new Emap({ container: "map", workerUrl: "/dist/emap-worker.js" })
 ```

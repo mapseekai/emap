@@ -36,7 +36,7 @@ export async function verifyCdnAssets({ version, distDir, fetchImpl = globalThis
 
   const integrity = {};
   for (const asset of assets) {
-    const url = `https://cdn.jsdelivr.net/npm/@zwishing/emap@${version}/dist/${asset.fileName}`;
+    const url = `https://cdn.jsdelivr.net/npm/@mapseekai/emap@${version}/dist/${asset.fileName}`;
     let response;
     try {
       response = await fetchImpl(url);

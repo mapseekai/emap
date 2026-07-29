@@ -169,14 +169,14 @@ shape-count operation 可能改变记录索引，应用应在操作后从 `selec
 
 ## API
 
-- [Emap](/emap/api/classes/index.Emap.html)
-- [Feature](/emap/api/interfaces/index.Feature.html)
-- [ApplyExpressionOptions](/emap/api/interfaces/index.ApplyExpressionOptions.html)
-- [JoinTableOptions](/emap/api/interfaces/index.JoinTableOptions.html)
+- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
+- [Feature](/mapseekai/emap/api/interfaces/index.Feature.html)
+- [ApplyExpressionOptions](/mapseekai/emap/api/interfaces/index.ApplyExpressionOptions.html)
+- [JoinTableOptions](/mapseekai/emap/api/interfaces/index.JoinTableOptions.html)
 
 ## 可运行示例
 
-- [要素属性](/emap/examples/feature-attributes/)
-- [属性编辑](/emap/examples/attribute-editing/)
-- [属性表达式](/emap/examples/attribute-expressions/)
-- [表连接](/emap/examples/join/)
+- [要素属性](/mapseekai/emap/examples/feature-attributes/)
+- [属性编辑](/mapseekai/emap/examples/attribute-editing/)
+- [属性表达式](/mapseekai/emap/examples/attribute-expressions/)
+- [表连接](/mapseekai/emap/examples/join/)

@@ -39,13 +39,13 @@ npm install
 ## Install Emap
 
 ```bash
-pnpm add @zwishing/emap
+pnpm add @mapseekai/emap
 ```
 
 Or:
 
 ```bash
-npm install @zwishing/emap
+npm install @mapseekai/emap
 ```
 
 ## Prepare the map container
@@ -90,8 +90,8 @@ import {
   HistoryControl,
   NavigationControl,
   TopologySource,
-} from '@zwishing/emap';
-import '@zwishing/emap/style.css';
+} from '@mapseekai/emap';
+import '@mapseekai/emap/style.css';
 import './style.css';
 
 const map = new Emap({
@@ -221,7 +221,7 @@ const map = new Emap({
 });
 ```
 
-Copy `node_modules/@zwishing/emap/dist/emap-worker.js` and
+Copy `node_modules/@mapseekai/emap/dist/emap-worker.js` and
 `mapshaper-vendor.js` into the public asset directory. Keep them together by
 default because the worker loads the vendor file through a relative URL.
 
@@ -242,7 +242,7 @@ Check these in order:
 Confirm the application entry imports:
 
 ```ts
-import '@zwishing/emap/style.css';
+import '@mapseekai/emap/style.css';
 ```
 
 ### The worker returns 404
@@ -257,5 +257,5 @@ that `mapshaper-vendor.js` is available beside it.
 - Read [Styling](../guides/styling.md) to configure point, line, and polygon
   paint.
 - Read [Events](../guides/events.md) to connect the map to application UI.
-- Open the [runnable examples](/emap/examples/) for complete interaction and
+- Open the [runnable examples](/mapseekai/emap/examples/) for complete interaction and
   data-processing scenarios.

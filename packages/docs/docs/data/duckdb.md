@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # DuckDB
 
-`@zwishing/emap/duckdb` 是可选入口，在浏览器 DuckDB-Wasm 中执行受限 SQL 和空间函数。
+`@mapseekai/emap/duckdb` 是可选入口，在浏览器 DuckDB-Wasm 中执行受限 SQL 和空间函数。
 核心地图不会自动加载 DuckDB；只有导入该子路径的应用承担下载和初始化成本。
 
 ## 安装
@@ -24,7 +24,7 @@ pnpm add @duckdb/duckdb-wasm
 推荐懒加载：
 
 ```ts
-const duckdb = await import('@zwishing/emap/duckdb');
+const duckdb = await import('@mapseekai/emap/duckdb');
 ```
 
 ## 初始化运行时
@@ -204,15 +204,15 @@ try {
 
 ## API
 
-- [queryDatasetWithDuckDb](/emap/api/functions/duckdb.queryDatasetWithDuckDb.html)
-- [bufferDatasetWithDuckDb](/emap/api/functions/duckdb.bufferDatasetWithDuckDb.html)
-- [createDuckDbRuntimeFromJsDelivr](/emap/api/functions/duckdb.createDuckDbRuntimeFromJsDelivr.html)
-- [DuckDbOperationError](/emap/api/classes/duckdb.DuckDbOperationError.html)
+- [queryDatasetWithDuckDb](/mapseekai/emap/api/functions/duckdb.queryDatasetWithDuckDb.html)
+- [bufferDatasetWithDuckDb](/mapseekai/emap/api/functions/duckdb.bufferDatasetWithDuckDb.html)
+- [createDuckDbRuntimeFromJsDelivr](/mapseekai/emap/api/functions/duckdb.createDuckDbRuntimeFromJsDelivr.html)
+- [DuckDbOperationError](/mapseekai/emap/api/classes/duckdb.DuckDbOperationError.html)
 
 ## 可运行示例
 
-- [DuckDB 查询](/emap/examples/duckdb-query/)
-- [DuckDB buffer](/emap/examples/duckdb-buffer/)
-- [空间操作](/emap/examples/duckdb-spatial-ops/)
-- [Overlay](/emap/examples/duckdb-overlay/)
-- [GeoParquet 查询](/emap/examples/duckdb-geoparquet-query/)
+- [DuckDB 查询](/mapseekai/emap/examples/duckdb-query/)
+- [DuckDB buffer](/mapseekai/emap/examples/duckdb-buffer/)
+- [空间操作](/mapseekai/emap/examples/duckdb-spatial-ops/)
+- [Overlay](/mapseekai/emap/examples/duckdb-overlay/)
+- [GeoParquet 查询](/mapseekai/emap/examples/duckdb-geoparquet-query/)

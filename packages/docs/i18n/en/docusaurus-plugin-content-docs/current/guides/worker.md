@@ -51,8 +51,8 @@ worker.
 Copy these package files:
 
 ```text
-node_modules/@zwishing/emap/dist/emap-worker.js
-node_modules/@zwishing/emap/dist/mapshaper-vendor.js
+node_modules/@mapseekai/emap/dist/emap-worker.js
+node_modules/@mapseekai/emap/dist/mapshaper-vendor.js
 ```
 
 Into a public layout such as:
@@ -156,10 +156,10 @@ explicit user action. The current Promise still needs failure handling.
 
 ## API
 
-- [MapOptions](/emap/api/interfaces/index.MapOptions.html)
-- [MapshaperWorkerPool](/emap/api/classes/index.MapshaperWorkerPool.html)
-- [MapshaperWorkerPoolOptions](/emap/api/interfaces/index.MapshaperWorkerPoolOptions.html)
+- [MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
+- [MapshaperWorkerPool](/mapseekai/emap/api/classes/index.MapshaperWorkerPool.html)
+- [MapshaperWorkerPoolOptions](/mapseekai/emap/api/interfaces/index.MapshaperWorkerPoolOptions.html)
 
 ## Runnable examples
 
-- [Web Worker](/emap/examples/web-worker/)
+- [Web Worker](/mapseekai/emap/examples/web-worker/)

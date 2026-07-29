@@ -18,17 +18,17 @@ Worker builds must serve `emap-worker.js` and mapshaper vendor assets from URLs 
 
 ## API
 
-- [src.MapOptions](/emap/api/interfaces/index.MapOptions.html)
-- [src.MapshaperWorkerPool](/emap/api/classes/index.MapshaperWorkerPool.html)
+- [src.MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
+- [src.MapshaperWorkerPool](/mapseekai/emap/api/classes/index.MapshaperWorkerPool.html)
 
 ## Runnable examples
 
-- [web-worker](/emap/examples/web-worker/)
-- [geoparquet-viewer](/emap/examples/geoparquet-viewer/)
+- [web-worker](/mapseekai/emap/examples/web-worker/)
+- [geoparquet-viewer](/mapseekai/emap/examples/geoparquet-viewer/)
 
 ## Minimal snippet
 
 ```ts
-import "@zwishing/emap/style.css"
+import "@mapseekai/emap/style.css"
 new Emap({ container: "map", workerUrl: "/dist/emap-worker.js" })
 ```

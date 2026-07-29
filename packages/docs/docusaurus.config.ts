@@ -4,10 +4,10 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'Emap',
   tagline: 'Topology-oriented browser maps',
-  url: 'https://zwishing.github.io',
-  baseUrl: '/emap/',
+  url: 'https://mapseekai.github.io',
+  baseUrl: '/mapseekai/emap/',
   favicon: 'img/emap.svg',
-  organizationName: 'zwishing',
+  organizationName: 'mapseekai',
   projectName: 'emap',
   onBrokenLinks: 'warn',
   markdown: {

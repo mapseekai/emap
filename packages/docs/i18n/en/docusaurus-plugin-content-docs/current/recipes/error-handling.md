@@ -18,14 +18,14 @@ Handle errors at app boundaries: keep the map alive, show retry instructions, an
 
 ## API
 
-- [src.OpError](/emap/api/types/index.OpError.html)
-- [src_duckdb.DuckDbOperationError](/emap/api/classes/src_duckdb.DuckDbOperationError.html)
+- [src.OpError](/mapseekai/emap/api/types/index.OpError.html)
+- [src_duckdb.DuckDbOperationError](/mapseekai/emap/api/classes/src_duckdb.DuckDbOperationError.html)
 
 ## Runnable examples
 
-- [check-geometry](/emap/examples/check-geometry/)
-- [duckdb-query](/emap/examples/duckdb-query/)
-- [duckdb-buffer](/emap/examples/duckdb-buffer/)
+- [check-geometry](/mapseekai/emap/examples/check-geometry/)
+- [duckdb-query](/mapseekai/emap/examples/duckdb-query/)
+- [duckdb-buffer](/mapseekai/emap/examples/duckdb-buffer/)
 
 ## Minimal snippet
 

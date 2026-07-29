@@ -208,15 +208,15 @@ update together.
 
 ## API
 
-- [TopologySource](/emap/api/classes/index.TopologySource.html)
-- [ITopologySource](/emap/api/interfaces/index.ITopologySource.html)
-- [LayerSpecification](/emap/api/interfaces/index.LayerSpecification.html)
-- [ExportOptions](/emap/api/interfaces/index.ExportOptions.html)
+- [TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
+- [ITopologySource](/mapseekai/emap/api/interfaces/index.ITopologySource.html)
+- [LayerSpecification](/mapseekai/emap/api/interfaces/index.LayerSpecification.html)
+- [ExportOptions](/mapseekai/emap/api/interfaces/index.ExportOptions.html)
 
 ## Runnable examples
 
-- [GeoJSON viewer](/emap/examples/getting-started/geojson-viewer/)
-- [Point layers](/emap/examples/getting-started/points/)
-- [Merge layers](/emap/examples/merge-layers/)
-- [Rename a layer](/emap/examples/rename-layer/)
-- [Split a layer](/emap/examples/split-layer/)
+- [GeoJSON viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [Point layers](/mapseekai/emap/examples/getting-started/points/)
+- [Merge layers](/mapseekai/emap/examples/merge-layers/)
+- [Rename a layer](/mapseekai/emap/examples/rename-layer/)
+- [Split a layer](/mapseekai/emap/examples/split-layer/)

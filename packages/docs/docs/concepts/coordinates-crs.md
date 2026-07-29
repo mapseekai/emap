@@ -139,14 +139,14 @@ map.jumpTo({
 
 ## API
 
-- [Emap](/emap/api/classes/index.Emap.html)
-- [Bounds](/emap/api/classes/index.Bounds.html)
-- [Projection](/emap/api/classes/index.Projection.html)
-- [resolveDatasetCRS](/emap/api/functions/index.resolveDatasetCRS.html)
-- [ProjectOptions](/emap/api/interfaces/index.ProjectOptions.html)
+- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
+- [Bounds](/mapseekai/emap/api/classes/index.Bounds.html)
+- [Projection](/mapseekai/emap/api/classes/index.Projection.html)
+- [resolveDatasetCRS](/mapseekai/emap/api/functions/index.resolveDatasetCRS.html)
+- [ProjectOptions](/mapseekai/emap/api/interfaces/index.ProjectOptions.html)
 
 ## 可运行示例
 
-- [投影操作](/emap/examples/project/)
-- [CRS 切换](/emap/examples/crs-switch/)
-- [DuckDB buffer](/emap/examples/duckdb-buffer/)
+- [投影操作](/mapseekai/emap/examples/project/)
+- [CRS 切换](/mapseekai/emap/examples/crs-switch/)
+- [DuckDB buffer](/mapseekai/emap/examples/duckdb-buffer/)

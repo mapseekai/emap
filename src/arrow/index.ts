@@ -1,5 +1,5 @@
 /**
- * `@zwishing/emap/arrow` — optional GeoParquet / GeoArrow support.
+ * `@mapseekai/emap/arrow` — optional GeoParquet / GeoArrow support.
  *
  * Importing this module registers the formats plugin with the core
  * (side effect), after which:

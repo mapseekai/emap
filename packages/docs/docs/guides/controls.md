@@ -36,7 +36,7 @@ map.removeControl(navigation);
 使用内置控件必须导入：
 
 ```ts
-import '@zwishing/emap/style.css';
+import '@mapseekai/emap/style.css';
 ```
 
 控件挂载到 map container 内，因此容器所在页面的全局 CSS 可能影响按钮、输入框和字体。
@@ -95,7 +95,7 @@ pointermove 流程，否则可能绕过 HandlerManager 的互斥和光标管理�
 自定义控件实现 `Control`：
 
 ```ts
-import type { Control, Emap } from '@zwishing/emap';
+import type { Control, Emap } from '@mapseekai/emap';
 
 class ResetViewControl implements Control {
   private button: HTMLButtonElement | null = null;
@@ -161,15 +161,15 @@ boxButton.addEventListener('click', () => {
 
 ## API
 
-- [Control](/emap/api/interfaces/index.Control.html)
-- [ControlPosition](/emap/api/types/index.ControlPosition.html)
-- [NavigationControl](/emap/api/classes/index.NavigationControl.html)
-- [HistoryControl](/emap/api/classes/index.HistoryControl.html)
-- [StatusControl](/emap/api/classes/index.StatusControl.html)
+- [Control](/mapseekai/emap/api/interfaces/index.Control.html)
+- [ControlPosition](/mapseekai/emap/api/types/index.ControlPosition.html)
+- [NavigationControl](/mapseekai/emap/api/classes/index.NavigationControl.html)
+- [HistoryControl](/mapseekai/emap/api/classes/index.HistoryControl.html)
+- [StatusControl](/mapseekai/emap/api/classes/index.StatusControl.html)
 
 ## 可运行示例
 
-- [简化控件](/emap/examples/simplify-control/)
-- [撤销与重做](/emap/examples/undo-redo/)
-- [交互处理器](/emap/examples/interaction-handlers/)
-- [顶点编辑](/emap/examples/vertex-editing/)
+- [简化控件](/mapseekai/emap/examples/simplify-control/)
+- [撤销与重做](/mapseekai/emap/examples/undo-redo/)
+- [交互处理器](/mapseekai/emap/examples/interaction-handlers/)
+- [顶点编辑](/mapseekai/emap/examples/vertex-editing/)

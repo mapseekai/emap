@@ -59,8 +59,8 @@ Worker pack、postMessage 和 unpack 的往返成本。
 从包内复制：
 
 ```text
-node_modules/@zwishing/emap/dist/emap-worker.js
-node_modules/@zwishing/emap/dist/mapshaper-vendor.js
+node_modules/@mapseekai/emap/dist/emap-worker.js
+node_modules/@mapseekai/emap/dist/mapshaper-vendor.js
 ```
 
 到应用公开目录：
@@ -170,10 +170,10 @@ Worker 已启动，但相对导入 vendor 失败。把 vendor 文件移动到 wo
 
 ## API
 
-- [MapOptions](/emap/api/interfaces/index.MapOptions.html)
-- [MapshaperWorkerPool](/emap/api/classes/index.MapshaperWorkerPool.html)
-- [MapshaperWorkerPoolOptions](/emap/api/interfaces/index.MapshaperWorkerPoolOptions.html)
+- [MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
+- [MapshaperWorkerPool](/mapseekai/emap/api/classes/index.MapshaperWorkerPool.html)
+- [MapshaperWorkerPoolOptions](/mapseekai/emap/api/interfaces/index.MapshaperWorkerPoolOptions.html)
 
 ## 可运行示例
 
-- [Web Worker](/emap/examples/web-worker/)
+- [Web Worker](/mapseekai/emap/examples/web-worker/)

@@ -20,7 +20,7 @@ function readExample(id: string): string {
 }
 
 function importedDuckDbNames(html: string): string[] {
-  const importMatch = html.match(/import\s+\{([^}]+)\}\s+from\s+["']@zwishing\/emap\/duckdb["']/);
+  const importMatch = html.match(/import\s+\{([^}]+)\}\s+from\s+["']@mapseekai\/emap\/duckdb["']/);
   if (!importMatch) throw new Error('DuckDB module import not found');
   return importMatch[1]
     .split(',')
@@ -57,7 +57,7 @@ describe('DuckDB new feature examples', () => {
 
   it('lets Vite resolve DuckDB and Arrow dependencies', () => {
     for (const html of duckDbExamples) {
-      expect(html).toContain("from '@zwishing/emap/duckdb'");
+      expect(html).toContain("from '@mapseekai/emap/duckdb'");
       expect(html).not.toContain('<script type="importmap">');
       expect(html).not.toContain('Arrow.dom.mjs');
     }

@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # 迁移
 
-当前文档默认使用 `@zwishing/emap` 的类型化导入、`formats` 和 `duckdb` 可选子路径，以及默认 `expressionPolicy: "disabled"`。
+当前文档默认使用 `@mapseekai/emap` 的类型化导入、`formats` 和 `duckdb` 可选子路径，以及默认 `expressionPolicy: "disabled"`。
 
 ## 行为说明
 
@@ -18,13 +18,13 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.MapOptions](/emap/api/interfaces/index.MapOptions.html)
-- [src.Emap](/emap/api/classes/index.Emap.html)
+- [src.MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
+- [src.Emap](/mapseekai/emap/api/classes/index.Emap.html)
 
 ## 可运行示例
 
-- [attribute-expressions](/emap/examples/attribute-expressions/)
-- [filter-features](/emap/examples/filter-features/)
+- [attribute-expressions](/mapseekai/emap/examples/attribute-expressions/)
+- [filter-features](/mapseekai/emap/examples/filter-features/)
 
 ## 最小片段
 

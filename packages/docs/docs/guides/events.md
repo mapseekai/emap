@@ -139,7 +139,7 @@ map.on('moveend', (event) => {
 应用可以扩展 `EmapEventMap`，保留完整类型推断：
 
 ```ts
-declare module '@zwishing/emap' {
+declare module '@mapseekai/emap' {
   interface EmapEventMap {
     'panel:open': { panelId: string };
   }
@@ -162,13 +162,13 @@ Promise、`OpResult` 和自己的加载状态驱动进度 UI。
 
 ## API
 
-- [Emap](/emap/api/classes/index.Emap.html)
-- [EmapEventMap](/emap/api/interfaces/index.EmapEventMap.html)
-- [CameraEvent](/emap/api/interfaces/index.CameraEvent.html)
-- [FeatureEvent](/emap/api/interfaces/index.FeatureEvent.html)
+- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
+- [EmapEventMap](/mapseekai/emap/api/interfaces/index.EmapEventMap.html)
+- [CameraEvent](/mapseekai/emap/api/interfaces/index.CameraEvent.html)
+- [FeatureEvent](/mapseekai/emap/api/interfaces/index.FeatureEvent.html)
 
 ## 可运行示例
 
-- [要素属性](/emap/examples/feature-attributes/)
-- [交互处理器](/emap/examples/interaction-handlers/)
-- [要素选择](/emap/examples/feature-selection/)
+- [要素属性](/mapseekai/emap/examples/feature-attributes/)
+- [交互处理器](/mapseekai/emap/examples/interaction-handlers/)
+- [要素选择](/mapseekai/emap/examples/feature-selection/)

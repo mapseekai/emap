@@ -54,8 +54,8 @@ Emap 不依赖后端地图服务。数据可以来自 URL、用户上传的文�
 ### 数据输入与输出
 
 - 核心包支持 GeoJSON、TopoJSON、Shapefile ZIP 和 mapshaper snapshot。
-- `@zwishing/emap/arrow` 提供 GeoParquet 与 GeoArrow 支持。
-- `@zwishing/emap/duckdb` 提供可选的 DuckDB-Wasm 查询和空间处理能力。
+- `@mapseekai/emap/arrow` 提供 GeoParquet 与 GeoArrow 支持。
+- `@mapseekai/emap/duckdb` 提供可选的 DuckDB-Wasm 查询和空间处理能力。
 
 ### 渲染与相机
 
@@ -73,12 +73,12 @@ Emap 不依赖后端地图服务。数据可以来自 URL、用户上传的文�
 ## 包入口与静态资源
 
 ```ts
-import { Emap, TopologySource } from '@zwishing/emap';
-import '@zwishing/emap/style.css';
+import { Emap, TopologySource } from '@mapseekai/emap';
+import '@mapseekai/emap/style.css';
 
 // 按需使用，不会进入只使用核心包的应用代码
-import '@zwishing/emap/arrow';
-const duckdb = await import('@zwishing/emap/duckdb');
+import '@mapseekai/emap/arrow';
+const duckdb = await import('@mapseekai/emap/duckdb');
 ```
 
 启用 Worker 时，宿主应用还需要提供 `emap-worker.js` 和
@@ -95,5 +95,5 @@ const duckdb = await import('@zwishing/emap/duckdb');
 
 ## 项目状态
 
-当前文档对应 `@zwishing/emap` 0.5.0。项目仍在快速演进，适合原型、演示、
+当前文档对应 `@mapseekai/emap` 0.5.0。项目仍在快速演进，适合原型、演示、
 研究工具和受控的内部应用；升级版本时应同时查看迁移说明和 API 参考。

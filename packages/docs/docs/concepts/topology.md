@@ -123,14 +123,14 @@ Emap 根据效果决定是否能保留选择。shape-count 操作可能改变 fe
 
 ## API
 
-- [TopologySource](/emap/api/classes/index.TopologySource.html)
-- [ITopologySource](/emap/api/interfaces/index.ITopologySource.html)
-- [MapshaperDataset](/emap/api/interfaces/index.MapshaperDataset.html)
-- [ArcCollection](/emap/api/interfaces/index.ArcCollection.html)
+- [TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
+- [ITopologySource](/mapseekai/emap/api/interfaces/index.ITopologySource.html)
+- [MapshaperDataset](/mapseekai/emap/api/interfaces/index.MapshaperDataset.html)
+- [ArcCollection](/mapseekai/emap/api/interfaces/index.ArcCollection.html)
 
 ## 可运行示例
 
-- [重建拓扑](/emap/examples/rebuild-topology/)
-- [内部边界](/emap/examples/innerlines/)
-- [顶点编辑](/emap/examples/vertex-editing/)
-- [简化](/emap/examples/simplify/)
+- [重建拓扑](/mapseekai/emap/examples/rebuild-topology/)
+- [内部边界](/mapseekai/emap/examples/innerlines/)
+- [顶点编辑](/mapseekai/emap/examples/vertex-editing/)
+- [简化](/mapseekai/emap/examples/simplify/)

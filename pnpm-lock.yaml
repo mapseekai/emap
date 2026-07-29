@@ -109,7 +109,7 @@ importers:
 
   packages/examples:
     dependencies:
-      '@zwishing/emap':
+      '@mapseekai/emap':
         specifier: workspace:*
         version: link:../..
 

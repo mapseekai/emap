@@ -18,13 +18,13 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.TopologySource](/emap/api/classes/index.TopologySource.html)
-- [src.TopologySourceFromBytesOptions](/emap/api/interfaces/index.TopologySourceFromBytesOptions.html)
+- [src.TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
+- [src.TopologySourceFromBytesOptions](/mapseekai/emap/api/interfaces/index.TopologySourceFromBytesOptions.html)
 
 ## 可运行示例
 
-- [geoparquet-viewer](/emap/examples/geoparquet-viewer/)
-- [getting-started/points](/emap/examples/getting-started/points/)
+- [geoparquet-viewer](/mapseekai/emap/examples/geoparquet-viewer/)
+- [getting-started/points](/mapseekai/emap/examples/getting-started/points/)
 
 ## 最小片段
 

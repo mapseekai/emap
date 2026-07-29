@@ -77,7 +77,7 @@ export function resolveRuntimeAssets(options: RuntimeAssetOptions = {}): Runtime
   }
 
   const integrity = requireCdnIntegrity(options.integrity ?? configuredIntegrity());
-  const cdnBase = `https://cdn.jsdelivr.net/npm/@zwishing/emap@${version}/dist/`;
+  const cdnBase = `https://cdn.jsdelivr.net/npm/@mapseekai/emap@${version}/dist/`;
 
   return {
     vendor: `${cdnBase}mapshaper-vendor.js`,

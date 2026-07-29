@@ -18,13 +18,13 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.Emap](/emap/api/classes/index.Emap.html)
-- [src.TopologySource](/emap/api/classes/index.TopologySource.html)
+- [src.Emap](/mapseekai/emap/api/classes/index.Emap.html)
+- [src.TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
 
 ## 可运行示例
 
-- [getting-started/geojson-viewer](/emap/examples/getting-started/geojson-viewer/)
-- [duckdb-query](/emap/examples/duckdb-query/)
+- [getting-started/geojson-viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [duckdb-query](/mapseekai/emap/examples/duckdb-query/)
 
 ## 最小片段
 

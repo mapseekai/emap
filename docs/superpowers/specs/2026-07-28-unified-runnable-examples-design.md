@@ -9,12 +9,12 @@ The repository currently has two implementations for most runnable examples:
 
 The split has produced three user-visible failures:
 
-1. Documentation links use `/emap/examples/<id>/`, while the Vite build emits
+1. Documentation links use `/mapseekai/emap/examples/<id>/`, while the Vite build emits
    `dist/examples/<id>/` and the release composer copies that directory under
    `build/examples/`. The resulting deployed route is accidentally
-   `/emap/examples/examples/<id>/`.
+   `/mapseekai/emap/examples/examples/<id>/`.
 2. Fixture requests use root-relative `/fixtures/...` URLs instead of the Vite
-   base `/emap/examples/fixtures/...`.
+   base `/mapseekai/emap/examples/fixtures/...`.
 3. Local documentation preview starts the docs and examples on separate ports,
    but documentation links remain same-origin and therefore never reach the
    examples server.
@@ -28,7 +28,7 @@ The split has produced three user-visible failures:
 - Preserve the existing file-upload controls so users can replace the starter data.
 - Serve the catalog, example routes, fixtures, worker bundle, API reference, and
   documentation from one local preview origin.
-- Keep the public route contract `/emap/examples/<id>/`.
+- Keep the public route contract `/mapseekai/emap/examples/<id>/`.
 - Allow a published documentation build to load stable core runtime assets from
   an exact-version CDN URL without making local development depend on that CDN.
 
@@ -92,20 +92,20 @@ from `runtime-assets.ts` and:
 Runtime assets follow these environment-specific rules:
 
 - Vite development and integrated local documentation preview use the current
-  workspace build under `/emap/examples/vendor/`. A source change is therefore
+  workspace build under `/mapseekai/emap/examples/vendor/`. A source change is therefore
   exercised by the examples without waiting for a package release.
 - A formal published documentation build may use
-  `https://cdn.jsdelivr.net/npm/@zwishing/emap@<exact-version>/dist/` for
+  `https://cdn.jsdelivr.net/npm/@mapseekai/emap@<exact-version>/dist/` for
   `mapshaper-vendor.js`, `emap.js`, and `emap.css` only after that exact package
   version has been confirmed on npm.
 - Published CDN script and stylesheet URLs are pinned to the exact version from
   `package.json`, include generated Subresource Integrity metadata, and never
   use `latest` or a version range.
 - A CDN load failure retries the same exact-version asset from the local
-  `/emap/examples/vendor/` directory and reports the fallback in the console.
+  `/mapseekai/emap/examples/vendor/` directory and reports the fallback in the console.
 - Fixtures and `emap-worker.js` always remain local and same-origin.
 
-DuckDB examples import `@zwishing/emap/duckdb` through Vite instead of loading
+DuckDB examples import `@mapseekai/emap/duckdb` through Vite instead of loading
 the raw jsDelivr ESM file, because the bundle retains external DuckDB and Arrow
 dependencies. Format examples also remain Vite-managed where Parquet-Wasm
 initialization is required. The worker example receives a base-aware local
@@ -140,8 +140,8 @@ the page's existing status element and is not silently ignored.
 
 ## Catalog and Metadata
 
-The catalog remains at `/emap/examples/`, but its cards link directly to
-`/emap/examples/<id>/`. It no longer uses hash routing or renders a second
+The catalog remains at `/mapseekai/emap/examples/`, but its cards link directly to
+`/mapseekai/emap/examples/<id>/`. It no longer uses hash routing or renders a second
 example-page shell.
 
 `docs-meta/examples.ts` is reduced to catalog metadata, route IDs, fixture
@@ -171,7 +171,7 @@ packages/examples/dist/
 
 The normalizer works only inside `packages/examples/dist`, validates its source
 and destination paths, and fails if a route would overwrite an unrelated file.
-The Vite development server rewrites `/emap/examples/<id>/` to the physical
+The Vite development server rewrites `/mapseekai/emap/examples/<id>/` to the physical
 source HTML so development and production use the same browser URL.
 
 The documentation composer can then copy the normalized examples artifact
@@ -202,20 +202,20 @@ examples preview.
 Implementation follows test-driven development. Focused tests are added before
 production changes for these contracts:
 
-- catalog links use non-hash `/emap/examples/<id>/` routes;
+- catalog links use non-hash `/mapseekai/emap/examples/<id>/` routes;
 - every metadata ID has exactly one canonical HTML file under
   `packages/examples/examples`;
 - no migrated HTML depends on `../../dist` or `../../src`;
-- fixture URLs resolve from `/emap/examples/`, not `/fixtures/`;
+- fixture URLs resolve from `/mapseekai/emap/examples/`, not `/fixtures/`;
 - automatic fixture injection dispatches the existing upload change path;
-- local preview resolves runtime assets from `/emap/examples/vendor/`;
+- local preview resolves runtime assets from `/mapseekai/emap/examples/vendor/`;
 - release CDN URLs use the exact package version and never contain `latest`;
 - CDN failure selects the same exact-version local fallback;
 - fixture and worker URLs remain same-origin in CDN-first builds;
 - the build normalizer produces `dist/<id>/index.html` and removes the nested
   `dist/examples` directory;
 - composition produces `packages/docs/build/examples/<id>/index.html`;
-- documentation route checks reject `/emap/examples/examples/` links.
+- documentation route checks reject `/mapseekai/emap/examples/examples/` links.
 
 Verification runs the focused documentation/example tests, typecheck, library
 build, examples build, docs build, composition checks, and a local HTTP probe
@@ -226,12 +226,12 @@ single-file, multi-file, format, and worker examples.
 
 ## Success Criteria
 
-- `/emap/examples/` shows the catalog.
-- `/emap/examples/getting-started/geojson-viewer/` and
-  `/emap/examples/buffer/` return real example HTML, not a fallback page.
+- `/mapseekai/emap/examples/` shows the catalog.
+- `/mapseekai/emap/examples/getting-started/geojson-viewer/` and
+  `/mapseekai/emap/examples/buffer/` return real example HTML, not a fallback page.
 - Opening an example loads local starter data and displays a map without user action.
 - Selecting a replacement file reuses the same upload workflow and updates the map.
-- No request is made to `/fixtures/...` or `/emap/examples/examples/...`.
+- No request is made to `/fixtures/...` or `/mapseekai/emap/examples/examples/...`.
 - The integrated local preview uses one origin for docs, API, examples, fixtures,
   and workers.
 - Local preview works without CDN access and exercises the current workspace build.

@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # DuckDB
 
-`@zwishing/emap/duckdb` is an optional browser DuckDB-Wasm entry for restricted
+`@mapseekai/emap/duckdb` is an optional browser DuckDB-Wasm entry for restricted
 SQL and spatial functions. Core maps do not load it; only applications that
 import the subpath pay its download and initialization cost.
 
@@ -26,7 +26,7 @@ manager skips optional dependencies.
 Load lazily:
 
 ```ts
-const duckdb = await import('@zwishing/emap/duckdb');
+const duckdb = await import('@mapseekai/emap/duckdb');
 ```
 
 ## Initialize the runtime
@@ -187,15 +187,15 @@ extension, and execution failures.
 
 ## API
 
-- [queryDatasetWithDuckDb](/emap/api/functions/duckdb.queryDatasetWithDuckDb.html)
-- [bufferDatasetWithDuckDb](/emap/api/functions/duckdb.bufferDatasetWithDuckDb.html)
-- [createDuckDbRuntimeFromJsDelivr](/emap/api/functions/duckdb.createDuckDbRuntimeFromJsDelivr.html)
-- [DuckDbOperationError](/emap/api/classes/duckdb.DuckDbOperationError.html)
+- [queryDatasetWithDuckDb](/mapseekai/emap/api/functions/duckdb.queryDatasetWithDuckDb.html)
+- [bufferDatasetWithDuckDb](/mapseekai/emap/api/functions/duckdb.bufferDatasetWithDuckDb.html)
+- [createDuckDbRuntimeFromJsDelivr](/mapseekai/emap/api/functions/duckdb.createDuckDbRuntimeFromJsDelivr.html)
+- [DuckDbOperationError](/mapseekai/emap/api/classes/duckdb.DuckDbOperationError.html)
 
 ## Runnable examples
 
-- [DuckDB query](/emap/examples/duckdb-query/)
-- [DuckDB buffer](/emap/examples/duckdb-buffer/)
-- [Spatial operations](/emap/examples/duckdb-spatial-ops/)
-- [Overlay](/emap/examples/duckdb-overlay/)
-- [GeoParquet query](/emap/examples/duckdb-geoparquet-query/)
+- [DuckDB query](/mapseekai/emap/examples/duckdb-query/)
+- [DuckDB buffer](/mapseekai/emap/examples/duckdb-buffer/)
+- [Spatial operations](/mapseekai/emap/examples/duckdb-spatial-ops/)
+- [Overlay](/mapseekai/emap/examples/duckdb-overlay/)
+- [GeoParquet query](/mapseekai/emap/examples/duckdb-geoparquet-query/)

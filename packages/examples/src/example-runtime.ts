@@ -4,7 +4,7 @@ import {
   type RuntimeAssetSet,
 } from './runtime-assets';
 import { fixtureManifest, fixtureUrl } from './fixture-manifest';
-import type { Control, Emap } from '@zwishing/emap';
+import type { Control, Emap } from '@mapseekai/emap';
 
 export type {
   RuntimeAssetIntegrity,
@@ -16,7 +16,7 @@ export { resolveRuntimeAssets } from './runtime-assets';
 export { fixtureManifest, fixtureUrl, type FixtureBinding } from './fixture-manifest';
 
 declare global {
-  var emap: typeof import('@zwishing/emap');
+  var emap: typeof import('@mapseekai/emap');
 }
 
 type RuntimeAssetName = 'vendor' | 'core' | 'css';
@@ -225,8 +225,8 @@ export function installExampleMapUi(
   syncUi();
 }
 
-export async function loadExampleArrow(): Promise<typeof import('@zwishing/emap/arrow')> {
-  return import('@zwishing/emap/arrow');
+export async function loadExampleArrow(): Promise<typeof import('@mapseekai/emap/arrow')> {
+  return import('@mapseekai/emap/arrow');
 }
 
 export function exampleWorkerUrl(): string {

@@ -32,15 +32,15 @@ GIS 应用，提供客户端数据加载、渲染、选择、拓扑感知编辑�
 - 提供 30 多个由 Mapshaper 命令驱动的 `map.ops.*` 数据操作。
 - 支持撤销/重做、事务、校验器、要素访问、高亮与完整会话快照。
 - 可选 Web Worker，用于开销较大的数据集替换操作。
-- 可选 `@zwishing/emap/duckdb` 模块，提供 DuckDB-Wasm 空间处理和 GeoParquet 查询。
+- 可选 `@mapseekai/emap/duckdb` 模块，提供 DuckDB-Wasm 空间处理和 GeoParquet 查询。
 - 使用 CSS 设计令牌定制内置 UI 的主题。
 
 ## 文档与示例
 
-- 简体中文文档：<https://zwishing.github.io/emap/>
-- 英文文档：<https://zwishing.github.io/emap/en/>
-- API 参考：<https://zwishing.github.io/emap/api/>
-- 可运行示例：<https://zwishing.github.io/emap/examples/>
+- 简体中文文档：<https://mapseekai.github.io/mapseekai/emap/>
+- 英文文档：<https://mapseekai.github.io/mapseekai/emap/en/>
+- API 参考：<https://mapseekai.github.io/mapseekai/emap/api/>
+- 可运行示例：<https://mapseekai.github.io/mapseekai/emap/examples/>
 - 发布核对清单：[docs/release-checklist.md](docs/release-checklist.md)
 
 站点文档和 API 参考涵盖完整公开接口、数据格式、编辑、选择、相机、主题和部署细节。
@@ -48,9 +48,9 @@ GIS 应用，提供客户端数据加载、渲染、选择、拓扑感知编辑�
 ## 安装
 
 ```bash
-npm install @zwishing/emap
+npm install @mapseekai/emap
 # 或
-pnpm add @zwishing/emap
+pnpm add @mapseekai/emap
 ```
 
 ## 快速开始
@@ -63,8 +63,8 @@ import {
   TopologySource,
   NavigationControl,
   HistoryControl,
-} from '@zwishing/emap';
-import '@zwishing/emap/style.css';
+} from '@mapseekai/emap';
+import '@mapseekai/emap/style.css';
 
 const map = new Emap({ container: 'map' });
 map.addControl(new NavigationControl(), 'top-left');
@@ -95,11 +95,11 @@ esbuild 和 Bun 通常不需要额外配置 `Buffer` polyfill 或别名。
 使用打包工具时，优先直接导入样式：
 
 ```ts
-import '@zwishing/emap/style.css';
+import '@mapseekai/emap/style.css';
 ```
 
 对于 script 标签或静态托管部署，请将
-`node_modules/@zwishing/emap/dist/` 下的文件复制到公开资源目录。使用 Worker 时，
+`node_modules/@mapseekai/emap/dist/` 下的文件复制到公开资源目录。使用 Worker 时，
 除非自行打包 Worker，否则 `emap-worker.js` 与 `mapshaper-vendor.js` 必须在同一目录，
 因为 Worker 会通过相对路径 `importScripts('mapshaper-vendor.js')` 导入后者。
 

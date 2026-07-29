@@ -9,7 +9,7 @@ const html = readFileSync(
 const duckDbBundle = readFileSync(resolve(__dirname, '../../dist/emap-duckdb.mjs'), 'utf8');
 
 function importedDuckDbNames(): string[] {
-  const importMatch = html.match(/import\s+\{([^}]+)\}\s+from\s+'@zwishing\/emap\/duckdb'/);
+  const importMatch = html.match(/import\s+\{([^}]+)\}\s+from\s+'@mapseekai\/emap\/duckdb'/);
   if (!importMatch) throw new Error('DuckDB module import not found');
   return importMatch[1]
     .split(',')

@@ -8,7 +8,7 @@ const temporaryDirectories: string[] = [];
 
 function createConsumerPackage(): { consumerFile: string; declarationFile: string } {
   const directory = mkdtempSync(join(tmpdir(), 'emap-package-exports-'));
-  const packageDirectory = join(directory, 'node_modules', '@zwishing', 'emap');
+  const packageDirectory = join(directory, 'node_modules', '@mapseekai', 'emap');
   const declarationFile = join(packageDirectory, 'dist', 'style.css.d.ts');
   mkdirSync(join(packageDirectory, 'dist'), { recursive: true });
   writeFileSync(
@@ -26,7 +26,7 @@ function createConsumerPackage(): { consumerFile: string; declarationFile: strin
 
 function resolveStyleDeclaration(consumerFile: string, moduleResolution: ts.ModuleResolutionKind) {
   return ts.resolveModuleName(
-    '@zwishing/emap/style.css',
+    '@mapseekai/emap/style.css',
     consumerFile,
     { module: ts.ModuleKind.Node16, moduleResolution },
     ts.sys,

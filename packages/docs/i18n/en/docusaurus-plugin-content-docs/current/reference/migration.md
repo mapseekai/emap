@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # Migration
 
-The current docs assume typed imports from `@zwishing/emap`, optional subpath imports for `formats` and `duckdb`, and `expressionPolicy: "disabled"` by default.
+The current docs assume typed imports from `@mapseekai/emap`, optional subpath imports for `formats` and `duckdb`, and `expressionPolicy: "disabled"` by default.
 
 ## Behavior notes
 
@@ -18,13 +18,13 @@ When migrating older examples, explicitly opt into trusted expressions, replace 
 
 ## API
 
-- [src.MapOptions](/emap/api/interfaces/index.MapOptions.html)
-- [src.Emap](/emap/api/classes/index.Emap.html)
+- [src.MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
+- [src.Emap](/mapseekai/emap/api/classes/index.Emap.html)
 
 ## Runnable examples
 
-- [attribute-expressions](/emap/examples/attribute-expressions/)
-- [filter-features](/emap/examples/filter-features/)
+- [attribute-expressions](/mapseekai/emap/examples/attribute-expressions/)
+- [filter-features](/mapseekai/emap/examples/filter-features/)
 
 ## Minimal snippet
 

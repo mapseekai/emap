@@ -35,7 +35,7 @@ describe('documentation workspace config', () => {
       "node -e \"require('node:fs').rmSync('packages/docs/.docusaurus',{recursive:true,force:true})\"",
     );
     expect(manifest.scripts?.['docs:dev']).toBe(
-      'pnpm run docs:clean && pnpm --filter @zwishing/emap-docs start',
+      'pnpm run docs:clean && pnpm --filter @mapseekai/emap-docs start',
     );
   });
 });

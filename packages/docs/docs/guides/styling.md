@@ -169,13 +169,13 @@ source layers，或先通过数据操作生成分类字段和目标图层，再�
 
 ## API
 
-- [FillPaint](/emap/api/interfaces/index.FillPaint.html)
-- [LinePaint](/emap/api/interfaces/index.LinePaint.html)
-- [CirclePaint](/emap/api/interfaces/index.CirclePaint.html)
-- [LayerSpecification](/emap/api/interfaces/index.LayerSpecification.html)
+- [FillPaint](/mapseekai/emap/api/interfaces/index.FillPaint.html)
+- [LinePaint](/mapseekai/emap/api/interfaces/index.LinePaint.html)
+- [CirclePaint](/mapseekai/emap/api/interfaces/index.CirclePaint.html)
+- [LayerSpecification](/mapseekai/emap/api/interfaces/index.LayerSpecification.html)
 
 ## 可运行示例
 
-- [线图层](/emap/examples/getting-started/lines/)
-- [面图层](/emap/examples/getting-started/polygons/)
-- [面填充](/emap/examples/getting-started/polygon-fill/)
+- [线图层](/mapseekai/emap/examples/getting-started/lines/)
+- [面图层](/mapseekai/emap/examples/getting-started/polygons/)
+- [面填充](/mapseekai/emap/examples/getting-started/polygon-fill/)

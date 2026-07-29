@@ -22,8 +22,8 @@ application does not pay for Arrow, Parquet, or WASM.
 | Shapefile ZIP | `.zip` | yes | yes, as ZIP | core |
 | KML | `.kml` | yes | no | core |
 | mapshaper snapshot | `.msx` | yes | yes | core |
-| GeoParquet | `.parquet`, `.geoparquet` | yes | yes | `@zwishing/emap/arrow` |
-| GeoArrow | `.arrow`, `.arrows`, `.feather` | yes | yes | `@zwishing/emap/arrow` |
+| GeoParquet | `.parquet`, `.geoparquet` | yes | yes | `@mapseekai/emap/arrow` |
+| GeoArrow | `.arrow`, `.arrows`, `.feather` | yes | yes | `@mapseekai/emap/arrow` |
 
 ## Load URLs and bytes
 
@@ -69,7 +69,7 @@ complete ZIP rather than only the `.shp` bytes.
 Before parquet/arrow import or export:
 
 ```ts
-import '@zwishing/emap/arrow';
+import '@mapseekai/emap/arrow';
 ```
 
 This side-effect import registers format plugins. GeoArrow does not need WASM.
@@ -79,7 +79,7 @@ webpack 5 normally emit the WASM asset automatically.
 Set an explicit WASM location:
 
 ```ts
-import { initParquetWasm } from '@zwishing/emap/arrow';
+import { initParquetWasm } from '@mapseekai/emap/arrow';
 
 await initParquetWasm({
   wasmInput: '/assets/parquet_wasm_bg.wasm',
@@ -89,7 +89,7 @@ await initParquetWasm({
 Or inject an already initialized module:
 
 ```ts
-import { setParquetWasm } from '@zwishing/emap/arrow';
+import { setParquetWasm } from '@mapseekai/emap/arrow';
 
 setParquetWasm(parquetModule);
 ```
@@ -104,7 +104,7 @@ import {
   fromArrowTable,
   setArrowTable,
   toArrowTable,
-} from '@zwishing/emap/arrow';
+} from '@mapseekai/emap/arrow';
 
 setArrowTable(source, duckdbResultTable);
 const table = toArrowTable(source.getDataset()!);
@@ -160,14 +160,14 @@ URL.revokeObjectURL(url);
 
 ## API
 
-- [TopologySource](/emap/api/classes/index.TopologySource.html)
-- [ExportOptions](/emap/api/interfaces/index.ExportOptions.html)
-- [initParquetWasm](/emap/api/functions/arrow.initParquetWasm.html)
-- [setParquetWasm](/emap/api/functions/arrow.setParquetWasm.html)
-- [toArrowTable](/emap/api/functions/arrow.toArrowTable.html)
+- [TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
+- [ExportOptions](/mapseekai/emap/api/interfaces/index.ExportOptions.html)
+- [initParquetWasm](/mapseekai/emap/api/functions/arrow.initParquetWasm.html)
+- [setParquetWasm](/mapseekai/emap/api/functions/arrow.setParquetWasm.html)
+- [toArrowTable](/mapseekai/emap/api/functions/arrow.toArrowTable.html)
 
 ## Runnable examples
 
-- [GeoParquet viewer](/emap/examples/geoparquet-viewer/)
-- [Export GeoParquet](/emap/examples/export-geoparquet/)
-- [Export round trip](/emap/examples/export-roundtrip/)
+- [GeoParquet viewer](/mapseekai/emap/examples/geoparquet-viewer/)
+- [Export GeoParquet](/mapseekai/emap/examples/export-geoparquet/)
+- [Export round trip](/mapseekai/emap/examples/export-roundtrip/)

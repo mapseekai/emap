@@ -18,7 +18,7 @@ interact with it through public methods and events.
 ## Construct a map
 
 ```ts
-import { Emap } from '@zwishing/emap';
+import { Emap } from '@mapseekai/emap';
 
 const map = new Emap({
   container: 'map',
@@ -155,13 +155,13 @@ application code.
 
 ## API
 
-- [Emap](/emap/api/classes/index.Emap.html)
-- [MapOptions](/emap/api/interfaces/index.MapOptions.html)
-- [EmapEventMap](/emap/api/interfaces/index.EmapEventMap.html)
+- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
+- [MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
+- [EmapEventMap](/mapseekai/emap/api/interfaces/index.EmapEventMap.html)
 
 ## Runnable examples
 
-- [GeoJSON viewer](/emap/examples/getting-started/geojson-viewer/)
-- [Interaction handlers](/emap/examples/interaction-handlers/)
-- [Undo and redo](/emap/examples/undo-redo/)
-- [Web Worker](/emap/examples/web-worker/)
+- [GeoJSON viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [Interaction handlers](/mapseekai/emap/examples/interaction-handlers/)
+- [Undo and redo](/mapseekai/emap/examples/undo-redo/)
+- [Web Worker](/mapseekai/emap/examples/web-worker/)

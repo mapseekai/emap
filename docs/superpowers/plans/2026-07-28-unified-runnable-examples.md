@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - 不新增运行时或前端框架依赖。
-- 公开示例 URL 必须保持 `/emap/examples/<id>/`。
+- 公开示例 URL 必须保持 `/mapseekai/emap/examples/<id>/`。
 - 本地开发与 `docs:preview` 默认使用当前工作区构建，不依赖 CDN。
 - CDN 模式只允许精确的 `package.json` 版本，禁止 `latest` 或版本范围，并必须验证 SRI。
 - fixtures 与 `emap-worker.js` 必须保持本地同源。
@@ -113,9 +113,9 @@ Expected: FAIL，原因包括 `load` 仍存在、source 仍指向 `test/examples
 - [ ] **Step 1: 为真实 catalog 链接写失败测试**
 
 ```ts
-expect(examplePublicHref('buffer')).toBe('/emap/examples/buffer/');
+expect(examplePublicHref('buffer')).toBe('/mapseekai/emap/examples/buffer/');
 expect(examplePublicHref('getting-started/points')).toBe(
-  '/emap/examples/getting-started/points/',
+  '/mapseekai/emap/examples/getting-started/points/',
 );
 ```
 
@@ -159,7 +159,7 @@ Catalog 链接实现：
 
 ```ts
 export const examplePublicHref = (id: string): string =>
-  `/emap/examples/${id.replace(/^\/+|\/+$/g, '')}/`;
+  `/mapseekai/emap/examples/${id.replace(/^\/+|\/+$/g, '')}/`;
 ```
 
 `main.ts` 只调用 `renderCatalog(root, examples)`；删除 hashchange 与 example-page 分支。
@@ -195,21 +195,21 @@ git commit -m "refactor: make example catalog metadata-only"
 - [ ] **Step 1: 写资源选择与 CDN 回退失败测试**
 
 ```ts
-expect(resolveRuntimeAssets({ mode: 'local', baseUrl: '/emap/examples/' })).toMatchObject({
-  vendor: '/emap/examples/vendor/mapshaper-vendor.js',
-  core: '/emap/examples/vendor/emap.js',
-  css: '/emap/examples/vendor/emap.css',
-  worker: '/emap/examples/emap-worker.js',
+expect(resolveRuntimeAssets({ mode: 'local', baseUrl: '/mapseekai/emap/examples/' })).toMatchObject({
+  vendor: '/mapseekai/emap/examples/vendor/mapshaper-vendor.js',
+  core: '/mapseekai/emap/examples/vendor/emap.js',
+  css: '/mapseekai/emap/examples/vendor/emap.css',
+  worker: '/mapseekai/emap/examples/emap-worker.js',
 });
 
 expect(resolveRuntimeAssets({
   mode: 'cdn',
-  baseUrl: '/emap/examples/',
+  baseUrl: '/mapseekai/emap/examples/',
   version: '0.5.0',
 })).toMatchObject({
-  vendor: 'https://cdn.jsdelivr.net/npm/@zwishing/emap@0.5.0/dist/mapshaper-vendor.js',
-  fallbackVendor: '/emap/examples/vendor/mapshaper-vendor.js',
-  worker: '/emap/examples/emap-worker.js',
+  vendor: 'https://cdn.jsdelivr.net/npm/@mapseekai/emap@0.5.0/dist/mapshaper-vendor.js',
+  fallbackVendor: '/mapseekai/emap/examples/vendor/mapshaper-vendor.js',
+  worker: '/mapseekai/emap/examples/emap-worker.js',
 });
 ```
 
@@ -238,7 +238,7 @@ export interface RuntimeAssetSet {
 }
 
 export async function loadExampleRuntime(): Promise<typeof globalThis.emap>;
-export async function loadExampleFormats(): Promise<typeof import('@zwishing/emap/formats')>;
+export async function loadExampleFormats(): Promise<typeof import('@mapseekai/emap/formats')>;
 export function exampleWorkerUrl(): string;
 ```
 
@@ -289,8 +289,8 @@ git commit -m "feat: load example runtime from local or pinned CDN assets"
 - [ ] **Step 1: 写 fixture URL 和真实 change 事件失败测试**
 
 ```ts
-expect(fixtureUrl('fixtures/task-6-polygons.geojson', '/emap/examples/')).toBe(
-  '/emap/examples/fixtures/task-6-polygons.geojson',
+expect(fixtureUrl('fixtures/task-6-polygons.geojson', '/mapseekai/emap/examples/')).toBe(
+  '/mapseekai/emap/examples/fixtures/task-6-polygons.geojson',
 );
 ```
 
@@ -378,7 +378,7 @@ Expected: FAIL，canonical HTML 尚未迁移。
 
 - [ ] **Step 4: 移动 Task 7、Worker 与 DuckDB HTML**
 
-移动 `buffer` 到 `duckdb-spatial-ops` 的 21 个页面。Worker URL 改为 `exampleWorkerUrl()`；DuckDB imports 改为 `@zwishing/emap/duckdb`；Formats 页面通过 runtime 的 Vite-managed `loadFormats()` 初始化，不再引用 `../../dist/emap-formats.*`。
+移动 `buffer` 到 `duckdb-spatial-ops` 的 21 个页面。Worker URL 改为 `exampleWorkerUrl()`；DuckDB imports 改为 `@mapseekai/emap/duckdb`；Formats 页面通过 runtime 的 Vite-managed `loadFormats()` 初始化，不再引用 `../../dist/emap-formats.*`。
 
 - [ ] **Step 5: 统一每个 HTML 的启动片段**
 
@@ -463,7 +463,7 @@ Expected: FAIL，脚本不存在且 compose 仍要求 `examples/buffer`。
 "build": "vite build && node ../../scripts/normalize-examples-build.mjs"
 ```
 
-Vite dev plugin 将 `/emap/examples/<id>/` 内部重写到物理 `/examples/<id>/index.html`。
+Vite dev plugin 将 `/mapseekai/emap/examples/<id>/` 内部重写到物理 `/examples/<id>/index.html`。
 
 - [ ] **Step 4: 修改 compose 契约**
 
@@ -610,12 +610,12 @@ Expected: 全部 exit 0；`packages/docs/build/examples/examples` 不存在。
 启动 Docusaurus serve 后检查：
 
 ```text
-/emap/examples/
-/emap/examples/getting-started/geojson-viewer/
-/emap/examples/buffer/
-/emap/examples/fixtures/task-6-polygons.geojson
-/emap/examples/vendor/emap.js
-/emap/examples/emap-worker.js
+/mapseekai/emap/examples/
+/mapseekai/emap/examples/getting-started/geojson-viewer/
+/mapseekai/emap/examples/buffer/
+/mapseekai/emap/examples/fixtures/task-6-polygons.geojson
+/mapseekai/emap/examples/vendor/emap.js
+/mapseekai/emap/examples/emap-worker.js
 ```
 
 Expected: 全部 HTTP 200；HTML 资源 URL 不包含 `/fixtures/` 根路径或 `/examples/examples/`。

@@ -62,11 +62,11 @@ const expectedIds = [
 
 describe('example catalog metadata', () => {
   it('builds stable public hrefs for flat and nested IDs', () => {
-    expect(examplePublicHref('buffer')).toBe('/emap/examples/buffer/');
+    expect(examplePublicHref('buffer')).toBe('/mapseekai/emap/examples/buffer/');
     expect(examplePublicHref('getting-started/points')).toBe(
-      '/emap/examples/getting-started/points/',
+      '/mapseekai/emap/examples/getting-started/points/',
     );
-    expect(examplePublicHref('/buffer/')).toBe('/emap/examples/buffer/');
+    expect(examplePublicHref('/buffer/')).toBe('/mapseekai/emap/examples/buffer/');
   });
 
   it('defines the complete metadata-only catalog', () => {
@@ -131,7 +131,7 @@ describe('example catalog metadata', () => {
     expect(links).toHaveLength(examples.length);
 
     for (const [index, link] of links.entries()) {
-      expect(link.getAttribute('href')).toBe(`/emap/examples/${examples[index].id}/`);
+      expect(link.getAttribute('href')).toBe(`/mapseekai/emap/examples/${examples[index].id}/`);
       expect(link.getAttribute('href')).not.toContain('#');
     }
   });

@@ -18,13 +18,13 @@ Catch load errors, display a retryable message, and add the source/layer only af
 
 ## API
 
-- [src.TopologySource](/emap/api/classes/index.TopologySource.html)
-- [src.TopologySourceFromBytesOptions](/emap/api/interfaces/index.TopologySourceFromBytesOptions.html)
+- [src.TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
+- [src.TopologySourceFromBytesOptions](/mapseekai/emap/api/interfaces/index.TopologySourceFromBytesOptions.html)
 
 ## Runnable examples
 
-- [geoparquet-viewer](/emap/examples/geoparquet-viewer/)
-- [getting-started/points](/emap/examples/getting-started/points/)
+- [geoparquet-viewer](/mapseekai/emap/examples/geoparquet-viewer/)
+- [getting-started/points](/mapseekai/emap/examples/getting-started/points/)
 
 ## Minimal snippet
 

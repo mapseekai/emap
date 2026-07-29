@@ -38,13 +38,13 @@ npm install
 ## 安装 Emap
 
 ```bash
-pnpm add @zwishing/emap
+pnpm add @mapseekai/emap
 ```
 
 或：
 
 ```bash
-npm install @zwishing/emap
+npm install @mapseekai/emap
 ```
 
 ## 准备地图容器
@@ -87,8 +87,8 @@ import {
   HistoryControl,
   NavigationControl,
   TopologySource,
-} from '@zwishing/emap';
-import '@zwishing/emap/style.css';
+} from '@mapseekai/emap';
+import '@mapseekai/emap/style.css';
 import './style.css';
 
 const map = new Emap({
@@ -213,7 +213,7 @@ const map = new Emap({
 });
 ```
 
-宿主应用需要将 `node_modules/@zwishing/emap/dist/emap-worker.js` 和
+宿主应用需要将 `node_modules/@mapseekai/emap/dist/emap-worker.js` 和
 `mapshaper-vendor.js` 一起复制到公开资源目录。两者默认应保持在同一目录，因为
 Worker 会相对加载 vendor 文件。
 
@@ -234,7 +234,7 @@ Worker 会相对加载 vendor 文件。
 确认应用入口导入了：
 
 ```ts
-import '@zwishing/emap/style.css';
+import '@mapseekai/emap/style.css';
 ```
 
 ### Worker 返回 404
@@ -247,4 +247,4 @@ import '@zwishing/emap/style.css';
 - 阅读[数据源与图层](../concepts/source-layer.md)，了解 source layer 与渲染图层的区别。
 - 阅读[样式图层](../guides/styling.md)，配置点、线和面的 paint。
 - 阅读[事件](../guides/events.md)，把地图状态接入应用界面。
-- 打开[可运行示例](/emap/examples/)，查看完整交互和数据处理场景。
+- 打开[可运行示例](/mapseekai/emap/examples/)，查看完整交互和数据处理场景。

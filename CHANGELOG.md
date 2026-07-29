@@ -16,8 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Generated TypeDoc API documentation is published inside the documentation
   bundle with local navigation, complete public-contract metadata, and links
   back to the matching guides and runnable examples.
-- A canonical `@zwishing/emap-examples` workspace now publishes runnable
-  examples at stable `/emap/examples/` routes. The catalog includes
+- A canonical `@mapseekai/emap-examples` workspace now publishes runnable
+  examples at stable `/mapseekai/emap/examples/` routes. The catalog includes
   getting-started maps, interaction and editing workflows, map operations,
   import/export, Worker usage, and DuckDB spatial processing.
 - Vertex editing now provides topology-aware shared-node deletion and an
@@ -26,8 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- The optional Arrow integration has moved from `@zwishing/emap/formats` to
-  `@zwishing/emap/arrow`, with source, declarations, bundles, examples, and API
+- The optional Arrow integration has moved from `@mapseekai/emap/formats` to
+  `@mapseekai/emap/arrow`, with source, declarations, bundles, examples, and API
   documentation renamed accordingly. The old module path is no longer exported.
 - Legacy and generated example placeholders were replaced by canonical,
   metadata-driven routes using one shared runtime, shared branding, and
@@ -66,11 +66,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Optional `@zwishing/emap/duckdb` browser module, powered by DuckDB-Wasm and its spatial extension. It provides Arrow-backed dataset processing, GeoParquet byte queries, unary geometry operations, geometry-derived attributes, spatial relations, and overlay operations without adding DuckDB to the core bundle.
+- Optional `@mapseekai/emap/duckdb` browser module, powered by DuckDB-Wasm and its spatial extension. It provides Arrow-backed dataset processing, GeoParquet byte queries, unary geometry operations, geometry-derived attributes, spatial relations, and overlay operations without adding DuckDB to the core bundle.
 
 ### Fixed
 
-- `@zwishing/emap/style.css` now resolves its TypeScript declaration through both modern conditional exports and legacy Node-style module resolution.
+- `@mapseekai/emap/style.css` now resolves its TypeScript declaration through both modern conditional exports and legacy Node-style module resolution.
 
 ## [0.4.0] - 2026-06-10
 
@@ -401,7 +401,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **`LassoStyle` widened (additive, back-compat):** the public
-  `LassoStyle` type (`@zwishing/emap` index, from
+  `LassoStyle` type (`@mapseekai/emap` index, from
   `core/handlers/lasso-select`) gained an optional `strokeDasharray?:
   string` field (default `'4 3'`). Every existing 3-field value remains
   assignable; consumers passing an extra `strokeDasharray` to a lasso
@@ -514,7 +514,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `import "@zwishing/emap"` is now self-contained in any browser bundler.
+- `import "@mapseekai/emap"` is now self-contained in any browser bundler.
   mapshaper is no longer routed through CommonJS in the ESM build (which could
   emit a dead `require("adm-zip")` and a runtime-throwing `iconv-lite` helper);
   it ships as a sibling ES module `dist/mapshaper-vendor.mjs` that `dist/emap.mjs`
@@ -529,7 +529,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Exported `MapOptions` from the package root for typed constructor options.
 - Added `TopologySource.fromBytes(...)` for in-memory file and upload flows.
 - Documented bundler, stylesheet, and worker asset integration for
-  `@zwishing/emap`.
+  `@mapseekai/emap`.
 
 ### Fixed
 
@@ -565,20 +565,20 @@ Initial public release.
 - Built-in UI controls: navigation, status, basemap, vertex edit, feature
   draw, history, box / lasso selection, simplify.
 - Distributed control stylesheet as `dist/emap.css` (importable via
-  `@zwishing/emap/style.css`).
+  `@mapseekai/emap/style.css`).
 
-[Unreleased]: https://github.com/zwishing/emap/compare/0c7ef115bbbb6d59829cd244c683f65ef38f39cd...HEAD
-[0.5.0]: https://github.com/zwishing/emap/compare/v0.4.0...0c7ef115bbbb6d59829cd244c683f65ef38f39cd
-[0.4.0]: https://github.com/zwishing/emap/compare/v0.3.6...v0.4.0
-[0.3.7]: https://github.com/zwishing/emap/compare/v0.3.6...v0.3.7
-[0.3.6]: https://github.com/zwishing/emap/compare/v0.3.5...v0.3.6
-[0.3.5]: https://github.com/zwishing/emap/compare/v0.3.3...v0.3.5
-[0.3.3]: https://github.com/zwishing/emap/compare/v0.3.2...v0.3.3
-[0.3.2]: https://github.com/zwishing/emap/compare/v0.3.1...v0.3.2
-[0.3.1]: https://github.com/zwishing/emap/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/zwishing/emap/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/zwishing/emap/compare/v0.1.3...v0.2.0
-[0.1.3]: https://github.com/zwishing/emap/compare/v0.1.2...v0.1.3
-[0.1.2]: https://github.com/zwishing/emap/compare/v0.1.1...v0.1.2
-[0.1.1]: https://github.com/zwishing/emap/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/zwishing/emap/releases/tag/v0.1.0
+[Unreleased]: https://github.com/mapseekai/emap/compare/0c7ef115bbbb6d59829cd244c683f65ef38f39cd...HEAD
+[0.5.0]: https://github.com/mapseekai/emap/compare/v0.4.0...0c7ef115bbbb6d59829cd244c683f65ef38f39cd
+[0.4.0]: https://github.com/mapseekai/emap/compare/v0.3.6...v0.4.0
+[0.3.7]: https://github.com/mapseekai/emap/compare/v0.3.6...v0.3.7
+[0.3.6]: https://github.com/mapseekai/emap/compare/v0.3.5...v0.3.6
+[0.3.5]: https://github.com/mapseekai/emap/compare/v0.3.3...v0.3.5
+[0.3.3]: https://github.com/mapseekai/emap/compare/v0.3.2...v0.3.3
+[0.3.2]: https://github.com/mapseekai/emap/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/mapseekai/emap/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/mapseekai/emap/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/mapseekai/emap/compare/v0.1.3...v0.2.0
+[0.1.3]: https://github.com/mapseekai/emap/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/mapseekai/emap/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/mapseekai/emap/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/mapseekai/emap/releases/tag/v0.1.0

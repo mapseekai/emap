@@ -156,15 +156,15 @@ through `map.ops`; otherwise feature IDs may become stale.
 
 ## API
 
-- [Emap](/emap/api/classes/index.Emap.html)
-- [Selection](/emap/api/classes/index.Selection.html)
-- [FeatureRef](/emap/api/interfaces/index.FeatureRef.html)
-- [BoxSelectControl](/emap/api/classes/index.BoxSelectControl.html)
-- [LassoSelectControl](/emap/api/classes/index.LassoSelectControl.html)
+- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
+- [Selection](/mapseekai/emap/api/classes/index.Selection.html)
+- [FeatureRef](/mapseekai/emap/api/interfaces/index.FeatureRef.html)
+- [BoxSelectControl](/mapseekai/emap/api/classes/index.BoxSelectControl.html)
+- [LassoSelectControl](/mapseekai/emap/api/classes/index.LassoSelectControl.html)
 
 ## Runnable examples
 
-- [Feature selection](/emap/examples/feature-selection/)
-- [Box selection](/emap/examples/box-select/)
-- [Lasso selection](/emap/examples/lasso-select/)
-- [Merge selected](/emap/examples/merge-selected/)
+- [Feature selection](/mapseekai/emap/examples/feature-selection/)
+- [Box selection](/mapseekai/emap/examples/box-select/)
+- [Lasso selection](/mapseekai/emap/examples/lasso-select/)
+- [Merge selected](/mapseekai/emap/examples/merge-selected/)

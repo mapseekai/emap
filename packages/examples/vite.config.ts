@@ -70,7 +70,7 @@ const routeIds = [
 const htmlInput = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
 const routeIdSet = new Set<string>(routeIds);
-const examplesBaseUrl = '/emap/examples/';
+const examplesBaseUrl = '/mapseekai/emap/examples/';
 
 function examplesBrandPlugin(): Plugin {
   const logoUrl = `${examplesBaseUrl}emap.svg`;
@@ -232,7 +232,7 @@ function examplesRouteRewritePlugin(): Plugin {
         const queryIndex = url.indexOf('?');
         const pathname = queryIndex === -1 ? url : url.slice(0, queryIndex);
         const query = queryIndex === -1 ? '' : url.slice(queryIndex);
-        const publicPrefix = '/emap/examples/';
+        const publicPrefix = '/mapseekai/emap/examples/';
         if (pathname.startsWith(publicPrefix) && pathname.endsWith('/')) {
           const routeId = pathname.slice(publicPrefix.length, -1);
           if (routeIdSet.has(routeId)) {
@@ -246,7 +246,31 @@ function examplesRouteRewritePlugin(): Plugin {
 }
 
 export default defineConfig({
-  base: '/emap/examples/',
+  base: '/mapseekai/emap/examples/',
+  resolve: {
+    alias: [
+      {
+        find: 'mapshaper',
+        replacement: fileURLToPath(new URL('./src/mapshaper-global.ts', import.meta.url)),
+      },
+      {
+        find: '@mapseekai/emap/arrow',
+        replacement: fileURLToPath(new URL('../../src/arrow/index.ts', import.meta.url)),
+      },
+      {
+        find: '@mapseekai/emap/duckdb',
+        replacement: fileURLToPath(new URL('../../src/duckdb/index.ts', import.meta.url)),
+      },
+      {
+        find: '@mapseekai/emap/style.css',
+        replacement: fileURLToPath(new URL('../../src/ui/controls.css', import.meta.url)),
+      },
+      {
+        find: '@mapseekai/emap',
+        replacement: fileURLToPath(new URL('../../src/index.ts', import.meta.url)),
+      },
+    ],
+  },
   define: {
     __EMAP_ASSET_INTEGRITY__: JSON.stringify(assetIntegrity),
     __EMAP_ASSET_MODE__: JSON.stringify(assetMode),

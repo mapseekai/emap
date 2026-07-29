@@ -11,7 +11,7 @@ export interface ExportedFormatFile {
  *
  * Plugins exist so optional, heavyweight format support (GeoParquet /
  * GeoArrow with apache-arrow + parquet-wasm) can live in a separate bundle
- * (`@zwishing/emap/arrow`) without growing the core `emap.js`. Importing
+ * (`@mapseekai/emap/arrow`) without growing the core `emap.js`. Importing
  * that bundle registers its plugin as a side effect; the core import/export
  * paths consult this registry by file extension / format name.
  */

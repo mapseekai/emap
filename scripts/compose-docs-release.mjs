@@ -51,4 +51,4 @@ if (await fileExists(nestedExamplesOutput)) {
   );
 }
 
-console.log('Composed examples at packages/docs/build/examples for /emap/examples/.');
+console.log('Composed examples at packages/docs/build/examples for /mapseekai/emap/examples/.');

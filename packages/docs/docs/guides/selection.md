@@ -161,15 +161,15 @@ feature ID 是 source layer 内的索引，删除或 shape-count 操作可能改
 
 ## API
 
-- [Emap](/emap/api/classes/index.Emap.html)
-- [Selection](/emap/api/classes/index.Selection.html)
-- [FeatureRef](/emap/api/interfaces/index.FeatureRef.html)
-- [BoxSelectControl](/emap/api/classes/index.BoxSelectControl.html)
-- [LassoSelectControl](/emap/api/classes/index.LassoSelectControl.html)
+- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
+- [Selection](/mapseekai/emap/api/classes/index.Selection.html)
+- [FeatureRef](/mapseekai/emap/api/interfaces/index.FeatureRef.html)
+- [BoxSelectControl](/mapseekai/emap/api/classes/index.BoxSelectControl.html)
+- [LassoSelectControl](/mapseekai/emap/api/classes/index.LassoSelectControl.html)
 
 ## 可运行示例
 
-- [要素选择](/emap/examples/feature-selection/)
-- [拉框选择](/emap/examples/box-select/)
-- [套索选择](/emap/examples/lasso-select/)
-- [合并已选要素](/emap/examples/merge-selected/)
+- [要素选择](/mapseekai/emap/examples/feature-selection/)
+- [拉框选择](/mapseekai/emap/examples/box-select/)
+- [套索选择](/mapseekai/emap/examples/lasso-select/)
+- [合并已选要素](/mapseekai/emap/examples/merge-selected/)

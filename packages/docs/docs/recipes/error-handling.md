@@ -18,14 +18,14 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.OpError](/emap/api/types/index.OpError.html)
-- [src_duckdb.DuckDbOperationError](/emap/api/classes/src_duckdb.DuckDbOperationError.html)
+- [src.OpError](/mapseekai/emap/api/types/index.OpError.html)
+- [src_duckdb.DuckDbOperationError](/mapseekai/emap/api/classes/src_duckdb.DuckDbOperationError.html)
 
 ## 可运行示例
 
-- [check-geometry](/emap/examples/check-geometry/)
-- [duckdb-query](/emap/examples/duckdb-query/)
-- [duckdb-buffer](/emap/examples/duckdb-buffer/)
+- [check-geometry](/mapseekai/emap/examples/check-geometry/)
+- [duckdb-query](/mapseekai/emap/examples/duckdb-query/)
+- [duckdb-buffer](/mapseekai/emap/examples/duckdb-buffer/)
 
 ## 最小片段
 

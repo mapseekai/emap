@@ -116,7 +116,7 @@ describe('release documentation checklist', () => {
 
     expect(checklist).toContain('pnpm run docs:preview');
     expect(checklist).toContain('single process and port');
-    expect(checklist).not.toContain('@zwishing/emap-examples preview');
+    expect(checklist).not.toContain('@mapseekai/emap-examples preview');
   });
 
   it('serves docs, example routes, and static assets from the composed build', async () => {
@@ -147,15 +147,21 @@ describe('release documentation checklist', () => {
       await writeFile(resolve(build, 'examples/emap-worker.js'), 'self.postMessage("ready");');
 
       const handler = previewModule.createDocsPreviewHandler({ root }) as PreviewHandler;
-      const docs = await requestPreview(handler, '/emap/');
-      const example = await requestPreview(handler, '/emap/examples/buffer/');
-      const spa = await requestPreview(handler, '/emap/concepts/not-generated/');
-      const css = await requestPreview(handler, '/emap/assets/site.css');
-      const vendor = await requestPreview(handler, '/emap/examples/vendor/emap.js');
-      const fixture = await requestPreview(handler, '/emap/examples/fixtures/starter.geojson');
-      const parquet = await requestPreview(handler, '/emap/examples/fixtures/starter.parquet');
-      const worker = await requestPreview(handler, '/emap/examples/emap-worker.js');
-      const missingAsset = await requestPreview(handler, '/emap/assets/missing.js');
+      const docs = await requestPreview(handler, '/mapseekai/emap/');
+      const example = await requestPreview(handler, '/mapseekai/emap/examples/buffer/');
+      const spa = await requestPreview(handler, '/mapseekai/emap/concepts/not-generated/');
+      const css = await requestPreview(handler, '/mapseekai/emap/assets/site.css');
+      const vendor = await requestPreview(handler, '/mapseekai/emap/examples/vendor/emap.js');
+      const fixture = await requestPreview(
+        handler,
+        '/mapseekai/emap/examples/fixtures/starter.geojson',
+      );
+      const parquet = await requestPreview(
+        handler,
+        '/mapseekai/emap/examples/fixtures/starter.parquet',
+      );
+      const worker = await requestPreview(handler, '/mapseekai/emap/examples/emap-worker.js');
+      const missingAsset = await requestPreview(handler, '/mapseekai/emap/assets/missing.js');
 
       expect(docs).toMatchObject({ status: 200 });
       expect(docs.body.toString()).toContain('<title>docs</title>');
@@ -185,7 +191,7 @@ describe('release documentation checklist', () => {
       await writeFile(resolve(root, 'packages/docs/build/index.html'), '<!doctype html>docs');
 
       const handler = previewModule.createDocsPreviewHandler({ root }) as PreviewHandler;
-      const response = await requestPreview(handler, '/emap/', 'HEAD');
+      const response = await requestPreview(handler, '/mapseekai/emap/', 'HEAD');
 
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
@@ -210,7 +216,7 @@ describe('release documentation checklist', () => {
         },
       },
     }) as PreviewHandler;
-    const response = await requestPreview(handler, '/emap/');
+    const response = await requestPreview(handler, '/mapseekai/emap/');
 
     expect(response.status).toBe(500);
     expect(response.body.toString()).toContain('lookup unavailable');
@@ -236,8 +242,8 @@ describe('release documentation checklist', () => {
         },
       }) as PreviewHandler;
 
-      const getResponse = await requestPreview(handler, '/emap/');
-      const headResponse = await requestPreview(handler, '/emap/', 'HEAD');
+      const getResponse = await requestPreview(handler, '/mapseekai/emap/');
+      const headResponse = await requestPreview(handler, '/mapseekai/emap/', 'HEAD');
 
       expect(getResponse.status).toBe(500);
       expect(getResponse.body.toString()).toContain('read unavailable');
@@ -256,15 +262,15 @@ describe('release documentation checklist', () => {
     const handler = previewModule.createDocsPreviewHandler({
       root: process.cwd(),
     }) as PreviewHandler;
-    const response = await requestPreview(handler, '/emap/', 'POST');
+    const response = await requestPreview(handler, '/mapseekai/emap/', 'POST');
 
     expect(response.status).toBe(405);
     expect(response.headers.get('allow')).toBe('GET, HEAD');
   });
 
   it.each([
-    '/emap/%',
-    '/emap/%00index.html',
+    '/mapseekai/emap/%',
+    '/mapseekai/emap/%00index.html',
   ])('rejects malformed preview paths: %s', async (url) => {
     const previewModule = await loadPreviewModule();
     expect(previewModule).not.toBeNull();
@@ -279,11 +285,11 @@ describe('release documentation checklist', () => {
   });
 
   it.each([
-    '/emap/../package.json',
-    '/emap/%2e%2e/package.json',
-    '/emap/..%2Fpackage.json',
-    '/emap/%5c..%5cpackage.json',
-    '/emap/\\..\\package.json',
+    '/mapseekai/emap/../package.json',
+    '/mapseekai/emap/%2e%2e/package.json',
+    '/mapseekai/emap/..%2Fpackage.json',
+    '/mapseekai/emap/%5c..%5cpackage.json',
+    '/mapseekai/emap/\\..\\package.json',
   ])('rejects preview path traversal: %s', async (url) => {
     const previewModule = await loadPreviewModule();
     expect(
@@ -327,8 +333,8 @@ describe('release documentation checklist', () => {
       await writeFile(
         resolve(root, 'packages/examples/dist/assets/main.js'),
         [
-          'const returnToDocs = "/emap/concepts/emap/";',
-          'const workerUrl = "/emap/examples/emap-worker.js";',
+          'const returnToDocs = "/mapseekai/emap/concepts/emap/";',
+          'const workerUrl = "/mapseekai/emap/examples/emap-worker.js";',
         ].join('\n'),
       );
 
@@ -353,9 +359,9 @@ describe('release documentation checklist', () => {
         'utf8',
       );
 
-      expect(composedMain).toContain('/emap/concepts/emap/');
+      expect(composedMain).toContain('/mapseekai/emap/concepts/emap/');
       expect(composedMain).not.toContain('/docs/');
-      expect(composedMain).toContain('/emap/examples/emap-worker.js');
+      expect(composedMain).toContain('/mapseekai/emap/examples/emap-worker.js');
       expect(composedMain).not.toContain('/dist/emap-worker.js');
       expect(composedWorker).toBe('self.postMessage("ready");');
       expect(composedBuffer).toBe('<!doctype html>');

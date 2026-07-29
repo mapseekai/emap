@@ -1,5 +1,5 @@
 {
-  "name": "@zwishing/emap",
+  "name": "@mapseekai/emap",
   "version": "0.5.0",
   "packageManager": "pnpm@11.15.1",
   "description": "A modern, decoupled rendering engine for mapshaper data",
@@ -77,12 +77,12 @@
     "test:run": "vitest run",
     "test:duckdb": "DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/duckdb-buffer.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/duckdb-attribute.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/duckdb-relation.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/duckdb-query.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/duckdb-geoparquet-query.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/duckdb-overlay.integration.test.ts",
     "docs:clean": "node -e \"require('node:fs').rmSync('packages/docs/.docusaurus',{recursive:true,force:true})\"",
-    "docs:dev": "pnpm run docs:clean && pnpm --filter @zwishing/emap-docs start",
+    "docs:dev": "pnpm run docs:clean && pnpm --filter @mapseekai/emap-docs start",
     "docs:preview": "pnpm run build && pnpm run api:build && pnpm run examples:build && pnpm run docs:build && pnpm run docs:compose-examples && node scripts/preview-docs.mjs",
-    "docs:build": "pnpm --filter @zwishing/emap-docs build",
+    "docs:build": "pnpm --filter @mapseekai/emap-docs build",
     "api:build": "typedoc --options typedoc.json",
-    "examples:dev": "pnpm --filter @zwishing/emap-examples dev",
-    "examples:build": "pnpm --filter @zwishing/emap-examples build",
+    "examples:dev": "pnpm --filter @mapseekai/emap-examples dev",
+    "examples:build": "pnpm --filter @mapseekai/emap-examples build",
     "examples:build:cdn": "node scripts/build-examples-cdn.mjs",
     "docs:compose-examples": "node scripts/compose-docs-release.mjs",
     "docs:check-i18n": "node scripts/check-docs-i18n.mjs",
@@ -98,19 +98,19 @@
     "renderer",
     "canvas"
   ],
-  "author": "zwishing",
+  "author": "mapseekai",
   "license": "MPL-2.0",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zwishing/emap.git"
+    "url": "git+https://github.com/mapseekai/emap.git"
   },
   "bugs": {
-    "url": "https://github.com/zwishing/emap/issues"
+    "url": "https://github.com/mapseekai/emap/issues"
   },
-  "homepage": "https://github.com/zwishing/emap#readme",
+  "homepage": "https://github.com/mapseekai/emap#readme",
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",
     "@rollup/plugin-alias": "^6.0.0",

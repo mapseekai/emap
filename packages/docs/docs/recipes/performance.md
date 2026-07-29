@@ -18,14 +18,14 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.MapOptions](/emap/api/interfaces/index.MapOptions.html)
-- [src.MapshaperWorkerPool](/emap/api/classes/index.MapshaperWorkerPool.html)
+- [src.MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
+- [src.MapshaperWorkerPool](/mapseekai/emap/api/classes/index.MapshaperWorkerPool.html)
 
 ## 可运行示例
 
-- [web-worker](/emap/examples/web-worker/)
-- [simplify-control](/emap/examples/simplify-control/)
-- [simplify](/emap/examples/simplify/)
+- [web-worker](/mapseekai/emap/examples/web-worker/)
+- [simplify-control](/mapseekai/emap/examples/simplify-control/)
+- [simplify](/mapseekai/emap/examples/simplify/)
 
 ## 最小片段
 

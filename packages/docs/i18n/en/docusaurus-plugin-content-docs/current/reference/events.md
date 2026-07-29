@@ -22,13 +22,13 @@ dispatched through `map.on`.
 
 ## API
 
-- [src.EmapEventMap](/emap/api/interfaces/index.EmapEventMap.html)
-- [src.EventListener](/emap/api/types/index.EventListener.html)
+- [src.EmapEventMap](/mapseekai/emap/api/interfaces/index.EmapEventMap.html)
+- [src.EventListener](/mapseekai/emap/api/types/index.EventListener.html)
 
 ## Runnable examples
 
-- [web-worker](/emap/examples/web-worker/)
-- [feature-selection](/emap/examples/feature-selection/)
+- [web-worker](/mapseekai/emap/examples/web-worker/)
+- [feature-selection](/mapseekai/emap/examples/feature-selection/)
 
 ## Minimal snippet
 

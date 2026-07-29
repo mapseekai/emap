@@ -40,6 +40,16 @@ async function exists(path: string): Promise<boolean> {
 }
 
 describe('examples build routes', () => {
+  it('keeps source-bundled optional modules on the loaded mapshaper vendor global', async () => {
+    const configModule = await import('../../packages/examples/vite.config');
+    const config = configModule.default as UserConfig;
+    const aliases = config.resolve?.alias as Array<{ find: string; replacement: string }>;
+
+    expect(aliases.find((alias) => alias.find === 'mapshaper')?.replacement).toBe(
+      resolve('packages/examples/src/mapshaper-global.ts'),
+    );
+  });
+
   it('normalizes flat and getting-started routes without disturbing shared assets', async () => {
     const root = await mkdtemp(join(tmpdir(), 'emap-examples-build-'));
     const dist = resolve(root, 'packages/examples/dist');
@@ -120,7 +130,7 @@ describe('examples build routes', () => {
     if (!middleware) throw new Error('examples route middleware was not registered');
 
     const request = {
-      url: '/emap/examples/getting-started/points/?source=dev',
+      url: '/mapseekai/emap/examples/getting-started/points/?source=dev',
     } as IncomingMessage;
     let nextCalls = 0;
     middleware(request, {} as ServerResponse, () => {
@@ -156,9 +166,9 @@ describe('published examples CDN assets', () => {
         css: 'sha384-UBMkxqeDcCTKPzPzjuIeBlUOJFn324DlNqSUk371f8IZnmXGcbPVocOx00EzeR8I',
       });
       expect(requestedUrls).toEqual([
-        'https://cdn.jsdelivr.net/npm/@zwishing/emap@0.5.0/dist/mapshaper-vendor.js',
-        'https://cdn.jsdelivr.net/npm/@zwishing/emap@0.5.0/dist/emap.js',
-        'https://cdn.jsdelivr.net/npm/@zwishing/emap@0.5.0/dist/emap.css',
+        'https://cdn.jsdelivr.net/npm/@mapseekai/emap@0.5.0/dist/mapshaper-vendor.js',
+        'https://cdn.jsdelivr.net/npm/@mapseekai/emap@0.5.0/dist/emap.js',
+        'https://cdn.jsdelivr.net/npm/@mapseekai/emap@0.5.0/dist/emap.css',
       ]);
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -278,7 +288,7 @@ describe('published examples CDN assets', () => {
 
       expect(JSON.parse(await readFile(marker, 'utf8'))).toEqual({
         command: 'pnpm',
-        args: ['--filter', '@zwishing/emap-examples', 'build'],
+        args: ['--filter', '@mapseekai/emap-examples', 'build'],
         mode: 'cdn',
         integrity: {
           vendor: 'sha384-QK9AUNMnVitdP9Hd+4l9gBiJy4R0AfquzWWzRx/wJU2I7t8HxMeknwmsWx41H3/C',
@@ -348,7 +358,7 @@ describe('published examples CDN assets', () => {
     );
 
     expect(rootManifest.scripts['examples:build']).toBe(
-      'pnpm --filter @zwishing/emap-examples build',
+      'pnpm --filter @mapseekai/emap-examples build',
     );
     expect(rootManifest.scripts['examples:build:cdn']).toBe('node scripts/build-examples-cdn.mjs');
     expect(examplesManifest.scripts.build).toBe(

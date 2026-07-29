@@ -4,9 +4,9 @@
     "noEmit": true,
     "types": ["vite/client"],
     "paths": {
-      "@zwishing/emap": ["../../src/index.ts"],
-      "@zwishing/emap/arrow": ["../../src/arrow/index.ts"],
-      "@zwishing/emap/style.css": ["../../src/types/style.css.d.ts"]
+      "@mapseekai/emap": ["../../src/index.ts"],
+      "@mapseekai/emap/arrow": ["../../src/arrow/index.ts"],
+      "@mapseekai/emap/style.css": ["../../src/types/style.css.d.ts"]
     }
   },
   "include": ["src/**/*.ts", "../../src/types/**/*.d.ts", "vite.config.ts"]

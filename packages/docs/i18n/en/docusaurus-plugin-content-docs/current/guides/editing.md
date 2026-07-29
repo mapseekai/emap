@@ -170,16 +170,16 @@ The application chooses whether to warn, continue, or invoke undo.
 
 ## API
 
-- [EditCommand](/emap/api/interfaces/index.EditCommand.html)
-- [EditHistory](/emap/api/classes/index.EditHistory.html)
-- [Transaction](/emap/api/classes/index.Transaction.html)
-- [EditToolbar](/emap/api/classes/index.EditToolbar.html)
+- [EditCommand](/mapseekai/emap/api/interfaces/index.EditCommand.html)
+- [EditHistory](/mapseekai/emap/api/classes/index.EditHistory.html)
+- [Transaction](/mapseekai/emap/api/classes/index.Transaction.html)
+- [EditToolbar](/mapseekai/emap/api/classes/index.EditToolbar.html)
 
 ## Runnable examples
 
-- [Editing overview](/emap/examples/china-editing/)
-- [Vertex editing](/emap/examples/vertex-editing/)
-- [Feature translation](/emap/examples/feature-translate/)
-- [Rotate and scale](/emap/examples/feature-rotate-scale/)
-- [Transactions](/emap/examples/transaction/)
-- [Undo and redo](/emap/examples/undo-redo/)
+- [Editing overview](/mapseekai/emap/examples/china-editing/)
+- [Vertex editing](/mapseekai/emap/examples/vertex-editing/)
+- [Feature translation](/mapseekai/emap/examples/feature-translate/)
+- [Rotate and scale](/mapseekai/emap/examples/feature-rotate-scale/)
+- [Transactions](/mapseekai/emap/examples/transaction/)
+- [Undo and redo](/mapseekai/emap/examples/undo-redo/)

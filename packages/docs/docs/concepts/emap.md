@@ -17,7 +17,7 @@ verifiedVersion: 0.5.0
 ## 创建实例
 
 ```ts
-import { Emap } from '@zwishing/emap';
+import { Emap } from '@mapseekai/emap';
 
 const map = new Emap({
   container: 'map',
@@ -146,13 +146,13 @@ viewport，也不要在应用代码中维护另一套矩阵。
 
 ## API
 
-- [Emap](/emap/api/classes/index.Emap.html)
-- [MapOptions](/emap/api/interfaces/index.MapOptions.html)
-- [EmapEventMap](/emap/api/interfaces/index.EmapEventMap.html)
+- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
+- [MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
+- [EmapEventMap](/mapseekai/emap/api/interfaces/index.EmapEventMap.html)
 
 ## 可运行示例
 
-- [GeoJSON 查看器](/emap/examples/getting-started/geojson-viewer/)
-- [交互处理器](/emap/examples/interaction-handlers/)
-- [撤销与重做](/emap/examples/undo-redo/)
-- [Web Worker](/emap/examples/web-worker/)
+- [GeoJSON 查看器](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [交互处理器](/mapseekai/emap/examples/interaction-handlers/)
+- [撤销与重做](/mapseekai/emap/examples/undo-redo/)
+- [Web Worker](/mapseekai/emap/examples/web-worker/)

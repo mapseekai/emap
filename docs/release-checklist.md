@@ -47,7 +47,7 @@ assets, and worker with a single process and port:
 pnpm run docs:preview
 ```
 
-Open `http://127.0.0.1:3000/emap/`. This command uses the local
+Open `http://127.0.0.1:3000/mapseekai/emap/`. This command uses the local
 `examples:build`; it does not start a second examples server or depend on CDN
 access.
 

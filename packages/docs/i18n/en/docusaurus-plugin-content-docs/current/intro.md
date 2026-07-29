@@ -63,8 +63,8 @@ A typical application follows this sequence:
 
 - The core package supports GeoJSON, TopoJSON, Shapefile ZIP, and mapshaper
   snapshots.
-- `@zwishing/emap/arrow` adds GeoParquet and GeoArrow.
-- `@zwishing/emap/duckdb` adds optional DuckDB-Wasm queries and spatial
+- `@mapseekai/emap/arrow` adds GeoParquet and GeoArrow.
+- `@mapseekai/emap/duckdb` adds optional DuckDB-Wasm queries and spatial
   processing.
 
 ### Rendering and camera
@@ -85,12 +85,12 @@ A typical application follows this sequence:
 ## Package entries and static assets
 
 ```ts
-import { Emap, TopologySource } from '@zwishing/emap';
-import '@zwishing/emap/style.css';
+import { Emap, TopologySource } from '@mapseekai/emap';
+import '@mapseekai/emap/style.css';
 
 // Optional entries do not affect applications that only import the core package
-import '@zwishing/emap/arrow';
-const duckdb = await import('@zwishing/emap/duckdb');
+import '@mapseekai/emap/arrow';
+const duckdb = await import('@mapseekai/emap/duckdb');
 ```
 
 Worker deployments must also serve `emap-worker.js` and
@@ -112,7 +112,7 @@ deployment layout.
 
 ## Project status
 
-These docs describe `@zwishing/emap` 0.5.0. The project is still evolving
+These docs describe `@mapseekai/emap` 0.5.0. The project is still evolving
 quickly and is best suited to prototypes, demos, research tools, and controlled
 internal applications. Review the migration notes and API reference when
 upgrading.

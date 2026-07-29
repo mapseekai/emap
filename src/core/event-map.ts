@@ -27,7 +27,7 @@ export interface CameraEvent {
  * This is an `interface` (not a `type`) so consumers can augment it:
  *
  * ```ts
- * declare module '@zwishing/emap' {
+ * declare module '@mapseekai/emap' {
  *   interface EmapEventMap { myCustomEvent: { detail: string } }
  * }
  * ```

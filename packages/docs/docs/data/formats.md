@@ -22,8 +22,8 @@ Emap 把核心格式和可选格式分开，避免只加载 GeoJSON 的应用承
 | Shapefile ZIP | `.zip` | 是 | 是，输出 ZIP | core |
 | KML | `.kml` | 是 | 否 | core |
 | mapshaper snapshot | `.msx` | 是 | 是 | core |
-| GeoParquet | `.parquet`、`.geoparquet` | 是 | 是 | `@zwishing/emap/arrow` |
-| GeoArrow | `.arrow`、`.arrows`、`.feather` | 是 | 是 | `@zwishing/emap/arrow` |
+| GeoParquet | `.parquet`、`.geoparquet` | 是 | 是 | `@mapseekai/emap/arrow` |
+| GeoArrow | `.arrow`、`.arrows`、`.feather` | 是 | 是 | `@mapseekai/emap/arrow` |
 
 ## 从 URL 加载
 
@@ -75,7 +75,7 @@ Emap 对 ZIP 设置 entry 数量、总解压大小和压缩比限制，避免浏
 在任何 parquet/arrow `setData` 或 export 之前导入：
 
 ```ts
-import '@zwishing/emap/arrow';
+import '@mapseekai/emap/arrow';
 ```
 
 该导入注册格式插件。GeoArrow 不需要 WASM；GeoParquet 第一次使用时会懒加载
@@ -84,7 +84,7 @@ import '@zwishing/emap/arrow';
 显式指定 WASM 地址：
 
 ```ts
-import { initParquetWasm } from '@zwishing/emap/arrow';
+import { initParquetWasm } from '@mapseekai/emap/arrow';
 
 await initParquetWasm({
   wasmInput: '/assets/parquet_wasm_bg.wasm',
@@ -94,7 +94,7 @@ await initParquetWasm({
 如果应用已经初始化模块：
 
 ```ts
-import { setParquetWasm } from '@zwishing/emap/arrow';
+import { setParquetWasm } from '@mapseekai/emap/arrow';
 
 setParquetWasm(parquetModule);
 ```
@@ -109,7 +109,7 @@ import {
   fromArrowTable,
   setArrowTable,
   toArrowTable,
-} from '@zwishing/emap/arrow';
+} from '@mapseekai/emap/arrow';
 
 setArrowTable(source, duckdbResultTable);
 const table = toArrowTable(source.getDataset()!);
@@ -158,7 +158,7 @@ URL.revokeObjectURL(url);
 
 ### 提示需要 Arrow module
 
-确保 `import '@zwishing/emap/arrow'` 在第一次调用前执行，并确认 bundler 没有把
+确保 `import '@mapseekai/emap/arrow'` 在第一次调用前执行，并确认 bundler 没有把
 该 side-effect import 移除。
 
 ### Parquet WASM 404
@@ -171,14 +171,14 @@ URL.revokeObjectURL(url);
 
 ## API
 
-- [TopologySource](/emap/api/classes/index.TopologySource.html)
-- [ExportOptions](/emap/api/interfaces/index.ExportOptions.html)
-- [initParquetWasm](/emap/api/functions/arrow.initParquetWasm.html)
-- [setParquetWasm](/emap/api/functions/arrow.setParquetWasm.html)
-- [toArrowTable](/emap/api/functions/arrow.toArrowTable.html)
+- [TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
+- [ExportOptions](/mapseekai/emap/api/interfaces/index.ExportOptions.html)
+- [initParquetWasm](/mapseekai/emap/api/functions/arrow.initParquetWasm.html)
+- [setParquetWasm](/mapseekai/emap/api/functions/arrow.setParquetWasm.html)
+- [toArrowTable](/mapseekai/emap/api/functions/arrow.toArrowTable.html)
 
 ## 可运行示例
 
-- [GeoParquet 查看器](/emap/examples/geoparquet-viewer/)
-- [导出 GeoParquet](/emap/examples/export-geoparquet/)
-- [导出往返](/emap/examples/export-roundtrip/)
+- [GeoParquet 查看器](/mapseekai/emap/examples/geoparquet-viewer/)
+- [导出 GeoParquet](/mapseekai/emap/examples/export-geoparquet/)
+- [导出往返](/mapseekai/emap/examples/export-roundtrip/)

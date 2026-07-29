@@ -31,7 +31,7 @@ The default is `top-left`. Removal requires the same control instance.
 Built-in controls require:
 
 ```ts
-import '@zwishing/emap/style.css';
+import '@mapseekai/emap/style.css';
 ```
 
 Controls mount inside the map container, so page-level CSS may affect buttons,
@@ -92,7 +92,7 @@ gesture arbitration and cursor ownership.
 A custom control implements `Control`:
 
 ```ts
-import type { Control, Emap } from '@zwishing/emap';
+import type { Control, Emap } from '@mapseekai/emap';
 
 class ResetViewControl implements Control {
   private button: HTMLButtonElement | null = null;
@@ -151,15 +151,15 @@ state instead of assuming every click changed the map.
 
 ## API
 
-- [Control](/emap/api/interfaces/index.Control.html)
-- [ControlPosition](/emap/api/types/index.ControlPosition.html)
-- [NavigationControl](/emap/api/classes/index.NavigationControl.html)
-- [HistoryControl](/emap/api/classes/index.HistoryControl.html)
-- [StatusControl](/emap/api/classes/index.StatusControl.html)
+- [Control](/mapseekai/emap/api/interfaces/index.Control.html)
+- [ControlPosition](/mapseekai/emap/api/types/index.ControlPosition.html)
+- [NavigationControl](/mapseekai/emap/api/classes/index.NavigationControl.html)
+- [HistoryControl](/mapseekai/emap/api/classes/index.HistoryControl.html)
+- [StatusControl](/mapseekai/emap/api/classes/index.StatusControl.html)
 
 ## Runnable examples
 
-- [Simplify control](/emap/examples/simplify-control/)
-- [Undo and redo](/emap/examples/undo-redo/)
-- [Interaction handlers](/emap/examples/interaction-handlers/)
-- [Vertex editing](/emap/examples/vertex-editing/)
+- [Simplify control](/mapseekai/emap/examples/simplify-control/)
+- [Undo and redo](/mapseekai/emap/examples/undo-redo/)
+- [Interaction handlers](/mapseekai/emap/examples/interaction-handlers/)
+- [Vertex editing](/mapseekai/emap/examples/vertex-editing/)

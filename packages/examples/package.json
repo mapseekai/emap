@@ -1,5 +1,5 @@
 {
-  "name": "@zwishing/emap-examples",
+  "name": "@mapseekai/emap-examples",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,6 +10,6 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "@zwishing/emap": "workspace:*"
+    "@mapseekai/emap": "workspace:*"
   }
 }

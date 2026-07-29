@@ -18,13 +18,13 @@ If an operation fails, check expression policy, missing fixtures, CRS constraint
 
 ## API
 
-- [src.Emap](/emap/api/classes/index.Emap.html)
-- [src.TopologySource](/emap/api/classes/index.TopologySource.html)
+- [src.Emap](/mapseekai/emap/api/classes/index.Emap.html)
+- [src.TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
 
 ## Runnable examples
 
-- [getting-started/geojson-viewer](/emap/examples/getting-started/geojson-viewer/)
-- [duckdb-query](/emap/examples/duckdb-query/)
+- [getting-started/geojson-viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [duckdb-query](/mapseekai/emap/examples/duckdb-query/)
 
 ## Minimal snippet
 

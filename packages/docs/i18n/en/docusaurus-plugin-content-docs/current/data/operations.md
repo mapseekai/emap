@@ -161,16 +161,16 @@ changing their call shape or result.
 
 ## API
 
-- [OpResult](/emap/api/types/index.OpResult.html)
-- [OpError](/emap/api/types/index.OpError.html)
-- [BufferOptions](/emap/api/interfaces/index.BufferOptions.html)
-- [SimplifyOptions](/emap/api/interfaces/index.SimplifyOptions.html)
-- [ProjectOptions](/emap/api/interfaces/index.ProjectOptions.html)
+- [OpResult](/mapseekai/emap/api/types/index.OpResult.html)
+- [OpError](/mapseekai/emap/api/types/index.OpError.html)
+- [BufferOptions](/mapseekai/emap/api/interfaces/index.BufferOptions.html)
+- [SimplifyOptions](/mapseekai/emap/api/interfaces/index.SimplifyOptions.html)
+- [ProjectOptions](/mapseekai/emap/api/interfaces/index.ProjectOptions.html)
 
 ## Runnable examples
 
-- [Buffer](/emap/examples/buffer/)
-- [Clip and erase](/emap/examples/clip-erase/)
-- [Dissolve](/emap/examples/dissolve/)
-- [Simplify](/emap/examples/simplify/)
-- [Union](/emap/examples/union/)
+- [Buffer](/mapseekai/emap/examples/buffer/)
+- [Clip and erase](/mapseekai/emap/examples/clip-erase/)
+- [Dissolve](/mapseekai/emap/examples/dissolve/)
+- [Simplify](/mapseekai/emap/examples/simplify/)
+- [Union](/mapseekai/emap/examples/union/)

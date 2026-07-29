@@ -18,14 +18,14 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.HistoryControl](/emap/api/classes/index.HistoryControl.html)
-- [src.EditHistory](/emap/api/classes/index.EditHistory.html)
+- [src.HistoryControl](/mapseekai/emap/api/classes/index.HistoryControl.html)
+- [src.EditHistory](/mapseekai/emap/api/classes/index.EditHistory.html)
 
 ## 可运行示例
 
-- [undo-redo](/emap/examples/undo-redo/)
-- [transaction](/emap/examples/transaction/)
-- [attribute-editing](/emap/examples/attribute-editing/)
+- [undo-redo](/mapseekai/emap/examples/undo-redo/)
+- [transaction](/mapseekai/emap/examples/transaction/)
+- [attribute-editing](/mapseekai/emap/examples/attribute-editing/)
 
 ## 最小片段
 

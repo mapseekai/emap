@@ -24,7 +24,7 @@ export async function buildExamplesCdn({
   });
 
   const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-  const result = spawnImpl(command, ['--filter', '@zwishing/emap-examples', 'build'], {
+  const result = spawnImpl(command, ['--filter', '@mapseekai/emap-examples', 'build'], {
     cwd: repositoryRoot,
     env: {
       ...process.env,

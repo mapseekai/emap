@@ -38,7 +38,7 @@ or controlled internal workflows first.
 - Undo/redo, transactions, validators, feature accessors, highlighting, and
   full-session snapshots.
 - Optional Web Worker offloading for expensive dataset-replace operations.
-- Optional `@zwishing/emap/duckdb` module for DuckDB-Wasm spatial processing and GeoParquet queries.
+- Optional `@mapseekai/emap/duckdb` module for DuckDB-Wasm spatial processing and GeoParquet queries.
 - CSS design tokens for theming built-in UI surfaces.
 
 See the documentation and generated API reference below for the complete public
@@ -46,18 +46,18 @@ surface.
 
 ## Documentation
 
-- Simplified Chinese documentation entry: <https://zwishing.github.io/emap/>
-- English documentation entry: <https://zwishing.github.io/emap/en/>
-- Generated API reference: <https://zwishing.github.io/emap/api/>
-- Runnable examples catalog: <https://zwishing.github.io/emap/examples/>
+- Simplified Chinese documentation entry: <https://mapseekai.github.io/mapseekai/emap/>
+- English documentation entry: <https://mapseekai.github.io/mapseekai/emap/en/>
+- Generated API reference: <https://mapseekai.github.io/mapseekai/emap/api/>
+- Runnable examples catalog: <https://mapseekai.github.io/mapseekai/emap/examples/>
 - Release verification checklist: [docs/release-checklist.md](docs/release-checklist.md)
 
 ## Install
 
 ```bash
-npm install @zwishing/emap
+npm install @mapseekai/emap
 # or
-pnpm add @zwishing/emap
+pnpm add @mapseekai/emap
 ```
 
 ## Quick Start
@@ -70,8 +70,8 @@ import {
   TopologySource,
   NavigationControl,
   HistoryControl,
-} from '@zwishing/emap';
-import '@zwishing/emap/style.css';
+} from '@mapseekai/emap';
+import '@mapseekai/emap/style.css';
 
 const map = new Emap({ container: 'map' });
 map.addControl(new NavigationControl(), 'top-left');
@@ -87,7 +87,7 @@ map.setExtent(source.getExtent());
 ```
 
 The ESM build is browser-ready. Mapshaper is shipped as a sibling ES module
-resolved from `node_modules/@zwishing/emap/dist/`, so Vite, webpack, esbuild,
+resolved from `node_modules/@mapseekai/emap/dist/`, so Vite, webpack, esbuild,
 and Bun consumers should not need a `Buffer` polyfill or a custom alias.
 
 ### Static Assets
@@ -104,13 +104,13 @@ application bundle:
 For bundlers, prefer:
 
 ```ts
-import '@zwishing/emap/style.css';
+import '@mapseekai/emap/style.css';
 ```
 
 TypeScript resolves this CSS import to the bundled declaration file under both modern conditional exports and legacy Node-style module resolution.
 
 For script-tag or static-host deployments, copy the files from
-`node_modules/@zwishing/emap/dist/` into your public assets directory. When
+`node_modules/@mapseekai/emap/dist/` into your public assets directory. When
 using the worker, keep `emap-worker.js` and `mapshaper-vendor.js` in the same
 directory unless you build your own worker bundle; the worker imports the vendor
 file with a relative `importScripts('mapshaper-vendor.js')` call.
@@ -121,15 +121,15 @@ file with a relative `importScripts('mapshaper-vendor.js')` call.
 <!doctype html>
 <html>
   <head>
-    <link rel="stylesheet" href="node_modules/@zwishing/emap/dist/emap.css" />
+    <link rel="stylesheet" href="node_modules/@mapseekai/emap/dist/emap.css" />
     <style>
       html, body, #map { width: 100%; height: 100%; margin: 0; }
     </style>
   </head>
   <body>
     <div id="map"></div>
-    <script src="node_modules/@zwishing/emap/dist/mapshaper-vendor.js"></script>
-    <script src="node_modules/@zwishing/emap/dist/emap.js"></script>
+    <script src="node_modules/@mapseekai/emap/dist/mapshaper-vendor.js"></script>
+    <script src="node_modules/@mapseekai/emap/dist/emap.js"></script>
     <script>
       const { Emap, TopologySource, NavigationControl } = emap;
       const map = new Emap({ container: 'map' });
@@ -173,14 +173,14 @@ Supported inputs:
 
 ### GeoParquet / GeoArrow (optional module)
 
-`@zwishing/emap/arrow` adds GeoParquet (`.parquet`) and GeoArrow
+`@mapseekai/emap/arrow` adds GeoParquet (`.parquet`) and GeoArrow
 (`.arrow` / `.arrows` / `.feather`) support as a separate bundle so the core
 stays small. Conversion is direct (coordinate buffers ↔ mapshaper arcs, no
 GeoJSON intermediate); importing the module registers the formats with
 `setData` / `export` as a side effect:
 
 ```ts
-import '@zwishing/emap/arrow';
+import '@mapseekai/emap/arrow';
 
 await source.setData({ filename: 'parcels.parquet', content: bytes });
 const blob = await source.export({ format: 'geoparquet' }); // WKB encoding default
@@ -191,7 +191,7 @@ In-memory Arrow tables work without files — this is the duckdb-wasm bridge
 (query results with an `ST_AsWKB(geometry)` column convert directly):
 
 ```ts
-import { fromArrowTable, toArrowTable, setArrowTable } from '@zwishing/emap/arrow';
+import { fromArrowTable, toArrowTable, setArrowTable } from '@mapseekai/emap/arrow';
 
 setArrowTable(source, duckdbResultTable); // replace a source's dataset
 const table = toArrowTable(source.getDataset()!); // dataset → Arrow table
@@ -211,7 +211,7 @@ Notes:
 
 ### DuckDB-Wasm Spatial Processing (opt mod)
 
-`@zwishing/emap/duckdb` adds an optional DuckDB-Wasm processing surface. It is
+`@mapseekai/emap/duckdb` adds an optional DuckDB-Wasm processing surface. It is
 kept out of the core and Arrow bundles; import it only where spatial
 processing is needed.
 
@@ -237,12 +237,12 @@ import {
   intersectionDatasetWithDuckDb,
   simplifyPreserveTopologyDatasetWithDuckDb,
   setDuckDbRuntime,
-} from '@zwishing/emap/duckdb';
+} from '@mapseekai/emap/duckdb';
 ```
 
 The package declares `@duckdb/duckdb-wasm` as an optional dependency. If your
 package manager does not install optional dependencies by default, install it
-next to `@zwishing/emap`.
+next to `@mapseekai/emap`.
 
 ```bash
 npm install @duckdb/duckdb-wasm
@@ -399,7 +399,7 @@ For scalar attribute queries, `queryDatasetWithDuckDb` registers one logical
 table named `input` for the selected layer:
 
 ```ts
-import { queryDatasetWithDuckDb } from '@zwishing/emap/duckdb';
+import { queryDatasetWithDuckDb } from '@mapseekai/emap/duckdb';
 
 const filtered = await queryDatasetWithDuckDb(dataset, {
   sql: 'SELECT name, population FROM input WHERE population > 100000 ORDER BY population DESC LIMIT 50',
@@ -416,13 +416,13 @@ intentionally conservative and evolves with this first-batch query surface.
 
 ##### Query GeoParquet bytes with DuckDB
 
-`@zwishing/emap/duckdb` can run the same restricted `SELECT ... FROM input ...`
+`@mapseekai/emap/duckdb` can run the same restricted `SELECT ... FROM input ...`
 contract against GeoParquet bytes. The helper registers the bytes with
 DuckDB-Wasm, exposes them as the logical `input` table, and converts the
 geometry-bearing Arrow result to a `MapshaperDataset`.
 
 ```ts
-import { queryGeoParquetWithDuckDb } from '@zwishing/emap/duckdb';
+import { queryGeoParquetWithDuckDb } from '@mapseekai/emap/duckdb';
 
 const result = await queryGeoParquetWithDuckDb(bytes, {
   layerName: 'active_points',
@@ -769,7 +769,7 @@ map.on('selectionchange', (e) => {
 Register validators for post-commit checks:
 
 ```ts
-import { topologyValidator } from '@zwishing/emap';
+import { topologyValidator } from '@mapseekai/emap';
 
 const unregister = map.validators.register(topologyValidator({
   sources: ['editing'],
@@ -812,8 +812,8 @@ const map = new Emap({
 When workers are enabled, serve these files from the same directory:
 
 ```text
-node_modules/@zwishing/emap/dist/emap-worker.js
-node_modules/@zwishing/emap/dist/mapshaper-vendor.js
+node_modules/@mapseekai/emap/dist/emap-worker.js
+node_modules/@mapseekai/emap/dist/mapshaper-vendor.js
 ```
 
 `workerRouting` can override the built-in cheap/expensive operation routing.
@@ -829,7 +829,7 @@ than worker round trips.
 Import the default CSS once:
 
 ```ts
-import '@zwishing/emap/style.css';
+import '@mapseekai/emap/style.css';
 ```
 
 Override CSS tokens at `:root` or an app-specific container:
@@ -984,7 +984,7 @@ Common tasks (prepend `cmd /c` on Windows):
 ```bash
 pnpm run dev            # rollup watch for the library
 pnpm run dev-build      # one-off dev build (sourcemaps, no minify)
-pnpm run examples:dev   # canonical examples at /emap/examples/
+pnpm run examples:dev   # canonical examples at /mapseekai/emap/examples/
 pnpm run docs:dev       # fast documentation-only authoring server
 pnpm run docs:preview   # full one-origin docs, API, and examples preview
 pnpm run format:check   # Biome formatting check
@@ -1040,8 +1040,8 @@ Then check:
   same public API.
 - The dry-run package contains only current `dist` files, docs, license, and
   package metadata.
-- A fresh consumer project can import `@zwishing/emap`, import
-  `@zwishing/emap/style.css`, and resolve `dist/emap-worker.js` if worker
+- A fresh consumer project can import `@mapseekai/emap`, import
+  `@mapseekai/emap/style.css`, and resolve `dist/emap-worker.js` if worker
   mode is documented for the release.
 
 ## License

@@ -1,7 +1,7 @@
 import type { ExampleDefinition } from '../../../docs-meta/examples';
 
 export const examplePublicHref = (id: string): string =>
-  `/emap/examples/${id.replace(/^\/+|\/+$/g, '')}/`;
+  `/mapseekai/emap/examples/${id.replace(/^\/+|\/+$/g, '')}/`;
 
 export function renderCatalog(root: HTMLElement, examples: readonly ExampleDefinition[]): void {
   root.replaceChildren();

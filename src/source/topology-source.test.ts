@@ -847,7 +847,7 @@ describe('TopologySource format plugin routing', () => {
     const source = new TopologySource('p');
     await expect(
       source.setData({ filename: 'data.parquet', content: new Uint8Array([1]) }),
-    ).rejects.toThrow(/@zwishing\/emap\/arrow/);
+    ).rejects.toThrow(/@mapseekai\/emap\/arrow/);
   });
 
   it('rejects mixing plugin files with other inputs', async () => {
@@ -877,6 +877,8 @@ describe('TopologySource format plugin routing', () => {
   it('throws a registration hint for geoparquet export when unregistered', async () => {
     const source = new TopologySource('p');
     setPrivate(source, '_dataset', FAKE_DATASET);
-    await expect(source.export({ format: 'geoparquet' })).rejects.toThrow(/@zwishing\/emap\/arrow/);
+    await expect(source.export({ format: 'geoparquet' })).rejects.toThrow(
+      /@mapseekai\/emap\/arrow/,
+    );
   });
 });

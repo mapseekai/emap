@@ -90,7 +90,7 @@ describe('example runtime build assets', () => {
       throw new Error('runtimeAssetsPlugin must configure the Vite development server');
     }
     plugin.configureServer({
-      config: { base: '/emap/examples/' },
+      config: { base: '/mapseekai/emap/examples/' },
       middlewares: {
         use(handler: RuntimeMiddleware) {
           runtimeMiddleware = handler;
@@ -101,7 +101,7 @@ describe('example runtime build assets', () => {
 
     const vendorResponse = await invokeMiddleware(
       runtimeMiddleware,
-      '/emap/examples/vendor/mapshaper-vendor.js',
+      '/mapseekai/emap/examples/vendor/mapshaper-vendor.js',
     );
     expect(vendorResponse?.statusCode).toBe(200);
     expect(vendorResponse?.headers.get('content-type')).toContain('application/javascript');
@@ -110,7 +110,7 @@ describe('example runtime build assets', () => {
     expect(vendorResponse?.body.equals(vendorBytes)).toBe(true);
 
     await expect(
-      invokeMiddleware(runtimeMiddleware, '/emap/examples/vendor/package.json'),
+      invokeMiddleware(runtimeMiddleware, '/mapseekai/emap/examples/vendor/package.json'),
     ).resolves.toBeUndefined();
   });
 });

@@ -173,16 +173,16 @@ map.on('validationfailed', ({ results, label }) => {
 
 ## API
 
-- [EditCommand](/emap/api/interfaces/index.EditCommand.html)
-- [EditHistory](/emap/api/classes/index.EditHistory.html)
-- [Transaction](/emap/api/classes/index.Transaction.html)
-- [EditToolbar](/emap/api/classes/index.EditToolbar.html)
+- [EditCommand](/mapseekai/emap/api/interfaces/index.EditCommand.html)
+- [EditHistory](/mapseekai/emap/api/classes/index.EditHistory.html)
+- [Transaction](/mapseekai/emap/api/classes/index.Transaction.html)
+- [EditToolbar](/mapseekai/emap/api/classes/index.EditToolbar.html)
 
 ## 可运行示例
 
-- [综合编辑](/emap/examples/china-editing/)
-- [顶点编辑](/emap/examples/vertex-editing/)
-- [要素平移](/emap/examples/feature-translate/)
-- [旋转与缩放](/emap/examples/feature-rotate-scale/)
-- [事务](/emap/examples/transaction/)
-- [撤销与重做](/emap/examples/undo-redo/)
+- [综合编辑](/mapseekai/emap/examples/china-editing/)
+- [顶点编辑](/mapseekai/emap/examples/vertex-editing/)
+- [要素平移](/mapseekai/emap/examples/feature-translate/)
+- [旋转与缩放](/mapseekai/emap/examples/feature-rotate-scale/)
+- [事务](/mapseekai/emap/examples/transaction/)
+- [撤销与重做](/mapseekai/emap/examples/undo-redo/)

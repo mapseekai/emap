@@ -18,14 +18,14 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.StatusControl](/emap/api/classes/index.StatusControl.html)
-- [src.StatusOptions](/emap/api/interfaces/index.StatusOptions.html)
+- [src.StatusControl](/mapseekai/emap/api/classes/index.StatusControl.html)
+- [src.StatusOptions](/mapseekai/emap/api/interfaces/index.StatusOptions.html)
 
 ## 可运行示例
 
-- [duckdb-query](/emap/examples/duckdb-query/)
-- [web-worker](/emap/examples/web-worker/)
-- [geoparquet-viewer](/emap/examples/geoparquet-viewer/)
+- [duckdb-query](/mapseekai/emap/examples/duckdb-query/)
+- [web-worker](/mapseekai/emap/examples/web-worker/)
+- [geoparquet-viewer](/mapseekai/emap/examples/geoparquet-viewer/)
 
 ## 最小片段
 

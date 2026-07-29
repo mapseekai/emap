@@ -11,7 +11,7 @@ import { transform } from 'esbuild';
 // `src/ui/controls.css` is a hand-maintained standalone stylesheet — it is
 // NOT imported by any TS module, so postcss never sees it. Ship it as a
 // first-class dist asset (`dist/emap.css`) so consumers can `import
-// '@zwishing/emap/style.css'` instead of reaching into the unpublished src tree.
+// '@mapseekai/emap/style.css'` instead of reaching into the unpublished src tree.
 function copyControlsCss() {
   return {
     name: 'copy-controls-css',
@@ -265,7 +265,7 @@ export default [
     },
     plugins: commonPlugins(),
   },
-  // Arrow ESM bundle (`@zwishing/emap/arrow`) — optional GeoParquet /
+  // Arrow ESM bundle (`@mapseekai/emap/arrow`) — optional GeoParquet /
   // GeoArrow support. apache-arrow is bundled INTO this file (it is not a
   // core dependency); parquet-wasm stays external and loads lazily via
   // dynamic import in the consumer's bundler. mapshaper is external and
@@ -312,7 +312,7 @@ export default [
     },
     plugins: commonPlugins(),
   },
-  // ESM bundle (`@zwishing/emap/duckdb`) — optional DuckDB-Wasm spatial
+  // ESM bundle (`@mapseekai/emap/duckdb`) — optional DuckDB-Wasm spatial
   // processing support. Keep DuckDB runtime dependencies external/lazy so
   // the main and Arrow bundles stay light.
   {

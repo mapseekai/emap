@@ -160,13 +160,13 @@ still notify it explicitly.
 
 ## API
 
-- [Emap](/emap/api/classes/index.Emap.html)
-- [CameraOptions](/emap/api/interfaces/index.CameraOptions.html)
-- [FitBoundsOptions](/emap/api/interfaces/index.FitBoundsOptions.html)
-- [FlyToOptions](/emap/api/interfaces/index.FlyToOptions.html)
+- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
+- [CameraOptions](/mapseekai/emap/api/interfaces/index.CameraOptions.html)
+- [FitBoundsOptions](/mapseekai/emap/api/interfaces/index.FitBoundsOptions.html)
+- [FlyToOptions](/mapseekai/emap/api/interfaces/index.FlyToOptions.html)
 
 ## Runnable examples
 
-- [GeoJSON viewer](/emap/examples/getting-started/geojson-viewer/)
-- [CRS switch](/emap/examples/crs-switch/)
+- [GeoJSON viewer](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [CRS switch](/mapseekai/emap/examples/crs-switch/)
 - [Fit bounds recipe](../recipes/fit-bounds.md)

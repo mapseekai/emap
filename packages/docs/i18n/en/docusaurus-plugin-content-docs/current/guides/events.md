@@ -130,7 +130,7 @@ map.on('moveend', (event) => {
 Applications can augment `EmapEventMap`:
 
 ```ts
-declare module '@zwishing/emap' {
+declare module '@mapseekai/emap' {
   interface EmapEventMap {
     'panel:open': { panelId: string };
   }
@@ -154,13 +154,13 @@ with `requestAnimationFrame` when needed.
 
 ## API
 
-- [Emap](/emap/api/classes/index.Emap.html)
-- [EmapEventMap](/emap/api/interfaces/index.EmapEventMap.html)
-- [CameraEvent](/emap/api/interfaces/index.CameraEvent.html)
-- [FeatureEvent](/emap/api/interfaces/index.FeatureEvent.html)
+- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
+- [EmapEventMap](/mapseekai/emap/api/interfaces/index.EmapEventMap.html)
+- [CameraEvent](/mapseekai/emap/api/interfaces/index.CameraEvent.html)
+- [FeatureEvent](/mapseekai/emap/api/interfaces/index.FeatureEvent.html)
 
 ## Runnable examples
 
-- [Feature attributes](/emap/examples/feature-attributes/)
-- [Interaction handlers](/emap/examples/interaction-handlers/)
-- [Feature selection](/emap/examples/feature-selection/)
+- [Feature attributes](/mapseekai/emap/examples/feature-attributes/)
+- [Interaction handlers](/mapseekai/emap/examples/interaction-handlers/)
+- [Feature selection](/mapseekai/emap/examples/feature-selection/)

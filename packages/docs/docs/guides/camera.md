@@ -165,13 +165,13 @@ zoom 是 WebMercator 便利概念。对其他 CRS 优先使用数据范围、`fi
 
 ## API
 
-- [Emap](/emap/api/classes/index.Emap.html)
-- [CameraOptions](/emap/api/interfaces/index.CameraOptions.html)
-- [FitBoundsOptions](/emap/api/interfaces/index.FitBoundsOptions.html)
-- [FlyToOptions](/emap/api/interfaces/index.FlyToOptions.html)
+- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
+- [CameraOptions](/mapseekai/emap/api/interfaces/index.CameraOptions.html)
+- [FitBoundsOptions](/mapseekai/emap/api/interfaces/index.FitBoundsOptions.html)
+- [FlyToOptions](/mapseekai/emap/api/interfaces/index.FlyToOptions.html)
 
 ## 可运行示例
 
-- [GeoJSON 查看器](/emap/examples/getting-started/geojson-viewer/)
-- [CRS 切换](/emap/examples/crs-switch/)
+- [GeoJSON 查看器](/mapseekai/emap/examples/getting-started/geojson-viewer/)
+- [CRS 切换](/mapseekai/emap/examples/crs-switch/)
 - [范围适配](../recipes/fit-bounds.md)

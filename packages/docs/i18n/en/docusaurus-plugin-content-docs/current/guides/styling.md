@@ -169,13 +169,13 @@ output, then assign separate paint to each render layer.
 
 ## API
 
-- [FillPaint](/emap/api/interfaces/index.FillPaint.html)
-- [LinePaint](/emap/api/interfaces/index.LinePaint.html)
-- [CirclePaint](/emap/api/interfaces/index.CirclePaint.html)
-- [LayerSpecification](/emap/api/interfaces/index.LayerSpecification.html)
+- [FillPaint](/mapseekai/emap/api/interfaces/index.FillPaint.html)
+- [LinePaint](/mapseekai/emap/api/interfaces/index.LinePaint.html)
+- [CirclePaint](/mapseekai/emap/api/interfaces/index.CirclePaint.html)
+- [LayerSpecification](/mapseekai/emap/api/interfaces/index.LayerSpecification.html)
 
 ## Runnable examples
 
-- [Lines](/emap/examples/getting-started/lines/)
-- [Polygons](/emap/examples/getting-started/polygons/)
-- [Polygon fill](/emap/examples/getting-started/polygon-fill/)
+- [Lines](/mapseekai/emap/examples/getting-started/lines/)
+- [Polygons](/mapseekai/emap/examples/getting-started/polygons/)
+- [Polygon fill](/mapseekai/emap/examples/getting-started/polygon-fill/)
