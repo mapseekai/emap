@@ -48,6 +48,19 @@ describe('examples build routes', () => {
     expect(aliases.find((alias) => alias.find === 'mapshaper')?.replacement).toBe(
       resolve('packages/examples/src/mapshaper-global.ts'),
     );
+
+    type MapshaperStub = { internal: object };
+    const globals = globalThis as typeof globalThis & { mapshaper?: MapshaperStub };
+    const previous = globals.mapshaper;
+    const vendor: MapshaperStub = { internal: {} };
+    globals.mapshaper = vendor;
+    try {
+      const { default: proxy } = await import('../../packages/examples/src/mapshaper-global');
+      expect(proxy.internal).toBe(vendor.internal);
+    } finally {
+      if (previous) globals.mapshaper = previous;
+      else delete globals.mapshaper;
+    }
   });
 
   it('normalizes flat and getting-started routes without disturbing shared assets', async () => {
