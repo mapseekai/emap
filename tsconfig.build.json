@@ -8,6 +8,6 @@
     "noEmit": false,
     "rootDir": "src"
   },
-  "include": ["src/index.ts", "src/formats/index.ts", "src/duckdb/index.ts", "src/types/**/*.d.ts"],
+  "include": ["src/index.ts", "src/arrow/index.ts", "src/duckdb/index.ts", "src/types/**/*.d.ts"],
   "exclude": ["**/*.test.ts", "**/*.test.tsx"]
 }

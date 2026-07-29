@@ -163,7 +163,7 @@ export type {
   ExportFormat,
   ExportOptions,
 } from './source/source';
-// Format-plugin registry (the optional `@zwishing/emap/formats` bundle
+// Format-plugin registry (the optional `@zwishing/emap/arrow` bundle
 // registers GeoParquet / GeoArrow support through this; arrow-free).
 export { registerFormat } from './source/format-registry';
 export type { DatasetFormatPlugin, ExportedFormatFile } from './source/format-registry';

@@ -265,7 +265,7 @@ export default [
     },
     plugins: commonPlugins(),
   },
-  // Formats ESM bundle (`@zwishing/emap/formats`) — optional GeoParquet /
+  // Arrow ESM bundle (`@zwishing/emap/arrow`) — optional GeoParquet /
   // GeoArrow support. apache-arrow is bundled INTO this file (it is not a
   // core dependency); parquet-wasm stays external and loads lazily via
   // dynamic import in the consumer's bundler. mapshaper is external and
@@ -273,7 +273,7 @@ export default [
   // apache-arrow v21 ships `sideEffects:false` ESM that breaks when
   // tree-shaken aggressively — keep its module side effects.
   {
-    input: 'src/formats/index.ts',
+    input: 'src/arrow/index.ts',
     external: ['maplibre-gl', 'mapshaper', 'parquet-wasm'],
     onwarn: quietKnownCircularWarnings,
     treeshake: {
@@ -282,19 +282,19 @@ export default [
       moduleSideEffects: (id) => id.includes('apache-arrow') || !id.includes('node_modules'),
     },
     output: {
-      file: 'dist/emap-formats.mjs',
+      file: 'dist/emap-arrow.mjs',
       format: 'es',
       sourcemap: shouldWriteSourcemap,
       paths: { mapshaper: './mapshaper-vendor.mjs' },
     },
     plugins: commonPlugins(),
   },
-  // Formats IIFE bundle for script-tag users (global `emapFormats`).
+  // Arrow IIFE bundle for script-tag users (global `emapArrow`).
   // parquet-wasm cannot be dynamically imported from an IIFE — GeoParquet
   // users must call setParquetWasm() with a self-initialized module (the
   // loader's error message says exactly that). GeoArrow needs no wasm.
   {
-    input: 'src/formats/index.ts',
+    input: 'src/arrow/index.ts',
     external: ['mapshaper', 'parquet-wasm'],
     onwarn: quietKnownCircularWarnings,
     treeshake: {
@@ -303,9 +303,9 @@ export default [
       moduleSideEffects: (id) => id.includes('apache-arrow') || !id.includes('node_modules'),
     },
     output: {
-      file: 'dist/emap-formats.js',
+      file: 'dist/emap-arrow.js',
       format: 'iife',
-      name: 'emapFormats',
+      name: 'emapArrow',
       sourcemap: shouldWriteSourcemap,
       inlineDynamicImports: true,
       globals: { ...mapshaperGlobal, 'parquet-wasm': 'parquetWasm' },
@@ -314,7 +314,7 @@ export default [
   },
   // ESM bundle (`@zwishing/emap/duckdb`) — optional DuckDB-Wasm spatial
   // processing support. Keep DuckDB runtime dependencies external/lazy so
-  // the main and formats bundles stay light.
+  // the main and Arrow bundles stay light.
   {
     input: 'src/duckdb/index.ts',
     external: ['@duckdb/duckdb-wasm', 'apache-arrow'],

@@ -1,7 +1,7 @@
 import type { Table } from 'apache-arrow';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
-import { toArrowTable } from '../formats/dataset-to-table';
-import { recordsFromArrowTable } from '../formats/table-to-dataset';
+import { toArrowTable } from '../arrow/dataset-to-table';
+import { recordsFromArrowTable } from '../arrow/table-to-dataset';
 import type { FeatureShape, MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import { DuckDbOperationError } from './duckdb-errors';
 import { getDuckDbRuntime, type DuckDbRuntime } from './duckdb-runtime';

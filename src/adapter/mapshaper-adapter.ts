@@ -88,7 +88,7 @@ export type RunnerInputFiles = Record<string, Uint8Array | string>;
 /**
  * Handle over mapshaper's internal `PathImporter` — the same streaming
  * builder mapshaper's own GeoJSON / Shapefile importers feed. Lets the
- * formats module construct a dataset directly from coordinate buffers
+ * Arrow module construct a dataset directly from coordinate buffers
  * without a GeoJSON intermediate. Call `startShape` once per feature,
  * then zero or more import* calls, then `done()`.
  */
@@ -333,7 +333,7 @@ export interface MapshaperAdapter {
   exportFileContent(dataset: MapshaperDataset, opts: { format: string }): ExportedFile[];
 
   // -- Format-module bridge (GeoParquet / GeoArrow) -----------------------
-  // Used exclusively by src/formats/* for direct (non-GeoJSON) conversion
+  // Used exclusively by src/arrow/* for direct (non-GeoJSON) conversion
   // between Arrow tables and mapshaper datasets.
 
   /** New streaming dataset builder (mapshaper's internal `PathImporter`). */
@@ -364,7 +364,7 @@ export interface MapshaperAdapter {
 
   /**
    * Winding-number test of point (x, y) against the ring formed by the
-   * signed arc ids. Non-zero = inside. Used by the formats module's
+   * signed arc ids. Non-zero = inside. Used by the Arrow module's
    * hole-to-shell grouping (port of mapshaper's groupPolygonRings).
    */
   testPointInRing(x: number, y: number, ids: number[], arcs: ArcCollection): number;

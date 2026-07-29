@@ -54,7 +54,7 @@ emap 不依赖后端地图服务。数据可以来自 URL、用户上传的文�
 ### 数据输入与输出
 
 - 核心包支持 GeoJSON、TopoJSON、Shapefile ZIP 和 mapshaper snapshot。
-- `@zwishing/emap/formats` 提供 GeoParquet 与 GeoArrow 支持。
+- `@zwishing/emap/arrow` 提供 GeoParquet 与 GeoArrow 支持。
 - `@zwishing/emap/duckdb` 提供可选的 DuckDB-Wasm 查询和空间处理能力。
 
 ### 渲染与相机
@@ -77,7 +77,7 @@ import { Emap, TopologySource } from '@zwishing/emap';
 import '@zwishing/emap/style.css';
 
 // 按需使用，不会进入只使用核心包的应用代码
-import '@zwishing/emap/formats';
+import '@zwishing/emap/arrow';
 const duckdb = await import('@zwishing/emap/duckdb');
 ```
 

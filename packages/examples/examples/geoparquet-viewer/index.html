@@ -86,13 +86,13 @@
     import { installExampleMapUi } from '/src/example-runtime.ts';
     import {
       autoLoadExampleFixtures,
-      loadExampleFormats,
+      loadExampleArrow,
       loadExampleRuntime,
     } from '/src/example-runtime.ts';
 
     const emap = await loadExampleRuntime();
-    const emapFormats = await loadExampleFormats();
-    await emapFormats.initParquetWasm();
+    const emapArrow = await loadExampleArrow();
+    await emapArrow.initParquetWasm();
     document.getElementById('status').textContent = '上传 .parquet / .arrow 文件开始';
     document.getElementById('file-input').disabled = false;
 
@@ -127,7 +127,7 @@
 
         try {
           // setData 识别 .parquet/.arrow 扩展名并调用 formats 模块注册的插件。
-          // loadExampleFormats() 已通过 Vite 加载并注册该模块。
+          // loadExampleArrow() 已通过 Vite 加载并注册该模块。
           await source.setData({ filename: file.name, content });
           map.addSource(SOURCE_ID, source);
           map.setExtent(source.getExtent());

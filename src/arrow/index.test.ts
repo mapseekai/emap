@@ -5,7 +5,7 @@ import { getExportHandler, getFormatForExtension } from '../source/format-regist
 import { TopologySource } from '../source/topology-source';
 import { datasetFromGeoJSON } from './test-utils';
 
-describe('formats module registration', () => {
+describe('Arrow module registration', () => {
   it('registers import handling for all plugin extensions', () => {
     for (const ext of ['parquet', 'geoparquet', 'arrow', 'arrows', 'feather']) {
       expect(getFormatForExtension(ext)?.name).toBe('geoarrow-formats');

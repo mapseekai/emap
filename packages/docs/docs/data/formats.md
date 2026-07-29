@@ -22,8 +22,8 @@ emap 把核心格式和可选格式分开，避免只加载 GeoJSON 的应用承
 | Shapefile ZIP | `.zip` | 是 | 是，输出 ZIP | core |
 | KML | `.kml` | 是 | 否 | core |
 | mapshaper snapshot | `.msx` | 是 | 是 | core |
-| GeoParquet | `.parquet`、`.geoparquet` | 是 | 是 | `@zwishing/emap/formats` |
-| GeoArrow | `.arrow`、`.arrows`、`.feather` | 是 | 是 | `@zwishing/emap/formats` |
+| GeoParquet | `.parquet`、`.geoparquet` | 是 | 是 | `@zwishing/emap/arrow` |
+| GeoArrow | `.arrow`、`.arrows`、`.feather` | 是 | 是 | `@zwishing/emap/arrow` |
 
 ## 从 URL 加载
 
@@ -75,7 +75,7 @@ emap 对 ZIP 设置 entry 数量、总解压大小和压缩比限制，避免浏
 在任何 parquet/arrow `setData` 或 export 之前导入：
 
 ```ts
-import '@zwishing/emap/formats';
+import '@zwishing/emap/arrow';
 ```
 
 该导入注册格式插件。GeoArrow 不需要 WASM；GeoParquet 第一次使用时会懒加载
@@ -84,7 +84,7 @@ import '@zwishing/emap/formats';
 显式指定 WASM 地址：
 
 ```ts
-import { initParquetWasm } from '@zwishing/emap/formats';
+import { initParquetWasm } from '@zwishing/emap/arrow';
 
 await initParquetWasm({
   wasmInput: '/assets/parquet_wasm_bg.wasm',
@@ -94,7 +94,7 @@ await initParquetWasm({
 如果应用已经初始化模块：
 
 ```ts
-import { setParquetWasm } from '@zwishing/emap/formats';
+import { setParquetWasm } from '@zwishing/emap/arrow';
 
 setParquetWasm(parquetModule);
 ```
@@ -109,7 +109,7 @@ import {
   fromArrowTable,
   setArrowTable,
   toArrowTable,
-} from '@zwishing/emap/formats';
+} from '@zwishing/emap/arrow';
 
 setArrowTable(source, duckdbResultTable);
 const table = toArrowTable(source.getDataset()!);
@@ -156,9 +156,9 @@ URL.revokeObjectURL(url);
 
 ## 常见问题
 
-### 提示需要 formats module
+### 提示需要 Arrow module
 
-确保 `import '@zwishing/emap/formats'` 在第一次调用前执行，并确认 bundler 没有把
+确保 `import '@zwishing/emap/arrow'` 在第一次调用前执行，并确认 bundler 没有把
 该 side-effect import 移除。
 
 ### Parquet WASM 404
@@ -173,9 +173,9 @@ URL.revokeObjectURL(url);
 
 - [TopologySource](/emap/api/classes/index.TopologySource.html)
 - [ExportOptions](/emap/api/interfaces/index.ExportOptions.html)
-- [initParquetWasm](/emap/api/functions/formats.initParquetWasm.html)
-- [setParquetWasm](/emap/api/functions/formats.setParquetWasm.html)
-- [toArrowTable](/emap/api/functions/formats.toArrowTable.html)
+- [initParquetWasm](/emap/api/functions/arrow.initParquetWasm.html)
+- [setParquetWasm](/emap/api/functions/arrow.setParquetWasm.html)
+- [toArrowTable](/emap/api/functions/arrow.toArrowTable.html)
 
 ## 可运行示例
 

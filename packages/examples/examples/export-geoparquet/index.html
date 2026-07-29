@@ -89,13 +89,13 @@
     import { installExampleMapUi } from '/src/example-runtime.ts';
     import {
       autoLoadExampleFixtures,
-      loadExampleFormats,
+      loadExampleArrow,
       loadExampleRuntime,
     } from '/src/example-runtime.ts';
 
     const emap = await loadExampleRuntime();
-    const emapFormats = await loadExampleFormats();
-    await emapFormats.initParquetWasm();
+    const emapArrow = await loadExampleArrow();
+    await emapArrow.initParquetWasm();
     document.getElementById('status').textContent = '加载文件以开始';
     document.getElementById('file-input').disabled = false;
 

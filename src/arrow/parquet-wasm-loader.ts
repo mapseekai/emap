@@ -8,7 +8,7 @@
  * pre-initialized module via {@link setParquetWasm} instead.
  */
 
-/** Subset of the parquet-wasm module surface the formats module consumes. */
+/** Subset of the parquet-wasm module surface the Arrow module consumes. */
 export interface ParquetWasmTable {
   intoIPCStream(): Uint8Array;
 }

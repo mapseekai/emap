@@ -1,6 +1,6 @@
 /**
  * Minimal 2D WKB (Well-Known Binary, ISO/OGC Simple Features) codec for the
- * GeoParquet / GeoArrow formats module.
+ * Arrow module's GeoParquet / GeoArrow support.
  *
  * Scope: geometry types 1–6 (Point, LineString, Polygon, MultiPoint,
  * MultiLineString, MultiPolygon), both byte orders on read, little-endian

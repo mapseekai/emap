@@ -2,8 +2,8 @@ import { createRequire } from 'node:module';
 import type { Table } from 'apache-arrow';
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm/blocking';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { exportGeoParquet } from '../formats/geoparquet-io';
-import { datasetFromGeoJSON, injectParquetWasmForTests } from '../formats/test-utils';
+import { exportGeoParquet } from '../arrow/geoparquet-io';
+import { datasetFromGeoJSON, injectParquetWasmForTests } from '../arrow/test-utils';
 import { queryGeoParquetWithDuckDb } from './duckdb-geoparquet-query-op';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
 

@@ -22,8 +22,8 @@ application does not pay for Arrow, Parquet, or WASM.
 | Shapefile ZIP | `.zip` | yes | yes, as ZIP | core |
 | KML | `.kml` | yes | no | core |
 | mapshaper snapshot | `.msx` | yes | yes | core |
-| GeoParquet | `.parquet`, `.geoparquet` | yes | yes | `@zwishing/emap/formats` |
-| GeoArrow | `.arrow`, `.arrows`, `.feather` | yes | yes | `@zwishing/emap/formats` |
+| GeoParquet | `.parquet`, `.geoparquet` | yes | yes | `@zwishing/emap/arrow` |
+| GeoArrow | `.arrow`, `.arrows`, `.feather` | yes | yes | `@zwishing/emap/arrow` |
 
 ## Load URLs and bytes
 
@@ -69,7 +69,7 @@ complete ZIP rather than only the `.shp` bytes.
 Before parquet/arrow import or export:
 
 ```ts
-import '@zwishing/emap/formats';
+import '@zwishing/emap/arrow';
 ```
 
 This side-effect import registers format plugins. GeoArrow does not need WASM.
@@ -79,7 +79,7 @@ webpack 5 normally emit the WASM asset automatically.
 Set an explicit WASM location:
 
 ```ts
-import { initParquetWasm } from '@zwishing/emap/formats';
+import { initParquetWasm } from '@zwishing/emap/arrow';
 
 await initParquetWasm({
   wasmInput: '/assets/parquet_wasm_bg.wasm',
@@ -89,7 +89,7 @@ await initParquetWasm({
 Or inject an already initialized module:
 
 ```ts
-import { setParquetWasm } from '@zwishing/emap/formats';
+import { setParquetWasm } from '@zwishing/emap/arrow';
 
 setParquetWasm(parquetModule);
 ```
@@ -104,7 +104,7 @@ import {
   fromArrowTable,
   setArrowTable,
   toArrowTable,
-} from '@zwishing/emap/formats';
+} from '@zwishing/emap/arrow';
 
 setArrowTable(source, duckdbResultTable);
 const table = toArrowTable(source.getDataset()!);
@@ -152,7 +152,7 @@ URL.revokeObjectURL(url);
 
 ## Troubleshooting
 
-- A “requires formats module” error means the side-effect import did not run.
+- A “requires Arrow module” error means the side-effect import did not run.
 - For a Parquet WASM 404, let the bundler emit it or pass the final URL through
   `wasmInput`.
 - If Shapefile attributes or CRS are missing, verify matching `.dbf` and `.prj`
@@ -162,9 +162,9 @@ URL.revokeObjectURL(url);
 
 - [TopologySource](/emap/api/classes/index.TopologySource.html)
 - [ExportOptions](/emap/api/interfaces/index.ExportOptions.html)
-- [initParquetWasm](/emap/api/functions/formats.initParquetWasm.html)
-- [setParquetWasm](/emap/api/functions/formats.setParquetWasm.html)
-- [toArrowTable](/emap/api/functions/formats.toArrowTable.html)
+- [initParquetWasm](/emap/api/functions/arrow.initParquetWasm.html)
+- [setParquetWasm](/emap/api/functions/arrow.setParquetWasm.html)
+- [toArrowTable](/emap/api/functions/arrow.toArrowTable.html)
 
 ## Runnable examples
 

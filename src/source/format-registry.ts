@@ -11,7 +11,7 @@ export interface ExportedFormatFile {
  *
  * Plugins exist so optional, heavyweight format support (GeoParquet /
  * GeoArrow with apache-arrow + parquet-wasm) can live in a separate bundle
- * (`@zwishing/emap/formats`) without growing the core `emap.js`. Importing
+ * (`@zwishing/emap/arrow`) without growing the core `emap.js`. Importing
  * that bundle registers its plugin as a side effect; the core import/export
  * paths consult this registry by file extension / format name.
  */
@@ -31,14 +31,14 @@ export interface DatasetFormatPlugin {
 
 /**
  * Extensions the core recognizes as "needs a format plugin". Used to produce
- * a helpful "import the formats module" error instead of a generic mapshaper
+ * a helpful "import the Arrow module" error instead of a generic mapshaper
  * parse failure when the plugin is not registered.
  */
 const KNOWN_PLUGIN_EXTENSIONS = ['parquet', 'geoparquet', 'arrow', 'arrows', 'feather'];
 
 /**
  * Registry state lives on `globalThis` under a well-known symbol. The core
- * bundle and the formats bundle each compile their own copy of this module;
+ * bundle and the Arrow bundle each compile their own copy of this module;
  * sharing through a global slot makes registration visible across copies.
  */
 const REGISTRY_KEY = Symbol.for('emap.formatRegistry');

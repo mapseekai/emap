@@ -225,8 +225,8 @@ export function installExampleMapUi(
   syncUi();
 }
 
-export async function loadExampleFormats(): Promise<typeof import('@zwishing/emap/formats')> {
-  return import('@zwishing/emap/formats');
+export async function loadExampleArrow(): Promise<typeof import('@zwishing/emap/arrow')> {
+  return import('@zwishing/emap/arrow');
 }
 
 export function exampleWorkerUrl(): string {

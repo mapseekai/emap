@@ -162,18 +162,18 @@ Supported inputs:
 - GeoJSON and TopoJSON.
 - ZIP Shapefile archives containing `.shp`, `.dbf`, `.shx`, and optional `.prj`.
 - Mapshaper `.msx` snapshots via `map.loadSnapshot()`.
-- GeoParquet and GeoArrow, with the optional formats module (below).
+- GeoParquet and GeoArrow, with the optional Arrow module (below).
 
 ### GeoParquet / GeoArrow (optional module)
 
-`@zwishing/emap/formats` adds GeoParquet (`.parquet`) and GeoArrow
+`@zwishing/emap/arrow` adds GeoParquet (`.parquet`) and GeoArrow
 (`.arrow` / `.arrows` / `.feather`) support as a separate bundle so the core
 stays small. Conversion is direct (coordinate buffers ↔ mapshaper arcs, no
 GeoJSON intermediate); importing the module registers the formats with
 `setData` / `export` as a side effect:
 
 ```ts
-import '@zwishing/emap/formats';
+import '@zwishing/emap/arrow';
 
 await source.setData({ filename: 'parcels.parquet', content: bytes });
 const blob = await source.export({ format: 'geoparquet' }); // WKB encoding default
@@ -184,7 +184,7 @@ In-memory Arrow tables work without files — this is the duckdb-wasm bridge
 (query results with an `ST_AsWKB(geometry)` column convert directly):
 
 ```ts
-import { fromArrowTable, toArrowTable, setArrowTable } from '@zwishing/emap/formats';
+import { fromArrowTable, toArrowTable, setArrowTable } from '@zwishing/emap/arrow';
 
 setArrowTable(source, duckdbResultTable); // replace a source's dataset
 const table = toArrowTable(source.getDataset()!); // dataset → Arrow table
@@ -205,7 +205,7 @@ Notes:
 ### DuckDB-Wasm Spatial Processing (opt mod)
 
 `@zwishing/emap/duckdb` adds an optional DuckDB-Wasm processing surface. It is
-kept out of the core and formats bundles; import it only where spatial
+kept out of the core and Arrow bundles; import it only where spatial
 processing is needed.
 
 ```ts

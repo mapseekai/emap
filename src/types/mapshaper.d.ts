@@ -149,7 +149,7 @@ declare module 'mapshaper' {
     deleteLastArc(arcs: ArcCollection): void;
     findArcIdFromVertexId(vertexId: number, ii: Int32Array | Uint32Array): number;
 
-    // Direct dataset construction — used by the formats module
+    // Direct dataset construction — used by the Arrow module
     // (GeoParquet / GeoArrow) to build datasets from coordinate buffers
     // without a GeoJSON intermediate.
     /** Streaming importer; the class mapshaper's own format readers feed. */

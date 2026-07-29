@@ -65,10 +65,10 @@ describe('DuckDB new feature examples', () => {
 
   it('initializes formats and parquet-wasm through the Vite-managed module', () => {
     for (const html of geoParquetExamples) {
-      expect(html).toContain('loadExampleFormats');
-      expect(html).toContain('await emapFormats.initParquetWasm()');
+      expect(html).toContain('loadExampleArrow');
+      expect(html).toContain('await emapArrow.initParquetWasm()');
       expect(html).not.toContain('parquet-wasm@');
-      expect(html).not.toContain('emap-formats.js');
+      expect(html).not.toContain('emap-arrow.js');
     }
   });
 

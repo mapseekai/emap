@@ -63,7 +63,7 @@ A typical application follows this sequence:
 
 - The core package supports GeoJSON, TopoJSON, Shapefile ZIP, and mapshaper
   snapshots.
-- `@zwishing/emap/formats` adds GeoParquet and GeoArrow.
+- `@zwishing/emap/arrow` adds GeoParquet and GeoArrow.
 - `@zwishing/emap/duckdb` adds optional DuckDB-Wasm queries and spatial
   processing.
 
@@ -89,7 +89,7 @@ import { Emap, TopologySource } from '@zwishing/emap';
 import '@zwishing/emap/style.css';
 
 // Optional entries do not affect applications that only import the core package
-import '@zwishing/emap/formats';
+import '@zwishing/emap/arrow';
 const duckdb = await import('@zwishing/emap/duckdb');
 ```
 

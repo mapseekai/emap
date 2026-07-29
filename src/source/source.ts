@@ -11,8 +11,8 @@ export interface Source extends EventDispatcher {
 
 /**
  * File formats emap can serialize a dataset to. Mirrors the import format
- * set. `geoparquet` / `geoarrow` require the optional formats module
- * (`@zwishing/emap/formats`) to be imported first.
+ * set. `geoparquet` / `geoarrow` require the optional Arrow module
+ * (`@zwishing/emap/arrow`) to be imported first.
  */
 export type ExportFormat = 'geojson' | 'topojson' | 'shapefile' | 'msx' | 'geoparquet' | 'geoarrow';
 

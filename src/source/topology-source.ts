@@ -428,8 +428,8 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     const plugin = getFormatForExtension(ext);
     if (!plugin) {
       throw new Error(
-        `'.${ext}' import requires the emap formats module — ` +
-          `import '@zwishing/emap/formats' (or call registerFormat) before setData`,
+        `'.${ext}' import requires the emap Arrow module — ` +
+          `import '@zwishing/emap/arrow' (or call registerFormat) before setData`,
       );
     }
     if (primaryFiles.length > 1) {
@@ -612,8 +612,8 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       }
       if (options.format === 'geoparquet' || options.format === 'geoarrow') {
         throw new Error(
-          `'${options.format}' export requires the emap formats module — ` +
-            `import '@zwishing/emap/formats' (or call registerFormat) before export`,
+          `'${options.format}' export requires the emap Arrow module — ` +
+            `import '@zwishing/emap/arrow' (or call registerFormat) before export`,
         );
       }
       // mapshaper's `.msx` snapshot format is special-cased: exportFileContent

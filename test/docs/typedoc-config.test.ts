@@ -133,7 +133,7 @@ describe('TypeDoc public API config', () => {
 
     expect(config.entryPoints).toEqual([
       'src/index.ts',
-      'src/formats/index.ts',
+      'src/arrow/index.ts',
       'src/duckdb/index.ts',
     ]);
 

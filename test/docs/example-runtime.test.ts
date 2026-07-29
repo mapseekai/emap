@@ -2,9 +2,9 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { importGeoParquet } from '../../src/formats/geoparquet-io';
-import { setParquetWasm } from '../../src/formats/parquet-wasm-loader';
-import { injectParquetWasmForTests } from '../../src/formats/test-utils';
+import { importGeoParquet } from '../../src/arrow/geoparquet-io';
+import { setParquetWasm } from '../../src/arrow/parquet-wasm-loader';
+import { injectParquetWasmForTests } from '../../src/arrow/test-utils';
 import {
   autoLoadExampleFixtures,
   fixtureManifest,

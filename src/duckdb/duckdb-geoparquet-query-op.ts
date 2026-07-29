@@ -1,6 +1,6 @@
 import type { Table } from 'apache-arrow';
-import { detectGeometryColumn } from '../formats/geometry-column';
-import { fromArrowTable, type FromArrowTableOptions } from '../formats/table-to-dataset';
+import { detectGeometryColumn } from '../arrow/geometry-column';
+import { fromArrowTable, type FromArrowTableOptions } from '../arrow/table-to-dataset';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import { DuckDbOperationError } from './duckdb-errors';
 import { getDuckDbRuntime, type DuckDbRuntime } from './duckdb-runtime';

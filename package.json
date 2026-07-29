@@ -19,9 +19,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/emap.mjs"
     },
-    "./formats": {
-      "types": "./dist/formats/index.d.ts",
-      "import": "./dist/emap-formats.mjs"
+    "./arrow": {
+      "types": "./dist/arrow/index.d.ts",
+      "import": "./dist/emap-arrow.mjs"
     },
     "./duckdb": {
       "types": "./dist/duckdb/index.d.ts",
@@ -36,8 +36,8 @@
     "./dist/mapshaper-vendor.js": "./dist/mapshaper-vendor.js",
     "./dist/mapshaper-vendor.mjs": "./dist/mapshaper-vendor.mjs",
     "./dist/emap.js": "./dist/emap.js",
-    "./dist/emap-formats.js": "./dist/emap-formats.js",
-    "./dist/emap-formats.mjs": "./dist/emap-formats.mjs",
+    "./dist/emap-arrow.js": "./dist/emap-arrow.js",
+    "./dist/emap-arrow.mjs": "./dist/emap-arrow.mjs",
     "./package.json": "./package.json"
   },
   "sideEffects": [
@@ -45,15 +45,15 @@
     "./src/shim.ts",
     "./dist/mapshaper-vendor.js",
     "./dist/mapshaper-vendor.mjs",
-    "./dist/emap-formats.js",
-    "./dist/emap-formats.mjs"
+    "./dist/emap-arrow.js",
+    "./dist/emap-arrow.mjs"
   ],
   "files": [
     "dist/emap.js",
     "dist/emap.mjs",
     "dist/emap-worker.js",
-    "dist/emap-formats.js",
-    "dist/emap-formats.mjs",
+    "dist/emap-arrow.js",
+    "dist/emap-arrow.mjs",
     "dist/emap-duckdb.mjs",
     "dist/mapshaper-vendor.js",
     "dist/mapshaper-vendor.mjs",

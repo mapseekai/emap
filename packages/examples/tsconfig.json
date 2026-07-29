@@ -5,7 +5,7 @@
     "types": ["vite/client"],
     "paths": {
       "@zwishing/emap": ["../../src/index.ts"],
-      "@zwishing/emap/formats": ["../../src/formats/index.ts"],
+      "@zwishing/emap/arrow": ["../../src/arrow/index.ts"],
       "@zwishing/emap/style.css": ["../../src/types/style.css.d.ts"]
     }
   },

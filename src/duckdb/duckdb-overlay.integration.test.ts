@@ -3,7 +3,7 @@ import { tableToIPC, type Table } from 'apache-arrow';
 import type * as DuckDBBundles from '@duckdb/duckdb-wasm/blocking';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
-import { datasetFromGeoJSON } from '../formats/test-utils';
+import { datasetFromGeoJSON } from '../arrow/test-utils';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
 import { setDuckDbRuntime } from './duckdb-runtime';
