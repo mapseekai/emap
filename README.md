@@ -961,14 +961,18 @@ packages/examples/examples/ # Canonical runnable HTML examples
 ## Development
 
 Repository development and tests require Node.js `^20.19.0` or `>=22.12.0`,
-matching the Vite/Vitest toolchain used by the test runner.
-
-Install dependencies (use `pnpm` locally, or `cmd /c npm install` on Windows
-to avoid the PowerShell shim):
+matching the Vite/Vitest toolchain used by the test runner. The repository pins
+pnpm through the root `packageManager` field; enable Corepack before installing:
 
 ```bash
+corepack enable
+corepack prepare pnpm@11.15.1 --activate
 pnpm install
 ```
+
+On Windows, if PowerShell blocks command shims, run the same commands through
+Command Prompt (for example, `cmd /c pnpm install`) instead of switching package
+managers.
 
 Common tasks (prepend `cmd /c` on Windows):
 
@@ -988,8 +992,8 @@ pnpm run build          # production build → dist/
 Targeted test runs:
 
 ```bash
-npx vitest run src/geo/crs-resolver.test.ts --reporter=dot
-npx vitest run src/map/map.test.ts src/source/topology-source.test.ts
+pnpm exec vitest run src/geo/crs-resolver.test.ts --reporter=dot
+pnpm exec vitest run src/map/map.test.ts src/source/topology-source.test.ts
 ```
 
 Runnable examples live in `packages/examples/examples/<id>/index.html`. Run

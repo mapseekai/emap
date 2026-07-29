@@ -9,9 +9,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Release-grade documentation handoff checklist covering static docs, generated
-  API artifacts, runnable examples, bilingual review, and required verification
-  gates for the documentation platform.
+- A bilingual Docusaurus documentation site now covers installation, core
+  concepts, sources and layers, topology, styling, camera control, selection,
+  editing, events, data operations, formats, DuckDB, workers, recipes, and
+  reference material.
+- Generated TypeDoc API documentation is published inside the documentation
+  bundle with local navigation, complete public-contract metadata, and links
+  back to the matching guides and runnable examples.
+- A canonical `@zwishing/emap-examples` workspace now publishes runnable
+  examples at stable `/emap/examples/` routes. The catalog includes
+  getting-started maps, interaction and editing workflows, map operations,
+  import/export, Worker usage, and DuckDB spatial processing.
+- The shared example runtime can load local build assets or pinned CDN assets,
+  auto-load packaged fixtures, expose consistent upload/status controls, and
+  verify that published CDN dependencies remain reproducible.
+- Release-grade documentation tooling now builds a one-origin preview, composes
+  the example bundle into the documentation output, verifies Chinese/English
+  parity, checks public API metadata and required examples, validates static
+  routes and runtime assets, and provides a release handoff checklist.
+- Vertex editing now provides topology-aware shared-node deletion and an
+  undoable **Separate shared node** action that duplicates shared arcs and
+  remaps only the selected feature.
+
+### Changed
+
+- The optional Arrow integration has moved from `@zwishing/emap/formats` to
+  `@zwishing/emap/arrow`, with source, declarations, bundles, examples, and API
+  documentation renamed accordingly. The old module path is no longer exported.
+- Legacy and generated example placeholders were replaced by canonical,
+  metadata-driven routes using one shared runtime, shared branding, and
+  packaged fixture manifests.
+- Documentation and examples are now first-class pnpm workspace packages with
+  dedicated development, build, preview, composition, and verification
+  commands.
+- Repository development now pins pnpm `11.15.1` through the root
+  `packageManager` field and uses `pnpm-lock.yaml` as the only dependency lock;
+  Windows setup documentation now uses Corepack instead of falling back to npm.
+- The jsDelivr DuckDB-Wasm runtime now serializes Arrow tables to IPC streams
+  before insertion, matching the browser DuckDB connection API. Bundled
+  GeoJSON-based DuckDB examples now default their source CRS to `EPSG:4326`.
+
+### Fixed
+
+- Shared topology nodes can now be deleted as one node across shared edges or
+  coordinate-matched features. Endpoint deletion inserts shared bridge arcs so
+  polygon and polyline rendering keeps every surviving edge, while features
+  below their geometry minimum are removed atomically.
+- Shared-node classification now uses the vertex owned by the selected feature,
+  ignores repeated nodes that occur only inside one feature, and remains stable
+  when coincident-feature hit-test order changes.
+- Opening the context menu no longer loses the pending shared-node separation
+  when window-level pointer movement clears hover state. The selected feature,
+  node coordinates, and detached vertex IDs are restored after the menu action.
+- Vertex snapping now promotes a node to a shared topology node after it lands
+  on another feature vertex, and clears stale detached-node state when a
+  separated node is snapped back onto another feature.
+- Documentation preview and publication now handle request errors, base-path
+  routing, composed example routes, local API navigation, and stale Docusaurus
+  metadata without producing broken pages.
+- Documentation checks now accept linked TypeDoc source paths and detect
+  bilingual drift, missing public API descriptions, uncataloged examples,
+  generated filler, and invalid static navigation before release.
+- Runnable examples now recover cleanly from runtime failures, keep box and
+  lasso selection modes mutually exclusive, and load GeoParquet starter data
+  at the published route.
+- `StatusControl` now displays Mapshaper CRS aliases such as `webmercator` and
+  `wgs84` as canonical `EPSG:3857` and `EPSG:4326` identifiers.
 
 ## [0.5.0] - 2026-07-22
 
@@ -523,7 +586,8 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@zwishing/emap/style.css`).
 
-[Unreleased]: https://github.com/zwishing/emap/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/zwishing/emap/compare/0c7ef115bbbb6d59829cd244c683f65ef38f39cd...HEAD
+[0.5.0]: https://github.com/zwishing/emap/compare/v0.4.0...0c7ef115bbbb6d59829cd244c683f65ef38f39cd
 [0.4.0]: https://github.com/zwishing/emap/compare/v0.3.6...v0.4.0
 [0.3.7]: https://github.com/zwishing/emap/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/zwishing/emap/compare/v0.3.5...v0.3.6
