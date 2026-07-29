@@ -79,7 +79,7 @@ function examplesBrandPlugin(): Plugin {
     name: 'examples-brand',
     transformIndexHtml: {
       order: 'pre',
-      handler: () => [
+      handler: (html) => [
         {
           tag: 'link',
           attrs: { rel: 'icon', type: 'image/svg+xml', href: logoUrl },
@@ -97,7 +97,7 @@ function examplesBrandPlugin(): Plugin {
               position: relative;
               box-sizing: border-box;
               min-height: 48px;
-              padding-right: 330px !important;
+              padding-right: 410px !important;
               background: var(--emap-banner-bg) !important;
               color: var(--emap-banner-ink) !important;
               border-bottom: 1px solid #1f2d3a;
@@ -141,6 +141,105 @@ function examplesBrandPlugin(): Plugin {
               color: var(--emap-banner-ink);
               font: 12px/1.2 ui-sans-serif, system-ui, sans-serif;
               white-space: nowrap;
+            }
+
+            #header .emap-example-source-button {
+              display: inline-flex;
+              align-items: center;
+              min-height: 28px;
+              box-sizing: border-box;
+              padding: 3px 9px;
+              border: 1px solid #8acb99;
+              border-radius: 4px;
+              background: transparent;
+              color: #ffffff;
+              font: 600 12px/1.2 ui-sans-serif, system-ui, sans-serif;
+              cursor: pointer;
+            }
+
+            #header .emap-example-source-button:hover {
+              background: #365669;
+              color: #b8e0c1;
+            }
+
+            #header .emap-example-source-button:disabled {
+              background: transparent;
+              color: #cbd5df;
+              cursor: wait;
+              opacity: 0.75;
+            }
+
+            #header .emap-example-source-button:focus-visible {
+              outline: 2px solid #8acb99;
+              outline-offset: 2px;
+            }
+
+            .emap-example-source-dialog {
+              width: min(1100px, calc(100vw - 32px));
+              height: min(760px, calc(100vh - 48px));
+              max-width: none;
+              max-height: none;
+              box-sizing: border-box;
+              padding: 0;
+              border: 1px solid #526578;
+              border-radius: 8px;
+              background: #111827;
+              color: #e5edf5;
+              box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            }
+
+            .emap-example-source-dialog[open] {
+              display: flex;
+              flex-direction: column;
+            }
+
+            .emap-example-source-dialog::backdrop {
+              background: rgba(15, 23, 42, 0.72);
+            }
+
+            .emap-example-source-header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              flex: 0 0 auto;
+              padding: 12px 16px;
+              border-bottom: 1px solid #334155;
+              background: #1f2d3a;
+              font: 14px/1.2 ui-sans-serif, system-ui, sans-serif;
+            }
+
+            .emap-example-source-close {
+              padding: 5px 10px;
+              border: 1px solid #64788c;
+              border-radius: 4px;
+              background: transparent;
+              color: #ffffff;
+              cursor: pointer;
+            }
+
+            .emap-example-source-close:hover {
+              background: #365669;
+            }
+
+            .emap-example-source-close:focus-visible {
+              outline: 2px solid #8acb99;
+              outline-offset: 2px;
+            }
+
+            .emap-example-source-dialog pre {
+              flex: 1 1 auto;
+              min-height: 0;
+              margin: 0;
+              padding: 16px;
+              overflow: auto;
+              background: #0b1220;
+              color: #d8e2ec;
+              tab-size: 2;
+            }
+
+            .emap-example-source-dialog code {
+              font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+              white-space: pre;
             }
 
             .emap-example-crs-field {
@@ -216,6 +315,12 @@ function examplesBrandPlugin(): Plugin {
             }
           `,
           injectTo: 'head',
+        },
+        {
+          tag: 'script',
+          attrs: { id: 'emap-example-source', type: 'application/json' },
+          children: JSON.stringify(html).replace(/</g, '\\u003c'),
+          injectTo: 'body',
         },
       ],
     },

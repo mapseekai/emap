@@ -151,6 +151,50 @@ function selectCurrentCRS(select: HTMLSelectElement, crs: string): void {
   select.value = canonical;
 }
 
+function embeddedExampleSource(root: Document): string | null {
+  const sourceElement = root.querySelector<HTMLScriptElement>('#emap-example-source');
+  if (!sourceElement?.textContent) return null;
+
+  try {
+    const source = JSON.parse(sourceElement.textContent);
+    return typeof source === 'string' ? source : null;
+  } catch {
+    return null;
+  }
+}
+
+function openExampleSourceDialog(sourceText: string, root: Document): void {
+  root.querySelector('.emap-example-source-dialog')?.remove();
+
+  const dialog = root.createElement('dialog');
+  dialog.className = 'emap-example-source-dialog';
+  dialog.setAttribute('aria-labelledby', 'emap-example-source-title');
+
+  const dialogHeader = root.createElement('div');
+  dialogHeader.className = 'emap-example-source-header';
+  const title = root.createElement('strong');
+  title.id = 'emap-example-source-title';
+  title.textContent = '示例源码';
+  const closeButton = root.createElement('button');
+  closeButton.className = 'emap-example-source-close';
+  closeButton.type = 'button';
+  closeButton.setAttribute('aria-label', '关闭源码');
+  closeButton.textContent = '关闭';
+  dialogHeader.append(title, closeButton);
+
+  const source = root.createElement('pre');
+  const code = root.createElement('code');
+  code.textContent = sourceText;
+  source.append(code);
+  dialog.append(dialogHeader, source);
+  root.body.append(dialog);
+
+  closeButton.addEventListener('click', () => dialog.remove());
+  dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  if (typeof dialog.showModal === 'function') dialog.showModal();
+  else dialog.setAttribute('open', '');
+}
+
 export function installExampleMapUi(
   map: Emap,
   runtime: ExampleUiRuntime = globalThis.emap,
@@ -166,7 +210,18 @@ export function installExampleMapUi(
   const tools = root.createElement('div');
   tools.className = 'emap-example-map-tools';
   tools.setAttribute('role', 'group');
-  tools.setAttribute('aria-label', 'Map coordinate system and basemap');
+  tools.setAttribute('aria-label', 'Example source, map coordinate system, and basemap');
+
+  const sourceText = embeddedExampleSource(root);
+  if (sourceText) {
+    const sourceButton = root.createElement('button');
+    sourceButton.className = 'emap-example-source-button';
+    sourceButton.type = 'button';
+    sourceButton.setAttribute('aria-haspopup', 'dialog');
+    sourceButton.textContent = '查看源码';
+    sourceButton.addEventListener('click', () => openExampleSourceDialog(sourceText, root));
+    tools.append(sourceButton);
+  }
 
   const crsLabel = root.createElement('label');
   crsLabel.className = 'emap-example-crs-field';

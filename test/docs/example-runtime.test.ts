@@ -135,6 +135,7 @@ afterAll(() => setParquetWasm(null));
 afterEach(() => {
   document.head.replaceChildren();
   document.body.replaceChildren();
+  window.history.replaceState({}, '', '/');
   delete (globalThis as { emap?: unknown }).emap;
   vi.unstubAllGlobals();
 });
@@ -259,6 +260,35 @@ describe('shared example map UI', () => {
     expect(map.reprojectCalls).toEqual(['EPSG:3857', 'EPSG:4326']);
     expect(map.controls).toHaveLength(1);
     expect(map.controls[0]?.control).toBeInstanceOf(StatusControlStub);
+  });
+
+  it('opens an embedded example source in an in-page dialog', () => {
+    window.history.replaceState({}, '', '/mapseekai/emap/examples/getting-started/points/');
+    const source = '<!doctype html>\n<title>Points example</title>';
+    const encodedSource = JSON.stringify(source).replace(/</g, '\\u003c');
+    document.body.innerHTML = [
+      '<div id="header"><strong>Example</strong></div>',
+      `<script id="emap-example-source" type="application/json">${encodedSource}</script>`,
+    ].join('');
+    const fetchSource = vi.fn();
+    vi.stubGlobal('fetch', fetchSource);
+    const map = new ExampleMapStub();
+
+    installExampleMapUi(map as unknown as Emap, exampleRuntimeStub);
+
+    const sourceButton = document.querySelector<HTMLButtonElement>('.emap-example-source-button');
+    expect(sourceButton?.textContent).toBe('查看源码');
+    expect(sourceButton?.type).toBe('button');
+
+    sourceButton?.click();
+
+    expect(fetchSource).not.toHaveBeenCalled();
+    const dialog = document.querySelector<HTMLDialogElement>('.emap-example-source-dialog');
+    expect(dialog?.hasAttribute('open')).toBe(true);
+    expect(dialog?.querySelector('code')?.textContent).toBe(source);
+
+    dialog?.querySelector<HTMLButtonElement>('.emap-example-source-close')?.click();
+    expect(dialog?.isConnected).toBe(false);
   });
 
   it('shows the current nonstandard CRS without duplicating shared controls', () => {
