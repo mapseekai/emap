@@ -1,5 +1,11 @@
 # Emap
 
+<p align="center">
+  <img src="packages/docs/static/img/emap.svg" alt="Emap logo" width="160" />
+</p>
+
+[简体中文](README.zh-CN.md)
+
 `Emap` is a browser-only TypeScript map rendering and editing engine built on
 Mapshaper topology data structures and HTML5 Canvas 2D. It is designed for
 framework-agnostic GIS applications that need client-side loading, rendering,
@@ -35,11 +41,12 @@ or controlled internal workflows first.
 - Optional `@zwishing/emap/duckdb` module for DuckDB-Wasm spatial processing and GeoParquet queries.
 - CSS design tokens for theming built-in UI surfaces.
 
-For the full capability matrix, see [FEATURES.md](FEATURES.md).
+See the documentation and generated API reference below for the complete public
+surface.
 
 ## Documentation
 
-- Static documentation entry: <https://zwishing.github.io/emap/>
+- Simplified Chinese documentation entry: <https://zwishing.github.io/emap/>
 - English documentation entry: <https://zwishing.github.io/emap/en/>
 - Generated API reference: <https://zwishing.github.io/emap/api/>
 - Runnable examples catalog: <https://zwishing.github.io/emap/examples/>
@@ -941,7 +948,7 @@ packages/examples/examples/ # Canonical runnable HTML examples
 | Worker routing | `src/map/worker-routing.ts`, `src/map/ops/_runner.ts` |
 | Mapshaper internals | `src/adapter/mapshaper-adapter.ts` only |
 | Public API | `src/index.ts` |
-| User docs | `README.md`, `FEATURES.md`, `CHANGELOG.md` |
+| User docs | `README.md`, `README.zh-CN.md`, `CHANGELOG.md` |
 
 ### Code Conventions
 
@@ -960,9 +967,7 @@ packages/examples/examples/ # Canonical runnable HTML examples
 
 ## Development
 
-Repository development and tests require Node.js 22 (`>=22 <23`). The
-repository pins Node.js `22.23.1` through `.nvmrc` and pnpm through the root
-`packageManager` field; enable Corepack before installing:
+Enable Corepack before installing:
 
 ```bash
 corepack enable
@@ -1031,7 +1036,7 @@ pnpm pack --dry-run
 Then check:
 
 - `package.json` version matches the release section in `CHANGELOG.md`.
-- `README.md`, `FEATURES.md`, `SECURITY.md`, and `CHANGELOG.md` describe the
+- `README.md`, `SECURITY.md`, and `CHANGELOG.md` describe the
   same public API.
 - The dry-run package contains only current `dist` files, docs, license, and
   package metadata.

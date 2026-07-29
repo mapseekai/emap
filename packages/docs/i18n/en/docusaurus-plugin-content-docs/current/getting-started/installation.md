@@ -15,7 +15,6 @@ TopoJSON, and displays navigation and history controls.
 
 ## Requirements
 
-- Node.js 22 (`>=22 <23`), matching the project's development and build toolchain.
 - A browser with ES modules, Canvas 2D, and modern JavaScript support.
 - npm, pnpm, or another package manager that supports package exports.
 

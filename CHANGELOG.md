@@ -20,33 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   examples at stable `/emap/examples/` routes. The catalog includes
   getting-started maps, interaction and editing workflows, map operations,
   import/export, Worker usage, and DuckDB spatial processing.
-- The shared example runtime can load local build assets or pinned CDN assets,
-  auto-load packaged fixtures, expose consistent upload/status controls, and
-  verify that published CDN dependencies remain reproducible.
-- Release-grade documentation tooling now builds a one-origin preview, composes
-  the example bundle into the documentation output, verifies Chinese/English
-  parity, checks public API metadata and required examples, validates static
-  routes and runtime assets, and provides a release handoff checklist.
 - Vertex editing now provides topology-aware shared-node deletion and an
   undoable **Separate shared node** action that duplicates shared arcs and
   remaps only the selected feature.
 
 ### Changed
 
-- Local development and package engines now target Node.js 22, pinned to
-  `22.23.1` through `.nvmrc`.
 - The optional Arrow integration has moved from `@zwishing/emap/formats` to
   `@zwishing/emap/arrow`, with source, declarations, bundles, examples, and API
   documentation renamed accordingly. The old module path is no longer exported.
 - Legacy and generated example placeholders were replaced by canonical,
   metadata-driven routes using one shared runtime, shared branding, and
   packaged fixture manifests.
-- Documentation and examples are now first-class pnpm workspace packages with
-  dedicated development, build, preview, composition, and verification
-  commands.
-- Repository development now pins pnpm `11.15.1` through the root
-  `packageManager` field and uses `pnpm-lock.yaml` as the only dependency lock;
-  Windows setup documentation now uses Corepack instead of falling back to npm.
 - The jsDelivr DuckDB-Wasm runtime now serializes Arrow tables to IPC streams
   before insertion, matching the browser DuckDB connection API. Bundled
   GeoJSON-based DuckDB examples now default their source CRS to `EPSG:4326`.
@@ -71,12 +56,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Vertex snapping now promotes a node to a shared topology node after it lands
   on another feature vertex, and clears stale detached-node state when a
   separated node is snapped back onto another feature.
-- Documentation preview and publication now handle request errors, base-path
-  routing, composed example routes, local API navigation, and stale Docusaurus
-  metadata without producing broken pages.
-- Documentation checks now accept linked TypeDoc source paths and detect
-  bilingual drift, missing public API descriptions, uncataloged examples,
-  generated filler, and invalid static navigation before release.
 - Runnable examples now recover cleanly from runtime failures, keep box and
   lasso selection modes mutually exclusive, and load GeoParquet starter data
   at the published route.
@@ -189,9 +168,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `map.reproject()` continues to reset the viewport initial line-scale state
   before fitting the reprojected extent, preventing outline widths from drifting
   after switching between degree- and meter-based CRS values.
-- Build output now suppresses only the known `rollup-plugin-polyfill-node`
-  `_stream_*` circular dependency warnings while preserving all other Rollup
-  circular dependency warnings.
 
 ## [0.3.5] - 2026-05-27
 
@@ -439,7 +415,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `map.boxSelect.disable()` before enabling the other (see the updated
   `test/examples/lasso-select.html` for the canonical toggle recipe).
 - Release metadata now targets `0.3.0`, matching the handler-centric public API
-  documented in README/FEATURES.
+  documented in the README and project documentation.
 
 ### Fixed
 
@@ -455,15 +431,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added third-party release guidance: static asset deployment, full custom
   box-selection wiring without bundled controls, known limitations, API
-  stability boundaries, and a release checklist. The build now cleans `dist`
-  before production output so stale declaration files are not packed.
+  stability boundaries, and a release checklist.
 - Refreshed the project documentation for the current handler-centric public
   API: rewrote `README.md` around third-party integration, headless handler
   usage, custom UI patterns, feature events, editing, worker setup, theming,
-  and built-in controls; moved `docs/FEATURES.md` to the package root as
-  `FEATURES.md` and updated it as the canonical capability matrix. Removed
-  the mandatory OpenSpec workflow instructions from `AGENTS.md` and
-  `CLAUDE.md`, keeping them focused on current project architecture and
+  and built-in controls; consolidated the capability matrix at the package
+  root. Removed the mandatory OpenSpec workflow instructions from `AGENTS.md`
+  and `CLAUDE.md`, keeping them focused on current project architecture and
   contribution rules.
 - Documented the explicit 0.2.0 loading contract: `setData()` resolves only
   after the dataset is populated and `data{reason:'load'}` has fired, and
