@@ -2,7 +2,7 @@ import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
-  title: 'emap',
+  title: 'Emap',
   tagline: 'Topology-oriented browser maps',
   url: 'https://zwishing.github.io',
   baseUrl: '/emap/',
@@ -44,9 +44,9 @@ const config: Config = {
   ],
   themeConfig: {
     navbar: {
-      title: 'emap',
+      title: 'Emap',
       logo: {
-        alt: 'emap logo',
+        alt: 'Emap logo',
         src: 'img/emap.svg',
         srcDark: 'img/emap.svg',
         width: 22,

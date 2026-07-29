@@ -20,7 +20,7 @@ import the subpath pay its download and initialization cost.
 pnpm add @duckdb/duckdb-wasm
 ```
 
-It is an optional emap dependency. Install it explicitly when the package
+It is an optional Emap dependency. Install it explicitly when the package
 manager skips optional dependencies.
 
 Load lazily:
@@ -163,7 +163,7 @@ map.setExtent(output.getExtent());
 ```
 
 Choose explicitly between a new source and replacing an existing one. Dataset
-helpers alone do not create map history; use the emap adapter/operation surface
+helpers alone do not create map history; use the Emap adapter/operation surface
 when history is required.
 
 ## CRS and errors

@@ -19,7 +19,7 @@ TopoJSON, and displays navigation and history controls.
 - A browser with ES modules, Canvas 2D, and modern JavaScript support.
 - npm, pnpm, or another package manager that supports package exports.
 
-If you already have a frontend application, start at “Install emap.”
+If you already have a frontend application, start at “Install Emap.”
 
 ## Create an application
 
@@ -37,7 +37,7 @@ cd emap-demo
 npm install
 ```
 
-## Install emap
+## Install Emap
 
 ```bash
 pnpm add @zwishing/emap

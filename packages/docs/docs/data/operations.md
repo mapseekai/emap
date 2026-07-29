@@ -177,7 +177,7 @@ dataset-replace operation 可以通过 `useWorker: 'auto'` 离开主线程。调
 
 ### option 名称来自 mapshaper CLI
 
-emap 暴露 TypeScript option，不接受任意 CLI 字符串。检查具体接口，例如 buffer
+Emap 暴露 TypeScript option，不接受任意 CLI 字符串。检查具体接口，例如 buffer
 使用 `radius`，project 使用 `crs`。
 
 ### operation 返回成功但输出名称不同

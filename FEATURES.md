@@ -1,6 +1,6 @@
-# emap Feature Overview
+# Emap Feature Overview
 
-This document lists the current public capabilities of `emap`. It complements
+This document lists the current public capabilities of `Emap`. It complements
 the quick-start focused [README.md](README.md).
 
 ## 1. Runtime and Packaging
@@ -126,7 +126,7 @@ Camera events:
 
 ## 6. Named Interaction Handlers
 
-`emap` exposes built-in interactions as named handlers. Third-party apps can use
+`Emap` exposes built-in interactions as named handlers. Third-party apps can use
 these directly without using bundled UI controls.
 
 | Handler | Purpose |
@@ -350,7 +350,7 @@ Source export formats:
 - TopoJSON
 - Shapefile ZIP
 
-Snapshots use Mapshaper pack data with `emap` source metadata for multi-source
+Snapshots use Mapshaper pack data with `Emap` source metadata for multi-source
 restore.
 
 ## 13. Built-In Controls

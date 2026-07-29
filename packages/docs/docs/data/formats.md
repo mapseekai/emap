@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # 数据格式
 
-emap 把核心格式和可选格式分开，避免只加载 GeoJSON 的应用承担 Arrow、Parquet
+Emap 把核心格式和可选格式分开，避免只加载 GeoJSON 的应用承担 Arrow、Parquet
 和 WASM 依赖。
 
 ## 支持矩阵
@@ -67,7 +67,7 @@ ZIP 中至少应包含 `.shp`，通常还包括：
 - `.shx`：索引
 - `.prj`：CRS
 
-emap 对 ZIP 设置 entry 数量、总解压大小和压缩比限制，避免浏览器解压异常归档。
+Emap 对 ZIP 设置 entry 数量、总解压大小和压缩比限制，避免浏览器解压异常归档。
 上传时保留完整 ZIP，不要只把 `.shp` 内容传给 `fromBytes`。
 
 ## 启用 GeoParquet 和 GeoArrow

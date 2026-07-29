@@ -147,7 +147,7 @@ const result = await map.ops.joinTable({
 
 ## 属性与选择
 
-`attribute-only` operation 可以保留 feature ID，因此 emap 会尽量保留当前选择。
+`attribute-only` operation 可以保留 feature ID，因此 Emap 会尽量保留当前选择。
 shape-count operation 可能改变记录索引，应用应在操作后从 `selectionchange` 或新查询
 刷新缓存。
 

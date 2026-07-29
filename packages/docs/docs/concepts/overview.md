@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # 核心概念
 
-emap 的运行模型围绕 `Emap`、`TopologySource`、source layer 和渲染图层展开。
+Emap 的运行模型围绕 `Emap`、`TopologySource`、source layer 和渲染图层展开。
 先理解它们的职责边界，可以避免数据已经加载却无法显示、图层 ID 混用或直接修改
 dataset 导致历史和缓存失效等问题。
 

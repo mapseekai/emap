@@ -154,7 +154,7 @@ changing their call shape or result.
 
 ## Troubleshooting
 
-- emap accepts typed options, not arbitrary mapshaper CLI strings. Buffer uses
+- Emap accepts typed options, not arbitrary mapshaper CLI strings. Buffer uses
   `radius`; project uses `crs`.
 - Check `name`, `target`, and `noReplace` for output-layer behavior.
 - Run shape-count changes through `map.ops` so selection is cleared or remapped.

@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # 样式图层
 
-emap 的样式模型直接对应 Canvas 绘制基元，只有 `fill`、`line` 和 `circle`
+Emap 的样式模型直接对应 Canvas 绘制基元，只有 `fill`、`line` 和 `circle`
 三种图层类型。它不包含复杂的样式表达式系统；数据样式和属性计算应分别处理。
 
 ## 图层结构

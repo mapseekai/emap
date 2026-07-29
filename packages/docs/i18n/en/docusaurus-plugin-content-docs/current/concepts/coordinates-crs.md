@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # Coordinates and CRS
 
-emap works with three coordinate spaces:
+Emap works with three coordinate spaces:
 
 | Space | Example | Purpose |
 |---|---|---|

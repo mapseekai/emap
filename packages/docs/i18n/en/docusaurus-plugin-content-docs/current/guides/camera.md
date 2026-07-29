@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # Camera
 
-The camera controls map center and scale. emap is two-dimensional and does not
+The camera controls map center and scale. Emap is two-dimensional and does not
 have bearing or pitch. Camera centers use current projected/data coordinates;
 canvas pointers use container-local pixels.
 

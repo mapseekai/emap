@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # 坐标与 CRS
 
-emap 同时处理三种坐标空间：
+Emap 同时处理三种坐标空间：
 
 | 空间 | 示例 | 用途 |
 |---|---|---|
@@ -134,7 +134,7 @@ map.jumpTo({
 
 ### 屏幕点击坐标无法查询
 
-`queryFeatures` 接收 Canvas 容器内像素。使用浏览器事件时应由 emap Handler
+`queryFeatures` 接收 Canvas 容器内像素。使用浏览器事件时应由 Emap Handler
 归一化坐标，或先减去容器位置。
 
 ## API

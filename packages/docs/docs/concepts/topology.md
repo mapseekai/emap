@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # 拓扑模型
 
-emap 使用 mapshaper dataset 保存几何。线和面的坐标不会在每个要素中重复存储，
+Emap 使用 mapshaper dataset 保存几何。线和面的坐标不会在每个要素中重复存储，
 而是由 shape 引用共享 arc。相邻多边形共享边界时，对应的是同一组 arc 坐标。
 
 ## 为什么保留拓扑
@@ -91,7 +91,7 @@ if (!result.ok) {
 `DisplayArcs` 为渲染维护缩放相关的简化结果。显示简化不是直接删除 source dataset
 中的坐标。数据操作需要永久简化输出时，应调用 `map.ops.simplifyLayer(...)`。
 
-直接设置 ArcCollection retained interval 会和 emap 的 LOD 管理冲突。
+直接设置 ArcCollection retained interval 会和 Emap 的 LOD 管理冲突。
 
 ## 操作效果与选择
 
@@ -102,7 +102,7 @@ if (!result.ok) {
 - `attribute-only`
 - `crs-only`
 
-emap 根据效果决定是否能保留选择。shape-count 操作可能改变 feature ID，因此旧引用
+Emap 根据效果决定是否能保留选择。shape-count 操作可能改变 feature ID，因此旧引用
 不能继续使用。通过 `map.ops` 执行操作，选择和空间索引才会按效果正确更新。
 
 ## 常见问题

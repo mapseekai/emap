@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # Concepts overview
 
-emap is organized around `Emap`, `TopologySource`, source layers, and render
+Emap is organized around `Emap`, `TopologySource`, source layers, and render
 layers. Understanding their ownership boundaries prevents common failures such
 as loaded data that is not visible, mixed-up layer IDs, or direct dataset
 mutations that bypass history and caches.

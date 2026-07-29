@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # 兼容性
 
-emap 面向浏览器，需要有尺寸的 DOM 容器、Canvas 和现代模块工具链。可选 formats 与 DuckDB 功能需要对应 WASM 依赖。
+Emap 面向浏览器，需要有尺寸的 DOM 容器、Canvas 和现代模块工具链。可选 formats 与 DuckDB 功能需要对应 WASM 依赖。
 
 ## 行为说明
 

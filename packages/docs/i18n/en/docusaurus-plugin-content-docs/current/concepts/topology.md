@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # Topology model
 
-emap stores geometry in a mapshaper dataset. Line and polygon coordinates are
+Emap stores geometry in a mapshaper dataset. Line and polygon coordinates are
 not repeated in every feature; shapes reference shared arcs. Adjacent polygons
 that share a boundary reference the same arc coordinates.
 
@@ -95,12 +95,12 @@ simplification does not delete coordinates from the source dataset. Use
 simplified.
 
 Do not set the ArcCollection retained interval directly; it conflicts with
-emap's LOD management.
+Emap's LOD management.
 
 ## Operation effects and selection
 
 Operations are classified as `shape-count`, `topology-only`, `attribute-only`,
-or `crs-only`. emap uses the effect to preserve, remap, or clear selection and
+or `crs-only`. Emap uses the effect to preserve, remap, or clear selection and
 to invalidate indexes. A shape-count operation may change feature IDs, so old
 references must not be retained.
 

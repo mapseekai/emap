@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # 事件
 
-emap 在引擎层使用 `EventDispatcher`。应用通过 `map.on`、`map.once` 和 `map.off`
+Emap 在引擎层使用 `EventDispatcher`。应用通过 `map.on`、`map.once` 和 `map.off`
 监听相机、数据、选择、历史、验证、指针和要素变化，而不需要监听内部 Canvas
 的实现事件。
 

@@ -138,7 +138,7 @@ if (deleted) {
 
 ## 选择与数据操作
 
-数据操作可能改变要素数量、拓扑、属性或 CRS。emap 根据 operation effect 决定选择
+数据操作可能改变要素数量、拓扑、属性或 CRS。Emap 根据 operation effect 决定选择
 是保留、重映射还是清空。所有批量操作都应通过 `map.ops`，否则选择引用可能指向
 错误的 feature ID。
 

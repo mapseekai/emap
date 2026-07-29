@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # 数据源与图层
 
-emap 把“保存数据”和“如何绘制数据”分开：
+Emap 把“保存数据”和“如何绘制数据”分开：
 
 - `TopologySource` 保存导入后的 mapshaper dataset。
 - dataset 中的 source layer 保存几何和属性。
@@ -81,7 +81,7 @@ map.addLayer({
 
 ## 选择 source layer
 
-单图层数据通常可以省略 `source-layer`，emap 会使用第一个与渲染类型兼容的 layer：
+单图层数据通常可以省略 `source-layer`，Emap 会使用第一个与渲染类型兼容的 layer：
 
 ```ts
 map.addLayer({

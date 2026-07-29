@@ -18,7 +18,7 @@ verifiedVersion: 0.5.0
 - 支持 ES module、Canvas 2D 和现代 JavaScript 的浏览器。
 - npm、pnpm 或其他支持 package exports 的包管理器。
 
-如果已有前端项目，可以直接从“安装 emap”开始。
+如果已有前端项目，可以直接从“安装 Emap”开始。
 
 ## 创建项目
 
@@ -36,7 +36,7 @@ cd emap-demo
 npm install
 ```
 
-## 安装 emap
+## 安装 Emap
 
 ```bash
 pnpm add @zwishing/emap

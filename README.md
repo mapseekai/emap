@@ -1,6 +1,6 @@
-# emap
+# Emap
 
-`emap` is a browser-only TypeScript map rendering and editing engine built on
+`Emap` is a browser-only TypeScript map rendering and editing engine built on
 Mapshaper topology data structures and HTML5 Canvas 2D. It is designed for
 framework-agnostic GIS applications that need client-side loading, rendering,
 selection, topology-aware editing, data operations, undo/redo, and custom UI
@@ -8,7 +8,7 @@ integration without a backend service.
 
 ## Project Status
 
-`emap` is an AI-driven development project and is still evolving quickly. The
+`Emap` is an AI-driven development project and is still evolving quickly. The
 API, behavior, and implementation details may change without the compatibility
 guarantees expected from a mature GIS engine. It is not recommended for
 production environments yet; evaluate it in prototypes, demos, research tools,
@@ -535,7 +535,7 @@ map.addLayer({
 });
 ```
 
-When no user layers are added, `emap` creates default display layers from the
+When no user layers are added, `Emap` creates default display layers from the
 source geometry type. Polygon defaults are outline-only for large-data browsing;
 add an explicit `fill` layer when you want area fills.
 
@@ -632,7 +632,7 @@ map.addControl(control, 'top-right');
 
 If you want your own rectangular selection UI instead of `BoxSelectControl`, use
 the built-in handler as the gesture engine and keep your buttons outside
-`emap`:
+`Emap`:
 
 ```ts
 const boxButton = document.querySelector<HTMLButtonElement>('[data-tool="box"]')!;

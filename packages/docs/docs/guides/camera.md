@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # 相机
 
-相机控制地图中心和缩放比例。emap 是二维地图，不提供 bearing 或 pitch。相机中心使用
+相机控制地图中心和缩放比例。Emap 是二维地图，不提供 bearing 或 pitch。相机中心使用
 当前地图的 projected/data 坐标；Canvas 指针使用容器内像素坐标。
 
 ## 即时移动

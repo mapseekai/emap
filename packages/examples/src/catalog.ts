@@ -14,7 +14,7 @@ export function renderCatalog(root: HTMLElement, examples: readonly ExampleDefin
 
   const eyebrow = document.createElement('p');
   eyebrow.className = 'eyebrow';
-  eyebrow.textContent = 'emap examples';
+  eyebrow.textContent = 'Emap examples';
 
   const title = document.createElement('h1');
   title.textContent = 'Runnable documentation examples';

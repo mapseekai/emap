@@ -19,7 +19,7 @@ verifiedVersion: 0.5.0
 pnpm add @duckdb/duckdb-wasm
 ```
 
-该包是 emap 的 optional dependency。包管理器跳过 optional dependency 时需要显式安装。
+该包是 Emap 的 optional dependency。包管理器跳过 optional dependency 时需要显式安装。
 
 推荐懒加载：
 
@@ -177,7 +177,7 @@ map.setExtent(output.getExtent());
 ```
 
 应用可以选择新建 source 或显式替换已有 source。不要在 helper 之外假设历史自动更新；
-需要地图操作历史时使用 emap adapter/operation 入口。
+需要地图操作历史时使用 Emap adapter/operation 入口。
 
 ## CRS 与单位
 

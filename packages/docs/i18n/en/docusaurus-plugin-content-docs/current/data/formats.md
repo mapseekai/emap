@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # Data formats
 
-emap separates core formats from optional formats so a GeoJSON-only
+Emap separates core formats from optional formats so a GeoJSON-only
 application does not pay for Arrow, Parquet, or WASM.
 
 ## Support matrix
@@ -60,7 +60,7 @@ A newer load supersedes an older in-flight load.
 
 ## Shapefile ZIP
 
-A ZIP needs `.shp` and normally includes `.dbf`, `.shx`, and `.prj`. emap
+A ZIP needs `.shp` and normally includes `.dbf`, `.shx`, and `.prj`. Emap
 enforces entry-count, expanded-size, and compression-ratio limits. Pass the
 complete ZIP rather than only the `.shp` bytes.
 

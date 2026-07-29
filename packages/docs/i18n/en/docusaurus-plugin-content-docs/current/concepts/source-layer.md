@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # Sources and layers
 
-emap separates data ownership from data presentation:
+Emap separates data ownership from data presentation:
 
 - `TopologySource` stores an imported mapshaper dataset.
 - Source layers inside the dataset store geometry and attribute records.
@@ -85,7 +85,7 @@ load, but they still belong to different levels.
 
 ## Select a source layer
 
-A single-layer dataset can usually omit `source-layer`; emap selects the first
+A single-layer dataset can usually omit `source-layer`; Emap selects the first
 layer compatible with the render type:
 
 ```ts
