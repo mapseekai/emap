@@ -1,8 +1,6 @@
-import { Emap } from '../map/map';
+import type { Emap } from '../map/map';
+import type { ControlContract } from './control-contract';
 
-export interface Control {
-  onAdd(map: Emap): HTMLElement;
-  onRemove(map?: Emap): void;
-}
+export interface Control extends ControlContract<Emap> {}
 
-export type ControlPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+export type { ControlPosition } from './control-contract';

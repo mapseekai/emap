@@ -61,7 +61,7 @@ import type { EditCommand } from '../edit/edit-command';
 import { Transaction, type TransactionInternal } from '../edit/transaction';
 // `MapshaperOps`, `EditSessions`, `AttributeOps` are composed onto `Emap`
 // via the `ops` / `editSession` / `attributes` getters below.
-import { Control, ControlPosition } from '../ui/control';
+import type { ControlContract, ControlPosition } from '../ui/control-contract';
 import { getLayerId } from '../source/layer-utils';
 import { DEFAULT_LAYER_COLOR, type LayerSpecification } from './layer';
 import type { ArcCollection, MapshaperLayer } from '../types/mapshaper-types';
@@ -159,7 +159,7 @@ export class Emap extends EventDispatcher {
   // `onRemove()` on each. We intentionally don't drop entries on
   // `removeControl()` — that would require both an Array and a Set —
   // and the array is short-lived so the duplicate is harmless.
-  private _controls: Control[] = [];
+  private _controls: ControlContract<Emap>[] = [];
 
   // Delegated managers. `_selection` and `_history` are read by composed
   // managers via `EmapHostInternal`; the rest stay private.
@@ -1158,14 +1158,14 @@ export class Emap extends EventDispatcher {
     this._viewport.reset();
   }
 
-  public addControl(control: Control, position: ControlPosition = 'top-left'): void {
+  public addControl(control: ControlContract<Emap>, position: ControlPosition = 'top-left'): void {
     const el = control.onAdd(this);
     el.style.pointerEvents = 'auto';
     this._controlContainers.get(position)?.appendChild(el);
     this._controls.push(control);
   }
 
-  public removeControl(control: Control): void {
+  public removeControl(control: ControlContract<Emap>): void {
     control.onRemove(this);
     const idx = this._controls.indexOf(control);
     if (idx !== -1) this._controls.splice(idx, 1);

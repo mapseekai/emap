@@ -1,11 +1,11 @@
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
-import type { Emap } from '../../map/map';
 import type {
   DragSessionOptions,
   FeatureTranslateSession,
   FeatureAffineSession,
 } from '../../map/types';
 import { rotateMatrix, scaleMatrix } from '../../edit/commands/feature-affine';
+import type { EditHandlerHost } from './edit-handler-host';
 
 export interface TransformFeatureOptions {
   /** Active transform. Default 'translate'. */
@@ -43,7 +43,7 @@ export class TransformFeatureHandler implements Handler<TransformFeatureOptions>
   private _prevDist = 1;
   private _onKeyDownBound = (e: KeyboardEvent) => this._onKeyDown(e);
 
-  constructor(private _map: Emap) {
+  constructor(private _map: EditHandlerHost) {
     this._map.on('editmodechange', (e: { mode: string }) => {
       if (e.mode !== 'transform' && this._enabled) this._quietDisable();
     });

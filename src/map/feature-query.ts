@@ -3,7 +3,7 @@ import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { AffineTransform } from '../geo/transform';
 import { TopologySource } from '../source/source';
 import { getLayerId, normalizePointShape } from '../source/layer-utils';
-import type { QueryFeaturesOptions, QueriedFeature } from './map';
+import type { QueryFeaturesOptions, QueriedFeature } from './types';
 import type { ArcCollection, MapshaperLayer, PathPart, PathShape } from '../types/mapshaper-types';
 
 /** Pixel distance for a bullseye hit on point features */

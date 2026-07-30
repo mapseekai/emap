@@ -3,7 +3,8 @@ import type { Handler, HandlerResult, NormalizedPointerEvent, PointerModifiers }
 import { resolveMode, type ModifierCombo } from './select-mode';
 import { featureMatchesLasso, pathBBox } from './select-geometry';
 import type { SelectHandlerOptions } from './click-select';
-import type { Emap, FeatureRef } from '../../map/map';
+import type { FeatureRef } from '../../map/types';
+import type { SelectionHandlerHost } from './selection-handler-host';
 
 /** Visual style for the rubber-band lasso path. */
 export interface LassoSelectStyle {
@@ -54,7 +55,7 @@ export class LassoSelectHandler
   /** Set by HandlerManager.register. */
   _manager?: { isEnabledByName(name: string): boolean };
 
-  constructor(private _map: Emap) {
+  constructor(private _map: SelectionHandlerHost) {
     super();
   }
 

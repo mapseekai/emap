@@ -3,7 +3,7 @@ import type { Handler, HandlerResult, NormalizedPointerEvent, PointerModifiers }
 import { resolveMode, type ModifierCombo } from './select-mode';
 import { dedupeRefs } from './select-geometry';
 import type { SelectHandlerOptions } from './click-select';
-import type { Emap } from '../../map/map';
+import type { SelectionHandlerHost } from './selection-handler-host';
 
 /** Visual style for the rubber-band rectangle. */
 export interface BoxSelectStyle {
@@ -47,7 +47,7 @@ export class BoxSelectHandler extends EventDispatcher implements Handler<BoxSele
   /** Set by HandlerManager.register. */
   _manager?: { isEnabledByName(name: string): boolean };
 
-  constructor(private _map: Emap) {
+  constructor(private _map: SelectionHandlerHost) {
     super();
   }
 

@@ -1,5 +1,5 @@
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
-import { Emap, EditVertexShape, EditVertexArcs } from '../../map/map';
+import type { EditVertexShape, EditVertexArcs } from '../../map/types';
 import { VertexMoveCommand } from '../../edit/commands/vertex-move';
 import { VertexInsertCommand } from '../../edit/commands/vertex-insert';
 import { planTopologyNodeDeletion } from '../../edit/commands/vertex-delete';
@@ -8,6 +8,7 @@ import type { TopologySource } from '../../source/source';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import { getLayerId } from '../../source/layer-utils';
 import { isSharedNode } from '../../edit/commands/split-shared-node';
+import type { EditHandlerHost } from './edit-handler-host';
 
 interface EditableArcs extends EditVertexArcs {
   getVertex2(vertexId: number): [number, number] | null;
@@ -57,7 +58,7 @@ export interface VertexEditOptions {
 
 export class VertexEditHandler implements Handler<VertexEditOptions> {
   readonly name = 'vertexEdit';
-  private readonly _map: Emap;
+  private readonly _map: EditHandlerHost;
   private _enabled = false;
   /** Injected by HandlerManager.register (cursor recompute on mode flips). */
   _manager?: { refreshCursor(): void };
@@ -92,7 +93,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     this._clearHoverState();
   };
 
-  constructor(map: Emap, opts: VertexEditOptions = {}) {
+  constructor(map: EditHandlerHost, opts: VertexEditOptions = {}) {
     this._map = map;
     this._layers = opts.layers;
     this._polygonFillColor =

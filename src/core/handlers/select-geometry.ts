@@ -1,6 +1,7 @@
 import { normalizePointShape, getLayerId } from '../../source/layer-utils';
 import type { ArcCollection, MapshaperLayer, PathShape } from '../../types/mapshaper-types';
-import type { Emap, FeatureRef } from '../../map/map';
+import type { FeatureRef } from '../../map/types';
+import type { SelectionHandlerHost } from './selection-handler-host';
 
 // ---------------------------------------------------------------------------
 // Module-private helpers — exported only for the test file.
@@ -44,7 +45,7 @@ export function pathBBox(path: Array<[number, number]>): [number, number, number
 }
 
 export function featureMatchesLasso(
-  map: Emap,
+  map: SelectionHandlerHost,
   ref: { source: string; layer: string; id: number; geometryType?: string },
   lasso: Array<[number, number]>,
   includeIntersecting: boolean,
@@ -71,7 +72,7 @@ export function featureMatchesLasso(
 }
 
 function resolveFeatureShape(
-  map: Emap,
+  map: SelectionHandlerHost,
   ref: { source: string; layer: string; id: number },
 ): { layer: MapshaperLayer; shape: unknown; arcs?: ArcCollection } | null {
   const source = map.getSource(ref.source);
@@ -92,7 +93,7 @@ function resolveFeatureShape(
 }
 
 function pathShapeToPixelParts(
-  map: Emap,
+  map: SelectionHandlerHost,
   shape: PathShape,
   arcs: ArcCollection,
 ): Array<Array<[number, number]>> {

@@ -2,7 +2,7 @@ import { EventDispatcher } from '../events';
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
 import { resolveMode, type ModifierCombo, type SelectMode } from './select-mode';
 import { dedupeRefs } from './select-geometry';
-import type { Emap } from '../../map/map';
+import type { SelectionHandlerHost } from './selection-handler-host';
 
 export interface SelectHandlerOptions {
   /** Restrict selectable layers; default = all visible. */
@@ -30,7 +30,7 @@ export class ClickSelectHandler extends EventDispatcher implements Handler<Selec
   private _enabled = false;
   private _opts: SelectHandlerOptions = {};
 
-  constructor(private _map: Emap) {
+  constructor(private _map: SelectionHandlerHost) {
     super();
   }
 

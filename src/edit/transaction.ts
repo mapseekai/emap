@@ -45,15 +45,9 @@ import { OK, type OpResult } from '../map/op-result';
 import type { EmapHostInternal } from '../map/emap-host';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { SelectionSnapshot } from '../map/selection';
+import type { TransactionInternal } from './transaction-internal';
 
-/**
- * Internal-only view of a Transaction used by the runner. Public callers
- * receive the wider {@link Transaction} class.
- */
-export interface TransactionInternal {
-  /** Record the first-touch dataset snapshot for `sourceId`, if not already captured. */
-  _captureFirstTouch(sourceId: string, before: MapshaperDataset): void;
-}
+export type { TransactionInternal } from './transaction-internal';
 
 /**
  * Atomic multi-step edit unit. Stages every command pushed during its

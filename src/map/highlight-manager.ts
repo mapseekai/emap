@@ -2,7 +2,7 @@ import type { CorePainter } from '../renderer/painter';
 import { AffineTransform } from '../geo/transform';
 import { TopologySource } from '../source/source';
 import { getLayerId } from '../source/layer-utils';
-import type { HighlightStyle, HighlightFeatureRef, QueriedFeature } from './map';
+import type { HighlightStyle, HighlightFeatureRef, QueriedFeature } from './types';
 import type { FeatureShape } from '../types/mapshaper-types';
 
 /**

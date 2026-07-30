@@ -1,4 +1,4 @@
-import type { FeatureRef } from './map';
+import type { FeatureRef } from './types';
 import type { SelectMode } from '../core/handlers/select-mode';
 
 /** Mutation modes for {@link Selection.apply}. Canonical declaration lives

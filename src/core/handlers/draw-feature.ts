@@ -1,8 +1,9 @@
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
-import { Emap, SnapKind } from '../../map/map';
+import type { SnapKind } from '../../map/types';
 import { getLayerId } from '../../source/layer-utils';
 import { FeatureCreateCommand } from '../../edit/commands/feature-create';
 import type { MapshaperLayer, ArcCollection } from '../../types/mapshaper-types';
+import type { EditHandlerHost } from './edit-handler-host';
 
 export type DrawGeometryType = 'polygon' | 'polyline' | 'point';
 
@@ -41,7 +42,7 @@ const CLOSE_THRESHOLD = 12;
 
 export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
   readonly name = 'drawFeature';
-  private readonly _map: Emap;
+  private readonly _map: EditHandlerHost;
   private _enabled = false;
   private _opts: DrawFeatureOptions;
   /** Injected by HandlerManager.register (cursor recompute on mode flips). */
@@ -57,7 +58,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
   private _onMapMoveBound = () => this._onMapMove();
   private _onKeyDownBound = (e: KeyboardEvent) => this._onKeyDown(e);
 
-  constructor(map: Emap, opts?: Partial<DrawFeatureOptions>) {
+  constructor(map: EditHandlerHost, opts?: Partial<DrawFeatureOptions>) {
     this._map = map;
     this._opts = { ...(opts ?? {}) } as DrawFeatureOptions;
     this._snapThreshold = this._opts.snapThreshold ?? DEFAULT_SNAP_THRESHOLD;
