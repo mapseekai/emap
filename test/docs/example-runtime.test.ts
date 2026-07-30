@@ -286,6 +286,9 @@ describe('shared example map UI', () => {
     const dialog = document.querySelector<HTMLDialogElement>('.emap-example-source-dialog');
     expect(dialog?.hasAttribute('open')).toBe(true);
     expect(dialog?.querySelector('code')?.textContent).toBe(source);
+    expect(dialog?.querySelector('code')?.classList).toContain('language-html');
+    expect(dialog?.querySelector('.token.doctype')).not.toBeNull();
+    expect(dialog?.querySelector('.token.tag')).not.toBeNull();
 
     dialog?.querySelector<HTMLButtonElement>('.emap-example-source-close')?.click();
     expect(dialog?.isConnected).toBe(false);

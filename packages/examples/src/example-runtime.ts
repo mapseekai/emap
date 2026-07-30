@@ -1,3 +1,5 @@
+import * as Prism from 'prismjs';
+import 'prismjs/themes/prism-tomorrow.css';
 import {
   resolveRuntimeAssets,
   type RuntimeAssetOptions,
@@ -184,7 +186,8 @@ function openExampleSourceDialog(sourceText: string, root: Document): void {
 
   const source = root.createElement('pre');
   const code = root.createElement('code');
-  code.textContent = sourceText;
+  code.className = 'language-html';
+  code.innerHTML = Prism.highlight(sourceText, Prism.languages.markup, 'html');
   source.append(code);
   dialog.append(dialogHeader, source);
   root.body.append(dialog);

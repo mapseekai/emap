@@ -112,6 +112,13 @@ importers:
       '@mapseekai/emap':
         specifier: workspace:*
         version: link:../..
+      prismjs:
+        specifier: ^1.30.0
+        version: 1.30.0
+    devDependencies:
+      '@types/prismjs':
+        specifier: ^1.26.6
+        version: 1.26.6
 
 packages:
 
