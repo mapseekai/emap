@@ -45,10 +45,14 @@ export class DatasetReplaceCommand implements EditCommand {
   }
 
   do(): void {
-    asMutableTopologySource(this.opts.source).setDataset(this.opts.after);
+    asMutableTopologySource(this.opts.source).setDataset(this.opts.after, false);
   }
 
   undo(): void {
-    asMutableTopologySource(this.opts.source).setDataset(this.opts.before);
+    asMutableTopologySource(this.opts.source).setDataset(this.opts.before, false);
+  }
+
+  publish(): void {
+    this.opts.source.fire?.('data', { reason: 'replace' });
   }
 }

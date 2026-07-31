@@ -452,13 +452,15 @@ function commitDatasetReplace(
 ): OpResult {
   reuseUnchangedDatasetState(before, after, effect);
   transaction?._captureFirstTouch(sourceId, before);
-  source.setDataset(after);
-  host._history.push(new DatasetReplaceCommand({ source, before, after, label }));
-  if (!host._history.isCapturing()) host._fireHistoryChange();
-  if (effectInvalidatesSelection(effect)) {
-    host._fireSelectionChange(host._selection.clear());
-  }
+  source.setDataset(after, false);
+  const command = new DatasetReplaceCommand({ source, before, after, label });
+  host._history.push(command);
+  const selectionDiff = effectInvalidatesSelection(effect) ? host._selection.clear() : null;
+  host._invalidateShapeCachesForSources([sourceId]);
   host._scheduleRender();
+  command.publish();
+  if (!host._history.isCapturing()) host._fireHistoryChange();
+  if (selectionDiff) host._fireSelectionChange(selectionDiff);
   return OK;
 }
 

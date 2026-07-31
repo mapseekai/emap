@@ -25,11 +25,10 @@
       <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
     </span>
     <span class="group">
-      <label>作用域:
-        <select id="scope">
-          <option value="">整个数据源</option>
-        </select>
-      </label>
+       <label>导出图层:
+         <select id="scope">
+         </select>
+       </label>
     </span>
     <span class="group">
       <label>目标 CRS:
@@ -51,11 +50,14 @@
       <label>源 CRS (init=,可选): <input id="init" type="text" placeholder="例如 EPSG:4326" /></label>
       <label><input id="densify" type="checkbox" /> densify</label>
     </span>
-    <button id="btn" disabled>投影</button>
-    <span id="status">加载一个数据文件;选择目标 CRS 后投影</span>
+    <span class="group">
+      <label>输出文件: <input id="filename" type="text" placeholder="默认: 图层名.geojson" /></label>
+    </span>
+    <button id="btn" disabled>投影并下载</button>
+    <span id="status">加载一个数据文件；选择图层和目标 CRS 后导出</span>
     <span class="hint">
-      mapshaper <code>-proj</code>。投影后 buffer / area / snap 等会基于目标单位。
-      投影完成后会自动重新拟合视图。Ctrl+Z 撤销。
+      <code>projectLayer</code> 在隔离副本上运行 mapshaper <code>-proj</code> 并下载 GeoJSON；
+      当前地图、数据源、CRS 和视图不会改变。整图坐标系切换请使用 <code>map.reproject()</code>。
     </span>
   </div>
   <div id="map" tabindex="0"></div>
@@ -78,11 +80,12 @@
     const crsText = document.getElementById('crs-text');
     const initInput = document.getElementById('init');
     const densifyInput = document.getElementById('densify');
+    const filenameInput = document.getElementById('filename');
     const btn = document.getElementById('btn');
     const status = document.getElementById('status');
 
     function populate(source) {
-      scopeSel.innerHTML = '<option value="">整个数据源</option>';
+      scopeSel.innerHTML = '';
       source.getLayers().forEach((lyr, i) => {
         const name = lyr?.name || lyr?.id || `layer-${i}`;
         scopeSel.appendChild(new Option(`${name} (${lyr?.geometry_type ?? '?'})`, name));
@@ -125,27 +128,37 @@
         status.textContent = '请选择或输入目标 CRS。';
         return;
       }
-      const opts = { source: SOURCE_ID, crs };
-      if (scopeSel.value) opts.target = scopeSel.value;
+      const opts = {
+        source: SOURCE_ID,
+        target: scopeSel.value,
+        crs,
+        output: { format: 'geojson' },
+      };
       const init = initInput.value.trim();
       if (init) opts.init = init;
       if (densifyInput.checked) opts.densify = true;
+      const filename = filenameInput.value.trim();
+      if (filename) opts.output.filename = filename;
 
-      const label = scopeSel.value || '整个数据源';
-      status.textContent = `正在投影 ${label} → ${crs}...`;
+      const label = scopeSel.value;
+      status.textContent = `正在投影并导出 ${label} → ${crs}...`;
       btn.disabled = true;
       try {
-        const ok = await map.ops.projectLayer(opts);
-        if (ok) {
-          // Auto-fit: projected extent likely differs from input
-          const src = map.getSource(SOURCE_ID);
-          if (src) map.setExtent(src.getExtent());
-          status.textContent = `已投影 ${label} → ${crs}。Ctrl+Z 撤销。`;
+        const result = await map.ops.projectLayer(opts);
+        if (result.ok) {
+          const url = URL.createObjectURL(result.value.blob);
+          const download = document.createElement('a');
+          download.href = url;
+          download.download = result.value.filename;
+          download.hidden = true;
+          document.body.append(download);
+          download.click();
+          download.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 0);
+          status.textContent = `已导出 ${result.value.filename}；当前地图未改变。`;
         } else {
-          status.textContent = '投影失败 (检查 CRS 字符串)。';
+          status.textContent = `投影失败: ${result.error?.reason ?? result.error?.message ?? '未知错误'}`;
         }
-        const src = map.getSource(SOURCE_ID);
-        if (src) populate(src);
       } catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);

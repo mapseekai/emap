@@ -38,21 +38,36 @@ const source = await TopologySource.fromBytes('upload', bytes, {
 });
 ```
 
-### 先创建，再加载
+### 预检并确认
 
 ```ts
 const source = new TopologySource('live');
-await map.addSource('live', source);
-
 await source.setData({
   filename: 'districts.geojson',
   content,
 });
+
+let result = await map.preflightSource({ id: 'live', source });
+if (result.status === 'needs-input') {
+  result = await map.preflightSource(result.draft, {
+    sourceCrs: selectedCrs,
+  });
+}
+if (result.status === 'ready') {
+  await map.confirmSource(result.plan);
+}
 ```
 
-`map.addSource()` 与加载顺序无关，但始终应 `await`。已加载 source 会在注册前
-归一到地图的活动 CRS；先注册后加载时，`setData()` 会在提交和 `data` 事件前归一。
-注册后的 `TopologySource.reproject()` 不能独立切换 CRS；应使用 `map.reproject()`。
+`preflightSource()` 在地图外解析和检查数据，不注册 source，也不改变地图 CRS。
+显式 `sourceCrs` 优先于 dataset CRS 元数据；两者都缺失或显式值无效时，结果为
+`needs-input`，应用根据 `requirements` 收集 CRS，再用原 `draft` 重跑预检。
+`rejected` 表示输入无法加载，只有 `ready` plan 可以交给 `confirmSource()`。
+
+不需要交互时可以直接使用
+`await map.addSource('live', source, { sourceCrs: 'EPSG:3857' })`；它复用同一套
+预检和确认流程。空 source 不能先注册，必须先完成 `setData()`。注册后的动态
+`setData()` 仍会归一到地图 CRS；`TopologySource.reproject()` 不能独立切换
+已注册 source 的 CRS，应使用 `map.reproject()`。
 
 ## 三种 ID 不要混用
 

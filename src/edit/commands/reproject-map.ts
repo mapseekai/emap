@@ -14,6 +14,7 @@ export interface ReprojectMapCommandOptions {
   before: { crs: string; extent: Bounds };
   after: { crs: string; extent: Bounds };
   applyViewState(state: { crs: string; extent: Bounds }): void;
+  publishViewState(): void;
 }
 
 export class ReprojectMapCommand implements EditCommand {
@@ -32,13 +33,17 @@ export class ReprojectMapCommand implements EditCommand {
     this.apply('before', this.opts.before);
   }
 
+  publish(): void {
+    this.opts.publishViewState();
+    for (const replacement of this.opts.replacements) {
+      replacement.source.fire('data', { reason: 'reproject' });
+    }
+  }
+
   private apply(datasetKey: 'before' | 'after', state: { crs: string; extent: Bounds }): void {
     for (const replacement of this.opts.replacements) {
       replacement.source.setDataset(replacement[datasetKey], false);
     }
     this.opts.applyViewState({ crs: state.crs, extent: state.extent.clone() });
-    for (const replacement of this.opts.replacements) {
-      replacement.source.fire('data', { reason: 'reproject' });
-    }
   }
 }

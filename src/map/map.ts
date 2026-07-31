@@ -14,8 +14,10 @@ import {
   EpsgProjectionError,
   normalizeProjectCrs,
   normalizeProjectCrsMetadata,
-  resolveDatasetCRS,
+  resolveDatasetCRSMetadata,
   resolveProjectCrs,
+  resolveProjectCrsDefinition,
+  setDatasetCrsMetadata,
 } from '../geo/crs-resolver';
 import { Painter } from '../renderer/painter';
 import { CanvasPainter } from '../renderer/canvas-painter';
@@ -29,7 +31,6 @@ import { LayerRegistry } from './layer-registry';
 import {
   isMutableTopologySource,
   type MutableTopologySource,
-  type NormalizedDatasetCommit,
   type TopologySource,
 } from '../source/source';
 import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
@@ -84,6 +85,23 @@ import { renderLayers } from './layer-renderer';
 // All public type/option surfaces moved to `./types`. Re-export here so
 // existing `import { MapOptions, ... } from './map'` paths keep working.
 export * from './types';
+export type * from './source-loading';
+import {
+  createReadySourceLoadPlan,
+  createSourceLoadDraft,
+  consumeReadySourceLoadPlan,
+  getSourceLoadDraftState,
+  SourceLoadError,
+  type PreparedDatasetCommit,
+  type ReadySourceLoadPlan,
+  type ReadySourceLoadState,
+  type SourceLoadAnswers,
+  type SourceLoadDiagnostic,
+  type SourceLoadDraft,
+  type SourceLoadRequest,
+  type SourceLoadState,
+  type SourcePreflightResult,
+} from './source-loading';
 import {
   DEFAULT_WORKER_THRESHOLD,
   type ExpressionEvaluationPolicy,
@@ -101,6 +119,18 @@ import {
   type RenderAction,
   type AffineDelta,
 } from './types';
+
+interface PreparedSourceRegistration {
+  readonly token: symbol;
+  readonly state: ReadySourceLoadState;
+  readonly dataset: MapshaperDataset;
+  readonly targetCrs: string;
+  readonly expectedMapCrs?: string;
+}
+
+function sourceLoadError(code: SourceLoadDiagnostic['code'], message: string): SourceLoadError {
+  return new SourceLoadError(code, [{ code, severity: 'error', message }]);
+}
 
 /**
  * Canvas map engine that owns sources, layers, camera state, controls, and edit history.
@@ -139,6 +169,7 @@ export class Emap extends EventDispatcher {
     string,
     EventListener<{ reason?: 'load' | 'replace' | 'reproject' }>
   >();
+  private _pendingSourceCommits = new globalThis.Map<string, symbol>();
   private _crsEstablished = false;
   private _layers: LayerSpecification[] = [];
   private _effectiveLayersCache: LayerSpecification[] = [];
@@ -749,92 +780,410 @@ export class Emap extends EventDispatcher {
   }
 
   /**
-   * Register a source in the map's single active CRS.
-   *
-   * The first loaded source establishes an otherwise unset map CRS. A later
-   * loaded source is reprojected before registration when its CRS differs.
-   * Always await this method before adding layers or reading the registered source.
-   *
-   * A successful registration clears undo/redo history (same as
-   * {@link removeSource}), because recorded commands captured the previous
-   * source set and can no longer restore a consistent map state.
+   * Parse and validate a detached source without changing map or source state.
+   * A ready plan is map-bound and can be consumed once by {@link confirmSource}.
    */
-  public async addSource(id: string, source: TopologySource): Promise<void> {
-    if (this._sources.has(id)) {
-      throw new Error(`Source "${id}" already exists`);
+  public async preflightSource(request: SourceLoadRequest): Promise<SourcePreflightResult>;
+  public async preflightSource(
+    draft: SourceLoadDraft,
+    answers: SourceLoadAnswers,
+  ): Promise<SourcePreflightResult>;
+  public async preflightSource(
+    requestOrDraft: SourceLoadRequest | SourceLoadDraft,
+    answers: SourceLoadAnswers = {},
+  ): Promise<SourcePreflightResult> {
+    if (this._removed) {
+      return {
+        status: 'rejected',
+        diagnostics: [
+          {
+            code: 'source-load-cancelled',
+            severity: 'error',
+            message: 'Cannot preflight a source after the map has been removed',
+          },
+        ],
+      };
     }
-    if (!isMutableTopologySource(source)) {
-      throw new TypeError(`Source "${id}" does not implement the mutable topology contract`);
-    }
-    const mutableSource = source;
-    const dataset = mutableSource.getDataset();
-    let adoptedSourceCrs = false;
+    let state: SourceLoadState;
+    let draft: SourceLoadDraft;
+    let suppliedCrs: string | undefined;
 
-    if (dataset) {
-      const sourceCrs = mutableSource.getCRS?.();
-      const hasLoadedSource = Array.from(this._sources.values()).some((entry) =>
-        Boolean(entry.getDataset()),
+    if ('kind' in requestOrDraft) {
+      const draftState = getSourceLoadDraftState(this, requestOrDraft);
+      if (!draftState) {
+        return {
+          status: 'rejected',
+          diagnostics: [
+            {
+              code: 'source-plan-invalid',
+              severity: 'error',
+              message: 'Source load draft is invalid or belongs to another map',
+            },
+          ],
+        };
+      }
+      state = draftState;
+      draft = requestOrDraft;
+      suppliedCrs = answers.sourceCrs;
+    } else {
+      const id = requestOrDraft.id;
+      if (this._sources.has(id)) {
+        return {
+          status: 'rejected',
+          diagnostics: [
+            {
+              code: 'source-id-conflict',
+              severity: 'error',
+              message: `Source "${id}" already exists`,
+            },
+          ],
+        };
+      }
+
+      let source: TopologySource;
+      if ('source' in requestOrDraft) {
+        source = requestOrDraft.source;
+      } else {
+        const parsedSource = new ConcreteTopologySource(id, requestOrDraft.sourceOptions);
+        try {
+          await parsedSource.setData(requestOrDraft.input);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : 'Source parsing failed';
+          return {
+            status: 'rejected',
+            diagnostics: [{ code: 'source-load-rejected', severity: 'error', message }],
+          };
+        }
+        source = parsedSource;
+      }
+
+      if (!isMutableTopologySource(source)) {
+        return {
+          status: 'rejected',
+          diagnostics: [
+            {
+              code: 'source-load-rejected',
+              severity: 'error',
+              message: `Source "${id}" does not implement the mutable topology contract`,
+            },
+          ],
+        };
+      }
+      const dataset = source.getDataset();
+      if (!dataset) {
+        return {
+          status: 'rejected',
+          diagnostics: [
+            {
+              code: 'source-load-rejected',
+              severity: 'error',
+              message: `Source "${id}" has no parsed dataset`,
+            },
+          ],
+        };
+      }
+      state = {
+        owner: this,
+        id,
+        source,
+        dataset,
+        editVersion: dataset.editVersion ?? 0,
+        metadataCrs: resolveDatasetCRSMetadata(dataset),
+        mapCrs: this._crsEstablished ? this._projection.crs : undefined,
+      };
+      draft = createSourceLoadDraft(state);
+      suppliedCrs = requestOrDraft.sourceCrs;
+    }
+
+    const summaryBase = {
+      id: state.id,
+      layerCount: state.dataset.layers.length,
+      metadataCrs: state.metadataCrs,
+    };
+    const hasSuppliedCrs = suppliedCrs !== undefined;
+    const trimmedCrs = suppliedCrs?.trim();
+    if (hasSuppliedCrs && !trimmedCrs) {
+      return {
+        status: 'needs-input',
+        draft,
+        requirements: [{ code: 'source-crs', field: 'sourceCrs', reason: 'invalid' }],
+        summary: summaryBase,
+        diagnostics: [
+          {
+            code: 'source-crs-invalid',
+            severity: 'error',
+            message: 'Source CRS cannot be empty',
+            suppliedCrs: trimmedCrs,
+            metadataCrs: state.metadataCrs,
+          },
+        ],
+      };
+    }
+    const candidateCrs = trimmedCrs ?? state.metadataCrs;
+    if (!candidateCrs) {
+      return {
+        status: 'needs-input',
+        draft,
+        requirements: [{ code: 'source-crs', field: 'sourceCrs', reason: 'missing' }],
+        summary: summaryBase,
+        diagnostics: [],
+      };
+    }
+
+    let resolvedCandidate;
+    try {
+      resolvedCandidate = await resolveProjectCrsDefinition(candidateCrs);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Source CRS is invalid';
+      return {
+        status: 'needs-input',
+        draft,
+        requirements: [{ code: 'source-crs', field: 'sourceCrs', reason: 'invalid' }],
+        summary: summaryBase,
+        diagnostics: [
+          {
+            code: 'source-crs-invalid',
+            severity: 'error',
+            message,
+            suppliedCrs: trimmedCrs,
+            metadataCrs: state.metadataCrs,
+          },
+        ],
+      };
+    }
+
+    const effectiveCrs = normalizeProjectCrsMetadata(candidateCrs) ?? candidateCrs;
+    const diagnostics: SourceLoadDiagnostic[] = [];
+    if (trimmedCrs && state.metadataCrs) {
+      try {
+        const resolvedMetadata = await resolveProjectCrsDefinition(state.metadataCrs);
+        if (resolvedMetadata.signature !== resolvedCandidate.signature) {
+          diagnostics.push({
+            code: 'source-crs-overrides-metadata',
+            severity: 'warning',
+            suppliedCrs: trimmedCrs,
+            metadataCrs: state.metadataCrs,
+            effectiveCrs,
+          });
+        }
+      } catch {
+        diagnostics.push({
+          code: 'source-crs-overrides-metadata',
+          severity: 'warning',
+          suppliedCrs: trimmedCrs,
+          metadataCrs: state.metadataCrs,
+          effectiveCrs,
+        });
+      }
+    }
+
+    return {
+      status: 'ready',
+      plan: createReadySourceLoadPlan(state, effectiveCrs),
+      summary: { ...summaryBase, sourceCrs: effectiveCrs },
+      diagnostics,
+    };
+  }
+
+  /**
+   * Register a source through preflight and confirmation.
+   * Independent maps, including maps in separate browser tabs, must receive
+   * separate mutable source instances.
+   */
+  public async addSource(
+    id: string,
+    source: TopologySource,
+    answers: SourceLoadAnswers = {},
+  ): Promise<void> {
+    const result = await this.preflightSource({ id, source, sourceCrs: answers.sourceCrs });
+    if (result.status === 'ready') {
+      await this.confirmSource(result.plan);
+      return;
+    }
+
+    const diagnostics =
+      result.diagnostics.length > 0
+        ? result.diagnostics
+        : [
+            {
+              code: 'source-crs-required' as const,
+              severity: 'error' as const,
+              message: `Source "${id}" requires an explicit CRS`,
+            },
+          ];
+    throw new SourceLoadError(diagnostics[0].code, diagnostics);
+  }
+
+  /** Atomically normalize and register a source from a ready preflight plan. */
+  public async confirmSource(plan: ReadySourceLoadPlan): Promise<void> {
+    const state = consumeReadySourceLoadPlan(this, plan);
+    if (this._removed) {
+      throw sourceLoadError('source-load-cancelled', 'Cannot confirm a source after map removal');
+    }
+    const pending = (this._pendingSourceCommits ??= new globalThis.Map());
+    if (this._sources.has(state.id) || pending.has(state.id)) {
+      throw sourceLoadError(
+        'source-id-conflict',
+        `Source "${state.id}" already exists or is loading`,
       );
-      if (!this._crsEstablished && !hasLoadedSource && sourceCrs) {
-        this._projection.setCRS(sourceCrs);
-        this._viewport.setCRS(sourceCrs);
-        this._crsEstablished = true;
-        adoptedSourceCrs = true;
-      } else if (sourceCrs) {
-        const targetCrs = this._projection.crs;
+    }
+    if (
+      state.mapCrs !== undefined &&
+      (!this._crsEstablished || this._projection.crs !== state.mapCrs)
+    ) {
+      throw sourceLoadError(
+        'source-plan-stale',
+        `Map CRS changed after source "${state.id}" was preflighted`,
+      );
+    }
+
+    const token = Symbol(state.id);
+    pending.set(state.id, token);
+    try {
+      for (;;) {
+        this._assertSourceLoadState(state, token);
+        const expectedMapCrs = this._crsEstablished ? this._projection.crs : undefined;
+        const targetCrs = expectedMapCrs ?? state.sourceCrs;
+        let prepared: MapshaperDataset = {
+          ...state.dataset,
+          info: { ...state.dataset.info },
+        };
+        setDatasetCrsMetadata(prepared, state.sourceCrs);
+
         const [resolvedSource, resolvedTarget] = await Promise.all([
-          resolveProjectCrs(sourceCrs),
-          resolveProjectCrs(targetCrs),
+          resolveProjectCrsDefinition(state.sourceCrs),
+          resolveProjectCrsDefinition(targetCrs),
         ]);
-        if (this._projection.crs !== targetCrs) {
-          throw new Error(`Map CRS changed during source registration for "${id}"`);
-        }
-        if (resolvedSource !== resolvedTarget) {
+        if (resolvedSource.signature !== resolvedTarget.signature) {
           const targetMetadata = normalizeProjectCrsMetadata(targetCrs) ?? targetCrs;
-          const projected = await mutableSource.prepareReproject(targetCrs, targetMetadata);
-          if (this._projection.crs !== targetCrs) {
-            throw new Error(`Map CRS changed during source registration for "${id}"`);
-          }
-          if (mutableSource.getDataset() !== dataset) {
-            throw new Error(`Source "${id}" changed during CRS normalization`);
-          }
-          mutableSource.setDataset(projected, false);
+          prepared = await state.source.prepareReprojectDataset(
+            prepared,
+            targetCrs,
+            targetMetadata,
+          );
+        }
+
+        this._assertSourceLoadState(state, token);
+        const preparedCrs = resolveDatasetCRSMetadata(prepared);
+        if (
+          !preparedCrs ||
+          (await resolveProjectCrsDefinition(preparedCrs)).signature !== resolvedTarget.signature
+        ) {
+          throw sourceLoadError(
+            'source-load-rejected',
+            `Prepared dataset for source "${state.id}" does not match map CRS`,
+          );
+        }
+        if (
+          this._commitPreparedSource({
+            token,
+            state,
+            dataset: prepared,
+            targetCrs,
+            expectedMapCrs,
+          })
+        ) {
+          return;
         }
       }
+    } finally {
+      if (pending.get(state.id) === token) pending.delete(state.id);
+    }
+  }
+
+  private _commitPreparedSource(registration: PreparedSourceRegistration): boolean {
+    const { token, state, dataset, targetCrs, expectedMapCrs } = registration;
+    this._assertSourceLoadState(state, token);
+    const currentMapCrs = this._crsEstablished ? this._projection.crs : undefined;
+    if (currentMapCrs !== expectedMapCrs) {
+      if (state.mapCrs === undefined) return false;
+      throw sourceLoadError(
+        'source-plan-stale',
+        `Map CRS changed while source "${state.id}" was being prepared`,
+      );
+    }
+    if ((expectedMapCrs ?? state.sourceCrs) !== targetCrs) {
+      throw sourceLoadError(
+        'source-plan-stale',
+        `Source "${state.id}" was prepared for a stale map CRS`,
+      );
     }
 
-    if (this._sources.has(id)) {
-      throw new Error(`Source "${id}" already exists`);
-    }
-    mutableSource.setDatasetNormalizer((nextDataset) =>
-      this._normalizeSourceDataset(id, mutableSource, nextDataset),
-    );
-    mutableSource.setManagedCRS(() => this._projection.crs);
-    this._sources.set(id, mutableSource);
-
+    const { id, source } = state;
+    const previousMapCrs = this._projection.crs;
+    const previousCrsEstablished = this._crsEstablished;
+    const previousDefaultLayersDirty = this._defaultLayersDirty;
+    const adoptedMapCrs = expectedMapCrs === undefined;
     const onData: EventListener<{ reason?: 'load' | 'replace' | 'reproject' }> = (event) => {
-      if (this._sources.get(id) !== mutableSource) return;
-      this._defaultLayersDirty = true;
-      this._invalidateShapeCachesForSources([id]);
-      if (event.reason === 'load') {
-        // setData loads bypass the command history, so any recorded command
-        // (e.g. ReprojectMapCommand) predates the dataset it would restore.
-        this._clearHistory();
-      }
-      this.fire('data', { sourceId: id, reason: event.reason });
-      this._scheduleRender();
+      this._handleSourceData(id, source, event);
     };
 
-    this._sourceListeners.set(id, onData);
-    source.on('data', onData);
+    try {
+      source.setDatasetNormalizer((nextDataset) =>
+        this._normalizeSourceDataset(id, source, nextDataset),
+      );
+      source.setManagedCRS(() => this._projection.crs);
+      source.setDataset(dataset, false);
+      if (adoptedMapCrs) {
+        this._projection.setCRS(targetCrs);
+        this._viewport.setCRS(targetCrs);
+        this._crsEstablished = true;
+      }
+      this._sources.set(id, source);
+      this._sourceListeners.set(id, onData);
+      source.on('data', onData);
 
-    // Registration changes the source set captured by history commands (e.g.
-    // ReprojectMapCommand replacements); undoing them now would strand this
-    // source on a stale CRS. Mirror removeSource and drop prior history.
-    this._clearHistory();
+      this._clearHistory();
+      this._pendingSourceCommits.delete(id);
+      if (adoptedMapCrs) this.fire('crschange');
+      this._handleSourceData(id, source, { reason: 'load' });
+      return true;
+    } catch (error: unknown) {
+      source.off('data', onData);
+      this._sourceListeners.delete(id);
+      if (this._sources.get(id) === source) this._sources.delete(id);
+      source.setDatasetNormalizer(null);
+      source.setManagedCRS(null);
+      source.setDataset(state.dataset, false);
+      if (adoptedMapCrs) {
+        this._projection.setCRS(previousMapCrs);
+        this._viewport.setCRS(previousMapCrs);
+      }
+      this._crsEstablished = previousCrsEstablished;
+      this._defaultLayersDirty = previousDefaultLayersDirty;
+      throw error;
+    }
+  }
 
-    if (adoptedSourceCrs) this.fire('crschange');
-    if (source.getDataset()) onData({ type: 'data', reason: 'load' });
+  private _assertSourceLoadState(state: ReadySourceLoadState, token: symbol): void {
+    if (this._pendingSourceCommits.get(state.id) !== token) {
+      throw sourceLoadError('source-load-cancelled', `Source load for "${state.id}" was cancelled`);
+    }
+    const dataset = state.source.getDataset();
+    if (dataset !== state.dataset || (dataset.editVersion ?? 0) !== state.editVersion) {
+      throw sourceLoadError(
+        'source-plan-stale',
+        `Source "${state.id}" changed after it was preflighted`,
+      );
+    }
+    if (this._sources.has(state.id)) {
+      throw sourceLoadError('source-id-conflict', `Source "${state.id}" already exists`);
+    }
+  }
+
+  private _handleSourceData(
+    id: string,
+    source: MutableTopologySource,
+    event: { reason?: 'load' | 'replace' | 'reproject' },
+  ): void {
+    if (this._sources.get(id) !== source) return;
+    this._defaultLayersDirty = true;
+    this._invalidateShapeCachesForSources([id]);
+    if (event.reason === 'load') {
+      this._clearHistory();
+    }
+    this.fire('data', { sourceId: id, reason: event.reason });
+    this._scheduleRender();
   }
 
   /**
@@ -853,34 +1202,25 @@ export class Emap extends EventDispatcher {
     id: string,
     source: MutableTopologySource,
     dataset: MapshaperDataset,
-  ): Promise<MapshaperDataset | NormalizedDatasetCommit> {
+  ): Promise<MapshaperDataset | PreparedDatasetCommit> {
     if (this._sources.get(id) !== source) {
       throw new Error(`Source "${id}" is no longer registered`);
     }
-    const sourceCrs = resolveDatasetCRS(dataset);
-    const hasLoadedOtherSource = Array.from(this._sources.entries()).some(
-      ([sourceId, entry]) => sourceId !== id && Boolean(entry.getDataset()),
-    );
-    if (!this._crsEstablished && !hasLoadedOtherSource) {
-      this._projection.setCRS(sourceCrs);
-      this._viewport.setCRS(sourceCrs);
-      this._crsEstablished = true;
-      this.fire('crschange');
-      return {
-        dataset,
-        assertCommittable: () => this._assertNormalizationCommit(id, source, sourceCrs),
-      };
+    const sourceCrs = resolveDatasetCRSMetadata(dataset);
+    if (!sourceCrs) {
+      throw new Error(`Dataset for source "${id}" has no explicit CRS metadata`);
     }
 
     const targetCrs = this._projection.crs;
     const [resolvedSource, resolvedTarget] = await Promise.all([
-      resolveProjectCrs(sourceCrs),
-      resolveProjectCrs(targetCrs),
+      resolveProjectCrsDefinition(sourceCrs),
+      resolveProjectCrsDefinition(targetCrs),
     ]);
     this._assertNormalizationCommit(id, source, targetCrs);
-    if (resolvedSource === resolvedTarget) {
+    if (resolvedSource.signature === resolvedTarget.signature) {
       return {
         dataset,
+        intendedMapCrs: targetCrs,
         assertCommittable: () => this._assertNormalizationCommit(id, source, targetCrs),
       };
     }
@@ -890,6 +1230,7 @@ export class Emap extends EventDispatcher {
     this._assertNormalizationCommit(id, source, targetCrs);
     return {
       dataset: projected,
+      intendedMapCrs: targetCrs,
       assertCommittable: () => this._assertNormalizationCommit(id, source, targetCrs),
     };
   }
@@ -912,6 +1253,7 @@ export class Emap extends EventDispatcher {
     if (this._activeTransaction) {
       throw new Error('Cannot remove a source during an active transaction');
     }
+    this._pendingSourceCommits?.delete(id);
     const source = this._sources.get(id);
     if (!source) return;
 
@@ -1283,9 +1625,16 @@ export class Emap extends EventDispatcher {
       before: beforeView,
       after: { crs: normalizedTarget, extent: afterExtent },
       applyViewState: (state) => this._applyReprojectedView(state.crs, state.extent),
+      publishViewState: () => {
+        this.fire('crschange');
+        this.fire('move');
+      },
     });
     command.do();
     this._history.push(command);
+    this._invalidateAllShapeCaches();
+    this._scheduleRender();
+    command.publish();
     this._fireHistoryChange();
   }
 
@@ -1296,9 +1645,6 @@ export class Emap extends EventDispatcher {
     this._viewport.clearInitialState();
     this._clearSpatialIndexesForSources(this._sources.keys());
     if (extent.hasBounds()) this._viewport.setExtent(extent);
-    this.fire('crschange');
-    this.fire('move');
-    this._scheduleRender();
   }
 
   public getCenter(): [number, number] {
@@ -1806,12 +2152,13 @@ export class Emap extends EventDispatcher {
   public undo(): boolean {
     const cmd = this._history.undo();
     if (!cmd) return false;
-    this._fireHistoryChange();
     // Any command that touched `layer.shapes` (delete/create/...) will have
     // moved feature ids around; invalidate every shape-derived cache rather
     // than threading per-command source ids through the history.
     this._invalidateAllShapeCaches();
     this._scheduleRender();
+    this._publishCommand(cmd);
+    this._fireHistoryChange();
     return true;
   }
 
@@ -1822,10 +2169,17 @@ export class Emap extends EventDispatcher {
   public redo(): boolean {
     const cmd = this._history.redo();
     if (!cmd) return false;
-    this._fireHistoryChange();
     this._invalidateAllShapeCaches();
     this._scheduleRender();
+    this._publishCommand(cmd);
+    this._fireHistoryChange();
     return true;
+  }
+
+  private _publishCommand(command: EditCommand): void {
+    if ('publish' in command && typeof command.publish === 'function') {
+      command.publish();
+    }
   }
 
   /** Drop every shape-derived cache. Used by undo/redo where per-source
@@ -2007,11 +2361,16 @@ export class Emap extends EventDispatcher {
     // Source `data` listeners installed in `addSource()` — without this
     // the source keeps the Emap instance alive via the closure inside
     // `onData` and (worse) re-fires render scheduling after teardown.
-    for (const [id, listener] of this._sourceListeners) {
-      const source = this._sources.get(id);
-      source?.off('data', listener);
+    for (const [id, source] of this._sources) {
+      const listener = this._sourceListeners.get(id);
+      if (listener) source.off('data', listener);
+      if (isMutableTopologySource(source)) {
+        source.setDatasetNormalizer(null);
+        source.setManagedCRS(null);
+      }
     }
     this._sourceListeners.clear();
+    this._pendingSourceCommits?.clear();
 
     // Per-source feature query + arc-flag caches.
     for (const id of this._sources.keys()) this._featureQuery?.clear(id);

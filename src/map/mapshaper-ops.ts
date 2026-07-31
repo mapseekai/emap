@@ -50,6 +50,7 @@ import type {
   MosaicOptions,
   PointsOptions,
   PolygonsOptions,
+  ProjectLayerExport,
   ProjectOptions,
   RebuildTopologyOptions,
   RenameFieldsOptions,
@@ -182,7 +183,7 @@ export class MapshaperOps {
   simplifyLayer(opts: SimplifyOptions): Promise<OpResult> {
     return simplifyLayer(this._ctx, opts);
   }
-  projectLayer(opts: ProjectOptions): Promise<OpResult> {
+  projectLayer(opts: ProjectOptions): Promise<OpResult<ProjectLayerExport>> {
     return projectLayer(this._ctx, opts);
   }
   affineLayer(opts: AffineLayerOptions): Promise<OpResult> {

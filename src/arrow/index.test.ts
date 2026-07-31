@@ -1,10 +1,51 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import './index'; // module side effect registers the plugin
 import { setArrowTable, toArrowTableFromSource } from './index';
 import { getExportHandler, getFormatForExtension } from '../source/format-registry';
 import { TopologySource } from '../source/topology-source';
 import { datasetFromGeoJSON } from './test-utils';
 import { toArrowTable } from './dataset-to-table';
+import { Emap } from '../map/map';
+import { Selection } from '../map/selection';
+import { EditHistory } from '../edit/edit-history';
+
+function setPrivate(target: object, key: string, value: unknown): void {
+  Reflect.set(target, key, value);
+}
+
+function createBareMap(crs: string): Emap {
+  const map: Emap = Object.create(Emap.prototype);
+  const projection = {
+    crs,
+    setCRS(nextCrs: string) {
+      this.crs = nextCrs;
+    },
+  };
+  setPrivate(map, '_sources', new globalThis.Map());
+  setPrivate(map, '_sourceListeners', new globalThis.Map());
+  setPrivate(map, '_layers', []);
+  setPrivate(map, '_effectiveLayersCache', []);
+  setPrivate(map, '_defaultLayersDirty', false);
+  setPrivate(map, '_layerArcIdsCache', new globalThis.Map());
+  setPrivate(map, '_listeners', {});
+  setPrivate(map, '_selection', new Selection());
+  setPrivate(map, '_history', new EditHistory());
+  setPrivate(map, '_scheduleRender', vi.fn());
+  setPrivate(map, '_projection', projection);
+  setPrivate(map, '_viewport', { setCRS: vi.fn() });
+  setPrivate(map, '_crsEstablished', true);
+  return map;
+}
+
+async function pointDataset(coordinates: readonly [number, number], crs?: string) {
+  const dataset = await datasetFromGeoJSON({
+    type: 'Feature',
+    properties: {},
+    geometry: { type: 'Point', coordinates },
+  });
+  if (crs) dataset.info = { ...dataset.info, crs_string: crs };
+  return dataset;
+}
 
 describe('Arrow module registration', () => {
   it('registers import handling for all plugin extensions', () => {
@@ -49,7 +90,7 @@ describe('Arrow module registration', () => {
     });
 
     const table = toArrowTable(dataset);
-    setArrowTable(source, table);
+    await setArrowTable(source, table);
     expect(source.getLayers()[0].shapes![0]).toEqual([[1, 2]]);
 
     const back = toArrowTableFromSource(source);
@@ -65,10 +106,87 @@ describe('Arrow module registration', () => {
     });
     const table = toArrowTable(dataset);
     const source = new TopologySource('readonly');
+    Reflect.set(source, 'replaceDataset', undefined);
     Reflect.set(source, 'setDataset', undefined);
 
-    expect(() => setArrowTable(source, table)).toThrow(
+    await expect(setArrowTable(source, table)).rejects.toThrow(
       'setArrowTable requires a mutable TopologySource',
     );
+  });
+
+  it('keeps the legacy mutable-hook fallback for detached custom sources', async () => {
+    const incoming = await pointDataset([1, 2], 'EPSG:4326');
+    const source = new TopologySource('detached-custom');
+    Reflect.set(source, 'replaceDataset', undefined);
+    const setDataset = vi.spyOn(source, 'setDataset');
+
+    await setArrowTable(source, toArrowTable(incoming));
+
+    expect(setDataset).toHaveBeenCalledOnce();
+    expect(source.getLayers()[0].shapes?.[0]).toEqual([[1, 2]]);
+    const map = createBareMap('EPSG:4326');
+    await expect(map.addSource('detached-custom', source)).rejects.toMatchObject({
+      code: 'source-load-rejected',
+    });
+  });
+
+  it('normalizes an Arrow table to the owning map CRS before committing it', async () => {
+    const map = createBareMap('EPSG:3857');
+    const source = new TopologySource('managed');
+    const previous = await pointDataset([0, 0], 'EPSG:3857');
+    source.setDataset(previous);
+    await map.addSource('managed', source);
+    const incoming = await pointDataset([1, 2], 'EPSG:4326');
+
+    await setArrowTable(source, toArrowTable(incoming));
+
+    expect(source.getCRS()).toBe('EPSG:3857');
+    expect(source.getLayers()[0].shapes?.[0]).toEqual([
+      [expect.closeTo(111319.49, 2), expect.closeTo(222684.21, 2)],
+    ]);
+  });
+
+  it('keeps the previous dataset when the owning map rejects the final commit', async () => {
+    const source = new TopologySource('managed');
+    const previous = await pointDataset([0, 0]);
+    const incoming = await pointDataset([1, 2]);
+    source.setDataset(previous);
+    source.setDatasetNormalizer(async (dataset) => ({
+      dataset,
+      assertCommittable: () => {
+        throw new Error('Map CRS changed during source normalization for "managed"');
+      },
+    }));
+
+    await expect(setArrowTable(source, toArrowTable(incoming))).rejects.toThrow(
+      'Map CRS changed during source normalization',
+    );
+
+    expect(source.getDataset()).toBe(previous);
+  });
+
+  it('rejects an Arrow replacement when the live dataset changes during normalization', async () => {
+    const source = new TopologySource('managed');
+    const previous = await pointDataset([0, 0]);
+    const incoming = await pointDataset([1, 2]);
+    const superseding = await pointDataset([3, 4]);
+    source.setDataset(previous);
+    let releaseNormalizer = () => {};
+    const normalizerGate = new Promise<void>((resolve) => {
+      releaseNormalizer = resolve;
+    });
+    source.setDatasetNormalizer(async (dataset) => {
+      await normalizerGate;
+      return dataset;
+    });
+
+    const replacement = setArrowTable(source, toArrowTable(incoming));
+    source.setDataset(superseding);
+    releaseNormalizer();
+
+    await expect(replacement).rejects.toThrow(
+      'TopologySource "managed" changed during dataset replacement',
+    );
+    expect(source.getDataset()).toBe(superseding);
   });
 });

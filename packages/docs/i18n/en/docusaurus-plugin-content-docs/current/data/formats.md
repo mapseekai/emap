@@ -106,7 +106,7 @@ import {
   toArrowTableFromSource,
 } from '@mapseekai/emap/arrow';
 
-setArrowTable(source, duckdbResultTable);
+await setArrowTable(source, duckdbResultTable);
 const table = toArrowTableFromSource(source);
 const dataset = fromArrowTable(table);
 ```

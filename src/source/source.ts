@@ -71,6 +71,10 @@ export interface TopologySource extends Source {
   getCRS?(): string;
 }
 
+export interface ReplaceableTopologySource extends TopologySource {
+  replaceDataset(dataset: MapshaperDataset): Promise<void>;
+}
+
 /** @internal Normalized dataset plus the last-moment assertion run before it commits. */
 export interface NormalizedDatasetCommit {
   dataset: MapshaperDataset;
@@ -92,7 +96,7 @@ export type DatasetNormalizer = (
  * read-only TopologySource contract; internal edit paths narrow once at their
  * ownership boundary instead of scattering assertions across callers.
  */
-export interface MutableTopologySource extends TopologySource {
+export interface MutableTopologySource extends ReplaceableTopologySource {
   getArcs(): ArcCollection | undefined;
   getLayers(): MapshaperLayer[];
   getDataset(): MapshaperDataset | undefined;
@@ -126,6 +130,7 @@ export function isMutableTopologySource(source: TopologySource): source is Mutab
     typeof candidate.getDisplayArcs === 'function' &&
     typeof candidate.refreshDisplayArcs === 'function' &&
     typeof candidate.setDataset === 'function' &&
+    typeof candidate.replaceDataset === 'function' &&
     typeof candidate.setDatasetNormalizer === 'function' &&
     typeof candidate.getSimplifyFloor === 'function' &&
     typeof candidate.prepareReproject === 'function' &&

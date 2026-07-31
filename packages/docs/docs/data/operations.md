@@ -104,17 +104,20 @@ await map.ops.dissolveLayer({
 });
 ```
 
-### 投影
+### 投影并导出
 
 ```ts
-await map.ops.projectLayer({
+const result = await map.ops.projectLayer({
   source: 'main',
   target: 'districts',
   crs: 'EPSG:3857',
+  output: { format: 'geojson', filename: 'districts-3857.geojson' },
 });
 ```
 
-`ProjectOptions` 的目标 CRS 字段是 `crs`。
+`projectLayer` 返回 detached 文件 Blob，不修改或重新加载当前地图。应用负责用
+`result.value.blob` 和 `result.value.filename` 触发下载；整图 CRS 变化使用
+`map.reproject()`。
 
 ## 属性和 layer 操作
 

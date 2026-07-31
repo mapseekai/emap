@@ -6,6 +6,7 @@ import type { MapshaperDataset } from '../../types/mapshaper-types';
 function makeSource() {
   return {
     setDataset: vi.fn(),
+    fire: vi.fn(),
   } as unknown as TopologySource & { setDataset: ReturnType<typeof vi.fn> };
 }
 
@@ -17,14 +18,14 @@ describe('DatasetReplaceCommand', () => {
     const source = makeSource();
     const cmd = new DatasetReplaceCommand({ source, before, after, label: 'Clip x' });
     cmd.do();
-    expect(source.setDataset).toHaveBeenCalledWith(after);
+    expect(source.setDataset).toHaveBeenCalledWith(after, false);
   });
 
   it('undo() activates the before dataset', () => {
     const source = makeSource();
     const cmd = new DatasetReplaceCommand({ source, before, after, label: 'Clip x' });
     cmd.undo();
-    expect(source.setDataset).toHaveBeenCalledWith(before);
+    expect(source.setDataset).toHaveBeenCalledWith(before, false);
   });
 
   it('round-trip do() then undo() ends on `before`', () => {
@@ -32,8 +33,8 @@ describe('DatasetReplaceCommand', () => {
     const cmd = new DatasetReplaceCommand({ source, before, after, label: 'Clip x' });
     cmd.do();
     cmd.undo();
-    expect(source.setDataset).toHaveBeenNthCalledWith(1, after);
-    expect(source.setDataset).toHaveBeenNthCalledWith(2, before);
+    expect(source.setDataset).toHaveBeenNthCalledWith(1, after, false);
+    expect(source.setDataset).toHaveBeenNthCalledWith(2, before, false);
   });
 
   it('exposes the label for historychange', () => {

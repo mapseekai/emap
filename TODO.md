@@ -5,41 +5,42 @@
 
 ## CRS 设计阻断项
 
-- [ ] **P0：关闭 `map.ops.projectLayer()` 对地图 CRS 不变量的绕过**
+- [x] **P0：关闭 `map.ops.projectLayer()` 对地图 CRS 不变量的绕过**
   - 当前可将单个已注册 source，甚至单个 target layer，投影到任意 CRS；地图 CRS 和其他 source 不变。
   - target-scoped 投影还会保留原 dataset 级 CRS 元数据，造成同一 dataset 内混合坐标系。
   - 位置：[`src/map/ops/project.ts`](src/map/ops/project.ts)、[`src/map/mapshaper-ops.ts`](src/map/mapshaper-ops.ts)、[`src/map/map.test.ts`](src/map/map.test.ts)。
   - 验收：受管 source 的整源投影统一走 `map.reproject()`；地图内拒绝 target-scoped CRS 投影。若保留单 dataset 投影能力，应作为 detached dataset API。
   - 测试：覆盖整源和 target layer 均不能脱离地图 CRS。
 
-- [ ] **P0：让 `setArrowTable()` 经过地图拥有的 CRS 归一化提交路径**
+- [x] **P0：让 `setArrowTable()` 经过地图拥有的 CRS 归一化提交路径**
   - 当前直接执行 `source.setDataset(fromArrowTable(...))`，可把不同 CRS 的 Arrow 数据写入已注册 source。
   - 新增 mutable guard 只验证写权限，没有验证 owning map 或目标 CRS。
   - 位置：[`src/arrow/index.ts`](src/arrow/index.ts)、[`src/arrow/index.test.ts`](src/arrow/index.test.ts)。
   - 验收：提供 map-aware 异步 replacement API，或在受管 source 上拒绝该调用；提交前必须执行 normalizer 和最终 owner/CRS assertion。
   - 测试：EPSG:3857 地图中的 source 写入 EPSG:4326 Arrow table 后，live dataset 必须已是 EPSG:3857，或调用被明确拒绝。
 
-- [ ] **P1：封闭预加载自定义 source 缺少 `getCRS()` 的注册漏洞**
+- [x] **P1：封闭预加载自定义 source 缺少 `getCRS()` 的注册漏洞**
   - `TopologySource.getCRS` 当前是可选方法，`isMutableTopologySource()` 又不要求它存在；预加载 custom mutable source 会跳过 CRS 采用/投影逻辑后直接注册。
   - 位置：[`src/source/source.ts`](src/source/source.ts)、[`src/map/map.ts`](src/map/map.ts)。
   - 验收：注册时直接从 dataset 解析 CRS，或把 `getCRS()` 变为 mutable source 的必需契约；任何预加载 dataset 都不得跳过归一化。
   - 测试：custom mutable source 有 dataset、无 `getCRS()`、且 CRS 与地图不同时必须投影或拒绝。
 
-- [ ] **P1：为 `TopologySource` 增加明确且唯一的 map owner**
+- [x] **P1：记录独立地图必须使用独立 `TopologySource` 的产品约定**
   - `_datasetNormalizer` 和 `_managedCrs` 都是单槽回调，但同一 source 实例可用两个 ID 注册到同一地图，也可注册到两张地图。
   - 后一次注册会覆盖前一个 owner；移除其中一个注册又会清除仍在使用的回调。跨地图注册还可能静默改变第一张地图使用的数据。
   - 位置：[`src/source/topology-source.ts`](src/source/topology-source.ts)、[`src/map/map.ts`](src/map/map.ts)。
-  - 验收：使用 owner token/WeakMap；拒绝已归属其他 `(map, sourceId)` 的实例；只允许持有匹配 token 的 owner 清理 hook。
-  - 测试：同 source 双 ID、同 source 双 map、移除其中一个 owner、两张地图 CRS 不同。
+  - 产品结论：当前仅支持单 Canvas；多地图及新标签页使用独立数据和独立 source 实例。
+  - 验收：仅在引擎 API JSDoc 记录实例隔离规则；不得加入 runtime owner WeakMap、claim、跨地图排斥或其他行为变更。
+  - 测试：确认公开引擎文档包含约定，且运行时代码不存在 owner claim/跨地图排斥路径。
 
-- [ ] **P1：把首个 source 的 CRS 采用纳入最终 dataset commit**
+- [x] **P1：把首个 source 的 CRS 采用纳入最终 dataset commit**
   - 延迟加载的第一个 source 会先修改 map CRS、设置 `_crsEstablished` 并触发 `crschange`，之后 source 才执行 stale/assert/commit。
   - 加载被取代、source 被移除或监听器抛错时，会留下没有成功数据源支撑的 phantom CRS。
   - 位置：[`src/map/map.ts`](src/map/map.ts)、[`src/source/topology-source.ts`](src/source/topology-source.ts)。
   - 验收：normalizer 只准备 `{dataset, intendedMapCrs}`；source dataset、map CRS 和 `_crsEstablished` 在同一最终提交阶段更新，失败时不留下部分状态；事件在成功提交后发布。
   - 测试：首载提交前被 supersede、remove、map CRS 改变，以及 `crschange` listener 抛错。
 
-- [ ] **P1：让 dataset replacement 和 map reprojection 对事件监听器异常保持原子性**
+- [x] **P1：让 dataset replacement 和 map reprojection 对事件监听器异常保持原子性**
   - 普通 op 先 `setDataset()` 再写 history；`data`/map listener 抛错时 dataset 已变但没有 undo 记录。
   - `ReprojectMapCommand` 先替换全部 dataset 并触发 `crschange`/`move`，`map.reproject()` 随后才把 command 压入 history。
   - `EventDispatcher.fire()` 当前传播第一个 listener 异常。
@@ -113,12 +114,12 @@
 
 ## 测试覆盖清单
 
-- [ ] managed `setArrowTable` 的跨 CRS 写入。
-- [ ] `projectLayer` 的整源和 target-scoped 地图 CRS 不变量。
-- [ ] custom mutable source 缺少 `getCRS()`。
-- [ ] 同 source 双 ID、双 map 和 owner 清理。
-- [ ] 首次加载在最终 commit 前被 supersede/remove/listener throw。
-- [ ] 普通 op/reproject 事件异常后的 dataset、CRS 和 history 一致性。
+- [x] managed `setArrowTable` 的跨 CRS 写入。
+- [x] `projectLayer` 的整源和 target-scoped 地图 CRS 不变量。
+- [x] custom mutable source 缺少 `getCRS()`。
+- [x] 独立地图使用独立 source 的引擎 JSDoc 约定，无 runtime owner 排斥逻辑。
+- [x] 首次加载在最终 commit 前被 supersede/remove/listener throw。
+- [x] 普通 op/reproject 事件异常后的 dataset、CRS 和 history 一致性。
 - [ ] `map.remove()` 后 retained source 的独立生命周期。
 - [ ] DuckDB 输出继承 `prj`/`wkt1`/legacy `crs`。
 - [ ] 未知 CRS Shapefile 和 DuckDB mask 的最终约定。

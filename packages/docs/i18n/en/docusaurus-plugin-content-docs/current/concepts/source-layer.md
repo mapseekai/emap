@@ -40,23 +40,41 @@ const source = await TopologySource.fromBytes('upload', bytes, {
 });
 ```
 
-### Construct first, load later
+### Preflight and confirm
 
 ```ts
 const source = new TopologySource('live');
-await map.addSource('live', source);
-
 await source.setData({
   filename: 'districts.geojson',
   content,
 });
+
+let result = await map.preflightSource({ id: 'live', source });
+if (result.status === 'needs-input') {
+  result = await map.preflightSource(result.draft, {
+    sourceCrs: selectedCrs,
+  });
+}
+if (result.status === 'ready') {
+  await map.confirmSource(result.plan);
+}
 ```
 
-`map.addSource()` is independent of load order, but should always be awaited.
-A loaded source is normalized to the map's active CRS before registration; for
-a source loaded later, `setData()` normalizes before commit and before its
-`data` event. A registered `TopologySource.reproject()` cannot change CRS
-independently; use `map.reproject()`.
+`preflightSource()` parses and checks data outside the map. It does not
+register the source or change the map CRS. An explicit `sourceCrs` takes
+precedence over dataset CRS metadata. If both are missing, or the explicit
+value is invalid, the result is `needs-input`; collect the CRS described by
+`requirements` and run preflight again with the same `draft`. A `rejected`
+result means the input cannot be loaded, and only a `ready` plan can be passed
+to `confirmSource()`.
+
+For non-interactive loading, call
+`await map.addSource('live', source, { sourceCrs: 'EPSG:3857' })`; it uses the
+same preflight and confirmation path. An empty source cannot be registered, so
+finish `setData()` first. Dynamic `setData()` calls remain supported after
+registration and normalize to the map CRS. A registered
+`TopologySource.reproject()` cannot change CRS independently; use
+`map.reproject()`.
 
 ## Do not mix up the IDs
 

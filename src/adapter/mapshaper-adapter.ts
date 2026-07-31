@@ -424,6 +424,35 @@ export interface MapshaperAdapter {
  * any future mapshaper rename lands here visibly.
  */
 import mapshaper from 'mapshaper';
+import mproj from 'mproj';
+
+interface MapshaperProjectionInternals {
+  parseCrsString(crs: string): unknown;
+}
+
+interface MprojInternals {
+  get_normalized_proj_defn(projection: unknown): string;
+}
+
+const PROJECTION_NUMBER_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
+
+export function resolveMapshaperCrsSignature(crs: string): string {
+  const projectionApi = mapshaper.internal as unknown as MapshaperProjectionInternals;
+  const mprojApi = mproj as unknown as { internal: MprojInternals };
+  const projection = projectionApi.parseCrsString(crs);
+  return mprojApi.internal
+    .get_normalized_proj_defn(projection)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => {
+      const separator = token.indexOf('=');
+      if (separator === -1) return token;
+      const value = token.slice(separator + 1);
+      if (!PROJECTION_NUMBER_RE.test(value)) return token;
+      return `${token.slice(0, separator + 1)}${Number(value)}`;
+    })
+    .join(' ');
+}
 
 export class DefaultMapshaperAdapter implements MapshaperAdapter {
   snapVertices(vertexIds: number[], to: [number, number], arcs: ArcCollection): void {

@@ -116,8 +116,29 @@ await map.addSource('local', local);
 ```
 
 `TopologySource.setData()` 在数据集填充完成且 `data` 事件触发后才会完成。始终
-`await map.addSource()`：已加载 source 可能需要先重投影再注册。调用顺序仍不受限，
-可以先注册空 source 再加载；导入结果会在可观察前归一到地图的活动 CRS。
+先在地图外加载 source，再 `await map.addSource()`。它是 source 预检与确认流程的
+便捷包装，可能在注册前重投影 detached dataset。dataset 没有 CRS 元数据时，应显式
+提供数据 CRS：
+
+```ts
+await map.addSource('local', local, { sourceCrs: 'EPSG:3857' });
+```
+
+需要由 UI 补充 CRS 时，使用两阶段 API；复用 `draft` 不会重新读取输入：
+
+```ts
+let result = await map.preflightSource({ id: 'local', source: local });
+if (result.status === 'needs-input') {
+  result = await map.preflightSource(result.draft, { sourceCrs: selectedCrs });
+}
+if (result.status === 'ready') {
+  await map.confirmSource(result.plan);
+}
+```
+
+显式 `sourceCrs` 优先于 dataset 元数据；两者都没有时，预检返回
+`needs-input`，不会猜测。空 source 不能先注册：应先加载，再调用
+`addSource()` 或 `preflightSource()`。
 
 支持的输入包括：
 

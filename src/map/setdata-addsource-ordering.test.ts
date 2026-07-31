@@ -1,12 +1,3 @@
-// Reproduction for the REOPENED Friction #9: consumer reports that in 0.2.0
-// `await source.setData(...)` then a synchronous read still renders blank,
-// and claims an undocumented addSource/setData ordering dependency.
-//
-// This exercises BOTH orderings end-to-end against the real Emap.addSource
-// and a real TopologySource (mapshaper stubbed). If emap 0.2.0 is correct,
-// both orderings must (a) populate the dataset before `await` resolves and
-// (b) trigger a render via the addSource-wired `data` listener — proving the
-// blank-map symptom is environmental (stale install), not an emap defect.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mapshaper from 'mapshaper';
 import { Emap } from './map';
@@ -45,7 +36,7 @@ function createBareMap(): { map: Emap; scheduleRender: ReturnType<typeof vi.fn> 
   return { map, scheduleRender };
 }
 
-describe('Friction #9 reopened — setData/addSource ordering renders correctly', () => {
+describe('setData/addSource registration ordering', () => {
   const origParse = Reflect.get(mapshaper.internal as object, 'parseCommands');
   const origRun = Reflect.get(mapshaper.internal as object, 'runParsedCommands');
 
@@ -75,18 +66,20 @@ describe('Friction #9 reopened — setData/addSource ordering renders correctly'
 
   const input = { filename: 'a.geojson', content: new Uint8Array([1]) };
 
-  it('addSource BEFORE await setData: dataset populated + render scheduled', async () => {
+  it('rejects addSource before setData without leaving a registered shell', async () => {
     const { map, scheduleRender } = createBareMap();
     const src = new TopologySource('s');
 
-    await map.addSource('s', src); // consumer order: addSource first
+    await expect(map.addSource('s', src)).rejects.toMatchObject({
+      code: 'source-load-rejected',
+    });
 
-    await src.setData(input); // resolves only after _dataset set + data fired
+    await src.setData(input);
 
     expect(src.getDataset()).toBeTruthy();
     expect(src.getLayers()).toHaveLength(1);
-    // The listener addSource wired must have fired -> render scheduled.
-    expect(scheduleRender).toHaveBeenCalled();
+    expect(map.getSource('s')).toBeUndefined();
+    expect(scheduleRender).not.toHaveBeenCalled();
   });
 
   it('await setData BEFORE addSource: addSource back-fills + render scheduled', async () => {

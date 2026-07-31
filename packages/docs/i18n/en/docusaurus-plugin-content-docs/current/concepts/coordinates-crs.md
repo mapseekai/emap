@@ -64,17 +64,22 @@ await map.reproject('EPSG:3857');
 spatial indexes, fits the new extent, and fires `crschange` and `data`. If any
 source conversion fails, no source is committed.
 
-For one target layer:
+To project one layer for local saving without changing the current map:
 
 ```ts
 const result = await map.ops.projectLayer({
   source: 'main',
   target: 'districts',
   crs: 'EPSG:3857',
+  output: { format: 'geojson', filename: 'districts-3857.geojson' },
 });
 ```
 
-The `ProjectOptions` field is `crs`, not `targetCrs`.
+On success, `result.value` contains `blob`, `filename`, and `format`; save the
+Blob with a download link or the File System Access API. This operation runs on
+an isolated copy and never changes the current map's sources, CRS, or viewport,
+or loads the result back into the map. Use `map.reproject()` for map-wide CRS
+changes.
 
 ## Map and screen coordinates
 

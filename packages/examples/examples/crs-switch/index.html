@@ -103,7 +103,7 @@
 
     <span id="status" class="group-label">加载中…</span>
     <span class="hint">
-      通过 <code>map.ops.projectLayer({ crs })</code> 切换坐标系；CRS 可为
+      通过 <code>map.reproject(crs)</code> 原子切换整张地图的坐标系；CRS 可为
       <code>EPSG:NNNN</code>、mapshaper 别名（<code>wgs84</code>/<code>webmercator</code>/<code>natearth</code>/<code>wintri</code>/<code>robinson</code>/<code>lcc</code>/<code>aea</code>），
       或完整 Proj.4 字符串。投影后自动 <code>setExtent</code>，Ctrl+Z 撤销。
     </span>
@@ -200,12 +200,7 @@
       showOverlay(`投影中: → ${label}`);
       const t0 = performance.now();
       try {
-        const result = await map.ops.projectLayer({ source: SOURCE_ID, crs });
-        if (!result?.ok) {
-          status.textContent = `投影失败 (${label}): ${result?.error?.message ?? '未知错误'}`;
-          return;
-        }
-        map.setExtent(src.getExtent());
+        await map.reproject(crs);
         const ms = Math.round(performance.now() - t0);
         setActive(key, label);
         status.textContent = `已切换到 ${label} (${ms} ms)。Ctrl+Z 撤销。`;

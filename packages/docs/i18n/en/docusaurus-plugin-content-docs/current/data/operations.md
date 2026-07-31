@@ -89,14 +89,17 @@ await map.ops.dissolveLayer({
   field: 'province',
 });
 
-await map.ops.projectLayer({
+const result = await map.ops.projectLayer({
   source: 'main',
   target: 'districts',
   crs: 'EPSG:3857',
+  output: { format: 'geojson', filename: 'districts-3857.geojson' },
 });
 ```
 
-The target CRS field in `ProjectOptions` is `crs`.
+`projectLayer` returns a detached file Blob and never mutates or reloads the
+current map. Save `result.value.blob` using `result.value.filename`; use
+`map.reproject()` for map-wide CRS changes.
 
 ## Layer and attribute operations
 

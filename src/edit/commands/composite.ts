@@ -33,4 +33,12 @@ export class CompositeCommand implements EditCommand {
       this.children[i].undo();
     }
   }
+
+  publish(): void {
+    for (const child of this.children) {
+      if ('publish' in child && typeof child.publish === 'function') {
+        child.publish();
+      }
+    }
+  }
 }

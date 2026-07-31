@@ -34,7 +34,17 @@ export class EventDispatcher {
   fire<T = Record<string, unknown>>(type: string, data?: T): this {
     if (!this._listeners[type]) return this;
     const event = { type, ...data } as { type: string } & T;
-    this._listeners[type].forEach((l) => l(event));
+    const failures: Error[] = [];
+    for (const listener of this._listeners[type].slice()) {
+      try {
+        listener(event);
+      } catch (error) {
+        failures.push(error instanceof Error ? error : new Error(String(error)));
+      }
+    }
+    if (type !== 'error') {
+      for (const error of failures) this.fire('error', { error });
+    }
     return this;
   }
 }

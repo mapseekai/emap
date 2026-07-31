@@ -162,6 +162,26 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     this._datasetNormalizer = normalizer;
   }
 
+  async replaceDataset(dataset: MapshaperDataset): Promise<void> {
+    const currentDataset = this._dataset;
+    const currentEditVersion = currentDataset?.editVersion ?? 0;
+    const normalized = this._datasetNormalizer ? await this._datasetNormalizer(dataset) : dataset;
+
+    if (
+      this._dataset !== currentDataset ||
+      (currentDataset?.editVersion ?? 0) !== currentEditVersion
+    ) {
+      throw new Error(`TopologySource "${this.id}" changed during dataset replacement`);
+    }
+
+    if (isNormalizedDatasetCommit(normalized)) {
+      normalized.assertCommittable();
+      this.setDataset(normalized.dataset);
+      return;
+    }
+    this.setDataset(normalized);
+  }
+
   /** @internal Set or clear the owning map's authoritative CRS provider. */
   setManagedCRS(getCrs: (() => string) | null): void {
     this._managedCrs = getCrs;

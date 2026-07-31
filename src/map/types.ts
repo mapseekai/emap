@@ -5,6 +5,7 @@
 import type { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import type { AffineMatrix } from '../edit/commands/feature-affine';
 import type { DrawOverlayState, DrawOverlaySnapKind } from '../renderer/painter';
+import type { ExportFormat } from '../source/source';
 
 // `EditDrawState` originally lived here; the canonical definition now sits in
 // `src/renderer/painter.ts` (it is the input to `Painter.drawDrawingOverlay`).
@@ -796,21 +797,34 @@ export interface MergeLayersOptions {
 export type SimplifyMethod = 'dp' | 'visvalingam' | 'weighted';
 
 /**
- * Options for `Emap.projectLayer`. Reprojection via mapshaper's `-proj`
- * (Proj.4-backed). `crs` is the destination CRS string; mapshaper accepts
- * EPSG codes (`'EPSG:3857'`), named aliases (`'webmercator'`, `'robinson'`),
- * or full Proj.4 definitions (`'+proj=utm +zone=10'`).
+ * Options for exporting one detached, projected layer via mapshaper's `-proj`.
+ * The current map is never modified. `crs` accepts EPSG codes (`'EPSG:3857'`),
+ * named aliases (`'webmercator'`, `'robinson'`), or full Proj.4 definitions
+ * (`'+proj=utm +zone=10'`).
  */
+export interface ProjectLayerOutputOptions {
+  /** Browser export format. Defaults to `geojson`. */
+  format?: ExportFormat;
+  /** Suggested local filename returned with the Blob. Defaults from the target layer and format. */
+  filename?: string;
+}
+
+export interface ProjectLayerExport {
+  /** Detached projected file content; save it with a download link or file picker. */
+  blob: Blob;
+  /** Suggested local filename. */
+  filename: string;
+  /** Format used to create the Blob. */
+  format: ExportFormat;
+}
+
 export interface ProjectOptions {
-  /** Source ID containing the layer(s) to reproject. */
+  /** Source ID containing the layer to export. */
   source: string;
   /** Destination CRS. Required, non-empty after trimming. */
   crs: string;
-  /**
-   * Optional layer name to scope the operation. When omitted, the whole
-   * source dataset is reprojected (mapshaper CLI default).
-   */
-  target?: string;
+  /** Layer name or id to project on an isolated dataset copy. */
+  target: string;
   /**
    * Source CRS override. Useful when the dataset doesn't have a stored
    * CRS or when the stored value is wrong. Same string formats as `crs`.
@@ -824,6 +838,8 @@ export interface ProjectOptions {
    * geodesic segments.
    */
   densify?: boolean;
+  /** Detached browser-file output. The projected data is never loaded into the current map. */
+  output?: ProjectLayerOutputOptions;
 }
 
 /**

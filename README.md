@@ -161,10 +161,31 @@ await map.addSource('local', local);
 ```
 
 `TopologySource.setData()` resolves after the dataset is populated and its
-`data` event fires. Always await `map.addSource()`: a loaded source may need
-reprojection before registration. The APIs remain order-independent, so an
-empty source can be registered first and loaded later; that import is normalized
-to the map's active CRS before it becomes observable.
+`data` event fires. Load the source before registration, then always await
+`map.addSource()`; it is a convenience wrapper around source preflight and
+confirmation, and may reproject the detached dataset before registration. If
+the dataset has no CRS metadata, supply its CRS explicitly:
+
+```ts
+await map.addSource('local', local, { sourceCrs: 'EPSG:3857' });
+```
+
+For UI-driven imports, use the two-phase API so missing or invalid CRS can be
+resolved without reading the input again:
+
+```ts
+let result = await map.preflightSource({ id: 'local', source: local });
+if (result.status === 'needs-input') {
+  result = await map.preflightSource(result.draft, { sourceCrs: selectedCrs });
+}
+if (result.status === 'ready') {
+  await map.confirmSource(result.plan);
+}
+```
+
+An explicit `sourceCrs` overrides dataset metadata; without either, preflight
+returns `needs-input` instead of guessing. Empty sources cannot be registered:
+load them first, then call `addSource()` or `preflightSource()`.
 
 Supported inputs:
 
@@ -195,7 +216,7 @@ In-memory Arrow tables work without files — this is the duckdb-wasm bridge
 ```ts
 import { setArrowTable, toArrowTableFromSource } from '@mapseekai/emap/arrow';
 
-setArrowTable(source, duckdbResultTable); // replace a source's dataset
+await setArrowTable(source, duckdbResultTable); // replace a source's dataset
 const table = toArrowTableFromSource(source); // source dataset → Arrow table
 ```
 

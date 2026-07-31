@@ -48,6 +48,8 @@ export type {
   SimplifyOptions,
   SimplifyMethod,
   ProjectOptions,
+  ProjectLayerOutputOptions,
+  ProjectLayerExport,
   RebuildTopologyOptions,
   RenameLayerOptions,
   MergeLayersOptions,
@@ -171,9 +173,22 @@ export type {
 } from './source/topology-source';
 export type {
   TopologySource as ITopologySource,
+  ReplaceableTopologySource,
   ExportFormat,
   ExportOptions,
 } from './source/source';
+export { SourceLoadError } from './map/source-loading';
+export type {
+  ReadySourceLoadPlan,
+  SourceLoadAnswers,
+  SourceLoadDiagnostic,
+  SourceLoadDiagnosticCode,
+  SourceLoadDraft,
+  SourceLoadRequest,
+  SourceLoadRequirement,
+  SourceLoadSummary,
+  SourcePreflightResult,
+} from './map/source-loading';
 // Format-plugin registry (the optional `@mapseekai/emap/arrow` bundle
 // registers GeoParquet / GeoArrow support through this; arrow-free).
 export { registerFormat } from './source/format-registry';

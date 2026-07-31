@@ -65,17 +65,20 @@ await map.reproject('EPSG:3857');
 - 用新范围更新 viewport。
 - 触发 `crschange` 和 `data`。
 
-如果只处理一个目标 layer，也可以使用：
+如果要把一个 layer 投影后保存到本地，而不是改变当前地图，可以使用：
 
 ```ts
 const result = await map.ops.projectLayer({
   source: 'main',
   target: 'districts',
   crs: 'EPSG:3857',
+  output: { format: 'geojson', filename: 'districts-3857.geojson' },
 });
 ```
 
-`ProjectOptions` 的字段名是 `crs`，不是 `targetCrs`。
+成功时 `result.value` 包含 `blob`、`filename` 和 `format`，由应用通过下载链接或
+File System Access API 保存。该操作只处理隔离副本，不修改当前 map 的 source、CRS
+或 viewport，也不会把结果加载回地图。整图坐标系变化只能使用 `map.reproject()`。
 
 ## 地图坐标与屏幕坐标
 
@@ -85,7 +88,7 @@ const [mapX, mapY] = map.unproject(screenX, screenY);
 ```
 
 `project(x, y)` 只应用当前 viewport 变换，不执行 EPSG 重投影。EPSG 转换使用
-`reproject` 或 project operation。
+`map.reproject()`；`projectLayer` 只用于离线投影导出。
 
 ## 范围
 

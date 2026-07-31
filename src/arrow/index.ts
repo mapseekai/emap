@@ -19,7 +19,7 @@ import type { Table } from 'apache-arrow';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import {
   asMutableTopologySource,
-  isMutableTopologySource,
+  type ReplaceableTopologySource,
   type TopologySource,
 } from '../source/source';
 import { registerFormat, type ExportedFormatFile } from '../source/format-registry';
@@ -51,20 +51,41 @@ export type { GeoMetadata, GeoColumnMetadata, GeoEncoding } from './geoparquet-m
 export { detectGeometryColumn } from './geometry-column';
 export type { GeometryColumnInfo } from './geometry-column';
 
+interface DetachedMutableSource extends TopologySource {
+  setDataset(dataset: ReturnType<typeof fromArrowTable>): void;
+}
+
+function isReplaceableTopologySource(source: TopologySource): source is ReplaceableTopologySource {
+  const candidate = source as unknown as Partial<ReplaceableTopologySource>;
+  return typeof candidate.replaceDataset === 'function';
+}
+
+function isDetachedMutableSource(source: TopologySource): source is DetachedMutableSource {
+  const candidate = source as unknown as Partial<DetachedMutableSource>;
+  return typeof candidate.setDataset === 'function';
+}
+
 /**
  * Replace `source`'s dataset with the contents of an in-memory Arrow table
  * (e.g. a duckdb-wasm query result). Fires the source's `data` event so an
- * attached map re-renders.
+ * attached map re-renders. Resolves after map-owned CRS normalization and
+ * final commit validation complete.
  */
-export function setArrowTable(
+export async function setArrowTable(
   source: TopologySource,
   table: Table,
   opts?: FromArrowTableOptions,
-): void {
-  if (!isMutableTopologySource(source)) {
-    throw new TypeError('setArrowTable requires a mutable TopologySource');
+): Promise<void> {
+  const dataset = fromArrowTable(table, opts);
+  if (isReplaceableTopologySource(source)) {
+    await source.replaceDataset(dataset);
+    return;
   }
-  source.setDataset(fromArrowTable(table, opts));
+  if (isDetachedMutableSource(source)) {
+    source.setDataset(dataset);
+    return;
+  }
+  throw new TypeError('setArrowTable requires a mutable TopologySource');
 }
 
 /** Convert `source`'s current dataset to an in-memory Arrow table. */

@@ -12,6 +12,7 @@
 
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import { EPSG_CODES_WITHOUT_PROJ4, EPSG_PROJ4_TABLE } from './epsg-proj4-data';
+import { resolveMapshaperCrsSignature } from '../adapter/mapshaper-adapter';
 
 /** Default fallback when no metadata identifies a CRS. */
 export const DEFAULT_CRS = 'EPSG:4326';
@@ -254,6 +255,19 @@ export async function resolveProjectCrs(crs: string): Promise<string> {
     `${formatEpsgCode(code)} does not include a Proj.4 definition`,
     formatEpsgCode(code),
   );
+}
+
+export interface ResolvedProjectCrs {
+  readonly definition: string;
+  readonly signature: string;
+}
+
+export async function resolveProjectCrsDefinition(crs: string): Promise<ResolvedProjectCrs> {
+  const definition = await resolveProjectCrs(crs);
+  return {
+    definition,
+    signature: resolveMapshaperCrsSignature(definition),
+  };
 }
 
 /**
