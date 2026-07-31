@@ -7,12 +7,11 @@
 // Members keep their `_` prefix because they are emap-internal — public
 // API consumers must not depend on this interface.
 
-import type { TopologySource } from '../source/source';
+import type { MutableTopologySource } from '../source/source';
 import type { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import type { EditHistory } from '../edit/edit-history';
 import type { TransactionInternal } from '../edit/transaction-internal';
 import type { Selection } from './selection';
-import type { MapshaperLayer } from '../types/mapshaper-types';
 import type { LayerRegistry } from './layer-registry';
 
 /**
@@ -29,7 +28,7 @@ export interface EmapHostInternal {
   readonly _removed: boolean;
 
   // ---- shared state owned by Emap ------------------------------------
-  readonly _sources: globalThis.Map<string, TopologySource>;
+  readonly _sources: globalThis.Map<string, MutableTopologySource>;
   readonly _history: EditHistory;
   readonly _selection: Selection;
   /**
@@ -54,13 +53,6 @@ export interface EmapHostInternal {
    */
   readonly layers: LayerRegistry;
 
-  // ---- helpers managers call back into -------------------------------
-  /**
-   * @deprecated Use `host.layers.resolve(sourceId, layerId)` instead. Kept
-   * as a thin shim for one release so in-flight refactors don't all need
-   * to land at once.
-   */
-  _resolveLayer(sourceId: string, layerId: string): MapshaperLayer | null;
   _scheduleRender(): void;
   _fireHistoryChange(): void;
   _fireSelectionChange(diff: import('./selection').SelectionDiff): void;

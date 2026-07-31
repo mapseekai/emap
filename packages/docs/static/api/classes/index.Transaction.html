@@ -28,7 +28,7 @@ supported for tests but bypasses the Emap host wiring.</p>
 <ul class="tsd-hierarchy">
 <li><span class="tsd-signature-type">TransactionInternal</span></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/36090c713ff87c8d041f00ae308e1bdc50aab068/src/edit/transaction.ts#L61">src/edit/transaction.ts:61</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/edit/transaction.ts#L61">src/edit/transaction.ts:61</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -45,6 +45,7 @@ supported for tests but bypasses the Emap host wiring.</p>
 <section class="tsd-index-section">
 <h3 class="tsd-index-heading tsd-anchor-link" id="methods">Methods<a href="#methods" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-index-list"><a href="#_capturefirsttouch" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>_<wbr/>capture<wbr/>First<wbr/>Touch</span></a>
+<a href="#_trackoperation" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>_<wbr/>track<wbr/>Operation</span></a>
 <a href="#commit" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>commit</span></a>
 <a href="#rollback" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>rollback</span></a>
 </div></section></div></details></section></section>
@@ -65,7 +66,7 @@ supported for tests but bypasses the Emap host wiring.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">Transaction</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/36090c713ff87c8d041f00ae308e1bdc50aab068/src/edit/transaction.ts#L67">src/edit/transaction.ts:67</a></li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/edit/transaction.ts#L68">src/edit/transaction.ts:68</a></li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Accessors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="accessors-1">Accessors<a href="#accessors-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -78,8 +79,9 @@ supported for tests but bypasses the Emap host wiring.</p>
 <div class="tsd-comment tsd-typography"><p>True iff <code>commit()</code> / <code>rollback()</code> has not been called yet.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Implementation of TransactionInternal.isOpen</p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/36090c713ff87c8d041f00ae308e1bdc50aab068/src/edit/transaction.ts#L92">src/edit/transaction.ts:92</a></li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/edit/transaction.ts#L100">src/edit/transaction.ts:100</a></li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -108,7 +110,25 @@ how many ops touched it later.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of TransactionInternal._captureFirstTouch</p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/36090c713ff87c8d041f00ae308e1bdc50aab068/src/edit/transaction.ts#L85">src/edit/transaction.ts:85</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/edit/transaction.ts#L86">src/edit/transaction.ts:86</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="_trackoperation"><span>_<wbr/>track<wbr/>Operation</span><a href="#_trackoperation" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="_trackoperation-1"><span class="tsd-kind-call-signature">_trackOperation</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">operation</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#_trackoperation-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>_trackOperation is a public emap call signature documented for package consumers.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">operation</span>: <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">&gt;</span></span>
+<div class="tsd-comment tsd-typography"><p>operation accepts <code>Promise</code> for _trackOperation. Required; omission is not allowed. Must be assignable to <code>Promise</code>.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Implementation of TransactionInternal._trackOperation</p>
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/edit/transaction.ts#L92">src/edit/transaction.ts:92</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="commit"><span>commit</span><a href="#commit" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -130,7 +150,7 @@ applied as each child was originally captured.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.OpResult.html" class="tsd-signature-type tsd-kind-type-alias">OpResult</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/36090c713ff87c8d041f00ae308e1bdc50aab068/src/edit/transaction.ts#L105">src/edit/transaction.ts:105</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/edit/transaction.ts#L113">src/edit/transaction.ts:113</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="rollback"><span>rollback</span><a href="#rollback" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -146,7 +166,7 @@ the transaction is closed it cannot be re-used.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/36090c713ff87c8d041f00ae308e1bdc50aab068/src/edit/transaction.ts#L126">src/edit/transaction.ts:126</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/edit/transaction.ts#L137">src/edit/transaction.ts:137</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -167,7 +187,7 @@ the transaction is closed it cannot be re-used.</p>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Accessors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Accessors</summary>
 <div><a href="#isopen"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Accessor"><use href="../assets/icons.svg#icon-262144"></use></svg><span>is<wbr/>Open</span></a></div></details>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
-<div><a href="#_capturefirsttouch"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>_<wbr/>capture<wbr/>First<wbr/>Touch</span></a><a href="#commit"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>commit</span></a><a href="#rollback"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>rollback</span></a></div></details></div></details></div>
+<div><a href="#_capturefirsttouch"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>_<wbr/>capture<wbr/>First<wbr/>Touch</span></a><a href="#_trackoperation"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>_<wbr/>track<wbr/>Operation</span></a><a href="#commit"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>commit</span></a><a href="#rollback"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>rollback</span></a></div></details></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="../index.html">@mapseekai/emap</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">

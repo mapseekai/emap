@@ -1,6 +1,6 @@
 import type { EditCommand } from '../edit-command';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
-import type { TopologySource } from '../../source/source';
+import { asMutableTopologySource, type TopologySource } from '../../source/source';
 
 export interface DatasetReplaceCommandOptions {
   /** The source whose dataset is being swapped. */
@@ -45,10 +45,10 @@ export class DatasetReplaceCommand implements EditCommand {
   }
 
   do(): void {
-    this.opts.source.setDataset(this.opts.after);
+    asMutableTopologySource(this.opts.source).setDataset(this.opts.after);
   }
 
   undo(): void {
-    this.opts.source.setDataset(this.opts.before);
+    asMutableTopologySource(this.opts.source).setDataset(this.opts.before);
   }
 }

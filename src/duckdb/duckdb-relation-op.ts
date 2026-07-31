@@ -9,6 +9,7 @@ import {
   buildRelationFilterSql,
   type RelationDuckDbFunction,
 } from './duckdb-sql';
+import { alignSecondaryDatasetCrs } from './dataset-crs';
 
 let duckDbRelationInputTableSequence = 0;
 let duckDbRelationMaskTableSequence = 0;
@@ -132,12 +133,13 @@ export async function processRelationWithDuckDb(
   let input: Table;
   let mask: Table;
   try {
+    const alignedMaskDataset = await alignSecondaryDatasetCrs(inputDataset, maskDataset);
     input = toArrowTable(inputDataset, {
       layer: opts.inputLayer,
       encoding: 'wkb',
       geometryColumn: inputGeometryColumn,
     });
-    mask = toArrowTable(maskDataset, {
+    mask = toArrowTable(alignedMaskDataset, {
       layer: opts.maskLayer,
       encoding: 'wkb',
       geometryColumn: maskGeometryColumn,

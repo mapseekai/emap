@@ -106,7 +106,7 @@
       // is ready), then addSource (order-independent) + setExtent.
       try {
         await source.setData(entries);
-        map.addSource(SOURCE_ID, source);
+        await map.addSource(SOURCE_ID, source);
         map.setExtent(source.getExtent());
         populateLayerOptions(source);
         status.textContent = `已加载 ${uploaded.size} 个文件。选择折线和多边形图层后点击 "按多边形切分折线"。`;

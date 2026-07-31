@@ -17,7 +17,11 @@
  */
 import type { Table } from 'apache-arrow';
 import type { MapshaperDataset } from '../types/mapshaper-types';
-import type { TopologySource } from '../source/source';
+import {
+  asMutableTopologySource,
+  isMutableTopologySource,
+  type TopologySource,
+} from '../source/source';
 import { registerFormat, type ExportedFormatFile } from '../source/format-registry';
 import { fromArrowTable, type FromArrowTableOptions } from './table-to-dataset';
 import { toArrowTable, type ToArrowTableOptions } from './dataset-to-table';
@@ -57,12 +61,15 @@ export function setArrowTable(
   table: Table,
   opts?: FromArrowTableOptions,
 ): void {
+  if (!isMutableTopologySource(source)) {
+    throw new TypeError('setArrowTable requires a mutable TopologySource');
+  }
   source.setDataset(fromArrowTable(table, opts));
 }
 
 /** Convert `source`'s current dataset to an in-memory Arrow table. */
 export function toArrowTableFromSource(source: TopologySource, opts?: ToArrowTableOptions): Table {
-  const dataset = source.getDataset();
+  const dataset = asMutableTopologySource(source).getDataset();
   if (!dataset) throw new Error('TopologySource has no dataset');
   return toArrowTable(dataset, opts);
 }

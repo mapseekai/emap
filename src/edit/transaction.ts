@@ -41,7 +41,7 @@
 // is open throws via `EditHistory.beginCapture`.
 
 import { CompositeCommand } from './commands/composite';
-import { OK, type OpResult } from '../map/op-result';
+import { Err, OK, type OpResult } from '../map/op-result';
 import type { EmapHostInternal } from '../map/emap-host';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { SelectionSnapshot } from '../map/selection';
@@ -63,6 +63,7 @@ export class Transaction implements TransactionInternal {
   private readonly _datasetSnapshots = new globalThis.Map<string, MapshaperDataset>();
   private readonly _selectionSnapshot: SelectionSnapshot;
   private _closed = false;
+  private readonly _pendingOperations = new Set<Promise<unknown>>();
 
   constructor(host: EmapHostInternal) {
     if (host._activeTransaction) {
@@ -88,6 +89,13 @@ export class Transaction implements TransactionInternal {
     }
   }
 
+  _trackOperation(operation: Promise<unknown>): void {
+    if (this._closed) return;
+    this._pendingOperations.add(operation);
+    const settle = () => this._pendingOperations.delete(operation);
+    void operation.then(settle, settle);
+  }
+
   /** True iff `commit()` / `rollback()` has not been called yet. */
   get isOpen(): boolean {
     return !this._closed;
@@ -103,15 +111,18 @@ export class Transaction implements TransactionInternal {
    * applied as each child was originally captured.
    */
   async commit(label: string): Promise<OpResult> {
+    while (this._pendingOperations.size > 0) {
+      await Promise.allSettled(this._pendingOperations);
+    }
     this._end();
     const cmds = this._host._history.endCapture();
     if (cmds.length === 0) {
-      return OK;
+      return this._host._removed ? Err.hostRemoved() : OK;
     }
     const composite = new CompositeCommand(cmds, label);
     this._host._history.push(composite);
     this._host._fireHistoryChange();
-    return OK;
+    return this._host._removed ? Err.hostRemoved() : OK;
   }
 
   /**

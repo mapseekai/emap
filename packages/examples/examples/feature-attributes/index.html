@@ -157,7 +157,7 @@
               filename: file.name,
               content: content,
             });
-            map.addSource("test-source", source);
+            await map.addSource("test-source", source);
             map.setExtent(source.getExtent());
             populateLayers(source);
             status.textContent = `当前: ${file.name}`;

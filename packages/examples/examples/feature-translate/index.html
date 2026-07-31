@@ -89,7 +89,7 @@
         // is ready), then addSource (order-independent) + setExtent.
         try {
           await source.setData({ filename: file.name, content });
-          map.addSource(SOURCE_ID, source);
+          await map.addSource(SOURCE_ID, source);
           map.setExtent(source.getExtent());
           // Enable the transform handler only AFTER the map/data is ready
           // (mirrors how the vertexEdit/drawFeature examples enable theirs).

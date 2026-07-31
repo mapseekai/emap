@@ -42,6 +42,18 @@ describe('duckdb-spatial-ops example', () => {
     expect(html).toContain('<input id="crs" type="text" value="EPSG:4326"');
   });
 
+  it('re-registers the input source when the declared CRS changes', () => {
+    expect(html).toContain("crsInput.addEventListener('change', reapplyInputCrs)");
+    expect(html).not.toContain("crsInput.addEventListener('change', applyInputCrs)");
+    expect(html).toContain('await map.addSource(SOURCE_ID, source);');
+    expect(html).toContain('await source.setData(uploadedInput)');
+    expect(html).toContain('crsInput.disabled = true');
+  });
+
+  it('discards operation results computed before an input CRS change', () => {
+    expect(html.match(/map\.getSource\(SOURCE_ID\) !== runInputSource/g)).toHaveLength(2);
+  });
+
   it('exposes DuckDB attribute operations in the operation picker', () => {
     expect(html).toContain('<option value="area">Area Attribute</option>');
     expect(html).toContain('<option value="geometryType">Geometry Type Attribute</option>');
@@ -87,6 +99,32 @@ describe('duckdb-spatial-ops example', () => {
     expect(html).toContain('id="distance-label"');
     expect(html).toContain('id="distance"');
     expect(html).toContain('operationNeedsDistance(operationSelect.value)');
+  });
+
+  it('reads operation input from the currently registered map source', () => {
+    const functionMatch = html.match(/function datasetForLayerEntry\(entry\) \{[\s\S]*?\n\s{6}\}/);
+    if (!functionMatch) throw new Error('datasetForLayerEntry function not found');
+
+    const currentInput = { crs: 'EPSG:3857' };
+    const map = {
+      getSource: () => ({
+        getDataset: () => currentInput,
+      }),
+    };
+    const createResolver = new Function(
+      'map',
+      `${functionMatch[0]}; return datasetForLayerEntry;`,
+    ) as (map: object) => (entry: { sourceId: string }) => object | null;
+    const resolveDataset = createResolver(map);
+
+    expect(resolveDataset({ sourceId: 'input' })).toBe(currentInput);
+  });
+
+  it('registers generated output through map CRS normalization', () => {
+    expect(html).toContain('outputSource.setDataset(result)');
+    expect(html).toContain('await map.addSource(OUTPUT_ID, outputSource)');
+    expect(html).not.toContain('function createOutputSource');
+    expect(html).not.toContain('await outputSource.reproject');
   });
 
   it('imports only exported DuckDB browser module names', () => {

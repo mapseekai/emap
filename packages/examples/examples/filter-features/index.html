@@ -83,7 +83,7 @@
         // is ready), then addSource (order-independent) + setExtent.
         try {
           await source.setData({ filename: file.name, content });
-          map.addSource(SOURCE_ID, source);
+          await map.addSource(SOURCE_ID, source);
           map.setExtent(source.getExtent());
           populate(source);
           status.textContent = `已加载 ${file.name}。`;

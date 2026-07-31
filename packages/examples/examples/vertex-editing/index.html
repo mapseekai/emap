@@ -133,7 +133,7 @@
           // is ready), then addSource (order-independent) + setExtent.
           try {
             await source.setData({ filename: file.name, content });
-            map.addSource("test-source", source);
+            await map.addSource("test-source", source);
             map.setExtent(source.getExtent());
             status.textContent = `当前: ${file.name} —— 点击 ✏ 进入编辑模式；右击共享节点可分离；Ctrl/Cmd+Z 撤销`;
           } catch (e) {

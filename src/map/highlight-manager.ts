@@ -1,6 +1,6 @@
 import type { CorePainter } from '../renderer/painter';
 import { AffineTransform } from '../geo/transform';
-import { TopologySource } from '../source/source';
+import type { MutableTopologySource } from '../source/source';
 import { getLayerId } from '../source/layer-utils';
 import type { HighlightStyle, HighlightFeatureRef, QueriedFeature } from './types';
 import type { FeatureShape } from '../types/mapshaper-types';
@@ -47,6 +47,10 @@ export class HighlightManager {
     return true;
   }
 
+  removeSource(sourceId: string): boolean {
+    return this._highlighted.delete(sourceId);
+  }
+
   setHighlightStyle(style: HighlightStyle): boolean {
     this._highlightStyle = { ...this._highlightStyle, ...style };
     return this._highlighted.size > 0;
@@ -54,7 +58,7 @@ export class HighlightManager {
 
   renderHighlights(
     painter: CorePainter,
-    sources: globalThis.Map<string, TopologySource>,
+    sources: globalThis.Map<string, MutableTopologySource>,
     transform: AffineTransform,
     lineScale: number,
     visibleLayers?: Set<string>,

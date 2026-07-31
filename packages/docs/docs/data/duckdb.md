@@ -172,7 +172,7 @@ DuckDB helper 返回 dataset，不会隐式替换现有 source：
 const output = new TopologySource('buffered');
 output.setDataset(buffered);
 
-map.addSource('buffered', output);
+await map.addSource('buffered', output);
 map.setExtent(output.getExtent());
 ```
 

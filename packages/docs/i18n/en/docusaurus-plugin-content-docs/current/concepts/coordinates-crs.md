@@ -38,23 +38,31 @@ console.log(map.getCRS());
 A fallback does not prove the data is geographic. Let users confirm or override
 the CRS for files of unknown origin.
 
-## Set a CRS or reproject
+## Set a map CRS or reproject
 
-`setCRS` changes projection/viewport interpretation without rewriting source
-coordinates:
+An empty map can establish its CRS with `setCRS`:
 
 ```ts
 map.setCRS('EPSG:3857');
 ```
 
-To transform every registered source:
+Emap maintains one active CRS for all loaded data:
+
+- Without a preset CRS, the first loaded source establishes the map CRS.
+- `await map.addSource(...)` reprojects a loaded source before registration when its CRS differs.
+- A later `setData(...)` on a registered source performs the same normalization before commit and before its `data` event.
+- `map.ops`, DuckDB helpers, editing, and export read datasets in the active map CRS.
+
+After a source is registered, `setCRS` rejects a display-only interpretation
+change. Transform every registered source instead:
 
 ```ts
 await map.reproject('EPSG:3857');
 ```
 
-`reproject` converts coordinates, updates metadata, clears spatial indexes,
-fits the new extent, and fires `crschange` and `data`.
+`reproject` atomically converts every source, updates CRS metadata, clears
+spatial indexes, fits the new extent, and fires `crschange` and `data`. If any
+source conversion fails, no source is committed.
 
 For one target layer:
 

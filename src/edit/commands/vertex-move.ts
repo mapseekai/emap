@@ -1,6 +1,6 @@
 import type { EditCommand } from '../edit-command';
 import { bumpEditVersion, type ArcCollection } from '../../types/mapshaper-types';
-import type { TopologySource } from '../../source/source';
+import { asMutableTopologySource, type TopologySource } from '../../source/source';
 import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
 
 export interface VertexMoveCommandOptions {
@@ -48,15 +48,15 @@ export class VertexMoveCommand implements EditCommand {
   do(): void {
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     adapter.snapVertices(this.opts.vertexIds, this.opts.to, this.opts.arcs);
-    this.opts.source.markDisplayArcsDirty?.();
-    bumpEditVersion(this.opts.source.getDataset?.());
+    asMutableTopologySource(this.opts.source).markDisplayArcsDirty?.();
+    bumpEditVersion(asMutableTopologySource(this.opts.source).getDataset?.());
   }
 
   undo(): void {
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     adapter.snapVertices(this.opts.vertexIds, this.opts.from, this.opts.arcs);
-    this.opts.source.markDisplayArcsDirty?.();
-    bumpEditVersion(this.opts.source.getDataset?.());
+    asMutableTopologySource(this.opts.source).markDisplayArcsDirty?.();
+    bumpEditVersion(asMutableTopologySource(this.opts.source).getDataset?.());
   }
 
   mergeable(prev: EditCommand): boolean {

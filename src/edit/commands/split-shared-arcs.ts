@@ -6,7 +6,7 @@ import {
   type MapshaperLayer,
   type PathShape,
 } from '../../types/mapshaper-types';
-import type { TopologySource } from '../../source/source';
+import { asMutableTopologySource, type TopologySource } from '../../source/source';
 
 /**
  * One feature whose shape was rewritten to point at duplicated arc ids.
@@ -65,25 +65,27 @@ export class SplitSharedArcsCommand implements EditCommand {
   }
 
   do(): void {
-    const arcs = this.opts.source.getArcs();
+    const source = asMutableTopologySource(this.opts.source);
+    const arcs = source.getArcs();
     if (!arcs) return;
     appendArcs(arcs, this.opts.appendedArcs);
     for (const r of this.opts.remaps) {
       r.layer.shapes![r.featureId] = cloneShape(r.newShape);
     }
-    this.opts.source.markDisplayArcsDirty?.();
-    bumpEditVersion(this.opts.source.getDataset?.());
+    source.markDisplayArcsDirty?.();
+    bumpEditVersion(source.getDataset?.());
   }
 
   undo(): void {
-    const arcs = this.opts.source.getArcs();
+    const source = asMutableTopologySource(this.opts.source);
+    const arcs = source.getArcs();
     if (!arcs) return;
     truncateArcs(arcs, this.opts.originalArcCount);
     for (const r of this.opts.remaps) {
       r.layer.shapes![r.featureId] = cloneShape(r.originalShape);
     }
-    this.opts.source.markDisplayArcsDirty?.();
-    bumpEditVersion(this.opts.source.getDataset?.());
+    source.markDisplayArcsDirty?.();
+    bumpEditVersion(source.getDataset?.());
   }
 }
 
@@ -107,7 +109,8 @@ export function planSharedArcSplit(
   selected: Array<{ layer: MapshaperLayer; featureId: number }>,
   allLayers: MapshaperLayer[],
 ): SplitSharedArcsCommandOptions | null {
-  const arcs = source.getArcs();
+  const mutableSource = asMutableTopologySource(source);
+  const arcs = mutableSource.getArcs();
   if (!arcs) return null;
   const arcCount = arcs.size();
   if (arcCount === 0 || selected.length === 0) return null;

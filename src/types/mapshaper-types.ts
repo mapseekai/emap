@@ -32,6 +32,22 @@ export interface ArcVertexData {
   bb?: Float64Array;
 }
 
+/** Numeric buffer view that permits indexed reads without exposing mutating typed-array methods. */
+export interface ReadonlyNumericArray {
+  readonly length: number;
+  readonly [index: number]: number;
+}
+
+/** Read-only view of the raw vertex storage owned by an ArcCollection. */
+export interface ReadonlyArcVertexData {
+  readonly xx: ReadonlyNumericArray;
+  readonly yy: ReadonlyNumericArray;
+  readonly zz: ReadonlyNumericArray | null;
+  readonly nn: ReadonlyNumericArray;
+  readonly ii: ReadonlyNumericArray;
+  readonly bb?: ReadonlyNumericArray;
+}
+
 /** Mapshaper's ArcCollection — manages all arcs in a dataset */
 export interface ArcCollection {
   /** Number of arcs (NOT number of points — see getPointCount for that) */
@@ -75,6 +91,35 @@ export interface ArcCollection {
   arcIntersectsBBox?(i: number, bbox: number[]): boolean;
 }
 
+/**
+ * Query-only ArcCollection surface returned by public source getters.
+ * Mutators such as setRetainedInterval(), transformPoints() and
+ * updateVertexData() are intentionally absent.
+ */
+export interface ReadonlyArcCollection {
+  size(): number;
+  getArcIter(arcId: number): ArcIterator;
+  getShapeIter?(part: number[]): ArcIterator;
+  forEachSegment?(
+    cb: (i: number, j: number, xx: ReadonlyNumericArray, yy: ReadonlyNumericArray) => void,
+  ): void;
+  forEachArcSegment?(
+    arcId: number,
+    cb: (i: number, j: number, xx: ReadonlyNumericArray, yy: ReadonlyNumericArray) => void,
+  ): void;
+  getRetainedInterval?(): number;
+  getThresholdByPct?(pct: number, nth?: number): number;
+  isFlat?(): boolean;
+  getFilteredCopy?(): ReadonlyArcCollection;
+  getCopy?(): ReadonlyArcCollection;
+  getPointCount?(): number;
+  getVertexData?(): ReadonlyArcVertexData;
+  getVertex2?(vertexId: number): readonly [number, number] | null;
+  getSimpleShapeBbox?(shapeIds: number[], bbox: number[]): void;
+  arcIsSmaller?(i: number, minLen: number): boolean;
+  arcIntersectsBBox?(i: number, bbox: number[]): boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Layer & Dataset
 // ---------------------------------------------------------------------------
@@ -112,11 +157,25 @@ export type PointShape = Coord2[];
 export type LegacyPointShape = Coord2;
 export type FeatureShape = PathShape | PointShape | LegacyPointShape;
 
+export type ReadonlyCoord2 = readonly [number, number];
+export type ReadonlyPathPart = readonly SignedArcId[];
+export type ReadonlyPathShape = readonly ReadonlyPathPart[];
+export type ReadonlyPointShape = readonly ReadonlyCoord2[];
+export type ReadonlyFeatureShape = ReadonlyPathShape | ReadonlyPointShape | ReadonlyCoord2;
+
 /** Mapshaper DataTable holding feature attributes for a layer */
 export interface DataTable {
   getRecordAt?(id: number): Record<string, unknown>;
   getRecords?(): Record<string, unknown>[];
   getFields?(): string[];
+  size?(): number;
+}
+
+/** Query-only view of a mapshaper attribute table. */
+export interface ReadonlyDataTable {
+  getRecordAt?(id: number): Readonly<Record<string, unknown>>;
+  getRecords?(): readonly Readonly<Record<string, unknown>>[];
+  getFields?(): readonly string[];
   size?(): number;
 }
 
@@ -134,6 +193,15 @@ export interface MapshaperLayer {
   geometry_type?: GeometryType;
   shapes: (FeatureShape | null)[] | null;
   data?: DataTable;
+}
+
+/** Deep read-only layer view exposed to package consumers. */
+export interface ReadonlyMapshaperLayer {
+  readonly name?: string;
+  readonly id?: string;
+  readonly geometry_type?: GeometryType;
+  readonly shapes: readonly (ReadonlyFeatureShape | null)[] | null;
+  readonly data?: ReadonlyDataTable;
 }
 
 /** Layer narrowed to path geometry. `shapes[i]` is `PathShape | null`. */
@@ -187,6 +255,23 @@ export interface MapshaperDataset {
    * `0` when first observed via {@link bumpEditVersion}.
    */
   editVersion?: number;
+}
+
+/** Deep read-only view of the live dataset owned by a TopologySource. */
+export interface ReadonlyMapshaperDataset {
+  readonly layers: readonly ReadonlyMapshaperLayer[];
+  readonly arcs?: ReadonlyArcCollection;
+  readonly info?: {
+    readonly crs_string?: string;
+    readonly prj?: string;
+    readonly wkt1?: string;
+    readonly crs?: {
+      readonly is_latlong?: boolean;
+      readonly projName?: string;
+      readonly a?: number;
+    };
+  };
+  readonly editVersion?: number;
 }
 
 /**

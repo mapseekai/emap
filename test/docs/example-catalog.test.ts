@@ -81,6 +81,12 @@ describe('example catalog metadata', () => {
       expect(example.title.en.trim(), `${example.id} is missing en title`).not.toBe('');
       expect(example.description.zh.trim(), `${example.id} is missing zh description`).not.toBe('');
       expect(example.description.en.trim(), `${example.id} is missing en description`).not.toBe('');
+      expect(example.description.zh, `${example.id} exposes a source path`).not.toContain(
+        'packages/examples/',
+      );
+      expect(example.description.en, `${example.id} exposes a source path`).not.toContain(
+        'packages/examples/',
+      );
       expect(example.learningGoals.zh, `${example.id} zh learning goals`).not.toHaveLength(0);
       expect(example.learningGoals.en, `${example.id} en learning goals`).not.toHaveLength(0);
       expect(example.docs.length, `${example.id} docs`).toBeGreaterThanOrEqual(1);
@@ -89,10 +95,16 @@ describe('example catalog metadata', () => {
       expect(example.featureFlags, `${example.id} feature flags`).toBeDefined();
       expect(example.fixtures, `${example.id} fixtures`).toBeDefined();
       expect(example.success.trim(), `${example.id} success`).not.toBe('');
+      expect(example.success, `${example.id} exposes a source path`).not.toContain(
+        'packages/examples/',
+      );
       expect(example.route).toBe(`/examples/${example.id}/`);
       expect(example).not.toHaveProperty('load');
       expect(example.source.html).toBe(`packages/examples/examples/${example.id}/index.html`);
     }
+
+    expect(new Set(examples.map((example) => example.description.zh)).size).toBe(examples.length);
+    expect(new Set(examples.map((example) => example.description.en)).size).toBe(examples.length);
   });
 
   it('preserves representative fixture and feature associations', () => {
@@ -134,6 +146,37 @@ describe('example catalog metadata', () => {
       expect(link.getAttribute('href')).toBe(`/mapseekai/emap/examples/${examples[index].id}/`);
       expect(link.getAttribute('href')).not.toContain('#');
     }
+  });
+
+  it('defaults to Chinese and switches the complete catalog to English', () => {
+    const root = document.createElement('div');
+    renderCatalog(root, examples);
+
+    expect(document.documentElement.lang).toBe('zh-CN');
+    expect(document.title).toBe('Emap 文档示例');
+    expect(root.querySelector('h1')?.textContent).toBe('Emap 文档示例');
+    expect(root.querySelector('h2')?.textContent).toBe(examples[0].title.zh);
+    expect(root.querySelector('.example-description')?.textContent).toBe(
+      examples[0].description.zh,
+    );
+    expect(root.querySelector('.primary-link')?.textContent).toBe('打开示例');
+    expect(root.textContent).not.toContain('packages/examples/');
+
+    const language = root.querySelector<HTMLSelectElement>('.catalog-language select');
+    expect(language?.value).toBe('zh');
+    if (!language) throw new Error('Catalog language selector was not rendered');
+    language.value = 'en';
+    language.dispatchEvent(new Event('change'));
+
+    expect(document.documentElement.lang).toBe('en');
+    expect(root.querySelector('h2')?.textContent).toBe(examples[0].title.en);
+    expect(root.querySelector('.example-description')?.textContent).toBe(
+      examples[0].description.en,
+    );
+    expect(document.title).toBe('Emap Documentation Example');
+    expect(root.querySelector('h1')?.textContent).toBe('Emap Documentation Example');
+    expect(root.querySelector('.primary-link')?.textContent).toBe('Open example');
+    expect(root.textContent).not.toContain('packages/examples/');
   });
 
   it('ships one canonical runnable HTML page for every metadata entry', async () => {

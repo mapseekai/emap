@@ -82,9 +82,8 @@ export class EditHistory {
    * to coalesce rapid drag / nudge sequences into one undo step.
    *
    * If `cmd.invalidatesPriorCommands` is `true` (DatasetReplaceCommand),
-   * every entry currently in the undo stack is flagged `stale = true`
-   * before this command is pushed. The command itself is NOT marked
-   * stale — it remains undoable as the boundary itself.
+   * prior undo entries are released and replaced with one lightweight stale
+   * boundary before this command is pushed. The command itself remains undoable.
    */
   push(cmd: EditCommand): void {
     // Capture mode (Transaction): divert without touching undo / redo
@@ -106,10 +105,15 @@ export class EditHistory {
     }
 
     if (cmd.invalidatesPriorCommands) {
-      for (const prior of this._undoStack) prior.stale = true;
-      // Items currently on the redo stack are also outdated — a
-      // dataset-swap voids any forward-replay of work captured against
-      // the old dataset. Drop them so the next state is unambiguous.
+      if (this._undoStack.length > 0) {
+        this._undoStack.length = 0;
+        this._undoStack.push({
+          label: 'Earlier edits unavailable',
+          stale: true,
+          do() {},
+          undo() {},
+        });
+      }
       this._redoStack.length = 0;
     }
     this._undoStack.push(cmd);

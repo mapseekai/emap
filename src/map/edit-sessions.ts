@@ -18,7 +18,7 @@ import {
 import { SplitSharedArcsCommand, planSharedArcSplit } from '../edit/commands/split-shared-arcs';
 import { SplitSharedNodeCommand, planSharedNodeSplit } from '../edit/commands/split-shared-node';
 import type { EditCommand } from '../edit/edit-command';
-import type { TopologySource } from '../source/source';
+import type { MutableTopologySource } from '../source/source';
 import type { MapshaperLayer } from '../types/mapshaper-types';
 import { normalizePointShape } from '../source/layer-utils';
 import type { EmapHostInternal } from './emap-host';
@@ -169,7 +169,7 @@ export class EditSessions {
   _buildSelectionBuckets(splitShared: boolean): {
     buckets: Array<{
       sourceId: string;
-      source: TopologySource;
+      source: MutableTopologySource;
       arcIds: number[];
       pointFeatures: TranslatedPointFeature[];
     }>;
@@ -177,7 +177,7 @@ export class EditSessions {
   } | null {
     type Bucket = {
       sourceId: string;
-      source: TopologySource;
+      source: MutableTopologySource;
       arcIds: number[];
       pointFeatures: TranslatedPointFeature[];
       pathFeatures: Array<{ layer: MapshaperLayer; featureId: number }>;

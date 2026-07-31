@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderLayers } from './layer-renderer';
 
 describe('renderLayers fill rendering', () => {
-  it('skips outline arc flag work when fill layer line width is zero', () => {
+  it('skips outline arc-id work when fill layer line width is zero', () => {
     const arcs = { size: () => 0 };
     const layer = {
       id: 'filled',
@@ -26,7 +26,7 @@ describe('renderLayers fill rendering', () => {
       drawPolygonFill: vi.fn(),
       drawArcs: vi.fn(),
     };
-    const getLayerArcFlags = vi.fn();
+    const getLayerArcIds = vi.fn();
 
     renderLayers(
       {
@@ -39,7 +39,7 @@ describe('renderLayers fill rendering', () => {
         } as any,
         painter: painter as any,
         resolveSourceLayer: vi.fn(() => mapshaperLayer as any),
-        getLayerArcFlags,
+        getLayerArcIds,
       },
       1,
       1,
@@ -54,7 +54,7 @@ describe('renderLayers fill rendering', () => {
       undefined,
       { viewBBox: [0, 0, 10, 10] },
     );
-    expect(getLayerArcFlags).not.toHaveBeenCalled();
+    expect(getLayerArcIds).not.toHaveBeenCalled();
     expect(painter.drawArcs).not.toHaveBeenCalled();
   });
 
@@ -91,7 +91,7 @@ describe('renderLayers fill rendering', () => {
         } as any,
         painter: painter as any,
         resolveSourceLayer: vi.fn(() => mapshaperLayer as any),
-        getLayerArcFlags: vi.fn(),
+        getLayerArcIds: vi.fn(),
       },
       1,
       1,

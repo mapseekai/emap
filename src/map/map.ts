@@ -14,6 +14,7 @@ import {
   EpsgProjectionError,
   normalizeProjectCrs,
   normalizeProjectCrsMetadata,
+  resolveDatasetCRS,
   resolveProjectCrs,
 } from '../geo/crs-resolver';
 import { Painter } from '../renderer/painter';
@@ -25,12 +26,18 @@ import { EditSessions } from './edit-sessions';
 import { AttributeOps } from './attribute-ops';
 import { EditStateStore, type EditMode } from './edit-state-store';
 import { LayerRegistry } from './layer-registry';
-import type { TopologySource } from '../source/source';
+import {
+  isMutableTopologySource,
+  type MutableTopologySource,
+  type NormalizedDatasetCommit,
+  type TopologySource,
+} from '../source/source';
 import { TopologySource as ConcreteTopologySource } from '../source/topology-source';
 import { ScrollZoomHandler } from '../core/handlers/scroll-zoom';
 import type { ScrollZoomOptions } from '../core/handlers/scroll-zoom';
 import { DragPanHandler } from '../core/handlers/drag-pan';
 import type { DragPanOptions } from '../core/handlers/drag-pan';
+import type { EditHandlerHost } from '../core/handlers/edit-handler-host';
 import { ClickSelectHandler, type SelectHandlerOptions } from '../core/handlers/click-select';
 import { BoxSelectHandler, type BoxSelectHandlerOptions } from '../core/handlers/box-select';
 import { LassoSelectHandler, type LassoSelectHandlerOptions } from '../core/handlers/lasso-select';
@@ -59,12 +66,18 @@ import { Selection, type SelectMode, SelectionDiff } from './selection';
 import { EditHistory, HistoryStateSnapshot } from '../edit/edit-history';
 import type { EditCommand } from '../edit/edit-command';
 import { Transaction, type TransactionInternal } from '../edit/transaction';
+import { ReprojectMapCommand } from '../edit/commands/reproject-map';
 // `MapshaperOps`, `EditSessions`, `AttributeOps` are composed onto `Emap`
 // via the `ops` / `editSession` / `attributes` getters below.
 import type { ControlContract, ControlPosition } from '../ui/control-contract';
 import { getLayerId } from '../source/layer-utils';
-import { DEFAULT_LAYER_COLOR, type LayerSpecification } from './layer';
-import type { ArcCollection, MapshaperLayer } from '../types/mapshaper-types';
+import { cloneLayerSpecification, DEFAULT_LAYER_COLOR, type LayerSpecification } from './layer';
+import type {
+  ArcCollection,
+  MapshaperDataset,
+  MapshaperLayer,
+  PathShape,
+} from '../types/mapshaper-types';
 import { exportSnapshotFromSources, unpackSnapshot } from './snapshot';
 import { deleteSelectedFeatures } from './delete-selected';
 import { renderLayers } from './layer-renderer';
@@ -94,7 +107,7 @@ import {
  *
  * @example
  * const map = new Emap({ container: 'map' });
- * map.addSource('example', source);
+ * await map.addSource('example', source);
  * map.addLayer({ id: 'points', type: 'circle', source: 'example' });
  */
 export class Emap extends EventDispatcher {
@@ -109,7 +122,7 @@ export class Emap extends EventDispatcher {
   private _camera!: Camera;
   // Accessed by composed managers via `EmapHostInternal`. Treat as
   // read-only outside this class.
-  _sources: globalThis.Map<string, TopologySource> = new globalThis.Map();
+  _sources: globalThis.Map<string, MutableTopologySource> = new globalThis.Map();
   /**
    * Single resolution surface for `(sourceId, layerId) → MapshaperLayer`.
    * Exposed to managers via `EmapHostInternal.layers`. Reads `_sources`
@@ -122,11 +135,15 @@ export class Emap extends EventDispatcher {
   get layers(): LayerRegistry {
     return this._layersCache ?? (this._layersCache = new LayerRegistry(this._sources));
   }
-  private _sourceListeners: globalThis.Map<string, (e: any) => void> = new globalThis.Map();
+  private _sourceListeners = new globalThis.Map<
+    string,
+    EventListener<{ reason?: 'load' | 'replace' | 'reproject' }>
+  >();
+  private _crsEstablished = false;
   private _layers: LayerSpecification[] = [];
   private _effectiveLayersCache: LayerSpecification[] = [];
   private _defaultLayersDirty = true;
-  private _layerArcFlagsCache: globalThis.Map<string, Uint8Array> = new globalThis.Map();
+  private _layerArcIdsCache: globalThis.Map<string, Uint32Array> = new globalThis.Map();
 
   // Interactions (delegated)
   private _handlers: HandlerManager;
@@ -150,7 +167,7 @@ export class Emap extends EventDispatcher {
   private _pendingNavDelta: AffineDelta | null = null;
   private _pendingRedrawIsSettle = false;
   private _navSnapshotTransform: { mx: number; my: number; bx: number; by: number } | null = null;
-  private _wheelSettleTimer: ReturnType<typeof setTimeout> | null = null;
+  private _wheelSettleTimer: number | NodeJS.Timeout | null = null;
   private static readonly _WHEEL_SETTLE_MS = 250;
 
   // UI controls
@@ -339,17 +356,18 @@ export class Emap extends EventDispatcher {
     );
     this._handlers.register(this._dragPan);
     this._handlers.register(this._scrollZoom);
-    this._clickSelect = new ClickSelectHandler(this);
-    this._boxSelect = new BoxSelectHandler(this);
-    this._lassoSelect = new LassoSelectHandler(this);
+    const handlerHost = this as unknown as EditHandlerHost;
+    this._clickSelect = new ClickSelectHandler(handlerHost);
+    this._boxSelect = new BoxSelectHandler(handlerHost);
+    this._lassoSelect = new LassoSelectHandler(handlerHost);
     this._handlers.register(this._clickSelect);
     this._handlers.register(this._boxSelect);
     this._handlers.register(this._lassoSelect);
-    this._vertexEdit = new VertexEditHandler(this);
+    this._vertexEdit = new VertexEditHandler(handlerHost);
     this._handlers.register(this._vertexEdit);
-    this._drawFeature = new DrawFeatureHandler(this);
+    this._drawFeature = new DrawFeatureHandler(handlerHost);
     this._handlers.register(this._drawFeature);
-    this._transformFeature = new TransformFeatureHandler(this);
+    this._transformFeature = new TransformFeatureHandler(handlerHost);
     this._handlers.register(this._transformFeature);
     this._handlers.attach(this._canvasContainer);
 
@@ -730,53 +748,193 @@ export class Emap extends EventDispatcher {
     this._painter.resize(width, height);
   }
 
-  public addSource(id: string, source: TopologySource): void {
-    this._sources.set(id, source);
+  /**
+   * Register a source in the map's single active CRS.
+   *
+   * The first loaded source establishes an otherwise unset map CRS. A later
+   * loaded source is reprojected before registration when its CRS differs.
+   * Always await this method before adding layers or reading the registered source.
+   *
+   * A successful registration clears undo/redo history (same as
+   * {@link removeSource}), because recorded commands captured the previous
+   * source set and can no longer restore a consistent map state.
+   */
+  public async addSource(id: string, source: TopologySource): Promise<void> {
+    if (this._sources.has(id)) {
+      throw new Error(`Source "${id}" already exists`);
+    }
+    if (!isMutableTopologySource(source)) {
+      throw new TypeError(`Source "${id}" does not implement the mutable topology contract`);
+    }
+    const mutableSource = source;
+    const dataset = mutableSource.getDataset();
+    let adoptedSourceCrs = false;
 
-    const onData = (e: any) => {
-      if (this._sources.size === 1 && source.getCRS) {
-        const crs = source.getCRS();
-        if (crs && this._projection.crs !== crs) {
-          this._projection.setCRS(crs);
-          this._viewport.setCRS(crs);
-          this.fire('crschange');
+    if (dataset) {
+      const sourceCrs = mutableSource.getCRS?.();
+      const hasLoadedSource = Array.from(this._sources.values()).some((entry) =>
+        Boolean(entry.getDataset()),
+      );
+      if (!this._crsEstablished && !hasLoadedSource && sourceCrs) {
+        this._projection.setCRS(sourceCrs);
+        this._viewport.setCRS(sourceCrs);
+        this._crsEstablished = true;
+        adoptedSourceCrs = true;
+      } else if (sourceCrs) {
+        const targetCrs = this._projection.crs;
+        const [resolvedSource, resolvedTarget] = await Promise.all([
+          resolveProjectCrs(sourceCrs),
+          resolveProjectCrs(targetCrs),
+        ]);
+        if (this._projection.crs !== targetCrs) {
+          throw new Error(`Map CRS changed during source registration for "${id}"`);
+        }
+        if (resolvedSource !== resolvedTarget) {
+          const targetMetadata = normalizeProjectCrsMetadata(targetCrs) ?? targetCrs;
+          const projected = await mutableSource.prepareReproject(targetCrs, targetMetadata);
+          if (this._projection.crs !== targetCrs) {
+            throw new Error(`Map CRS changed during source registration for "${id}"`);
+          }
+          if (mutableSource.getDataset() !== dataset) {
+            throw new Error(`Source "${id}" changed during CRS normalization`);
+          }
+          mutableSource.setDataset(projected, false);
         }
       }
-      this.fire('data', { sourceId: id, ...e });
+    }
+
+    if (this._sources.has(id)) {
+      throw new Error(`Source "${id}" already exists`);
+    }
+    mutableSource.setDatasetNormalizer((nextDataset) =>
+      this._normalizeSourceDataset(id, mutableSource, nextDataset),
+    );
+    mutableSource.setManagedCRS(() => this._projection.crs);
+    this._sources.set(id, mutableSource);
+
+    const onData: EventListener<{ reason?: 'load' | 'replace' | 'reproject' }> = (event) => {
+      if (this._sources.get(id) !== mutableSource) return;
       this._defaultLayersDirty = true;
-      this._layerArcFlagsCache.clear();
+      this._invalidateShapeCachesForSources([id]);
+      if (event.reason === 'load') {
+        // setData loads bypass the command history, so any recorded command
+        // (e.g. ReprojectMapCommand) predates the dataset it would restore.
+        this._clearHistory();
+      }
+      this.fire('data', { sourceId: id, reason: event.reason });
       this._scheduleRender();
     };
 
     this._sourceListeners.set(id, onData);
     source.on('data', onData);
 
-    // If source already has data, trigger logic once manually
-    if (source.getDataset && source.getDataset()) {
-      onData({ type: 'data' });
+    // Registration changes the source set captured by history commands (e.g.
+    // ReprojectMapCommand replacements); undoing them now would strand this
+    // source on a stale CRS. Mirror removeSource and drop prior history.
+    this._clearHistory();
+
+    if (adoptedSourceCrs) this.fire('crschange');
+    if (source.getDataset()) onData({ type: 'data', reason: 'load' });
+  }
+
+  /**
+   * Drop undo/redo entries when the live source set or datasets no longer
+   * match the state those commands captured. No-op on an empty history.
+   */
+  private _clearHistory(): void {
+    const history = this._history.snapshot();
+    if (history.canUndo || history.canRedo) {
+      this._history.clear();
+      this._fireHistoryChange();
+    }
+  }
+
+  private async _normalizeSourceDataset(
+    id: string,
+    source: MutableTopologySource,
+    dataset: MapshaperDataset,
+  ): Promise<MapshaperDataset | NormalizedDatasetCommit> {
+    if (this._sources.get(id) !== source) {
+      throw new Error(`Source "${id}" is no longer registered`);
+    }
+    const sourceCrs = resolveDatasetCRS(dataset);
+    const hasLoadedOtherSource = Array.from(this._sources.entries()).some(
+      ([sourceId, entry]) => sourceId !== id && Boolean(entry.getDataset()),
+    );
+    if (!this._crsEstablished && !hasLoadedOtherSource) {
+      this._projection.setCRS(sourceCrs);
+      this._viewport.setCRS(sourceCrs);
+      this._crsEstablished = true;
+      this.fire('crschange');
+      return {
+        dataset,
+        assertCommittable: () => this._assertNormalizationCommit(id, source, sourceCrs),
+      };
+    }
+
+    const targetCrs = this._projection.crs;
+    const [resolvedSource, resolvedTarget] = await Promise.all([
+      resolveProjectCrs(sourceCrs),
+      resolveProjectCrs(targetCrs),
+    ]);
+    this._assertNormalizationCommit(id, source, targetCrs);
+    if (resolvedSource === resolvedTarget) {
+      return {
+        dataset,
+        assertCommittable: () => this._assertNormalizationCommit(id, source, targetCrs),
+      };
+    }
+
+    const targetMetadata = normalizeProjectCrsMetadata(targetCrs) ?? targetCrs;
+    const projected = await source.prepareReprojectDataset(dataset, targetCrs, targetMetadata);
+    this._assertNormalizationCommit(id, source, targetCrs);
+    return {
+      dataset: projected,
+      assertCommittable: () => this._assertNormalizationCommit(id, source, targetCrs),
+    };
+  }
+
+  /**
+   * Last-moment validation run both inside normalization and by the source
+   * immediately before a normalized dataset becomes observable: the owning
+   * registration and the map CRS that authorized it must both still hold.
+   */
+  private _assertNormalizationCommit(id: string, source: MutableTopologySource, crs: string): void {
+    if (this._sources.get(id) !== source) {
+      throw new Error(`Source "${id}" is no longer registered`);
+    }
+    if (this._projection.crs !== crs) {
+      throw new Error(`Map CRS changed during source normalization for "${id}"`);
     }
   }
 
   public removeSource(id: string): void {
-    const source = this._sources.get(id);
-    if (source) {
-      const listener = this._sourceListeners.get(id);
-      if (listener) {
-        source.off('data', listener);
-        this._sourceListeners.delete(id);
-      }
-      this._sources.delete(id);
-      this._defaultLayersDirty = true;
-      this._layerArcFlagsCache.delete(id);
-
-      // Remove all cached arc flags for this source
-      for (const key of this._layerArcFlagsCache.keys()) {
-        if (key.startsWith(`${id}:`)) {
-          this._layerArcFlagsCache.delete(key);
-        }
-      }
-      this._scheduleRender();
+    if (this._activeTransaction) {
+      throw new Error('Cannot remove a source during an active transaction');
     }
+    const source = this._sources.get(id);
+    if (!source) return;
+
+    const listener = this._sourceListeners.get(id);
+    if (listener) source.off('data', listener);
+    source.setDatasetNormalizer(null);
+    source.setManagedCRS(null);
+    this._sourceListeners.delete(id);
+    this._sources.delete(id);
+
+    this._layers = this._layers.filter((layer) => layer.source !== id);
+    this._defaultLayersDirty = true;
+    this._featureQuery.clear(id);
+    this._invalidateShapeCachesForSources([id]);
+    this._highlightManager.removeSource(id);
+
+    const selected = this._selection.getAll().filter((ref) => ref.source === id);
+    if (selected.length > 0) {
+      this._fireSelectionChange(this._selection.remove(selected));
+    }
+
+    this._clearHistory();
+    this._scheduleRender();
   }
 
   public getSource(id: string): TopologySource | undefined {
@@ -849,7 +1007,7 @@ export class Emap extends EventDispatcher {
       if (replace && this._sources.has(id)) this.removeSource(id);
       const src = new ConcreteTopologySource(id);
       src.setDataset(datasets[i]);
-      this.addSource(id, src);
+      await this.addSource(id, src);
       registered.push(id);
     }
     return registered;
@@ -871,9 +1029,9 @@ export class Emap extends EventDispatcher {
       if (idx === -1) {
         throw new Error(`Layer "${before}" not found`);
       }
-      this._layers.splice(idx, 0, { ...layer });
+      this._layers.splice(idx, 0, cloneLayerSpecification(layer));
     } else {
-      this._layers.push({ ...layer });
+      this._layers.push(cloneLayerSpecification(layer));
     }
     this._defaultLayersDirty = true;
     this._scheduleRender();
@@ -889,11 +1047,12 @@ export class Emap extends EventDispatcher {
   }
 
   public getLayer(id: string): LayerSpecification | undefined {
-    return this._layers.find((l) => l.id === id);
+    const layer = this._layers.find((candidate) => candidate.id === id);
+    return layer ? cloneLayerSpecification(layer) : undefined;
   }
 
-  public getLayers(): LayerSpecification[] {
-    return [...this._layers];
+  public getLayers(): readonly LayerSpecification[] {
+    return this._layers.map(cloneLayerSpecification);
   }
 
   public setLayerVisibility(id: string, visibility: 'visible' | 'none'): void {
@@ -960,16 +1119,23 @@ export class Emap extends EventDispatcher {
           // many-polygon datasets (winding-rule rasterization vs straight
           // strokes). Callers who want a filled appearance add an explicit
           // `type: 'fill'` layer via addLayer().
-          defaults.push({
-            id: `${sourceId}:${layerId}`,
-            type: geomType === 'point' ? 'circle' : 'line',
-            source: sourceId,
-            'source-layer': layerId,
-            paint:
-              geomType === 'point'
-                ? { 'circle-color': DEFAULT_LAYER_COLOR, 'circle-radius': 4 }
-                : { 'line-color': DEFAULT_LAYER_COLOR, 'line-width': 0.8 },
-          });
+          if (geomType === 'point') {
+            defaults.push({
+              id: `${sourceId}:${layerId}`,
+              type: 'circle',
+              source: sourceId,
+              'source-layer': layerId,
+              paint: { 'circle-color': DEFAULT_LAYER_COLOR, 'circle-radius': 4 },
+            });
+          } else {
+            defaults.push({
+              id: `${sourceId}:${layerId}`,
+              type: 'line',
+              source: sourceId,
+              'source-layer': layerId,
+              paint: { 'line-color': DEFAULT_LAYER_COLOR, 'line-width': 0.8 },
+            });
+          }
         }
       }
     }
@@ -977,20 +1143,6 @@ export class Emap extends EventDispatcher {
     this._effectiveLayersCache = defaults;
     this._defaultLayersDirty = false;
     return defaults;
-  }
-
-  private _resolveSourceLayer(
-    source: TopologySource,
-    sourceLayerName?: string,
-  ): MapshaperLayer | null {
-    const layers = source.getLayers() as MapshaperLayer[];
-    if (!layers.length) return null;
-    if (!sourceLayerName) return layers[0];
-    for (let i = 0; i < layers.length; i++) {
-      const lid = getLayerId(layers[i], i);
-      if (lid === sourceLayerName) return layers[i];
-    }
-    return null;
   }
 
   /**
@@ -1001,35 +1153,33 @@ export class Emap extends EventDispatcher {
    * arc references, so iterating their shapes contributes nothing — caller
    * should filter by `isPathLayer` before invoking.
    */
-  private _getLayerArcFlags(
+  private _getLayerArcIds(
     ml: MapshaperLayer,
     arcs: ArcCollection,
     cacheKey: string,
-  ): Uint8Array | null {
-    if (!ml || !ml.shapes || !arcs) return null;
+  ): Uint32Array | null {
+    if (!ml.shapes) return null;
 
-    let flags = this._layerArcFlagsCache.get(cacheKey);
-    if (flags) return flags;
+    const cached = this._layerArcIdsCache.get(cacheKey);
+    if (cached) return cached;
 
-    const arcCount = arcs.size();
-    flags = new Uint8Array(arcCount);
-
-    // Tag all arcs used by this layer's shapes. Layer is expected to be a
-    // path layer; we cast for narrow access since the runtime guard at the
-    // call sites ensures correctness.
-    const pathShapes = ml.shapes as Array<import('../types/mapshaper-types').PathShape | null>;
-    for (const shape of pathShapes) {
+    const seen = new Uint8Array(arcs.size());
+    const ids: number[] = [];
+    for (const shape of ml.shapes as Array<PathShape | null>) {
       if (!shape) continue;
       for (const part of shape) {
-        for (const arcId of part) {
-          const absId = arcId >= 0 ? arcId : ~arcId;
-          flags[absId] = 1;
+        for (const signedArcId of part) {
+          const arcId = signedArcId >= 0 ? signedArcId : ~signedArcId;
+          if (seen[arcId] === 1) continue;
+          seen[arcId] = 1;
+          ids.push(arcId);
         }
       }
     }
 
-    this._layerArcFlagsCache.set(cacheKey, flags);
-    return flags;
+    const arcIds = Uint32Array.from(ids);
+    this._layerArcIdsCache.set(cacheKey, arcIds);
+    return arcIds;
   }
 
   private _getVisibleLayerKeys(): Set<string> {
@@ -1039,7 +1189,7 @@ export class Emap extends EventDispatcher {
       if (layer.layout?.visibility === 'none') continue;
       const source = this._sources.get(layer.source);
       if (!source) continue;
-      const ml = this._resolveSourceLayer(source, layer['source-layer']);
+      const ml = this.layers.resolve(layer.source, layer['source-layer']);
       if (ml) {
         const mapshaperLayers = source.getLayers() as MapshaperLayer[];
         const idx = mapshaperLayers.indexOf(ml);
@@ -1050,21 +1200,32 @@ export class Emap extends EventDispatcher {
     return keys;
   }
 
-  public getPainter(): Painter {
-    return this._painter;
-  }
-
   public getCRS(): string {
     return this._projection.crs;
   }
 
+  /**
+   * Set the CRS used by an empty map.
+   *
+   * Once a source is registered, use {@link reproject} so dataset coordinates,
+   * source metadata, projection, and viewport remain synchronized.
+   */
   public setCRS(crs: string): void {
+    if (this._sources.size > 0) {
+      throw new Error(
+        'Cannot change the map CRS while sources are registered; use map.reproject()',
+      );
+    }
     this._projection.setCRS(crs);
     this._viewport.setCRS(crs);
+    this._crsEstablished = true;
     this.fire('crschange');
   }
 
   public async reproject(targetCrs: string): Promise<void> {
+    if (this._activeTransaction) {
+      throw new Error('Cannot reproject during an active transaction');
+    }
     if (targetCrs.trim().length === 0) {
       throw new Error('targetCrs must be a non-empty CRS string');
     }
@@ -1079,22 +1240,65 @@ export class Emap extends EventDispatcher {
     }
     if (normalizedCurrent === normalizedTarget) return;
 
-    const newExtent = await this._projection.reproject(
+    const beforeView = {
+      crs: this._projection.crs,
+      extent: this._viewport.extent.clone(),
+    };
+    // Snapshot every registered source with its current dataset identity.
+    // prepareReproject skips sources that have not loaded yet; if one of them
+    // commits (or the registry changes) while preparation is in flight, the
+    // command must abort instead of switching the CRS around it.
+    const sourceDatasets = new Map(
+      Array.from(this._sources, ([sourceId, source]) => [sourceId, source.getDataset()]),
+    );
+    const prepared = await this._projection.prepareReproject(
       normalizedTarget,
       this._sources,
       targetCrsMetadata,
     );
-
-    this._viewport.setCRS(normalizedTarget);
-    this._viewport.clearInitialState();
-    this._clearSpatialIndexesForSources(this._sources.keys());
-
-    if (newExtent.hasBounds()) {
-      this.setExtent(newExtent);
+    for (const replacement of prepared.replacements) {
+      if (
+        this._sources.get(replacement.sourceId) !== replacement.source ||
+        replacement.source.getDataset() !== replacement.before ||
+        (replacement.before.editVersion ?? 0) !== replacement.beforeEditVersion
+      ) {
+        throw new Error(`Source "${replacement.sourceId}" changed during reprojection`);
+      }
+    }
+    for (const [sourceId, dataset] of sourceDatasets) {
+      const current = this._sources.get(sourceId);
+      if (!current || current.getDataset() !== dataset) {
+        throw new Error(`Source "${sourceId}" changed during reprojection`);
+      }
+    }
+    if (this._sources.size !== sourceDatasets.size) {
+      throw new Error('Map sources changed during reprojection');
     }
 
+    const afterExtent = prepared.extent.hasBounds()
+      ? prepared.extent
+      : this._viewport.extent.clone();
+    const command = new ReprojectMapCommand({
+      replacements: prepared.replacements,
+      before: beforeView,
+      after: { crs: normalizedTarget, extent: afterExtent },
+      applyViewState: (state) => this._applyReprojectedView(state.crs, state.extent),
+    });
+    command.do();
+    this._history.push(command);
+    this._fireHistoryChange();
+  }
+
+  private _applyReprojectedView(crs: string, extent: Bounds): void {
+    this._projection.setCRS(crs);
+    this._viewport.setCRS(crs);
+    this._crsEstablished = true;
+    this._viewport.clearInitialState();
+    this._clearSpatialIndexesForSources(this._sources.keys());
+    if (extent.hasBounds()) this._viewport.setExtent(extent);
     this.fire('crschange');
-    this.fire('data', { reason: 'reproject' });
+    this.fire('move');
+    this._scheduleRender();
   }
 
   public getCenter(): [number, number] {
@@ -1142,11 +1346,11 @@ export class Emap extends EventDispatcher {
   }
 
   public getTransform(): AffineTransform {
-    return this._viewport.transform;
+    return this._viewport.transform.clone();
   }
 
   public getExtent(): Bounds {
-    return this._viewport.extent;
+    return this._viewport.extent.clone();
   }
 
   public setExtent(bounds: Bounds): void {
@@ -1288,7 +1492,6 @@ export class Emap extends EventDispatcher {
     this._clearFastTransform();
     const t0 = performance.now();
     this._renderImpl();
-    (this._painter as typeof this._painter & { flush?: () => void }).flush?.();
     this._scheduler.recordFrame(performance.now() - t0, this._captureRenderSnapshot());
   }
 
@@ -1341,9 +1544,9 @@ export class Emap extends EventDispatcher {
         sources: this._sources,
         viewport: this._viewport,
         painter: this._painter,
-        resolveSourceLayer: (source, sourceLayerName) =>
-          this._resolveSourceLayer(source, sourceLayerName),
-        getLayerArcFlags: (ml, arcs, cacheKey) => this._getLayerArcFlags(ml, arcs, cacheKey),
+        resolveSourceLayer: (sourceId, sourceLayerName) =>
+          this.layers.resolve(sourceId, sourceLayerName),
+        getLayerArcIds: (ml, arcs, cacheKey) => this._getLayerArcIds(ml, arcs, cacheKey),
       },
       pixelSize,
       lineScale,
@@ -1395,7 +1598,29 @@ export class Emap extends EventDispatcher {
     options?: QueryFeaturesOptions,
   ): QueriedFeature[] {
     const visibleKeys = this._getVisibleLayerKeys();
-    return this._featureQuery.query(geometryOrOptions, options, visibleKeys);
+    const results = this._featureQuery.query(geometryOrOptions, options, visibleKeys);
+    const renderRanks = new globalThis.Map<string, number>();
+    const effectiveLayers = this._getEffectiveLayers();
+    for (let rank = 0; rank < effectiveLayers.length; rank++) {
+      const styleLayer = effectiveLayers[rank];
+      if (styleLayer.layout?.visibility === 'none') continue;
+      const source = this._sources.get(styleLayer.source);
+      if (!source) continue;
+      const sourceLayer = styleLayer['source-layer']
+        ? this.layers.resolve(styleLayer.source, styleLayer['source-layer'])
+        : source.getLayers()[0];
+      if (!sourceLayer) continue;
+      const sourceLayerIndex = source.getLayers().indexOf(sourceLayer);
+      if (sourceLayerIndex === -1) continue;
+      const layerId = getLayerId(sourceLayer, sourceLayerIndex);
+      renderRanks.set(`${styleLayer.source}:${layerId}`, rank);
+    }
+    results.sort(
+      (a, b) =>
+        (renderRanks.get(`${b.source}:${b.layer}`) ?? -1) -
+        (renderRanks.get(`${a.source}:${a.layer}`) ?? -1),
+    );
+    return results;
   }
 
   /**
@@ -1550,8 +1775,8 @@ export class Emap extends EventDispatcher {
   _invalidateShapeCachesForSources(sourceIds: Iterable<string>): void {
     for (const sourceId of sourceIds) {
       const prefix = `${sourceId}:`;
-      for (const key of this._layerArcFlagsCache.keys()) {
-        if (key.startsWith(prefix)) this._layerArcFlagsCache.delete(key);
+      for (const key of this._layerArcIdsCache.keys()) {
+        if (key.startsWith(prefix)) this._layerArcIdsCache.delete(key);
       }
       this._featureQuery?.clear(sourceId);
     }
@@ -1606,7 +1831,7 @@ export class Emap extends EventDispatcher {
   /** Drop every shape-derived cache. Used by undo/redo where per-source
    *  invalidation isn't tracked. */
   private _invalidateAllShapeCaches(): void {
-    this._layerArcFlagsCache.clear();
+    this._layerArcIdsCache.clear();
     for (const id of this._sources.keys()) this._featureQuery?.clear(id);
   }
 
@@ -1737,14 +1962,6 @@ export class Emap extends EventDispatcher {
    */
 
   /**
-   * @deprecated Prefer `emap.layers.resolve(sourceId, layerId)`. Kept as a
-   * thin shim while the composed managers migrate over.
-   */
-  _resolveLayer(sourceId: string, layerId: string): MapshaperLayer | null {
-    return this.layers.resolve(sourceId, layerId);
-  }
-
-  /**
    * Tear the map down: cancel pending renders, detach every `data` listener
    * we attached to sources, release each registered control, kill the worker
    * pool, and unmount the canvas. Idempotent — calling it twice is safe.
@@ -1798,7 +2015,7 @@ export class Emap extends EventDispatcher {
 
     // Per-source feature query + arc-flag caches.
     for (const id of this._sources.keys()) this._featureQuery?.clear(id);
-    this._layerArcFlagsCache.clear();
+    this._layerArcIdsCache.clear();
     this._sources.clear();
 
     // Released registered controls. Each `onRemove` is responsible for its

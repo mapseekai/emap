@@ -129,7 +129,7 @@
           // setData 识别 .parquet/.arrow 扩展名并调用 formats 模块注册的插件。
           // loadExampleArrow() 已通过 Vite 加载并注册该模块。
           await source.setData({ filename: file.name, content });
-          map.addSource(SOURCE_ID, source);
+          await map.addSource(SOURCE_ID, source);
           map.setExtent(source.getExtent());
 
           const layer = source.getDataset()?.layers?.[0];

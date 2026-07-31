@@ -5,6 +5,7 @@ import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types'
 import { DuckDbOperationError } from './duckdb-errors';
 import { getDuckDbRuntime, type DuckDbRuntime } from './duckdb-runtime';
 import { buildOverlaySql, type OverlayDuckDbFunction } from './duckdb-sql';
+import { alignSecondaryDatasetCrs } from './dataset-crs';
 
 export interface DuckDbOverlayOptions {
   inputLayer?: string | number;
@@ -85,19 +86,20 @@ export async function processOverlayWithDuckDb(
   let input: Table;
   let mask: Table;
   try {
+    const alignedMaskDataset = await alignSecondaryDatasetCrs(inputDataset, maskDataset);
     input = toArrowTable(inputDataset, {
       layer: opts.inputLayer,
       encoding: 'wkb',
       geometryColumn: inputGeometryColumn,
     });
     try {
-      mask = toArrowTable(maskDataset, {
+      mask = toArrowTable(alignedMaskDataset, {
         layer: opts.maskLayer,
         encoding: 'wkb',
         geometryColumn: maskGeometryColumn,
       });
     } catch (err) {
-      const emptyMaskDataset = datasetWithEmptyMaskGeometry(inputDataset, maskDataset, opts);
+      const emptyMaskDataset = datasetWithEmptyMaskGeometry(inputDataset, alignedMaskDataset, opts);
       if (!emptyMaskDataset) throw err;
       mask = toArrowTable(emptyMaskDataset, {
         layer: opts.maskLayer,

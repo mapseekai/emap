@@ -27,6 +27,7 @@ export type OpError =
       cause?: unknown;
     }
   | { kind: 'mapshaper'; cause: unknown; cmd?: string; operation?: string }
+  | { kind: 'stale-operation'; sourceId: string; operation: string }
   | { kind: 'host-removed' };
 
 /**
@@ -71,6 +72,9 @@ export const Err = Object.freeze({
   },
   mapshaper(cause: unknown, opts?: { cmd?: string; operation?: string }): OpResult<never> {
     return { ok: false, error: { kind: 'mapshaper', cause, ...(opts ?? {}) } };
+  },
+  staleOperation(sourceId: string, operation: string): OpResult<never> {
+    return { ok: false, error: { kind: 'stale-operation', sourceId, operation } };
   },
   hostRemoved(): OpResult<never> {
     return { ok: false, error: { kind: 'host-removed' } };

@@ -115,7 +115,7 @@
         // is ready), then addSource (order-independent) + setExtent.
         try {
           await source.setData({ filename: file.name, content });
-          map.addSource(SOURCE_ID, source);
+          await map.addSource(SOURCE_ID, source);
           map.setExtent(source.getExtent());
           status.textContent = `已加载 ${file.name}。可绘制要素后再导出。`;
           exportBtn.disabled = false;

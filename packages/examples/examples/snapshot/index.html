@@ -132,7 +132,7 @@
           // Canonical 0.2.0 recipe: await setData (resolves once the dataset
           // is ready), then addSource (order-independent).
           await source.setData({ filename: file.name, content });
-          map.addSource(id, source);
+          await map.addSource(id, source);
           sourceIds.add(id);
           refreshSourceList();
           fitFirstSource();

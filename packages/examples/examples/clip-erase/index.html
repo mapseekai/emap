@@ -151,7 +151,7 @@
       // 数组形式 → 调用扩展后的 setData,内部走 mapshaper `-i FILE1 FILE2 ...` 多文件导入
       try {
         await source.setData(entries);
-        map.addSource(SOURCE_ID, source);
+        await map.addSource(SOURCE_ID, source);
         map.setExtent(source.getExtent());
         populateLayerOptions(source);
         const names = entries.map((e) => e.filename).join(', ');

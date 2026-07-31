@@ -144,7 +144,7 @@
       // is ready), then addSource (order-independent) + setExtent.
       try {
         await source.setData(entries);
-        map.addSource(SOURCE_ID, source);
+        await map.addSource(SOURCE_ID, source);
         map.setExtent(source.getExtent());
         const layerNames = source.getLayers().map((l) => l.name).join(', ');
         status.textContent = `已加载图层: ${layerNames}`;

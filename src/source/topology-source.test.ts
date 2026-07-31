@@ -213,7 +213,7 @@ describe('TopologySource.setData', () => {
 
     try {
       const source = new TopologySource('roads', {
-        mapshaperRunner: { runImport },
+        adapter: { runImport },
       });
 
       await source.setData('/data/roads.geojson');
@@ -230,7 +230,7 @@ describe('TopologySource.setData', () => {
     // RFC 7946 fixes GeoJSON to WGS84 lon/lat; without this the CRS stays
     // "unknown" and GeoParquet exports write `crs: null`.
     const runImport = vi.fn(async () => ({ ...FAKE_DATASET, info: {} }));
-    const source = new TopologySource('t', { mapshaperRunner: { runImport } });
+    const source = new TopologySource('t', { adapter: { runImport } });
 
     await source.setData({ filename: 'a.geojson', content: new Uint8Array([123, 125]) });
 
@@ -239,7 +239,7 @@ describe('TopologySource.setData', () => {
 
   it('does not mark shapefile imports as EPSG:4326 without CRS metadata', async () => {
     const runImport = vi.fn(async () => ({ ...FAKE_DATASET, info: {} }));
-    const source = new TopologySource('t', { mapshaperRunner: { runImport } });
+    const source = new TopologySource('t', { adapter: { runImport } });
 
     await source.setData({ filename: 'a.shp', content: new Uint8Array([0]) });
 
@@ -251,12 +251,98 @@ describe('TopologySource.setData', () => {
       ...FAKE_DATASET,
       info: { prj: 'PROJCS["X",AUTHORITY["EPSG","3857"]]' },
     }));
-    const source = new TopologySource('t', { mapshaperRunner: { runImport } });
+    const source = new TopologySource('t', { adapter: { runImport } });
 
     await source.setData({ filename: 'a.geojson', content: new Uint8Array([123, 125]) });
 
     expect(source.getDataset()?.info?.crs_string).toBeUndefined();
     expect(source.getCRS()).toBe('EPSG:3857');
+  });
+
+  it('normalizes imported data before committing or firing data', async () => {
+    const imported = { ...FAKE_DATASET, info: { crs_string: 'EPSG:4326' } };
+    const normalized = { ...FAKE_DATASET, info: { crs_string: 'EPSG:3857' } };
+    const source = new TopologySource('managed', {
+      adapter: { runImport: vi.fn(async () => imported) },
+    });
+    const normalize = vi.fn(async () => normalized);
+    const observed: unknown[] = [];
+    source.setDatasetNormalizer(normalize);
+    source.on('data', () => observed.push(source.getDataset()));
+
+    await source.setData({ filename: 'a.geojson', content: new Uint8Array([1]) });
+
+    expect(normalize).toHaveBeenCalledWith(imported);
+    expect(source.getDataset()).toBe(normalized);
+    expect(observed).toEqual([normalized]);
+  });
+
+  it('keeps the previous dataset when normalization fails', async () => {
+    const previous = { ...FAKE_DATASET, info: { crs_string: 'EPSG:3857' } };
+    const source = new TopologySource('managed', {
+      adapter: {
+        runImport: vi.fn(async () => ({
+          ...FAKE_DATASET,
+          info: { crs_string: 'EPSG:4326' },
+        })),
+      },
+    });
+    source.setDataset(previous);
+    source.setDatasetNormalizer(async () => {
+      throw new Error('projection failed');
+    });
+    const dataEvents = vi.fn();
+    source.on('data', dataEvents);
+
+    await expect(
+      source.setData({ filename: 'a.geojson', content: new Uint8Array([1]) }),
+    ).rejects.toThrow('projection failed');
+
+    expect(source.getDataset()).toBe(previous);
+    expect(dataEvents).not.toHaveBeenCalled();
+  });
+
+  it('runs the normalizer commit assertion before committing normalized data', async () => {
+    const imported = { ...FAKE_DATASET, info: { crs_string: 'EPSG:4326' } };
+    const normalized = { ...FAKE_DATASET, info: { crs_string: 'EPSG:3857' } };
+    const source = new TopologySource('managed', {
+      adapter: { runImport: vi.fn(async () => imported) },
+    });
+    const assertCommittable = vi.fn();
+    source.setDatasetNormalizer(async () => ({ dataset: normalized, assertCommittable }));
+
+    await source.setData({ filename: 'a.geojson', content: new Uint8Array([1]) });
+
+    expect(assertCommittable).toHaveBeenCalledTimes(1);
+    expect(source.getDataset()).toBe(normalized);
+  });
+
+  it('keeps the previous dataset when the normalizer commit assertion fails', async () => {
+    const previous = { ...FAKE_DATASET, info: { crs_string: 'EPSG:3857' } };
+    const source = new TopologySource('managed', {
+      adapter: {
+        runImport: vi.fn(async () => ({
+          ...FAKE_DATASET,
+          info: { crs_string: 'EPSG:4326' },
+        })),
+      },
+    });
+    source.setDataset(previous);
+    source.setDatasetNormalizer(async () => ({
+      dataset: { ...FAKE_DATASET, info: { crs_string: 'EPSG:4490' } },
+      assertCommittable: () => {
+        throw new Error('Map CRS changed during source normalization for "managed"');
+      },
+    }));
+    const dataEvents = vi.fn();
+    source.on('data', dataEvents);
+
+    await expect(
+      source.setData({ filename: 'a.geojson', content: new Uint8Array([1]) }),
+    ).rejects.toThrow('Map CRS changed during source normalization');
+
+    expect(source.getDataset()).toBe(previous);
+    expect(dataEvents).not.toHaveBeenCalled();
   });
 });
 
@@ -294,6 +380,7 @@ describe('TopologySource.reproject', () => {
     const source = new TopologySource('test');
     const dataset = { ...FAKE_DATASET, info: {} };
     const resultDataset = { ...FAKE_DATASET, info: {} };
+
     setPrivate(source, '_dataset', dataset);
 
     const adapter = getDefaultMapshaperAdapter();
@@ -311,6 +398,78 @@ describe('TopologySource.reproject', () => {
     } finally {
       runOnDatasetSpy.mockRestore();
     }
+  });
+  it('blocks independent CRS changes while the source is managed by a map', async () => {
+    const dataset = {
+      ...FAKE_DATASET,
+      info: { crs_string: 'EPSG:3857' },
+    };
+    const runOnDataset = vi.fn(async () => dataset);
+    const source = new TopologySource('managed', {
+      adapter: { runOnDataset },
+    });
+    source.setDataset(dataset);
+    source.setManagedCRS(() => 'EPSG:3857');
+
+    await expect(source.reproject('EPSG:4326')).rejects.toThrow(
+      'use map.reproject() to change its CRS',
+    );
+    expect(runOnDataset).not.toHaveBeenCalled();
+  });
+
+  it('reprojects a managed source to the current map CRS', async () => {
+    const dataset = { ...FAKE_DATASET, info: { crs_string: 'EPSG:3857' } };
+    const projected = { ...FAKE_DATASET, info: {} };
+    const runOnDataset = vi.fn(async () => projected);
+    const source = new TopologySource('managed', {
+      adapter: { copyDataset: (value: object) => ({ ...value }), runOnDataset },
+    });
+    source.setDataset(dataset);
+    source.setManagedCRS(() => 'EPSG:3857');
+
+    await source.reproject('EPSG:3857');
+
+    expect(runOnDataset).toHaveBeenCalledTimes(1);
+    expect(source.getDataset()).toBe(projected);
+    expect(source.getDataset()?.info?.crs_string).toBe('EPSG:3857');
+  });
+
+  it('rejects a managed reprojection when the owning map CRS changes mid-flight', async () => {
+    const dataset = { ...FAKE_DATASET, info: { crs_string: 'EPSG:3857' } };
+    const { promise, resolve } = Promise.withResolvers<object>();
+    const runOnDataset = vi.fn(() => promise);
+    const source = new TopologySource('managed', {
+      adapter: { copyDataset: (value: object) => ({ ...value }), runOnDataset },
+    });
+    source.setDataset(dataset);
+    let managedCrs = 'EPSG:3857';
+    source.setManagedCRS(() => managedCrs);
+
+    const reprojection = source.reproject('EPSG:3857');
+    await vi.waitFor(() => expect(runOnDataset).toHaveBeenCalled());
+    managedCrs = 'EPSG:4490';
+    resolve({ ...FAKE_DATASET, info: {} });
+
+    await expect(reprojection).rejects.toThrow('Map CRS changed during reprojection');
+    expect(source.getDataset()).toBe(dataset);
+  });
+
+  it('rejects a managed reprojection when the dataset is replaced mid-flight', async () => {
+    const dataset = { ...FAKE_DATASET, info: { crs_string: 'EPSG:3857' } };
+    const { promise, resolve } = Promise.withResolvers<object>();
+    const runOnDataset = vi.fn(() => promise);
+    const source = new TopologySource('managed', {
+      adapter: { copyDataset: (value: object) => ({ ...value }), runOnDataset },
+    });
+    source.setDataset(dataset);
+    source.setManagedCRS(() => 'EPSG:3857');
+
+    const reprojection = source.reproject('EPSG:3857');
+    await vi.waitFor(() => expect(runOnDataset).toHaveBeenCalled());
+    source.setDataset({ ...FAKE_DATASET, info: { crs_string: 'EPSG:3857' } }, false);
+    resolve({ ...FAKE_DATASET, info: {} });
+
+    await expect(reprojection).rejects.toThrow('changed during reprojection');
   });
 
   it('uses caller-provided CRS metadata when the projection input is already resolved', async () => {

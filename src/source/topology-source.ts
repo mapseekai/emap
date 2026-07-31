@@ -4,10 +4,19 @@ import { Bounds } from '../geo/bounds';
 import { unzip, strFromU8, zipSync } from 'fflate';
 import type { UnzipFileInfo, Unzipped } from 'fflate';
 import { DisplayArcs } from './display-arcs';
-import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
-import type { ExportFormat, ExportOptions } from './source';
-import { getDefaultMapshaperRunner, type MapshaperRunner } from './mapshaper-runner';
-import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
+import type {
+  MapshaperDataset,
+  ReadonlyArcCollection,
+  ReadonlyMapshaperDataset,
+  ReadonlyMapshaperLayer,
+} from '../types/mapshaper-types';
+import type {
+  DatasetNormalizer,
+  ExportFormat,
+  ExportOptions,
+  NormalizedDatasetCommit,
+} from './source';
+import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../adapter/mapshaper-adapter';
 import {
   normalizeProjectCrsMetadata,
   resolveDatasetCRS,
@@ -73,6 +82,13 @@ function toBlobPart(content: string | Uint8Array | ArrayBuffer): BlobPart {
   return content as BlobPart;
 }
 
+/** Type guard for the commit-guarded normalizer result. */
+function isNormalizedDatasetCommit(
+  value: MapshaperDataset | NormalizedDatasetCommit,
+): value is NormalizedDatasetCommit {
+  return typeof (value as NormalizedDatasetCommit).assertCommittable === 'function';
+}
+
 /**
  * Resource ceilings applied by {@link TopologySource} when extracting a ZIP
  * payload. Defaults are intentionally generous so legitimate shapefile zips
@@ -97,13 +113,8 @@ const DEFAULT_ZIP_LIMITS: Required<ZipExtractionLimits> = {
 export interface TopologySourceOptions {
   data?: TopologySourceInput;
   zipLimits?: ZipExtractionLimits;
-  /**
-   * Optional injection point for the mapshaper command runner used by
-   * the load path. Defaults to a process-wide singleton that calls
-   * `MapshaperAdapter.runImport / runOnDataset` directly.
-   * Tests and instrumentation use this to swap in a mock runner.
-   */
-  mapshaperRunner?: MapshaperRunner;
+  /** Adapter used for every mapshaper import, transform, bounds and export operation. */
+  adapter?: MapshaperAdapter;
 }
 
 export interface TopologySourceFromBytesOptions extends Omit<TopologySourceOptions, 'data'> {
@@ -142,9 +153,21 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * Re-captured on every `setDataset` / `setData`.
    */
   private _simplifyFloor: number = 0;
-  private _runner: MapshaperRunner;
+  private _adapter: MapshaperAdapter;
+  private _datasetNormalizer: DatasetNormalizer | null = null;
+  private _managedCrs: (() => string) | null = null;
 
-  /** Max-detail threshold the user (or last `-simplify` run) asked for. */
+  /** @internal Install the map-owned pre-commit dataset normalization hook. */
+  setDatasetNormalizer(normalizer: DatasetNormalizer | null): void {
+    this._datasetNormalizer = normalizer;
+  }
+
+  /** @internal Set or clear the owning map's authoritative CRS provider. */
+  setManagedCRS(getCrs: (() => string) | null): void {
+    this._managedCrs = getCrs;
+  }
+
+  /** @internal Max-detail threshold the user (or last `-simplify` run) asked for. */
   getSimplifyFloor(): number {
     return this._simplifyFloor;
   }
@@ -152,9 +175,10 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   constructor(id: string, options?: TopologySourceOptions) {
     super();
     this.id = id;
-    this._options = options || {};
-    this._data = this._options.data;
-    this._runner = this._options.mapshaperRunner ?? getDefaultMapshaperRunner();
+    const { data, adapter, ...sourceOptions } = options ?? {};
+    this._options = sourceOptions;
+    this._data = data;
+    this._adapter = adapter ?? getDefaultMapshaperAdapter();
 
     if (this._data) {
       this._updateData();
@@ -255,7 +279,8 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   }
 
   private async _updateData(): Promise<void> {
-    if (!this._data) return;
+    const data = this._data;
+    if (data === undefined) return;
 
     const version = this._loadVersion;
     const controller = new AbortController();
@@ -270,13 +295,13 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       const inputFiles: Record<string, Uint8Array | string> = {};
       const primaryFiles: string[] = [];
 
-      if (Array.isArray(this._data)) {
+      if (Array.isArray(data)) {
         // Multi-file import: each entry becomes its own layer in one dataset
         // (same behaviour as mapshaper CLI `-i FILE1 FILE2 ...`).
-        if (this._data.length === 0) {
+        if (data.length === 0) {
           throw new Error('setData received an empty array; nothing to import');
         }
-        for (const entry of this._data) {
+        for (const entry of data) {
           if (this._isZipFile(entry.filename)) {
             const extracted = await this._extractZip(entry.content);
             const primary = this._findPrimaryFile(extracted);
@@ -294,9 +319,9 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         }
       } else {
         let input: { filename: string; content: Uint8Array };
-        if (typeof this._data === 'string') {
+        if (typeof data === 'string') {
           // Load from URL
-          const url = this._data;
+          const url = data;
           const response = await fetch(url, { signal: controller.signal });
           if (!response.ok) {
             throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
@@ -319,7 +344,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
           input = { filename, content };
         } else {
-          input = this._data;
+          input = data;
         }
 
         if (this._isZipFile(input.filename)) {
@@ -352,9 +377,9 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       // sized files unusable. Callers run `Emap.ops.cleanLayer()` /
       // `source.simplifyArcs()` explicitly when they need those passes.
       const cmd = `-i ${primaryFiles.map((f) => `"${f.replace(/"/g, '\\"')}"`).join(' ')}`;
-      const dataset: MapshaperDataset = pluginImport
+      let dataset: MapshaperDataset = pluginImport
         ? await pluginImport
-        : await this._runner.runImport(cmd, inputFiles);
+        : await this._adapter.runImport(cmd, inputFiles);
 
       if (
         resolveDatasetCRSMetadata(dataset) === undefined &&
@@ -364,9 +389,25 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         dataset.info.crs_string = 'EPSG:4326';
       }
 
+      let normalized: MapshaperDataset | NormalizedDatasetCommit | undefined;
+      if (this._datasetNormalizer) {
+        normalized = await this._datasetNormalizer(dataset);
+      }
+
       // Stale guard: another setData superseded this run while it was awaiting.
       // Drop the result silently — the live chain owns the next data/error.
       if (version !== this._loadVersion) return;
+
+      if (normalized !== undefined) {
+        if (isNormalizedDatasetCommit(normalized)) {
+          // Last-moment check: the map state that authorized the
+          // normalization (registration, active CRS) must still hold.
+          normalized.assertCommittable();
+          dataset = normalized.dataset;
+        } else {
+          dataset = normalized;
+        }
+      }
 
       this._dataset = dataset;
       // Initialize LOD wrapper for large datasets
@@ -374,16 +415,18 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         this._displayArcs = new DisplayArcs(this._dataset.arcs);
       }
       this._simplifyFloor = this._dataset?.arcs?.getRetainedInterval?.() ?? 0;
+      this._data = undefined;
 
       this.fire('data', { reason: 'load' });
       this._resolvePending(version);
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Stale chain (either superseded by a newer setData, or its fetch was
       // aborted by us). Either way, the new chain owns the next event.
       if (version !== this._loadVersion) return;
-      if (err?.name === 'AbortError') return;
+      if (err instanceof Error && err.name === 'AbortError') return;
+      this._data = undefined;
       this.fire('error', { error: err });
-      this._rejectPending(version, err ?? new Error('setData import failed'));
+      this._rejectPending(version, err);
     }
   }
 
@@ -480,8 +523,39 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     }
   }
 
-  public getDataset(): MapshaperDataset | undefined {
+  public getDataset(): ReadonlyMapshaperDataset | undefined {
     return this._dataset;
+  }
+
+  /** @internal */
+  public async prepareReprojectDataset(
+    dataset: MapshaperDataset,
+    targetCrs: string,
+    targetCrsMetadata?: string,
+  ): Promise<MapshaperDataset> {
+    const resolvedTargetCrs = await resolveProjectCrs(targetCrs);
+    const metadataCrs = targetCrsMetadata ?? normalizeProjectCrsMetadata(targetCrs);
+    const working = this._adapter.copyDataset(dataset);
+    working.arcs?.setRetainedInterval?.(0);
+    const result = await this._adapter.runOnDataset(`-proj ${resolvedTargetCrs}`, working);
+    if (result.info) {
+      delete result.info.crs_string;
+      delete result.info.prj;
+      delete result.info.wkt1;
+    }
+    setDatasetCrsMetadata(result, metadataCrs);
+    return result;
+  }
+
+  /** @internal */
+  public async prepareReproject(
+    targetCrs: string,
+    targetCrsMetadata?: string,
+  ): Promise<MapshaperDataset> {
+    if (!this._dataset) {
+      throw new Error(`TopologySource "${this.id}" has no dataset to reproject`);
+    }
+    return this.prepareReprojectDataset(this._dataset, targetCrs, targetCrsMetadata);
   }
 
   /**
@@ -493,48 +567,61 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     return resolveDatasetCRS(this._dataset);
   }
 
+  /**
+   * Reproject a detached source in place.
+   *
+   * A map-managed source can only be reprojected to the map's current CRS.
+   * Use `map.reproject()` to change the CRS of a registered source.
+   */
   public async reproject(targetCrs: string, targetCrsMetadata?: string): Promise<void> {
-    if (!this._dataset) return;
-    const resolvedTargetCrs = await resolveProjectCrs(targetCrs);
-    const metadataCrs = targetCrsMetadata ?? normalizeProjectCrsMetadata(targetCrs);
-
-    // Reset dynamic simplification before running -proj. Mapshaper's -proj
-    // internally calls arcs.flatten(), which errors if an interval is set but
-    // simplification thresholds are missing.
-    if (this._dataset?.arcs?.setRetainedInterval) {
-      this._dataset.arcs.setRetainedInterval(0);
+    const managedCrs = this._managedCrs?.();
+    const startDataset = this._dataset;
+    let resolvedManaged: string | undefined;
+    if (managedCrs) {
+      const [resolvedTarget, managed] = await Promise.all([
+        resolveProjectCrs(targetCrs),
+        resolveProjectCrs(managedCrs),
+      ]);
+      if (resolvedTarget !== managed) {
+        throw new Error(
+          `TopologySource "${this.id}" is managed by a map; use map.reproject() to change its CRS`,
+        );
+      }
+      resolvedManaged = managed;
+      // The owning map's CRS is authoritative: pin the target and metadata
+      // instead of trusting caller-provided metadata.
+      targetCrs = managedCrs;
+      targetCrsMetadata = normalizeProjectCrsMetadata(managedCrs) ?? managedCrs;
     }
-
-    const cmd = `-proj ${resolvedTargetCrs}`;
-
-    const result = await getDefaultMapshaperAdapter().runOnDataset(cmd, this._dataset);
-    if (result.info) {
-      delete result.info.crs_string;
-      delete result.info.prj;
-      delete result.info.wkt1;
+    const prepared = await this.prepareReproject(targetCrs, targetCrsMetadata);
+    if (managedCrs) {
+      // The map may have reprojected (or detached this source) while the
+      // asynchronous preparation was in flight; never commit a stale target.
+      const currentManaged = this._managedCrs?.();
+      if (!currentManaged || (await resolveProjectCrs(currentManaged)) !== resolvedManaged) {
+        throw new Error(`Map CRS changed during reprojection of source "${this.id}"`);
+      }
+      if (this._dataset !== startDataset) {
+        throw new Error(`TopologySource "${this.id}" changed during reprojection`);
+      }
     }
-    setDatasetCrsMetadata(result, metadataCrs);
-    this._dataset = result;
-    // Re-initialize DisplayArcs (including LOD threshold detection) against
-    // the post-projection arcs — coordinates and z-values may have changed.
-    if (this._dataset?.arcs) {
-      this._displayArcs = new DisplayArcs(this._dataset.arcs);
-    }
+    this.setDataset(prepared);
   }
 
   getExtent(): Bounds {
     if (!this._dataset) return new Bounds();
-    const info = getDefaultMapshaperAdapter().getDatasetBounds(this._dataset);
+    const info = this._adapter.getDatasetBounds(this._dataset);
     return new Bounds(info.xmin, info.ymin, info.xmax, info.ymax);
   }
 
-  getArcs(): any {
+  getArcs(): ReadonlyArcCollection | undefined {
     return this._dataset?.arcs;
   }
 
   /**
    * Returns the DisplayArcs wrapper for LOD support.
    * Use getScaledArcs(unitsPerPixel) to get the appropriate LOD.
+   * @internal
    */
   getDisplayArcs(): DisplayArcs | null {
     return this._displayArcs;
@@ -545,6 +632,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * the renderer will rebuild it lazily. Cheap (O(1)) so per-frame edit
    * sessions can call this on every step without paying the rebuild cost
    * until the user actually zooms out far enough to need the filtered copy.
+   * @internal
    */
   markDisplayArcsDirty(): void {
     this._displayArcs?.markDirty();
@@ -555,6 +643,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * for one-shot mutations where the caller wants the new LOD copy ready
    * immediately (project, dataset-replace). Per-frame in-place edits
    * should prefer {@link markDisplayArcsDirty}.
+   * @internal
    */
   refreshDisplayArcs(): void {
     if (this._dataset?.arcs) {
@@ -566,8 +655,9 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * Swap the active dataset. Used by dataset-replace commands (clip / erase /
    * dissolve / …) and by reproject. Rebuilds the LOD copy and notifies
    * listeners with the `data` event.
+   * @internal
    */
-  public setDataset(dataset: MapshaperDataset): void {
+  public setDataset(dataset: MapshaperDataset, notify = true): void {
     this._dataset = dataset;
     if (dataset.arcs) {
       this._displayArcs = new DisplayArcs(dataset.arcs);
@@ -577,9 +667,11 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     // Re-capture the simplification floor: mapshaper's `-simplify` writes
     // a non-zero `retainedInterval` here; other ops typically leave it at 0.
     this._simplifyFloor = dataset.arcs?.getRetainedInterval?.() ?? 0;
-    // `replace` distinguishes edit-driven dataset swaps from initial `load` —
-    // listeners that auto-fit the viewport should only react to `load`.
-    this.fire('data', { reason: 'replace' });
+    if (notify) {
+      // `replace` distinguishes edit-driven dataset swaps from initial `load` —
+      // listeners that auto-fit the viewport should only react to `load`.
+      this.fire('data', { reason: 'replace' });
+    }
   }
 
   /**
@@ -620,7 +712,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       // does not handle it, so we go through the Pack pipeline directly.
       // `compact: true` matches mapshaper CLI defaults — bakes simplification
       // thresholds into `zz` and gzip-compresses arc buffers for a small file.
-      const adapter = getDefaultMapshaperAdapter();
+      const adapter = this._adapter;
       const files =
         options.format === 'msx'
           ? await adapter.exportPackedDatasets([this._dataset], { compact: true })
@@ -663,7 +755,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
    * Each entry is a {@link MapshaperLayer} (`name`, optional `geometry_type`
    * — `'polygon' | 'polyline' | 'point'`, absent for data-only layers).
    */
-  getLayers(): MapshaperLayer[] {
+  getLayers(): readonly ReadonlyMapshaperLayer[] {
     return this._dataset?.layers || [];
   }
 
@@ -744,7 +836,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     return /\.(prj|cpg|csv|json|geojson|kml|txt)$/i.test(filename);
   }
 
-  private _findPrimaryFile(files: Record<string, any>): string {
+  private _findPrimaryFile(files: Record<string, unknown>): string {
     const filenames = Object.keys(files);
 
     // Priority: .shp > .geojson > .json > .kml > other

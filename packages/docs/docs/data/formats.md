@@ -108,11 +108,11 @@ setParquetWasm(parquetModule);
 import {
   fromArrowTable,
   setArrowTable,
-  toArrowTable,
+  toArrowTableFromSource,
 } from '@mapseekai/emap/arrow';
 
 setArrowTable(source, duckdbResultTable);
-const table = toArrowTable(source.getDataset()!);
+const table = toArrowTableFromSource(source);
 const dataset = fromArrowTable(table);
 ```
 

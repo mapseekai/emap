@@ -4,7 +4,7 @@ import {
   type ArcCollection,
   type MapshaperLayer,
 } from '../../types/mapshaper-types';
-import type { TopologySource } from '../../source/source';
+import { asMutableTopologySource, type TopologySource } from '../../source/source';
 import { normalizePointShape } from '../../source/layer-utils';
 
 /** Point-feature reference within a single source. */
@@ -134,7 +134,7 @@ export class FeatureTranslateCommand implements EditCommand {
       }
     }
 
-    source.markDisplayArcsDirty?.();
-    bumpEditVersion(source.getDataset?.());
+    asMutableTopologySource(source).markDisplayArcsDirty?.();
+    bumpEditVersion(asMutableTopologySource(source).getDataset?.());
   }
 }

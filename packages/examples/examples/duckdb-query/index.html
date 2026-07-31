@@ -205,11 +205,11 @@
         });
       }
 
-      function addDatasetSource(id, dataset, prefix, colors) {
+      async function addDatasetSource(id, dataset, prefix, colors) {
         const source = new TopologySource(id);
         removeSourceWithLayers(id);
         source.setDataset(dataset);
-        map.addSource(id, source);
+        await map.addSource(id, source);
         addDisplayLayers(id, source, prefix, colors);
         return source;
       }
@@ -281,7 +281,7 @@
           await source.setData({ filename: file.name, content });
           inputDataset = source.getDataset();
           if (!inputDataset) throw new Error("文件未生成可用 dataset");
-          map.addSource(SOURCE_ID, source);
+          await map.addSource(SOURCE_ID, source);
           addDisplayLayers(SOURCE_ID, source, "duckdb-query-input", {
             fill: "#dbeafe",
             fillOpacity: 0.48,
@@ -331,7 +331,7 @@
           } else {
             resultDataset = await queryDatasetWithDuckDb(inputDataset, opts, runtime);
           }
-          const outputSource = addDatasetSource(OUTPUT_ID, resultDataset, "duckdb-query-output", {
+          const outputSource = await addDatasetSource(OUTPUT_ID, resultDataset, "duckdb-query-output", {
             fill: "#fef3c7",
             fillOpacity: 0.56,
             line: "#b45309",

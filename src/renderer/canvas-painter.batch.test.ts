@@ -104,7 +104,7 @@ function makePointPainter(fillCalls: string[], arcCalls: unknown[] = []) {
 }
 
 describe('CanvasPainter batching', () => {
-  it('requests a read-optimized 2d context', () => {
+  it('requests the GPU-friendly default 2d context', () => {
     const calls: unknown[][] = [];
     const ctx: any = {};
     const canvas = {
@@ -119,7 +119,7 @@ describe('CanvasPainter batching', () => {
 
     new CanvasPainter(canvas as any);
 
-    expect(calls).toEqual([['2d', { willReadFrequently: true }]]);
+    expect(calls).toEqual([['2d']]);
   });
 
   it('flushes drawArcs every 100 arcs plus a final stroke', () => {
@@ -143,30 +143,25 @@ describe('CanvasPainter batching', () => {
     expect(strokes).toHaveLength(2);
   });
 
-  it('flushes the backing canvas when getImageData is available', () => {
-    const calls: unknown[][] = [];
-    const ctx: any = {
-      getImageData(...args: unknown[]) {
-        calls.push(args);
-      },
-    };
-    const canvas = { getContext: () => ctx, width: 100, height: 100, style: {} };
-    const painter = new CanvasPainter(canvas as any);
-
-    painter.flush();
-
-    expect(calls).toEqual([[0, 0, 1, 1]]);
-  });
-
   it('flushes drawPoints every 100 points plus a final fill', () => {
     const fills: string[] = [];
     const painter = makePointPainter(fills);
-    const shapes = Array.from({ length: 250 }, (_, i) => [[i, i]]);
+    const shapes = Array.from({ length: 250 }, (_, i) => [[i % 50, i % 50]]);
 
     painter.drawPoints(shapes as any, { color: '#333', radius: 4, fill: true });
 
     // flush at 100 and 200, plus the final fill after the loop
     expect(fills).toHaveLength(3);
+  });
+
+  it('culls points outside the backing canvas', () => {
+    const fills: string[] = [];
+    const arcs: unknown[] = [];
+    const painter = makePointPainter(fills, arcs);
+
+    painter.drawPoints([[[10, 10]], [[500, 500]]] as any, { color: '#333', radius: 4, fill: true });
+
+    expect(arcs).toHaveLength(1);
   });
 
   it('skips vertex-dot arcs rejected by the edit viewport filter', () => {

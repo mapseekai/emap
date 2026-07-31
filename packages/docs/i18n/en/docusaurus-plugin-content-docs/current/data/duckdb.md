@@ -158,7 +158,7 @@ Helpers return datasets and do not implicitly replace a source:
 const output = new TopologySource('buffered');
 output.setDataset(buffered);
 
-map.addSource('buffered', output);
+await map.addSource('buffered', output);
 map.setExtent(output.getExtent());
 ```
 

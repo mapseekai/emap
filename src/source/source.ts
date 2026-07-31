@@ -1,5 +1,12 @@
 import { EventDispatcher } from '../core/events';
-import type { ArcCollection, MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
+import type {
+  ArcCollection,
+  MapshaperDataset,
+  MapshaperLayer,
+  ReadonlyArcCollection,
+  ReadonlyMapshaperDataset,
+  ReadonlyMapshaperLayer,
+} from '../types/mapshaper-types';
 import type { DisplayArcs } from './display-arcs';
 import type { Bounds } from '../geo/bounds';
 
@@ -34,55 +41,22 @@ export interface ExportOptions {
 
 export interface TopologySource extends Source {
   type: 'topology';
-  getArcs(): ArcCollection | undefined;
-  getLayers(): MapshaperLayer[];
+  /** Query-only view of the source's live arc collection. */
+  getArcs(): ReadonlyArcCollection | undefined;
+  /** Deep read-only view of the source's live layers. */
+  getLayers(): readonly ReadonlyMapshaperLayer[];
   /**
-   * Returns the live mapshaper dataset reference owned by this source.
+   * Returns a zero-copy, deep read-only TypeScript view of the live dataset.
    *
-   * **Do not mutate the returned object directly**. Edit-history caches
-   * (arc-flag flags, Flatbush spatial indices, the LOD copy in DisplayArcs)
-   * key off `(layer, shape, arc)` identity and shape/arc counts; mutations
-   * applied outside the official edit-command surface will silently desync
-   * those caches. To change a dataset, route the change through
-   * `Emap.ops.*` (clip / dissolve / buffer / …), `Emap.editSession.*`
-   * (translate / rotate / scale), or a custom `EditCommand`. Read-only
-   * inspection — `getDataset()?.info?.crs_string`, `dataset.layers[0].name`,
-   * arc iteration via `dataset.arcs.getArcIter()` — is always safe.
+   * The view intentionally omits mutating ArcCollection methods and marks
+   * nested layers, shapes, records and metadata as read-only. Route changes
+   * through `Emap.ops.*`, `Emap.editSession.*` or an `EditCommand` so render
+   * caches, selection and history stay synchronized.
    *
-   * The TypeScript return type intentionally stays `MapshaperDataset` (not
-   * `Readonly<MapshaperDataset>`) because mapshaper's own internal helpers
-   * — and a number of in-tree edit commands — receive the dataset and
-   * mutate it through trusted code paths. A blanket `Readonly` would just
-   * force casts everywhere.
+   * This is a compile-time boundary, not a runtime clone: JavaScript, `any`
+   * and explicit type assertions can still bypass it.
    */
-  getDataset(): MapshaperDataset | undefined;
-  getDisplayArcs(): DisplayArcs | null;
-  /**
-   * Eagerly re-initialize the LOD copy in DisplayArcs from the current
-   * dataset arcs. Use for one-shot mutations that need the new copy ready
-   * immediately. Per-frame in-place edits (drag sessions) should prefer
-   * {@link markDisplayArcsDirty} to defer the rebuild until the renderer
-   * actually needs the filtered copy.
-   */
-  refreshDisplayArcs(): void;
-  /**
-   * Mark the LOD copy stale; the next `getScaledArcs` rebuilds it lazily.
-   * O(1); safe inside per-frame drag callbacks.
-   */
-  markDisplayArcsDirty?(): void;
-  /**
-   * Replace the active dataset (used by undo/redo of dataset-replace commands
-   * and by reproject). Rebuilds DisplayArcs and fires the `data` event so the
-   * map re-renders.
-   */
-  setDataset(dataset: MapshaperDataset): void;
-  /**
-   * Sticky simplification floor (in arc-Z units). Set by the most recent
-   * `-simplify` run via `setDataset`; cleared on a fresh load. The render
-   * loop uses this as a lower-bound for `setRetainedInterval` so the
-   * per-frame zoom-LOD never re-introduces detail the user filtered out.
-   */
-  getSimplifyFloor?(): number;
+  getDataset(): ReadonlyMapshaperDataset | undefined;
   /**
    * Serialize the current in-memory dataset to a browser `Blob`.
    *
@@ -95,5 +69,71 @@ export interface TopologySource extends Source {
    */
   export(options: ExportOptions): Promise<Blob>;
   getCRS?(): string;
-  reproject?(targetCrs: string, targetCrsMetadata?: string): Promise<void>;
+}
+
+/** @internal Normalized dataset plus the last-moment assertion run before it commits. */
+export interface NormalizedDatasetCommit {
+  dataset: MapshaperDataset;
+  /**
+   * Executed by the source immediately before the normalized dataset becomes
+   * observable. Throws when the owner state that authorized the
+   * normalization (registration, active map CRS) no longer holds.
+   */
+  assertCommittable(): void;
+}
+
+/** @internal Pre-commit dataset normalization hook installed by the owning map. */
+export type DatasetNormalizer = (
+  dataset: MapshaperDataset,
+) => Promise<MapshaperDataset | NormalizedDatasetCommit>;
+
+/**
+ * Trusted engine-only view of a source. Public package exports expose the
+ * read-only TopologySource contract; internal edit paths narrow once at their
+ * ownership boundary instead of scattering assertions across callers.
+ */
+export interface MutableTopologySource extends TopologySource {
+  getArcs(): ArcCollection | undefined;
+  getLayers(): MapshaperLayer[];
+  getDataset(): MapshaperDataset | undefined;
+  /** @internal */
+  getDisplayArcs(): DisplayArcs | null;
+  /** @internal */
+  refreshDisplayArcs(): void;
+  /** @internal */
+  markDisplayArcsDirty?(): void;
+  /** @internal */
+  setDataset(dataset: MapshaperDataset, notify?: boolean): void;
+  /** @internal Normalize imported datasets before they become observable. */
+  setDatasetNormalizer(normalizer: DatasetNormalizer | null): void;
+  /** @internal Prevent per-source CRS changes while registered with a map. */
+  setManagedCRS(getCrs: (() => string) | null): void;
+  /** @internal */
+  getSimplifyFloor(): number;
+  prepareReproject(targetCrs: string, targetCrsMetadata?: string): Promise<MapshaperDataset>;
+  prepareReprojectDataset(
+    dataset: MapshaperDataset,
+    targetCrs: string,
+    targetCrsMetadata?: string,
+  ): Promise<MapshaperDataset>;
+}
+
+export function isMutableTopologySource(source: TopologySource): source is MutableTopologySource {
+  // Public query views intentionally omit engine mutation hooks, so validate
+  // the registration boundary before retaining the source as engine-owned.
+  const candidate = source as unknown as Partial<MutableTopologySource>;
+  return (
+    typeof candidate.getDisplayArcs === 'function' &&
+    typeof candidate.refreshDisplayArcs === 'function' &&
+    typeof candidate.setDataset === 'function' &&
+    typeof candidate.setDatasetNormalizer === 'function' &&
+    typeof candidate.getSimplifyFloor === 'function' &&
+    typeof candidate.prepareReproject === 'function' &&
+    typeof candidate.prepareReprojectDataset === 'function' &&
+    typeof candidate.setManagedCRS === 'function'
+  );
+}
+
+export function asMutableTopologySource(source: TopologySource): MutableTopologySource {
+  return source as MutableTopologySource;
 }

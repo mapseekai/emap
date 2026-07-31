@@ -211,6 +211,17 @@ describe('Transaction', () => {
     expect(tx.isOpen).toBe(false);
   });
 
+  it('settles rejected pending operations without leaking an unhandled rejection', async () => {
+    const ctx = makeHost();
+    const tx = new Transaction(ctx.host);
+    tx._trackOperation(Promise.reject(new Error('operation failed')));
+
+    const result = await tx.commit('failed operation');
+
+    expect(result.ok).toBe(true);
+    expect(tx.isOpen).toBe(false);
+  });
+
   it('_captureFirstTouch only records the FIRST snapshot per source', () => {
     const ctx = makeHost();
     const tx = new Transaction(ctx.host);

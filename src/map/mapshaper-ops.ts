@@ -23,7 +23,6 @@ import type { OpContext } from './ops/_context';
 import {
   _runDatasetCommand as _runDatasetCommandShared,
   _runDatasetCommandParsed as _runDatasetCommandParsedShared,
-  _applyDatasetReplace,
 } from './ops/_runner';
 import type {
   AffineLayerOptions,
@@ -118,8 +117,6 @@ export class MapshaperOps {
         _runDatasetCommandShared(this._emap, sourceId, cmd, label, inputFiles),
       runDatasetCommandParsed: (sourceId, commands, label, inputFiles) =>
         _runDatasetCommandParsedShared(this._emap, sourceId, commands, label, inputFiles),
-      applyDatasetReplace: (sourceId, before, after, label) =>
-        _applyDatasetReplace(this._emap, sourceId, before, after, label),
     };
   }
 

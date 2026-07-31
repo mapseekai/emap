@@ -24,7 +24,7 @@ describe('inferEffect (PR-10)', () => {
     ['-target X -join data.csv keys=k,s', 'attribute-only'],
     ['-target X -rename-fields A=B', 'attribute-only'],
     ['-target X -filter-fields a,b', 'attribute-only'],
-    ['-target X -sort foo', 'attribute-only'],
+    ['-target X -sort foo', 'feature-order'],
 
     // crs-only: coords reprojected
     ['-target X -proj EPSG:3857', 'crs-only'],
@@ -32,7 +32,7 @@ describe('inferEffect (PR-10)', () => {
 
     // strongest-effect rule: shape-count wins over the rest
     ['-target X -each "this.x = 1" -dissolve foo', 'shape-count'],
-    ['-target X -sort foo -clean', 'topology-only'],
+    ['-target X -sort foo -clean', 'feature-order'],
 
     // unknown command falls through to `unknown` (clear selection)
     ['-target X -wat', 'unknown'],

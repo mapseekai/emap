@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mapshaper from 'mapshaper';
 import { Emap } from './map';
 import { Selection } from './selection';
+import { EditHistory } from '../edit/edit-history';
 import { TopologySource } from '../source/topology-source';
 
 function setPrivate(target: object, key: string, value: unknown): void {
@@ -26,13 +27,20 @@ function createBareMap(): { map: Emap; scheduleRender: ReturnType<typeof vi.fn> 
   setPrivate(map, '_layers', []);
   setPrivate(map, '_effectiveLayersCache', []);
   setPrivate(map, '_defaultLayersDirty', false);
-  setPrivate(map, '_layerArcFlagsCache', new globalThis.Map());
+  setPrivate(map, '_layerArcIdsCache', new globalThis.Map());
   setPrivate(map, '_listeners', {});
   setPrivate(map, '_selection', new Selection());
+  setPrivate(map, '_history', new EditHistory());
   setPrivate(map, '_scheduleRender', scheduleRender);
-  // CRS branch in addSource.onData touches these only when the source
-  // reports a CRS; our stub dataset has none, but stub them defensively.
-  setPrivate(map, '_projection', { crs: null, setCRS: vi.fn() });
+  // CRS adoption in addSource's normalizer reads _projection.crs back after
+  // setCRS, so the stub must actually store the assigned CRS like Projection.
+  const projection: { crs: string | null; setCRS: ReturnType<typeof vi.fn> } = {
+    crs: null,
+    setCRS: vi.fn((crs: string) => {
+      projection.crs = crs;
+    }),
+  };
+  setPrivate(map, '_projection', projection);
   setPrivate(map, '_viewport', { setCRS: vi.fn() });
   return { map, scheduleRender };
 }
@@ -71,7 +79,7 @@ describe('Friction #9 reopened — setData/addSource ordering renders correctly'
     const { map, scheduleRender } = createBareMap();
     const src = new TopologySource('s');
 
-    map.addSource('s', src); // consumer 1c33c8ab order: addSource first
+    await map.addSource('s', src); // consumer order: addSource first
 
     await src.setData(input); // resolves only after _dataset set + data fired
 
@@ -88,7 +96,7 @@ describe('Friction #9 reopened — setData/addSource ordering renders correctly'
     await src.setData(input); // data event fires here, no listener yet
     expect(src.getDataset()).toBeTruthy(); // promise did NOT resolve early
 
-    map.addSource('s', src); // must back-fill from already-loaded dataset
+    await map.addSource('s', src); // must back-fill from already-loaded dataset
 
     expect(scheduleRender).toHaveBeenCalled();
   });

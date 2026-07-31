@@ -114,7 +114,7 @@ describe('DuckDB new feature examples', () => {
     expect(changeStart).toBeGreaterThan(queryStart);
     expect(buttonStart).toBeGreaterThan(changeStart);
     expect(html.slice(queryStart, changeStart)).toContain(
-      'const outputSource = addDatasetSource(OUTPUT_ID, resultDataset)',
+      'const outputSource = await addDatasetSource(OUTPUT_ID, resultDataset)',
     );
     expect(html.slice(queryStart, changeStart)).toContain(
       'map.setExtent(outputSource.getExtent())',

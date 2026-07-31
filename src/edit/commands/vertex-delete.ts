@@ -7,7 +7,7 @@ import {
   type MapshaperLayer,
   type PathShape,
 } from '../../types/mapshaper-types';
-import type { TopologySource } from '../../source/source';
+import { asMutableTopologySource, type TopologySource } from '../../source/source';
 import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import { BulkFeatureDeleteCommand } from './feature-delete';
 import { CompositeCommand } from './composite';
@@ -41,15 +41,15 @@ export class VertexDeleteCommand implements EditCommand {
   do(): void {
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     adapter.deleteVertex(this.opts.arcs, this.opts.vertexIndex);
-    this.opts.source.markDisplayArcsDirty?.();
-    bumpEditVersion(this.opts.source.getDataset?.());
+    asMutableTopologySource(this.opts.source).markDisplayArcsDirty?.();
+    bumpEditVersion(asMutableTopologySource(this.opts.source).getDataset?.());
   }
 
   undo(): void {
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     adapter.insertVertex(this.opts.arcs, this.opts.vertexIndex, this.opts.coords);
-    this.opts.source.markDisplayArcsDirty?.();
-    bumpEditVersion(this.opts.source.getDataset?.());
+    asMutableTopologySource(this.opts.source).markDisplayArcsDirty?.();
+    bumpEditVersion(asMutableTopologySource(this.opts.source).getDataset?.());
   }
 }
 
@@ -78,7 +78,8 @@ export function planTopologyNodeDeletion(
   vertexIds: readonly number[],
   allLayers: readonly MapshaperLayer[],
 ): TopologyNodeDeletion | null {
-  const arcs = source.getArcs();
+  const mutableSource = asMutableTopologySource(source);
+  const arcs = mutableSource.getArcs();
   const data = arcs?.getVertexData?.();
   if (!arcs || !data || !arcs.updateVertexData) return null;
 
@@ -346,8 +347,8 @@ class TopologyNodeDeleteCommand implements EditCommand {
   }
 
   private _markChanged(): void {
-    this._source.markDisplayArcsDirty?.();
-    bumpEditVersion(this._source.getDataset?.());
+    asMutableTopologySource(this._source).markDisplayArcsDirty?.();
+    bumpEditVersion(asMutableTopologySource(this._source).getDataset?.());
   }
 }
 

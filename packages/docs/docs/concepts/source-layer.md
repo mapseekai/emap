@@ -42,7 +42,7 @@ const source = await TopologySource.fromBytes('upload', bytes, {
 
 ```ts
 const source = new TopologySource('live');
-map.addSource('live', source);
+await map.addSource('live', source);
 
 await source.setData({
   filename: 'districts.geojson',
@@ -50,15 +50,16 @@ await source.setData({
 });
 ```
 
-`map.addSource()` 与加载顺序无关。无论 source 在注册前还是注册后完成加载，
-地图都会在收到数据事件后更新。
+`map.addSource()` 与加载顺序无关，但始终应 `await`。已加载 source 会在注册前
+归一到地图的活动 CRS；先注册后加载时，`setData()` 会在提交和 `data` 事件前归一。
+注册后的 `TopologySource.reproject()` 不能独立切换 CRS；应使用 `map.reproject()`。
 
 ## 三种 ID 不要混用
 
 假设一个上传文件包含名为 `districts` 的 source layer：
 
 ```ts
-map.addSource('main', source);
+await map.addSource('main', source);
 
 map.addLayer({
   id: 'district-fill',
@@ -192,8 +193,9 @@ if (!result.ok) {
 
 ### 直接修改 dataset 后显示没有同步
 
-`getDataset()` 用于只读检查。数据变化应通过编辑命令、编辑会话或 `map.ops`，
-让渲染缓存、选择和历史一起更新。
+`getDataset()`、`getLayers()` 和 `getArcs()` 返回零复制的 TypeScript 深只读视图。
+数据变化应通过编辑命令、编辑会话或 `map.ops`，让渲染缓存、选择和历史一起更新。
+只读约束位于类型层；JavaScript、`any` 或显式类型断言仍可绕过，因此返回值不是可变入口。
 
 ## API
 

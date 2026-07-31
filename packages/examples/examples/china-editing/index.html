@@ -222,7 +222,7 @@
         const source = new TopologySource(sourceId);
         const content = new Uint8Array(await file.arrayBuffer());
         await source.setData({ filename: file.name, content });
-        map.addSource(sourceId, source);
+        await map.addSource(sourceId, source);
         map.setExtent(source.getExtent());
         currentSourceId = sourceId;
         status.textContent = `${file.name} 已加载 — 点击 ✏ 编辑顶点`;

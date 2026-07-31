@@ -92,6 +92,9 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     this._detachedNode = null;
     this._clearHoverState();
   };
+  private _contextMenu: HTMLElement | null = null;
+  private _contextMenuTimer: number | NodeJS.Timeout | undefined;
+  private _dismissContextMenuBound = () => this._dismissContextMenu();
 
   constructor(map: EditHandlerHost, opts: VertexEditOptions = {}) {
     this._map = map;
@@ -123,6 +126,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
 
   disable(): void {
     if (!this._enabled) return;
+    this._dismissContextMenu();
     this._enabled = false;
     this._hoveredFeature = null;
     this._hoverVertexCoords = null;
@@ -371,6 +375,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     onSplit: (() => void) | null = null,
     unavailableText = '共享节点无法删除',
   ): void {
+    this._dismissContextMenu();
     document.getElementById('emap-ctx-menu')?.remove();
 
     const menu = document.createElement('div');
@@ -385,8 +390,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       item.textContent = '删除节点';
       item.addEventListener('click', (e) => {
         e.stopPropagation();
-        menu.remove();
-        document.removeEventListener('click', dismiss);
+        this._dismissContextMenu();
         onDelete();
       });
     } else {
@@ -401,20 +405,26 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       splitItem.textContent = '分离共享节点';
       splitItem.addEventListener('click', (e) => {
         e.stopPropagation();
-        menu.remove();
-        document.removeEventListener('click', dismiss);
+        this._dismissContextMenu();
         onSplit();
       });
       menu.appendChild(splitItem);
     }
     document.body.appendChild(menu);
+    this._contextMenu = menu;
 
-    const dismiss = () => {
-      menu.remove();
-      document.removeEventListener('click', dismiss);
-    };
-    // Use setTimeout so this listener doesn't fire immediately from the right-click.
-    setTimeout(() => document.addEventListener('click', dismiss), 0);
+    this._contextMenuTimer = globalThis.setTimeout(
+      () => document.addEventListener('click', this._dismissContextMenuBound),
+      0,
+    );
+  }
+
+  private _dismissContextMenu(): void {
+    clearTimeout(this._contextMenuTimer);
+    this._contextMenuTimer = undefined;
+    document.removeEventListener('click', this._dismissContextMenuBound);
+    this._contextMenu?.remove();
+    this._contextMenu = null;
   }
 
   private _onMouseMove(px: number, py: number): void {

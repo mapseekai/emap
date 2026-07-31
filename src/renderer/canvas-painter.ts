@@ -28,8 +28,8 @@ function partIntersectsView(
   part: readonly number[],
   getSimpleShapeBbox: (shapeIds: number[], bbox: number[]) => void,
   viewBBox: readonly number[],
+  bbox: number[],
 ): boolean {
-  const bbox = [0, 0, 0, 0];
   getSimpleShapeBbox(part as number[], bbox);
   return bboxIntersects(bbox, viewBBox);
 }
@@ -42,46 +42,13 @@ function partPassesArcFilter(part: readonly number[], filter?: (i: number) => bo
   return false;
 }
 
-function getVisiblePolygonParts(
-  shape: PathShape,
-  arcs: ArcCollection,
-  filter: ((i: number) => boolean) | undefined,
-  viewBBox: readonly number[] | null,
-): PathShape {
-  const parts: PathShape = [];
-  const getSimpleShapeBbox = viewBBox ? arcs.getSimpleShapeBbox : undefined;
-  for (const part of shape) {
-    if (getSimpleShapeBbox && viewBBox) {
-      if (!partIntersectsView(part, getSimpleShapeBbox, viewBBox)) continue;
-    } else if (!partPassesArcFilter(part, filter)) {
-      continue;
-    }
-    parts.push(part);
-  }
-  return parts;
-}
-
-function countShapeVertices(
-  parts: PathShape,
-  vertexCounts: Int32Array | Uint32Array | null,
-): number {
-  if (!vertexCounts) return parts.length;
-  let count = 0;
-  for (const part of parts) {
-    for (const arcId of part) {
-      count += vertexCounts[absArcId(arcId)] ?? 0;
-    }
-  }
-  return count;
-}
-
 export class CanvasPainter implements Painter {
   private _ctx: CanvasRenderingContext2D;
   private _transform: AffineTransform = new AffineTransform();
   private _pixelRatio: number = window.devicePixelRatio || 1;
 
   constructor(private _canvas: HTMLCanvasElement) {
-    const ctx = _canvas.getContext('2d', { willReadFrequently: true });
+    const ctx = _canvas.getContext('2d');
     if (!ctx) throw new Error('Failed to get 2D context');
     this._ctx = ctx;
   }
@@ -132,10 +99,15 @@ export class CanvasPainter implements Painter {
   }
 
   // Direct arc rendering for maximum performance (bypasses shape iteration)
-  drawArcs(arcs: ArcCollection, style: StrokeStyle, filter?: (i: number) => boolean): void {
+  drawArcs(
+    arcs: ArcCollection,
+    style: StrokeStyle,
+    filter?: (i: number) => boolean,
+    arcIds?: Uint32Array,
+  ): void {
     if (style.width === 0) return;
     const ctx = this._ctx;
-    const n = arcs.size();
+    const n = arcIds?.length ?? arcs.size();
     const vertexCounts = arcs.getVertexData?.().nn ?? null;
 
     ctx.strokeStyle = style.color || '#333';
@@ -157,9 +129,10 @@ export class CanvasPainter implements Painter {
       hasPath = false;
     };
 
-    for (let i = 0; i < n; i++) {
-      if (filter && !filter(i)) continue;
-      const arcVertexCount = vertexCounts?.[i] ?? 1;
+    for (let index = 0; index < n; index++) {
+      const arcId = arcIds?.[index] ?? index;
+      if (filter && !filter(arcId)) continue;
+      const arcVertexCount = vertexCounts?.[arcId] ?? 1;
       if (
         hasPath &&
         (arcCount >= ARC_STROKE_BATCH_ARC_LIMIT ||
@@ -167,7 +140,7 @@ export class CanvasPainter implements Painter {
       ) {
         flush();
       }
-      const iter = arcs.getArcIter(i);
+      const iter = arcs.getArcIter(arcId);
       this.drawPathSnapping(iter, ctx);
       arcCount++;
       vertexCount += arcVertexCount;
@@ -221,6 +194,10 @@ export class CanvasPainter implements Painter {
     const radius = (Number(_style?.radius) || 4) * pr;
     const color = _style?.color || '#333';
     const fill = _style?.fill !== false;
+    const left = -radius;
+    const top = -radius;
+    const right = this._canvas.width + radius;
+    const bottom = this._canvas.height + radius;
 
     ctx.fillStyle = color;
     ctx.strokeStyle = color;
@@ -244,6 +221,7 @@ export class CanvasPainter implements Painter {
         }
         const x = p[0] * mx + bx;
         const y = p[1] * my + by;
+        if (x < left || x > right || y < top || y > bottom) return;
         ctx.moveTo(x + radius, y);
         ctx.arc(x, y, radius, 0, Math.PI * 2);
         count++;
@@ -382,6 +360,8 @@ export class CanvasPainter implements Painter {
     // polygon holes have to stay in the same evenodd path as their shell.
     const viewBBox = options.viewBBox ?? null;
     const vertexCounts = arcs.getVertexData?.().nn ?? null;
+    const getSimpleShapeBbox = viewBBox ? arcs.getSimpleShapeBbox : undefined;
+    const bbox = [0, 0, 0, 0];
     let shapeCount = 0;
     let vertexCount = 0;
 
@@ -390,9 +370,25 @@ export class CanvasPainter implements Painter {
       const shape = shapes[sIdx];
       if (!shape) continue;
 
-      const parts = getVisiblePolygonParts(shape as PathShape, arcs, filter, viewBBox);
-      if (parts.length === 0) continue;
-      const shapeVertexCount = countShapeVertices(parts, vertexCounts);
+      const pathShape = shape as PathShape;
+      let visiblePartCount = 0;
+      let shapeVertexCount = 0;
+      for (const part of pathShape) {
+        const visible =
+          getSimpleShapeBbox && viewBBox
+            ? partIntersectsView(part, getSimpleShapeBbox, viewBBox, bbox)
+            : partPassesArcFilter(part, filter);
+        if (!visible) continue;
+        visiblePartCount++;
+        if (vertexCounts) {
+          for (const arcId of part) {
+            shapeVertexCount += vertexCounts[absArcId(arcId)] ?? 0;
+          }
+        } else {
+          shapeVertexCount++;
+        }
+      }
+      if (visiblePartCount === 0) continue;
 
       if (
         shapeCount > 0 &&
@@ -405,7 +401,12 @@ export class CanvasPainter implements Painter {
         vertexCount = 0;
       }
 
-      for (const part of parts) {
+      for (const part of pathShape) {
+        const visible =
+          getSimpleShapeBbox && viewBBox
+            ? partIntersectsView(part, getSimpleShapeBbox, viewBBox, bbox)
+            : partPassesArcFilter(part, filter);
+        if (!visible) continue;
         // getShapeIter respects arc direction (reversed arcs traversed backwards)
         const iter = arcs.getShapeIter!(part);
         if (!iter.hasNext()) continue;
@@ -529,11 +530,6 @@ export class CanvasPainter implements Painter {
 
   clear(): void {
     this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
-  }
-
-  flush(): void {
-    if (typeof this._ctx.getImageData !== 'function') return;
-    this._ctx.getImageData(0, 0, 1, 1);
   }
 
   resize(width: number, height: number): void {

@@ -2,6 +2,7 @@ import type { Table } from 'apache-arrow';
 import { describe, expect, it } from 'vitest';
 import { toArrowTable } from '../arrow/dataset-to-table';
 import { datasetFromGeoJSON } from '../arrow/test-utils';
+import { parseGeoMetadata } from '../arrow/geoparquet-metadata';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import { processOverlayWithDuckDb, type DuckDbOverlayOperationSpec } from './duckdb-overlay-op';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
@@ -189,7 +190,7 @@ describe('buildOverlaySql', () => {
 
 describe('processOverlayWithDuckDb', () => {
   it('registers input and mask tables, runs overlay SQL, cleans up, and preserves input CRS', async () => {
-    const input = await inputDataset('EPSG:26910');
+    const input = await inputDataset('EPSG:3857');
     const mask = await maskDataset();
     const resultTable = toArrowTable(input, { encoding: 'wkb' });
     const runtime = new FakeRuntime(resultTable);
@@ -206,6 +207,9 @@ describe('processOverlayWithDuckDb', () => {
     const maskTableName = runtime.connection.inserted[1]!.opts.name;
     expect(inputTableName).toMatch(/^emap_duckdb_overlay_input_/);
     expect(maskTableName).toMatch(/^emap_duckdb_overlay_mask_/);
+    const maskCrs = parseGeoMetadata(runtime.connection.inserted[1]!.table.schema.metadata)?.columns
+      .geometry.crs as { id?: { authority?: string; code?: number } };
+    expect(maskCrs.id).toEqual({ authority: 'EPSG', code: 3857 });
     expect(runtime.events).toEqual([
       'ensureSpatial',
       'connect',
@@ -218,7 +222,7 @@ describe('processOverlayWithDuckDb', () => {
     ]);
     expect(runtime.connection.queries[0]).toContain('ST_Intersection');
     expect(result.layers[0]?.name).toBe('clipped_parcels');
-    expect(result.info?.crs_string).toBe('EPSG:26910');
+    expect(result.info?.crs_string).toBe('EPSG:3857');
   });
 
   it('wraps input conversion failures as conversion-failed', async () => {

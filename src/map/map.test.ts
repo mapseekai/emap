@@ -5,6 +5,7 @@ import type { FeatureRef } from './map';
 import type { LayerSpecification } from './layer';
 import { Selection } from './selection';
 import { Projection } from '../geo/projection';
+import { Viewport } from '../geo/viewport';
 import { EditHistory } from '../edit/edit-history';
 import { CompositeCommand } from '../edit/commands/composite';
 import { ValidatorRegistry } from '../validation/registry';
@@ -142,7 +143,14 @@ function createMockSource(layers?: unknown[]) {
     getLayers: vi.fn(() => layers || []),
     getDataset: vi.fn(() => undefined),
     getDisplayArcs: vi.fn(() => null),
+    refreshDisplayArcs: vi.fn(),
+    setDataset: vi.fn(),
+    getSimplifyFloor: vi.fn(() => 0),
+    prepareReproject: vi.fn(),
+    prepareReprojectDataset: vi.fn(),
     getCRS: vi.fn(() => 'EPSG:4326'),
+    setDatasetNormalizer: vi.fn(),
+    setManagedCRS: vi.fn(),
   };
 }
 
@@ -158,14 +166,20 @@ function createBareMap(): Emap {
   setPrivate(map, '_layers', []);
   setPrivate(map, '_effectiveLayersCache', []);
   setPrivate(map, '_defaultLayersDirty', true);
-  setPrivate(map, '_layerArcFlagsCache', new globalThis.Map());
+  setPrivate(map, '_layerArcIdsCache', new globalThis.Map());
   setPrivate(map, '_pendingRender', 0);
   setPrivate(map, '_rafId', 0);
-  setPrivate(map, '_highlightManager', { clearHighlightedFeatures: vi.fn() });
+  setPrivate(map, '_highlightManager', {
+    clearHighlightedFeatures: vi.fn(),
+    removeSource: vi.fn(),
+  });
   // EventDispatcher field initializer does not run when bypassing constructor
   setPrivate(map, '_listeners', {});
   // Initialize selection so select / deselect / clearSelection have somewhere to write
   setPrivate(map, '_selection', new Selection());
+  setPrivate(map, '_featureQuery', { clear: vi.fn() });
+  setPrivate(map, '_activeTransaction', null);
+  setPrivate(map, '_history', new EditHistory());
   // Stub _scheduleRender so it doesn't try to use requestAnimationFrame
   setPrivate(map, '_scheduleRender', vi.fn());
   // Tests exercise expression-evaluating ops (applyExpression, filter,
@@ -336,11 +350,10 @@ describe('Emap rendering', () => {
     expect(renderOverlay).toHaveBeenCalledWith('vertex', vertexState, null, vertexArcFilter);
   });
 
-  it('flushes the canvas before recording full-frame timing', () => {
+  it('records full-frame timing without forcing a Canvas readback', () => {
     const map = Object.create(Emap.prototype) as Emap;
     const order: string[] = [];
     const recordFrame = vi.fn(() => order.push('record'));
-    const flush = vi.fn(() => order.push('flush'));
     const now = vi.spyOn(performance, 'now').mockReturnValueOnce(10).mockReturnValueOnce(35);
     vi.stubGlobal('window', { devicePixelRatio: 1 });
 
@@ -355,7 +368,7 @@ describe('Emap rendering', () => {
       getLineScale: () => 1,
       getArcFilter: vi.fn(),
     });
-    setPrivate(map, '_painter', { setTransform: vi.fn(), clear: vi.fn(), flush });
+    setPrivate(map, '_painter', { setTransform: vi.fn(), clear: vi.fn() });
     setPrivate(map, '_editOverlay', { render: vi.fn() });
     setPrivate(map, '_editState', { mode: null, vertex: null, draw: null });
     setPrivate(map, '_renderLayers', vi.fn());
@@ -368,8 +381,7 @@ describe('Emap rendering', () => {
       vi.unstubAllGlobals();
     }
 
-    expect(flush).toHaveBeenCalledTimes(1);
-    expect(order).toEqual(['flush', 'record']);
+    expect(order).toEqual(['record']);
     expect(recordFrame).toHaveBeenCalledWith(
       25,
       expect.objectContaining({ canvasWidth: 800, canvasHeight: 600 }),
@@ -383,6 +395,286 @@ describe('Emap layer management', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     map = createBareMap();
+  });
+
+  describe('addSource', () => {
+    it('rejects sources that do not implement the internal mutable contract', async () => {
+      const source = { ...createMockSource(), setDataset: undefined };
+      // Deliberately cross the public registration boundary with an invalid source.
+      const invalidSource = source as unknown as Parameters<Emap['addSource']>[1];
+
+      await expect(map.addSource('invalid', invalidSource)).rejects.toThrow(
+        'Source "invalid" does not implement the mutable topology contract',
+      );
+    });
+
+    it('projects an already-loaded source to the established map CRS before registration', async () => {
+      const before = { layers: [], info: { crs_string: 'EPSG:4326' } };
+      const after = { layers: [], info: { crs_string: 'EPSG:3857' } };
+      const source = createMockSource();
+      source.getDataset.mockReturnValue(before);
+      source.prepareReproject.mockResolvedValue(after);
+      const projection = new Projection();
+      projection.setCRS('EPSG:3857');
+      setPrivate(map, '_projection', projection);
+      setPrivate(map, '_viewport', new Viewport());
+      setPrivate(map, '_crsEstablished', true);
+
+      await map.addSource('projected', source as any);
+
+      expect(source.prepareReproject).toHaveBeenCalledWith('EPSG:3857', 'EPSG:3857');
+      expect(source.setDataset).toHaveBeenCalledWith(after, false);
+      expect(map.getSource('projected')).toBe(source);
+    });
+
+    it('does not register a source when CRS normalization fails', async () => {
+      const source = createMockSource();
+      source.getDataset.mockReturnValue({
+        layers: [],
+        info: { crs_string: 'EPSG:4326' },
+      });
+      source.prepareReproject.mockRejectedValue(new Error('projection failed'));
+      const projection = new Projection();
+      projection.setCRS('EPSG:3857');
+      setPrivate(map, '_projection', projection);
+      setPrivate(map, '_viewport', new Viewport());
+      setPrivate(map, '_crsEstablished', true);
+
+      await expect(map.addSource('broken', source as any)).rejects.toThrow('projection failed');
+
+      expect(map.getSource('broken')).toBeUndefined();
+      expect(source.on).not.toHaveBeenCalled();
+    });
+
+    it('rejects a prepared source when the map CRS changes before registration', async () => {
+      const before = { layers: [], info: { crs_string: 'EPSG:4326' } };
+      const after = { layers: [], info: { crs_string: 'EPSG:3857' } };
+      const { promise: pendingProjection, resolve: resolveProjection } =
+        Promise.withResolvers<object>();
+      const source = createMockSource();
+      source.getDataset.mockReturnValue(before);
+      source.prepareReproject.mockReturnValue(pendingProjection);
+      const projection = new Projection();
+      projection.setCRS('EPSG:3857');
+      setPrivate(map, '_projection', projection);
+      setPrivate(map, '_viewport', new Viewport());
+      setPrivate(map, '_crsEstablished', true);
+
+      const registration = map.addSource('stale', source as any);
+      await vi.waitFor(() => expect(source.prepareReproject).toHaveBeenCalled());
+      map.setCRS('EPSG:3395');
+      resolveProjection(after);
+
+      await expect(registration).rejects.toThrow('Map CRS changed during source registration');
+      expect(source.setDataset).not.toHaveBeenCalled();
+      expect(map.getSource('stale')).toBeUndefined();
+    });
+
+    it('normalizes data loaded after source registration to the established map CRS', async () => {
+      const source = createMockSource();
+      const input = { layers: [], info: { crs_string: 'EPSG:4326' } };
+      const projected = { layers: [], info: { crs_string: 'EPSG:3857' } };
+      let normalize: ((dataset: object) => Promise<object>) | null = null;
+      source.setDatasetNormalizer.mockImplementation((fn) => {
+        normalize = fn;
+      });
+      source.prepareReprojectDataset.mockResolvedValue(projected);
+      const projection = new Projection();
+      projection.setCRS('EPSG:3857');
+      setPrivate(map, '_projection', projection);
+      setPrivate(map, '_viewport', new Viewport());
+      setPrivate(map, '_crsEstablished', true);
+
+      await map.addSource('late', source as any);
+      const result = (await normalize?.(input)) as {
+        dataset: object;
+        assertCommittable(): void;
+      };
+
+      expect(source.prepareReprojectDataset).toHaveBeenCalledWith(input, 'EPSG:3857', 'EPSG:3857');
+      expect(result.dataset).toBe(projected);
+      expect(() => result.assertCommittable()).not.toThrow();
+    });
+
+    it('rejects imported data when the map CRS changes during normalization', async () => {
+      const source = createMockSource();
+      const input = { layers: [], info: { crs_string: 'EPSG:4326' } };
+      const projected = { layers: [], info: { crs_string: 'EPSG:3857' } };
+      let normalize: ((dataset: object) => Promise<object>) | null = null;
+      const { promise: pendingProjection, resolve: resolveProjection } =
+        Promise.withResolvers<object>();
+      source.setDatasetNormalizer.mockImplementation((fn) => {
+        normalize = fn;
+      });
+      source.prepareReprojectDataset.mockReturnValue(pendingProjection);
+      const projection = new Projection();
+      projection.setCRS('EPSG:3857');
+      setPrivate(map, '_projection', projection);
+      setPrivate(map, '_viewport', new Viewport());
+      setPrivate(map, '_history', new EditHistory());
+      setPrivate(map, '_crsEstablished', true);
+
+      await map.addSource('late-stale', source as any);
+      const normalization = normalize?.(input);
+      await vi.waitFor(() => expect(source.prepareReprojectDataset).toHaveBeenCalled());
+      await map.reproject('EPSG:3395');
+      resolveProjection(projected);
+
+      await expect(normalization).rejects.toThrow('Map CRS changed during source normalization');
+    });
+
+    it('adopts the CRS of the first source that loads data', async () => {
+      const source = createMockSource();
+      const input = { layers: [], info: { crs_string: 'EPSG:4490' } };
+      let normalize: ((dataset: object) => Promise<object>) | null = null;
+      source.setDatasetNormalizer.mockImplementation((fn) => {
+        normalize = fn;
+      });
+      const projection = new Projection();
+      const viewport = new Viewport();
+      setPrivate(map, '_projection', projection);
+      setPrivate(map, '_viewport', viewport);
+      setPrivate(map, '_crsEstablished', false);
+      const crsChange = vi.fn();
+      map.on('crschange', crsChange);
+
+      await map.addSource('first', source as any);
+      const result = (await normalize?.(input)) as { dataset: object };
+
+      expect(result.dataset).toBe(input);
+      expect(map.getCRS()).toBe('EPSG:4490');
+      expect(crsChange).toHaveBeenCalledTimes(1);
+      expect(source.prepareReprojectDataset).not.toHaveBeenCalled();
+    });
+
+    it('rejects the normalized commit when the source is unregistered before commit', async () => {
+      const source = createMockSource();
+      const input = { layers: [], info: { crs_string: 'EPSG:4326' } };
+      const projected = { layers: [], info: { crs_string: 'EPSG:3857' } };
+      let normalize: ((dataset: object) => Promise<object>) | null = null;
+      source.setDatasetNormalizer.mockImplementation((fn) => {
+        normalize = fn;
+      });
+      source.prepareReprojectDataset.mockResolvedValue(projected);
+      const projection = new Projection();
+      projection.setCRS('EPSG:3857');
+      setPrivate(map, '_projection', projection);
+      setPrivate(map, '_viewport', new Viewport());
+      setPrivate(map, '_crsEstablished', true);
+
+      await map.addSource('late-detached', source as any);
+      const result = (await normalize?.(input)) as { assertCommittable(): void };
+      map.removeSource('late-detached');
+
+      expect(() => result.assertCommittable()).toThrow(
+        'Source "late-detached" is no longer registered',
+      );
+    });
+
+    it('rejects the normalized commit when the map CRS changes before commit', async () => {
+      const source = createMockSource();
+      const input = { layers: [], info: { crs_string: 'EPSG:4326' } };
+      const projected = { layers: [], info: { crs_string: 'EPSG:3857' } };
+      let normalize: ((dataset: object) => Promise<object>) | null = null;
+      source.setDatasetNormalizer.mockImplementation((fn) => {
+        normalize = fn;
+      });
+      source.prepareReprojectDataset.mockResolvedValue(projected);
+      const projection = new Projection();
+      projection.setCRS('EPSG:3857');
+      setPrivate(map, '_projection', projection);
+      setPrivate(map, '_viewport', new Viewport());
+      setPrivate(map, '_crsEstablished', true);
+
+      await map.addSource('late-stale-crs', source as any);
+      const result = (await normalize?.(input)) as { assertCommittable(): void };
+      await map.reproject('EPSG:3395');
+
+      expect(() => result.assertCommittable()).toThrow(
+        'Map CRS changed during source normalization',
+      );
+    });
+
+    it('clears undo history when a source registers after a map reprojection', async () => {
+      const first = createMockSource();
+      first.getDataset.mockReturnValue({ layers: [], info: { crs_string: 'EPSG:3857' } });
+      first.prepareReproject.mockResolvedValue({ layers: [], info: { crs_string: 'EPSG:3395' } });
+      const projection = new Projection();
+      projection.setCRS('EPSG:3857');
+      setPrivate(map, '_projection', projection);
+      setPrivate(map, '_viewport', new Viewport());
+      setPrivate(map, '_crsEstablished', true);
+
+      await map.addSource('first', first as any);
+      await map.reproject('EPSG:3395');
+      const crsAfterReproject = map.getCRS();
+
+      const second = createMockSource();
+      second.getCRS.mockReturnValue('EPSG:3395');
+      second.getDataset.mockReturnValue({ layers: [], info: { crs_string: 'EPSG:3395' } });
+      await map.addSource('second', second as any);
+
+      expect(map.undo()).toBe(false);
+      expect(map.getCRS()).toBe(crsAfterReproject);
+      expect(second.setDataset).not.toHaveBeenCalled();
+    });
+
+    it('rejects reprojection when a registered source loads during preparation', async () => {
+      const loaded = createMockSource();
+      const unloaded = createMockSource();
+      loaded.getCRS.mockReturnValue('EPSG:3857');
+      loaded.getDataset.mockReturnValue({ layers: [], info: { crs_string: 'EPSG:3857' } });
+      const { promise: pendingProjection, resolve: resolveProjection } =
+        Promise.withResolvers<object>();
+      loaded.prepareReproject.mockReturnValue(pendingProjection);
+      const projection = new Projection();
+      projection.setCRS('EPSG:3857');
+      setPrivate(map, '_projection', projection);
+      setPrivate(map, '_viewport', new Viewport());
+      setPrivate(map, '_crsEstablished', true);
+
+      await map.addSource('unloaded', unloaded as any);
+      await map.addSource('loaded', loaded as any);
+      const reprojection = map.reproject('EPSG:3395');
+      await vi.waitFor(() => expect(loaded.prepareReproject).toHaveBeenCalled());
+      // The unloaded source was already skipped by the preparation loop;
+      // committing its first dataset now must abort the reprojection.
+      unloaded.getDataset.mockReturnValue({ layers: [], info: { crs_string: 'EPSG:3857' } });
+      resolveProjection({ layers: [], info: { crs_string: 'EPSG:3395' } });
+
+      await expect(reprojection).rejects.toThrow('Source "unloaded" changed during reprojection');
+      expect(map.getCRS()).toBe('EPSG:3857');
+    });
+
+    it('clears undo history when an unloaded source loads after a reprojection', async () => {
+      const unloaded = createMockSource();
+      const loaded = createMockSource();
+      loaded.getCRS.mockReturnValue('EPSG:3857');
+      loaded.getDataset.mockReturnValue({ layers: [], info: { crs_string: 'EPSG:3857' } });
+      loaded.prepareReproject.mockResolvedValue({ layers: [], info: { crs_string: 'EPSG:3395' } });
+      const projection = new Projection();
+      projection.setCRS('EPSG:3857');
+      setPrivate(map, '_projection', projection);
+      setPrivate(map, '_viewport', new Viewport());
+      setPrivate(map, '_crsEstablished', true);
+
+      await map.addSource('unloaded', unloaded as any);
+      await map.addSource('loaded', loaded as any);
+      await map.reproject('EPSG:3395');
+      const crsAfterReproject = map.getCRS();
+
+      // Simulate the unloaded source committing its first dataset (already
+      // normalized to the new map CRS) after the reprojection was recorded.
+      unloaded.getDataset.mockReturnValue({ layers: [], info: { crs_string: 'EPSG:3395' } });
+      const onData = unloaded.on.mock.calls.find(([type]) => type === 'data')?.[1] as (event: {
+        type: string;
+        reason: string;
+      }) => void;
+      onData({ type: 'data', reason: 'load' });
+
+      expect(map.undo()).toBe(false);
+      expect(map.getCRS()).toBe(crsAfterReproject);
+    });
   });
 
   describe('addLayer', () => {
@@ -586,44 +878,6 @@ describe('Emap layer management', () => {
       const effective = callPrivate(map, '_getEffectiveLayers') as LayerSpecification[];
       expect(effective[0].type).toBe('line');
       expect((effective[0].paint as any)['line-color']).toBe('#1e88e5');
-    });
-  });
-
-  describe('_resolveSourceLayer', () => {
-    it('returns first layer when no source-layer specified', () => {
-      const layers = [
-        { name: 'roads', geometry_type: 'polyline', shapes: [] },
-        { name: 'rivers', geometry_type: 'polyline', shapes: [] },
-      ];
-      const source = createMockSource(layers);
-
-      const result = callPrivate(map, '_resolveSourceLayer', source, undefined);
-      expect(result).toBe(layers[0]);
-    });
-
-    it('returns matching layer by name', () => {
-      const layers = [
-        { name: 'roads', geometry_type: 'polyline', shapes: [] },
-        { name: 'rivers', geometry_type: 'polyline', shapes: [] },
-      ];
-      const source = createMockSource(layers);
-
-      const result = callPrivate(map, '_resolveSourceLayer', source, 'rivers');
-      expect(result).toBe(layers[1]);
-    });
-
-    it('returns null if source has no layers', () => {
-      const source = createMockSource([]);
-      const result = callPrivate(map, '_resolveSourceLayer', source, undefined);
-      expect(result).toBeNull();
-    });
-
-    it('returns null if source-layer name does not match', () => {
-      const layers = [{ name: 'roads', geometry_type: 'polyline', shapes: [] }];
-      const source = createMockSource(layers);
-
-      const result = callPrivate(map, '_resolveSourceLayer', source, 'nonexistent');
-      expect(result).toBeNull();
     });
   });
 
@@ -987,6 +1241,21 @@ describe('Emap clipLayer / eraseLayer', () => {
     expect(copyDatasetSpy).not.toHaveBeenCalled();
   });
 
+  it('returns a mapshaper error without swapping when the working copy fails', async () => {
+    copyDatasetSpy.mockImplementationOnce(() => {
+      throw new Error('copy failed');
+    });
+
+    const result = await map.ops.clipLayer({
+      source: 'src1',
+      target: 'roads',
+      mask: 'park',
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { kind: 'mapshaper' } });
+    expect(source.setDataset).not.toHaveBeenCalled();
+  });
+
   it('clipLayer returns false when the mask layer is missing', async () => {
     const ok = await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'nope' });
     expect(ok.ok).toBe(false);
@@ -1021,19 +1290,18 @@ describe('Emap clipLayer / eraseLayer', () => {
     expect(map.canUndo()).toBe(true);
 
     await map.ops.clipLayer({ source: 'src1', target: 'roads', mask: 'park' });
-    // Prior command must have been flagged stale by the DatasetReplaceCommand push.
-    expect(priorCmd.stale).toBe(true);
+    // Prior commands are released and replaced by one lightweight stale boundary.
+    expect(priorCmd.stale).toBeUndefined();
 
     map.undo();
     expect(source.setDataset).toHaveBeenCalledTimes(2);
-    // First call: do() applied afterDataset; second call: undo() applies the
-    // copyDataset snapshot (the value returned by copyDatasetSpy).
+    // First call applies afterDataset; undo restores the retained source dataset.
     const restoredArg = source.setDataset.mock.calls[1][0];
-    expect(restoredArg._isCopy).toBe(true);
+    expect(restoredArg).toBe(beforeDataset);
 
-    // Prior history is preserved (not cleared) but the next undo target is stale.
+    // The compact stale boundary remains as the next undo target.
     expect(map.canUndo()).toBe(true);
-    map.undo(); // skips priorCmd because it's stale; doesn't invoke its undo()
+    map.undo(); // skips the boundary without invoking the released command
     expect(priorCmd.undo).not.toHaveBeenCalled();
     expect(map.canUndo()).toBe(false);
   });
@@ -1185,7 +1453,7 @@ describe('Emap dissolveLayer', () => {
     map.pushCommand(prior);
     expect(map.canUndo()).toBe(true);
     await map.ops.dissolveLayer({ source: 'src1', target: 'states' });
-    expect(prior.stale).toBe(true);
+    expect(prior.stale).toBeUndefined();
     map.undo(); // undoes the dataset-replace
     map.undo(); // skips the stale prior cmd
     expect(prior.undo).not.toHaveBeenCalled();
@@ -1530,7 +1798,7 @@ describe('Emap mergeSelected', () => {
     map.pushCommand(prior);
     map.select([{ source: 'src1', layer: 'parcels', id: 0 }]);
     await map.ops.mergeSelected();
-    expect(prior.stale).toBe(true);
+    expect(prior.stale).toBeUndefined();
     map.undo(); // dataset-replace
     map.undo(); // stale prior — skipped
     expect(prior.undo).not.toHaveBeenCalled();
@@ -5063,10 +5331,9 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
     // copyDataset returns a fresh object each call so the test can inspect
     // which copy was passed to addIntersectionCuts vs which to DatasetReplace.
     let copyId = 0;
-    copyDatasetSpy = vi.fn(() => ({
+    copyDatasetSpy = vi.fn((dataset: Record<string, unknown>) => ({
+      ...dataset,
       _copy: ++copyId,
-      layers: ds.layers,
-      arcs: ds.arcs,
     })) as ReturnType<typeof vi.fn>;
     addIntersectionCutsSpy = vi.fn() as ReturnType<typeof vi.fn>;
     Reflect.set(mapshaper.internal as object, 'copyDataset', copyDatasetSpy);
@@ -5081,7 +5348,7 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
   it('calls addIntersectionCuts on a deep copy of the source dataset', async () => {
     const ok = await map.ops.rebuildTopology({ source: 'src1' });
     expect(ok.ok).toBe(true);
-    expect(copyDatasetSpy).toHaveBeenCalledTimes(2); // before snapshot + working copy
+    expect(copyDatasetSpy).toHaveBeenCalledTimes(1);
     expect(addIntersectionCutsSpy).toHaveBeenCalledTimes(1);
     const arg = addIntersectionCutsSpy.mock.calls[0][0] as any;
     expect(arg._copy).toBeDefined();
@@ -5121,6 +5388,17 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
     expect(addIntersectionCutsSpy).not.toHaveBeenCalled();
   });
 
+  it('returns a mapshaper error when the topology working copy fails', async () => {
+    copyDatasetSpy.mockImplementationOnce(() => {
+      throw new Error('copy failed');
+    });
+
+    const result = await map.ops.rebuildTopology({ source: 'src1' });
+
+    expect(result).toMatchObject({ ok: false, error: { kind: 'mapshaper' } });
+    expect(setDatasetSpy).not.toHaveBeenCalled();
+  });
+
   it('returns true (no-op) for arc-less point-only datasets', async () => {
     const pointSource = {
       id: 'pts',
@@ -5158,10 +5436,10 @@ describe('Emap rebuildTopology (mocked mapshaper)', () => {
     const fake = { label: 'fake', do: vi.fn(), undo: fakeUndo } as any;
     history.push(fake);
     expect(map.canUndo()).toBe(true);
-    // After rebuild, the fake prior command is flagged stale rather than
-    // dropped — visible in the history list, but its undo() is skipped.
+    // After rebuild, the fake prior command is released and represented by
+    // one lightweight boundary whose traversal skips the old undo().
     await map.ops.rebuildTopology({ source: 'src1' });
-    expect(fake.stale).toBe(true);
+    expect(fake.stale).toBeUndefined();
     const command = history.undo();
     expect(command?.label).toBe('Rebuild topology');
     expect(map.canUndo()).toBe(true);
@@ -5321,6 +5599,8 @@ describe('Emap.exportSnapshot / loadSnapshot (mocked mapshaper)', () => {
       getLayers: () => ds?.layers ?? [],
       setDataset: vi.fn(),
       refreshDisplayArcs: vi.fn(),
+      setDatasetNormalizer: vi.fn(),
+      setManagedCRS: vi.fn(),
       // EventDispatcher surface used by Emap.removeSource
       off: vi.fn(),
       on: vi.fn(),
@@ -5578,8 +5858,8 @@ describe('Emap.exportSnapshot / loadSnapshot round-trip (real mapshaper)', () =>
     const mapA = createBareMap();
     setPrivate(mapA, '_history', new EditHistory());
     stubProjection(mapA);
-    mapA.addSource('alpha', sourceA);
-    mapA.addSource('beta', sourceB);
+    await mapA.addSource('alpha', sourceA);
+    await mapA.addSource('beta', sourceB);
 
     const beforeA = summarize(mapA, 'alpha');
     const beforeB = summarize(mapA, 'beta');
@@ -6744,136 +7024,164 @@ describe('Emap.prebuildSpatialIndex / clearSpatialIndex', () => {
 });
 
 describe('Emap.reproject', () => {
-  it('resolves EPSG:3857 to webmercator before reprojection', async () => {
-    const map = createBareMap();
+  function makeSource(before: object, prepared: object | Error) {
+    let current = before;
     const source = {
-      reproject: vi.fn(async () => undefined),
-      getDataset: vi.fn(() => ({ layers: [], info: {} })),
+      getDataset: vi.fn(() => current),
+      prepareReproject: vi.fn(async () => {
+        if (prepared instanceof Error) throw prepared;
+        return prepared;
+      }),
+      fire: vi.fn(),
+      setDataset: vi.fn((dataset: object, notify = true) => {
+        current = dataset;
+        if (notify) source.fire('data', { reason: 'replace' });
+      }),
+      current: () => current,
     };
-    const projection = new Projection();
-    const reproject = vi.spyOn(projection, 'reproject');
-    const viewport = { setCRS: vi.fn(), clearInitialState: vi.fn() };
+    return source;
+  }
+
+  function configureMap(map: Emap): void {
+    setPrivate(map, '_projection', new Projection());
+    setPrivate(map, '_viewport', new Viewport());
+    setPrivate(map, '_history', new EditHistory());
+  }
+
+  it('rejects a display-only CRS change while a source is registered', () => {
+    const map = createBareMap();
+    configureMap(map);
+    setPrivate(map, '_sources', new globalThis.Map([['s1', { getDataset: () => undefined }]]));
+
+    expect(() => map.setCRS('EPSG:3857')).toThrow(
+      'Cannot change the map CRS while sources are registered; use map.reproject()',
+    );
+    expect(map.getCRS()).toBe('EPSG:4326');
+  });
+
+  it('resolves the target and commits every prepared source', async () => {
+    const map = createBareMap();
+    configureMap(map);
+    const before = { layers: [], info: { crs_string: 'EPSG:4326' } };
+    const after = { layers: [], info: { crs_string: 'EPSG:3857' } };
+    const source = makeSource(before, after);
     setPrivate(map, '_sources', new globalThis.Map([['s1', source]]));
-    setPrivate(map, '_projection', projection);
-    setPrivate(map, '_viewport', viewport);
-    setPrivate(map, '_featureQuery', { clear: vi.fn() });
 
     await map.reproject('EPSG:3857');
 
-    expect(reproject).toHaveBeenCalledWith('webmercator', expect.any(globalThis.Map), 'EPSG:3857');
-    expect(source.reproject).toHaveBeenCalledWith('webmercator', 'EPSG:3857');
-    expect(viewport.setCRS).toHaveBeenCalledWith('webmercator');
+    expect(source.prepareReproject).toHaveBeenCalledWith('webmercator', 'EPSG:3857');
+    expect(source.current()).toBe(after);
+    expect(map.getCRS()).toBe('webmercator');
+    expect(map.canUndo()).toBe(true);
   });
 
-  it('resolves standard EPSG codes to Proj.4 strings before reprojection', async () => {
+  it('leaves every source unchanged when preparation fails', async () => {
     const map = createBareMap();
-    const source = {
-      reproject: vi.fn(async () => undefined),
-      getDataset: vi.fn(() => ({ layers: [], info: {} })),
-    };
-    const projection = new Projection();
-    const reproject = vi.spyOn(projection, 'reproject');
-    const viewport = { setCRS: vi.fn(), clearInitialState: vi.fn() };
+    configureMap(map);
+    const beforeA = { layers: [], info: {} };
+    const beforeB = { layers: [], info: {} };
+    const sourceA = makeSource(beforeA, { layers: [], info: {} });
+    const sourceB = makeSource(beforeB, new Error('projection failed'));
+    setPrivate(
+      map,
+      '_sources',
+      new globalThis.Map([
+        ['a', sourceA],
+        ['b', sourceB],
+      ]),
+    );
+
+    await expect(map.reproject('EPSG:3857')).rejects.toThrow('projection failed');
+
+    expect(sourceA.setDataset).not.toHaveBeenCalled();
+    expect(sourceB.setDataset).not.toHaveBeenCalled();
+    expect(map.getCRS()).toBe('EPSG:4326');
+    expect(map.canUndo()).toBe(false);
+  });
+
+  it('rejects a prepared projection when the source was edited in place', async () => {
+    const map = createBareMap();
+    configureMap(map);
+    const before = { layers: [], info: {}, editVersion: 0 };
+    const after = { layers: [], info: { crs_string: 'EPSG:3857' } };
+    let resolveProjection: ((dataset: object) => void) | null = null;
+    const pendingProjection = new Promise<object>((resolve) => {
+      resolveProjection = resolve;
+    });
+    const source = makeSource(before, pendingProjection);
     setPrivate(map, '_sources', new globalThis.Map([['s1', source]]));
-    setPrivate(map, '_projection', projection);
-    setPrivate(map, '_viewport', viewport);
-    setPrivate(map, '_featureQuery', { clear: vi.fn() });
 
-    await map.reproject('EPSG:4490');
+    const reprojection = map.reproject('EPSG:3857');
+    await vi.waitFor(() => expect(source.prepareReproject).toHaveBeenCalled());
+    before.editVersion = 1;
+    resolveProjection?.(after);
 
-    const resolvedTarget = source.reproject.mock.calls[0]?.[0];
-    expect(typeof resolvedTarget).toBe('string');
-    expect(resolvedTarget).toContain('+ellps=GRS80');
-    expect(source.reproject).toHaveBeenCalledWith(resolvedTarget, 'EPSG:4490');
-    expect(reproject).toHaveBeenCalledWith(resolvedTarget, expect.any(globalThis.Map), 'EPSG:4490');
-    expect(viewport.setCRS).toHaveBeenCalledWith(resolvedTarget);
+    await expect(reprojection).rejects.toThrow('changed during reprojection');
+    expect(source.setDataset).not.toHaveBeenCalled();
+    expect(map.getCRS()).toBe('EPSG:4326');
   });
 
-  it('clears spatial indexes after source reprojection', async () => {
+  it('undo and redo restore all datasets and the map CRS atomically', async () => {
     const map = createBareMap();
-    const clear = vi.fn();
-    const projection = new Projection();
-    const makeSource = () => ({
-      getDataset: vi.fn(() => ({ layers: [], info: {} })),
+    configureMap(map);
+    const beforeA = { layers: [], info: {} };
+    const beforeB = { layers: [], info: {} };
+    const afterA = { layers: [], info: {} };
+    const afterB = { layers: [], info: {} };
+    const sourceA = makeSource(beforeA, afterA);
+    const sourceB = makeSource(beforeB, afterB);
+    setPrivate(
+      map,
+      '_sources',
+      new globalThis.Map([
+        ['a', sourceA],
+        ['b', sourceB],
+      ]),
+    );
+
+    await map.reproject('EPSG:3857');
+    expect(map.undo()).toBe(true);
+    expect(sourceA.current()).toBe(beforeA);
+    expect(sourceB.current()).toBe(beforeB);
+    expect(map.getCRS()).toBe('EPSG:4326');
+
+    expect(map.redo()).toBe(true);
+    expect(sourceA.current()).toBe(afterA);
+    expect(sourceB.current()).toBe(afterB);
+    expect(map.getCRS()).toBe('webmercator');
+  });
+
+  it('publishes source data events only after every dataset and view are committed', async () => {
+    const map = createBareMap();
+    configureMap(map);
+    const beforeA = { layers: [], info: { id: 'before-a' } };
+    const beforeB = { layers: [], info: { id: 'before-b' } };
+    const afterA = { layers: [], info: { id: 'after-a' } };
+    const afterB = { layers: [], info: { id: 'after-b' } };
+    const sourceA = makeSource(beforeA, afterA);
+    const sourceB = makeSource(beforeB, afterB);
+    const observations: Array<[object, object, string]> = [];
+    sourceA.fire.mockImplementation(() => {
+      observations.push([sourceA.current(), sourceB.current(), map.getCRS()]);
+    });
+    sourceB.fire.mockImplementation(() => {
+      observations.push([sourceA.current(), sourceB.current(), map.getCRS()]);
     });
     setPrivate(
       map,
       '_sources',
       new globalThis.Map([
-        ['s1', makeSource()],
-        ['s2', makeSource()],
+        ['a', sourceA],
+        ['b', sourceB],
       ]),
     );
-    setPrivate(map, '_projection', projection);
-    setPrivate(map, '_viewport', { setCRS: vi.fn(), clearInitialState: vi.fn() });
-    setPrivate(map, '_featureQuery', { clear });
-
-    await map.reproject('webmercator');
-
-    expect(clear).toHaveBeenCalledWith('s1');
-    expect(clear).toHaveBeenCalledWith('s2');
-  });
-
-  it('rejects unknown EPSG codes before projection starts', async () => {
-    const map = createBareMap();
-    const source = {
-      reproject: vi.fn(async () => undefined),
-      getDataset: vi.fn(() => ({ layers: [], info: {} })),
-    };
-    const projection = new Projection();
-    const reproject = vi.spyOn(projection, 'reproject');
-    const viewport = { setCRS: vi.fn(), clearInitialState: vi.fn() };
-    setPrivate(map, '_sources', new globalThis.Map([['s1', source]]));
-    setPrivate(map, '_projection', projection);
-    setPrivate(map, '_viewport', viewport);
-    setPrivate(map, '_featureQuery', { clear: vi.fn() });
-
-    await expect(map.reproject('EPSG:999999')).rejects.toThrow(/Unsupported EPSG code/);
-    expect(reproject).not.toHaveBeenCalled();
-    expect(source.reproject).not.toHaveBeenCalled();
-    expect(viewport.setCRS).not.toHaveBeenCalled();
-  });
-
-  it('rejects blank CRS input before projection starts', async () => {
-    const map = createBareMap();
-    const source = {
-      reproject: vi.fn(async () => undefined),
-      getDataset: vi.fn(() => ({ layers: [], info: {} })),
-    };
-    const projection = new Projection();
-    const reproject = vi.spyOn(projection, 'reproject');
-    const viewport = { setCRS: vi.fn(), clearInitialState: vi.fn() };
-    setPrivate(map, '_sources', new globalThis.Map([['s1', source]]));
-    setPrivate(map, '_projection', projection);
-    setPrivate(map, '_viewport', viewport);
-    setPrivate(map, '_featureQuery', { clear: vi.fn() });
-
-    await expect(map.reproject('   ')).rejects.toThrow('targetCrs must be a non-empty CRS string');
-    expect(reproject).not.toHaveBeenCalled();
-    expect(source.reproject).not.toHaveBeenCalled();
-    expect(viewport.setCRS).not.toHaveBeenCalled();
-  });
-
-  it('does not reject when only the current CRS lacks a Proj.4 definition', async () => {
-    const map = createBareMap();
-    const source = {
-      reproject: vi.fn(async () => undefined),
-      getDataset: vi.fn(() => ({ layers: [], info: {} })),
-    };
-    const projection = new Projection();
-    projection.setCRS('EPSG:2000');
-    const reproject = vi.spyOn(projection, 'reproject');
-    const viewport = { setCRS: vi.fn(), clearInitialState: vi.fn() };
-    setPrivate(map, '_sources', new globalThis.Map([['s1', source]]));
-    setPrivate(map, '_projection', projection);
-    setPrivate(map, '_viewport', viewport);
-    setPrivate(map, '_featureQuery', { clear: vi.fn() });
 
     await map.reproject('EPSG:3857');
 
-    expect(reproject).toHaveBeenCalledWith('webmercator', expect.any(globalThis.Map), 'EPSG:3857');
-    expect(source.reproject).toHaveBeenCalledWith('webmercator', 'EPSG:3857');
-    expect(viewport.setCRS).toHaveBeenCalledWith('webmercator');
+    expect(observations).toEqual([
+      [afterA, afterB, 'webmercator'],
+      [afterA, afterB, 'webmercator'],
+    ]);
   });
 });
 
@@ -7185,7 +7493,7 @@ describe('Emap.remove() teardown', () => {
     setPrivate(map, '_sources', sources);
     setPrivate(map, '_sourceListeners', sourceListeners);
     setPrivate(map, '_featureQuery', { clear: fqClear });
-    setPrivate(map, '_layerArcFlagsCache', new globalThis.Map([['a:l', new Uint8Array(1)]]));
+    setPrivate(map, '_layerArcIdsCache', new globalThis.Map([['a:l', new Uint32Array(1)]]));
     setPrivate(map, '_pendingRender', 3);
     setPrivate(map, '_rafId', 0);
 
@@ -7231,12 +7539,10 @@ describe('Emap.remove() teardown', () => {
     expect(fqClear).toHaveBeenCalledWith('b');
   });
 
-  it('drops the arc-flag cache and clears the source map', () => {
+  it('drops the layer arc-id cache and clears the source map', () => {
     const { map } = buildStubMap();
     map.remove();
-    expect((getPrivate(map, '_layerArcFlagsCache') as globalThis.Map<string, unknown>).size).toBe(
-      0,
-    );
+    expect((getPrivate(map, '_layerArcIdsCache') as globalThis.Map<string, unknown>).size).toBe(0);
     expect((getPrivate(map, '_sources') as globalThis.Map<string, unknown>).size).toBe(0);
     expect((getPrivate(map, '_sourceListeners') as globalThis.Map<string, unknown>).size).toBe(0);
   });
@@ -7427,10 +7733,8 @@ describe('Phase-6 integration', () => {
       // Source dataset is now afterDs.
       expect(source._currentDs).toBe(afterDs);
       tx.rollback();
-      // Rollback restored the FIRST-touch snapshot the runner produced,
-      // which is the structural copy of `originalDs`.
-      expect(source._currentDs).not.toBe(afterDs);
-      expect((source._currentDs as any)._snapshotOf).toBe(originalDs);
+      // Rollback restores the first-touch dataset without retaining a clone.
+      expect(source._currentDs).toBe(originalDs);
       expect(map.canUndo()).toBe(false);
     });
 
@@ -7450,10 +7754,8 @@ describe('Phase-6 integration', () => {
       await tx.commit('Do thing');
       expect(map.canUndo()).toBe(true);
       map.undo();
-      // Undo invokes CompositeCommand.undo → DatasetReplaceCommand.undo →
-      // source.setDataset(before) where `before` is the runner's pre-op snapshot.
-      expect(source._currentDs).not.toBe(afterDs);
-      expect((source._currentDs as any)._snapshotOf).toBe(originalDs);
+      // Undo restores the pre-op dataset retained by the replacement command.
+      expect(source._currentDs).toBe(originalDs);
     });
   });
 

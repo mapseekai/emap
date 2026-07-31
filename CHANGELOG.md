@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Dataset-replacement operations now run against isolated working copies,
+  serialize per source, classify their effects centrally, and commit through one
+  atomic path. Multi-source reprojection is likewise prepared before commit and
+  is now one undoable history entry.
+- Source registration is now awaitable and enforces one active map CRS:
+  the first loaded source establishes the CRS, later imports normalize before
+  commit, and map-wide reprojection keeps every registered source synchronized.
+  Display-only CRS changes and per-source CRS divergence are rejected.
+- Public source datasets and map camera state now expose read-only or cloned
+  views. Layer specifications are a discriminated union, layer lookup is
+  centralized in `LayerRegistry`, and source processing uses the unified
+  `MapshaperAdapter` contract.
+- Runnable examples now syntax-highlight their **View source** dialogs with
+  Prism's HTML grammar and theme.
+
+### Fixed
+
+- Feature-event filtering and one-shot registration now dispatch consistently,
+  while source removal, map teardown, vertex context menus, and worker failures
+  release their listeners, pending jobs, highlights, indexes, and caches.
+- Transactions now wait for tracked asynchronous operations without leaking
+  rejected cleanup promises, and destructive history barriers release obsolete
+  command payloads while preserving one unavailable-history boundary.
+- The DuckDB spatial-operations example now processes the live registered
+  datasets instead of retaining original/display copies, and multi-input DuckDB
+  operations align secondary datasets to the active input CRS.
+- Registering a source now clears undo/redo history (matching source removal),
+  so undoing an earlier map reprojection can no longer strand newly added
+  sources on a stale CRS. Normalization commits re-validate the owning
+  registration and the active map CRS at the last moment, per-source
+  reprojection of a managed source rechecks the owning map's CRS before
+  committing, and map reprojection aborts when any registered source loads or
+  the registry changes during preparation. Undo history is likewise dropped
+  when a source loads data outside the command history. The DuckDB
+  spatial-operations example re-applies a changed input CRS by re-importing
+  the original upload through a fresh source registration, discarding stale
+  outputs and in-flight results.
+
+### Performance
+
+- Point rendering culls offscreen features; line and polygon rendering reuse
+  cached layer arc IDs and avoid hot-path iterator and array allocations.
+- Full-frame timing no longer forces synchronous Canvas pixel readback.
+  Attribute-only operations retain unchanged geometry, and bulk feature undo
+  restores records in linear time.
+
 ## [0.6.0] - 2026-07-29
 
 ### Added

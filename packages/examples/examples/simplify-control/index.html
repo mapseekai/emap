@@ -59,7 +59,7 @@
         // is ready), then addSource (order-independent) + setExtent.
         try {
           await source.setData({ filename: file.name, content });
-          map.addSource(SOURCE_ID, source);
+          await map.addSource(SOURCE_ID, source);
           map.setExtent(source.getExtent());
           // Mount the SimplifyControl on first load. Reusing the same control
           // instance across reloads is fine, but easiest is to recreate.

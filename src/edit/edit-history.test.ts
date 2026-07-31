@@ -146,75 +146,69 @@ function makeBarrier(label?: string): EditCommand & {
 }
 
 describe('EditHistory stale marker (history barrier)', () => {
-  it('pushing an `invalidatesPriorCommands` command marks every prior entry stale', () => {
+  it('releases prior commands and retains one lightweight stale boundary', () => {
     const h = new EditHistory();
     const a = makeCmd('a');
     const b = makeCmd('b');
-    const dr = makeBarrier('clip');
+    const barrier = makeBarrier('clip');
     h.push(a);
     h.push(b);
+    h.push(barrier);
+
     expect(a.stale).toBeUndefined();
     expect(b.stale).toBeUndefined();
-    h.push(dr);
-    expect(a.stale).toBe(true);
-    expect(b.stale).toBe(true);
-    // The barrier itself remains undoable
-    expect(dr.stale).toBeUndefined();
+    expect(h.size()).toBe(2);
+    expect(h.snapshot()).toMatchObject({
+      label: 'clip',
+      staleCount: 1,
+      topIsStale: false,
+    });
   });
 
-  it('snapshot reports staleCount and topIsStale across the barrier', () => {
+  it('exposes the collapsed boundary after undoing the dataset replacement', () => {
     const h = new EditHistory();
     h.push(makeCmd('a'));
     h.push(makeCmd('b'));
     h.push(makeBarrier('clip'));
-    let snap = h.snapshot();
-    expect(snap.staleCount).toBe(2);
-    expect(snap.topIsStale).toBe(false); // barrier is on top, not stale
-    expect(snap.label).toBe('clip');
-    // After undoing the barrier, the top of undo is now stale.
     h.undo();
-    snap = h.snapshot();
-    expect(snap.canUndo).toBe(true);
-    expect(snap.staleCount).toBe(2);
-    expect(snap.topIsStale).toBe(true);
-    expect(snap.label).toBe('b');
+
+    expect(h.snapshot()).toMatchObject({
+      canUndo: true,
+      label: 'Earlier edits unavailable',
+      staleCount: 1,
+      topIsStale: true,
+    });
   });
 
-  it('undo skips a stale command without invoking its undo() and surfaces skippedStale once', () => {
+  it('skips the lightweight stale boundary without retaining old commands', () => {
     const h = new EditHistory();
-    const a = makeCmd('a');
-    h.push(a);
+    const old = makeCmd('old');
+    h.push(old);
     h.push(makeBarrier('clip'));
-    h.undo(); // pop barrier — barrier.undo() invoked
-    expect(h.snapshot().skippedStale).toBeUndefined();
-    const popped = h.undo();
-    expect(popped).toBe(a);
-    expect(a.undo).not.toHaveBeenCalled();
-    const snap = h.snapshot();
-    expect(snap.skippedStale).toBe(true);
-    expect(snap.canUndo).toBe(false);
-    expect(snap.canRedo).toBe(true);
+    h.undo();
+    const boundary = h.undo();
+
+    expect(boundary?.label).toBe('Earlier edits unavailable');
+    expect(old.undo).not.toHaveBeenCalled();
+    expect(h.snapshot().skippedStale).toBe(true);
+    expect(h.canUndo()).toBe(false);
   });
 
-  it('redo skips a stale command without invoking its do() and surfaces skippedStale', () => {
+  it('redo skips the lightweight stale boundary', () => {
     const h = new EditHistory();
-    const a = makeCmd('a');
-    h.push(a);
+    h.push(makeCmd('old'));
     h.push(makeBarrier('clip'));
-    h.undo(); // barrier
-    h.undo(); // a (stale, skipped)
-    // both now on redo stack: [barrier, a] from bottom to top — wait,
-    // pushed in pop order: barrier first, then a. So redoStack top is a.
-    const redone = h.redo();
-    expect(redone).toBe(a);
-    expect(a.do).not.toHaveBeenCalled();
+    h.undo();
+    h.undo();
+
+    const boundary = h.redo();
+    expect(boundary?.label).toBe('Earlier edits unavailable');
     expect(h.snapshot().skippedStale).toBe(true);
   });
 
-  it('a barrier push on a non-empty stack also drops the redo stack', () => {
+  it('a barrier push drops the redo stack', () => {
     const h = new EditHistory();
-    const a = makeCmd('a');
-    h.push(a);
+    h.push(makeCmd('a'));
     h.undo();
     expect(h.canRedo()).toBe(true);
     h.push(makeBarrier('clip'));
@@ -223,16 +217,14 @@ describe('EditHistory stale marker (history barrier)', () => {
 
   it('skippedStale resets on the next non-stale traversal', () => {
     const h = new EditHistory();
-    const a = makeCmd('a');
-    h.push(a);
+    h.push(makeCmd('a'));
     h.push(makeBarrier('clip'));
-    h.undo(); // barrier — non-stale
-    expect(h.snapshot().skippedStale).toBeFalsy();
-    h.undo(); // a — stale, skip
+    h.undo();
+    h.undo();
     expect(h.snapshot().skippedStale).toBe(true);
-    h.redo(); // a — still stale, skip
+    h.redo();
     expect(h.snapshot().skippedStale).toBe(true);
-    h.redo(); // barrier — non-stale, runs do()
+    h.redo();
     expect(h.snapshot().skippedStale).toBeFalsy();
   });
 });

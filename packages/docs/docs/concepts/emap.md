@@ -44,7 +44,7 @@ const map = new Emap({
 ```ts
 const source = await TopologySource.fromUrl('main', '/data/districts.geojson');
 
-map.addSource('main', source);
+await map.addSource('main', source);
 map.setExtent(source.getExtent());
 ```
 

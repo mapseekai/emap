@@ -75,7 +75,7 @@ const source = await TopologySource.fromUrl(
   'https://geojson.cn/api/china/1.6.3/china.topo.json',
 );
 
-map.addSource('china', source);
+await map.addSource('china', source);
 map.setExtent(source.getExtent());
 ```
 
@@ -107,16 +107,17 @@ import '@mapseekai/emap/style.css';
 
 ```ts
 const source = await TopologySource.fromUrl('roads', '/data/roads.geojson');
-map.addSource('roads', source);
+await map.addSource('roads', source);
 map.setExtent(source.getExtent());
 
 const local = new TopologySource('local');
 await local.setData({ filename: 'upload.zip', content: bytes });
-map.addSource('local', local);
+await map.addSource('local', local);
 ```
 
-`TopologySource.setData()` 在数据集填充完成且 `data` 事件触发后才会完成。`map.addSource()`
-不依赖调用顺序：既可先加载再添加，也可先添加后加载。
+`TopologySource.setData()` 在数据集填充完成且 `data` 事件触发后才会完成。始终
+`await map.addSource()`：已加载 source 可能需要先重投影再注册。调用顺序仍不受限，
+可以先注册空 source 再加载；导入结果会在可观察前归一到地图的活动 CRS。
 
 支持的输入包括：
 

@@ -36,15 +36,22 @@ console.log(map.getCRS());
 
 回退值不代表数据一定是经纬度。来源不明的文件应允许用户确认或覆盖 CRS。
 
-## 设置显示 CRS 与重投影
+## 设置地图 CRS 与重投影
 
-`setCRS` 只更新 projection/viewport 对坐标的解释，不改写 source 坐标：
+空地图可以用 `setCRS` 预设坐标系：
 
 ```ts
 map.setCRS('EPSG:3857');
 ```
 
-需要真正转换所有已注册 source：
+Emap 对所有已加载数据维护一个活动 CRS：
+
+- 如果没有预设 CRS，第一个已加载 source 的 CRS 成为地图 CRS。
+- `await map.addSource(...)` 会在注册前把 CRS 不同的已加载 source 重投影到地图 CRS。
+- 已注册 source 再次 `setData(...)` 时，也会在提交和触发 `data` 前完成相同的归一化。
+- `map.ops`、DuckDB helper、编辑和导出读取的都是当前活动 CRS 下的 dataset。
+
+source 注册后，`setCRS` 会拒绝只改变坐标解释；应真正转换所有已注册 source：
 
 ```ts
 await map.reproject('EPSG:3857');
@@ -52,7 +59,7 @@ await map.reproject('EPSG:3857');
 
 `reproject` 会：
 
-- 转换 source dataset 坐标。
+- 原子地转换全部 source dataset 坐标；任一转换失败时不提交任何 source。
 - 更新 CRS 元数据。
 - 清理空间索引。
 - 用新范围更新 viewport。

@@ -76,26 +76,30 @@ export interface BulkFeatureDeleteCommandOptions {
  * one O(N) compaction pass instead.
  *
  * `do()` rebuilds `layer.shapes` and compacts the data table's records
- * array IN PLACE so the table's reference stays valid. `undo()` walks the
- * snapshots in ascending id order and re-inserts via splice — fine because
- * undo is called once per delete batch, not per feature.
+ * array IN PLACE so the table's reference stays valid. `undo()` merges the
+ * sorted snapshots back into the compacted arrays from the end in O(N + K).
  *
  * Like {@link FeatureDeleteCommand}, no `DisplayArcs` refresh is issued;
  * deletion never changes the arc collection.
  */
 export class BulkFeatureDeleteCommand implements EditCommand {
   readonly label: string;
+  private readonly sortedSnapshots: BulkFeatureDeleteCommandOptions['snapshots'];
+  private readonly deletedIds: ReadonlySet<number>;
 
   constructor(private readonly opts: BulkFeatureDeleteCommandOptions) {
     this.label = `Delete ${opts.snapshots.length} feature${opts.snapshots.length === 1 ? '' : 's'}`;
+    this.sortedSnapshots = [...opts.snapshots].sort((a, b) => a.id - b.id);
+    const deletedIds = new Set<number>();
+    for (const snapshot of this.sortedSnapshots) deletedIds.add(snapshot.id);
+    this.deletedIds = deletedIds;
   }
 
   do(): void {
     const { layer, snapshots } = this.opts;
     if (!layer.shapes || snapshots.length === 0) return;
 
-    const del = new Set<number>();
-    for (const s of snapshots) del.add(s.id);
+    const del = this.deletedIds;
 
     const oldShapes = layer.shapes;
     const newShapes: (FeatureShape | null)[] = new Array(oldShapes.length - del.size);
@@ -116,13 +120,40 @@ export class BulkFeatureDeleteCommand implements EditCommand {
   }
 
   undo(): void {
-    const { layer, snapshots } = this.opts;
-    if (!layer.shapes) layer.shapes = [];
-    const sorted = [...snapshots].sort((a, b) => a.id - b.id);
+    const { layer } = this.opts;
+    const snapshots = this.sortedSnapshots;
+    if (snapshots.length === 0) return;
+
+    const shapes = layer.shapes ?? [];
+    const compactedShapeCount = shapes.length;
+    shapes.length = compactedShapeCount + snapshots.length;
+    let shapeSource = compactedShapeCount - 1;
+    let snapshotIndex = snapshots.length - 1;
+    for (let dst = shapes.length - 1; dst >= 0; dst--) {
+      const snapshot = snapshots[snapshotIndex];
+      if (snapshot && snapshot.id === dst) {
+        shapes[dst] = snapshot.shape;
+        snapshotIndex--;
+      } else {
+        shapes[dst] = shapes[shapeSource--];
+      }
+    }
+    layer.shapes = shapes;
+
     const records = layer.data?.getRecords?.();
-    for (const s of sorted) {
-      layer.shapes.splice(s.id, 0, s.shape);
-      if (records && s.record !== null) records.splice(s.id, 0, s.record);
+    if (!records) return;
+    const compactedRecordCount = records.length;
+    records.length = compactedRecordCount + snapshots.length;
+    let recordSource = compactedRecordCount - 1;
+    snapshotIndex = snapshots.length - 1;
+    for (let dst = records.length - 1; dst >= 0; dst--) {
+      const snapshot = snapshots[snapshotIndex];
+      if (snapshot && snapshot.id === dst) {
+        records[dst] = snapshot.record ?? {};
+        snapshotIndex--;
+      } else {
+        records[dst] = records[recordSource--];
+      }
     }
   }
 }

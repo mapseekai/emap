@@ -213,11 +213,11 @@
         runBtn.disabled = !enabled;
       }
 
-      function addDatasetSource(id, dataset) {
+      async function addDatasetSource(id, dataset) {
         const source = new TopologySource(id);
         removeSourceWithLayers(id);
         source.setDataset(dataset);
-        map.addSource(id, source);
+        await map.addSource(id, source);
         return source;
       }
 
@@ -257,7 +257,7 @@
           if (!inputDataset) throw new Error('文件未生成可用 dataset');
           applyInputCrs();
 
-          map.addSource(SOURCE_ID, source);
+          await map.addSource(SOURCE_ID, source);
           addDisplayLayers(SOURCE_ID, source, 'duckdb-input', {
             fill: '#dbeafe',
             fillOpacity: 0.55,
@@ -314,7 +314,7 @@
             },
             runtime,
           );
-          const source = addDatasetSource(OUTPUT_ID, result);
+          const source = await addDatasetSource(OUTPUT_ID, result);
           addDisplayLayers(OUTPUT_ID, source, 'duckdb-output', {
             fill: '#f97316',
             fillOpacity: 0.35,

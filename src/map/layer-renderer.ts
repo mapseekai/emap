@@ -1,17 +1,17 @@
 import type { Viewport } from '../geo/viewport';
 import type { CorePainter } from '../renderer/painter';
-import type { TopologySource } from '../source/source';
+import type { MutableTopologySource } from '../source/source';
 import type { ArcCollection, MapshaperLayer } from '../types/mapshaper-types';
 import { resolvePointStyle, resolveStrokeStyle } from './layer';
-import type { CirclePaint, FillPaint, LayerSpecification, LinePaint } from './layer';
+import type { FillLayerSpecification, LayerSpecification, LineLayerSpecification } from './layer';
 
 export interface LayerRendererContext {
   layers: readonly LayerSpecification[];
-  sources: ReadonlyMap<string, TopologySource>;
+  sources: ReadonlyMap<string, MutableTopologySource>;
   viewport: Viewport;
   painter: CorePainter;
-  resolveSourceLayer(source: TopologySource, sourceLayerName?: string): MapshaperLayer | null;
-  getLayerArcFlags(ml: MapshaperLayer, arcs: ArcCollection, cacheKey: string): Uint8Array | null;
+  resolveSourceLayer(sourceId: string, sourceLayerName?: string): MapshaperLayer | null;
+  getLayerArcIds(ml: MapshaperLayer, arcs: ArcCollection, cacheKey: string): Uint32Array | null;
 }
 
 export function renderLayers(
@@ -33,7 +33,7 @@ export function renderLayers(
       arcs.setRetainedInterval(Math.max(userFloor, pixelSize * 0.5));
     }
 
-    const ml = ctx.resolveSourceLayer(source, layer['source-layer']);
+    const ml = ctx.resolveSourceLayer(layer.source, layer['source-layer']);
     const cacheKey = `${layer.source}:${layer['source-layer'] || 'default'}`;
 
     if (layer.type === 'line' && arcs) {
@@ -41,7 +41,7 @@ export function renderLayers(
     } else if (layer.type === 'fill' && arcs && ml?.shapes) {
       renderFillLayer(ctx, layer, ml, arcs, cacheKey, lineScale);
     } else if (layer.type === 'circle' && ml?.shapes) {
-      const style = resolvePointStyle(layer.paint as CirclePaint);
+      const style = resolvePointStyle(layer.paint);
       ctx.painter.drawPoints(ml.shapes, style);
     }
   }
@@ -49,17 +49,16 @@ export function renderLayers(
 
 function renderLineLayer(
   ctx: LayerRendererContext,
-  layer: LayerSpecification,
+  layer: LineLayerSpecification,
   ml: MapshaperLayer | null,
   arcs: ArcCollection,
   cacheKey: string,
   lineScale: number,
 ): void {
-  const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
+  const style = resolveStrokeStyle(layer.paint, lineScale);
   if (ml?.shapes) {
-    const flags = ctx.getLayerArcFlags(ml, arcs, cacheKey);
-    const filter = combineArcFilters(flags, ctx.viewport.getArcFilter(arcs));
-    ctx.painter.drawArcs(arcs, style, filter);
+    const arcIds = ctx.getLayerArcIds(ml, arcs, cacheKey);
+    ctx.painter.drawArcs(arcs, style, ctx.viewport.getArcFilter(arcs), arcIds ?? undefined);
   } else {
     ctx.painter.drawArcs(arcs, style, ctx.viewport.getArcFilter(arcs));
   }
@@ -67,13 +66,13 @@ function renderLineLayer(
 
 function renderFillLayer(
   ctx: LayerRendererContext,
-  layer: LayerSpecification,
+  layer: FillLayerSpecification,
   ml: MapshaperLayer,
   arcs: ArcCollection,
   cacheKey: string,
   lineScale: number,
 ): void {
-  const fillPaint = layer.paint as FillPaint | undefined;
+  const fillPaint = layer.paint;
   const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
   const fillOpacity = fillPaint?.['fill-opacity'];
   const viewportFilter = ctx.viewport.getArcFilter(arcs);
@@ -90,17 +89,9 @@ function renderFillLayer(
     fillOpacity,
     { viewBBox: cullParts ? ctx.viewport.getViewBounds() : null },
   );
-  const style = resolveStrokeStyle(layer.paint as LinePaint, lineScale);
-  if (style.width === 0) return;
-  const flags = ctx.getLayerArcFlags(ml, arcs, cacheKey);
-  ctx.painter.drawArcs(arcs, style, combineArcFilters(flags, viewportFilter));
-}
-
-function combineArcFilters(
-  layerFilter: Uint8Array | null,
-  viewportFilter?: (i: number) => boolean,
-): ((i: number) => boolean) | undefined {
-  if (!layerFilter) return viewportFilter;
-  if (!viewportFilter) return (i: number) => layerFilter[i] === 1;
-  return (i: number) => layerFilter[i] === 1 && viewportFilter(i);
+  const style = resolveStrokeStyle(layer.paint, lineScale);
+  if ((style.width ?? 0) > 0) {
+    const arcIds = ctx.getLayerArcIds(ml, arcs, cacheKey);
+    ctx.painter.drawArcs(arcs, style, viewportFilter, arcIds ?? undefined);
+  }
 }

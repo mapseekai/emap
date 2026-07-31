@@ -191,7 +191,7 @@
       // is ready), then addSource (order-independent) + setExtent.
       try {
         await source.setData({ filename: lastFile.name, content: lastFileBytes });
-        map.addSource(SOURCE_ID, source);
+        await map.addSource(SOURCE_ID, source);
         map.setExtent(source.getExtent());
         for (const b of allOpsBtns) b.disabled = false;
         refreshStats();

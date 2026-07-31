@@ -2,8 +2,8 @@
 id: topology
 slug: /concepts/topology
 title: Topology model
-api: []
-examples: []
+api: ["ReadonlyArcCollection","ReadonlyArcVertexData","ReadonlyCoord2","ReadonlyDataTable","ReadonlyFeatureShape","ReadonlyMapshaperDataset","ReadonlyMapshaperLayer","ReadonlyNumericArray","ReadonlyPathPart","ReadonlyPathShape","ReadonlyPointShape"]
+examples: ["rebuild-topology","vertex-editing"]
 stability: stable
 verifiedVersion: 0.5.0
 ---
@@ -52,9 +52,11 @@ if (dataset) {
 console.log(layers.map((layer) => layer.name));
 ```
 
-`getDataset()` returns the current live object, not a copy. It is useful for
-diagnostics and read-only statistics, but directly mutating shapes, records, or
-arcs is unsafe.
+`getDataset()` returns a zero-copy, deeply read-only TypeScript view of the
+current live object, not a copy. Nested layers, shapes, records, and metadata
+are read-only, and arcs expose query methods only. JavaScript, `any`, and
+explicit assertions can still bypass this type boundary, so mutations must use
+the entry points below.
 
 ## Choose the correct mutation entry point
 
@@ -63,8 +65,9 @@ arcs is unsafe.
 | Property or field | `map.attributes` or an attribute operation |
 | Feature transform or vertex | Edit command or handler |
 | Simplify, dissolve, clip, buffer | `map.ops.*` |
-| Reproject every dataset | `map.reproject(...)` |
-| Replace an application-owned dataset | `TopologySource.setDataset(...)` |
+| Reproject every registered dataset | `map.reproject(...)` |
+| Reproject a detached source | `TopologySource.reproject(...)` |
+| Replace a detached source's dataset | `TopologySource.setDataset(...)` |
 
 Direct mutation bypasses history, spatial indexes, display arcs, selection
 maintenance, and rendering invalidation.

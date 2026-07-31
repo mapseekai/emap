@@ -6,7 +6,7 @@ import {
   type MapshaperLayer,
   type PathShape,
 } from '../../types/mapshaper-types';
-import type { TopologySource } from '../../source/source';
+import { asMutableTopologySource, type TopologySource } from '../../source/source';
 import {
   SplitSharedArcsCommand,
   type AppendedArc,
@@ -155,7 +155,8 @@ function analyzeSharedNode(
   vertexId: number,
   allLayers: readonly MapshaperLayer[],
 ): SharedNodeAnalysis | null {
-  const arcs = source.getArcs();
+  const mutableSource = asMutableTopologySource(source);
+  const arcs = mutableSource.getArcs();
   const data = arcs?.getVertexData?.();
   const shape = layer.shapes?.[featureId];
   if (!arcs || !data || !shape || !isPathLayer(layer)) return null;

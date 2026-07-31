@@ -82,7 +82,7 @@
           // is ready), then addSource (order-independent) + setExtent.
           try {
             await source.setData({ filename: file.name, content });
-            map.addSource("test-source", source);
+            await map.addSource("test-source", source);
             map.setExtent(source.getExtent());
             status.textContent = `当前: ${file.name}`;
           } catch (err) {

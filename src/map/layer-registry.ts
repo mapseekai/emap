@@ -42,8 +42,8 @@ export class LayerRegistry {
   constructor(private readonly _sources: globalThis.Map<string, TopologySource>) {}
 
   /**
-   * Resolve `(sourceId, layerId)` to the underlying MapshaperLayer, or
-   * `null` when neither the source nor any layer name/id match.
+   * Resolve `(sourceId, layerId)` to the underlying MapshaperLayer. When
+   * `layerId` is omitted, resolve the source's first layer.
    *
    * `layerId` is matched in this priority order:
    *   1. The canonical id from `getLayerId(layer, idx)` — i.e. layer.name,
@@ -54,10 +54,11 @@ export class LayerRegistry {
    * Returns the FIRST hit; in a well-formed dataset every layer's
    * `getLayerId` is unique so the priority list is theoretical.
    */
-  resolve(sourceId: string, layerId: string): MapshaperLayer | null {
+  resolve(sourceId: string, layerId?: string): MapshaperLayer | null {
     const source = this._sources.get(sourceId);
     if (!source) return null;
-    return resolveLayerInList(source.getLayers() as MapshaperLayer[], layerId);
+    const layers = source.getLayers() as MapshaperLayer[];
+    return layerId === undefined ? (layers[0] ?? null) : resolveLayerInList(layers, layerId);
   }
 
   /**

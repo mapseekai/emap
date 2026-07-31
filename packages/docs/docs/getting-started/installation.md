@@ -105,7 +105,7 @@ async function loadMap(): Promise<void> {
       'https://geojson.cn/api/china/1.6.3/china.topo.json',
     );
 
-    map.addSource('china', source);
+    await map.addSource('china', source);
     map.setExtent(source.getExtent());
   } catch (error) {
     console.error('地图数据加载失败', error);
@@ -142,7 +142,7 @@ pnpm dev
 
 ```ts
 const source = await TopologySource.fromUrl('roads', '/data/roads.geojson');
-map.addSource('roads', source);
+await map.addSource('roads', source);
 map.setExtent(source.getExtent());
 ```
 
@@ -166,7 +166,7 @@ await source.setData({
   content,
 });
 
-map.addSource('districts', source);
+await map.addSource('districts', source);
 map.setExtent(source.getExtent());
 ```
 

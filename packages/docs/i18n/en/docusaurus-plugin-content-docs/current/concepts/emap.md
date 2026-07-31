@@ -46,7 +46,7 @@ application code. Do not execute user or remote input as a trusted expression.
 ```ts
 const source = await TopologySource.fromUrl('main', '/data/districts.geojson');
 
-map.addSource('main', source);
+await map.addSource('main', source);
 map.setExtent(source.getExtent());
 ```
 

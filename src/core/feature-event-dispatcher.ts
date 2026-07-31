@@ -20,7 +20,7 @@ export interface FeatureEvent {
 }
 
 type Cb = (e: FeatureEvent) => void;
-type Entry = { filter?: FeatureEventFilter; cb: Cb };
+type Entry = { filter?: FeatureEventFilter; cb: Cb; once?: boolean };
 
 /** Minimal surface the dispatcher needs from Emap (keeps it unit-testable). */
 export interface FeatureEventMapHost {
@@ -63,8 +63,6 @@ export class FeatureEventDispatcher {
   };
   private _lastKey: string | null = null;
   private _lastRef: FeatureRef | null = null;
-  /** Maps user-supplied cb → its once-wrapper so `off(type, userCb)` can resolve the wrap. */
-  private _onceWrap = new Map<Cb, Cb>();
   private _onChange?: () => void;
 
   constructor(private _host: FeatureEventMapHost) {}
@@ -88,23 +86,13 @@ export class FeatureEventDispatcher {
   /** Register a one-time listener. Cancellable via `off(type, cb)` using the original `cb`. */
   once(type: string, filter: FeatureEventFilter | undefined, cb: Cb): void {
     if (!isFeatureType(type)) return;
-    const wrap: Cb = (e) => {
-      this.off(type, cb);
-      cb(e);
-      // onChange already fired inside off(); no second call needed.
-    };
-    this._onceWrap.set(cb, wrap);
-    this._reg[type].push({ filter, cb: wrap });
+    this._reg[type].push({ filter, cb, once: true });
     this._onChange?.();
   }
 
   off(type: string, cb: Cb): void {
     if (!isFeatureType(type)) return;
-    const wrap = this._onceWrap.get(cb);
-    this._reg[type] = this._reg[type].filter(
-      (e) => e.cb !== cb && (wrap === undefined || e.cb !== wrap),
-    );
-    this._onceWrap.delete(cb);
+    this._reg[type] = this._reg[type].filter((entry) => entry.cb !== cb);
     if (!this.hasListeners()) this._clearHoverState();
     this._onChange?.();
   }
@@ -115,26 +103,26 @@ export class FeatureEventDispatcher {
   }
 
   /** Topmost hit at a point, restricted to the union of all registered filters' layers. */
-  private _hit(x: number, y: number): FeatureRef | null {
+  private _hit(x: number, y: number, types: readonly FType[]): FeatureRef | null {
+    const entries = types.flatMap((type) => this._reg[type]);
     let layers: string[] | undefined = [];
-    for (const t of TYPES) {
-      for (const e of this._reg[t]) {
-        if (!e.filter?.layers) {
-          layers = undefined;
-          break;
-        }
-        layers.push(...e.filter.layers);
+    for (const entry of entries) {
+      if (!entry.filter?.layers) {
+        layers = undefined;
+        break;
       }
-      if (layers === undefined) break;
+      layers.push(...entry.filter.layers);
     }
     const hits = this._host.queryFeatures([x, y], layers && layers.length ? { layers } : undefined);
-    if (hits.length === 0) return null;
-    const h = hits[0];
-    return { source: h.source, layer: h.layer, id: h.id };
+    for (const hit of hits) {
+      const ref = { source: hit.source, layer: hit.layer, id: hit.id };
+      if (entries.some((entry) => matches(entry.filter, ref))) return ref;
+    }
+    return null;
   }
 
   private _emit(type: FType, ref: FeatureRef, ev: NormalizedPointerEvent): void {
-    const entries = this._reg[type];
+    const entries = [...this._reg[type]];
     if (entries.length === 0) return;
     let built: FeatureEvent | null = null;
     for (const e of entries) {
@@ -152,6 +140,14 @@ export class FeatureEventDispatcher {
           originalEvent: ev.originalEvent,
         };
       }
+      if (e.once) {
+        const index = this._reg[type].indexOf(e);
+        if (index !== -1) {
+          this._reg[type].splice(index, 1);
+          if (!this.hasListeners()) this._clearHoverState();
+          this._onChange?.();
+        }
+      }
       e.cb(built);
     }
   }
@@ -159,12 +155,16 @@ export class FeatureEventDispatcher {
   dispatch(ev: NormalizedPointerEvent): void {
     if (!this.hasListeners()) return;
     if (ev.kind === 'click') {
-      const ref = this._hit(ev.point.x, ev.point.y);
+      const ref = this._hit(ev.point.x, ev.point.y, ['feature:click']);
       if (ref) this._emit('feature:click', ref, ev);
       return;
     }
     if (ev.kind !== 'move') return;
-    const ref = this._hit(ev.point.x, ev.point.y);
+    const ref = this._hit(ev.point.x, ev.point.y, [
+      'feature:hover',
+      'feature:enter',
+      'feature:leave',
+    ]);
     const key = ref ? keyOf(ref) : null;
     if (key !== this._lastKey) {
       if (this._lastRef) this._emit('feature:leave', this._lastRef, ev);

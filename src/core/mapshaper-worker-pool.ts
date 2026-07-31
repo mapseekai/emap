@@ -47,6 +47,8 @@ export interface MapshaperWorkerPoolOptions {
    * the first is busy, and so on.
    */
   poolSize?: number;
+  /** Maximum time for one worker request before its worker is restarted. Default 120 seconds. */
+  jobTimeoutMs?: number;
 }
 
 interface PendingResolver {
@@ -57,6 +59,7 @@ interface PendingResolver {
   /** Worker epoch at the time the request was posted. Used to discard
    *  late messages from a worker that's since been terminated. */
   epoch: number;
+  timeoutId?: number | NodeJS.Timeout;
 }
 
 interface RunMessage {
@@ -100,19 +103,24 @@ interface WorkerSlot {
 
 export class MapshaperWorkerPool {
   private _workerUrl: string;
-  private _WorkerCtor: typeof Worker;
+  private _WorkerCtor: typeof Worker | undefined;
   private _slots: WorkerSlot[];
   private _pending: Map<number, PendingResolver> = new Map();
   private _nextId: number = 1;
   /** Round-robin tie-breaker pointer for dispatch. */
   private _rrCursor: number = 0;
   private _destroyed: boolean = false;
+  private _jobTimeoutMs: number;
 
   constructor(opts: MapshaperWorkerPoolOptions) {
     this._workerUrl = opts.workerUrl;
     // Tests can inject a mock; production uses the global Worker.
-    this._WorkerCtor = opts.WorkerCtor ?? (globalThis as any).Worker;
+    this._WorkerCtor = opts.WorkerCtor ?? globalThis.Worker;
     const poolSize = Math.max(1, Math.floor(opts.poolSize ?? 1));
+    this._jobTimeoutMs = opts.jobTimeoutMs ?? 120_000;
+    if (!Number.isFinite(this._jobTimeoutMs) || this._jobTimeoutMs < 0) {
+      throw new Error('MapshaperWorkerPool: jobTimeoutMs must be a finite non-negative number');
+    }
     this._slots = Array.from({ length: poolSize }, () => ({
       worker: null,
       epoch: 0,
@@ -205,7 +213,14 @@ export class MapshaperWorkerPool {
     const epoch = slot.epoch;
     slot.pendingCount++;
     return new Promise<any>((resolve, reject) => {
-      this._pending.set(id, { resolve, reject, workerIndex, epoch });
+      const pending: PendingResolver = { resolve, reject, workerIndex, epoch };
+      if (this._jobTimeoutMs > 0) {
+        pending.timeoutId = setTimeout(
+          () => this._onRequestTimeout(id, workerIndex, epoch),
+          this._jobTimeoutMs,
+        );
+      }
+      this._pending.set(id, pending);
       const msg: RunMessage = { id, type: 'run', packed };
       if (typeof cmdOrCommands === 'string') {
         msg.cmd = cmdOrCommands;
@@ -220,6 +235,7 @@ export class MapshaperWorkerPool {
           worker.postMessage(msg);
         }
       } catch (err) {
+        clearTimeout(pending.timeoutId);
         this._pending.delete(id);
         slot.pendingCount = Math.max(0, slot.pendingCount - 1);
         reject(err instanceof Error ? err : new Error(String(err)));
@@ -306,7 +322,10 @@ export class MapshaperWorkerPool {
       slot.epoch++;
       slot.pendingCount = 0;
     }
-    for (const { reject } of this._pending.values()) reject(reason);
+    for (const pending of this._pending.values()) {
+      clearTimeout(pending.timeoutId);
+      pending.reject(reason);
+    }
     this._pending.clear();
   }
 
@@ -318,6 +337,8 @@ export class MapshaperWorkerPool {
     }
     const w = new this._WorkerCtor(this._workerUrl);
     w.onmessage = (e: MessageEvent) => this._onMessage(index, e.data as ResponseMessage);
+    w.onmessageerror = () =>
+      this._failWorker(index, new Error('mapshaper worker message deserialization failed'));
     w.onerror = (e: ErrorEvent) => this._onWorkerError(index, e);
     slot.worker = w;
     return w;
@@ -336,6 +357,7 @@ export class MapshaperWorkerPool {
     const slot = this._slots[workerIndex];
     if (pending.workerIndex !== workerIndex || pending.epoch !== slot.epoch) return;
     this._pending.delete(data.id);
+    clearTimeout(pending.timeoutId);
     slot.pendingCount = Math.max(0, slot.pendingCount - 1);
     if (data.type === 'ok') {
       pending.resolve(data.packed);
@@ -345,12 +367,19 @@ export class MapshaperWorkerPool {
   }
 
   private _onWorkerError(workerIndex: number, e: ErrorEvent): void {
-    // An uncaught worker exception (e.g. mapshaper bundle failed to parse)
-    // doesn't fire onmessage, so we have to fail every pending request
-    // dispatched to THIS worker to avoid hung promises. Other workers in
-    // the pool stay alive — pool size > 1 means a partial outage doesn't
-    // bring down everything.
-    const err = new Error(`mapshaper worker error: ${e.message || 'unknown'}`);
+    this._failWorker(workerIndex, new Error(`mapshaper worker error: ${e.message || 'unknown'}`));
+  }
+
+  private _onRequestTimeout(id: number, workerIndex: number, epoch: number): void {
+    const pending = this._pending.get(id);
+    if (!pending || pending.workerIndex !== workerIndex || pending.epoch !== epoch) return;
+    this._failWorker(
+      workerIndex,
+      new Error(`mapshaper worker request ${id} timed out after ${this._jobTimeoutMs}ms`),
+    );
+  }
+
+  private _failWorker(workerIndex: number, error: Error): void {
     const slot = this._slots[workerIndex];
     if (slot.worker) {
       slot.worker.terminate();
@@ -358,15 +387,15 @@ export class MapshaperWorkerPool {
     }
     slot.epoch++;
     slot.pendingCount = 0;
-    // Fail only this worker's pending requests; leave others alone.
     const toFail: number[] = [];
-    for (const [id, p] of this._pending) {
-      if (p.workerIndex === workerIndex) toFail.push(id);
+    for (const [id, pending] of this._pending) {
+      if (pending.workerIndex === workerIndex) toFail.push(id);
     }
     for (const id of toFail) {
-      const p = this._pending.get(id);
+      const pending = this._pending.get(id);
       this._pending.delete(id);
-      p?.reject(err);
+      clearTimeout(pending?.timeoutId);
+      pending?.reject(error);
     }
   }
 }

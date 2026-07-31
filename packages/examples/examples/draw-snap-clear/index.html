@@ -54,7 +54,7 @@
       if (map.getLayer('reference-line')) map.removeLayer('reference-line');
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
       await source.setData({ filename: file.name, content });
-      map.addSource(SOURCE_ID, source);
+      await map.addSource(SOURCE_ID, source);
       map.setExtent(source.getExtent());
 
       const layer = source.getLayers()[0];

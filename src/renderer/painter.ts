@@ -43,7 +43,12 @@ export interface CorePainter {
     style: StrokeStyle,
     arcs: ArcCollection,
   ): void;
-  drawArcs(arcs: ArcCollection, style: StrokeStyle, filter?: (i: number) => boolean): void;
+  drawArcs(
+    arcs: ArcCollection,
+    style: StrokeStyle,
+    filter?: (i: number) => boolean,
+    arcIds?: Uint32Array,
+  ): void;
   drawPoints(shapes: readonly (FeatureShape | null | undefined)[], style: PointStyle): void;
   drawPolygonFill(
     shapes: readonly (FeatureShape | null | undefined)[],

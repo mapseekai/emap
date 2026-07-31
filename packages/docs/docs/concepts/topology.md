@@ -2,8 +2,8 @@
 id: topology
 slug: /concepts/topology
 title: 拓扑模型
-api: []
-examples: []
+api: ["ReadonlyArcCollection","ReadonlyArcVertexData","ReadonlyCoord2","ReadonlyDataTable","ReadonlyFeatureShape","ReadonlyMapshaperDataset","ReadonlyMapshaperLayer","ReadonlyNumericArray","ReadonlyPathPart","ReadonlyPathShape","ReadonlyPointShape"]
+examples: ["rebuild-topology","vertex-editing"]
 stability: stable
 verifiedVersion: 0.5.0
 ---
@@ -53,8 +53,9 @@ if (dataset) {
 console.log(layers.map((layer) => layer.name));
 ```
 
-`getDataset()` 返回当前实时对象，不是副本。可用它做诊断和只读统计，但不能安全地
-直接改写 shapes、records 或 arcs。
+`getDataset()` 返回当前实时对象的零复制 TypeScript 深只读视图，不是副本。嵌套的
+layers、shapes、records 和元数据均为只读，arcs 只暴露查询方法。JavaScript、`any`
+或显式类型断言仍可绕过类型边界，因此数据变化仍必须走下方入口。
 
 ## 通过正确入口修改
 
@@ -63,8 +64,9 @@ console.log(layers.map((layer) => layer.name));
 | 属性值和字段 | `map.attributes` 或 attribute operation |
 | 单要素移动、旋转、顶点变化 | 编辑命令或 Handler |
 | 简化、融合、裁剪、缓冲区 | `map.ops.*` |
-| 整个数据集重投影 | `map.reproject(...)` 或 project operation |
-| 替换应用拥有的 dataset | `TopologySource.setDataset(...)`，并让地图接收 data 事件 |
+| 重投影全部已注册 dataset | `map.reproject(...)` |
+| 重投影未注册 source | `TopologySource.reproject(...)` |
+| 替换未注册 source 的 dataset | `TopologySource.setDataset(...)` |
 
 直接变更 dataset 会绕过历史、空间索引、DisplayArcs、选择维护和渲染失效。
 

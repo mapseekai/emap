@@ -1,7 +1,7 @@
 import Flatbush from 'flatbush';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import { AffineTransform } from '../geo/transform';
-import { TopologySource } from '../source/source';
+import type { MutableTopologySource } from '../source/source';
 import { getLayerId, normalizePointShape } from '../source/layer-utils';
 import type { QueryFeaturesOptions, QueriedFeature } from './types';
 import type { ArcCollection, MapshaperLayer, PathPart, PathShape } from '../types/mapshaper-types';
@@ -29,7 +29,7 @@ interface HitCandidate {
  * Extracted from Emap to keep the map class focused on coordination.
  */
 export class FeatureQuery {
-  private _sources: globalThis.Map<string, TopologySource>;
+  private _sources: globalThis.Map<string, MutableTopologySource>;
   private _getTransform: () => AffineTransform;
   private _getSize: () => { width: number; height: number };
   private _getInitialMX: () => number;
@@ -50,7 +50,7 @@ export class FeatureQuery {
   private _indexCache: globalThis.Map<string, IndexedLayer> = new globalThis.Map();
 
   constructor(
-    sources: globalThis.Map<string, TopologySource>,
+    sources: globalThis.Map<string, MutableTopologySource>,
     getTransform: () => AffineTransform,
     getSize: () => { width: number; height: number },
     getInitialMX: () => number,
@@ -106,7 +106,7 @@ export class FeatureQuery {
   // Spatial index — internals
   // ---------------------------------------------------------------------------
 
-  private _prebuildSource(sourceId: string, source: TopologySource): void {
+  private _prebuildSource(sourceId: string, source: MutableTopologySource): void {
     if (source.type !== 'topology') return;
     const layers = source.getLayers();
     const arcs = source.getArcs();

@@ -197,7 +197,7 @@
 
     const emap = await loadExampleRuntime();
 
-    const { Emap, TopologySource, NavigationControl } = emap;
+    const { Emap, TopologySource, NavigationControl, normalizeCrsString } = emap;
 
       const SOURCE_ID = 'duckdb-spatial-input';
       const OUTPUT_ID = 'duckdb-spatial-output';
@@ -261,8 +261,6 @@
     const pickedAttributes = document.getElementById('picked-attributes');
     const mapContainer = map.getCanvasContainer();
 
-    let inputDataset;
-    let outputDataset;
     let runtimePromise;
     let layerPickerEntries = [];
 
@@ -399,7 +397,7 @@
       }
 
       function datasetForLayerEntry(entry) {
-        return entry?.sourceId === OUTPUT_ID ? outputDataset : inputDataset;
+        return entry ? (map.getSource(entry.sourceId)?.getDataset() ?? null) : null;
       }
 
       function selectedOperationDataset() {
@@ -421,13 +419,56 @@
       map.clearHighlightedFeatures();
     }
 
-    function applyInputCrs() {
-      if (!inputDataset) return;
+    let uploadedInput = null;
+
+    function applyInputCrs(dataset) {
+      if (!dataset) return;
       const crs = crsInput.value.trim();
-      inputDataset.info = {
-        ...inputDataset.info,
+      dataset.info = {
+        ...dataset.info,
         crs_string: crs || undefined,
       };
+    }
+
+    async function reapplyInputCrs() {
+      if (!uploadedInput) return;
+      crsInput.disabled = true;
+      runBtn.disabled = true;
+      targetSelect.disabled = true;
+      try {
+        // Re-import the original bytes so each declaration reinterprets the
+        // uploaded coordinates instead of transforming an already-normalized
+        // dataset a second time.
+        const source = new TopologySource(SOURCE_ID);
+        await source.setData(uploadedInput);
+        const dataset = source.getDataset();
+        if (!dataset) throw new Error('文件未生成可用 dataset');
+        applyInputCrs(dataset);
+        removeSourceWithLayers(OUTPUT_ID);
+        removeSourceWithLayers(SOURCE_ID);
+        await map.addSource(SOURCE_ID, source);
+        addDisplayLayers(SOURCE_ID, source, 'duckdb-spatial-input', {
+          fill: '#dbeafe',
+          fillOpacity: 0.45,
+          line: '#1d4ed8',
+          lineWidth: 1.5,
+          pointRadius: 4,
+        });
+          populateLayerPicker(source, { sourceId: SOURCE_ID, prefix: 'duckdb-spatial-input' });
+          populateMaskLayerPicker();
+          updateOperationControls();
+          map.setExtent(source.getExtent());
+        status.textContent = `已按 ${dataset.info?.crs_string ?? '默认'} CRS 重新注册数据。`;
+      } catch (err) {
+        console.error(err);
+        removeSourceWithLayers(SOURCE_ID);
+        status.textContent = `CRS 应用失败: ${err?.message ?? err}`;
+      } finally {
+        crsInput.disabled = false;
+        const hasInput = Boolean(map.getSource(SOURCE_ID)?.getDataset());
+        runBtn.disabled = !hasInput || targetSelect.options.length === 0;
+        targetSelect.disabled = !hasInput || targetSelect.options.length === 0;
+      }
     }
 
     async function ensureDuckDbRuntime() {
@@ -555,6 +596,7 @@
         };
       }
 
+
       async function runOperation(dataset, operation, opts, runtime) {
         switch (operation) {
         case 'centroid':
@@ -620,16 +662,15 @@
       try {
         const source = new TopologySource(SOURCE_ID);
         const content = new Uint8Array(await file.arrayBuffer());
+        uploadedInput = { filename: file.name, content };
         removeSourceWithLayers(OUTPUT_ID);
-        outputDataset = undefined;
         removeSourceWithLayers(SOURCE_ID);
 
-        await source.setData({ filename: file.name, content });
-        inputDataset = source.getDataset();
-        if (!inputDataset) throw new Error('文件未生成可用 dataset');
-
-        applyInputCrs();
-        map.addSource(SOURCE_ID, source);
+        await source.setData(uploadedInput);
+        const dataset = source.getDataset();
+        if (!dataset) throw new Error('文件未生成可用 dataset');
+        applyInputCrs(dataset);
+        await map.addSource(SOURCE_ID, source);
         addDisplayLayers(SOURCE_ID, source, 'duckdb-spatial-input', {
           fill: '#dbeafe',
           fillOpacity: 0.45,
@@ -648,16 +689,18 @@
         status.textContent = `已加载 ${file.name}，${source.getLayers().length} 个图层，${featureCount} 个要素。`;
       } catch (err) {
         console.error(err);
-        inputDataset = undefined;
+        removeSourceWithLayers(SOURCE_ID);
         status.textContent = `加载失败: ${err?.message ?? err}`;
       } finally {
-        runBtn.disabled = !inputDataset || targetSelect.options.length === 0;
-        targetSelect.disabled = !inputDataset || targetSelect.options.length === 0;
+        const hasInput = Boolean(map.getSource(SOURCE_ID)?.getDataset());
+        runBtn.disabled = !hasInput || targetSelect.options.length === 0;
+        targetSelect.disabled = !hasInput || targetSelect.options.length === 0;
       }
     });
 
     runBtn.addEventListener('click', async () => {
-      if (!inputDataset) {
+      const runInputSource = map.getSource(SOURCE_ID);
+      if (!runInputSource?.getDataset()) {
         status.textContent = '请先上传数据文件。';
         return;
       }
@@ -669,7 +712,6 @@
     map.clearHighlightedFeatures();
 
     try {
-          applyInputCrs();
           const runtime = await ensureDuckDbRuntime();
           let result;
           if (operationIsRelation(operation)) {
@@ -687,12 +729,20 @@
             if (!operationDataset) throw new Error('请选择可处理的图层。');
             result = await runOperation(operationDataset, operation, makeOperationOptions(), runtime);
           }
+          if (map.getSource(SOURCE_ID) !== runInputSource) {
+            status.textContent = '输入 CRS 已变更，结果已丢弃，请重新运行。';
+            return;
+          }
           const outputSource = new TopologySource(OUTPUT_ID);
-      outputDataset = result;
-      outputSource.setDataset(result);
+          outputSource.setDataset(result);
 
       removeSourceWithLayers(OUTPUT_ID);
-      map.addSource(OUTPUT_ID, outputSource);
+      await map.addSource(OUTPUT_ID, outputSource);
+        if (map.getSource(SOURCE_ID) !== runInputSource) {
+          removeSourceWithLayers(OUTPUT_ID);
+          status.textContent = '输入 CRS 已变更，结果已丢弃，请重新运行。';
+          return;
+        }
         addDisplayLayers(OUTPUT_ID, outputSource, 'duckdb-spatial-output', {
           fill: '#fef3c7',
           fillOpacity: 0.5,
@@ -724,7 +774,7 @@
         console.error(err);
         status.textContent = `DuckDB 空间处理失败: ${err?.message ?? err}`;
       } finally {
-        runBtn.disabled = !inputDataset || targetSelect.options.length === 0;
+        runBtn.disabled = !map.getSource(SOURCE_ID)?.getDataset() || targetSelect.options.length === 0;
       }
     });
 
@@ -732,7 +782,7 @@
   targetSelect.addEventListener('change', () => {
     setCurrentLayerVisibility(targetSelect.value);
   });
-  crsInput.addEventListener('change', applyInputCrs);
+  crsInput.addEventListener('change', reapplyInputCrs);
   mapContainer.addEventListener('click', (e) => {
     const rect = mapContainer.getBoundingClientRect();
     const point = [e.clientX - rect.left, e.clientY - rect.top];

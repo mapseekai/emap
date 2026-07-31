@@ -82,7 +82,7 @@ const source = await TopologySource.fromUrl(
   'https://geojson.cn/api/china/1.6.3/china.topo.json',
 );
 
-map.addSource('china', source);
+await map.addSource('china', source);
 map.setExtent(source.getExtent());
 ```
 
@@ -140,7 +140,7 @@ file with a relative `importScripts('mapshaper-vendor.js')` call.
           'china',
           'https://geojson.cn/api/china/1.6.3/china.topo.json',
         );
-        map.addSource('china', source);
+        await map.addSource('china', source);
         map.setExtent(source.getExtent());
       })();
     </script>
@@ -152,17 +152,19 @@ file with a relative `importScripts('mapshaper-vendor.js')` call.
 
 ```ts
 const source = await TopologySource.fromUrl('roads', '/data/roads.geojson');
-map.addSource('roads', source);
+await map.addSource('roads', source);
 map.setExtent(source.getExtent());
 
 const local = new TopologySource('local');
 await local.setData({ filename: 'upload.zip', content: bytes });
-map.addSource('local', local);
+await map.addSource('local', local);
 ```
 
-`TopologySource.setData()` is awaitable. It resolves after the dataset is
-populated and the `data` event has fired. `map.addSource()` is order-independent:
-you can add a loaded source or add the source first and load it later.
+`TopologySource.setData()` resolves after the dataset is populated and its
+`data` event fires. Always await `map.addSource()`: a loaded source may need
+reprojection before registration. The APIs remain order-independent, so an
+empty source can be registered first and loaded later; that import is normalized
+to the map's active CRS before it becomes observable.
 
 Supported inputs:
 
@@ -191,10 +193,10 @@ In-memory Arrow tables work without files — this is the duckdb-wasm bridge
 (query results with an `ST_AsWKB(geometry)` column convert directly):
 
 ```ts
-import { fromArrowTable, toArrowTable, setArrowTable } from '@mapseekai/emap/arrow';
+import { setArrowTable, toArrowTableFromSource } from '@mapseekai/emap/arrow';
 
 setArrowTable(source, duckdbResultTable); // replace a source's dataset
-const table = toArrowTable(source.getDataset()!); // dataset → Arrow table
+const table = toArrowTableFromSource(source); // source dataset → Arrow table
 ```
 
 Notes:

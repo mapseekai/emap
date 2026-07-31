@@ -3,6 +3,7 @@ import { tableFromArrays } from 'apache-arrow';
 import { describe, expect, it } from 'vitest';
 import { toArrowTable } from '../arrow/dataset-to-table';
 import { datasetFromGeoJSON } from '../arrow/test-utils';
+import { parseGeoMetadata } from '../arrow/geoparquet-metadata';
 import type MapshaperDataset from '../types/mapshaper-types';
 import { DuckDbOperationError } from './duckdb-errors';
 import {
@@ -175,6 +176,9 @@ describe('processRelationWithDuckDb', () => {
 
     const inputTableName = runtime.connection.inserted[0]!.opts.name;
     const maskTableName = runtime.connection.inserted[1]!.opts.name;
+    const maskCrs = parseGeoMetadata(runtime.connection.inserted[1]!.table.schema.metadata)?.columns
+      .geometry.crs as { id?: { authority?: string; code?: number } };
+    expect(maskCrs.id).toEqual({ authority: 'EPSG', code: 3857 });
     expect(runtime.events).toEqual([
       'ensureSpatial',
       'connect',

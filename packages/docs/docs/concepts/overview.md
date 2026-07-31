@@ -101,7 +101,7 @@ if (extent.hasBounds()) {
 ```ts
 const source = await TopologySource.fromUrl('main', '/data/roads.geojson');
 
-map.addSource('main', source);
+await map.addSource('main', source);
 map.addLayer({
   id: 'roads',
   type: 'line',

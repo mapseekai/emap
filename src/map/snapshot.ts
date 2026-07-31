@@ -1,5 +1,5 @@
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
-import type { TopologySource } from '../source/source';
+import type { MutableTopologySource } from '../source/source';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { ExportSnapshotOptions, LoadSnapshotOptions } from './types';
 
@@ -9,7 +9,7 @@ export interface UnpackedSnapshot {
 }
 
 export async function exportSnapshotFromSources(
-  sources: ReadonlyMap<string, TopologySource>,
+  sources: ReadonlyMap<string, MutableTopologySource>,
   opts: ExportSnapshotOptions = {},
 ): Promise<Blob> {
   const compact = opts.compact !== false;

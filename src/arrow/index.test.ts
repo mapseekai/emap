@@ -4,6 +4,7 @@ import { setArrowTable, toArrowTableFromSource } from './index';
 import { getExportHandler, getFormatForExtension } from '../source/format-registry';
 import { TopologySource } from '../source/topology-source';
 import { datasetFromGeoJSON } from './test-utils';
+import { toArrowTable } from './dataset-to-table';
 
 describe('Arrow module registration', () => {
   it('registers import handling for all plugin extensions', () => {
@@ -47,12 +48,27 @@ describe('Arrow module registration', () => {
       ),
     });
 
-    const table = (await import('./dataset-to-table')).toArrowTable(dataset);
+    const table = toArrowTable(dataset);
     setArrowTable(source, table);
     expect(source.getLayers()[0].shapes![0]).toEqual([[1, 2]]);
 
     const back = toArrowTableFromSource(source);
     expect(back.numRows).toBe(1);
     expect(back.getChild('id')!.get(0)).toBe(9);
+  });
+
+  it('setArrowTable rejects a source without the internal mutation contract', async () => {
+    const dataset = await datasetFromGeoJSON({
+      type: 'Feature',
+      properties: {},
+      geometry: { type: 'Point', coordinates: [1, 2] },
+    });
+    const table = toArrowTable(dataset);
+    const source = new TopologySource('readonly');
+    Reflect.set(source, 'setDataset', undefined);
+
+    expect(() => setArrowTable(source, table)).toThrow(
+      'setArrowTable requires a mutable TopologySource',
+    );
   });
 });

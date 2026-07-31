@@ -1,4 +1,4 @@
-import type { TopologySource } from '../source/source';
+import type { MutableTopologySource } from '../source/source';
 import type { EditCommand } from '../edit/edit-command';
 import { CompositeCommand } from '../edit/commands/composite';
 import {
@@ -16,7 +16,7 @@ export interface SelectedFeatureDeletion {
 
 export function deleteSelectedFeatures(
   refs: readonly FeatureRef[],
-  sources: ReadonlyMap<string, TopologySource>,
+  sources: ReadonlyMap<string, MutableTopologySource>,
 ): SelectedFeatureDeletion | null {
   if (refs.length === 0) return null;
 

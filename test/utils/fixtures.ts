@@ -53,7 +53,7 @@ export async function loadFixtureDataset(name: string): Promise<MapshaperDataset
  * real source / adapter / event-loop boundary.
  *
  *   const source = await buildFixtureSource('topology-shared.geojson', 'mySrc');
- *   map.addSource(source.id, source);
+ *   await map.addSource(source.id, source);
  */
 export async function buildFixtureSource(
   fixtureName: string,

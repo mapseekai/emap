@@ -10,12 +10,14 @@ import type { EditCommand } from '../edit-command';
  */
 export class CompositeCommand implements EditCommand {
   readonly label: string | undefined;
+  readonly invalidatesPriorCommands: boolean;
 
   constructor(
     private readonly children: ReadonlyArray<EditCommand>,
     label?: string,
   ) {
     this.label = label;
+    this.invalidatesPriorCommands = children.some((child) => child.invalidatesPriorCommands);
   }
 
   do(): void {

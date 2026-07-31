@@ -124,7 +124,7 @@
       // is ready), then addSource (order-independent) + setExtent.
       try {
         await source.setData(entries);
-        map.addSource(SOURCE_ID, source);
+        await map.addSource(SOURCE_ID, source);
         map.setExtent(source.getExtent());
         refreshLayerList(source);
         status.textContent = `已加载 ${uploaded.size} 个文件。勾选 ≥ 2 个图层后点击 "合并"。`;

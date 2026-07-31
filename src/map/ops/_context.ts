@@ -8,7 +8,6 @@
 // becomes a thin facade that constructs an OpContext and delegates.
 
 import type { EmapHostInternal } from '../emap-host';
-import type { MapshaperDataset } from '../../types/mapshaper-types';
 import type { OpResult } from '../op-result';
 import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
 
@@ -39,20 +38,6 @@ export type RunDatasetCommandParsed = (
 ) => Promise<OpResult>;
 
 /**
- * Worker-only path used by `intersectionPointsLayer` / `rebuildTopology`
- * which bypass `parseCommands` and call mapshaper internals directly to
- * produce the `after` dataset. Centralised here so the dataset-replace
- * bookkeeping (history barrier flag, selection clear, render schedule)
- * stays consistent across every op that produces an `after` snapshot.
- */
-export type ApplyDatasetReplace = (
-  sourceId: string,
-  before: MapshaperDataset,
-  after: MapshaperDataset,
-  label: string,
-) => OpResult;
-
-/**
  * Everything an op function needs from the host. Intentionally narrow —
  * adding new fields here is a deliberate signal that the op surface is
  * growing.
@@ -64,6 +49,4 @@ export interface OpContext {
   runDatasetCommand: RunDatasetCommand;
   /** Parsed-command runner (PR-4b); see {@link RunDatasetCommandParsed}. */
   runDatasetCommandParsed: RunDatasetCommandParsed;
-  /** Direct dataset-replace path; see {@link ApplyDatasetReplace}. */
-  applyDatasetReplace: ApplyDatasetReplace;
 }

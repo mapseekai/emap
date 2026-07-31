@@ -1,6 +1,7 @@
 import { Bounds } from './bounds';
-import { TopologySource } from '../source/source';
+import type { MutableTopologySource } from '../source/source';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
+import type { MapshaperDataset } from '../types/mapshaper-types';
 
 /** WGS84 semi-major axis (Earth radius in meters) */
 const WGS84_SEMI_MAJOR_AXIS = 6378137;
@@ -10,6 +11,19 @@ const EARTH_CIRCUMFERENCE_WEB_MERCATOR = 40075016.6855;
 
 /** Padding factor for initial extent after reprojection */
 const INITIAL_EXTENT_PADDING = 1.07;
+
+export interface ReprojectedSource {
+  sourceId: string;
+  source: MutableTopologySource;
+  before: MapshaperDataset;
+  beforeEditVersion: number;
+  after: MapshaperDataset;
+}
+
+export interface PreparedReprojection {
+  replacements: ReprojectedSource[];
+  extent: Bounds;
+}
 
 /**
  * Projection manages the coordinate reference system and provides
@@ -69,40 +83,33 @@ export class Projection {
    * Reproject all sources to a target CRS.
    * Returns the merged extent of all reprojected layers.
    */
-  async reproject(
+  async prepareReproject(
     targetCrs: string,
-    sources: globalThis.Map<string, TopologySource>,
+    sources: globalThis.Map<string, MutableTopologySource>,
     targetCrsMetadata?: string,
-  ): Promise<Bounds> {
-    for (const source of sources.values()) {
-      if (source.reproject) {
-        await source.reproject(targetCrs, targetCrsMetadata);
-      }
+  ): Promise<PreparedReprojection> {
+    const replacements: ReprojectedSource[] = [];
+    for (const [sourceId, source] of sources) {
+      const before = source.getDataset();
+      if (!before) continue;
+      const beforeEditVersion = before.editVersion ?? 0;
+      const after = await source.prepareReproject(targetCrs, targetCrsMetadata);
+      replacements.push({ sourceId, source, before, beforeEditVersion, after });
     }
 
-    this._crs = targetCrs;
-
     const adapter = getDefaultMapshaperAdapter();
-    const newExtent = new Bounds();
-    for (const source of sources.values()) {
-      const dataset = source.getDataset();
-      if (dataset?.layers) {
-        for (const layer of dataset.layers) {
-          if (adapter.layerHasGeometry(layer)) {
-            const bb = adapter.getLayerBounds(layer, dataset.arcs);
-            if (bb) {
-              newExtent.merge(new Bounds(bb.xmin, bb.ymin, bb.xmax, bb.ymax));
-            }
-          }
+    const extent = new Bounds();
+    for (const { after } of replacements) {
+      for (const layer of after.layers) {
+        if (!adapter.layerHasGeometry(layer)) continue;
+        const bbox = adapter.getLayerBounds(layer, after.arcs);
+        if (Number.isFinite(bbox.xmin)) {
+          extent.merge(new Bounds(bbox.xmin, bbox.ymin, bbox.xmax, bbox.ymax));
         }
       }
     }
-
-    if (newExtent.hasBounds()) {
-      newExtent.scale(INITIAL_EXTENT_PADDING);
-    }
-
-    return newExtent;
+    if (extent.hasBounds()) extent.scale(INITIAL_EXTENT_PADDING);
+    return { replacements, extent };
   }
 
   private _webMercatorToLatLng(x: number, y: number): [number, number] {

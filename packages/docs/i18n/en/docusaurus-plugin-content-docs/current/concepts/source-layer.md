@@ -44,7 +44,7 @@ const source = await TopologySource.fromBytes('upload', bytes, {
 
 ```ts
 const source = new TopologySource('live');
-map.addSource('live', source);
+await map.addSource('live', source);
 
 await source.setData({
   filename: 'districts.geojson',
@@ -52,16 +52,18 @@ await source.setData({
 });
 ```
 
-`map.addSource()` is independent of load order. Whether the source finishes
-loading before or after registration, the map updates when it receives the data
-event.
+`map.addSource()` is independent of load order, but should always be awaited.
+A loaded source is normalized to the map's active CRS before registration; for
+a source loaded later, `setData()` normalizes before commit and before its
+`data` event. A registered `TopologySource.reproject()` cannot change CRS
+independently; use `map.reproject()`.
 
 ## Do not mix up the IDs
 
 Suppose an uploaded dataset has a source layer named `districts`:
 
 ```ts
-map.addSource('main', source);
+await map.addSource('main', source);
 
 map.addLayer({
   id: 'district-fill',
@@ -202,9 +204,10 @@ parser needs the extension to select an importer.
 
 ### A direct dataset change is not reflected
 
-Use `getDataset()` for read-only inspection. Apply changes through edit
-commands, edit sessions, or `map.ops` so render caches, selection, and history
-update together.
+`getDataset()`, `getLayers()`, and `getArcs()` return zero-copy, deeply
+read-only TypeScript views. Apply changes through edit commands, edit sessions,
+or `map.ops` so render caches, selection, and history update together. The
+guard is type-level; JavaScript, `any`, and explicit assertions can bypass it.
 
 ## API
 

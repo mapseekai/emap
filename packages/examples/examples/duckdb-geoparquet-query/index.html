@@ -206,11 +206,11 @@
         });
       }
 
-      function addDatasetSource(id, dataset) {
+      async function addDatasetSource(id, dataset) {
         const source = new TopologySource(id);
         removeSourceWithLayers(id);
         source.setDataset(dataset);
-        map.addSource(id, source);
+        await map.addSource(id, source);
         addDisplayLayers(id, source, "duckdb-geoparquet-output", {
           fill: "#dcfce7",
           fillOpacity: 0.52,
@@ -293,7 +293,7 @@
           } else {
             resultDataset = await querySource.query(opts);
           }
-          const outputSource = addDatasetSource(OUTPUT_ID, resultDataset);
+          const outputSource = await addDatasetSource(OUTPUT_ID, resultDataset);
           map.setExtent(outputSource.getExtent());
           const count = resultDataset.layers.reduce(
             (total, layer) => total + (layer?.shapes?.length ?? 0),
