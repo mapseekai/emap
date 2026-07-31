@@ -217,7 +217,7 @@ export function buildOverlaySql(opts: BuildOverlaySqlOptions): string {
     ')',
     'SELECT',
     ' * EXCLUDE (overlay_geometry),',
-    ` overlay_geometry AS ${outputGeometryColumn}`,
+    ` ST_AsWKB(overlay_geometry) AS ${outputGeometryColumn}`,
     'FROM overlay',
     'WHERE overlay_geometry IS NOT NULL',
     ' AND NOT ST_IsEmpty(overlay.overlay_geometry)',

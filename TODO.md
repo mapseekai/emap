@@ -71,10 +71,10 @@
   - 位置：[`src/source/topology-source.ts`](src/source/topology-source.ts)、[`src/geo/crs-resolver.ts`](src/geo/crs-resolver.ts)。
   - 验收：文档、导入 API、地图注册、Arrow/DuckDB 和测试 fixture 使用同一约定。
 
-- [ ] **修复 DuckDB overlay 集成 fixture/行为约定**
+- [x] **修复 DuckDB overlay 集成 fixture/行为约定**
   - 当前 `pnpm run test:duckdb` 的 overlay suite 有 2/4 失败：无 CRS 的 mask 被默认当作 EPSG:4326，对齐到 EPSG:26910 后不再与主数据相交。
   - 位置：[`src/duckdb/duckdb-overlay.integration.test.ts`](src/duckdb/duckdb-overlay.integration.test.ts)。
-  - 验收：在未知 CRS 策略确定后，为 mask 设置真实 CRS，或断言缺少 CRS 时明确报错；完整 `test:duckdb` 通过。
+  - 完成：mask fixture 显式携带真实 CRS；overlay SQL 将结果几何序列化为标准 WKB；完整 `test:duckdb` 通过。
 
 ## 数据所有权与 API 边界
 

@@ -87,7 +87,7 @@ async function createDuckDbTestRuntime(): Promise<DuckDbRuntime> {
   let spatialReady: Promise<void> | null = null;
 
   function wrapConnection(): DuckDbConnection {
-    const conn = db.connect() as BlockingDuckDbConnectionLike;
+    const conn = db.connect() as unknown as BlockingDuckDbConnectionLike;
     return {
       async insertArrowTable(table, opts) {
         conn.insertArrowFromIPCStream(tableToIPC(table, 'stream'), { ...opts, create: true });
@@ -141,12 +141,16 @@ async function polygonDataset(crs = 'EPSG:3857'): Promise<MapshaperDataset> {
   return dataset;
 }
 
-async function maskDataset(): Promise<MapshaperDataset> {
-  return datasetFromGeoJSON(MASK_FC);
+async function maskDataset(crs = 'EPSG:3857'): Promise<MapshaperDataset> {
+  const dataset = await datasetFromGeoJSON(MASK_FC);
+  dataset.info = { ...dataset.info, crs_string: crs };
+  return dataset;
 }
 
 async function emptyMaskDataset(): Promise<MapshaperDataset> {
-  return datasetFromGeoJSON(EMPTY_MASK_FC);
+  const dataset = await datasetFromGeoJSON(EMPTY_MASK_FC);
+  dataset.info = { ...dataset.info, crs_string: 'EPSG:3857' };
+  return dataset;
 }
 
 function records(dataset: MapshaperDataset): Array<Record<string, unknown>> {
@@ -179,7 +183,7 @@ afterAll(async () => {
 describeDuckDbIntegration('DuckDB-Wasm overlay integration', () => {
   it('clips polygon geometry with the mask, preserves input attributes, and inherits input CRS', async () => {
     const input = await polygonDataset('EPSG:26910');
-    const mask = await maskDataset();
+    const mask = await maskDataset('EPSG:26910');
 
     const result = await intersectionDatasetWithDuckDb(input, mask, {
       outputLayer: 'clipped_polygons',

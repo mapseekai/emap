@@ -155,6 +155,7 @@ describe('buildOverlaySql', () => {
     expect(sql).toContain('FROM "mask table" AS m');
     expect(sql).toContain('FROM "input table" AS i');
     expect(sql).toContain('ST_Intersection(i."geom", mask_coverage.mask_geometry)');
+    expect(sql).toContain('ST_AsWKB(overlay_geometry) AS "geom"');
     expect(sql).toContain('WHERE i."geom" IS NOT NULL');
     expect(sql).toContain('AND mask_coverage.mask_geometry IS NOT NULL');
     expect(sql).toContain('overlay_geometry IS NOT NULL');
