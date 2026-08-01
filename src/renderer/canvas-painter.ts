@@ -177,6 +177,7 @@ export class CanvasPainter implements Painter {
     ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    ctx.setLineDash((style.dash ?? []).map((length) => length * this._pixelRatio));
 
     let count = 0;
     ctx.beginPath();
@@ -215,6 +216,7 @@ export class CanvasPainter implements Painter {
     ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    ctx.setLineDash((style.dash ?? []).map((length) => length * this._pixelRatio));
 
     let arcCount = 0;
     let vertexCount = 0;

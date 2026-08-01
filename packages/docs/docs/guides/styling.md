@@ -80,11 +80,18 @@ map.addLayer({
   paint: {
     'line-color': '#1e3a8a',
     'line-width': 1.5,
+    'line-dasharray': [8, 4],
   },
 });
 ```
 
-`line-width` 省略时默认为 `0.8`。线宽会随当前渲染变换得到适合 Canvas 的宽度。
+| 属性 | 类型 | 说明 |
+|---|---|---|
+| `line-color` | `string` | Canvas 可识别的颜色字符串，默认为 `#1e88e5` |
+| `line-width` | `number` | 线宽，默认为 `0.8`；设置为 `0` 时不绘制描边 |
+| `line-dasharray` | `number[]` | 交替的实线和间隔长度，例如 `[8, 4]`；省略或传空数组时绘制实线 |
+
+线宽和虚线长度以 CSS 像素为单位，并随当前渲染变换得到适合 Canvas 的宽度。
 
 ## 点图层
 

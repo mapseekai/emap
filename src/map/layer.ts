@@ -20,6 +20,7 @@ export interface FillPaint {
 export interface LinePaint {
   'line-color'?: string;
   'line-width'?: number;
+  'line-dasharray'?: readonly number[];
 }
 
 export interface CirclePaint {
@@ -82,13 +83,27 @@ export function cloneLayerSpecification(layer: LayerSpecification): LayerSpecifi
     case 'fill':
       return {
         ...layer,
-        paint: layer.paint ? { ...layer.paint } : undefined,
+        paint: layer.paint
+          ? {
+              ...layer.paint,
+              ...(layer.paint['line-dasharray']
+                ? { 'line-dasharray': [...layer.paint['line-dasharray']] }
+                : {}),
+            }
+          : undefined,
         layout: layer.layout ? { ...layer.layout } : undefined,
       };
     case 'line':
       return {
         ...layer,
-        paint: layer.paint ? { ...layer.paint } : undefined,
+        paint: layer.paint
+          ? {
+              ...layer.paint,
+              ...(layer.paint['line-dasharray']
+                ? { 'line-dasharray': [...layer.paint['line-dasharray']] }
+                : {}),
+            }
+          : undefined,
         layout: layer.layout ? { ...layer.layout } : undefined,
       };
     case 'circle':
@@ -109,9 +124,11 @@ export function resolveStrokeStyle(
   const p = paint || {};
   const fillColor =
     'fill-color' in p && typeof p['fill-color'] === 'string' ? p['fill-color'] : undefined;
+  const dash = p['line-dasharray'];
   return {
     color: p['line-color'] || fillColor || DEFAULT_LAYER_COLOR,
     width: (p['line-width'] ?? 0.8) * lineScale,
+    ...(dash ? { dash: dash.map((length) => length * lineScale) } : {}),
   };
 }
 

@@ -43,11 +43,20 @@
     <span class="group">
       <label>描边: <input id="line-color" type="color" value="#222222" /></label>
       <label>线宽: <input id="line-width" type="number" min="0" max="10" step="0.5" value="1" /></label>
+      <label>线型:
+        <select id="line-dash">
+          <option value="">实线</option>
+          <option value="8,4">虚线</option>
+          <option value="2,4">点线</option>
+          <option value="12,4,3,4">点划线</option>
+        </select>
+      </label>
     </span>
     <span id="status">加载一个含 polygon 图层的文件</span>
     <span class="hint">
       <code>type: 'line'</code> 只画弧;
       <code>type: 'fill'</code> 先 <code>drawPolygonFill</code> 填面再 <code>drawPaths</code> 画轮廓——同一份共享 paint 决定两者样式。
+      <code>line-dasharray</code> 使用 CSS 像素定义交替的实线和间隔长度。
       <code>fill-opacity</code> 通过 canvas <code>globalAlpha</code> 叠在 <code>fill-color</code> 自带的 alpha 之上(MapLibre 语义)。
       切换时通过 <code>removeLayer</code> + <code>addLayer</code> 替换图层规格。
     </span>
@@ -72,6 +81,7 @@
     const fillAlphaOut = document.getElementById('fill-alpha-out');
     const lineColor = document.getElementById('line-color');
     const lineWidth = document.getElementById('line-width');
+    const lineDash = document.getElementById('line-dash');
     const fillGroup = document.getElementById('fill-group');
     const status = document.getElementById('status');
 
@@ -94,6 +104,8 @@
         'line-color': lineColor.value,
         'line-width': Number(lineWidth.value) || 0,
       };
+      const dash = lineDash.value.split(',').filter(Boolean).map(Number);
+      if (dash.length > 0) paint['line-dasharray'] = dash;
       if (mode === 'fill') {
         // `fill-color` is a plain hex; `fill-opacity` multiplies on top —
         // matches MapLibre semantics, lets the user tune transparency
@@ -161,6 +173,7 @@
     });
     lineColor.addEventListener('input', applyLayer);
     lineWidth.addEventListener('input', applyLayer);
+    lineDash.addEventListener('change', applyLayer);
     await autoLoadExampleFixtures('getting-started/polygon-fill');
   </script>
 </body>

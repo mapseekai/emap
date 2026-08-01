@@ -5,13 +5,16 @@ import { describe, expect, it } from 'vitest';
 import { CanvasPainter } from './canvas-painter';
 import type { PointMarkerShape, PointShape } from '../types/mapshaper-types';
 
-function makePainter(strokeCalls: string[]) {
+function makePainter(strokeCalls: string[], dashCalls: number[][] = []) {
   const ctx: any = {
     canvas: { width: 100, height: 100 },
     set strokeStyle(_v: string) {},
     set lineWidth(_v: number) {},
     set lineCap(_v: string) {},
     set lineJoin(_v: string) {},
+    setLineDash(values: number[]) {
+      dashCalls.push(values);
+    },
     beginPath() {},
     moveTo() {},
     lineTo() {},
@@ -161,6 +164,31 @@ describe('CanvasPainter batching', () => {
     });
 
     expect(strokes).toHaveLength(2);
+  });
+
+  it('applies and clears device-pixel-scaled line dashes', () => {
+    const strokes: string[] = [];
+    const dashes: number[][] = [];
+    const painter = makePainter(strokes, dashes);
+    (painter as any)._pixelRatio = 2;
+
+    painter.drawArcs(makeArcs(1) as any, { color: '#333', width: 1, dash: [8, 4] });
+    painter.drawArcs(makeArcs(1) as any, { color: '#333', width: 1 });
+
+    expect(dashes).toEqual([[16, 8], []]);
+  });
+
+  it('applies line dashes when drawing selected paths', () => {
+    const dashes: number[][] = [];
+    const painter = makePainter([], dashes);
+
+    painter.drawPaths(
+      [[[0]]] as any,
+      { color: '#333', width: 1, dash: [6, 3] },
+      makeArcs(1) as any,
+    );
+
+    expect(dashes).toEqual([[6, 3]]);
   });
 
   it('flushes drawPoints every 100 points plus a final fill', () => {

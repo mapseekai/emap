@@ -20,7 +20,7 @@
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">NormalizedPointerEvent</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#button">button</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#kind">kind</a><span class="tsd-signature-symbol">:</span><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;move&quot;</span><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;down&quot;</span><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;up&quot;</span><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;wheel&quot;</span><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;click&quot;</span><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;contextmenu&quot;</span><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;dblclick&quot;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#modifiers">modifiers</a><span class="tsd-signature-symbol">:</span> <a href="index.PointerModifiers.html" class="tsd-signature-type tsd-kind-interface">PointerModifiers</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#originalevent">originalEvent</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Event</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#point">point</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">x</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">y</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#wheeldirection">wheelDirection</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/core/handler.ts#L12">src/core/handler.ts:12</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/40945c7d603f90a4c68c928a649db0e60742167d/src/core/handler.ts#L12">src/core/handler.ts:12</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -44,42 +44,42 @@
 <div class="tsd-comment tsd-typography"><p>Mouse button for down/up/click; 0 otherwise.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/core/handler.ts#L18">src/core/handler.ts:18</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/40945c7d603f90a4c68c928a649db0e60742167d/src/core/handler.ts#L18">src/core/handler.ts:18</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="kind"><span>kind</span><a href="#kind" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">kind</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;move&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;down&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;up&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;wheel&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;click&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;contextmenu&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;dblclick&quot;</span></div>
 <div class="tsd-comment tsd-typography"><p>kind is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/core/handler.ts#L13">src/core/handler.ts:13</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/40945c7d603f90a4c68c928a649db0e60742167d/src/core/handler.ts#L13">src/core/handler.ts:13</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="modifiers"><span>modifiers</span><a href="#modifiers" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">modifiers</span><span class="tsd-signature-symbol">:</span> <a href="index.PointerModifiers.html" class="tsd-signature-type tsd-kind-interface">PointerModifiers</a></div>
 <div class="tsd-comment tsd-typography"><p>modifiers is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/core/handler.ts#L16">src/core/handler.ts:16</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/40945c7d603f90a4c68c928a649db0e60742167d/src/core/handler.ts#L16">src/core/handler.ts:16</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="originalevent"><span>original<wbr/>Event</span><a href="#originalevent" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">originalEvent</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Event</span></div>
 <div class="tsd-comment tsd-typography"><p>originalEvent is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/core/handler.ts#L21">src/core/handler.ts:21</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/40945c7d603f90a4c68c928a649db0e60742167d/src/core/handler.ts#L21">src/core/handler.ts:21</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="point"><span>point</span><a href="#point" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">point</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">x</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">y</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">}</span></div>
 <div class="tsd-comment tsd-typography"><p>Element-local pixel position.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/core/handler.ts#L15">src/core/handler.ts:15</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/40945c7d603f90a4c68c928a649db0e60742167d/src/core/handler.ts#L15">src/core/handler.ts:15</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="wheeldirection"><code class="tsd-tag">Optional</code><span>wheel<wbr/>Direction</span><a href="#wheeldirection" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">wheelDirection</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Wheel delta (sign already normalized: +1 zoom-in direction). Absent if N/A.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/core/handler.ts#L20">src/core/handler.ts:20</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/40945c7d603f90a4c68c928a649db0e60742167d/src/core/handler.ts#L20">src/core/handler.ts:20</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

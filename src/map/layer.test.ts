@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { resolveStrokeStyle, resolvePointStyle } from './layer';
-import type { LinePaint, FillPaint, CirclePaint } from './layer';
+import { cloneLayerSpecification, resolveStrokeStyle, resolvePointStyle } from './layer';
+import type { LinePaint, FillPaint, CirclePaint, LineLayerSpecification } from './layer';
 
 describe('resolveStrokeStyle', () => {
   it('returns defaults when paint is undefined', () => {
@@ -24,6 +24,28 @@ describe('resolveStrokeStyle', () => {
     const paint: LinePaint = { 'line-width': 2 };
     const style = resolveStrokeStyle(paint, 0.5);
     expect(style.width).toBe(1);
+  });
+
+  it('scales line-dasharray by lineScale', () => {
+    const paint: LinePaint = { 'line-dasharray': [8, 4] };
+    const style = resolveStrokeStyle(paint, 0.5);
+    expect(style.dash).toEqual([4, 2]);
+  });
+});
+
+describe('cloneLayerSpecification', () => {
+  it('clones line-dasharray values', () => {
+    const layer: LineLayerSpecification = {
+      id: 'roads',
+      type: 'line',
+      source: 'main',
+      paint: { 'line-dasharray': [8, 4] },
+    };
+
+    const clone = cloneLayerSpecification(layer);
+
+    expect(clone.paint?.['line-dasharray']).toEqual([8, 4]);
+    expect(clone.paint?.['line-dasharray']).not.toBe(layer.paint?.['line-dasharray']);
   });
 });
 

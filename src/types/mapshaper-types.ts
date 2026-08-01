@@ -292,6 +292,7 @@ export function bumpEditVersion(dataset: MapshaperDataset | null | undefined): v
 export interface StrokeStyle {
   color?: string;
   width?: number;
+  dash?: readonly number[];
 }
 
 /**

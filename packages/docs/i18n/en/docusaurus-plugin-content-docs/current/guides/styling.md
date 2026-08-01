@@ -81,11 +81,18 @@ map.addLayer({
   paint: {
     'line-color': '#1e3a8a',
     'line-width': 1.5,
+    'line-dasharray': [8, 4],
   },
 });
 ```
 
-`line-width` defaults to `0.8` when omitted.
+| Property | Type | Description |
+|---|---|---|
+| `line-color` | `string` | Any Canvas-compatible color string; defaults to `#1e88e5` |
+| `line-width` | `number` | Stroke width; defaults to `0.8`; use `0` to disable the stroke |
+| `line-dasharray` | `number[]` | Alternating dash and gap lengths such as `[8, 4]`; omit it or use an empty array for a solid line |
+
+Line widths and dash lengths use CSS pixels and are adjusted for the current Canvas render transform.
 
 ## Point layers
 

@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   square, upward and downward triangles, diamond, pentagon, star, cross, X,
   hexagon, and octagon markers. A new runnable point-style example loads point
   data and demonstrates live shape, color, radius, opacity, and stroke updates.
+- Line layers and polygon outlines now support `line-dasharray` with
+  device-pixel-aware dash and gap lengths, including reliable reset to solid
+  strokes between layers.
 
 ### Changed
 
