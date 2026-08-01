@@ -2,8 +2,8 @@
 id: styling
 slug: /guides/styling
 title: 样式图层
-api: ["FillPaint","LayerSpecification","LinePaint"]
-examples: ["getting-started/lines","getting-started/polygon-fill","getting-started/polygons"]
+api: ["FillPaint","LayerSpecification","LinePaint","PointMarkerShape"]
+examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons"]
 stability: stable
 verifiedVersion: 0.5.0
 ---
@@ -99,13 +99,16 @@ map.addLayer({
   paint: {
     'circle-color': '#ef4444',
     'circle-radius': 5,
+    'circle-shape': 'star',
     'circle-fill': true,
   },
 });
 ```
 
-`circle-radius` 默认为 `4`，`circle-fill` 默认为 `true`。将其设为 `false`
-可以只绘制圆形轮廓。
+`circle-radius` 默认为 `4`，`circle-shape` 默认为 `circle`，还支持 `square`、
+`triangle`、`triangle-down`、`diamond`、`pentagon`、`star`、`cross`、`x`、
+`hexagon` 和 `octagon`。`circle-fill` 默认为 `true`，将其设为 `false`
+可以只绘制形状轮廓。
 
 ## 图层顺序
 

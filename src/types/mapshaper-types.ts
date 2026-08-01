@@ -294,11 +294,30 @@ export interface StrokeStyle {
   width?: number;
 }
 
-/** Style for point rendering */
+/**
+ * Built-in Canvas marker shapes for point layers.
+ *
+ * @example
+ * const shape: PointMarkerShape = 'pentagon';
+ */
+export type PointMarkerShape =
+  | 'circle'
+  | 'square'
+  | 'triangle'
+  | 'triangle-down'
+  | 'diamond'
+  | 'pentagon'
+  | 'star'
+  | 'cross'
+  | 'x'
+  | 'hexagon'
+  | 'octagon';
+
 export interface PointStyle {
   color?: string;
   radius?: number;
   fill?: boolean;
+  shape?: PointMarkerShape;
 }
 
 /** Style for vertex dot rendering in edit mode */

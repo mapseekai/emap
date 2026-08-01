@@ -801,6 +801,9 @@ export type SimplifyMethod = 'dp' | 'visvalingam' | 'weighted';
  * The current map is never modified. `crs` accepts EPSG codes (`'EPSG:3857'`),
  * named aliases (`'webmercator'`, `'robinson'`), or full Proj.4 definitions
  * (`'+proj=utm +zone=10'`).
+ *
+ * @example
+ * const output: ProjectLayerOutputOptions = { format: 'geojson', filename: 'projected.geojson' };
  */
 export interface ProjectLayerOutputOptions {
   /** Browser export format. Defaults to `geojson`. */
@@ -809,6 +812,14 @@ export interface ProjectLayerOutputOptions {
   filename?: string;
 }
 
+/**
+ * Detached file returned after projecting a layer for export.
+ *
+ * @example
+ * function downloadProjectedLayer(result: ProjectLayerExport) {
+ *   const url = URL.createObjectURL(result.blob);
+ * }
+ */
 export interface ProjectLayerExport {
   /** Detached projected file content; save it with a download link or file picker. */
   blob: Blob;

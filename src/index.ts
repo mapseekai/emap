@@ -123,6 +123,7 @@ export type {
   PathShape,
   PointLayer,
   PointShape,
+  PointMarkerShape,
   ReadonlyArcCollection,
   ReadonlyArcVertexData,
   ReadonlyCoord2,

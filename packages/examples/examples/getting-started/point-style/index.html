@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 点图层样式 (Point layer styling)</title>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    #header select, #header input[type="color"], #header input[type="range"] { padding: 3px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; background: #fff; }
+    #header input[type="color"] { padding: 0; width: 38px; height: 26px; }
+    #header label { display: inline-flex; align-items: center; gap: 4px; }
+    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
+    .group { display: flex; gap: 8px; align-items: center; padding-left: 10px; border-left: 1px solid #4a5d70; }
+    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
+    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <label>点图层: <select id="target"></select></label>
+    <span class="group">
+      <label>形状:
+        <select id="circle-shape">
+          <option value="circle">圆形</option>
+          <option value="square">正方形</option>
+          <option value="triangle">三角形</option>
+          <option value="triangle-down">倒三角形</option>
+          <option value="diamond">菱形</option>
+          <option value="pentagon">五边形</option>
+          <option value="star">五角星</option>
+          <option value="cross">十字形</option>
+          <option value="x">X 形</option>
+          <option value="hexagon">六边形</option>
+          <option value="octagon">八边形</option>
+        </select>
+      </label>
+      <label>颜色: <input id="circle-color" type="color" value="#e4572e" /></label>
+      <label>半径: <input id="circle-radius" type="range" min="2" max="20" step="1" value="8" /> <span id="radius-output">8</span></label>
+      <label><input id="circle-fill" type="checkbox" checked /> 填充</label>
+    </span>
+    <span id="status">加载一个含 point 图层的数据文件</span>
+    <span class="hint">
+      使用 <code>circle</code> 图层渲染点数据，并通过 <code>setPaintProperty</code>
+      实时修改 <code>circle-shape</code>、<code>circle-color</code>、<code>circle-radius</code> 和 <code>circle-fill</code>。
+    </span>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <script type="module">
+    import { installExampleMapUi } from '/src/example-runtime.ts';
+    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+
+    const emap = await loadExampleRuntime();
+    const { Emap, TopologySource, NavigationControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    installExampleMapUi(map, emap);
+
+    const SOURCE_ID = 'point-style-source';
+    const LAYER_ID = 'point-style-layer';
+    const targetSel = document.getElementById('target');
+    const circleShape = document.getElementById('circle-shape');
+    const circleColor = document.getElementById('circle-color');
+    const circleRadius = document.getElementById('circle-radius');
+    const circleFill = document.getElementById('circle-fill');
+    const radiusOutput = document.getElementById('radius-output');
+    const status = document.getElementById('status');
+
+    function currentPaint() {
+      return {
+        'circle-shape': circleShape.value,
+        'circle-color': circleColor.value,
+        'circle-radius': Number(circleRadius.value),
+        'circle-fill': circleFill.checked,
+      };
+    }
+
+    function addPointLayer() {
+      const target = targetSel.value;
+      if (!target) {
+        status.textContent = '此文件没有 point 图层';
+        return;
+      }
+      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
+      map.addLayer({
+        id: LAYER_ID,
+        type: 'circle',
+        source: SOURCE_ID,
+        'source-layer': target,
+        paint: currentPaint(),
+      });
+      status.textContent = `正在显示点图层 "${target}"`;
+    }
+
+    function populate(source) {
+      targetSel.innerHTML = '';
+      source.getLayers().forEach((layer, index) => {
+        if (layer?.geometry_type !== 'point') return;
+        const name = layer?.name || layer?.id || `layer-${index}`;
+        targetSel.appendChild(new Option(name, name));
+      });
+      addPointLayer();
+    }
+
+    function updatePaint(name, value) {
+      if (!map.getLayer(LAYER_ID)) return;
+      map.setPaintProperty(LAYER_ID, name, value);
+      status.textContent = `已更新 ${name}`;
+    }
+
+    document.getElementById('file-input').addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      status.textContent = `正在加载 ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = async (loadEvent) => {
+        const content = new Uint8Array(loadEvent.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        try {
+          await source.setData({ filename: file.name, content });
+          await map.addSource(SOURCE_ID, source);
+          map.setExtent(source.getExtent());
+          populate(source);
+        } catch (error) {
+          console.error(error);
+          status.textContent = `错误: ${error?.message ?? error}`;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    targetSel.addEventListener('change', addPointLayer);
+    circleShape.addEventListener('change', () => updatePaint('circle-shape', circleShape.value));
+    circleColor.addEventListener('input', () => updatePaint('circle-color', circleColor.value));
+    circleRadius.addEventListener('input', () => {
+      const radius = Number(circleRadius.value);
+      radiusOutput.textContent = String(radius);
+      updatePaint('circle-radius', radius);
+    });
+    circleFill.addEventListener('change', () => updatePaint('circle-fill', circleFill.checked));
+
+    await autoLoadExampleFixtures('getting-started/point-style');
+  </script>
+</body>
+
+</html>

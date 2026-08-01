@@ -55,8 +55,12 @@ const exampleDescriptions = {
     en: 'Loads GeoJSON containing points, lines, and polygons, then fits the map to every feature.',
   },
   'getting-started/points': {
-    zh: '加载带属性记录的点要素，并使用 circle 图层渲染不同样式的标记。',
-    en: 'Loads point features with attribute records and renders styled markers with a circle layer.',
+    zh: '加载面或线要素，并按几何中心、顶点、端点或插值采样等方式转换为点图层。',
+    en: 'Loads polygon or line features and converts them into points using centroids, vertices, endpoints, or interpolated samples.',
+  },
+  'getting-started/point-style': {
+    zh: '加载点要素，并实时修改 circle 图层的形状、颜色、半径和填充样式。',
+    en: 'Loads point features and updates the circle layer shape, color, radius, and fill style in real time.',
   },
   'getting-started/lines': {
     zh: '加载两条线路要素，并通过 line 图层设置描边颜色和宽度。',
@@ -274,12 +278,21 @@ const seeds: readonly ExampleDefinition[] = [
   ),
   seed(
     'getting-started/points',
-    '点图层',
-    'Points',
-    [docsSourceLayer, docsFileUpload],
-    'TopologySource.fromBytes',
+    '几何转点',
+    'Geometry to points',
+    [docsSourceLayer, docsOperations, docsFileUpload],
+    'Emap.ops.pointsLayer',
+    task7Fixture,
+    'A polygon or line layer is converted into a point layer using the selected extraction mode.',
+  ),
+  seed(
+    'getting-started/point-style',
+    '点图层样式',
+    'Point layer styling',
+    [docsSourceLayer, docsStyling, docsFileUpload],
+    'Emap.setPaintProperty',
     'fixtures/getting-started-points.geojson',
-    'Three point features render as circle marks with distinct attribute records.',
+    'Three point features render as markers whose shape, color, radius, and fill style can be changed.',
   ),
   seed(
     'getting-started/lines',

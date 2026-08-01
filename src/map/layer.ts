@@ -1,4 +1,4 @@
-import type { StrokeStyle, PointStyle } from '../types/mapshaper-types';
+import type { PointMarkerShape, PointStyle, StrokeStyle } from '../types/mapshaper-types';
 
 /**
  * Paint options for polygon fills.
@@ -26,6 +26,7 @@ export interface CirclePaint {
   'circle-color'?: string;
   'circle-radius'?: number;
   'circle-fill'?: boolean;
+  'circle-shape'?: PointMarkerShape;
 }
 
 export interface FillLayerPaint extends FillPaint, LinePaint {}
@@ -120,5 +121,6 @@ export function resolvePointStyle(paint: CirclePaint | undefined): PointStyle {
     color: p['circle-color'] || DEFAULT_LAYER_COLOR,
     radius: p['circle-radius'] ?? 4,
     fill: p['circle-fill'] !== false,
+    shape: p['circle-shape'] ?? 'circle',
   };
 }

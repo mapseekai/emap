@@ -6,6 +6,12 @@ import type {
 import type { TopologySourceInput, TopologySourceOptions } from '../source/topology-source';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 
+/**
+ * Source or raw input submitted to {@link Emap.preflightSource}.
+ *
+ * @example
+ * const request: SourceLoadRequest = { id: 'roads', input: '/data/roads.geojson' };
+ */
 export type SourceLoadRequest =
   | {
       readonly id: string;
@@ -19,10 +25,22 @@ export type SourceLoadRequest =
       readonly sourceCrs?: string;
     };
 
+/**
+ * User-provided answers used to continue source preflight.
+ *
+ * @example
+ * const answers: SourceLoadAnswers = { sourceCrs: 'EPSG:4326' };
+ */
 export interface SourceLoadAnswers {
   readonly sourceCrs?: string;
 }
 
+/**
+ * Stable diagnostic codes emitted during source preflight and confirmation.
+ *
+ * @example
+ * const code: SourceLoadDiagnosticCode = 'source-crs-required';
+ */
 export type SourceLoadDiagnosticCode =
   | 'source-crs-invalid'
   | 'source-crs-required'
@@ -33,6 +51,12 @@ export type SourceLoadDiagnosticCode =
   | 'source-plan-invalid'
   | 'source-plan-stale';
 
+/**
+ * Structured warning or error produced while preparing a source.
+ *
+ * @example
+ * const diagnostic: SourceLoadDiagnostic = { code: 'source-crs-required', severity: 'error' };
+ */
 export interface SourceLoadDiagnostic {
   readonly code: SourceLoadDiagnosticCode;
   readonly severity: 'warning' | 'error';
@@ -42,12 +66,24 @@ export interface SourceLoadDiagnostic {
   readonly effectiveCrs?: string;
 }
 
+/**
+ * Additional input required before source loading can continue.
+ *
+ * @example
+ * const requirement: SourceLoadRequirement = { code: 'source-crs', field: 'sourceCrs', reason: 'missing' };
+ */
 export interface SourceLoadRequirement {
   readonly code: 'source-crs';
   readonly field: 'sourceCrs';
   readonly reason: 'missing' | 'invalid';
 }
 
+/**
+ * Metadata summary returned without registering the prepared source.
+ *
+ * @example
+ * const summary: SourceLoadSummary = { id: 'roads', layerCount: 1, sourceCrs: 'EPSG:4326' };
+ */
 export interface SourceLoadSummary {
   readonly id: string;
   readonly layerCount: number;
@@ -55,16 +91,32 @@ export interface SourceLoadSummary {
   readonly sourceCrs?: string;
 }
 
-/** Opaque handle retaining a parsed detached dataset for another preflight pass. */
+/**
+ * Opaque handle retaining a parsed detached dataset for another preflight pass.
+ *
+ * @example
+ * if (result.status === 'needs-input') await map.preflightSource(result.draft, answers);
+ */
 export interface SourceLoadDraft {
   readonly kind: 'source-load-draft';
 }
 
-/** Opaque, map-bound, single-use handle consumed by {@link Emap.confirmSource}. */
+/**
+ * Opaque, map-bound, single-use handle consumed by {@link Emap.confirmSource}.
+ *
+ * @example
+ * if (result.status === 'ready') await map.confirmSource(result.plan);
+ */
 export interface ReadySourceLoadPlan {
   readonly kind: 'ready-source-load-plan';
 }
 
+/**
+ * Discriminated result returned by {@link Emap.preflightSource}.
+ *
+ * @example
+ * const result: SourcePreflightResult = await map.preflightSource(request);
+ */
 export type SourcePreflightResult =
   | {
       readonly status: 'ready';
@@ -84,6 +136,14 @@ export type SourcePreflightResult =
       readonly diagnostics: readonly SourceLoadDiagnostic[];
     };
 
+/**
+ * Error raised when source confirmation cannot commit its prepared plan.
+ *
+ * @example
+ * const error = new SourceLoadError('source-plan-stale', [
+ *   { code: 'source-plan-stale', severity: 'error' },
+ * ]);
+ */
 export class SourceLoadError extends Error {
   constructor(
     readonly code: SourceLoadDiagnosticCode,

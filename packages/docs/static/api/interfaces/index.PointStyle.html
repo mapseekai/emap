@@ -12,15 +12,15 @@
 <li><a href="" aria-current="page">PointStyle</a></li></ul>
 <h1>Interface PointStyle</h1></div>
 <section class="tsd-panel tsd-comment">
-<div class="tsd-comment tsd-typography"><p>Style for point rendering</p>
+<div class="tsd-comment tsd-typography"><p>PointStyle is a public emap interface documented for package consumers.</p>
 </div>
 <div class="tsd-comment tsd-typography">
 <div class="tsd-tag-example">
 <h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: geoparquet-viewer.</p>
 </div></div></section>
-<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">PointStyle</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#color">color</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#fill">fill</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#radius">radius</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">PointStyle</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#color">color</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#fill">fill</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#radius">radius</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#shape">shape</a><span class="tsd-signature-symbol">?:</span> <a href="../types/index.PointMarkerShape.html" class="tsd-signature-type tsd-kind-type-alias">PointMarkerShape</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/types/mapshaper-types.ts#L298">src/types/mapshaper-types.ts:298</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/types/mapshaper-types.ts#L316">src/types/mapshaper-types.ts:316</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -31,6 +31,7 @@
 <div class="tsd-index-list"><a href="#color" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>color?</span></a>
 <a href="#fill" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>fill?</span></a>
 <a href="#radius" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>radius?</span></a>
+<a href="#shape" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>shape?</span></a>
 </div></section></div></details></section></section>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
@@ -41,21 +42,28 @@
 <div class="tsd-comment tsd-typography"><p>color is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/types/mapshaper-types.ts#L299">src/types/mapshaper-types.ts:299</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/types/mapshaper-types.ts#L317">src/types/mapshaper-types.ts:317</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="fill"><code class="tsd-tag">Optional</code><span>fill</span><a href="#fill" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">fill</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
 <div class="tsd-comment tsd-typography"><p>fill is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/types/mapshaper-types.ts#L301">src/types/mapshaper-types.ts:301</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/types/mapshaper-types.ts#L319">src/types/mapshaper-types.ts:319</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="radius"><code class="tsd-tag">Optional</code><span>radius</span><a href="#radius" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">radius</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>radius is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/types/mapshaper-types.ts#L300">src/types/mapshaper-types.ts:300</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/types/mapshaper-types.ts#L318">src/types/mapshaper-types.ts:318</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="shape"><code class="tsd-tag">Optional</code><span>shape</span><a href="#shape" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">shape</span><span class="tsd-signature-symbol">?:</span> <a href="../types/index.PointMarkerShape.html" class="tsd-signature-type tsd-kind-type-alias">PointMarkerShape</a></div>
+<div class="tsd-comment tsd-typography"><p>shape is a public emap API documented for package consumers.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/types/mapshaper-types.ts#L320">src/types/mapshaper-types.ts:320</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -72,7 +80,7 @@
 <h3>On This Page</h3></summary>
 <div class="tsd-accordion-details">
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
-<div><a href="#color"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>color</span></a><a href="#fill"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>fill</span></a><a href="#radius"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>radius</span></a></div></details></div></details></div>
+<div><a href="#color"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>color</span></a><a href="#fill"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>fill</span></a><a href="#radius"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>radius</span></a><a href="#shape"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>shape</span></a></div></details></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="../index.html">@mapseekai/emap</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">

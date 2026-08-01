@@ -8,6 +8,7 @@ import { examplePublicHref, renderCatalog } from '../../packages/examples/src/ca
 const expectedIds = [
   'getting-started/geojson-viewer',
   'getting-started/points',
+  'getting-started/point-style',
   'getting-started/lines',
   'getting-started/polygons',
   'getting-started/polygon-fill',
@@ -111,6 +112,9 @@ describe('example catalog metadata', () => {
     const byId = new Map(examples.map((example) => [example.id, example]));
 
     expect(byId.get('getting-started/points')?.fixtures).toEqual([
+      'fixtures/task-7-polygons.geojson',
+    ]);
+    expect(byId.get('getting-started/point-style')?.fixtures).toEqual([
       'fixtures/getting-started-points.geojson',
     ]);
     expect(byId.get('join')?.fixtures).toEqual([

@@ -2,8 +2,8 @@
 id: styling
 slug: /guides/styling
 title: Styling layers
-api: ["FillPaint","LayerSpecification","LinePaint"]
-examples: ["getting-started/lines","getting-started/polygon-fill","getting-started/polygons"]
+api: ["FillPaint","LayerSpecification","LinePaint","PointMarkerShape"]
+examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons"]
 stability: stable
 verifiedVersion: 0.5.0
 ---
@@ -100,13 +100,16 @@ map.addLayer({
   paint: {
     'circle-color': '#ef4444',
     'circle-radius': 5,
+    'circle-shape': 'star',
     'circle-fill': true,
   },
 });
 ```
 
-`circle-radius` defaults to `4`; `circle-fill` defaults to `true`. Set it to
-`false` to draw only the circle outline.
+`circle-radius` defaults to `4`; `circle-shape` defaults to `circle` and also accepts
+`square`, `triangle`, `triangle-down`, `diamond`, `pentagon`, `star`, `cross`, `x`,
+`hexagon`, and `octagon`. `circle-fill` defaults to `true`; set it to `false` to
+draw only the marker outline.
 
 ## Layer order
 

@@ -30,7 +30,7 @@ describe('resolveStrokeStyle', () => {
 describe('resolvePointStyle', () => {
   it('returns defaults when paint is undefined', () => {
     const style = resolvePointStyle(undefined);
-    expect(style).toEqual({ color: '#1e88e5', radius: 4, fill: true });
+    expect(style).toEqual({ color: '#1e88e5', radius: 4, fill: true, shape: 'circle' });
   });
 
   it('uses circle paint properties', () => {
@@ -38,9 +38,10 @@ describe('resolvePointStyle', () => {
       'circle-color': '#00f',
       'circle-radius': 8,
       'circle-fill': false,
+      'circle-shape': 'star',
     };
     const style = resolvePointStyle(paint);
-    expect(style).toEqual({ color: '#00f', radius: 8, fill: false });
+    expect(style).toEqual({ color: '#00f', radius: 8, fill: false, shape: 'star' });
   });
 
   it('defaults fill to true when circle-fill is not set', () => {

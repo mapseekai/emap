@@ -440,6 +440,9 @@ describe('example starter fixtures', () => {
 
   it('declares local fixture bindings for format and introductory examples', () => {
     expect(fixtureManifest['getting-started/points']).toEqual([
+      { selector: '#file-input', paths: ['fixtures/task-7-polygons.geojson'] },
+    ]);
+    expect(fixtureManifest['getting-started/point-style']).toEqual([
       { selector: '#file-input', paths: ['fixtures/getting-started-points.geojson'] },
     ]);
     expect(fixtureManifest['geoparquet-viewer']).toEqual([

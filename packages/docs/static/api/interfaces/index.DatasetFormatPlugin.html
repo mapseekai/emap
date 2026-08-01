@@ -25,7 +25,7 @@ paths consult this registry by file extension / format name.</p>
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">DatasetFormatPlugin</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#exportformats">exportFormats</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><br/>        <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-signature-symbol">(</span><br/>            <span class="tsd-kind-parameter">dataset</span><span class="tsd-signature-symbol">:</span> <a href="index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">,</span><br/>            <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">object</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="index.ExportedFormatFile.html" class="tsd-signature-type tsd-kind-interface">ExportedFormatFile</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#extensions">extensions</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#name">name</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#importbinary-1">importBinary</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">content</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Uint8Array</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">filename</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/source/format-registry.ts#L18">src/source/format-registry.ts:18</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/source/format-registry.ts#L18">src/source/format-registry.ts:18</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -50,21 +50,21 @@ paths consult this registry by file extension / format name.</p>
 <div class="tsd-comment tsd-typography"><p>Export handlers keyed by <code>ExportOptions.format</code> value.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/source/format-registry.ts#L26">src/source/format-registry.ts:26</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/source/format-registry.ts#L26">src/source/format-registry.ts:26</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="extensions"><span>extensions</span><a href="#extensions" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">extensions</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div>
 <div class="tsd-comment tsd-typography"><p>File extensions (lowercase, without dot) routed to <a href="#importbinary" class="tsd-kind-method">importBinary</a>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/source/format-registry.ts#L22">src/source/format-registry.ts:22</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/source/format-registry.ts#L22">src/source/format-registry.ts:22</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="name"><span>name</span><a href="#name" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">name</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Plugin id, e.g. <code>'geoarrow-formats'</code>. Re-registering a name replaces it.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/source/format-registry.ts#L20">src/source/format-registry.ts:20</a></li></ul></aside></section></section></details>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/source/format-registry.ts#L20">src/source/format-registry.ts:20</a></li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -87,7 +87,7 @@ paths consult this registry by file extension / format name.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="index.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/9c5e78c1029e1ca1d3e797edf034e0763112af82/src/source/format-registry.ts#L24">src/source/format-registry.ts:24</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/7642d9c9b2be37561819788a4a7e60269ff2adf0/src/source/format-registry.ts#L24">src/source/format-registry.ts:24</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

@@ -71,6 +71,14 @@ export interface TopologySource extends Source {
   getCRS?(): string;
 }
 
+/**
+ * Topology source contract used by owners that can atomically replace a dataset.
+ *
+ * @example
+ * async function replace(source: ReplaceableTopologySource, dataset: MapshaperDataset) {
+ *   await source.replaceDataset(dataset);
+ * }
+ */
 export interface ReplaceableTopologySource extends TopologySource {
   replaceDataset(dataset: MapshaperDataset): Promise<void>;
 }

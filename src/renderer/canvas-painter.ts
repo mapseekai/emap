@@ -6,6 +6,7 @@ import type {
   ArcIterator,
   FeatureShape,
   PathShape,
+  PointMarkerShape,
   StrokeStyle,
   PointStyle,
   VertexDotStyle,
@@ -15,6 +16,106 @@ const POLYGON_FILL_BATCH_SHAPE_LIMIT = 100;
 const POLYGON_FILL_BATCH_VERTEX_LIMIT = 12_000;
 const ARC_STROKE_BATCH_ARC_LIMIT = 100;
 const ARC_STROKE_BATCH_VERTEX_LIMIT = 12_000;
+const STAR_INNER_RADIUS_RATIO = 0.45;
+const CROSS_ARM_RADIUS_RATIO = 0.4;
+
+function addRegularPolygonPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  sides: number,
+  startAngle = -Math.PI / 2,
+): void {
+  for (let i = 0; i < sides; i++) {
+    const angle = startAngle + (i * Math.PI * 2) / sides;
+    const px = x + Math.cos(angle) * radius;
+    const py = y + Math.sin(angle) * radius;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+function addPointMarkerPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  shape: PointMarkerShape,
+): void {
+  switch (shape) {
+    case 'circle':
+      ctx.moveTo(x + radius, y);
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      return;
+    case 'square':
+      ctx.rect(x - radius, y - radius, radius * 2, radius * 2);
+      return;
+    case 'triangle':
+      addRegularPolygonPath(ctx, x, y, radius, 3);
+      return;
+    case 'triangle-down':
+      addRegularPolygonPath(ctx, x, y, radius, 3, Math.PI / 2);
+      return;
+    case 'diamond':
+      addRegularPolygonPath(ctx, x, y, radius, 4);
+      return;
+    case 'pentagon':
+      addRegularPolygonPath(ctx, x, y, radius, 5);
+      return;
+    case 'star':
+      for (let i = 0; i < 10; i++) {
+        const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+        const pointRadius = i % 2 === 0 ? radius : radius * STAR_INNER_RADIUS_RATIO;
+        const px = x + Math.cos(angle) * pointRadius;
+        const py = y + Math.sin(angle) * pointRadius;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      return;
+    case 'cross': {
+      const arm = radius * CROSS_ARM_RADIUS_RATIO;
+      ctx.moveTo(x - arm, y - radius);
+      ctx.lineTo(x + arm, y - radius);
+      ctx.lineTo(x + arm, y - arm);
+      ctx.lineTo(x + radius, y - arm);
+      ctx.lineTo(x + radius, y + arm);
+      ctx.lineTo(x + arm, y + arm);
+      ctx.lineTo(x + arm, y + radius);
+      ctx.lineTo(x - arm, y + radius);
+      ctx.lineTo(x - arm, y + arm);
+      ctx.lineTo(x - radius, y + arm);
+      ctx.lineTo(x - radius, y - arm);
+      ctx.lineTo(x - arm, y - arm);
+      ctx.closePath();
+      return;
+    }
+    case 'x': {
+      const arm = radius * CROSS_ARM_RADIUS_RATIO;
+      ctx.moveTo(x - radius, y - radius + arm);
+      ctx.lineTo(x - radius + arm, y - radius);
+      ctx.lineTo(x, y - arm);
+      ctx.lineTo(x + radius - arm, y - radius);
+      ctx.lineTo(x + radius, y - radius + arm);
+      ctx.lineTo(x + arm, y);
+      ctx.lineTo(x + radius, y + radius - arm);
+      ctx.lineTo(x + radius - arm, y + radius);
+      ctx.lineTo(x, y + arm);
+      ctx.lineTo(x - radius + arm, y + radius);
+      ctx.lineTo(x - radius, y + radius - arm);
+      ctx.lineTo(x - arm, y);
+      ctx.closePath();
+      return;
+    }
+    case 'hexagon':
+      addRegularPolygonPath(ctx, x, y, radius, 6, 0);
+      return;
+    case 'octagon':
+      addRegularPolygonPath(ctx, x, y, radius, 8, Math.PI / 8);
+  }
+}
 
 function absArcId(arcId: number): number {
   return arcId >= 0 ? arcId : ~arcId;
@@ -194,6 +295,7 @@ export class CanvasPainter implements Painter {
     const radius = (Number(_style?.radius) || 4) * pr;
     const color = _style?.color || '#333';
     const fill = _style?.fill !== false;
+    const markerShape = _style?.shape ?? 'circle';
     const left = -radius;
     const top = -radius;
     const right = this._canvas.width + radius;
@@ -222,8 +324,7 @@ export class CanvasPainter implements Painter {
         const x = p[0] * mx + bx;
         const y = p[1] * my + by;
         if (x < left || x > right || y < top || y > bottom) return;
-        ctx.moveTo(x + radius, y);
-        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        addPointMarkerPath(ctx, x, y, radius, markerShape);
         count++;
       });
     });

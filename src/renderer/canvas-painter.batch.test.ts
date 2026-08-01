@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 (globalThis as any).window = { devicePixelRatio: 1 };
 
 import { CanvasPainter } from './canvas-painter';
+import type { PointMarkerShape, PointShape } from '../types/mapshaper-types';
 
 function makePainter(strokeCalls: string[]) {
   const ctx: any = {
@@ -81,15 +82,34 @@ function makeCountingArcs(visited: number[]) {
   };
 }
 
-function makePointPainter(fillCalls: string[], arcCalls: unknown[] = []) {
+function makePointPainter(
+  fillCalls: string[],
+  arcCalls: unknown[] = [],
+  pathCalls: string[] = [],
+  vertexCalls: unknown[][] = [],
+) {
   const ctx: any = {
     canvas: { width: 100, height: 100 },
     set strokeStyle(_v: string) {},
     set fillStyle(_v: string) {},
     beginPath() {},
-    moveTo() {},
+    moveTo(...args: unknown[]) {
+      pathCalls.push('moveTo');
+      vertexCalls.push(args);
+    },
+    lineTo(...args: unknown[]) {
+      pathCalls.push('lineTo');
+      vertexCalls.push(args);
+    },
+    rect() {
+      pathCalls.push('rect');
+    },
+    closePath() {
+      pathCalls.push('closePath');
+    },
     arc(...args: unknown[]) {
       arcCalls.push(args);
+      pathCalls.push('arc');
     },
     fill() {
       fillCalls.push('fill');
@@ -162,6 +182,100 @@ describe('CanvasPainter batching', () => {
     painter.drawPoints([[[10, 10]], [[500, 500]]] as any, { color: '#333', radius: 4, fill: true });
 
     expect(arcs).toHaveLength(1);
+  });
+
+  it.each([
+    ['circle', ['moveTo', 'arc']],
+    ['square', ['rect']],
+    ['triangle', ['moveTo', 'lineTo', 'lineTo', 'closePath']],
+    ['triangle-down', ['moveTo', 'lineTo', 'lineTo', 'closePath']],
+    ['diamond', ['moveTo', 'lineTo', 'lineTo', 'lineTo', 'closePath']],
+    ['pentagon', ['moveTo', 'lineTo', 'lineTo', 'lineTo', 'lineTo', 'closePath']],
+    [
+      'star',
+      [
+        'moveTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'closePath',
+      ],
+    ],
+    [
+      'cross',
+      [
+        'moveTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'closePath',
+      ],
+    ],
+    [
+      'x',
+      [
+        'moveTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'lineTo',
+        'closePath',
+      ],
+    ],
+    ['hexagon', ['moveTo', 'lineTo', 'lineTo', 'lineTo', 'lineTo', 'lineTo', 'closePath']],
+    [
+      'octagon',
+      ['moveTo', 'lineTo', 'lineTo', 'lineTo', 'lineTo', 'lineTo', 'lineTo', 'lineTo', 'closePath'],
+    ],
+  ] satisfies ReadonlyArray<
+    readonly [PointMarkerShape, readonly string[]]
+  >)('draws the %s point marker path', (shape, expectedCalls) => {
+    const fills: string[] = [];
+    const pathCalls: string[] = [];
+    const painter = makePointPainter(fills, [], pathCalls);
+    const shapes: PointShape[] = [[[10, 10]]];
+
+    painter.drawPoints(shapes, { color: '#333', radius: 4, fill: true, shape });
+
+    expect(pathCalls).toEqual(expectedCalls);
+    expect(fills).toEqual(['fill']);
+  });
+
+  it('orients triangle-down toward the bottom of the canvas', () => {
+    const fills: string[] = [];
+    const vertexCalls: unknown[][] = [];
+    const painter = makePointPainter(fills, [], [], vertexCalls);
+    const shapes: PointShape[] = [[[10, 10]]];
+
+    painter.drawPoints(shapes, {
+      color: '#333',
+      radius: 4,
+      fill: true,
+      shape: 'triangle-down',
+    });
+
+    expect(vertexCalls[0]).toEqual([10, 14]);
   });
 
   it('skips vertex-dot arcs rejected by the edit viewport filter', () => {

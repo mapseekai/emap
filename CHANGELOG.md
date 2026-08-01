@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Point layers now support the `circle-shape` paint property with circle,
+  square, upward and downward triangles, diamond, pentagon, star, cross, X,
+  hexagon, and octagon markers. A new runnable point-style example loads point
+  data and demonstrates live shape, color, radius, opacity, and stroke updates.
+
 ### Changed
 
 - Dataset-replacement operations now run against isolated working copies,
@@ -23,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `MapshaperAdapter` contract.
 - Runnable examples now syntax-highlight their **View source** dialogs with
   Prism's HTML grammar and theme.
+- The former point-layer example is now identified as a feature-to-point
+  conversion example and demonstrates centroid, vertex, endpoint, and
+  interpolated point generation from polygon and line inputs.
 
 ### Fixed
 
