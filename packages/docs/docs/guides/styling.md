@@ -186,6 +186,6 @@ source layers，或先通过数据操作生成分类字段和目标图层，再�
 
 ## 可运行示例
 
-- [线图层](/mapseekai/emap/examples/getting-started/lines/)
+- [线图层样式（颜色、宽度和虚线）](/mapseekai/emap/examples/getting-started/lines/)
 - [面图层](/mapseekai/emap/examples/getting-started/polygons/)
 - [面填充](/mapseekai/emap/examples/getting-started/polygon-fill/)

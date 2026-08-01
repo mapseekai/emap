@@ -186,6 +186,6 @@ output, then assign separate paint to each render layer.
 
 ## Runnable examples
 
-- [Lines](/mapseekai/emap/examples/getting-started/lines/)
+- [Line layer styling (color, width, and dashes)](/mapseekai/emap/examples/getting-started/lines/)
 - [Polygons](/mapseekai/emap/examples/getting-started/polygons/)
 - [Polygon fill](/mapseekai/emap/examples/getting-started/polygon-fill/)

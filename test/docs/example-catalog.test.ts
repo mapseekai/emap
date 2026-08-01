@@ -117,6 +117,9 @@ describe('example catalog metadata', () => {
     expect(byId.get('getting-started/point-style')?.fixtures).toEqual([
       'fixtures/getting-started-points.geojson',
     ]);
+    expect(byId.get('getting-started/lines')?.fixtures).toEqual([
+      'fixtures/getting-started-lines.geojson',
+    ]);
     expect(byId.get('join')?.fixtures).toEqual([
       'fixtures/task-6-polygons.geojson',
       'fixtures/task-6-join.csv',
@@ -203,6 +206,23 @@ describe('example catalog metadata', () => {
       );
       expect(html, `${example.id} uses local starter data`).not.toContain('https://geojson.cn/');
     }
+  });
+
+  it('exposes live line color, width, and dash controls', async () => {
+    const html = await readFile(
+      resolve('packages/examples/examples/getting-started/lines/index.html'),
+      'utf8',
+    );
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    const dashValues = Array.from(
+      parsed.querySelectorAll<HTMLOptionElement>('#line-dash option'),
+      ({ value }) => value,
+    );
+
+    expect(parsed.querySelector('#line-color')).not.toBeNull();
+    expect(parsed.querySelector('#line-width')).not.toBeNull();
+    expect(dashValues).toEqual(['', '8,4', '2,4', '12,4,3,4']);
+    expect(html).toContain("updatePaint('line-dasharray', currentDash())");
   });
 
   it('removes the draw-snap display layer before replacing uploaded source data', async () => {
