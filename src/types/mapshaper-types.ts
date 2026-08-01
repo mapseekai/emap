@@ -143,7 +143,7 @@ export type PathGeometryType = 'polyline' | 'polygon';
  *   write back through the same array.
  * - {@link PointShape}: list of points (multi-point features). Some legacy
  *   mapshaper datasets store a single bare `[x, y]` instead of `[[x, y]]`;
- *   prefer {@link normalizePointShape} from `source/layer-utils` to coerce.
+ *   prefer `normalizePointShape` from `source/layer-utils` to coerce.
  *
  * `null` is reserved for deleted-but-still-indexed features (mapshaper keeps
  * positional alignment between `shapes` and `data.records`).
@@ -212,7 +212,7 @@ export interface PathLayer extends MapshaperLayer {
 
 /**
  * Layer narrowed to point geometry. `shapes[i]` is `PointShape | LegacyPointShape | null`;
- * use {@link normalizePointShape} to coerce to a uniform `Coord2[]`.
+ * use `normalizePointShape` to coerce to a uniform `Coord2[]`.
  */
 export interface PointLayer extends MapshaperLayer {
   geometry_type: 'point';

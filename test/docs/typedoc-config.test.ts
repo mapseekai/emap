@@ -9,7 +9,9 @@ interface TypeDocOutputConfig {
 
 interface TypeDocConfig {
   entryPoints?: unknown;
+  intentionallyNotExported?: unknown;
   outputs?: unknown;
+  treatWarningsAsErrors?: unknown;
 }
 
 interface ReflectionNode {
@@ -136,6 +138,11 @@ describe('TypeDoc public API config', () => {
       'src/arrow/index.ts',
       'src/duckdb/index.ts',
     ]);
+    expect(config.treatWarningsAsErrors).toBe(true);
+    expect(config.intentionallyNotExported).toEqual(
+      [...(config.intentionallyNotExported as string[])].sort((a, b) => a.localeCompare(b)),
+    );
+    expect(config.intentionallyNotExported).not.toHaveLength(0);
 
     expect(config.outputs).toEqual([
       { name: 'html', path: 'packages/docs/static/api' },

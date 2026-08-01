@@ -29,7 +29,7 @@ const MERGE_WINDOW_MS = 500;
  * internally, so no extra bookkeeping is required.
  *
  * Mergeable: consecutive moves of the SAME topological node within
- * {@link MERGE_WINDOW_MS} collapse into one undo entry. The merged
+ * `MERGE_WINDOW_MS` collapse into one undo entry. The merged
  * command keeps the original `from` (the very first pre-drag snapshot)
  * and adopts the latest `to`, so a single undo reverses an entire
  * arrow-key nudge sequence.

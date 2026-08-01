@@ -15,7 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   data and demonstrates live shape, color, radius, opacity, and stroke updates.
 - Line layers and polygon outlines now support `line-dasharray` with
   device-pixel-aware dash and gap lengths, including reliable reset to solid
-  strokes between layers.
+  strokes between layers. The runnable line-style example demonstrates live
+  color, width, solid, dashed, dotted, and dash-dot controls.
+
+### Fixed
+
+- TypeDoc generation now classifies intentionally internal symbols explicitly,
+  resolves all public JSDoc links, and treats future documentation warnings as
+  build failures.
 
 ### Changed
 

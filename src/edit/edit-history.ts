@@ -20,7 +20,7 @@ export interface HistoryStateSnapshot {
    */
   staleCount: number;
   /**
-   * `true` iff the command that {@link undo} would next visit is stale
+   * `true` iff the command that {@link EditHistory.undo} would next visit is stale
    * (i.e. cannot be reversed in place). Provides a single boolean for UI
    * tooltips like "the next undo crosses a topology rebuild — earlier
    * edits cannot be replayed".

@@ -44,7 +44,7 @@ const MERGE_WINDOW_MS = 500;
  * handles point-only, path-only, and mixed selections within one source.
  *
  * Mergeable: consecutive translates of the SAME (source, arcIds,
- * pointFeatures) tuple within {@link MERGE_WINDOW_MS} accumulate their
+ * pointFeatures) tuple within `MERGE_WINDOW_MS` accumulate their
  * deltas into a single entry — useful for arrow-key nudges or any UI
  * that batches `Emap.translateSelected` per keystroke.
  *

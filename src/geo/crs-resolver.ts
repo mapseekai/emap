@@ -79,7 +79,7 @@ export function resolveDatasetCRSMetadata(
  * tokens like `+proj=utm` survive.
  *
  * This is the inbound direction of the boundary translation: external/raw
- * metadata → canonical EPSG. Use {@link normalizeProjectCrs} for the outbound
+ * metadata → canonical EPSG. Use `normalizeProjectCrs` for the outbound
  * direction before handing CRS labels to mapshaper's `-proj`.
  */
 export function normalizeCrsString(str: string): string {
