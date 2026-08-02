@@ -2,6 +2,7 @@ import { normalizePointShape, getLayerId } from '../../source/layer-utils';
 import type { ArcCollection, MapshaperLayer, PathShape } from '../../types/mapshaper-types';
 import type { FeatureRef } from '../../map/types';
 import type { SelectionHandlerHost } from './selection-handler-host';
+import { addFeatureIdentity, type FeatureIdentityIndex } from '../../map/structured-keys';
 
 // ---------------------------------------------------------------------------
 // Module-private helpers — exported only for the test file.
@@ -246,12 +247,10 @@ const EPSILON = 1e-9;
 export function dedupeRefs(
   features: ReadonlyArray<{ source: string; layer: string; id: number }>,
 ): FeatureRef[] {
-  const seen = new Set<string>();
+  const seen: FeatureIdentityIndex = new globalThis.Map();
   const out: FeatureRef[] = [];
   for (const f of features) {
-    const key = `${f.source}|${f.layer}|${f.id}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (!addFeatureIdentity(seen, f)) continue;
     out.push({ source: f.source, layer: f.layer, id: f.id });
   }
   return out;

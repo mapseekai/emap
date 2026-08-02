@@ -82,6 +82,13 @@ import type {
 import { exportSnapshotFromSources, unpackSnapshot } from './snapshot';
 import { deleteSelectedFeatures } from './delete-selected';
 import { renderLayers } from './layer-renderer';
+import {
+  addLayerKey,
+  getLayerValue,
+  setLayerValue,
+  type MutableLayerKeyIndex,
+  type MutableLayerValueIndex,
+} from './structured-keys';
 // All public type/option surfaces moved to `./types`. Re-export here so
 // existing `import { MapOptions, ... } from './map'` paths keep working.
 export * from './types';
@@ -174,7 +181,8 @@ export class Emap extends EventDispatcher {
   private _layers: LayerSpecification[] = [];
   private _effectiveLayersCache: LayerSpecification[] = [];
   private _defaultLayersDirty = true;
-  private _layerArcIdsCache: globalThis.Map<string, Uint32Array> = new globalThis.Map();
+  private _layerArcIdsCache: globalThis.Map<string, globalThis.Map<MapshaperLayer, Uint32Array>> =
+    new globalThis.Map();
 
   // Interactions (delegated)
   private _handlers: HandlerManager;
@@ -1496,13 +1504,14 @@ export class Emap extends EventDispatcher {
    * should filter by `isPathLayer` before invoking.
    */
   private _getLayerArcIds(
+    sourceId: string,
     ml: MapshaperLayer,
     arcs: ArcCollection,
-    cacheKey: string,
   ): Uint32Array | null {
     if (!ml.shapes) return null;
 
-    const cached = this._layerArcIdsCache.get(cacheKey);
+    const sourceCache = this._layerArcIdsCache.get(sourceId);
+    const cached = sourceCache?.get(ml);
     if (cached) return cached;
 
     const seen = new Uint8Array(arcs.size());
@@ -1520,12 +1529,14 @@ export class Emap extends EventDispatcher {
     }
 
     const arcIds = Uint32Array.from(ids);
-    this._layerArcIdsCache.set(cacheKey, arcIds);
+    const layerCache = sourceCache ?? new globalThis.Map<MapshaperLayer, Uint32Array>();
+    layerCache.set(ml, arcIds);
+    this._layerArcIdsCache.set(sourceId, layerCache);
     return arcIds;
   }
 
-  private _getVisibleLayerKeys(): Set<string> {
-    const keys = new Set<string>();
+  private _getVisibleLayerKeys(): MutableLayerKeyIndex {
+    const keys: MutableLayerKeyIndex = new globalThis.Map();
     const layers = this._getEffectiveLayers();
     for (const layer of layers) {
       if (layer.layout?.visibility === 'none') continue;
@@ -1536,7 +1547,7 @@ export class Emap extends EventDispatcher {
         const mapshaperLayers = source.getLayers() as MapshaperLayer[];
         const idx = mapshaperLayers.indexOf(ml);
         const lid = getLayerId(ml, idx >= 0 ? idx : 0);
-        keys.add(`${layer.source}:${lid}`);
+        addLayerKey(keys, layer.source, lid);
       }
     }
     return keys;
@@ -1892,7 +1903,7 @@ export class Emap extends EventDispatcher {
         painter: this._painter,
         resolveSourceLayer: (sourceId, sourceLayerName) =>
           this.layers.resolve(sourceId, sourceLayerName),
-        getLayerArcIds: (ml, arcs, cacheKey) => this._getLayerArcIds(ml, arcs, cacheKey),
+        getLayerArcIds: (sourceId, ml, arcs) => this._getLayerArcIds(sourceId, ml, arcs),
       },
       pixelSize,
       lineScale,
@@ -1945,7 +1956,7 @@ export class Emap extends EventDispatcher {
   ): QueriedFeature[] {
     const visibleKeys = this._getVisibleLayerKeys();
     const results = this._featureQuery.query(geometryOrOptions, options, visibleKeys);
-    const renderRanks = new globalThis.Map<string, number>();
+    const renderRanks: MutableLayerValueIndex<number> = new globalThis.Map();
     const effectiveLayers = this._getEffectiveLayers();
     for (let rank = 0; rank < effectiveLayers.length; rank++) {
       const styleLayer = effectiveLayers[rank];
@@ -1959,12 +1970,12 @@ export class Emap extends EventDispatcher {
       const sourceLayerIndex = source.getLayers().indexOf(sourceLayer);
       if (sourceLayerIndex === -1) continue;
       const layerId = getLayerId(sourceLayer, sourceLayerIndex);
-      renderRanks.set(`${styleLayer.source}:${layerId}`, rank);
+      setLayerValue(renderRanks, styleLayer.source, layerId, rank);
     }
     results.sort(
       (a, b) =>
-        (renderRanks.get(`${b.source}:${b.layer}`) ?? -1) -
-        (renderRanks.get(`${a.source}:${a.layer}`) ?? -1),
+        (getLayerValue(renderRanks, b.source, b.layer) ?? -1) -
+        (getLayerValue(renderRanks, a.source, a.layer) ?? -1),
     );
     return results;
   }
@@ -2120,10 +2131,7 @@ export class Emap extends EventDispatcher {
    */
   _invalidateShapeCachesForSources(sourceIds: Iterable<string>): void {
     for (const sourceId of sourceIds) {
-      const prefix = `${sourceId}:`;
-      for (const key of this._layerArcIdsCache.keys()) {
-        if (key.startsWith(prefix)) this._layerArcIdsCache.delete(key);
-      }
+      this._layerArcIdsCache.delete(sourceId);
       this._featureQuery?.clear(sourceId);
     }
   }

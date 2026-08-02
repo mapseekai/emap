@@ -1,6 +1,7 @@
 import type { NormalizedPointerEvent } from './handler';
 import type { FeatureRef } from '../map/types';
 import type { Feature } from '../map/feature-accessor';
+import { sameFeatureIdentity } from '../map/structured-keys';
 
 /** Restrict which features a `feature:*` listener hears. Omitted = all visible. */
 export interface FeatureEventFilter {
@@ -38,9 +39,6 @@ type FType = (typeof TYPES)[number];
 function isFeatureType(t: string): t is FType {
   return (TYPES as readonly string[]).includes(t);
 }
-function keyOf(r: FeatureRef): string {
-  return `${r.source}|${r.layer}|${r.id}`;
-}
 function matches(filter: FeatureEventFilter | undefined, ref: FeatureRef): boolean {
   if (!filter) return true;
   if (filter.source && filter.source !== ref.source) return false;
@@ -61,7 +59,6 @@ export class FeatureEventDispatcher {
     'feature:enter': [],
     'feature:leave': [],
   };
-  private _lastKey: string | null = null;
   private _lastRef: FeatureRef | null = null;
   private _onChange?: () => void;
 
@@ -98,7 +95,6 @@ export class FeatureEventDispatcher {
   }
 
   private _clearHoverState(): void {
-    this._lastKey = null;
     this._lastRef = null;
   }
 
@@ -165,11 +161,9 @@ export class FeatureEventDispatcher {
       'feature:enter',
       'feature:leave',
     ]);
-    const key = ref ? keyOf(ref) : null;
-    if (key !== this._lastKey) {
+    if (!sameFeatureIdentity(ref, this._lastRef)) {
       if (this._lastRef) this._emit('feature:leave', this._lastRef, ev);
       if (ref) this._emit('feature:enter', ref, ev);
-      this._lastKey = key;
       this._lastRef = ref;
     }
     if (ref) this._emit('feature:hover', ref, ev);

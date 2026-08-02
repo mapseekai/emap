@@ -230,7 +230,10 @@ describe('FeatureQuery.clear', () => {
   }
 
   function cacheSize(): number {
-    return (Reflect.get(fq, '_indexCache') as Map<string, unknown>).size;
+    const cache = Reflect.get(fq, '_indexCache') as Map<string, Map<number, unknown>>;
+    let size = 0;
+    for (const layers of cache.values()) size += layers.size;
+    return size;
   }
 
   it('clear() with no arg drops everything', () => {
@@ -251,6 +254,17 @@ describe('FeatureQuery.clear', () => {
     buildSomeIndexes();
     fq.clear('nonexistent');
     expect(cacheSize()).toBe(3);
+  });
+
+  it('clear(sourceId) preserves a delimiter-bearing sibling source cache', () => {
+    const arcs = makeMockArcs([[0, 0, 5, 5]]);
+    const layer = { geometry_type: 'polyline', shapes: [[[0]]] };
+    callPrivate(fq, '_getOrBuildIndex', 'src', 0, layer, arcs);
+    const sibling = callPrivate(fq, '_getOrBuildIndex', 'src|nested', 0, layer, arcs);
+
+    fq.clear('src');
+
+    expect(callPrivate(fq, '_getOrBuildIndex', 'src|nested', 0, layer, arcs)).toBe(sibling);
   });
 });
 
@@ -316,11 +330,9 @@ describe('FeatureQuery editVersion cache invalidation (regression)', () => {
     callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs, { editVersion: 0 });
     callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs, { editVersion: 1 });
     callPrivate<any>(fq, '_getOrBuildIndex', 'src1', 0, layer, arcs, { editVersion: 2 });
-    const cache: Map<string, unknown> = Reflect.get(fq, '_indexCache') as any;
+    const cache = Reflect.get(fq, '_indexCache') as Map<string, Map<number, unknown>>;
     // Only the latest entry should remain for this (source,layer) pair.
-    let count = 0;
-    for (const k of cache.keys()) if (k.startsWith('src1|0|')) count++;
-    expect(count).toBe(1);
+    expect(cache.get('src1')?.size).toBe(1);
   });
 
   it('treats undefined editVersion as 0 (back-compat path)', () => {

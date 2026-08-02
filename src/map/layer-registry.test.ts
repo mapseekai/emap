@@ -5,7 +5,7 @@ import type { TopologySource } from '../source/source';
 
 // Layer resolution is the single most-called helper in the engine —
 // every op, hover, and selection write goes through it. These tests
-// pin the matching rules (`name` → `id` → positional `'layer-N'`)
+// pin the matching rules (canonical id → name alias → id alias)
 // and the null-on-miss contract.
 
 function makeLayer(props: Partial<MapshaperLayer>): MapshaperLayer {
@@ -46,8 +46,15 @@ describe('resolveLayerInList', () => {
   it('prefers an explicit name over a positional fallback', () => {
     const a = makeLayer({ name: 'layer-1' }); // ambiguous: name === 'layer-1'
     const b = makeLayer({}); // anonymous, getLayerId(b, 1) === 'layer-1'
-    // First match wins per the docstring; layer at index 0 has name 'layer-1'.
+    // The explicit name is also this layer's canonical id.
     expect(resolveLayerInList([a, b], 'layer-1')).toBe(a);
+  });
+
+  it('checks every canonical id before falling back to an earlier layer id alias', () => {
+    const alias = makeLayer({ name: 'first', id: 'target' });
+    const canonical = makeLayer({ name: 'target', id: 'second' });
+
+    expect(resolveLayerInList([alias, canonical], 'target')).toBe(canonical);
   });
 
   it('returns null for unknown layerId', () => {

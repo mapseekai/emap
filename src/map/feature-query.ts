@@ -5,6 +5,7 @@ import type { MutableTopologySource } from '../source/source';
 import { getLayerId, normalizePointShape } from '../source/layer-utils';
 import type { QueryFeaturesOptions, QueriedFeature } from './types';
 import type { ArcCollection, MapshaperLayer, PathPart, PathShape } from '../types/mapshaper-types';
+import { hasLayerKey, type LayerKeyIndex } from './structured-keys';
 
 /** Pixel distance for a bullseye hit on point features */
 const POINT_BULLSEYE_DIST = 2;
@@ -16,6 +17,13 @@ type FlatbushIndex = InstanceType<typeof Flatbush>;
 
 /** Sentinel returned by `_getOrBuildIndex` for layers with no shapes. */
 type IndexedLayer = { index: FlatbushIndex; shapeCount: number } | null;
+
+interface IndexedLayerCacheEntry {
+  shapeCount: number;
+  arcsSize: number;
+  editVersion: number;
+  value: Exclude<IndexedLayer, null>;
+}
 
 interface HitCandidate {
   shape: PathShape;
@@ -34,9 +42,8 @@ export class FeatureQuery {
   private _getSize: () => { width: number; height: number };
   private _getInitialMX: () => number;
 
-  // Per-(source, layer) Flatbush spatial index cache. Keyed by
-  // `${sourceId}|${layerIndex}|${shapes.length}|${arcs.size()}|${editVersion}`
-  // so any of three things implicitly invalidates a cached entry:
+  // Per-(source, layer) Flatbush spatial index cache. Each entry records
+  // shape count, arc count, and edit version so any change invalidates it:
   //   1. Dataset-replace ops change shape and/or arc counts.
   //   2. In-place edits (vertex move / translate / shared-arc split / …)
   //      bump `dataset.editVersion` via `bumpEditVersion`, which lands in
@@ -44,10 +51,8 @@ export class FeatureQuery {
   //   3. Manual `clear(sourceId)` calls (kept as an escape hatch for
   //      callers that mutate via paths that don't go through edit
   //      commands).
-  // The map of (sourceId, layerIndex) → null entries marks layers that
-  // have been seen as empty so the no-shape fallback path also
-  // short-circuits.
-  private _indexCache: globalThis.Map<string, IndexedLayer> = new globalThis.Map();
+  private _indexCache: globalThis.Map<string, globalThis.Map<number, IndexedLayerCacheEntry>> =
+    new globalThis.Map();
 
   constructor(
     sources: globalThis.Map<string, MutableTopologySource>,
@@ -94,12 +99,7 @@ export class FeatureQuery {
       this._indexCache.clear();
       return;
     }
-    const prefix = `${sourceId}|`;
-    const stale: string[] = [];
-    for (const key of this._indexCache.keys()) {
-      if (key.startsWith(prefix)) stale.push(key);
-    }
-    for (const key of stale) this._indexCache.delete(key);
+    this._indexCache.delete(sourceId);
   }
 
   // ---------------------------------------------------------------------------
@@ -141,18 +141,16 @@ export class FeatureQuery {
     if (!shapes || shapes.length === 0) return null;
     const arcsSize = arcs?.size?.() ?? 0;
     const editVersion = dataset?.editVersion ?? 0;
-    const key = `${sourceId}|${layerIndex}|${shapes.length}|${arcsSize}|${editVersion}`;
-    const cached = this._indexCache.get(key);
-    if (cached !== undefined) return cached;
-
-    // Pre-emptively drop stale entries for this (sourceId, layerIndex)
-    // pair. Cheap — at most one entry per (source, layer).
-    const stalePrefix = `${sourceId}|${layerIndex}|`;
-    const stale: string[] = [];
-    for (const k of this._indexCache.keys()) {
-      if (k !== key && k.startsWith(stalePrefix)) stale.push(k);
+    const sourceCache = this._indexCache.get(sourceId);
+    const cached = sourceCache?.get(layerIndex);
+    if (
+      cached &&
+      cached.shapeCount === shapes.length &&
+      cached.arcsSize === arcsSize &&
+      cached.editVersion === editVersion
+    ) {
+      return cached.value;
     }
-    for (const k of stale) this._indexCache.delete(k);
 
     const isPoint = layer.geometry_type === 'point';
     const index = new Flatbush(shapes.length);
@@ -197,7 +195,14 @@ export class FeatureQuery {
     }
     index.finish();
     const entry: IndexedLayer = { index, shapeCount: shapes.length };
-    this._indexCache.set(key, entry);
+    const layerCache = sourceCache ?? new globalThis.Map<number, IndexedLayerCacheEntry>();
+    layerCache.set(layerIndex, {
+      shapeCount: shapes.length,
+      arcsSize,
+      editVersion,
+      value: entry,
+    });
+    this._indexCache.set(sourceId, layerCache);
     return entry;
   }
 
@@ -207,7 +212,7 @@ export class FeatureQuery {
       | [[number, number], [number, number]]
       | QueryFeaturesOptions,
     options?: QueryFeaturesOptions,
-    visibleLayers?: Set<string>,
+    visibleLayers?: LayerKeyIndex,
   ): QueriedFeature[] {
     const { width, height } = this._getSize();
     const isGeometry = Array.isArray(geometryOrOptions);
@@ -459,7 +464,7 @@ export class FeatureQuery {
   private _queryFeaturesAtPoint(
     point: [number, number],
     options: QueryFeaturesOptions,
-    visibleLayers?: Set<string>,
+    visibleLayers?: LayerKeyIndex,
   ): QueriedFeature[] {
     const transform = this._getTransform();
     const results: QueriedFeature[] = [];
@@ -478,7 +483,7 @@ export class FeatureQuery {
         if (!this._layerMatchesFilter(layer, layerIndex, options.layers)) continue;
 
         const layerId = getLayerId(layer, layerIndex);
-        if (visibleLayers && !visibleLayers.has(`${sourceId}:${layerId}`)) continue;
+        if (visibleLayers && !hasLayerKey(visibleLayers, sourceId, layerId)) continue;
 
         const geometryType = layer.geometry_type;
         let ids: number[] = [];
@@ -515,7 +520,7 @@ export class FeatureQuery {
   private _queryFeaturesInBBox(
     bbox: [[number, number], [number, number]],
     options: QueryFeaturesOptions,
-    visibleLayers?: Set<string>,
+    visibleLayers?: LayerKeyIndex,
   ): QueriedFeature[] {
     const transform = this._getTransform();
     const results: QueriedFeature[] = [];
@@ -540,7 +545,7 @@ export class FeatureQuery {
         if (!this._layerMatchesFilter(layer, layerIndex, options.layers)) continue;
 
         const layerId = getLayerId(layer, layerIndex);
-        if (visibleLayers && !visibleLayers.has(`${sourceId}:${layerId}`)) continue;
+        if (visibleLayers && !hasLayerKey(visibleLayers, sourceId, layerId)) continue;
 
         const geometryType = layer.geometry_type;
         const table = layer.data;

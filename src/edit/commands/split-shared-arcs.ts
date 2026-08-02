@@ -121,9 +121,11 @@ export function planSharedArcSplit(
   const selectedRefs = new Uint32Array(arcCount);
   const unselectedRefs = new Uint32Array(arcCount);
 
-  const selectedKey = new Set<string>();
+  const selectedByLayer = new globalThis.Map<MapshaperLayer, Set<number>>();
   for (const s of selected) {
-    selectedKey.add(featureKey(s.layer, s.featureId));
+    const featureIds = selectedByLayer.get(s.layer) ?? new Set<number>();
+    featureIds.add(s.featureId);
+    selectedByLayer.set(s.layer, featureIds);
   }
 
   for (const layer of allLayers) {
@@ -133,7 +135,7 @@ export function planSharedArcSplit(
     for (let fid = 0; fid < shapes.length; fid++) {
       const shape = shapes[fid];
       if (!shape) continue;
-      const isSelected = selectedKey.has(featureKey(layer, fid));
+      const isSelected = selectedByLayer.get(layer)?.has(fid) === true;
       for (const part of shape) {
         if (!Array.isArray(part)) continue;
         for (const raw of part) {
@@ -214,15 +216,6 @@ export function planSharedArcSplit(
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-function featureKey(layer: MapshaperLayer, featureId: number): string {
-  // Layer object identity is enough as a key — within one dataset the same
-  // layer reference is stable. Encode by mixing object identity into a
-  // weak-map alternative wouldn't be JSON-serialisable, so we just use a
-  // per-call string built from the layer's name + featureId. Within one
-  // session the layer name is stable.
-  return `${layer.name ?? ''}#${featureId}`;
-}
 
 function cloneShape(shape: PathShape): PathShape {
   return shape.map((part) => part.slice());

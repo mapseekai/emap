@@ -32,8 +32,12 @@ export function resolveLayerInList(
     const layer = layers[i];
     if (!layer) continue;
     if (getLayerId(layer, i) === layerId) return layer;
-    if (layer.name === layerId) return layer;
-    if (layer.id === layerId) return layer;
+  }
+  for (const layer of layers) {
+    if (layer?.name === layerId) return layer;
+  }
+  for (const layer of layers) {
+    if (layer?.id === layerId) return layer;
   }
   return null;
 }

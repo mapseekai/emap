@@ -78,6 +78,22 @@ describe('FeatureEventDispatcher', () => {
     expect(hover.mock.calls.map((c) => c[0].ref.id)).toEqual([1, 1, 2]);
   });
 
+  it('distinguishes hover refs whose pipe-joined forms collide', () => {
+    const first = { source: 'a|b', layer: 'c', id: 1 };
+    const second = { source: 'a', layer: 'b|c', id: 1 };
+    const d = new FeatureEventDispatcher(stubMap([[first], [second]]) as any);
+    const enter = vi.fn();
+    const leave = vi.fn();
+    d.on('feature:enter', undefined, enter);
+    d.on('feature:leave', undefined, leave);
+
+    d.dispatch(ev('move', 0, 0));
+    d.dispatch(ev('move', 1, 1));
+
+    expect(enter.mock.calls.map((call) => call[0].ref)).toEqual([first, second]);
+    expect(leave.mock.calls.map((call) => call[0].ref)).toEqual([first]);
+  });
+
   it('per-listener {layers} filter: only matching refs delivered', () => {
     const map = stubMap([[{ source: 's', layer: 'roads', id: 5 }]]);
     const d = new FeatureEventDispatcher(map as any);

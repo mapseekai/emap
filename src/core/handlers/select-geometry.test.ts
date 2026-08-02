@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { featureMatchesLasso, pointInPolygon } from './select-geometry';
+import { dedupeRefs, featureMatchesLasso, pointInPolygon } from './select-geometry';
 
 function makePathSource(
   layer: { name: string; geometry_type: 'polyline' | 'polygon'; shapes: any[] },
@@ -29,6 +29,17 @@ function makePathSource(
     }),
   };
 }
+
+describe('dedupeRefs', () => {
+  it('does not collapse distinct refs whose pipe-joined forms collide', () => {
+    const refs = [
+      { source: 'a|b', layer: 'c', id: 1 },
+      { source: 'a', layer: 'b|c', id: 1 },
+    ];
+
+    expect(dedupeRefs(refs)).toEqual(refs);
+  });
+});
 
 describe('pointInPolygon', () => {
   // Unit square 0..10 in both dims.

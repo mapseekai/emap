@@ -74,6 +74,16 @@ describe('planSharedArcSplit', () => {
     expect(plan!.originalArcCount).toBe(5);
   });
 
+  it('uses layer identity when different layers share the same name and feature id', () => {
+    const { source, layerA, layerB } = buildFixture();
+    layerB.name = layerA.name;
+
+    const plan = planSharedArcSplit(source, [{ layer: layerA, featureId: 0 }], [layerA, layerB]);
+
+    expect(plan).not.toBeNull();
+    expect(plan!.remaps).toHaveLength(1);
+  });
+
   it('preserves direction of reversed arc references in selection', () => {
     const { source, arcs, layerA, layerB } = buildFixture();
     // Make A reference the shared arc reversed (~1) instead of forward.

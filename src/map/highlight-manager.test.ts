@@ -155,10 +155,22 @@ describe('HighlightManager.renderHighlights', () => {
     ]);
     const painter = makePainterStub();
     // Filter excludes 'src1:parks' → no draw call.
-    h.renderHighlights(painter, sources, new AffineTransform(), 1, new Set(['src1:other']));
+    h.renderHighlights(
+      painter,
+      sources,
+      new AffineTransform(),
+      1,
+      new Map([['src1', new Set(['other'])]]),
+    );
     expect(painter.drawPaths).not.toHaveBeenCalled();
     // Filter includes 'src1:parks' → drawPaths fires.
-    h.renderHighlights(painter, sources, new AffineTransform(), 1, new Set(['src1:parks']));
+    h.renderHighlights(
+      painter,
+      sources,
+      new AffineTransform(),
+      1,
+      new Map([['src1', new Set(['parks'])]]),
+    );
     expect(painter.drawPaths).toHaveBeenCalledTimes(1);
   });
 

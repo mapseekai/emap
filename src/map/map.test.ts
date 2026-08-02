@@ -6,11 +6,13 @@ import type { LayerSpecification } from './layer';
 import { Selection } from './selection';
 import { Projection } from '../geo/projection';
 import { Viewport } from '../geo/viewport';
+import { AffineTransform } from '../geo/transform';
 import { EditHistory } from '../edit/edit-history';
 import { CompositeCommand } from '../edit/commands/composite';
 import { ValidatorRegistry } from '../validation/registry';
 import { FeatureAccessor } from './feature-accessor';
 import { TopologySource } from '../source/topology-source';
+import { FeatureQuery } from './feature-query';
 
 // Snapshot the real mapshaper.internal entry points at module-load time,
 // BEFORE any test has had a chance to mock them. Some test blocks below
@@ -728,6 +730,133 @@ describe('Emap layer management', () => {
       expect(ids).toEqual(['a', 'b', 'c']);
     });
 
+    it('renders and hit-tests a later-added cross-source layer on top', () => {
+      const lowerLayer = {
+        name: 'lower-data',
+        geometry_type: 'point' as const,
+        shapes: [[[5, 5]]],
+      };
+      const upperLayer = {
+        name: 'upper-data',
+        geometry_type: 'point' as const,
+        shapes: [[[5, 5]]],
+      };
+      registerMockSource(map, 'lower', createMockSource([lowerLayer]));
+      registerMockSource(map, 'upper', createMockSource([upperLayer]));
+      map.addLayer({
+        id: 'lower-style',
+        type: 'circle',
+        source: 'lower',
+        'source-layer': 'lower-data',
+        paint: { 'circle-color': '#111' },
+      });
+      map.addLayer({
+        id: 'upper-style',
+        type: 'circle',
+        source: 'upper',
+        'source-layer': 'upper-data',
+        paint: { 'circle-color': '#eee' },
+      });
+
+      const drawPoints = vi.fn();
+      setPrivate(map, '_painter', { drawPoints });
+      setPrivate(map, '_viewport', {});
+      callPrivate(map, '_renderLayers', 1, 1);
+
+      expect(drawPoints.mock.calls.map(([, style]) => style.color)).toEqual(['#111', '#eee']);
+
+      setPrivate(map, '_featureQuery', {
+        query: vi.fn(() => [
+          {
+            id: 0,
+            source: 'lower',
+            layer: 'lower-data',
+            geometryType: 'point',
+            properties: {},
+          },
+          {
+            id: 0,
+            source: 'upper',
+            layer: 'upper-data',
+            geometryType: 'point',
+            properties: {},
+          },
+        ]),
+      });
+
+      expect(map.queryFeatures([5, 5]).map((feature) => feature.source)).toEqual([
+        'upper',
+        'lower',
+      ]);
+    });
+
+    it('does not expose an unstyled source/layer pair that collides on colon-joined ids', () => {
+      const visibleLayer = {
+        name: 'c',
+        geometry_type: 'point' as const,
+        shapes: [[[5, 5]]],
+      };
+      const hiddenLayer = {
+        name: 'b:c',
+        geometry_type: 'point' as const,
+        shapes: [[[5, 5]]],
+      };
+      registerMockSource(map, 'a:b', createMockSource([visibleLayer]));
+      registerMockSource(map, 'a', createMockSource([hiddenLayer]));
+      map.addLayer({
+        id: 'visible-style',
+        type: 'circle',
+        source: 'a:b',
+        'source-layer': 'c',
+      });
+      const sources = getPrivate(map, '_sources') as unknown as ConstructorParameters<
+        typeof FeatureQuery
+      >[0];
+      setPrivate(
+        map,
+        '_featureQuery',
+        new FeatureQuery(
+          sources,
+          () => new AffineTransform(),
+          () => ({ width: 100, height: 100 }),
+          () => 1,
+        ),
+      );
+
+      expect(map.queryFeatures([5, 5]).map(({ source, layer }) => ({ source, layer }))).toEqual([
+        { source: 'a:b', layer: 'c' },
+      ]);
+    });
+
+    it('keeps arc-id caches separate for colon-bearing source/layer pairs', () => {
+      const firstLayer = {
+        name: 'c',
+        geometry_type: 'polyline' as const,
+        shapes: [[[0]]],
+      };
+      const secondLayer = {
+        name: 'b:c',
+        geometry_type: 'polyline' as const,
+        shapes: [[[1]]],
+      };
+      const firstSource = createMockSource([firstLayer]);
+      const secondSource = createMockSource([secondLayer]);
+      firstSource.getArcs.mockReturnValue({ size: () => 2 } as never);
+      secondSource.getArcs.mockReturnValue({ size: () => 2 } as never);
+      registerMockSource(map, 'a:b', firstSource);
+      registerMockSource(map, 'a', secondSource);
+      map.addLayer({ id: 'first', type: 'line', source: 'a:b', 'source-layer': 'c' });
+      map.addLayer({ id: 'second', type: 'line', source: 'a', 'source-layer': 'b:c' });
+      const drawArcs = vi.fn();
+      setPrivate(map, '_painter', { drawArcs });
+      setPrivate(map, '_viewport', { getArcFilter: vi.fn(() => undefined) });
+
+      callPrivate(map, '_renderLayers', 1, 1);
+
+      expect(Array.from(drawArcs.mock.calls[0][3])).toEqual([0]);
+      expect(Array.from(drawArcs.mock.calls[1][3])).toEqual([1]);
+    });
+
     it('throws if before layer does not exist', () => {
       const source = createMockSource();
       registerMockSource(map, 'src1', source);
@@ -900,7 +1029,7 @@ describe('Emap layer management', () => {
         layout: { visibility: 'none' },
       });
 
-      const keys = callPrivate(map, '_getVisibleLayerKeys') as Set<string>;
+      const keys = callPrivate(map, '_getVisibleLayerKeys') as Map<string, Set<string>>;
       expect(keys.size).toBe(0);
     });
 
@@ -915,8 +1044,8 @@ describe('Emap layer management', () => {
         'source-layer': 'roads',
       });
 
-      const keys = callPrivate(map, '_getVisibleLayerKeys') as Set<string>;
-      expect(keys.has('src1:roads')).toBe(true);
+      const keys = callPrivate(map, '_getVisibleLayerKeys') as Map<string, Set<string>>;
+      expect(keys.get('src1')?.has('roads')).toBe(true);
     });
   });
 });
@@ -7756,6 +7885,53 @@ describe('Emap.remove() teardown', () => {
     map.remove();
     expect(sourceOff).toHaveBeenCalledTimes(2);
     expect(sourceOff).toHaveBeenCalledWith('data', expect.any(Function));
+  });
+
+  it('releases map-owned source hooks without deleting retained source data', async () => {
+    const { map } = buildStubMap();
+    const initialDataset = {
+      layers: [{ geometry_type: 'point' as const, shapes: [[[0, 0]]] }],
+      info: { crs_string: 'EPSG:3857' },
+    };
+    const importedDataset = {
+      layers: [{ geometry_type: 'point' as const, shapes: [[[1, 1]]] }],
+      info: { crs_string: 'EPSG:3857' },
+    };
+    const projectedDataset = {
+      layers: [{ geometry_type: 'point' as const, shapes: [[[2, 2]]] }],
+      info: {},
+    };
+    const runImport = vi.fn(async () => importedDataset);
+    const runOnDataset = vi.fn(async () => projectedDataset);
+    const source = new TopologySource('retained', {
+      adapter: {
+        copyDataset: (dataset) => ({ ...dataset, layers: [...dataset.layers] }),
+        runImport,
+        runOnDataset,
+      },
+    });
+    const staleNormalizer = vi.fn(async () => {
+      throw new Error('destroyed map normalizer ran');
+    });
+    const staleDataListener = vi.fn();
+    source.setDataset(initialDataset);
+    source.setDatasetNormalizer(staleNormalizer);
+    source.setManagedCRS(() => 'EPSG:3857');
+    source.on('data', staleDataListener);
+    setPrivate(map, '_sources', new globalThis.Map([['retained', source]]));
+    setPrivate(map, '_sourceListeners', new globalThis.Map([['retained', staleDataListener]]));
+
+    map.remove();
+
+    expect(source.getDataset()).toBe(initialDataset);
+    await source.setData({ filename: 'next.geojson', content: new Uint8Array([1]) });
+    await source.reproject('EPSG:4326');
+    expect(staleNormalizer).not.toHaveBeenCalled();
+    expect(staleDataListener).not.toHaveBeenCalled();
+    expect(runImport).toHaveBeenCalledTimes(1);
+    expect(runOnDataset).toHaveBeenCalledTimes(1);
+    expect(source.getDataset()).toBe(projectedDataset);
+    expect(source.getDataset()?.info?.crs_string).toBe('EPSG:4326');
   });
 
   it('cancels then destroys the worker pool in order', () => {

@@ -48,14 +48,14 @@
   - 验收：提交状态和 history 先完整落定，再发布通知；监听器异常不能留下无 history 的部分提交。明确采用异常隔离或可靠 rollback 策略。
   - 测试：source `data`、map `data`、`crschange`、`move`、`historychange` listener 分别抛错后的 dataset/CRS/history 一致性。
 
-- [ ] **P1：统一保留所有 DuckDB dataset 输出的主 CRS 元数据**
+- [x] **P1：统一保留所有 DuckDB dataset 输出的主 CRS 元数据**
   - geometry、attribute、relation、overlay 输出目前只复制 `info.crs_string`。
   - 主数据若只有 `info.prj`、`info.wkt1` 或 `info.crs`，输出坐标仍在主 CRS 中，但元数据会丢失；再次加入地图时可能被当作 EPSG:4326 并二次投影。
   - 位置：[`src/duckdb/duckdb-geometry-op.ts`](src/duckdb/duckdb-geometry-op.ts)、[`src/duckdb/duckdb-attribute-op.ts`](src/duckdb/duckdb-attribute-op.ts)、[`src/duckdb/duckdb-relation-op.ts`](src/duckdb/duckdb-relation-op.ts)、[`src/duckdb/duckdb-overlay-op.ts`](src/duckdb/duckdb-overlay-op.ts)、[`src/geo/crs-resolver.ts`](src/geo/crs-resolver.ts)。
   - 验收：所有 DuckDB dataset 输出通过同一 helper 解析并写入规范化主 CRS；不得只检查 `crs_string`。
   - 测试：分别覆盖仅有 `prj`、`wkt1`、legacy `crs` 和规范 `crs_string` 的输入。
 
-- [ ] **P1：`map.remove()` 必须释放 source 的 CRS 管理 hook**
+- [x] **P1：`map.remove()` 必须释放 source 的 CRS 管理 hook**
   - `removeSource()` 会清理 normalizer/managed CRS，但完整 `map.remove()` 只移除 data listener 并清空 source map。
   - 外部继续持有 source 时，后续 `setData()` 仍会调用已销毁地图，`source.reproject()` 仍认为自己受管。
   - 位置：[`src/map/map.ts`](src/map/map.ts)。
@@ -97,12 +97,12 @@
   - 位置：[`src/map/types.ts`](src/map/types.ts)、[`src/map/map.ts`](src/map/map.ts)。
   - 验收：仅销毁内部创建的 pool；外部 pool 只解除本地图引用/任务，或提供显式 ownership 选项。
 
-- [ ] **修复 `LayerRegistry.resolve()` 的全局匹配优先级**
+- [x] **修复 `LayerRegistry.resolve()` 的全局匹配优先级**
   - 文档声称先全局匹配 canonical ID，再 name，再 id；实现却逐 layer 依次尝试三种匹配，较早 layer 的低优先级 alias 可抢先命中。
   - 位置：[`src/map/layer-registry.ts`](src/map/layer-registry.ts)。
   - 验收：分三轮全局搜索；增加 canonical/name/id 冲突测试。
 
-- [ ] **消除 source/layer/feature 复合字符串键碰撞**
+- [x] **消除 source/layer/feature 复合字符串键碰撞**
   - renderer/cache 使用 `source:layer`，feature event 使用 `source|layer|id`；ID 包含分隔符时可能碰撞，cache prefix 清理也会误删/漏删。
   - 位置：[`src/map/layer-renderer.ts`](src/map/layer-renderer.ts)、[`src/map/map.ts`](src/map/map.ts)、[`src/core/feature-event-dispatcher.ts`](src/core/feature-event-dispatcher.ts)。
   - 验收：改用嵌套 Map、结构化 tuple 或 JSON 编码；覆盖含 `:`、`|` 的合法 ID。

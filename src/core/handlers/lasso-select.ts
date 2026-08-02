@@ -5,6 +5,7 @@ import { featureMatchesLasso, pathBBox } from './select-geometry';
 import type { SelectHandlerOptions } from './click-select';
 import type { FeatureRef } from '../../map/types';
 import type { SelectionHandlerHost } from './selection-handler-host';
+import { addFeatureIdentity, type FeatureIdentityIndex } from '../../map/structured-keys';
 
 /** Visual style for the rubber-band lasso path. */
 export interface LassoSelectStyle {
@@ -157,12 +158,10 @@ export class LassoSelectHandler
       );
       const includeIntersecting = this._opts.includeIntersecting !== false;
       const refs: FeatureRef[] = [];
-      const seen = new Set<string>();
+      const seen: FeatureIdentityIndex = new globalThis.Map();
       for (const f of candidates) {
-        const key = `${f.source}|${f.layer}|${f.id}`;
-        if (seen.has(key)) continue;
         if (!featureMatchesLasso(this._map, f, closed, includeIntersecting)) continue;
-        seen.add(key);
+        if (!addFeatureIdentity(seen, f)) continue;
         refs.push({ source: f.source, layer: f.layer, id: f.id });
       }
       const mode = resolveMode(

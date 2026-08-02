@@ -66,6 +66,23 @@ describe('LassoSelectHandler', () => {
     expect(map.select).not.toHaveBeenCalled();
   });
 
+  it('keeps distinct refs whose pipe-joined forms collide', () => {
+    const map = fakeMap();
+    const first = { source: 'a|b', layer: 'c', id: 1 };
+    const second = { source: 'a', layer: 'b|c', id: 1 };
+    map.queryFeatures.mockReturnValue([first, second]);
+    const spy = vi.spyOn(geom, 'featureMatchesLasso').mockReturnValue(true);
+    const h = new LassoSelectHandler(map as any);
+    h.enable();
+    h.handlePointer(ev('down', 0, 0, true));
+    h.handlePointer(ev('move', 0, 40, true));
+    h.handlePointer(ev('move', 40, 40, true));
+    h.handlePointer(ev('up', 40, 0, true));
+
+    expect(map.select).toHaveBeenCalledWith([first, second], { mode: 'replace' });
+    spy.mockRestore();
+  });
+
   it('disable() mid-lasso cancels', () => {
     const map = fakeMap();
     const h = new LassoSelectHandler(map as any);
