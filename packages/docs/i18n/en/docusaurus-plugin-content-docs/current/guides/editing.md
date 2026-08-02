@@ -30,6 +30,15 @@ updates consistent.
 Do not mutate `source.getDataset()` directly. Bypassing commands skips undo
 snapshots, cache invalidation, and selection maintenance.
 
+### `DatasetReplaceCommand` trust boundary
+
+`DatasetReplaceCommand` is a trusted low-level escape hatch for advanced
+history integrations. It does not normalize CRS metadata, reproject
+coordinates, or verify that a source belongs to a map. Prefer `map.ops.*` for
+map-managed bulk changes and `map.reproject()` for whole-map CRS changes. Only
+construct the command directly when `before` and `after` already match the
+owning map's CRS, or when the source is fully detached.
+
 ## Edit modes
 
 Public modes are `'none'`, `'vertex'`, `'draw'`, and `'transform'`:

@@ -28,6 +28,13 @@ Emap 的编辑由命令驱动。命令保存恢复数据所需的状态，因此
 
 不要直接修改 `source.getDataset()`。绕过命令系统会跳过撤销快照、缓存失效和选择维护。
 
+### `DatasetReplaceCommand` 的信任边界
+
+`DatasetReplaceCommand` 是供高级历史集成使用的可信低层 escape hatch。它不会归一化
+CRS 元数据、重投影坐标，也不会校验 source 是否属于某个地图。地图内的批量修改应优先
+使用 `map.ops.*`，整图 CRS 变更使用 `map.reproject()`。只有在 `before`、`after` 已经与
+所属地图 CRS 对齐，或 source 完全 detached 时，才应直接构造该命令。
+
 ## 编辑模式
 
 公开模式包括：

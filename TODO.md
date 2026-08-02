@@ -64,7 +64,7 @@
 
 ## 需要先确定的 CRS 产品约定
 
-- [ ] **决定未知 CRS 数据的处理策略**
+- [x] **决定未知 CRS 数据的处理策略**
   - GeoJSON/TopoJSON/JSON/KML 缺少元数据时按 EPSG:4326 有规范依据。
   - Shapefile 缺少 `.prj` 时当前不写 CRS 元数据，但 `resolveDatasetCRS()` 仍统一回退到 EPSG:4326，可能把任意投影坐标当经纬度。
   - 可选方案：非 WGS84 规范格式缺失 CRS 时拒绝；要求调用者提供 `sourceCrs`；或明确接受全局 EPSG:4326 fallback。
@@ -85,7 +85,7 @@
   - 位置：[`src/map/feature-accessor.ts`](src/map/feature-accessor.ts)、[`src/types/mapshaper-types.ts`](src/types/mapshaper-types.ts)、[`src/source/topology-source-readonly.test-d.ts`](src/source/topology-source-readonly.test-d.ts)。
   - 验收：公开类型使用真正递归只读结构，或返回安全副本；补充编译期回归测试。
 
-- [ ] **明确公开 `DatasetReplaceCommand` 的信任边界**
+- [x] **明确公开 `DatasetReplaceCommand` 的信任边界**
   - 该 command 接收任意 `before/after` dataset 并直接调用 internal `setDataset()`；包入口又公开导出它。
   - 如果统一 CRS 是无条件不变量，需要 map owner/CRS 校验；如果它是可信低层 escape hatch，需要在 API 文档中明确责任。
   - 位置：[`src/edit/commands/dataset-replace.ts`](src/edit/commands/dataset-replace.ts)、[`src/index.ts`](src/index.ts)。
@@ -121,11 +121,11 @@
 - [x] 独立地图使用独立 source 的引擎 JSDoc 约定，无 runtime owner 排斥逻辑。
 - [x] 首次加载在最终 commit 前被 supersede/remove/listener throw。
 - [x] 普通 op/reproject 事件异常后的 dataset、CRS 和 history 一致性。
-- [ ] `map.remove()` 后 retained source 的独立生命周期。
-- [ ] DuckDB 输出继承 `prj`/`wkt1`/legacy `crs`。
-- [ ] 未知 CRS Shapefile 和 DuckDB mask 的最终约定。
+- [x] `map.remove()` 后 retained source 的独立生命周期。
+- [x] DuckDB 输出继承 `prj`/`wkt1`/legacy `crs`。
+- [x] 未知 CRS Shapefile 和 DuckDB mask 的最终约定。
 - [ ] 深只读嵌套属性和 `Feature.geometry` 编译期约束。
-- [ ] LayerRegistry 冲突优先级、复合键特殊字符、Canvas 屏外点批处理。
+- [x] LayerRegistry 冲突优先级、复合键特殊字符、Canvas 屏外点批处理。
 
 ## 已确认完成，无需重复开项
 
@@ -140,11 +140,11 @@
 
 ## 当前验证基线
 
-- [x] `pnpm run typecheck`：通过。
-- [x] `pnpm run test:run`：112 个测试文件通过、6 个跳过；1793 个测试通过、24 个跳过。
-- [x] `pnpm run format:check`：通过。
+- [x] `npm run typecheck`：通过。
+- [x] `npm run test:run`：115 个测试文件通过、6 个跳过；1856 个测试通过、24 个跳过。
+- [x] `npm run format:check`：通过。
 - [x] `git diff --check`：通过。
-- [ ] `pnpm run test:duckdb`：未通过；前 5 个 suite 共 20 个测试通过，overlay suite 2 通过、2 失败。
+- [x] `npm run test:duckdb`：6 个 DuckDB-Wasm suite、24 个测试全部通过。
 
 ## 跟踪与提交整理
 

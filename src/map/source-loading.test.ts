@@ -66,9 +66,9 @@ function deferred<T>(): {
 }
 
 describe('source loading preflight', () => {
-  it('returns needs-input without changing map or source state when CRS metadata is missing', async () => {
+  it('requires sourceCrs without changing state for a Shapefile missing its .prj', async () => {
     const { map, viewportSetCrs } = createBareMap();
-    const dataset: MapshaperDataset = { layers: [], info: {} };
+    const dataset: MapshaperDataset = { layers: [], info: { input_files: ['unknown.shp'] } };
     const source = sourceWithDataset('missing-crs', dataset);
     const crsChange = vi.fn();
     const data = vi.fn();
@@ -87,7 +87,7 @@ describe('source loading preflight', () => {
     expect(map.getCRS()).toBe(beforeCrs);
     expect(viewportSetCrs).not.toHaveBeenCalled();
     expect(source.getDataset()).toBe(dataset);
-    expect(dataset.info).toEqual({});
+    expect(dataset.info).toEqual({ input_files: ['unknown.shp'] });
     expect(crsChange).not.toHaveBeenCalled();
     expect(data).not.toHaveBeenCalled();
   });
