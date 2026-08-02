@@ -95,10 +95,13 @@ export interface MapOptions {
    */
   workerPoolSize?: number;
   /**
-   * Pre-constructed worker pool. Only consulted when `useWorker` is
-   * truthy; takes precedence over `workerUrl` / `workerPoolSize`.
-   * Used by tests to inject a mock pool, and by power users who
-   * want to share one pool across multiple `Emap` instances.
+   * Pre-constructed worker pool. Only consulted when the resolved worker mode
+   * is not `false`; takes precedence over `workerUrl` / `workerPoolSize`.
+   *
+   * The `Emap` instance adopts exclusive ownership of this pool and destroys
+   * it from {@link Emap.remove}. Do not pass the same pool to multiple maps.
+   * When worker mode is disabled, the option is ignored and ownership stays
+   * with the caller.
    */
   workerPool?: MapshaperWorkerPool;
   /**

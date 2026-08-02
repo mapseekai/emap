@@ -453,15 +453,18 @@ export class Emap extends EventDispatcher {
     // empty so the only cost in the common case is one `size` check.
     this.on('historychange', () => this._runAfterCommitValidators());
 
-    // Set up the worker pool eagerly when requested. Construction is cheap;
-    // the underlying Worker is lazy-spawned on first run().
+    // Set up the worker pool when worker mode is enabled. Construction is
+    // cheap; the underlying Worker is lazy-spawned on first run(). A supplied
+    // pool is adopted exclusively and follows this map's remove() lifecycle.
+    // When worker mode is disabled, worker options are ignored and ownership
+    // remains with the caller.
     this._expressionPolicy = options.expressionPolicy ?? 'disabled';
     this._workerMode = options.useWorker ?? options.workerMode ?? false;
     if (typeof options.workerThreshold === 'number' && options.workerThreshold >= 0) {
       this._workerThreshold = options.workerThreshold;
     }
     this._workerRouting = options.workerRouting;
-    if (this._workerMode !== false || options.workerPool) {
+    if (this._workerMode !== false) {
       if (options.workerPool) {
         this._workerPool = options.workerPool;
       } else {

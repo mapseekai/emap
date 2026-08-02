@@ -92,10 +92,11 @@
 
 ## 非 CRS 的已确认问题
 
-- [ ] **区分内部创建与调用方提供的 worker pool 所有权**
-  - `MapOptions.workerPool` 文档允许多个地图共享，但任意地图 `remove()` 都会无条件 `cancelAll()` 和 `destroy()`。
+- [x] **明确 worker pool 的单地图所有权**
+  - 每个 `Emap` 独占自己的 pool；启用 worker 时，调用方提供的 pool 也由该地图接管并在 `remove()` 时销毁，不支持跨地图共享。
+  - `useWorker: false` 时忽略 `workerPool`，不会接管或销毁调用方资源。
   - 位置：[`src/map/types.ts`](src/map/types.ts)、[`src/map/map.ts`](src/map/map.ts)。
-  - 验收：仅销毁内部创建的 pool；外部 pool 只解除本地图引用/任务，或提供显式 ownership 选项。
+  - 验收：关闭地图会取消并销毁其 pool；禁用 worker 的地图不会影响传入 pool；文档不再承诺跨地图共享。
 
 - [x] **修复 `LayerRegistry.resolve()` 的全局匹配优先级**
   - 文档声称先全局匹配 canonical ID，再 name，再 id；实现却逐 layer 依次尝试三种匹配，较早 layer 的低优先级 alias 可抢先命中。

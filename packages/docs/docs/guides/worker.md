@@ -97,8 +97,10 @@ const map = new Emap({
 每个 Worker 都加载一份 mapshaper，增加并行度也会增加内存。Worker 延迟创建，
 但不要仅因为 CPU 核心多就无条件使用最大数量。
 
-高级应用可以构造 `MapshaperWorkerPool` 并通过 `workerPool` 传入多个地图实例共享。
-传入 pool 后，`workerUrl` 和 `workerPoolSize` 由该 pool 自己决定。
+高级应用可以预先构造 `MapshaperWorkerPool` 并通过 `workerPool` 交给一个地图实例。
+地图会独占该 pool，并在 `map.remove()` 时取消任务并销毁它；不要把同一个 pool 传给
+多个地图。传入 pool 后，`workerUrl` 和 `workerPoolSize` 由该 pool 自己决定。
+`useWorker: false` 时 `workerPool` 会被忽略，所有权仍属于调用方。
 
 ## 自定义自动路由
 

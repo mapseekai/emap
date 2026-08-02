@@ -92,9 +92,11 @@ Every worker loads a mapshaper instance. More parallelism also means more
 memory. Workers spawn lazily, but CPU count alone is not a reason to use the
 maximum.
 
-Advanced applications may pass a prebuilt `MapshaperWorkerPool` through
-`workerPool` and share it between maps. That pool then owns URL and size
-configuration.
+Advanced applications may pass a prebuilt `MapshaperWorkerPool` to one map
+through `workerPool`. The map adopts that pool exclusively and cancels and
+destroys it from `map.remove()`; do not pass one pool to multiple maps. The
+pool owns URL and size configuration. With `useWorker: false`, `workerPool` is
+ignored and remains caller-owned.
 
 ## Custom routing
 
