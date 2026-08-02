@@ -76,7 +76,10 @@ async function handleRun(req: RunRequest): Promise<void> {
     });
 
     const targets = finished.catalog.getDefaultTargets();
-    const result = targets.length > 0 ? targets[0].dataset : datasets[0];
+    if (targets.length === 0) {
+      throw new Error('mapshaper command completed but produced no default target');
+    }
+    const result = targets[0].dataset;
 
     const repacked = await mapshaper.internal.exportDatasetsToPack([result], { compact: false });
 

@@ -45,18 +45,6 @@ export function findEpsgProjjsonPath(code: string): string | undefined {
   return path ?? undefined;
 }
 
-/**
- * Synchronous compatibility hook. Full EPSG PROJJSON definitions are now kept
- * in @zwishing/epsg-index assets and loaded by findAuthorityProjjsonAsync().
- */
-export function findEpsgProjjson(_code: string): unknown | undefined {
-  return undefined;
-}
-
-export function findAuthorityProjjson(authority: string, code: string): unknown | undefined {
-  return authority.toUpperCase() === 'EPSG' ? findEpsgProjjson(code) : undefined;
-}
-
 export async function findEpsgProjjsonAsync(
   code: string,
   opts: EpsgProjjsonFetchOptions = {},

@@ -1,9 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import {
-  findAuthorityProjjson,
   findAuthorityProjjsonAsync,
-  findEpsgProjjson,
   findEpsgProjjsonAsync,
   findEpsgProjjsonPath,
 } from './epsg-projjson';
@@ -30,11 +28,6 @@ describe('EPSG PROJJSON asset lookup', () => {
   it('maps EPSG codes to epsg-index asset paths', () => {
     expect(findEpsgProjjsonPath('4490')).toMatch(/^s\/.+\.json$/);
     expect(findEpsgProjjsonPath(' EPSG:4490 ')).toBeUndefined();
-  });
-
-  it('keeps sync EPSG lookup as an undefined compatibility hook', () => {
-    expect(findEpsgProjjson('4490')).toBeUndefined();
-    expect(findAuthorityProjjson('EPSG', '4490')).toBeUndefined();
   });
 
   it('loads complete PROJJSON through an injected fetch', async () => {
