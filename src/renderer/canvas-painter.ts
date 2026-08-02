@@ -1,4 +1,9 @@
-import { Painter, DrawOverlayState, type PolygonFillOptions } from './painter';
+import {
+  Painter,
+  DrawOverlayState,
+  type ArrowDotPathOptions,
+  type PolygonFillOptions,
+} from './painter';
 import { AffineTransform } from '../geo/transform';
 import { normalizePointShape } from '../source/layer-utils';
 import type {
@@ -16,6 +21,11 @@ const POLYGON_FILL_BATCH_SHAPE_LIMIT = 100;
 const POLYGON_FILL_BATCH_VERTEX_LIMIT = 12_000;
 const ARC_STROKE_BATCH_ARC_LIMIT = 100;
 const ARC_STROKE_BATCH_VERTEX_LIMIT = 12_000;
+const ARROW_DOT_BATCH_SEGMENT_LIMIT = 12_000;
+const ARROW_DOT_CACHE_LIMIT = 64;
+const DEFAULT_ARROW_DOT_SPACING = 32;
+const DEFAULT_ARROW_DOT_SIZE = 6;
+const MIN_ARROW_DOT_VALUE = 0.1;
 const STAR_INNER_RADIUS_RATIO = 0.45;
 const CROSS_ARM_RADIUS_RATIO = 0.4;
 
@@ -121,6 +131,85 @@ function absArcId(arcId: number): number {
   return arcId >= 0 ? arcId : ~arcId;
 }
 
+const CLIP_LEFT = 1;
+const CLIP_RIGHT = 2;
+const CLIP_TOP = 4;
+const CLIP_BOTTOM = 8;
+
+function getClipOutCode(x: number, y: number, right: number, bottom: number): number {
+  let code = 0;
+  if (x < 0) code |= CLIP_LEFT;
+  else if (x > right) code |= CLIP_RIGHT;
+  if (y < 0) code |= CLIP_TOP;
+  else if (y > bottom) code |= CLIP_BOTTOM;
+  return code;
+}
+
+function clipSegmentToCanvas(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  right: number,
+  bottom: number,
+  output: Float64Array,
+): boolean {
+  let code0 = getClipOutCode(x0, y0, right, bottom);
+  let code1 = getClipOutCode(x1, y1, right, bottom);
+
+  while (true) {
+    if ((code0 | code1) === 0) {
+      output[0] = x0;
+      output[1] = y0;
+      output[2] = x1;
+      output[3] = y1;
+      return true;
+    }
+    if ((code0 & code1) !== 0) return false;
+
+    const code = code0 || code1;
+    let x = 0;
+    let y = 0;
+    if ((code & CLIP_TOP) !== 0) {
+      x = x0 + ((x1 - x0) * -y0) / (y1 - y0);
+    } else if ((code & CLIP_BOTTOM) !== 0) {
+      y = bottom;
+      x = x0 + ((x1 - x0) * (bottom - y0)) / (y1 - y0);
+    } else if ((code & CLIP_RIGHT) !== 0) {
+      x = right;
+      y = y0 + ((y1 - y0) * (right - x0)) / (x1 - x0);
+    } else {
+      y = y0 + ((y1 - y0) * -x0) / (x1 - x0);
+    }
+
+    if (code === code0) {
+      x0 = x;
+      y0 = y;
+      code0 = getClipOutCode(x0, y0, right, bottom);
+    } else {
+      x1 = x;
+      y1 = y;
+      code1 = getClipOutCode(x1, y1, right, bottom);
+    }
+  }
+}
+
+interface ArrowDotCacheEntry {
+  arcs: ArcCollection;
+  shapes: ArrowDotPathOptions['shapes'];
+  geometryRevision: number;
+  mx: number;
+  my: number;
+  bx: number;
+  by: number;
+  pixelRatio: number;
+  canvasWidth: number;
+  canvasHeight: number;
+  spacing: number;
+  size: number;
+  commands: Float64Array;
+}
+
 function bboxIntersects(a: readonly number[], b: readonly number[]): boolean {
   return a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 }
@@ -147,6 +236,7 @@ export class CanvasPainter implements Painter {
   private _ctx: CanvasRenderingContext2D;
   private _transform: AffineTransform = new AffineTransform();
   private _pixelRatio: number = window.devicePixelRatio || 1;
+  private _arrowDotCache = new Map<string, ArrowDotCacheEntry>();
 
   constructor(private _canvas: HTMLCanvasElement) {
     const ctx = _canvas.getContext('2d');
@@ -206,8 +296,14 @@ export class CanvasPainter implements Painter {
     style: StrokeStyle,
     filter?: (i: number) => boolean,
     arcIds?: Uint32Array,
+    arrowDot?: ArrowDotPathOptions,
   ): void {
     if (style.width === 0) return;
+    if (style.dashType === 'arrow-dot' && arrowDot) {
+      this.drawArrowDotPaths(arcs, style, filter, arrowDot);
+      return;
+    }
+
     const ctx = this._ctx;
     const n = arcIds?.length ?? arcs.size();
     const vertexCounts = arcs.getVertexData?.().nn ?? null;
@@ -285,6 +381,225 @@ export class CanvasPainter implements Painter {
     if (count === 0) {
       ctx.lineTo(x / 2 + 0.1, y / 2);
     }
+  }
+
+  private drawArrowDotPaths(
+    arcs: ArcCollection,
+    style: StrokeStyle,
+    filter: ((i: number) => boolean) | undefined,
+    options: ArrowDotPathOptions,
+  ): void {
+    const ctx = this._ctx;
+    const commands = this.getArrowDotCommands(arcs, style, filter, options);
+    if (commands.length === 0) return;
+
+    ctx.strokeStyle = style.color || '#333';
+    ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.setLineDash([]);
+
+    let segmentCount = 0;
+    ctx.beginPath();
+    for (let i = 0; i < commands.length; i += 4) {
+      ctx.moveTo(commands[i], commands[i + 1]);
+      ctx.lineTo(commands[i + 2], commands[i + 3]);
+      segmentCount += 1;
+      if (segmentCount >= ARROW_DOT_BATCH_SEGMENT_LIMIT) {
+        ctx.stroke();
+        ctx.beginPath();
+        segmentCount = 0;
+      }
+    }
+    if (segmentCount > 0) ctx.stroke();
+  }
+
+  private getArrowDotCommands(
+    arcs: ArcCollection,
+    style: StrokeStyle,
+    filter: ((i: number) => boolean) | undefined,
+    options: ArrowDotPathOptions,
+  ): Float64Array {
+    const transform = this._transform;
+    const pixelRatio = this._pixelRatio;
+    const spacing = Math.max(
+      MIN_ARROW_DOT_VALUE,
+      (style.arrowSpacing ?? DEFAULT_ARROW_DOT_SPACING) * pixelRatio,
+    );
+    const size = Math.max(
+      MIN_ARROW_DOT_VALUE,
+      (style.arrowSize ?? DEFAULT_ARROW_DOT_SIZE) * pixelRatio,
+    );
+    const cached = this._arrowDotCache.get(options.cacheKey);
+    if (
+      cached &&
+      cached.arcs === arcs &&
+      cached.shapes === options.shapes &&
+      cached.geometryRevision === options.geometryRevision &&
+      cached.mx === transform.mx &&
+      cached.my === transform.my &&
+      cached.bx === transform.bx &&
+      cached.by === transform.by &&
+      cached.pixelRatio === pixelRatio &&
+      cached.canvasWidth === this._canvas.width &&
+      cached.canvasHeight === this._canvas.height &&
+      cached.spacing === spacing &&
+      cached.size === size
+    ) {
+      this._arrowDotCache.delete(options.cacheKey);
+      this._arrowDotCache.set(options.cacheKey, cached);
+      return cached.commands;
+    }
+
+    const commands = this.buildArrowDotCommands(arcs, filter, options.shapes, spacing, size);
+    if (!cached && this._arrowDotCache.size >= ARROW_DOT_CACHE_LIMIT) {
+      const oldestKey = this._arrowDotCache.keys().next().value;
+      if (oldestKey !== undefined) this._arrowDotCache.delete(oldestKey);
+    }
+    this._arrowDotCache.set(options.cacheKey, {
+      arcs,
+      shapes: options.shapes,
+      geometryRevision: options.geometryRevision,
+      mx: transform.mx,
+      my: transform.my,
+      bx: transform.bx,
+      by: transform.by,
+      pixelRatio,
+      canvasWidth: this._canvas.width,
+      canvasHeight: this._canvas.height,
+      spacing,
+      size,
+      commands,
+    });
+    return commands;
+  }
+
+  private buildArrowDotCommands(
+    arcs: ArcCollection,
+    filter: ((i: number) => boolean) | undefined,
+    shapes: ArrowDotPathOptions['shapes'],
+    spacing: number,
+    size: number,
+  ): Float64Array {
+    const commands: number[] = [];
+    const clipped = new Float64Array(4);
+    const mx = this._transform.mx * this._pixelRatio;
+    const my = this._transform.my * this._pixelRatio;
+    const bx = this._transform.bx * this._pixelRatio;
+    const by = this._transform.by * this._pixelRatio;
+    const right = this._canvas.width;
+    const bottom = this._canvas.height;
+
+    for (const shape of shapes) {
+      if (!shape) continue;
+      for (const part of shape) {
+        let visibleDistance = 0;
+        let lastVisibleX = Number.NaN;
+        let lastVisibleY = Number.NaN;
+
+        for (const signedArcId of part) {
+          if (filter && !filter(absArcId(signedArcId))) {
+            visibleDistance = 0;
+            lastVisibleX = Number.NaN;
+            lastVisibleY = Number.NaN;
+            continue;
+          }
+
+          const iter = arcs.getArcIter(signedArcId);
+          if (!iter.hasNext()) continue;
+          let x0 = iter.x * mx + bx;
+          let y0 = iter.y * my + by;
+
+          while (iter.hasNext()) {
+            const x1 = iter.x * mx + bx;
+            const y1 = iter.y * my + by;
+            if (
+              clipSegmentToCanvas(x0, y0, x1, y1, right, bottom, clipped) &&
+              (clipped[0] !== clipped[2] || clipped[1] !== clipped[3])
+            ) {
+              if (
+                !Number.isFinite(lastVisibleX) ||
+                Math.abs(lastVisibleX - clipped[0]) > 0.01 ||
+                Math.abs(lastVisibleY - clipped[1]) > 0.01
+              ) {
+                visibleDistance = 0;
+              }
+              visibleDistance = this.appendArrowDotSegment(
+                commands,
+                clipped[0],
+                clipped[1],
+                clipped[2],
+                clipped[3],
+                visibleDistance,
+                spacing,
+                size,
+              );
+              lastVisibleX = clipped[2];
+              lastVisibleY = clipped[3];
+            } else {
+              visibleDistance = 0;
+              lastVisibleX = Number.NaN;
+              lastVisibleY = Number.NaN;
+            }
+            x0 = x1;
+            y0 = y1;
+          }
+        }
+      }
+    }
+    return Float64Array.from(commands);
+  }
+
+  private appendArrowDotSegment(
+    commands: number[],
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    startDistance: number,
+    spacing: number,
+    size: number,
+  ): number {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const length = Math.hypot(dx, dy);
+    if (length === 0) return startDistance;
+
+    const ux = dx / length;
+    const uy = dy / length;
+    const endDistance = startDistance + length;
+    const dashLength = Math.min(spacing * 0.55, Math.max(spacing * 0.35, size * 1.5));
+    const arrowOffset = spacing * 0.78;
+    const halfWidth = size * 0.45;
+    const backLength = Math.sqrt(size * size - halfWidth * halfWidth);
+    let cycle = Math.floor(startDistance / spacing);
+
+    while (cycle * spacing < endDistance) {
+      const cycleStart = cycle * spacing;
+      const visibleDashStart = Math.max(startDistance, cycleStart);
+      const visibleDashEnd = Math.min(endDistance, cycleStart + dashLength);
+      if (visibleDashEnd > visibleDashStart) {
+        const t0 = (visibleDashStart - startDistance) / length;
+        const t1 = (visibleDashEnd - startDistance) / length;
+        commands.push(x0 + dx * t0, y0 + dy * t0, x0 + dx * t1, y0 + dy * t1);
+      }
+
+      const arrowDistance = cycleStart + arrowOffset;
+      if (arrowDistance >= startDistance && arrowDistance < endDistance) {
+        const t = (arrowDistance - startDistance) / length;
+        const tipX = x0 + dx * t;
+        const tipY = y0 + dy * t;
+        const baseX = tipX - ux * backLength;
+        const baseY = tipY - uy * backLength;
+        const leftX = baseX - uy * halfWidth;
+        const leftY = baseY + ux * halfWidth;
+        const rightX = baseX + uy * halfWidth;
+        const rightY = baseY - ux * halfWidth;
+        commands.push(tipX, tipY, leftX, leftY, tipX, tipY, rightX, rightY);
+      }
+      cycle += 1;
+    }
+    return endDistance;
   }
 
   drawPoints(_shapes: readonly (FeatureShape | null | undefined)[], _style: PointStyle): void {

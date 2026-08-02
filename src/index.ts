@@ -137,6 +137,7 @@ export type {
   ReadonlyPointShape,
   PointStyle,
   SignedArcId,
+  LineDashStyle,
   StrokeStyle,
   VertexDotStyle,
 } from './types/mapshaper-types';
@@ -213,6 +214,7 @@ export {
 // Renderers
 // ===========================================================================
 export { CanvasPainter } from './renderer/canvas-painter';
+export type { ArrowDotPathOptions } from './renderer/painter';
 export { EditOverlayRenderer } from './renderer/edit-overlay-renderer';
 
 // ===========================================================================

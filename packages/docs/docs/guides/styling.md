@@ -90,8 +90,32 @@ map.addLayer({
 | `line-color` | `string` | Canvas 可识别的颜色字符串，默认为 `#1e88e5` |
 | `line-width` | `number` | 线宽，默认为 `0.8`；设置为 `0` 时不绘制描边 |
 | `line-dasharray` | `number[]` | 交替的实线和间隔长度，例如 `[8, 4]`；省略或传空数组时绘制实线 |
+| `line-dashstyle` | `solid \| dash \| dot \| dash-dot \| arrow-dot` | 命名线型；`arrow-dot` 用重复方向箭头替代点划线中的点 |
+| `line-arrow-spacing` | `number` | `arrow-dot` 箭头间距，CSS 像素，默认 `32` |
+| `line-arrow-size` | `number` | `arrow-dot` 箭头大小，CSS 像素，默认 `6` |
 
 线宽和虚线长度以 CSS 像素为单位，并随当前渲染变换得到适合 Canvas 的宽度。
+
+方向箭头默认遵循坐标顺序。polyline 从第一个顶点指向最后一个顶点；polygon
+外环和内环分别遵循各自的坐标顺序。当前样式模型没有方向翻转字段。
+
+```ts
+map.addLayer({
+  id: 'direction-flow',
+  type: 'line',
+  source: 'main',
+  paint: {
+    'line-color': 'rgba(37, 99, 235, 0.85)',
+    'line-width': 2,
+    'line-dashstyle': 'arrow-dot',
+    'line-arrow-spacing': 32,
+    'line-arrow-size': 6,
+  },
+});
+```
+
+箭头在当前可见视野中按屏幕像素采样，缩放和高 DPI 下保持稳定大小；普通
+`line-dasharray` 数组仍走原有 Canvas 虚线批处理路径。
 
 ## 点图层
 

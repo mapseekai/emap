@@ -221,8 +221,11 @@ describe('example catalog metadata', () => {
 
     expect(parsed.querySelector('#line-color')).not.toBeNull();
     expect(parsed.querySelector('#line-width')).not.toBeNull();
-    expect(dashValues).toEqual(['', '8,4', '2,4', '12,4,3,4']);
+    expect(dashValues).toEqual(['', '8,4', '2,4', '12,4,3,4', 'arrow-dot']);
     expect(html).toContain("updatePaint('line-dasharray', currentDash())");
+    expect(html).toContain("updatePaint('line-dashstyle', currentDashStyle())");
+    expect(parsed.querySelector('#arrow-spacing')).not.toBeNull();
+    expect(parsed.querySelector('#arrow-size')).not.toBeNull();
   });
 
   it('removes the draw-snap display layer before replacing uploaded source data', async () => {

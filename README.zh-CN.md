@@ -157,6 +157,7 @@ map.addLayer({
   paint: {
     'line-color': '#4a5568',
     'line-width': 1,
+    'line-dashstyle': 'dash',
   },
 });
 
@@ -169,6 +170,21 @@ map.addLayer({
     'line-width': 0,
   },
 });
+
+### 线样式补充
+
+对 `line`（以及 `fill` 的边框）可选：
+
+- `'line-dashstyle': 'solid' | 'dash' | 'dot' | 'dash-dot' | 'arrow-dot'`
+- `'line-arrow-spacing'`：箭头点画线中箭头的屏幕像素间距
+- `'line-arrow-size'`：箭头尺寸（像素）
+
+现有的 `line-dasharray` 行为保持不变；若同时配置了 `line-dasharray` 与
+`line-dashstyle`，将按 `line-dashstyle` 生效。
+
+`arrow-dot` 在一个批量 Canvas path 中同时绘制短划段和箭头翼，按每条可见
+polyline/环的坐标顺序定向，并缓存屏幕空间命令，直到几何、视图、像素比或
+箭头布局样式变化。
 ```
 
 未添加自定义图层时，`Emap` 会按源数据几何类型创建默认显示图层。为便于大数据浏览，

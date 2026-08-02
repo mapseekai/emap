@@ -1,6 +1,7 @@
 import type { AffineTransform } from '../geo/transform';
 import type {
   ArcCollection,
+  PathShape,
   FeatureShape,
   StrokeStyle,
   PointStyle,
@@ -32,6 +33,12 @@ export interface PolygonFillOptions {
   viewBBox?: readonly [number, number, number, number] | number[] | null;
 }
 
+export interface ArrowDotPathOptions {
+  shapes: readonly (PathShape | null | undefined)[];
+  cacheKey: string;
+  geometryRevision: number;
+}
+
 /**
  * Stateless drawing primitives: enough to render basemap topology, points,
  * polygons, and arc highlights. Anything that paints actual map content
@@ -48,6 +55,7 @@ export interface CorePainter {
     style: StrokeStyle,
     filter?: (i: number) => boolean,
     arcIds?: Uint32Array,
+    arrowDot?: ArrowDotPathOptions,
   ): void;
   drawPoints(shapes: readonly (FeatureShape | null | undefined)[], style: PointStyle): void;
   drawPolygonFill(

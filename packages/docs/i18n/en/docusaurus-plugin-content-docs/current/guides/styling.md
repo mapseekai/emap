@@ -91,8 +91,34 @@ map.addLayer({
 | `line-color` | `string` | Any Canvas-compatible color string; defaults to `#1e88e5` |
 | `line-width` | `number` | Stroke width; defaults to `0.8`; use `0` to disable the stroke |
 | `line-dasharray` | `number[]` | Alternating dash and gap lengths such as `[8, 4]`; omit it or use an empty array for a solid line |
+| `line-dashstyle` | `solid \| dash \| dot \| dash-dot \| arrow-dot` | Named line style; `arrow-dot` replaces the dots in a dash-dot line with repeated directional arrows |
+| `line-arrow-spacing` | `number` | Arrow spacing for `arrow-dot` in CSS pixels; defaults to `32` |
+| `line-arrow-size` | `number` | Arrow size for `arrow-dot` in CSS pixels; defaults to `6` |
 
 Line widths and dash lengths use CSS pixels and are adjusted for the current Canvas render transform.
+
+Directional arrows follow coordinate order by default. A polyline points from its first vertex to
+its last vertex; polygon outer and inner rings each follow their own coordinate order. The current
+style model has no direction-reversal field.
+
+```ts
+map.addLayer({
+  id: 'direction-flow',
+  type: 'line',
+  source: 'main',
+  paint: {
+    'line-color': 'rgba(37, 99, 235, 0.85)',
+    'line-width': 2,
+    'line-dashstyle': 'arrow-dot',
+    'line-arrow-spacing': 32,
+    'line-arrow-size': 6,
+  },
+});
+```
+
+Arrows are sampled in screen pixels for the current visible viewport, so their size stays stable
+across zoom and high-DPI displays. Numeric `line-dasharray` values continue to use the existing
+Canvas dash batching path.
 
 ## Point layers
 
