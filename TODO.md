@@ -108,7 +108,7 @@
   - 位置：[`src/map/layer-renderer.ts`](src/map/layer-renderer.ts)、[`src/map/map.ts`](src/map/map.ts)、[`src/core/feature-event-dispatcher.ts`](src/core/feature-event-dispatcher.ts)。
   - 验收：改用嵌套 Map、结构化 tuple 或 JSON 编码；覆盖含 `:`、`|` 的合法 ID。
 
-- [ ] **调整 Canvas 点批处理的 flush/cull 顺序**
+- [x] **调整 Canvas 点批处理的 flush/cull 顺序**
   - 达到 100 个可见点后，flush 检查发生在当前点屏幕裁剪之前；后续大量屏外点会反复触发空 `fill/stroke`，且 count 不前进。
   - 位置：[`src/renderer/canvas-painter.ts`](src/renderer/canvas-painter.ts)、[`src/renderer/canvas-painter.batch.test.ts`](src/renderer/canvas-painter.batch.test.ts)。
   - 验收：仅在确认当前点可绘制后进行批次判断/计数；增加“100 个可见点 + 大量屏外点”回归测试。

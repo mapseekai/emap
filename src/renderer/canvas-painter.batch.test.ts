@@ -212,6 +212,21 @@ describe('CanvasPainter batching', () => {
     expect(arcs).toHaveLength(1);
   });
 
+  it('does not flush empty point batches for offscreen points after a full batch', () => {
+    const fills: string[] = [];
+    const painter = makePointPainter(fills);
+    const visible = Array.from({ length: 100 }, (_, i) => [[i % 50, i % 50]]);
+    const offscreen = Array.from({ length: 500 }, () => [[500, 500]]);
+
+    painter.drawPoints([...visible, ...offscreen] as any, {
+      color: '#333',
+      radius: 4,
+      fill: true,
+    });
+
+    expect(fills).toHaveLength(1);
+  });
+
   it.each([
     ['circle', ['moveTo', 'arc']],
     ['square', ['rect']],

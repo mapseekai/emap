@@ -318,14 +318,14 @@ export class CanvasPainter implements Painter {
       if (!shape) return;
       const points = normalizePointShape(shape);
       points.forEach((p) => {
+        const x = p[0] * mx + bx;
+        const y = p[1] * my + by;
+        if (x < left || x > right || y < top || y > bottom) return;
         if (count > 0 && count % batchSize === 0) {
           if (fill) ctx.fill();
           else ctx.stroke();
           ctx.beginPath();
         }
-        const x = p[0] * mx + bx;
-        const y = p[1] * my + by;
-        if (x < left || x > right || y < top || y > bottom) return;
         addPointMarkerPath(ctx, x, y, radius, markerShape);
         count++;
       });
