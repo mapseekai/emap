@@ -63,8 +63,8 @@ const exampleDescriptions = {
     en: 'Loads point features and updates the circle layer shape, color, radius, and fill style in real time.',
   },
   'getting-started/lines': {
-    zh: '加载两条线路要素，并实时修改 line 图层的颜色、宽度和实线、虚线、点线或点划线样式。',
-    en: 'Loads two route features and updates the line layer color, width, and solid, dashed, dotted, or dash-dot style in real time.',
+    zh: '加载两条线路要素，并实时修改 line 图层的颜色、宽度以及实线、虚线、点线、点划线或方向箭头点划线样式。',
+    en: 'Loads two route features and updates the line layer color, width, and solid, dashed, dotted, dash-dot, or directional arrow-dot style in real time.',
   },
   'getting-started/polygons': {
     zh: '加载共享拓扑的面要素，并以线图层显示各个面的边界。',

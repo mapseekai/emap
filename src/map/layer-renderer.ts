@@ -1,7 +1,7 @@
 import type { Viewport } from '../geo/viewport';
 import type { CorePainter } from '../renderer/painter';
 import type { MutableTopologySource } from '../source/source';
-import type { ArcCollection, MapshaperLayer } from '../types/mapshaper-types';
+import type { ArcCollection, MapshaperLayer, PathShape } from '../types/mapshaper-types';
 import { resolvePointStyle, resolveStrokeStyle } from './layer';
 import type { FillLayerSpecification, LayerSpecification, LineLayerSpecification } from './layer';
 
@@ -37,9 +37,25 @@ export function renderLayers(
     const cacheKey = `${layer.source}:${layer['source-layer'] || 'default'}`;
 
     if (layer.type === 'line' && arcs) {
-      renderLineLayer(ctx, layer, ml, arcs, cacheKey, lineScale);
+      renderLineLayer(
+        ctx,
+        layer,
+        ml,
+        arcs,
+        cacheKey,
+        source.getDataset?.()?.editVersion ?? 0,
+        lineScale,
+      );
     } else if (layer.type === 'fill' && arcs && ml?.shapes) {
-      renderFillLayer(ctx, layer, ml, arcs, cacheKey, lineScale);
+      renderFillLayer(
+        ctx,
+        layer,
+        ml,
+        arcs,
+        cacheKey,
+        source.getDataset?.()?.editVersion ?? 0,
+        lineScale,
+      );
     } else if (layer.type === 'circle' && ml?.shapes) {
       const style = resolvePointStyle(layer.paint);
       ctx.painter.drawPoints(ml.shapes, style);
@@ -53,12 +69,22 @@ function renderLineLayer(
   ml: MapshaperLayer | null,
   arcs: ArcCollection,
   cacheKey: string,
+  geometryRevision: number,
   lineScale: number,
 ): void {
   const style = resolveStrokeStyle(layer.paint, lineScale);
   if (ml?.shapes) {
+    const viewportFilter = ctx.viewport.getArcFilter(arcs);
+    if (style.dashType === 'arrow-dot') {
+      ctx.painter.drawArcs(arcs, style, viewportFilter, undefined, {
+        shapes: ml.shapes as readonly (PathShape | null)[],
+        cacheKey: `${cacheKey}:${layer.id}`,
+        geometryRevision,
+      });
+      return;
+    }
     const arcIds = ctx.getLayerArcIds(ml, arcs, cacheKey);
-    ctx.painter.drawArcs(arcs, style, ctx.viewport.getArcFilter(arcs), arcIds ?? undefined);
+    ctx.painter.drawArcs(arcs, style, viewportFilter, arcIds ?? undefined);
   } else {
     ctx.painter.drawArcs(arcs, style, ctx.viewport.getArcFilter(arcs));
   }
@@ -70,6 +96,7 @@ function renderFillLayer(
   ml: MapshaperLayer,
   arcs: ArcCollection,
   cacheKey: string,
+  geometryRevision: number,
   lineScale: number,
 ): void {
   const fillPaint = layer.paint;
@@ -91,6 +118,14 @@ function renderFillLayer(
   );
   const style = resolveStrokeStyle(layer.paint, lineScale);
   if ((style.width ?? 0) > 0) {
+    if (style.dashType === 'arrow-dot') {
+      ctx.painter.drawArcs(arcs, style, viewportFilter, undefined, {
+        shapes: ml.shapes as readonly (PathShape | null)[],
+        cacheKey: `${cacheKey}:${layer.id}`,
+        geometryRevision,
+      });
+      return;
+    }
     const arcIds = ctx.getLayerArcIds(ml, arcs, cacheKey);
     ctx.painter.drawArcs(arcs, style, viewportFilter, arcIds ?? undefined);
   }

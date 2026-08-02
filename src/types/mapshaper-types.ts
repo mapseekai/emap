@@ -288,11 +288,17 @@ export function bumpEditVersion(dataset: MapshaperDataset | null | undefined): v
 // Render styles
 // ---------------------------------------------------------------------------
 
-/** Style for stroke-based rendering (lines, polygon outlines) */
+/** Named line patterns supported by line and polygon-outline paint. */
+export type LineDashStyle = 'solid' | 'dash' | 'dot' | 'dash-dot' | 'arrow-dot';
+
+/** Style for stroke-based rendering (lines, polygon outlines). */
 export interface StrokeStyle {
   color?: string;
   width?: number;
+  dashType?: LineDashStyle;
   dash?: readonly number[];
+  arrowSpacing?: number;
+  arrowSize?: number;
 }
 
 /**

@@ -31,14 +31,17 @@
           <option value="8,4">虚线</option>
           <option value="2,4">点线</option>
           <option value="12,4,3,4">点划线</option>
+          <option value="arrow-dot">箭头点划线</option>
         </select>
       </label>
+      <label>箭头间距: <input id="arrow-spacing" type="range" min="12" max="80" step="2" value="32" /> <span id="spacing-output">32</span></label>
+      <label>箭头大小: <input id="arrow-size" type="range" min="3" max="16" step="1" value="6" /> <span id="size-output">6</span></label>
     </span>
     <span id="status">加载一个含 polyline 图层的数据文件</span>
     <span class="hint">
       使用 <code>line</code> 图层渲染线数据，并通过 <code>setPaintProperty</code> 实时修改
-      <code>line-color</code>、<code>line-width</code> 和 <code>line-dasharray</code>。
-      虚线数组以 CSS 像素依次定义实线和间隔长度，空数组表示实线。
+      <code>line-color</code>、<code>line-width</code>、<code>line-dasharray</code> 和
+      <code>line-dashstyle</code>。箭头点划线按坐标顺序显示方向；间距和大小均为 CSS 像素。
     </span>
   </div>
   <div id="map" tabindex="0"></div>
@@ -58,11 +61,20 @@
     const lineColor = document.getElementById('line-color');
     const lineWidth = document.getElementById('line-width');
     const lineDash = document.getElementById('line-dash');
+    const arrowSpacing = document.getElementById('arrow-spacing');
+    const arrowSize = document.getElementById('arrow-size');
     const widthOutput = document.getElementById('width-output');
+    const spacingOutput = document.getElementById('spacing-output');
+    const sizeOutput = document.getElementById('size-output');
     const status = document.getElementById('status');
 
     function currentDash() {
+      if (lineDash.value === 'arrow-dot') return [];
       return lineDash.value.split(',').filter(Boolean).map(Number);
+    }
+
+    function currentDashStyle() {
+      return lineDash.value === 'arrow-dot' ? 'arrow-dot' : undefined;
     }
 
     function addLineLayer() {
@@ -81,6 +93,9 @@
           'line-color': lineColor.value,
           'line-width': Number(lineWidth.value),
           'line-dasharray': currentDash(),
+          'line-dashstyle': currentDashStyle(),
+          'line-arrow-spacing': Number(arrowSpacing.value),
+          'line-arrow-size': Number(arrowSize.value),
         },
       });
       status.textContent = `正在显示线图层 "${target}"`;
@@ -134,7 +149,18 @@
       widthOutput.textContent = String(width);
       updatePaint('line-width', width);
     });
-    lineDash.addEventListener('change', () => updatePaint('line-dasharray', currentDash()));
+    lineDash.addEventListener('change', () => {
+      updatePaint('line-dasharray', currentDash());
+      updatePaint('line-dashstyle', currentDashStyle());
+    });
+    arrowSpacing.addEventListener('input', () => {
+      spacingOutput.textContent = arrowSpacing.value;
+      updatePaint('line-arrow-spacing', Number(arrowSpacing.value));
+    });
+    arrowSize.addEventListener('input', () => {
+      sizeOutput.textContent = arrowSize.value;
+      updatePaint('line-arrow-size', Number(arrowSize.value));
+    });
     await autoLoadExampleFixtures('getting-started/lines');
   </script>
 </body>

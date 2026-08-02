@@ -551,6 +551,7 @@ map.addLayer({
   paint: {
     'line-color': '#4a5568',
     'line-width': 1,
+    'line-dashstyle': 'dash',
   },
 });
 
@@ -563,6 +564,20 @@ map.addLayer({
     'line-width': 0,
   },
 });
+
+### Line style options
+
+For `line` (and `fill` outlines), `line` paint can also use:
+
+- `'line-dashstyle': 'solid' | 'dash' | 'dot' | 'dash-dot' | 'arrow-dot'`
+- `'line-arrow-spacing'`: spacing in screen pixels between arrow heads, used by `arrow-dot`
+- `'line-arrow-size'`: arrow tip-to-tail size in screen pixels, used by `arrow-dot`
+
+The existing `line-dasharray` keeps working as before; when both `line-dasharray` and `line-dashstyle` are set, `line-dashstyle` takes precedence.
+
+`arrow-dot` draws short dashes and directional arrow wings in one batched Canvas path. It follows
+each visible polyline/ring coordinate order and caches the screen-space commands until geometry,
+view, pixel ratio, or arrow placement style changes.
 ```
 
 When no user layers are added, `Emap` creates default display layers from the
