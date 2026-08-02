@@ -57,6 +57,8 @@ const MASK_FC = {
   ],
 };
 
+const WEB_MERCATOR_WKT = 'PROJCS["Web Mercator",AUTHORITY["EPSG","3857"]]';
+
 const INTERSECTS_SPEC = {
   id: 'intersects',
   mode: 'filter',
@@ -225,9 +227,12 @@ describe('processRelationWithDuckDb', () => {
   });
 
   it('preserves input geometry and records for filter output', async () => {
-    const input = await inputDataset('EPSG:26910');
+    const input = await inputDataset();
+    input.info = { wkt1: WEB_MERCATOR_WKT };
     const mask = await maskDataset();
     const resultTable = toArrowTable(input, { encoding: 'wkb' });
+    resultTable.schema.metadata.clear();
+    resultTable.schema.fields.at(-1)!.metadata.clear();
     const runtime = new FakeRuntime(resultTable);
 
     const result = await processRelationWithDuckDb(
@@ -238,7 +243,7 @@ describe('processRelationWithDuckDb', () => {
       runtime,
     );
 
-    expect(result.info?.crs_string).toBe('EPSG:26910');
+    expect(result.info?.crs_string).toBe('EPSG:3857');
     expect(result.layers[0]?.name).toBe('filtered');
     expect(result.layers[0]?.data?.getRecords?.()).toEqual([{ name: 'parcel-a', zone: 'A' }]);
     expect(result.layers[0]?.shapes?.length).toBe(1);

@@ -9,7 +9,7 @@ import {
   buildRelationFilterSql,
   type RelationDuckDbFunction,
 } from './duckdb-sql';
-import { alignSecondaryDatasetCrs } from './dataset-crs';
+import { alignSecondaryDatasetCrs, inheritPrimaryDatasetCrs } from './dataset-crs';
 
 let duckDbRelationInputTableSequence = 0;
 let duckDbRelationMaskTableSequence = 0;
@@ -221,13 +221,7 @@ export async function processRelationWithDuckDb(
       const result = fromArrowTable(resultTable, {
         layerName: opts.outputLayer,
       });
-      if (inputDataset.info?.crs_string) {
-        result.info = {
-          ...result.info,
-          crs_string: inputDataset.info.crs_string,
-        };
-      }
-      return result;
+      return inheritPrimaryDatasetCrs(result, inputDataset);
     } catch (err) {
       throw new DuckDbOperationError(
         'conversion-failed',

@@ -5,6 +5,7 @@ import { fromArrowTable } from '../arrow/table-to-dataset';
 import { DuckDbOperationError } from './duckdb-errors';
 import { getDuckDbRuntime, type DuckDbRuntime } from './duckdb-runtime';
 import { buildAttributeSql } from './duckdb-sql';
+import { inheritPrimaryDatasetCrs } from './dataset-crs';
 
 let duckDbAttributeInputTableSequence = 0;
 
@@ -103,10 +104,7 @@ export async function processAttributeWithDuckDb(
 
     try {
       const result = fromArrowTable(resultTable, { layerName: opts.outputLayer });
-      if (dataset.info?.crs_string) {
-        result.info = { ...result.info, crs_string: dataset.info.crs_string };
-      }
-      return result;
+      return inheritPrimaryDatasetCrs(result, dataset);
     } catch (err) {
       throw new DuckDbOperationError(
         'conversion-failed',

@@ -192,8 +192,11 @@ describe('buildOverlaySql', () => {
 describe('processOverlayWithDuckDb', () => {
   it('registers input and mask tables, runs overlay SQL, cleans up, and preserves input CRS', async () => {
     const input = await inputDataset('EPSG:3857');
+    input.info = { crs: { projName: 'merc', a: 6378137 } };
     const mask = await maskDataset();
     const resultTable = toArrowTable(input, { encoding: 'wkb' });
+    resultTable.schema.metadata.clear();
+    resultTable.schema.fields.at(-1)!.metadata.clear();
     const runtime = new FakeRuntime(resultTable);
 
     const result = await processOverlayWithDuckDb(

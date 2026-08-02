@@ -29,6 +29,8 @@ const POLYGON_FC = {
   ],
 };
 
+const WEB_MERCATOR_WKT = 'PROJCS["Web Mercator",AUTHORITY["EPSG","3857"]]';
+
 async function polygonDataset(crs = 'EPSG:3857'): Promise<MapshaperDataset> {
   const dataset = await datasetFromGeoJSON(POLYGON_FC);
   dataset.info = { ...dataset.info, crs_string: crs };
@@ -86,7 +88,10 @@ class FakeRuntime implements DuckDbRuntime {
 describe('processAttributeWithDuckDb', () => {
   it('preserves geometry and appends scalar attribute columns', async () => {
     const dataset = await polygonDataset();
+    dataset.info = { prj: WEB_MERCATOR_WKT };
     const resultTable = toArrowTable(await resultDatasetWithArea(), { encoding: 'wkb' });
+    resultTable.schema.metadata.clear();
+    resultTable.schema.fields.at(-1)!.metadata.clear();
     const runtime = new FakeRuntime(resultTable);
 
     const result = await processAttributeWithDuckDb(

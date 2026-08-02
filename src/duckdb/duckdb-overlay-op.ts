@@ -5,7 +5,7 @@ import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types'
 import { DuckDbOperationError } from './duckdb-errors';
 import { getDuckDbRuntime, type DuckDbRuntime } from './duckdb-runtime';
 import { buildOverlaySql, type OverlayDuckDbFunction } from './duckdb-sql';
-import { alignSecondaryDatasetCrs } from './dataset-crs';
+import { alignSecondaryDatasetCrs, inheritPrimaryDatasetCrs } from './dataset-crs';
 
 export interface DuckDbOverlayOptions {
   inputLayer?: string | number;
@@ -153,13 +153,7 @@ export async function processOverlayWithDuckDb(
         layerName: opts.outputLayer,
         geometryColumn: inputGeometryColumn,
       });
-      if (inputDataset.info?.crs_string) {
-        result.info = {
-          ...result.info,
-          crs_string: inputDataset.info.crs_string,
-        };
-      }
-      return result;
+      return inheritPrimaryDatasetCrs(result, inputDataset);
     } catch (err) {
       throw new DuckDbOperationError(
         'conversion-failed',

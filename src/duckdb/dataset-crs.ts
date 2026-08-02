@@ -2,6 +2,7 @@ import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import {
   normalizeProjectCrsMetadata,
   resolveDatasetCRS,
+  resolveDatasetCRSMetadata,
   resolveProjectCrs,
   setDatasetCrsMetadata,
 } from '../geo/crs-resolver';
@@ -34,5 +35,17 @@ export async function alignSecondaryDatasetCrs(
   working.arcs?.setRetainedInterval?.(0);
   const result = await adapter.runOnDataset(`-proj ${resolvedPrimary}`, working);
   setDatasetCrsMetadata(result, normalizeProjectCrsMetadata(primaryCrs) ?? primaryCrs);
+  return result;
+}
+
+/** Write the primary input's explicit CRS onto a DuckDB result without changing coordinates. */
+export function inheritPrimaryDatasetCrs(
+  result: MapshaperDataset,
+  primary: MapshaperDataset,
+): MapshaperDataset {
+  const primaryCrs = resolveDatasetCRSMetadata(primary);
+  if (primaryCrs) {
+    setDatasetCrsMetadata(result, normalizeProjectCrsMetadata(primaryCrs) ?? primaryCrs);
+  }
   return result;
 }

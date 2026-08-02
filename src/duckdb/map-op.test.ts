@@ -1,6 +1,7 @@
 import { tableFromArrays, type Table } from 'apache-arrow';
 import { describe, expect, it } from 'vitest';
 import { toArrowTable } from '../arrow/dataset-to-table';
+import { parseGeoMetadata } from '../arrow/geoparquet-metadata';
 import { datasetFromGeoJSON } from '../arrow/test-utils';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
@@ -38,6 +39,8 @@ const POLYGON_FC = {
     },
   ],
 };
+
+const WEB_MERCATOR_WKT = 'PROJCS["Web Mercator",AUTHORITY["EPSG","3857"]]';
 
 async function polygonDataset(crs = 'EPSG:3857'): Promise<MapshaperDataset> {
   const dataset = await datasetFromGeoJSON(POLYGON_FC);
@@ -242,8 +245,13 @@ describe('duckDbBufferLayer', () => {
 describe('duckDbGeometryLayer', () => {
   it('runs a unary geometry operation and creates a new output source', async () => {
     const dataset = await polygonDataset();
+    dataset.info = { prj: WEB_MERCATOR_WKT };
+    const originalCoordinates = Array.from(dataset.arcs?.getVertexData?.().xx ?? []);
     const ctx = makeContext('src', dataset);
-    const runtime = new FakeRuntime(toArrowTable(dataset, { encoding: 'wkb' }));
+    const resultTable = toArrowTable(dataset, { encoding: 'wkb' });
+    resultTable.schema.metadata.clear();
+    resultTable.schema.fields.at(-1)!.metadata.clear();
+    const runtime = new FakeRuntime(resultTable);
 
     const result = await duckDbGeometryLayer(ctx, {
       src: 'src',
@@ -255,6 +263,20 @@ describe('duckDbGeometryLayer', () => {
     expect(result.ok).toBe(true);
     expect(ctx.outputDatasets.has('centroids')).toBe(true);
     expect(runtime.connection.queries[0]).toContain('ST_Centroid("geometry")');
+    if (result.ok) {
+      const outputTable = toArrowTable(result.value.dataset, { encoding: 'wkb' });
+      const outputCrs = parseGeoMetadata(outputTable.schema.metadata)?.columns.geometry.crs as {
+        id?: { authority?: string; code?: number };
+      };
+      const extensionCrs = JSON.parse(
+        outputTable.schema.fields.at(-1)!.metadata.get('ARROW:extension:metadata')!,
+      ).crs as { id?: { authority?: string; code?: number } };
+      expect(result.value.dataset.info?.crs_string).toBe('EPSG:3857');
+      expect(outputCrs.id).toEqual({ authority: 'EPSG', code: 3857 });
+      expect(extensionCrs.id).toEqual({ authority: 'EPSG', code: 3857 });
+    }
+    expect(dataset.info).toEqual({ prj: WEB_MERCATOR_WKT });
+    expect(Array.from(dataset.arcs?.getVertexData?.().xx ?? [])).toEqual(originalCoordinates);
   });
 
   it('returns not-found when the input source is missing', async () => {
