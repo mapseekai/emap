@@ -4,7 +4,7 @@ import type { MutableTopologySource } from '../source/source';
 import { getLayerId } from '../source/layer-utils';
 import type { HighlightStyle, HighlightFeatureRef, QueriedFeature } from './types';
 import type { FeatureShape } from '../types/mapshaper-types';
-import { hasLayerKey, type LayerKeyIndex } from './structured-keys';
+import { hasLayerKey, type VisibleLayerLookup } from './structured-keys';
 
 /**
  * Manages feature highlighting state and rendering.
@@ -62,7 +62,7 @@ export class HighlightManager {
     sources: globalThis.Map<string, MutableTopologySource>,
     transform: AffineTransform,
     lineScale: number,
-    visibleLayers?: LayerKeyIndex,
+    visibleLayers?: VisibleLayerLookup,
   ): void {
     if (this._highlighted.size === 0) return;
     const highlightColor = this._highlightStyle.color || '#ff7a00';

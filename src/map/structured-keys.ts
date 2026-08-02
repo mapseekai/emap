@@ -4,6 +4,14 @@ interface FeatureIdentity {
   id: number;
 }
 
+/**
+ * Minimal read-only visibility lookup accepted by low-level rendering queries.
+ * Implementations expose membership only; their map/set storage stays private.
+ */
+export interface VisibleLayerLookup {
+  get(sourceId: string): { has(layerId: string): boolean } | undefined;
+}
+
 export type LayerKeyIndex = ReadonlyMap<string, ReadonlySet<string>>;
 export type MutableLayerKeyIndex = Map<string, Set<string>>;
 
@@ -13,7 +21,7 @@ export function addLayerKey(index: MutableLayerKeyIndex, source: string, layer: 
   index.set(source, layers);
 }
 
-export function hasLayerKey(index: LayerKeyIndex, source: string, layer: string): boolean {
+export function hasLayerKey(index: VisibleLayerLookup, source: string, layer: string): boolean {
   return index.get(source)?.has(layer) === true;
 }
 

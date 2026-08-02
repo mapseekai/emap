@@ -68,6 +68,7 @@ export type {
   ExportSnapshotOptions,
   LoadSnapshotOptions,
 } from './map/map';
+export type { VisibleLayerLookup } from './map/structured-keys';
 
 // ===========================================================================
 // Layers + selection + highlights

@@ -5,7 +5,7 @@ import type { MutableTopologySource } from '../source/source';
 import { getLayerId, normalizePointShape } from '../source/layer-utils';
 import type { QueryFeaturesOptions, QueriedFeature } from './types';
 import type { ArcCollection, MapshaperLayer, PathPart, PathShape } from '../types/mapshaper-types';
-import { hasLayerKey, type LayerKeyIndex } from './structured-keys';
+import { hasLayerKey, type VisibleLayerLookup } from './structured-keys';
 
 /** Pixel distance for a bullseye hit on point features */
 const POINT_BULLSEYE_DIST = 2;
@@ -212,7 +212,7 @@ export class FeatureQuery {
       | [[number, number], [number, number]]
       | QueryFeaturesOptions,
     options?: QueryFeaturesOptions,
-    visibleLayers?: LayerKeyIndex,
+    visibleLayers?: VisibleLayerLookup,
   ): QueriedFeature[] {
     const { width, height } = this._getSize();
     const isGeometry = Array.isArray(geometryOrOptions);
@@ -464,7 +464,7 @@ export class FeatureQuery {
   private _queryFeaturesAtPoint(
     point: [number, number],
     options: QueryFeaturesOptions,
-    visibleLayers?: LayerKeyIndex,
+    visibleLayers?: VisibleLayerLookup,
   ): QueriedFeature[] {
     const transform = this._getTransform();
     const results: QueriedFeature[] = [];
@@ -520,7 +520,7 @@ export class FeatureQuery {
   private _queryFeaturesInBBox(
     bbox: [[number, number], [number, number]],
     options: QueryFeaturesOptions,
-    visibleLayers?: LayerKeyIndex,
+    visibleLayers?: VisibleLayerLookup,
   ): QueriedFeature[] {
     const transform = this._getTransform();
     const results: QueriedFeature[] = [];
