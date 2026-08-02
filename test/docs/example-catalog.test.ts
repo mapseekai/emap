@@ -199,6 +199,12 @@ describe('example catalog metadata', () => {
         parsed.querySelector('#header > .emap-example-banner-brand'),
         `${example.id} places its emap brand first in the banner`,
       ).toBe(parsed.querySelector('#header')?.firstElementChild);
+      expect(
+        parsed
+          .querySelector<HTMLImageElement>('.emap-example-banner-brand img')
+          ?.getAttribute('src'),
+        `${example.id} uses the canonical emap brand asset`,
+      ).toBe('/mapseekai/emap/examples/emap.svg');
       expect(html, `${example.id} installs the shared map UI`).toContain('installExampleMapUi(map');
       expect(html, `${example.id} keeps a user upload`).toMatch(/type=["']file["']/);
       expect(html, `${example.id} avoids source-tree assets`).not.toMatch(

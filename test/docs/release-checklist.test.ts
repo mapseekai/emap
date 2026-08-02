@@ -325,6 +325,7 @@ describe('release documentation checklist', () => {
 
       await writeFile(resolve(root, 'packages/examples/dist/index.html'), '<!doctype html>');
       await writeFile(resolve(root, 'packages/examples/dist/buffer/index.html'), '<!doctype html>');
+      await writeFile(resolve(root, 'packages/examples/dist/emap.svg'), '<svg>brand</svg>');
       await writeFile(resolve(root, 'packages/docs/build/index.html'), '<!doctype html>');
       await writeFile(
         resolve(root, 'packages/examples/dist/emap-worker.js'),
@@ -358,6 +359,10 @@ describe('release documentation checklist', () => {
         resolve(root, 'packages/docs/build/examples/buffer/index.html'),
         'utf8',
       );
+      const composedBrand = await readFile(
+        resolve(root, 'packages/docs/build/examples/emap.svg'),
+        'utf8',
+      );
 
       expect(composedMain).toContain('/mapseekai/emap/concepts/emap/');
       expect(composedMain).not.toContain('/docs/');
@@ -365,9 +370,35 @@ describe('release documentation checklist', () => {
       expect(composedMain).not.toContain('/dist/emap-worker.js');
       expect(composedWorker).toBe('self.postMessage("ready");');
       expect(composedBuffer).toBe('<!doctype html>');
+      expect(composedBrand).toBe('<svg>brand</svg>');
       await expect(
         access(resolve(root, 'packages/docs/build/examples/examples')),
       ).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a docs release without the canonical project brand asset', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'emap-docs-missing-brand-'));
+
+    try {
+      await mkdir(resolve(root, 'packages/examples/dist/assets'), { recursive: true });
+      await mkdir(resolve(root, 'packages/examples/dist/buffer'), { recursive: true });
+      await mkdir(resolve(root, 'packages/docs/build'), { recursive: true });
+      await writeFile(resolve(root, 'packages/examples/dist/index.html'), '<!doctype html>');
+      await writeFile(resolve(root, 'packages/examples/dist/buffer/index.html'), '<!doctype html>');
+      await writeFile(resolve(root, 'packages/examples/dist/emap-worker.js'), 'worker');
+      await writeFile(resolve(root, 'packages/docs/build/index.html'), '<!doctype html>');
+
+      const result = spawnSync(
+        process.execPath,
+        [resolve(process.cwd(), 'scripts/compose-docs-release.mjs'), '--root', root],
+        { cwd: process.cwd(), encoding: 'utf8' },
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).toMatch(/missing release input.*emap\.svg/i);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

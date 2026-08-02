@@ -1,7 +1,7 @@
 # Emap
 
 <p align="center">
-  <img src="packages/docs/static/img/emap.svg" alt="Emap 标志" width="160" />
+  <img src="packages/examples/public/emap.svg" alt="Emap 标志" width="160" />
 </p>
 
 [English](README.md)

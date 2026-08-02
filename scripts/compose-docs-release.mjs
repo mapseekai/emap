@@ -18,6 +18,7 @@ if (await fileExists(nestedExamplesInput)) {
 const requiredInputs = [
   resolve(examplesDist, 'index.html'),
   resolve(examplesDist, 'buffer/index.html'),
+  resolve(examplesDist, 'emap.svg'),
   resolve(examplesDist, 'emap-worker.js'),
   resolve(docsBuild, 'index.html'),
 ];
@@ -34,6 +35,7 @@ await cp(examplesDist, composedExamples, { recursive: true });
 const requiredOutputs = [
   resolve(composedExamples, 'index.html'),
   resolve(composedExamples, 'buffer/index.html'),
+  resolve(composedExamples, 'emap.svg'),
   resolve(composedExamples, 'emap-worker.js'),
   resolve(composedExamples, 'assets'),
 ];
