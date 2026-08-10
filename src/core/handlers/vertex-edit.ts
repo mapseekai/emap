@@ -9,6 +9,7 @@ import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import { getLayerId } from '../../source/layer-utils';
 import { isSharedNode } from '../../edit/commands/split-shared-node';
 import type { EditHandlerHost } from './edit-handler-host';
+import { EMAP_THEME_COLORS } from '../../theme/colors';
 
 interface EditableArcs extends EditVertexArcs {
   getVertex2(vertexId: number): [number, number] | null;
@@ -40,13 +41,13 @@ interface DetachedNodeSelection {
 /** Pixel threshold for vertex hover detection */
 const VERTEX_HIT_THRESHOLD = 10;
 
-/** Default light green fill for the polygon currently being vertex-edited. */
-const DEFAULT_POLYGON_FILL = 'rgba(76,175,80,0.2)';
+/** Default `EMAP_THEME_COLORS.selection` fill for the polygon being vertex-edited. */
+const DEFAULT_POLYGON_FILL = EMAP_THEME_COLORS.selection;
 
 export interface VertexEditOptions {
   /** Restrict editable hit-testing to these layer ids/names. Default = all visible. */
   layers?: string[];
-  /** Polygon hover fill. Default light green. */
+  /** Polygon hover fill. Default `EMAP_THEME_COLORS.selection`. */
   polygonFillColor?: string;
   /** Pixel threshold for snapping a dragged vertex to another feature. Default 10. */
   snapThreshold?: number;

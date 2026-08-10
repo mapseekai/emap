@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { BoxSelectHandler } from './box-select';
 import type { NormalizedPointerEvent } from '../handler';
+import { EMAP_THEME_COLORS } from '../../theme/colors';
 
 function ev(
   kind: NormalizedPointerEvent['kind'],
@@ -42,6 +43,31 @@ describe('BoxSelectHandler', () => {
     h.setOptions({ dragActivator: 'shift' });
     h.enable();
     expect(h.handlePointer(ev('down', 0, 0, false))).toBe('passthrough');
+  });
+
+  it('uses primary border and selection fill for the default overlay', () => {
+    const map = fakeMap();
+    const h = new BoxSelectHandler(map as any);
+    h.enable();
+
+    h.handlePointer(ev('down', 10, 10));
+
+    const overlay = map._c.querySelector('.emap-box-select') as HTMLDivElement;
+    expect(overlay.style.border).toContain(EMAP_THEME_COLORS.primary);
+    expect(overlay.style.background).toBe(EMAP_THEME_COLORS.selection);
+  });
+
+  it('preserves supplied overlay stroke and fill', () => {
+    const map = fakeMap();
+    const h = new BoxSelectHandler(map as any);
+    h.setOptions({ style: { stroke: 'var(--caller-stroke)', fill: 'var(--caller-fill)' } });
+    h.enable();
+
+    h.handlePointer(ev('down', 10, 10));
+
+    const overlay = map._c.querySelector('.emap-box-select') as HTMLDivElement;
+    expect(overlay.style.border).toContain('var(--caller-stroke)');
+    expect(overlay.style.background).toBe('var(--caller-fill)');
   });
 
   it('plain left-drag box-selects without shift by default', () => {

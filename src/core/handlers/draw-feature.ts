@@ -4,6 +4,7 @@ import { getLayerId } from '../../source/layer-utils';
 import { FeatureCreateCommand } from '../../edit/commands/feature-create';
 import type { MapshaperLayer, ArcCollection } from '../../types/mapshaper-types';
 import type { EditHandlerHost } from './edit-handler-host';
+import { EMAP_THEME_COLORS } from '../../theme/colors';
 
 export type DrawGeometryType = 'polygon' | 'polyline' | 'point';
 
@@ -30,7 +31,7 @@ export interface DrawFeatureOptions {
    * (default `true`). Disable to restrict snap to existing vertices only.
    */
   snapToEdge?: boolean;
-  /** CSS color for the drawing line (default: '#0078ff') */
+  /** CSS color for the drawing line (default: `EMAP_THEME_COLORS.primary`) */
   drawColor?: string;
 }
 
@@ -476,7 +477,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
       snapCoord: this._snapCoord,
       snapKind: this._snapKind,
       geometryType: this._opts.type,
-      drawColor: this._opts.drawColor || '#0078ff',
+      drawColor: this._opts.drawColor || EMAP_THEME_COLORS.primary,
     });
   }
 

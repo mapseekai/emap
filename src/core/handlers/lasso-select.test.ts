@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { LassoSelectHandler } from './lasso-select';
 import type { NormalizedPointerEvent } from '../handler';
 import * as geom from './select-geometry';
+import { EMAP_THEME_COLORS } from '../../theme/colors';
 
 function ev(
   kind: NormalizedPointerEvent['kind'],
@@ -64,6 +65,31 @@ describe('LassoSelectHandler', () => {
     h.handlePointer(ev('down', 5, 5, true));
     expect(h.handlePointer(ev('up', 6, 6, true))).toBe('passthrough');
     expect(map.select).not.toHaveBeenCalled();
+  });
+
+  it('uses primary stroke and selection fill for the default overlay', () => {
+    const map = fakeMap();
+    const h = new LassoSelectHandler(map as any);
+    h.enable();
+
+    h.handlePointer(ev('down', 0, 0, true));
+
+    const poly = map.getCanvasContainer().querySelector('polyline');
+    expect(poly?.getAttribute('stroke')).toBe(EMAP_THEME_COLORS.primary);
+    expect(poly?.getAttribute('fill')).toBe(EMAP_THEME_COLORS.selection);
+  });
+
+  it('preserves supplied overlay stroke and fill', () => {
+    const map = fakeMap();
+    const h = new LassoSelectHandler(map as any);
+    h.setOptions({ style: { stroke: 'var(--caller-stroke)', fill: 'var(--caller-fill)' } });
+    h.enable();
+
+    h.handlePointer(ev('down', 0, 0, true));
+
+    const poly = map.getCanvasContainer().querySelector('polyline');
+    expect(poly?.getAttribute('stroke')).toBe('var(--caller-stroke)');
+    expect(poly?.getAttribute('fill')).toBe('var(--caller-fill)');
   });
 
   it('keeps distinct refs whose pipe-joined forms collide', () => {

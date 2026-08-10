@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { EditOverlayRenderer } from './edit-overlay-renderer';
 import type { EditPainter } from './painter';
 import type { EditVertexState } from '../map/types';
+import { EMAP_THEME_COLORS } from '../theme/colors';
 
 function makePainter(): EditPainter {
   return {
@@ -19,7 +20,7 @@ function makePainter(): EditPainter {
 }
 
 describe('EditOverlayRenderer', () => {
-  it('renders vertex edit dots, hover circles, and hover squares in green', () => {
+  it('renders vertex edit dots and hover affordances with the primary theme color', () => {
     const painter = makePainter();
     const renderer = new EditOverlayRenderer(painter);
     const arcFilter = vi.fn(() => true);
@@ -36,9 +37,9 @@ describe('EditOverlayRenderer', () => {
       state.shapes,
       state.arcs,
       expect.objectContaining({
-        dotColor: '#2e7d32',
+        dotColor: EMAP_THEME_COLORS.primary,
         arcFilter,
-        hoverColor: '#2e7d32',
+        hoverColor: EMAP_THEME_COLORS.primary,
         hoverType: 'interpolated',
       }),
     );

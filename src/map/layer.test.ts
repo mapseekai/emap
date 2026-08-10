@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { cloneLayerSpecification, resolveStrokeStyle, resolvePointStyle } from './layer';
 import type { LinePaint, FillPaint, CirclePaint, LineLayerSpecification } from './layer';
+import { EMAP_THEME_COLORS } from '../theme/colors';
 
 describe('resolveStrokeStyle', () => {
   it('returns defaults when paint is undefined', () => {
     const style = resolveStrokeStyle(undefined, 1);
-    expect(style).toMatchObject({ color: '#1e88e5', width: 0.8, dashType: 'solid' });
+    expect(style).toMatchObject({ color: EMAP_THEME_COLORS.primary, width: 0.8, dashType: 'solid' });
   });
 
   it('uses line-color and line-width from LinePaint', () => {
@@ -37,7 +38,7 @@ describe('resolveStrokeStyle', () => {
     const paint: LinePaint = { 'line-dashstyle': 'dot' };
     const style = resolveStrokeStyle(paint, 2);
     expect(style).toEqual({
-      color: '#1e88e5',
+      color: EMAP_THEME_COLORS.primary,
       width: 1.6,
       dashType: 'dot',
       dash: [3, 10],
@@ -48,7 +49,7 @@ describe('resolveStrokeStyle', () => {
     const paint: LinePaint = { 'line-dashstyle': 'dash-dot' };
     const style = resolveStrokeStyle(paint, 1);
     expect(style).toEqual({
-      color: '#1e88e5',
+      color: EMAP_THEME_COLORS.primary,
       width: 0.8,
       dashType: 'dash-dot',
       dash: [12, 4, 3, 4],
@@ -66,7 +67,7 @@ describe('resolveStrokeStyle', () => {
     const paint: LinePaint = { 'line-dashstyle': 'arrow-dot' };
     const style = resolveStrokeStyle(paint, 1);
     expect(style).toEqual({
-      color: '#1e88e5',
+      color: EMAP_THEME_COLORS.primary,
       width: 0.8,
       dashType: 'arrow-dot',
       arrowSpacing: 32,
@@ -96,7 +97,12 @@ describe('cloneLayerSpecification', () => {
 describe('resolvePointStyle', () => {
   it('returns defaults when paint is undefined', () => {
     const style = resolvePointStyle(undefined);
-    expect(style).toEqual({ color: '#1e88e5', radius: 4, fill: true, shape: 'circle' });
+    expect(style).toEqual({
+      color: EMAP_THEME_COLORS.primary,
+      radius: 4,
+      fill: true,
+      shape: 'circle',
+    });
   });
 
   it('uses circle paint properties', () => {

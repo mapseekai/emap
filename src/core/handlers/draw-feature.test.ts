@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DrawFeatureHandler, projectPointOnSegment } from './draw-feature';
+import { EMAP_THEME_COLORS } from '../../theme/colors';
 
 function setPrivate(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
@@ -39,6 +40,19 @@ function createMockMap(sources?: Record<string, unknown>) {
     pushCommand: vi.fn(),
   };
 }
+
+describe('DrawFeatureHandler draw-state defaults', () => {
+  it('uses the primary theme color when no draw color is supplied', () => {
+    const map = createMockMap();
+    const handler = new DrawFeatureHandler(map as any, { source: 'src1', type: 'polygon' });
+
+    callPrivate(handler, '_updateDrawState');
+
+    expect(map.setEditDrawState).toHaveBeenCalledWith(
+      expect.objectContaining({ drawColor: EMAP_THEME_COLORS.primary }),
+    );
+  });
+});
 
 function createMockSource(options?: {
   layers?: unknown[];

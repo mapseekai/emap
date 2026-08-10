@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mapshaper from 'mapshaper';
 import { VertexEditHandler } from './vertex-edit';
 import type { Emap } from '../../map/map';
+import { EMAP_THEME_COLORS } from '../../theme/colors';
 
 type MockMap = {
   getCanvasContainer: () => { getBoundingClientRect: () => { left: number; top: number } };
@@ -93,10 +94,10 @@ describe('VertexEditHandler', () => {
     );
   });
 
-  it('uses a light green polygon fill by default', () => {
+  it('uses the selection theme color for polygon fill by default', () => {
     const handler = new VertexEditHandler({} as any);
 
-    expect(handler.getOptions().polygonFillColor).toBe('rgba(76,175,80,0.2)');
+    expect(handler.getOptions().polygonFillColor).toBe(EMAP_THEME_COLORS.selection);
   });
 
   it('moves all shared vertices during drag', () => {
