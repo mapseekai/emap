@@ -43,6 +43,29 @@ const VERTEX_HIT_THRESHOLD = 10;
 
 /** Default `EMAP_THEME_COLORS.selection` fill for the polygon being vertex-edited. */
 const DEFAULT_POLYGON_FILL = EMAP_THEME_COLORS.selection;
+const CONTEXT_MENU_THEME_PROPERTIES = [
+  '--popover',
+  '--popover-foreground',
+  '--border',
+  '--destructive',
+  '--accent',
+  '--ring',
+  '--emap-surface-bg',
+  '--emap-popover-foreground',
+  '--emap-surface-border',
+  '--emap-danger',
+  '--emap-hover-bg',
+  '--emap-ring',
+  '--emap-current-popover',
+  '--emap-current-popover-foreground',
+  '--emap-current-border',
+  '--emap-current-destructive',
+  '--emap-current-hover-bg',
+  '--emap-current-ring',
+  '--emap-radius',
+  '--emap-surface-shadow',
+  '--emap-font',
+] as const;
 
 export interface VertexEditOptions {
   /** Restrict editable hit-testing to these layer ids/names. Default = all visible. */
@@ -366,8 +389,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
    * Show a minimal context menu at (x, y) in viewport coords.
    * Auto-dismissed when user clicks anywhere else. Static appearance lives
    * in `src/ui/controls.css` as `.emap-ctx-menu` / `.emap-ctx-menu-item`
-   * (themable via `--emap-*` tokens on `:root`); only the dynamic
-   * `left`/`top` coords are set inline here.
+   * and theme values are snapshotted from the map container so the body-level
+   * portal retains a local host theme.
    */
   private _showContextMenu(
     x: number,
@@ -382,33 +405,54 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     const menu = document.createElement('div');
     menu.id = 'emap-ctx-menu';
     menu.className = 'emap-ctx-menu';
+    menu.setAttribute('role', 'menu');
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
+
+    const themeHost = this._map.getCanvasContainer?.();
+    const computed = themeHost?.ownerDocument.defaultView?.getComputedStyle(themeHost);
+    for (const property of CONTEXT_MENU_THEME_PROPERTIES) {
+      const value = computed?.getPropertyValue(property).trim();
+      if (value) menu.style.setProperty(property, value);
+    }
+
+    const configureItem = (element: HTMLDivElement, action: (() => void) | null): void => {
+      element.setAttribute('role', 'menuitem');
+      if (!action) {
+        element.tabIndex = -1;
+        return;
+      }
+      element.tabIndex = 0;
+      const activate = (event: Event) => {
+        event.stopPropagation();
+        this._dismissContextMenu();
+        action();
+      };
+      element.addEventListener('click', activate);
+      element.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        activate(event);
+      });
+    };
 
     const item = document.createElement('div');
     item.className = 'emap-ctx-menu-item';
     if (onDelete) {
       item.textContent = '删除节点';
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._dismissContextMenu();
-        onDelete();
-      });
+      configureItem(item, onDelete);
     } else {
       item.classList.add('emap-ctx-menu-item--disabled');
       item.textContent = unavailableText;
       item.setAttribute('aria-disabled', 'true');
+      configureItem(item, null);
     }
     menu.appendChild(item);
     if (onSplit) {
       const splitItem = document.createElement('div');
       splitItem.className = 'emap-ctx-menu-item';
       splitItem.textContent = '分离共享节点';
-      splitItem.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._dismissContextMenu();
-        onSplit();
-      });
+      configureItem(splitItem, onSplit);
       menu.appendChild(splitItem);
     }
     document.body.appendChild(menu);

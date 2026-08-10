@@ -6,17 +6,6 @@ import { resolveThemeColor } from '../theme/colors';
 
 const css = readFileSync(resolve('src/ui/controls.css'), 'utf8');
 
-function darkThemeDeclaration() {
-  const rule = Array.from(document.styleSheets)
-    .flatMap((sheet) => Array.from(sheet.cssRules))
-    .find(
-      (candidate): candidate is CSSStyleRule =>
-        candidate instanceof CSSStyleRule && candidate.selectorText === '.dark',
-    );
-  if (!rule) throw new Error('Missing dark theme rule');
-  return rule.style;
-}
-
 function mountControls(themeClass?: string) {
   const stylesheet = document.createElement('style');
   stylesheet.textContent = css;
@@ -25,7 +14,7 @@ function mountControls(themeClass?: string) {
   const host = document.createElement('div');
   host.className = themeClass ?? '';
   const group = document.createElement('div');
-  group.className = 'emap-ctrl-group';
+  group.className = 'emap-ctrl emap-ctrl-group';
   const button = document.createElement('button');
   button.className = 'active';
   group.append(button);
@@ -79,6 +68,26 @@ describe('controls.css Mapseek behavior', () => {
     }
   });
 
+  it('resolves local host and legacy colors at the actual control boundary', () => {
+    const { host, group } = mountControls();
+    const readVariable = (name: string) => getComputedStyle(group).getPropertyValue(name);
+    host.style.setProperty('--primary', 'rgb(10, 20, 30)');
+    host.style.setProperty('--foreground', 'rgb(40, 50, 60)');
+
+    expect(resolveThemeColor('var(--emap-current-primary)', 'transparent', readVariable)).toBe(
+      'rgb(10, 20, 30)',
+    );
+    expect(resolveThemeColor('var(--emap-current-foreground)', 'transparent', readVariable)).toBe(
+      'rgb(40, 50, 60)',
+    );
+
+    host.style.removeProperty('--primary');
+    host.style.setProperty('--emap-accent', 'rgb(70, 80, 90)');
+    expect(resolveThemeColor('var(--emap-current-primary)', 'transparent', readVariable)).toBe(
+      'rgb(70, 80, 90)',
+    );
+  });
+
   it('switches the inherited theme bridge when its host becomes dark', () => {
     const { host: lightHost } = mountControls();
     const { host: darkHost } = mountControls('dark');
@@ -92,18 +101,16 @@ describe('controls.css Mapseek behavior', () => {
   });
 
   it('resolves primary and destructive colors through dark fallbacks without host overrides', () => {
-    const { host } = mountControls('dark');
-    const readVariable = (name: string) => getComputedStyle(host).getPropertyValue(name);
+    const { group } = mountControls();
+    group.style.setProperty('--emap-accent', 'oklch(0.6800 0.1940 149)');
+    group.style.setProperty('--emap-danger', 'oklch(0.7000 0.1800 25)');
+    const readVariable = (name: string) => getComputedStyle(group).getPropertyValue(name);
 
-    expect(resolveThemeColor('var(--emap-primary)', 'transparent', readVariable)).toBe(
+    expect(resolveThemeColor('var(--emap-current-primary)', 'transparent', readVariable)).toBe(
       'oklch(0.6800 0.1940 149)',
     );
-    expect(resolveThemeColor('var(--emap-destructive)', 'transparent', readVariable)).toBe(
+    expect(resolveThemeColor('var(--emap-current-destructive)', 'transparent', readVariable)).toBe(
       'oklch(0.7000 0.1800 25)',
-    );
-    expect(darkThemeDeclaration().getPropertyValue('--emap-primary')).toBe('var(--emap-accent)');
-    expect(darkThemeDeclaration().getPropertyValue('--emap-destructive')).toBe(
-      'var(--emap-danger)',
     );
   });
 
@@ -144,6 +151,11 @@ describe('controls.css Mapseek behavior', () => {
     expect(applyStyle.paddingInline).toBe('10px');
     expect(applyStyle.borderTopWidth).toBe('1px');
     expect(applyStyle.width).not.toBe('var(--emap-control-size)');
+
+    apply.disabled = true;
+    const disabledStyle = getComputedStyle(apply);
+    expect(disabledStyle.opacity).toBe('0.5');
+    expect(disabledStyle.cursor).toBe('not-allowed');
   });
 
   it('allows the simplify popup to extend beyond its control group', () => {

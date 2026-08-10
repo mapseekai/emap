@@ -41,6 +41,13 @@ const THEME_TOKEN_ROLES: Record<string, ThemeColorRole> = {
   [EMAP_THEME_COLORS.selection]: 'selection',
   [EMAP_THEME_COLORS.destructive]: 'destructive',
 };
+const THEME_ROLE_VARIABLES: Record<ThemeColorRole, readonly string[]> = {
+  foreground: ['--foreground', '--emap-foreground'],
+  primary: ['--primary', '--emap-primary', '--emap-accent'],
+  muted: ['--muted', '--emap-muted'],
+  selection: ['--selection-bg', '--emap-selection-bg'],
+  destructive: ['--destructive', '--emap-destructive', '--emap-danger'],
+};
 
 function addRegularPolygonPath(
   ctx: CanvasRenderingContext2D,
@@ -263,11 +270,17 @@ export class CanvasPainter implements Painter {
     const fallbackRole = THEME_TOKEN_ROLES[color] ?? role;
     const view = this._canvas.ownerDocument?.defaultView;
     const computed = view?.getComputedStyle?.(this._canvas);
-    return resolveThemeColor(
-      color,
-      EMAP_THEME_FALLBACKS[fallbackRole],
-      (name) => computed?.getPropertyValue(name) ?? '',
-    );
+    const semanticToken = EMAP_THEME_COLORS[fallbackRole];
+    return resolveThemeColor(color, EMAP_THEME_FALLBACKS[fallbackRole], (name) => {
+      if (color === semanticToken && name === semanticToken.slice(4, -1)) {
+        for (const variable of THEME_ROLE_VARIABLES[fallbackRole]) {
+          const value = computed?.getPropertyValue(variable).trim();
+          if (value) return value;
+        }
+        return '';
+      }
+      return computed?.getPropertyValue(name) ?? '';
+    });
   }
 
   setTransform(transform: AffineTransform): void {

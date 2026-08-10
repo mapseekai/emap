@@ -95,6 +95,28 @@ describe('SimplifyControl', () => {
     expect(call.planar).toBeUndefined();
   });
 
+  it('disables Apply while simplifyLayer is pending', async () => {
+    let finish!: (value: unknown) => void;
+    map = makeFakeMap(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    ctrl.onRemove();
+    ctrl = new SimplifyControl({ source: 's1' });
+    el = ctrl.onAdd(map as any);
+    const apply = el.querySelector('button.apply') as HTMLButtonElement;
+
+    apply.click();
+    expect(apply.disabled).toBe(true);
+
+    finish({ ok: true });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(apply.disabled).toBe(false);
+  });
+
   it('forwards target when configured', async () => {
     ctrl.onRemove();
     ctrl = new SimplifyControl({ source: 's1', target: 'parks' });

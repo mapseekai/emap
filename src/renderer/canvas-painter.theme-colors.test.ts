@@ -142,6 +142,31 @@ describe('CanvasPainter theme colors', () => {
     expect(getComputedStyle).toHaveBeenCalledTimes(2);
   });
 
+  it('prefers a local host primary over the inherited emap alias', () => {
+    const { assignments, canvas, painter } = makePainter();
+    const host = document.createElement('div');
+    host.style.setProperty('--primary', 'rgb(10, 20, 30)');
+    canvas.style.setProperty('--emap-primary', 'rgb(40, 50, 60)');
+    host.append(canvas);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(
+      (element) =>
+        ({
+          getPropertyValue: (name: string) =>
+            (element as HTMLElement).style.getPropertyValue(name) ||
+            (element as HTMLElement).parentElement?.style.getPropertyValue(name) ||
+            '',
+        }) as CSSStyleDeclaration,
+    );
+
+    painter.drawPoints([[[10, 10]]] as any, {
+      color: EMAP_THEME_COLORS.primary,
+      radius: 4,
+      fill: true,
+    });
+
+    expect(assignments).toContain('rgb(10, 20, 30)');
+  });
+
   it('passes explicit literal colors unchanged', () => {
     const { assignments, painter } = makePainter();
     painter.drawPoints([[[10, 10]]] as any, {
