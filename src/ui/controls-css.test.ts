@@ -89,6 +89,12 @@ describe('controls.css Mapseek behavior', () => {
 
     host.style.setProperty('--accent', 'rgb(100, 0, 0)');
     expect(readVariable('--emap-current-hover-bg')).toContain('transparent 50%');
+
+    host.style.removeProperty('--accent');
+    host.style.setProperty('--emap-hover-bg', 'rgb(100, 110, 120)');
+    expect(resolveThemeColor('var(--emap-current-hover-bg)', 'transparent', readVariable)).toBe(
+      'rgb(100, 110, 120)',
+    );
   });
 
   it('switches the inherited theme bridge when its host becomes dark', () => {

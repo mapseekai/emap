@@ -19,7 +19,6 @@
   --emap-danger: var(--destructive, oklch(0.6000 0.1800 25));
   --emap-warning: var(--warning, oklch(0.769 0.188 70.08));
   --emap-info: var(--info, oklch(0.623 0.17 245));
-  --emap-hover-bg: color-mix(in oklch, var(--emap-interactive-accent), transparent 50%);
   --emap-radius: 0;
   --emap-surface-shadow: none;
   --emap-control-size: 32px;
@@ -65,7 +64,7 @@
   --emap-current-input: var(--input, var(--emap-input));
   --emap-current-ring: var(--ring, var(--emap-ring));
   --emap-current-destructive: var(--destructive, var(--emap-danger));
-  --emap-current-hover-bg: color-mix(in oklch, var(--accent, var(--emap-interactive-accent)), transparent 50%);
+  --emap-current-hover-bg: var(--emap-hover-bg, color-mix(in oklch, var(--accent, var(--emap-interactive-accent)), transparent 50%));
 }
 
 /* Navigation and basemap controls */
