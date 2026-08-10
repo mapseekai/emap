@@ -117,7 +117,7 @@ describe('controls.css Mapseek behavior', () => {
   });
 
   it('lays out semantic simplify fields with themed form controls', () => {
-    const { host } = mountControls();
+    const { host, group } = mountControls();
     host.style.setProperty('--emap-input', 'rgb(1, 2, 3)');
     const popup = document.createElement('div');
     popup.className = 'emap-simplify-popup';
@@ -133,12 +133,26 @@ describe('controls.css Mapseek behavior', () => {
     apply.className = 'emap-simplify-apply';
     field.append(label, input, select, apply);
     popup.append(field);
-    host.append(popup);
+    group.append(popup);
 
     expect(getComputedStyle(field).marginBottom).toBe('8px');
     expect(getComputedStyle(label).gap).toBe('6px');
     expect(getComputedStyle(input).borderTopWidth).toBe('1px');
     expect(getComputedStyle(select).height).toBe('var(--emap-control-size)');
-    expect(getComputedStyle(apply).height).toBe('var(--emap-control-size)');
+    const applyStyle = getComputedStyle(apply);
+    expect(applyStyle.height).toBe('var(--emap-control-size)');
+    expect(applyStyle.paddingInline).toBe('10px');
+    expect(applyStyle.borderTopWidth).toBe('1px');
+    expect(applyStyle.width).not.toBe('var(--emap-control-size)');
+  });
+
+  it('allows the simplify popup to extend beyond its control group', () => {
+    const { group } = mountControls();
+    group.classList.add('emap-ctrl-simplify-wrap');
+    const popup = document.createElement('div');
+    popup.className = 'emap-simplify-popup';
+    group.append(popup);
+
+    expect(getComputedStyle(group).overflow).toBe('visible');
   });
 });

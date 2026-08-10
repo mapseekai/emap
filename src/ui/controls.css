@@ -69,7 +69,7 @@
 .emap-ctrl-group { flex-direction: column; }
 .emap-basemap-ctrl { flex-direction: row; }
 
-.emap-ctrl-group button,
+.emap-ctrl-group > button,
 .emap-basemap-btn {
   position: relative;
   box-sizing: border-box;
@@ -83,15 +83,15 @@
   cursor: pointer;
 }
 
-.emap-ctrl-group button { width: var(--emap-control-size); }
+.emap-ctrl-group > button { width: var(--emap-control-size); }
 .emap-basemap-btn { width: auto; padding-inline: 10px; }
-.emap-ctrl-group button:last-child,
+.emap-ctrl-group > button:last-child,
 .emap-basemap-btn { border-block-end: 0; }
 
-.emap-ctrl-group button:hover:not(:disabled),
+.emap-ctrl-group > button:hover:not(:disabled),
 .emap-basemap-btn:hover:not(:disabled) { background: var(--emap-hover-bg); }
 
-.emap-ctrl-group button:focus-visible,
+.emap-ctrl-group > button:focus-visible,
 .emap-basemap-btn:focus-visible,
 .emap-simplify-popup :is(button, input, select):focus-visible,
 .emap-ctx-menu-item:focus-visible {
@@ -99,23 +99,23 @@
   outline-offset: -3px;
 }
 
-.emap-ctrl-group button:disabled,
+.emap-ctrl-group > button:disabled,
 .emap-basemap-btn:disabled { cursor: not-allowed; opacity: 0.5; }
 
-.emap-ctrl-group button.active,
+.emap-ctrl-group > button.active,
 .emap-basemap-btn.active {
   color: var(--emap-primary);
   background: var(--emap-selection-bg);
 }
 
-.emap-ctrl-group button.active::before,
+.emap-ctrl-group > button.active::before,
 .emap-basemap-btn.active::before {
   position: absolute;
   content: "";
   background: var(--emap-primary);
 }
 
-.emap-ctrl-group button.active::before {
+.emap-ctrl-group > button.active::before {
   inset-block: 0;
   inset-inline-start: 0;
   width: 2px;
@@ -169,7 +169,7 @@
 .emap-lasso-select { z-index: 5; }
 
 /* Simplify control */
-.emap-ctrl-simplify-wrap { position: relative; }
+.emap-ctrl-simplify-wrap { position: relative; overflow: visible; }
 .emap-ctrl-simplify { font-size: 16px; }
 
 .emap-simplify-popup,
