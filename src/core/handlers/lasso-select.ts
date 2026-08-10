@@ -6,15 +6,14 @@ import type { SelectHandlerOptions } from './click-select';
 import type { FeatureRef } from '../../map/types';
 import type { SelectionHandlerHost } from './selection-handler-host';
 import { addFeatureIdentity, type FeatureIdentityIndex } from '../../map/structured-keys';
-import { EMAP_THEME_COLORS } from '../../theme/colors';
 
 /** Visual style for the rubber-band lasso path. */
 export interface LassoSelectStyle {
-  /** Stroke color. Default `EMAP_THEME_COLORS.primary`. */
+  /** Stroke color. Default current theme primary. */
   stroke?: string;
   /** Stroke width in CSS pixels. Default `1.5`. */
   strokeWidth?: number;
-  /** Fill color of the closed shape preview. Default `EMAP_THEME_COLORS.selection`. */
+  /** Fill color of the closed shape preview. Default current theme selection. */
   fill?: string;
   /** SVG `stroke-dasharray`. Default `'4 3'` (subtly dashed). */
   strokeDasharray?: string;
@@ -107,8 +106,8 @@ export class LassoSelectHandler
     svg.setAttribute('class', 'emap-lasso-select');
     const poly = document.createElementNS(SVG_NS, 'polyline') as SVGPolylineElement;
     const s = this._opts.style ?? {};
-    poly.setAttribute('fill', s.fill ?? EMAP_THEME_COLORS.selection);
-    poly.setAttribute('stroke', s.stroke ?? EMAP_THEME_COLORS.primary);
+    poly.setAttribute('fill', s.fill ?? 'var(--emap-current-selection-bg)');
+    poly.setAttribute('stroke', s.stroke ?? 'var(--emap-current-primary)');
     poly.setAttribute('stroke-width', String(s.strokeWidth ?? 1.5));
     poly.setAttribute('stroke-dasharray', s.strokeDasharray ?? '4 3');
     poly.setAttribute('points', '');

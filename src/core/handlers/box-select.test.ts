@@ -2,7 +2,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { BoxSelectHandler } from './box-select';
 import type { NormalizedPointerEvent } from '../handler';
-import { EMAP_THEME_COLORS } from '../../theme/colors';
 
 function ev(
   kind: NormalizedPointerEvent['kind'],
@@ -53,8 +52,8 @@ describe('BoxSelectHandler', () => {
     h.handlePointer(ev('down', 10, 10));
 
     const overlay = map._c.querySelector('.emap-box-select') as HTMLDivElement;
-    expect(overlay.style.border).toContain(EMAP_THEME_COLORS.primary);
-    expect(overlay.style.background).toBe(EMAP_THEME_COLORS.selection);
+    expect(overlay.style.border).toContain('var(--emap-current-primary)');
+    expect(overlay.style.background).toBe('var(--emap-current-selection-bg)');
   });
 
   it('preserves supplied overlay stroke and fill', () => {

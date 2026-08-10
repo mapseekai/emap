@@ -3,7 +3,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { LassoSelectHandler } from './lasso-select';
 import type { NormalizedPointerEvent } from '../handler';
 import * as geom from './select-geometry';
-import { EMAP_THEME_COLORS } from '../../theme/colors';
 
 function ev(
   kind: NormalizedPointerEvent['kind'],
@@ -75,8 +74,8 @@ describe('LassoSelectHandler', () => {
     h.handlePointer(ev('down', 0, 0, true));
 
     const poly = map.getCanvasContainer().querySelector('polyline');
-    expect(poly?.getAttribute('stroke')).toBe(EMAP_THEME_COLORS.primary);
-    expect(poly?.getAttribute('fill')).toBe(EMAP_THEME_COLORS.selection);
+    expect(poly?.getAttribute('stroke')).toBe('var(--emap-current-primary)');
+    expect(poly?.getAttribute('fill')).toBe('var(--emap-current-selection-bg)');
   });
 
   it('preserves supplied overlay stroke and fill', () => {

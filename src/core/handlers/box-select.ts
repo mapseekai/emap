@@ -4,15 +4,14 @@ import { resolveMode, type ModifierCombo } from './select-mode';
 import { dedupeRefs } from './select-geometry';
 import type { SelectHandlerOptions } from './click-select';
 import type { SelectionHandlerHost } from './selection-handler-host';
-import { EMAP_THEME_COLORS } from '../../theme/colors';
 
 /** Visual style for the rubber-band rectangle. */
 export interface BoxSelectStyle {
-  /** Stroke color. Default `EMAP_THEME_COLORS.primary`. */
+  /** Stroke color. Default current theme primary. */
   stroke?: string;
   /** Stroke width in CSS pixels. Default `1.5`. */
   strokeWidth?: number;
-  /** Fill color. Default `EMAP_THEME_COLORS.selection`. */
+  /** Fill color. Default current theme selection. */
   fill?: string;
 }
 export interface BoxSelectHandlerOptions extends SelectHandlerOptions {
@@ -94,8 +93,8 @@ export class BoxSelectHandler extends EventDispatcher implements Handler<BoxSele
     o.style.display = 'none';
     o.style.boxSizing = 'border-box';
     const s = this._opts.style ?? {};
-    o.style.border = `${s.strokeWidth ?? 1.5}px solid ${s.stroke ?? EMAP_THEME_COLORS.primary}`;
-    o.style.background = s.fill ?? EMAP_THEME_COLORS.selection;
+    o.style.border = `${s.strokeWidth ?? 1.5}px solid ${s.stroke ?? 'var(--emap-current-primary)'}`;
+    o.style.background = s.fill ?? 'var(--emap-current-selection-bg)';
     this._map.getCanvasContainer().appendChild(o);
     this._overlay = o;
     return o;

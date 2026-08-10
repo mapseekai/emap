@@ -65,7 +65,7 @@
   --emap-current-input: var(--input, var(--emap-input));
   --emap-current-ring: var(--ring, var(--emap-ring));
   --emap-current-destructive: var(--destructive, var(--emap-danger));
-  --emap-current-hover-bg: var(--accent, var(--emap-hover-bg));
+  --emap-current-hover-bg: color-mix(in oklch, var(--accent, var(--emap-interactive-accent)), transparent 50%);
 }
 
 /* Navigation and basemap controls */

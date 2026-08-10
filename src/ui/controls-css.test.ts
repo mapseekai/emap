@@ -86,6 +86,9 @@ describe('controls.css Mapseek behavior', () => {
     expect(resolveThemeColor('var(--emap-current-primary)', 'transparent', readVariable)).toBe(
       'rgb(70, 80, 90)',
     );
+
+    host.style.setProperty('--accent', 'rgb(100, 0, 0)');
+    expect(readVariable('--emap-current-hover-bg')).toContain('transparent 50%');
   });
 
   it('switches the inherited theme bridge when its host becomes dark', () => {
