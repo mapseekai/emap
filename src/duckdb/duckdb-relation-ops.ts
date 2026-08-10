@@ -304,6 +304,60 @@ export function disjointDatasetWithDuckDb(
   return runTopologicalFilterHelper('disjoint', inputDataset, maskDataset, opts, runtime);
 }
 
+export function overlapsDatasetWithDuckDb(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  return runTopologicalFilterHelper('overlaps', inputDataset, maskDataset, opts, runtime);
+}
+
+export function equalsDatasetWithDuckDb(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  return runTopologicalFilterHelper('equals', inputDataset, maskDataset, opts, runtime);
+}
+
+export function crossesDatasetWithDuckDb(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  return runTopologicalFilterHelper('crosses', inputDataset, maskDataset, opts, runtime);
+}
+
+export function coversDatasetWithDuckDb(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  return runTopologicalFilterHelper('covers', inputDataset, maskDataset, opts, runtime);
+}
+
+export function coveredByDatasetWithDuckDb(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  return runTopologicalFilterHelper('coveredBy', inputDataset, maskDataset, opts, runtime);
+}
+
+export function containsProperlyDatasetWithDuckDb(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  return runTopologicalFilterHelper('containsProperly', inputDataset, maskDataset, opts, runtime);
+}
+
 export function distanceWithinDatasetWithDuckDb(
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
@@ -369,6 +423,60 @@ export function disjointAttributeDatasetWithDuckDb(
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
   return runTopologicalAttributeHelper('disjoint', inputDataset, maskDataset, opts, runtime);
+}
+
+export function overlapsAttributeDatasetWithDuckDb(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  return runTopologicalAttributeHelper('overlaps', inputDataset, maskDataset, opts, runtime);
+}
+
+export function equalsAttributeDatasetWithDuckDb(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  return runTopologicalAttributeHelper('equals', inputDataset, maskDataset, opts, runtime);
+}
+
+export function crossesAttributeDatasetWithDuckDb(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  return runTopologicalAttributeHelper('crosses', inputDataset, maskDataset, opts, runtime);
+}
+
+export function coversAttributeDatasetWithDuckDb(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  return runTopologicalAttributeHelper('covers', inputDataset, maskDataset, opts, runtime);
+}
+
+export function coveredByAttributeDatasetWithDuckDb(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  return runTopologicalAttributeHelper('coveredBy', inputDataset, maskDataset, opts, runtime);
+}
+
+export function containsProperlyAttributeDatasetWithDuckDb(
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  return runTopologicalAttributeHelper('containsProperly', inputDataset, maskDataset, opts, runtime);
 }
 
 export function distanceDatasetWithDuckDb(

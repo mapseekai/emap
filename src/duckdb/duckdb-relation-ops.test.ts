@@ -5,15 +5,27 @@ import { processRelationWithDuckDb, type DuckDbRelationOperationSpec } from './d
 import { buildRelationAttributeSql, buildRelationFilterSql } from './duckdb-sql';
 import {
   containsAttributeDatasetWithDuckDb,
+  containsProperlyAttributeDatasetWithDuckDb,
+  containsProperlyDatasetWithDuckDb,
   containsDatasetWithDuckDb,
+  coveredByAttributeDatasetWithDuckDb,
+  coveredByDatasetWithDuckDb,
+  coversAttributeDatasetWithDuckDb,
+  coversDatasetWithDuckDb,
+  crossesAttributeDatasetWithDuckDb,
+  crossesDatasetWithDuckDb,
   disjointAttributeDatasetWithDuckDb,
   disjointDatasetWithDuckDb,
   distanceDatasetWithDuckDb,
   distanceWithinAttributeDatasetWithDuckDb,
   distanceWithinDatasetWithDuckDb,
+  equalsAttributeDatasetWithDuckDb,
+  equalsDatasetWithDuckDb,
   getDuckDbRelationOperationSpec,
   intersectsAttributeDatasetWithDuckDb,
   intersectsDatasetWithDuckDb,
+  overlapsAttributeDatasetWithDuckDb,
+  overlapsDatasetWithDuckDb,
   touchesAttributeDatasetWithDuckDb,
   touchesDatasetWithDuckDb,
   withinAttributeDatasetWithDuckDb,
@@ -155,6 +167,12 @@ describe('named DuckDB relation helpers', () => {
     [withinDatasetWithDuckDb, 'within', 'ST_Within'],
     [touchesDatasetWithDuckDb, 'touches', 'ST_Touches'],
     [disjointDatasetWithDuckDb, 'disjoint', 'ST_Disjoint'],
+    [overlapsDatasetWithDuckDb, 'overlaps', 'ST_Overlaps'],
+    [equalsDatasetWithDuckDb, 'equals', 'ST_Equals'],
+    [crossesDatasetWithDuckDb, 'crosses', 'ST_Crosses'],
+    [coversDatasetWithDuckDb, 'covers', 'ST_Covers'],
+    [coveredByDatasetWithDuckDb, 'coveredBy', 'ST_CoveredBy'],
+    [containsProperlyDatasetWithDuckDb, 'containsProperly', 'ST_ContainsProperly'],
   ])('builds %s filter relation specs', async (helper, id, duckDbFunction) => {
     await helper(dataset(), dataset());
 
@@ -172,6 +190,17 @@ describe('named DuckDB relation helpers', () => {
     [withinAttributeDatasetWithDuckDb, 'within', 'ST_Within', 'duckdb_within'],
     [touchesAttributeDatasetWithDuckDb, 'touches', 'ST_Touches', 'duckdb_touches'],
     [disjointAttributeDatasetWithDuckDb, 'disjoint', 'ST_Disjoint', 'duckdb_disjoint'],
+    [overlapsAttributeDatasetWithDuckDb, 'overlaps', 'ST_Overlaps', 'duckdb_overlaps'],
+    [equalsAttributeDatasetWithDuckDb, 'equals', 'ST_Equals', 'duckdb_equals'],
+    [crossesAttributeDatasetWithDuckDb, 'crosses', 'ST_Crosses', 'duckdb_crosses'],
+    [coversAttributeDatasetWithDuckDb, 'covers', 'ST_Covers', 'duckdb_covers'],
+    [coveredByAttributeDatasetWithDuckDb, 'coveredBy', 'ST_CoveredBy', 'duckdb_covered_by'],
+    [
+      containsProperlyAttributeDatasetWithDuckDb,
+      'containsProperly',
+      'ST_ContainsProperly',
+      'duckdb_contains_properly',
+    ],
   ])('builds %s attribute relation specs with default columns', async (helper, id, duckDbFunction, outputColumn) => {
     await helper(dataset(), dataset());
 
@@ -251,11 +280,23 @@ describe('named DuckDB relation helpers', () => {
     ['within filter', withinDatasetWithDuckDb],
     ['touches filter', touchesDatasetWithDuckDb],
     ['disjoint filter', disjointDatasetWithDuckDb],
+    ['overlaps filter', overlapsDatasetWithDuckDb],
+    ['equals filter', equalsDatasetWithDuckDb],
+    ['crosses filter', crossesDatasetWithDuckDb],
+    ['covers filter', coversDatasetWithDuckDb],
+    ['coveredBy filter', coveredByDatasetWithDuckDb],
+    ['containsProperly filter', containsProperlyDatasetWithDuckDb],
     ['intersects attribute', intersectsAttributeDatasetWithDuckDb],
     ['contains attribute', containsAttributeDatasetWithDuckDb],
     ['within attribute', withinAttributeDatasetWithDuckDb],
     ['touches attribute', touchesAttributeDatasetWithDuckDb],
     ['disjoint attribute', disjointAttributeDatasetWithDuckDb],
+    ['overlaps attribute', overlapsAttributeDatasetWithDuckDb],
+    ['equals attribute', equalsAttributeDatasetWithDuckDb],
+    ['crosses attribute', crossesAttributeDatasetWithDuckDb],
+    ['covers attribute', coversAttributeDatasetWithDuckDb],
+    ['coveredBy attribute', coveredByAttributeDatasetWithDuckDb],
+    ['containsProperly attribute', containsProperlyAttributeDatasetWithDuckDb],
   ])('allows topological helper %s with EPSG:4326', async (_name, helper) => {
     await helper(dataset('EPSG:4326'), dataset('EPSG:4326'));
 
