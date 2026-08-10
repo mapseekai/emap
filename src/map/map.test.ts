@@ -13,6 +13,7 @@ import { ValidatorRegistry } from '../validation/registry';
 import { FeatureAccessor } from './feature-accessor';
 import { TopologySource } from '../source/topology-source';
 import { FeatureQuery } from './feature-query';
+import { EMAP_THEME_COLORS } from '../theme/colors';
 
 // Snapshot the real mapshaper.internal entry points at module-load time,
 // BEFORE any test has had a chance to mock them. Some test blocks below
@@ -1012,7 +1013,7 @@ describe('Emap layer management', () => {
 
       const effective = callPrivate(map, '_getEffectiveLayers') as LayerSpecification[];
       expect(effective[0].type).toBe('line');
-      expect((effective[0].paint as any)['line-color']).toBe('#1e88e5');
+      expect((effective[0].paint as any)['line-color']).toBe(EMAP_THEME_COLORS.primary);
     });
   });
 

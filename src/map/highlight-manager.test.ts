@@ -4,6 +4,7 @@ import { AffineTransform } from '../geo/transform';
 import type { CorePainter } from '../renderer/painter';
 import type { TopologySource } from '../source/source';
 import type { MapshaperLayer } from '../types/mapshaper-types';
+import { EMAP_THEME_COLORS } from '../theme/colors';
 
 // `HighlightManager` is the transient hover/selection render state —
 // distinct from `Selection` (persistent state). These tests pin the
@@ -121,7 +122,11 @@ describe('HighlightManager.renderHighlights', () => {
     ]);
     const painter = makePainterStub();
     h.renderHighlights(painter, sources, new AffineTransform(), 1);
-    expect(painter.drawPaths).toHaveBeenCalledTimes(1);
+    expect(painter.drawPaths).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ color: EMAP_THEME_COLORS.primary }),
+      expect.anything(),
+    );
     expect(painter.drawPoints).not.toHaveBeenCalled();
   });
 
@@ -138,7 +143,10 @@ describe('HighlightManager.renderHighlights', () => {
     ]);
     const painter = makePainterStub();
     h.renderHighlights(painter, sources, new AffineTransform(), 1);
-    expect(painter.drawPoints).toHaveBeenCalledTimes(1);
+    expect(painter.drawPoints).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ color: EMAP_THEME_COLORS.primary }),
+    );
     expect(painter.drawPaths).not.toHaveBeenCalled();
   });
 

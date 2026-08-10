@@ -27,6 +27,7 @@ export class VertexEditControl implements Control {
     this._btn.className = 'emap-ctrl-edit';
     this._btn.type = 'button';
     this._btn.title = 'Edit Vertices';
+    this._btn.setAttribute('aria-pressed', 'false');
     this._btn.innerHTML = '<span class="emap-ctrl-icon">✏</span>';
     this._btn.addEventListener('click', () => this._toggle());
     this._container.appendChild(this._btn);
@@ -47,9 +48,11 @@ export class VertexEditControl implements Control {
     if (ve.isEnabled()) {
       ve.disable();
       this._btn?.classList.remove('active');
+      this._btn?.setAttribute('aria-pressed', 'false');
     } else {
       ve.enable();
       this._btn?.classList.add('active');
+      this._btn?.setAttribute('aria-pressed', 'true');
     }
   }
 }

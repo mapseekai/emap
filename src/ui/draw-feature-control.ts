@@ -28,6 +28,7 @@ export class DrawFeatureControl implements Control {
   private _onEditModeChange = (e: { mode: string }) => {
     if (e.mode !== 'draw') {
       this._btn?.classList.remove('active');
+      this._btn?.setAttribute('aria-pressed', 'false');
     }
   };
 
@@ -44,6 +45,7 @@ export class DrawFeatureControl implements Control {
     this._btn.className = 'emap-ctrl-draw';
     this._btn.type = 'button';
     this._btn.title = DEFAULT_TITLES[this._opts.type];
+    this._btn.setAttribute('aria-pressed', 'false');
     const iconSpan = document.createElement('span');
     iconSpan.className = 'emap-ctrl-icon';
     const icon = this._opts.icon ?? DEFAULT_ICONS[this._opts.type];
@@ -82,12 +84,14 @@ export class DrawFeatureControl implements Control {
     if (df.isEnabled() && this._btn?.classList.contains('active')) {
       df.disable();
       this._btn?.classList.remove('active');
+      this._btn?.setAttribute('aria-pressed', 'false');
     } else {
       if (df.isEnabled()) df.disable();
       this._applyOptions();
       df.enable();
       this._clearPeerActiveButtons();
       this._btn?.classList.add('active');
+      this._btn?.setAttribute('aria-pressed', 'true');
     }
   }
 
@@ -100,7 +104,10 @@ export class DrawFeatureControl implements Control {
   private _clearPeerActiveButtons(): void {
     const group = this._btn?.closest('.emap-edit-toolbar, .emap-ctrl-group');
     group?.querySelectorAll('.emap-ctrl-draw.active').forEach((button) => {
-      if (button !== this._btn) button.classList.remove('active');
+      if (button !== this._btn) {
+        button.classList.remove('active');
+        button.setAttribute('aria-pressed', 'false');
+      }
     });
   }
 }

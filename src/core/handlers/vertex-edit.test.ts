@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mapshaper from 'mapshaper';
 import { VertexEditHandler } from './vertex-edit';
 import type { Emap } from '../../map/map';
+import { EMAP_THEME_COLORS } from '../../theme/colors';
 
 type MockMap = {
   getCanvasContainer: () => { getBoundingClientRect: () => { left: number; top: number } };
@@ -93,10 +94,10 @@ describe('VertexEditHandler', () => {
     );
   });
 
-  it('uses a light green polygon fill by default', () => {
+  it('uses the selection theme color for polygon fill by default', () => {
     const handler = new VertexEditHandler({} as any);
 
-    expect(handler.getOptions().polygonFillColor).toBe('rgba(76,175,80,0.2)');
+    expect(handler.getOptions().polygonFillColor).toBe(EMAP_THEME_COLORS.selection);
   });
 
   it('moves all shared vertices during drag', () => {
@@ -1200,12 +1201,17 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
 
   it('_showContextMenu sets class-based DOM and only dynamic position inline', () => {
     document.getElementById('emap-ctx-menu')?.remove();
+    const themeHost = document.createElement('div');
+    themeHost.style.setProperty('--emap-surface-bg', 'rgb(10, 20, 30)');
+    themeHost.style.setProperty('--emap-danger', 'rgb(40, 50, 60)');
+    document.body.append(themeHost);
     const mapMock = {
       setEditMode: () => {},
       on: () => {},
       off: () => {},
       render: () => {},
       clearEditVertexState: () => {},
+      getCanvasContainer: () => themeHost,
     } as any;
     const handler = new VertexEditHandler(mapMock);
     Reflect.get(handler, '_showContextMenu').call(handler, 123, 456, () => {});
@@ -1218,15 +1224,21 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
     expect(menu.style.background).toBe('');
     expect(menu.style.boxShadow).toBe('');
     expect(menu.style.font).toBe('');
+    expect(menu.getAttribute('role')).toBe('menu');
+    expect(menu.style.getPropertyValue('--emap-surface-bg')).toBe('rgb(10, 20, 30)');
+    expect(menu.style.getPropertyValue('--emap-danger')).toBe('rgb(40, 50, 60)');
 
     const item = menu.firstElementChild as HTMLDivElement;
     expect(item).toBeTruthy();
     expect(item.className).toBe('emap-ctx-menu-item');
     expect(item.textContent).toBe('删除节点');
+    expect(item.getAttribute('role')).toBe('menuitem');
+    expect(item.tabIndex).toBe(0);
     item.dispatchEvent(new Event('mouseenter', { bubbles: true }));
     expect(item.style.background).toBe('');
 
     menu.remove();
+    themeHost.remove();
   });
 
   it('_showContextMenu click handler invokes onDelete and removes the menu', () => {
@@ -1247,5 +1259,23 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
     item.click();
     expect(called).toBe(1);
     expect(document.getElementById('emap-ctx-menu')).toBeNull();
+  });
+
+  it('_showContextMenu supports keyboard activation and skips disabled items', () => {
+    document.getElementById('emap-ctx-menu')?.remove();
+    const handler = new VertexEditHandler({} as any);
+    const onDelete = vi.fn();
+    Reflect.get(handler, '_showContextMenu').call(handler, 10, 20, onDelete);
+    const enabled = document.querySelector('#emap-ctx-menu > div') as HTMLDivElement;
+
+    enabled.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(document.getElementById('emap-ctx-menu')).toBeNull();
+
+    Reflect.get(handler, '_showContextMenu').call(handler, 10, 20, null);
+    const disabled = document.querySelector('#emap-ctx-menu > div') as HTMLDivElement;
+    expect(disabled.getAttribute('role')).toBe('menuitem');
+    expect(disabled.tabIndex).toBe(-1);
+    document.getElementById('emap-ctx-menu')?.remove();
   });
 });

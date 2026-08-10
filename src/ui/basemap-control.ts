@@ -66,6 +66,7 @@ export class BasemapControl implements Control {
       const btn = document.createElement('button');
       btn.className = 'emap-basemap-btn';
       btn.textContent = style.name;
+      btn.setAttribute('aria-pressed', 'false');
       btn.onclick = () => this._toggleStyle(style);
       this._container!.appendChild(btn);
     });
@@ -228,6 +229,7 @@ export class BasemapControl implements Control {
     buttons.forEach((btn, index) => {
       const isActive = this._styles[index] === this._activeStyle;
       btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', String(isActive));
     });
   }
 

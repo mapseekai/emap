@@ -33,9 +33,14 @@ describe('SimplifyControl', () => {
   });
 
   it('keeps the popup hidden by default', () => {
+    const toggle = el.querySelector('button') as HTMLButtonElement;
     const popup = el.querySelector('.emap-simplify-popup') as HTMLElement;
     expect(popup).not.toBeNull();
     expect(popup.style.display).toBe('none');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(popup.getAttribute('style')).toBe('display: none;');
+    expect(popup.innerHTML).not.toMatch(/style=/);
+    expect(popup.querySelector('.emap-simplify-field')).not.toBeNull();
   });
 
   it('opens the popup when the toolbar button is clicked', () => {
@@ -44,6 +49,7 @@ describe('SimplifyControl', () => {
     const popup = el.querySelector('.emap-simplify-popup') as HTMLElement;
     expect(popup.style.display).toBe('block');
     expect(toggle.classList.contains('active')).toBe(true);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
   });
 
   it('Esc key closes the open popup', () => {
@@ -87,6 +93,28 @@ describe('SimplifyControl', () => {
     });
     expect(call.target).toBeUndefined();
     expect(call.planar).toBeUndefined();
+  });
+
+  it('disables Apply while simplifyLayer is pending', async () => {
+    let finish!: (value: unknown) => void;
+    map = makeFakeMap(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    ctrl.onRemove();
+    ctrl = new SimplifyControl({ source: 's1' });
+    el = ctrl.onAdd(map as any);
+    const apply = el.querySelector('button.apply') as HTMLButtonElement;
+
+    apply.click();
+    expect(apply.disabled).toBe(true);
+
+    finish({ ok: true });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(apply.disabled).toBe(false);
   });
 
   it('forwards target when configured', async () => {

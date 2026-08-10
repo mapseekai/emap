@@ -24,12 +24,15 @@ describe('VertexEditControl (thin shell)', () => {
     const root = c.onAdd(map);
     const btn = root.querySelector('button') as HTMLButtonElement;
     expect(btn).toBeTruthy();
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
     btn.click();
     expect(map.vertexEdit.enable).toHaveBeenCalledTimes(1);
     expect(btn.classList.contains('active')).toBe(true);
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
     btn.click();
     expect(map.vertexEdit.disable).toHaveBeenCalledTimes(1);
     expect(btn.classList.contains('active')).toBe(false);
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
   });
 
   it('forwards constructor polygonFillColor to map.vertexEdit.setOptions on add', () => {
