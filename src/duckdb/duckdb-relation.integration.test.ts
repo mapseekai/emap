@@ -371,10 +371,21 @@ describeDuckDbIntegration('DuckDB-Wasm relation integration', () => {
 
     const crosses = await crossesDatasetWithDuckDb(
       await fixtureDataset([
-        line('crossing', [[0, 5], [10, 5]]),
-        line('far', [[0, 20], [10, 20]]),
+        line('crossing', [
+          [0, 5],
+          [10, 5],
+        ]),
+        line('far', [
+          [0, 20],
+          [10, 20],
+        ]),
       ]),
-      await fixtureDataset([line('mask', [[5, 0], [5, 10]])]),
+      await fixtureDataset([
+        line('mask', [
+          [5, 0],
+          [5, 10],
+        ]),
+      ]),
       {},
       duckDbRuntime,
     );
@@ -397,16 +408,14 @@ describeDuckDbIntegration('DuckDB-Wasm relation integration', () => {
     expect(records(coveredBy).map((record) => record.id)).toEqual(['boundary']);
 
     const containsProperly = await containsProperlyAttributeDatasetWithDuckDb(
-      await fixtureDataset([
-        square('interior', 0, 0, 10, 10),
-        square('boundary', 5, 5, 15, 15),
-      ]),
+      await fixtureDataset([square('interior', 0, 0, 10, 10), square('boundary', 5, 5, 15, 15)]),
       await fixtureDataset([point('mask', [5, 5])]),
       {},
       duckDbRuntime,
     );
-    expect(
-      records(containsProperly).map((record) => record.duckdb_contains_properly),
-    ).toEqual([true, false]);
+    expect(records(containsProperly).map((record) => record.duckdb_contains_properly)).toEqual([
+      true,
+      false,
+    ]);
   }, 120_000);
 });

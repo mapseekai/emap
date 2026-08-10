@@ -396,21 +396,22 @@ describe('named DuckDB relation helpers', () => {
     });
   });
 
-  it.each(ADDITIONAL_RELATION_CASES)(
-    'returns the additional $id operation spec',
-    ({ id, duckDbFunction, outputColumn }) => {
-      expect(getDuckDbRelationOperationSpec(id)).toEqual({
-        id,
-        duckDbFunction,
-        outputColumn,
-        output: 'predicate',
-        supportsFilter: true,
-        supportsAttribute: true,
-        requiresDistance: false,
-        rejectGeographicCrs: false,
-      });
-    },
-  );
+  it.each(ADDITIONAL_RELATION_CASES)('returns the additional $id operation spec', ({
+    id,
+    duckDbFunction,
+    outputColumn,
+  }) => {
+    expect(getDuckDbRelationOperationSpec(id)).toEqual({
+      id,
+      duckDbFunction,
+      outputColumn,
+      output: 'predicate',
+      supportsFilter: true,
+      supportsAttribute: true,
+      requiresDistance: false,
+      rejectGeographicCrs: false,
+    });
+  });
 
   it('throws validation errors for unknown operation specs', () => {
     expect(() => getDuckDbRelationOperationSpec('unsupported')).toThrowError(DuckDbOperationError);

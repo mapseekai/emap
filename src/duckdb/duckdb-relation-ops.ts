@@ -476,7 +476,13 @@ export function containsProperlyAttributeDatasetWithDuckDb(
   opts: DuckDbRelationHelperOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return runTopologicalAttributeHelper('containsProperly', inputDataset, maskDataset, opts, runtime);
+  return runTopologicalAttributeHelper(
+    'containsProperly',
+    inputDataset,
+    maskDataset,
+    opts,
+    runtime,
+  );
 }
 
 export function distanceDatasetWithDuckDb(

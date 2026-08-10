@@ -341,28 +341,30 @@ describe('DuckDB buffer SQL', () => {
     );
   });
 
-  it.each(ADDITIONAL_RELATION_CASES)(
-    'builds additional filter and attribute SQL for $duckDbFunction',
-    ({ duckDbFunction, outputColumn }) => {
-      const base = {
-        inputTableName: 'input',
-        maskTableName: 'mask',
-        inputGeometryColumn: 'geometry',
-        maskGeometryColumn: 'geometry',
-        duckDbFunction,
-      };
+  it.each(
+    ADDITIONAL_RELATION_CASES,
+  )('builds additional filter and attribute SQL for $duckDbFunction', ({
+    duckDbFunction,
+    outputColumn,
+  }) => {
+    const base = {
+      inputTableName: 'input',
+      maskTableName: 'mask',
+      inputGeometryColumn: 'geometry',
+      maskGeometryColumn: 'geometry',
+      duckDbFunction,
+    };
 
-      const filterSql = buildRelationFilterSql(base);
-      const attributeSql = buildRelationAttributeSql({ ...base, outputColumn });
-      const predicate = `${duckDbFunction}(i."geometry", m."geometry")`;
+    const filterSql = buildRelationFilterSql(base);
+    const attributeSql = buildRelationAttributeSql({ ...base, outputColumn });
+    const predicate = `${duckDbFunction}(i."geometry", m."geometry")`;
 
-      expect(filterSql).toContain(' AND EXISTS (');
-      expect(filterSql).toContain(predicate);
-      expect(attributeSql).toContain(' EXISTS (');
-      expect(attributeSql).toContain(predicate);
-      expect(attributeSql).toContain(`AS "${outputColumn}"`);
-    },
-  );
+    expect(filterSql).toContain(' AND EXISTS (');
+    expect(filterSql).toContain(predicate);
+    expect(attributeSql).toContain(' EXISTS (');
+    expect(attributeSql).toContain(predicate);
+    expect(attributeSql).toContain(`AS "${outputColumn}"`);
+  });
 
   it('builds relation attribute query with minimum distance output', () => {
     expect(
