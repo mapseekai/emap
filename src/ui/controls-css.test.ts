@@ -107,4 +107,30 @@ describe('controls.css Mapseek behavior', () => {
     expect(groupStyle.display).toBe('flex');
     expect(buttonStyle.cursor).toBe('pointer');
   });
+
+  it('lays out semantic simplify fields with themed form controls', () => {
+    const { host } = mountControls();
+    host.style.setProperty('--emap-input', 'rgb(1, 2, 3)');
+    const popup = document.createElement('div');
+    popup.className = 'emap-simplify-popup';
+    const field = document.createElement('div');
+    field.className = 'emap-simplify-field';
+    const label = document.createElement('label');
+    label.className = 'emap-simplify-label';
+    const input = document.createElement('input');
+    input.className = 'emap-simplify-range';
+    const select = document.createElement('select');
+    select.className = 'emap-simplify-select';
+    const apply = document.createElement('button');
+    apply.className = 'emap-simplify-apply';
+    field.append(label, input, select, apply);
+    popup.append(field);
+    host.append(popup);
+
+    expect(getComputedStyle(field).marginBottom).toBe('8px');
+    expect(getComputedStyle(label).gap).toBe('6px');
+    expect(getComputedStyle(input).borderTopWidth).toBe('1px');
+    expect(getComputedStyle(select).height).toBe('var(--emap-control-size)');
+    expect(getComputedStyle(apply).height).toBe('var(--emap-control-size)');
+  });
 });

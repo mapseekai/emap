@@ -191,17 +191,36 @@
   padding: 10px;
 }
 
-.emap-simplify-popup select,
-.emap-simplify-popup button {
+.emap-simplify-field,
+.emap-simplify-flags { margin-bottom: 8px; }
+
+.emap-simplify-label,
+.emap-simplify-flags,
+.emap-simplify-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.emap-simplify-flags { flex-wrap: wrap; }
+
+.emap-simplify-range,
+.emap-simplify-select,
+.emap-simplify-apply {
   box-sizing: border-box;
   height: var(--emap-control-size);
   color: var(--emap-foreground);
-  border: 1px solid var(--emap-input);
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--emap-input);
   border-radius: var(--emap-radius);
   font: var(--emap-font);
 }
 
-.emap-simplify-popup select { min-width: 0; background: transparent; }
+.emap-simplify-range,
+.emap-simplify-select { flex: 1; min-width: 0; }
+.emap-simplify-select { background: transparent; }
+.emap-simplify-value { min-width: 48px; text-align: right; }
 .emap-simplify-apply { padding-inline: 10px; color: var(--emap-primary-foreground); background: var(--emap-primary); }
 .emap-simplify-status { color: var(--emap-muted-foreground); font-size: 11px; }
 
