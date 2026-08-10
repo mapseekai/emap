@@ -57,11 +57,13 @@ describe('CanvasPainter theme colors', () => {
     const { assignments, painter } = makePainter();
     mockMissingThemeVariables();
 
-    painter.drawPaths(
-      [[[0]]] as any,
-      { color: EMAP_THEME_COLORS.primary, width: 1 },
-      { getArcIter: () => makeArcIterator([[0, 0], [10, 10]]) } as any,
-    );
+    painter.drawPaths([[[0]]] as any, { color: EMAP_THEME_COLORS.primary, width: 1 }, {
+      getArcIter: () =>
+        makeArcIterator([
+          [0, 0],
+          [10, 10],
+        ]),
+    } as any);
 
     expect(assignments).toContain(EMAP_THEME_FALLBACKS.primary);
   });
@@ -72,7 +74,14 @@ describe('CanvasPainter theme colors', () => {
 
     painter.drawPolygonFill(
       [[[0]]] as any,
-      { getShapeIter: () => makeArcIterator([[0, 0], [10, 0], [10, 10]]) } as any,
+      {
+        getShapeIter: () =>
+          makeArcIterator([
+            [0, 0],
+            [10, 0],
+            [10, 10],
+          ]),
+      } as any,
       EMAP_THEME_COLORS.selection,
     );
 
@@ -83,14 +92,20 @@ describe('CanvasPainter theme colors', () => {
     const { assignments, canvas, painter } = makePainter();
     const getComputedStyle = vi.spyOn(window, 'getComputedStyle').mockReturnValue({
       getPropertyValue: (name: string) =>
-        name === '--emap-primary' ? 'var(--cycle)' : name === '--cycle' ? 'var(--emap-primary)' : '',
+        name === '--emap-primary'
+          ? 'var(--cycle)'
+          : name === '--cycle'
+            ? 'var(--emap-primary)'
+            : '',
     } as CSSStyleDeclaration);
 
-    painter.drawPaths(
-      [[[0]]] as any,
-      { color: EMAP_THEME_COLORS.primary, width: 1 },
-      { getArcIter: () => makeArcIterator([[0, 0], [10, 10]]) } as any,
-    );
+    painter.drawPaths([[[0]]] as any, { color: EMAP_THEME_COLORS.primary, width: 1 }, {
+      getArcIter: () =>
+        makeArcIterator([
+          [0, 0],
+          [10, 10],
+        ]),
+    } as any);
 
     expect(assignments).toContain(EMAP_THEME_FALLBACKS.primary);
     expect(getComputedStyle).toHaveBeenCalledWith(canvas);

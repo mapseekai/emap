@@ -9,8 +9,10 @@ const css = readFileSync(resolve('src/ui/controls.css'), 'utf8');
 function darkThemeDeclaration() {
   const rule = Array.from(document.styleSheets)
     .flatMap((sheet) => Array.from(sheet.cssRules))
-    .find((candidate): candidate is CSSStyleRule =>
-      candidate instanceof CSSStyleRule && candidate.selectorText === '.dark');
+    .find(
+      (candidate): candidate is CSSStyleRule =>
+        candidate instanceof CSSStyleRule && candidate.selectorText === '.dark',
+    );
   if (!rule) throw new Error('Missing dark theme rule');
   return rule.style;
 }
@@ -81,22 +83,28 @@ describe('controls.css Mapseek behavior', () => {
     const { host: lightHost } = mountControls();
     const { host: darkHost } = mountControls('dark');
 
-    expect(getComputedStyle(darkHost).getPropertyValue('--emap-accent'))
-      .not.toBe(getComputedStyle(lightHost).getPropertyValue('--emap-accent'));
-    expect(getComputedStyle(darkHost).getPropertyValue('--emap-selection-bg'))
-      .not.toBe(getComputedStyle(lightHost).getPropertyValue('--emap-selection-bg'));
+    expect(getComputedStyle(darkHost).getPropertyValue('--emap-accent')).not.toBe(
+      getComputedStyle(lightHost).getPropertyValue('--emap-accent'),
+    );
+    expect(getComputedStyle(darkHost).getPropertyValue('--emap-selection-bg')).not.toBe(
+      getComputedStyle(lightHost).getPropertyValue('--emap-selection-bg'),
+    );
   });
 
   it('resolves primary and destructive colors through dark fallbacks without host overrides', () => {
     const { host } = mountControls('dark');
     const readVariable = (name: string) => getComputedStyle(host).getPropertyValue(name);
 
-    expect(resolveThemeColor('var(--emap-primary)', 'transparent', readVariable))
-      .toBe('oklch(0.6800 0.1940 149)');
-    expect(resolveThemeColor('var(--emap-destructive)', 'transparent', readVariable))
-      .toBe('oklch(0.7000 0.1800 25)');
+    expect(resolveThemeColor('var(--emap-primary)', 'transparent', readVariable)).toBe(
+      'oklch(0.6800 0.1940 149)',
+    );
+    expect(resolveThemeColor('var(--emap-destructive)', 'transparent', readVariable)).toBe(
+      'oklch(0.7000 0.1800 25)',
+    );
     expect(darkThemeDeclaration().getPropertyValue('--emap-primary')).toBe('var(--emap-accent)');
-    expect(darkThemeDeclaration().getPropertyValue('--emap-destructive')).toBe('var(--emap-danger)');
+    expect(darkThemeDeclaration().getPropertyValue('--emap-destructive')).toBe(
+      'var(--emap-danger)',
+    );
   });
 
   it('renders the fixed control details that jsdom can compute', () => {

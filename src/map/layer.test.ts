@@ -6,7 +6,11 @@ import { EMAP_THEME_COLORS } from '../theme/colors';
 describe('resolveStrokeStyle', () => {
   it('returns defaults when paint is undefined', () => {
     const style = resolveStrokeStyle(undefined, 1);
-    expect(style).toMatchObject({ color: EMAP_THEME_COLORS.primary, width: 0.8, dashType: 'solid' });
+    expect(style).toMatchObject({
+      color: EMAP_THEME_COLORS.primary,
+      width: 0.8,
+      dashType: 'solid',
+    });
   });
 
   it('uses line-color and line-width from LinePaint', () => {

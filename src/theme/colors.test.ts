@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  EMAP_THEME_COLORS,
-  EMAP_THEME_FALLBACKS,
-  resolveThemeColor,
-} from './colors';
+import { EMAP_THEME_COLORS, EMAP_THEME_FALLBACKS, resolveThemeColor } from './colors';
 
 describe('emap semantic theme colors', () => {
   it('resolves every semantic role through its stable emap variable', () => {
@@ -69,9 +65,7 @@ describe('emap semantic theme colors', () => {
   });
 
   it('uses the supplied semantic fallback for missing and cyclic variables', () => {
-    expect(resolveThemeColor('var(--missing)', 'oklch(1 0 0)', () => '')).toBe(
-      'oklch(1 0 0)',
-    );
+    expect(resolveThemeColor('var(--missing)', 'oklch(1 0 0)', () => '')).toBe('oklch(1 0 0)');
     const cycle: Record<string, string> = { '--a': 'var(--b)', '--b': 'var(--a)' };
     expect(resolveThemeColor('var(--a)', 'oklch(1 0 0)', (name) => cycle[name] ?? '')).toBe(
       'oklch(1 0 0)',
