@@ -1,82 +1,151 @@
-/* emap design tokens — defaults are the verbatim legacy literals so default
- * rendering is byte-identical. Override on :root (or any ancestor selector)
- * to theme. Introduced in DX P4 for the context menu; future phases may
- * migrate existing controls to consume these tokens. */
 :root {
-  /* Accent (current usage: box-select stroke, lasso stroke, button-active bg). */
-  --emap-accent: #0078ff;
-  --emap-accent-soft: rgba(0, 120, 255, 0.1);
-  /* Surface — panels, menus, dropdowns. */
-  --emap-surface-bg: #fff;
-  --emap-surface-border: #ccc;
-  --emap-surface-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
-  /* Generic radius + hover/danger + font. */
-  --emap-radius: 4px;
-  --emap-hover-bg: #f5f5f5;
-  --emap-danger: #d32;
-  --emap-font: 13px/1.5 system-ui, sans-serif;
+  --emap-background: var(--background, oklch(0.9900 0.0020 149));
+  --emap-foreground: var(--foreground, oklch(0.2500 0.0100 149));
+  --emap-card: var(--card, oklch(1 0 0));
+  --emap-card-foreground: var(--card-foreground, oklch(0.2500 0.0100 149));
+  --emap-surface-bg: var(--popover, oklch(1 0 0));
+  --emap-popover-foreground: var(--popover-foreground, oklch(0.2500 0.0100 149));
+  --emap-accent: var(--primary, oklch(0.6270 0.1940 149));
+  --emap-primary: var(--emap-accent);
+  --emap-primary-foreground: var(--primary-foreground, oklch(1 0 0));
+  --emap-secondary: var(--secondary, oklch(0.9600 0.0050 149));
+  --emap-muted: var(--muted, oklch(0.9700 0.0020 149));
+  --emap-muted-foreground: var(--muted-foreground, oklch(0.5000 0.0200 149));
+  --emap-interactive-accent: var(--accent, oklch(0.9600 0.0100 149));
+  --emap-selection-bg: var(--selection-bg, oklch(0.9500 0.0300 149));
+  --emap-surface-border: var(--border, oklch(0.9200 0.0050 149));
+  --emap-border-strong: var(--border-strong, oklch(0.8500 0.0080 149));
+  --emap-input: var(--input, oklch(0.9400 0.0050 149));
+  --emap-ring: var(--ring, oklch(0.6270 0.1940 149));
+  --emap-danger: var(--destructive, oklch(0.6000 0.1800 25));
+  --emap-destructive: var(--emap-danger);
+  --emap-warning: var(--warning, oklch(0.769 0.188 70.08));
+  --emap-info: var(--info, oklch(0.623 0.17 245));
+  --emap-hover-bg: color-mix(in oklch, var(--emap-interactive-accent), transparent 50%);
+  --emap-radius: 0;
+  --emap-surface-shadow: none;
+  --emap-control-size: 32px;
+  --emap-font: 13px/1.3333 "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
-/* Navigation Controls */
-.emap-ctrl-group {
-  background-color: #fff;
-  border-radius: 4px;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+.dark {
+  --emap-background: var(--background, oklch(0.1500 0.0100 149));
+  --emap-foreground: var(--foreground, oklch(0.9500 0.0050 149));
+  --emap-card: var(--card, oklch(0.2000 0.0100 149));
+  --emap-card-foreground: var(--card-foreground, oklch(0.9500 0.0050 149));
+  --emap-surface-bg: var(--popover, oklch(0.2000 0.0100 149));
+  --emap-popover-foreground: var(--popover-foreground, oklch(0.9500 0.0050 149));
+  --emap-accent: var(--primary, oklch(0.6800 0.1940 149));
+  --emap-primary-foreground: var(--primary-foreground, oklch(0.1500 0.0100 149));
+  --emap-secondary: var(--secondary, oklch(0.2500 0.0100 149));
+  --emap-muted: var(--muted, oklch(0.2400 0.0080 149));
+  --emap-muted-foreground: var(--muted-foreground, oklch(0.6500 0.0200 149));
+  --emap-interactive-accent: var(--accent, oklch(0.2500 0.0100 149));
+  --emap-selection-bg: var(--selection-bg, oklch(0.2700 0.0300 149));
+  --emap-surface-border: var(--border, oklch(1 0 0 / 12%));
+  --emap-border-strong: var(--border-strong, oklch(1 0 0 / 20%));
+  --emap-input: var(--input, oklch(1 0 0 / 15%));
+  --emap-ring: var(--ring, oklch(0.6270 0.1940 149));
+  --emap-danger: var(--destructive, oklch(0.7000 0.1800 25));
+  --emap-warning: var(--warning, oklch(0.82 0.17 85));
+  --emap-info: var(--info, oklch(0.7 0.15 240));
+}
+
+/* Navigation and basemap controls */
+.emap-ctrl-group,
+.emap-basemap-ctrl {
   display: flex;
-  flex-direction: column;
+  overflow: hidden;
+  color: var(--emap-card-foreground);
+  background: var(--emap-card);
+  border: 1px solid var(--emap-surface-border);
+  border-radius: var(--emap-radius);
+  box-shadow: var(--emap-surface-shadow);
+  font: var(--emap-font);
 }
 
-.emap-ctrl-group button {
-  width: 30px;
-  height: 30px;
-  display: block;
-  padding: 0;
-  outline: none;
-  border: 0;
+.emap-ctrl-group { flex-direction: column; }
+.emap-basemap-ctrl { flex-direction: row; }
+
+.emap-ctrl-group button,
+.emap-basemap-btn {
+  position: relative;
   box-sizing: border-box;
-  background-color: transparent;
+  height: var(--emap-control-size);
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-block-end: 1px solid var(--emap-surface-border);
+  font: inherit;
   cursor: pointer;
-  border-bottom: 1px solid #ddd;
 }
 
-.emap-ctrl-group button:last-child {
-  border-bottom: 0;
+.emap-ctrl-group button { width: var(--emap-control-size); }
+.emap-basemap-btn { width: auto; padding-inline: 10px; }
+.emap-ctrl-group button:last-child,
+.emap-basemap-btn { border-block-end: 0; }
+
+.emap-ctrl-group button:hover:not(:disabled),
+.emap-basemap-btn:hover:not(:disabled) { background: var(--emap-hover-bg); }
+
+.emap-ctrl-group button:focus-visible,
+.emap-basemap-btn:focus-visible,
+.emap-simplify-popup :is(button, input, select):focus-visible,
+.emap-ctx-menu-item:focus-visible {
+  outline: 3px solid color-mix(in oklch, var(--emap-ring), transparent 80%);
+  outline-offset: -3px;
 }
 
-.emap-ctrl-group button:hover {
-  background-color: #f2f2f2;
+.emap-ctrl-group button:disabled,
+.emap-basemap-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+
+.emap-ctrl-group button.active,
+.emap-basemap-btn.active {
+  color: var(--emap-primary);
+  background: var(--emap-selection-bg);
 }
 
-.emap-ctrl-icon {
-  font-size: 18px;
-  line-height: 30px;
+.emap-ctrl-group button.active::before,
+.emap-basemap-btn.active::before {
+  position: absolute;
+  content: "";
+  background: var(--emap-primary);
 }
 
-/* Status Controls */
+.emap-ctrl-group button.active::before {
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 2px;
+}
+
+.emap-basemap-btn.active::before {
+  inset-inline: 0;
+  inset-block-end: 0;
+  height: 2px;
+}
+
+.emap-ctrl-icon { font-size: 18px; line-height: var(--emap-control-size); }
+
+/* Status controls */
 .emap-status-ctrl {
-  background-color: rgba(255, 255, 255, 0.8);
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #333;
-  pointer-events: auto;
-  white-space: nowrap;
   display: flex;
   align-items: center;
+  padding: 4px 8px;
+  color: var(--emap-card-foreground);
+  background: var(--emap-card);
+  border: 1px solid var(--emap-surface-border);
+  border-radius: var(--emap-radius);
+  box-shadow: var(--emap-surface-shadow);
+  font: 11px/1.5 "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: auto;
 }
 
-.emap-align-left {
-  align-self: flex-start;
-}
-
-.emap-align-right {
-  align-self: flex-end;
-}
-
-.emap-align-center {
-  align-self: center;
-}
+.emap-align-left { align-self: flex-start; }
+.emap-align-right { align-self: flex-end; }
+.emap-align-center { align-self: center; }
 
 .emap-status-zoom,
 .emap-status-mousepos,
@@ -85,114 +154,58 @@
   margin-right: 15px;
 }
 
-.emap-status-epsg {
-  margin-right: 0;
-}
-
-/* Basemap Controls */
-.emap-basemap-ctrl {
-  background-color: #fff;
-  border-radius: 4px;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-  display: flex;
-  flex-direction: row;
-  gap: 1px;
-}
-
-.emap-basemap-btn {
-  padding: 6px 10px;
-  background-color: #fff;
-  border: 0;
-  cursor: pointer;
-  font-size: 11px;
-  transition: background-color 0.15s ease;
-}
-
-.emap-basemap-btn:hover {
-  background-color: #f2f2f2;
-}
-
-.emap-basemap-btn.active {
-  background-color: #0078ff;
-  color: #fff;
-}
+.emap-status-epsg { margin-right: 0; }
 
 /* Basemap container needs MapLibre CSS import */
-.emap-basemap {
-  pointer-events: none;
-}
+.emap-basemap { pointer-events: none; }
 
-/* Vertex Edit Controls */
-.emap-ctrl-edit {
-  font-size: 14px;
-}
+/* Vertex edit, draw, box select, and lasso controls */
+.emap-ctrl-edit,
+.emap-ctrl-draw { font-size: 14px; }
 
-.emap-ctrl-edit.active {
-  background-color: #0078ff !important;
-  color: #fff;
-}
-
-/* Draw Feature Controls */
-.emap-ctrl-draw {
-  font-size: 14px;
-}
-
-.emap-ctrl-draw.active {
-  background-color: #0078ff !important;
-  color: #fff;
-}
-
-/* Box Select rubber-band rectangle. Defaults are inlined by BoxSelectControl
-   for option override; this rule lets users restyle via CSS too. */
-.emap-box-select {
-  z-index: 5;
-}
+.emap-box-select,
+.emap-lasso-select { z-index: 5; }
 
 /* Simplify control */
-.emap-ctrl-simplify-wrap {
-  position: relative;
-}
-.emap-ctrl-simplify {
-  font-size: 16px;
-}
-.emap-ctrl-simplify.active {
-  background-color: #0078ff !important;
-  color: #fff;
-}
+.emap-ctrl-simplify-wrap { position: relative; }
+.emap-ctrl-simplify { font-size: 16px; }
 
-/* Lasso Select free-form polygon overlay. Same z-index as BoxSelect — they
-   are mutually exclusive (only one is enabled at a time). */
-.emap-lasso-select {
-  z-index: 5;
-}
-
-/* Right-click context menu — opened on right-click over a selected vertex
- * by VertexEditHandler. Dynamic position/left/top are set inline; every
- * other property is tokenised here. */
+.emap-simplify-popup,
 .emap-ctx-menu {
-  position: fixed;
-  z-index: 9999;
-  min-width: 120px;
+  color: var(--emap-popover-foreground);
   background: var(--emap-surface-bg);
   border: 1px solid var(--emap-surface-border);
   border-radius: var(--emap-radius);
   box-shadow: var(--emap-surface-shadow);
-  padding: 4px 0;
   font: var(--emap-font);
 }
-.emap-ctx-menu-item {
-  padding: 6px 16px;
-  cursor: pointer;
-  color: var(--emap-danger);
+
+.emap-simplify-popup {
+  position: absolute;
+  inset-block-start: 36px;
+  inset-inline-start: 0;
+  z-index: 10;
+  min-width: 240px;
+  padding: 10px;
 }
-.emap-ctx-menu-item:hover {
-  background: var(--emap-hover-bg);
+
+.emap-simplify-popup select,
+.emap-simplify-popup button {
+  box-sizing: border-box;
+  height: var(--emap-control-size);
+  color: var(--emap-foreground);
+  border: 1px solid var(--emap-input);
+  border-radius: var(--emap-radius);
+  font: var(--emap-font);
 }
-.emap-ctx-menu-item--disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-.emap-ctx-menu-item--disabled:hover {
-  background: transparent;
-}
+
+.emap-simplify-popup select { min-width: 0; background: transparent; }
+.emap-simplify-apply { padding-inline: 10px; color: var(--emap-primary-foreground); background: var(--emap-primary); }
+.emap-simplify-status { color: var(--emap-muted-foreground); font-size: 11px; }
+
+/* Right-click context menu */
+.emap-ctx-menu { position: fixed; z-index: 9999; min-width: 120px; padding-block: 4px; }
+.emap-ctx-menu-item { padding: 6px 16px; color: var(--emap-destructive); cursor: pointer; }
+.emap-ctx-menu-item:hover { background: var(--emap-hover-bg); }
+.emap-ctx-menu-item--disabled { cursor: not-allowed; opacity: 0.55; }
+.emap-ctx-menu-item--disabled:hover { background: transparent; }
