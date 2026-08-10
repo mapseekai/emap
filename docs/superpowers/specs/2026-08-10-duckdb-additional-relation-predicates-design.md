@@ -147,9 +147,10 @@ and mask geometries retain the current exclusion behavior.
 
 The implementation extends `RelationDuckDbFunction` with the six fixed
 `ST_*` names and extends the existing topological operation registry. The SQL
-function-name safety check remains unchanged. `duckDbRelationLayer` already
-dispatches through `getDuckDbRelationOperationSpec`, so it consumes the new ids
-through the existing path.
+function-name safety check remains unchanged. `runRelationOperation` currently
+uses explicit filter-mode and attribute-mode switches, so both switches gain
+cases that call the corresponding new named helpers. `duckDbRelationLayer`
+continues to use that existing runner rather than adding another map operation.
 
 ## CRS and Units
 
