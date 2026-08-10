@@ -191,7 +191,9 @@ with a focused failing test.
   the correct `ST_*` function and mode.
 - Map-operation tests assert that every new id reaches the shared relation
   pipeline and writes the resulting source.
-- Existing unknown-operation and error-classification tests remain unchanged.
+- Existing unknown-operation and error-classification contracts remain intact;
+  the unknown-operation fixture changes from the newly supported `crosses` id
+  to a still-unsupported sentinel.
 
 ### DuckDB-Wasm integration tests
 
