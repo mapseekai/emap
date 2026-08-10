@@ -1,6 +1,7 @@
 # Additional DuckDB Relation Predicates Design
 
-**Date:** 2026-08-10  
+**Date:** 2026-08-10
+
 **Status:** Approved in conversation
 
 ## Context
