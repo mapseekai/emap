@@ -176,6 +176,19 @@ describe('DuckDB buffer operation validation', () => {
 });
 
 describe('DuckDB buffer SQL', () => {
+  const ADDITIONAL_RELATION_CASES = [
+    { id: 'overlaps', duckDbFunction: 'ST_Overlaps', outputColumn: 'duckdb_overlaps' },
+    { id: 'equals', duckDbFunction: 'ST_Equals', outputColumn: 'duckdb_equals' },
+    { id: 'crosses', duckDbFunction: 'ST_Crosses', outputColumn: 'duckdb_crosses' },
+    { id: 'covers', duckDbFunction: 'ST_Covers', outputColumn: 'duckdb_covers' },
+    { id: 'coveredBy', duckDbFunction: 'ST_CoveredBy', outputColumn: 'duckdb_covered_by' },
+    {
+      id: 'containsProperly',
+      duckDbFunction: 'ST_ContainsProperly',
+      outputColumn: 'duckdb_contains_properly',
+    },
+  ] as const;
+
   it('builds a unary geometry query with an explicit WKB bridge', () => {
     expect(
       buildUnaryGeometrySql({
@@ -327,6 +340,29 @@ describe('DuckDB buffer SQL', () => {
       ].join('\n'),
     );
   });
+
+  it.each(ADDITIONAL_RELATION_CASES)(
+    'builds additional filter and attribute SQL for $duckDbFunction',
+    ({ duckDbFunction, outputColumn }) => {
+      const base = {
+        inputTableName: 'input',
+        maskTableName: 'mask',
+        inputGeometryColumn: 'geometry',
+        maskGeometryColumn: 'geometry',
+        duckDbFunction,
+      };
+
+      const filterSql = buildRelationFilterSql(base);
+      const attributeSql = buildRelationAttributeSql({ ...base, outputColumn });
+      const predicate = `${duckDbFunction}(i."geometry", m."geometry")`;
+
+      expect(filterSql).toContain(' AND EXISTS (');
+      expect(filterSql).toContain(predicate);
+      expect(attributeSql).toContain(' EXISTS (');
+      expect(attributeSql).toContain(predicate);
+      expect(attributeSql).toContain(`AS "${outputColumn}"`);
+    },
+  );
 
   it('builds relation attribute query with minimum distance output', () => {
     expect(

@@ -106,6 +106,19 @@ async function expectValidationError(action: () => Promise<unknown>, field: stri
 }
 
 describe('named DuckDB relation helpers', () => {
+  const ADDITIONAL_RELATION_CASES = [
+    { id: 'overlaps', duckDbFunction: 'ST_Overlaps', outputColumn: 'duckdb_overlaps' },
+    { id: 'equals', duckDbFunction: 'ST_Equals', outputColumn: 'duckdb_equals' },
+    { id: 'crosses', duckDbFunction: 'ST_Crosses', outputColumn: 'duckdb_crosses' },
+    { id: 'covers', duckDbFunction: 'ST_Covers', outputColumn: 'duckdb_covers' },
+    { id: 'coveredBy', duckDbFunction: 'ST_CoveredBy', outputColumn: 'duckdb_covered_by' },
+    {
+      id: 'containsProperly',
+      duckDbFunction: 'ST_ContainsProperly',
+      outputColumn: 'duckdb_contains_properly',
+    },
+  ] as const;
+
   beforeEach(() => {
     processRelationWithDuckDbMock.mockClear();
   });
@@ -342,9 +355,25 @@ describe('named DuckDB relation helpers', () => {
     });
   });
 
+  it.each(ADDITIONAL_RELATION_CASES)(
+    'returns the additional $id operation spec',
+    ({ id, duckDbFunction, outputColumn }) => {
+      expect(getDuckDbRelationOperationSpec(id)).toEqual({
+        id,
+        duckDbFunction,
+        outputColumn,
+        output: 'predicate',
+        supportsFilter: true,
+        supportsAttribute: true,
+        requiresDistance: false,
+        rejectGeographicCrs: false,
+      });
+    },
+  );
+
   it('throws validation errors for unknown operation specs', () => {
-    expect(() => getDuckDbRelationOperationSpec('crosses')).toThrowError(DuckDbOperationError);
-    expect(() => getDuckDbRelationOperationSpec('crosses')).toThrowError(
+    expect(() => getDuckDbRelationOperationSpec('unsupported')).toThrowError(DuckDbOperationError);
+    expect(() => getDuckDbRelationOperationSpec('unsupported')).toThrowError(
       /Unsupported DuckDB relation operation/,
     );
   });

@@ -60,6 +60,66 @@ const DUCKDB_RELATION_OPERATION_SPECS = {
     requiresDistance: false,
     rejectGeographicCrs: false,
   },
+  overlaps: {
+    id: 'overlaps',
+    duckDbFunction: 'ST_Overlaps',
+    outputColumn: 'duckdb_overlaps',
+    output: 'predicate',
+    supportsFilter: true,
+    supportsAttribute: true,
+    requiresDistance: false,
+    rejectGeographicCrs: false,
+  },
+  equals: {
+    id: 'equals',
+    duckDbFunction: 'ST_Equals',
+    outputColumn: 'duckdb_equals',
+    output: 'predicate',
+    supportsFilter: true,
+    supportsAttribute: true,
+    requiresDistance: false,
+    rejectGeographicCrs: false,
+  },
+  crosses: {
+    id: 'crosses',
+    duckDbFunction: 'ST_Crosses',
+    outputColumn: 'duckdb_crosses',
+    output: 'predicate',
+    supportsFilter: true,
+    supportsAttribute: true,
+    requiresDistance: false,
+    rejectGeographicCrs: false,
+  },
+  covers: {
+    id: 'covers',
+    duckDbFunction: 'ST_Covers',
+    outputColumn: 'duckdb_covers',
+    output: 'predicate',
+    supportsFilter: true,
+    supportsAttribute: true,
+    requiresDistance: false,
+    rejectGeographicCrs: false,
+  },
+  coveredBy: {
+    id: 'coveredBy',
+    duckDbFunction: 'ST_CoveredBy',
+    outputColumn: 'duckdb_covered_by',
+    output: 'predicate',
+    supportsFilter: true,
+    supportsAttribute: true,
+    requiresDistance: false,
+    rejectGeographicCrs: false,
+  },
+  containsProperly: {
+    id: 'containsProperly',
+    duckDbFunction: 'ST_ContainsProperly',
+    outputColumn: 'duckdb_contains_properly',
+    output: 'predicate',
+    supportsFilter: true,
+    supportsAttribute: true,
+    requiresDistance: false,
+    rejectGeographicCrs: false,
+  },
   distance: {
     id: 'distance',
     duckDbFunction: 'ST_Distance',
@@ -92,7 +152,10 @@ export interface DuckDbRelationHelperOptions extends DuckDbRelationOptions {
   failOnGeographicCrs?: boolean;
 }
 
-type TopologicalRelationOperationId = 'intersects' | 'contains' | 'within' | 'touches' | 'disjoint';
+type TopologicalRelationOperationId = Exclude<
+  DuckDbRelationOperationId,
+  'distance' | 'distanceWithin'
+>;
 
 type PredicateDuckDbFunction = Exclude<RelationDuckDbFunction, 'ST_Distance'>;
 
