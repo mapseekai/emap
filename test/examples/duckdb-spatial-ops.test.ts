@@ -86,8 +86,37 @@ describe('duckdb-spatial-ops example', () => {
     expect(html).toContain('<option value="within">Within</option>');
     expect(html).toContain('<option value="touches">Touches</option>');
     expect(html).toContain('<option value="disjoint">Disjoint</option>');
+    expect(html).toContain('<option value="overlaps">Overlaps</option>');
+    expect(html).toContain('<option value="equals">Equals</option>');
+    expect(html).toContain('<option value="crosses">Crosses</option>');
+    expect(html).toContain('<option value="covers">Covers</option>');
+    expect(html).toContain('<option value="coveredBy">Covered By</option>');
+    expect(html).toContain('<option value="containsProperly">Contains Properly</option>');
     expect(html).toContain('<option value="distance">Distance</option>');
     expect(html).toContain('<option value="distanceWithin">Distance Within</option>');
+  });
+
+  it('keeps additional relation ids and labels synchronized', () => {
+    const additionalRelations = [
+      ['overlaps', 'Overlaps'],
+      ['equals', 'Equals'],
+      ['crosses', 'Crosses'],
+      ['covers', 'Covers'],
+      ['coveredBy', 'Covered By'],
+      ['containsProperly', 'Contains Properly'],
+    ] as const;
+
+    const relationOperations = html.match(
+      /const RELATION_OPERATIONS = new Set\(\[([\s\S]*?)\]\);/,
+    )?.[1];
+    const operationLabels = html.match(/const OPERATION_LABELS = \{([\s\S]*?)\n\s*\};/)?.[1];
+
+    expect(relationOperations).toBeDefined();
+    expect(operationLabels).toBeDefined();
+    for (const [id, label] of additionalRelations) {
+      expect(relationOperations).toContain(`'${id}'`);
+      expect(operationLabels).toContain(`${id}: '${label}'`);
+    }
   });
 
   it('exposes relation mode, mask layer, and distance controls', () => {
