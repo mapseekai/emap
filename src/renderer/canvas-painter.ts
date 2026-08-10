@@ -6,6 +6,12 @@ import {
 } from './painter';
 import { AffineTransform } from '../geo/transform';
 import { normalizePointShape } from '../source/layer-utils';
+import {
+  EMAP_THEME_COLORS,
+  EMAP_THEME_FALLBACKS,
+  resolveThemeColor,
+  type ThemeColorRole,
+} from '../theme/colors';
 import type {
   ArcCollection,
   ArcIterator,
@@ -244,6 +250,18 @@ export class CanvasPainter implements Painter {
     this._ctx = ctx;
   }
 
+  private _resolveColor(value: string | undefined, role: ThemeColorRole): string {
+    const color = value || EMAP_THEME_COLORS[role];
+    if (!color.trim().startsWith('var(')) return color;
+    const view = this._canvas.ownerDocument?.defaultView;
+    const computed = view?.getComputedStyle?.(this._canvas);
+    return resolveThemeColor(
+      color,
+      EMAP_THEME_FALLBACKS[role],
+      (name) => computed?.getPropertyValue(name) ?? '',
+    );
+  }
+
   setTransform(transform: AffineTransform): void {
     this._transform = transform;
   }
@@ -263,7 +281,7 @@ export class CanvasPainter implements Painter {
     const ctx = this._ctx;
     const batchSize = 100;
 
-    ctx.strokeStyle = style.color || '#333';
+    ctx.strokeStyle = this._resolveColor(style.color, 'foreground');
     ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -308,7 +326,7 @@ export class CanvasPainter implements Painter {
     const n = arcIds?.length ?? arcs.size();
     const vertexCounts = arcs.getVertexData?.().nn ?? null;
 
-    ctx.strokeStyle = style.color || '#333';
+    ctx.strokeStyle = this._resolveColor(style.color, 'foreground');
     ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -393,7 +411,7 @@ export class CanvasPainter implements Painter {
     const commands = this.getArrowDotCommands(arcs, style, filter, options);
     if (commands.length === 0) return;
 
-    ctx.strokeStyle = style.color || '#333';
+    ctx.strokeStyle = this._resolveColor(style.color, 'foreground');
     ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -610,7 +628,7 @@ export class CanvasPainter implements Painter {
     const bx = this._transform.bx * pr;
     const by = this._transform.by * pr;
     const radius = (Number(_style?.radius) || 4) * pr;
-    const color = _style?.color || '#333';
+    const color = this._resolveColor(_style?.color, 'foreground');
     const fill = _style?.fill !== false;
     const markerShape = _style?.shape ?? 'circle';
     const left = -radius;
@@ -670,9 +688,9 @@ export class CanvasPainter implements Painter {
     const bx = this._transform.bx * pr;
     const by = this._transform.by * pr;
 
-    const dotColor = style.dotColor || '#333';
+    const dotColor = this._resolveColor(style.dotColor, 'primary');
     const dotRadius = (style.dotRadius || 3) * pr;
-    const hoverColor = style.hoverColor || '#cc6acc';
+    const hoverColor = this._resolveColor(style.hoverColor, 'primary');
     const hoverRadius = (style.hoverRadius || 6) * pr;
     const hoverVertex = style.hoverVertex;
     const arcFilter = style.arcFilter;
@@ -760,7 +778,7 @@ export class CanvasPainter implements Painter {
     const bx = this._transform.bx * pr;
     const by = this._transform.by * pr;
 
-    ctx.fillStyle = fillColor;
+    ctx.fillStyle = this._resolveColor(fillColor, 'muted');
     const overrideAlpha = typeof opacity === 'number' && opacity !== 1;
     const prevAlpha = ctx.globalAlpha;
     if (overrideAlpha) {
@@ -870,7 +888,7 @@ export class CanvasPainter implements Painter {
     const bx = this._transform.bx * pr;
     const by = this._transform.by * pr;
 
-    const color = state.drawColor || '#0078ff';
+    const color = this._resolveColor(state.drawColor, 'primary');
     const verts = state.vertices;
     const cursor = state.cursorCoord;
 
@@ -934,7 +952,7 @@ export class CanvasPainter implements Painter {
     if (state.snapCoord) {
       const sp = proj(state.snapCoord);
       const snapRadius = 7 * pr;
-      ctx.strokeStyle = '#ff4444';
+      ctx.strokeStyle = this._resolveColor(undefined, 'destructive');
       ctx.lineWidth = 2 * pr;
       ctx.beginPath();
       if (state.snapKind === 'edge') {
