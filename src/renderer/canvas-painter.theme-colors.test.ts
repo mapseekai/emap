@@ -2,6 +2,28 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CanvasPainter } from './canvas-painter';
+import { EMAP_THEME_COLORS, EMAP_THEME_FALLBACKS } from '../theme/colors';
+
+function makeArcIterator(points: Array<[number, number]>) {
+  let index = 0;
+  return {
+    x: 0,
+    y: 0,
+    hasNext() {
+      const point = points[index++];
+      if (!point) return false;
+      this.x = point[0];
+      this.y = point[1];
+      return true;
+    },
+  };
+}
+
+function mockMissingThemeVariables() {
+  return vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+    getPropertyValue: () => '',
+  } as CSSStyleDeclaration);
+}
 
 function makePainter() {
   const assignments: string[] = [];
@@ -14,6 +36,7 @@ function makePainter() {
     },
     beginPath() {},
     moveTo() {},
+    lineTo() {},
     arc() {},
     fill() {},
     stroke() {},
@@ -30,6 +53,49 @@ function makePainter() {
 }
 
 describe('CanvasPainter theme colors', () => {
+  it('uses the primary fallback when drawPaths receives an unset primary token', () => {
+    const { assignments, painter } = makePainter();
+    mockMissingThemeVariables();
+
+    painter.drawPaths(
+      [[[0]]] as any,
+      { color: EMAP_THEME_COLORS.primary, width: 1 },
+      { getArcIter: () => makeArcIterator([[0, 0], [10, 10]]) } as any,
+    );
+
+    expect(assignments).toContain(EMAP_THEME_FALLBACKS.primary);
+  });
+
+  it('uses the selection fallback when drawPolygonFill receives an unset selection token', () => {
+    const { assignments, painter } = makePainter();
+    mockMissingThemeVariables();
+
+    painter.drawPolygonFill(
+      [[[0]]] as any,
+      { getShapeIter: () => makeArcIterator([[0, 0], [10, 0], [10, 10]]) } as any,
+      EMAP_THEME_COLORS.selection,
+    );
+
+    expect(assignments).toContain(EMAP_THEME_FALLBACKS.selection);
+  });
+
+  it('uses the primary fallback when a primary token resolves through a cycle', () => {
+    const { assignments, canvas, painter } = makePainter();
+    const getComputedStyle = vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      getPropertyValue: (name: string) =>
+        name === '--emap-primary' ? 'var(--cycle)' : name === '--cycle' ? 'var(--emap-primary)' : '',
+    } as CSSStyleDeclaration);
+
+    painter.drawPaths(
+      [[[0]]] as any,
+      { color: EMAP_THEME_COLORS.primary, width: 1 },
+      { getArcIter: () => makeArcIterator([[0, 0], [10, 10]]) } as any,
+    );
+
+    expect(assignments).toContain(EMAP_THEME_FALLBACKS.primary);
+    expect(getComputedStyle).toHaveBeenCalledWith(canvas);
+  });
+
   it('resolves inherited emap variables on every draw', () => {
     const { assignments, canvas, painter } = makePainter();
     const getComputedStyle = vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => {

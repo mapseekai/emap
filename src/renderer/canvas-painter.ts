@@ -34,6 +34,13 @@ const DEFAULT_ARROW_DOT_SIZE = 6;
 const MIN_ARROW_DOT_VALUE = 0.1;
 const STAR_INNER_RADIUS_RATIO = 0.45;
 const CROSS_ARM_RADIUS_RATIO = 0.4;
+const THEME_TOKEN_ROLES: Record<string, ThemeColorRole> = {
+  [EMAP_THEME_COLORS.foreground]: 'foreground',
+  [EMAP_THEME_COLORS.primary]: 'primary',
+  [EMAP_THEME_COLORS.muted]: 'muted',
+  [EMAP_THEME_COLORS.selection]: 'selection',
+  [EMAP_THEME_COLORS.destructive]: 'destructive',
+};
 
 function addRegularPolygonPath(
   ctx: CanvasRenderingContext2D,
@@ -253,11 +260,12 @@ export class CanvasPainter implements Painter {
   private _resolveColor(value: string | undefined, role: ThemeColorRole): string {
     const color = value || EMAP_THEME_COLORS[role];
     if (!color.trim().startsWith('var(')) return color;
+    const fallbackRole = THEME_TOKEN_ROLES[color] ?? role;
     const view = this._canvas.ownerDocument?.defaultView;
     const computed = view?.getComputedStyle?.(this._canvas);
     return resolveThemeColor(
       color,
-      EMAP_THEME_FALLBACKS[role],
+      EMAP_THEME_FALLBACKS[fallbackRole],
       (name) => computed?.getPropertyValue(name) ?? '',
     );
   }
