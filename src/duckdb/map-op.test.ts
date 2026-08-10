@@ -604,6 +604,38 @@ describe('duckDbGeoParquetQueryLayer', () => {
 });
 
 describe('duckDbRelationLayer', () => {
+  it.each([
+    ['overlaps', 'ST_Overlaps'],
+    ['equals', 'ST_Equals'],
+    ['crosses', 'ST_Crosses'],
+    ['covers', 'ST_Covers'],
+    ['coveredBy', 'ST_CoveredBy'],
+    ['containsProperly', 'ST_ContainsProperly'],
+  ] as const)('routes %s through filter and attribute relation modes', async (operation, fn) => {
+    for (const mode of ['filter', 'attribute'] as const) {
+      const input = await polygonDataset();
+      const mask = await polygonDataset();
+      const ctx = makeContext('src', input);
+      ctx.sources.set('mask', new FakeSource(mask));
+      const runtime = new FakeRuntime(toArrowTable(input, { encoding: 'wkb' }));
+      const sourceId = `${operation}-${mode}`;
+
+      const result = await duckDbRelationLayer(ctx, {
+        src: 'src',
+        mask: 'mask',
+        mode,
+        operation,
+        output: { sourceId },
+        runtime,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(ctx.outputDatasets.has(sourceId)).toBe(true);
+      expect(runtime.connection.inserted).toHaveLength(2);
+      expect(runtime.connection.queries.join('\n')).toContain(fn);
+    }
+  });
+
   it('writes an output source dataset in filter mode', async () => {
     const input = await polygonDataset();
     const mask = await polygonDataset();
