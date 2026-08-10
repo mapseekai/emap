@@ -1,7 +1,8 @@
 # MapLibre Online Map Services Design
 
 **Date:** 2026-08-10
-**Status:** Approved in conversation
+**Status:** Approved in conversation; implementation details refined during
+planning review on 2026-08-11
 
 ## Context
 
@@ -60,7 +61,10 @@ a parallel WMS or WMTS protocol stack.
 - No interactive MapLibre navigation. Emap remains the camera and pointer
   owner.
 - No attempt to align an arbitrary emap projection with the MapLibre canvas.
-  The existing Web Mercator alignment contract remains in force.
+  The existing Web Mercator alignment contract remains in force: first
+  activation may reproject emap to Web Mercator, and a later external
+  projection change suspends the MapLibre canvas until emap returns to Web
+  Mercator or the caller explicitly activates a previously inactive service.
 
 ## Approaches Considered
 
@@ -124,6 +128,23 @@ construction happen only when a basemap or overlay first needs to be shown.
 When no MapLibre service is visible, the container is hidden. `Emap.remove()`
 is the sole owner of final manager and MapLibre teardown.
 
+The Emap stylesheet contains only the structural MapLibre canvas rules needed
+for this managed, non-interactive map. Applications that use raw MapLibre
+controls, popups, or markers through the escape hatch must also import
+`maplibre-gl/dist/maplibre-gl.css`.
+
+The manager listens for later emap CRS changes. Moving away from Web Mercator
+hides and suspends the MapLibre container without changing registered service
+intent or active/status state. Returning to Web Mercator reveals, resizes, and
+resynchronizes the existing MapLibre map. This prevents knowingly misaligned
+canvases without treating a projection change as a service removal. While
+suspended, an inactive-to-active service transition explicitly calls the same
+Web Mercator preparation and resumes rendering. Same-value visibility calls
+remain no-ops; hiding/removing services and updating an already-active service
+may mutate the hidden MapLibre runtime but do not force a reprojection or
+reveal the container. Their promises settle when those hidden-runtime changes
+finish.
+
 Engine-level state notifications use `EventDispatcher`. DOM events remain
 inside the controls. Camera synchronization continues to listen to emap's
 `move` signal and applies `jumpTo({ center, zoom })` to MapLibre; it never
@@ -167,14 +188,19 @@ declare one vector source and several MapLibre layers referencing its
 
 Service IDs are unique in the service registry. Overlay source and layer IDs
 are globally unique across all registered overlays and must not collide with
-the active basemap style. Every source referenced by an overlay layer must be
-declared by that same overlay service; cross-service source dependencies are
-not supported because they make atomic update and removal ambiguous.
+the active basemap style. A native `background` layer may omit `source`;
+otherwise, every source referenced by an overlay layer must be declared by
+that same overlay service. Cross-service source dependencies are not supported
+because they make atomic update and removal ambiguous.
 
 Layer array order is preserved inside one overlay. Overlay services are
-applied in service registration order. Updating a service preserves its
-registry position. Changing a service's `role` is rejected; callers remove
-and re-add the service when its role changes.
+applied in service registration order, using MapLibre's `beforeId` argument
+when a previously hidden or updated overlay is reinserted. Updating a service
+preserves its registry position and current active state; the replacement
+definition's `visible` value does not toggle it. `visible` is initial/add
+intent only. Changing a service's `role`, or replacing id `A` with a
+definition whose `id` is not `A`, is rejected; callers remove and re-add the
+service for either identity change.
 
 ## Map Configuration and Manager API
 
@@ -243,6 +269,12 @@ present, must refer to a registered basemap. Every overlay with
 a basemap, the manager creates or sets an empty version-8 style with no
 sources or layers and mounts the overlays onto it.
 
+The style supplied to the `maplibregl.Map` constructor is registered as the
+first in-flight style operation. Constructor startup, ordinary basemap
+switches, blank-style transitions, and recovery all pass through one
+serialized style coordinator; a constructor `style.load` can never be
+mistaken for a later switch.
+
 Before the first visible MapLibre service is applied, the manager preserves
 the current basemap alignment behavior by awaiting
 `emap.reproject('webmercator')` when the emap CRS is not Web Mercator. This is
@@ -251,27 +283,71 @@ source, tile, and style projection behavior remains MapLibre's responsibility.
 
 ### Basemap switching
 
-`setBasemap(id)` validates that `id` names a basemap, records the desired
-selection, and calls MapLibre `setStyle(service.style)`. A monotonic style
-revision identifies the current request. `style.load` from an older revision
-cannot commit UI or service state.
+`setBasemap(id)` validates that `id` names a basemap and records the desired
+selection. A monotonic style revision identifies the current request. Only
+one actual style load runs at a time; a newer desired revision supersedes the
+older public promise with `AbortError`, and an older terminal event cannot
+commit UI or service state.
+
+At supersession time, the old selected basemap becomes
+`{ active: false, status: 'idle' }`, clears any prior error, and emits that
+snapshot in its inactive `basemap` change before the new selection's active
+change. This includes an old target that was still loading. Its later physical
+terminal event is silent, so no service can remain stuck in loading after it
+has been superseded.
+
+Because manager events dispatch synchronously, each selection first allocates
+and installs its complete desired revision/request and commits the old/new
+state snapshots before emitting anything. After every event callback returns,
+the caller rechecks that its revision is still desired before emitting the
+next event or starting physical style work. A listener that synchronously
+selects a newer basemap therefore wins without the outer call overwriting it.
+
+If an obsolete physical style load reports an error after a newer revision is
+desired, the manager terminates and detaches that obsolete load, emits no
+service error/change events for it, and starts the newest request. Failure
+state and recovery are committed only when the failing applied revision still
+equals the desired revision.
+
+Immediately before every actual base, blank, or recovery `setStyle()` call,
+the manager removes all manager-owned overlay layers in reverse visual order,
+then their sources, and invalidates their ownership handles. This deliberate
+detach step avoids relying on MapLibre's style-diff object reuse semantics.
+After it, any source or layer id already present in the newly loaded basemap
+is base-owned and is therefore a deterministic collision with an overlay.
 
 At the matching `style.load`, the manager reconciles every visible overlay in
-registry order:
+registry order through the same per-service serialized reconciliation path
+used by public overlay calls:
 
 1. Add each missing source.
-2. Add each missing layer in declared order.
-3. Leave an already-present manager-owned source or layer in place.
+2. Add each missing layer in declared and service registration order, using
+   `beforeId` when reinserting ahead of later overlays.
+3. Reject an id already supplied by the loaded base style as a transactional
+   source or layer collision.
 4. Mark the basemap and successfully reconciled overlays ready.
 
-This reconciliation is required because MapLibre may preserve runtime
-resources on a style diff but removes them on a full style rebuild. Checking
-for existing resources makes the same code safe in both paths.
+This produces the same managed result whether MapLibre internally performs a
+style diff or a full rebuild. Managed overlay persistence comes from explicit
+detach/reinstall, not from assumptions about objects MapLibre may preserve.
+The coordinator exposes the generation internally as parsed for this
+reconciliation, but publishes it to public-operation waiters as stable only
+after reconciliation finishes. Overlay calls already waiting for it join or
+observe the same per-service job instead of attempting duplicate
+`addSource()`/`addLayer()` mutations.
+
+The coordinator rechecks the desired style revision again after all overlay
+jobs settle. A selection made during reconciliation invalidates those jobs,
+prevents the parsed generation from becoming stable or committing ready
+state, and immediately advances to the newest desired style.
 
 `setBasemap(null)` selects no basemap. If overlays remain visible, the blank
 style is installed and the overlays are reconciled. If no overlay remains,
 the MapLibre container is hidden. Removing the active basemap has the same
-result and does not silently select another registered basemap.
+result and does not silently select another registered basemap. Once this
+no-basemap state commits, it clears the recovery candidate; a later failed
+selection recovers to blank rather than resurrecting a basemap that preceded
+the user's successful no-basemap choice.
 
 ### Overlay mutations
 
@@ -285,9 +361,16 @@ Updating an active overlay removes the old resources and applies the new
 definition transactionally. Updating the active basemap is equivalent to
 setting its replacement style and following the normal style-load path.
 
-The latest request wins during rapid changes. A request superseded before it
-commits rejects with `AbortError`. Stale `style.load`, source, or layer
-callbacks cannot overwrite the latest registry intent.
+The latest request wins during rapid changes. In addition to the global style
+revision, every overlay record has its own operation revision. Overlay work
+waits until the current desired style is stable, captures that ready style
+generation, and rechecks both the service revision/intent and style generation
+after every asynchronous boundary and before committing a resource mutation.
+If only the style generation changes, the still-current overlay operation
+waits for the new stable generation and reconciles there; if its own service
+revision is superseded, its promise rejects with `AbortError`. Dynamic import,
+reprojection, initial-style readiness, installation, update, hide, and remove
+therefore cannot write into an obsolete or in-flight style.
 
 ## Compatibility
 
@@ -305,9 +388,10 @@ Legacy behavior is normalized as follows:
   actually applied.
 - `new BasemapControl()` registers the existing built-in defaults only when
   the map-level service registry is empty.
-- An explicit legacy `styles` configuration and an existing map-level service
-  configuration are rejected as a configuration conflict instead of being
-  merged implicitly.
+- An explicit legacy configuration (`styles` or `defaultStyle`) and an existing
+  map-level service configuration are rejected as a configuration conflict
+  instead of being merged implicitly. With an empty registry,
+  `{ defaultStyle }` without `styles` selects from the built-in legacy list.
 - When map-level services already exist, `new BasemapControl()` without legacy
   options is a pure UI view over that registry.
 
@@ -359,20 +443,27 @@ state and applies the visibility change. This preserves the existing visual
 appearance while making future toggles stable.
 
 Emap publishes a `layerchange` signal when an explicit layer is added,
-removed, or shown/hidden, and when source loading/removal changes the generated
-effective layer list. Its payload contains the reason (`add`, `remove`,
-`visibility`, or `effective`), an optional affected layer id, and the current
-`getRenderedLayers()` snapshot. The control subscribes on `onAdd()` and fully
-detaches on `onRemove()`.
+removed, moved, or shown/hidden, and when source loading/removal changes the
+generated effective layer list. Its payload contains the reason (`add`,
+`remove`, `visibility`, or `effective`), an optional affected layer id, and the
+current `getRenderedLayers()` snapshot. Move and generated-list changes use
+`effective`. The control subscribes on `onAdd()` and fully detaches on
+`onRemove()`.
 
 ## Events and Error Handling
 
 The manager extends `EventDispatcher` and publishes typed `change` and `error`
 events. A change includes the service id, role, new runtime state, and the
-reason (`add`, `update`, `remove`, `basemap`, `visibility`, or `status`). An
-error includes the service id when known, a phase (`style`, `source`, `layer`,
-`tile`, or `lifecycle`), the original error, and whether the failure is fatal
-for the service.
+reason (`add`, `update`, `remove`, `basemap`, `visibility`, or `status`). A
+basemap selection emits the previous service's inactive `basemap` change
+before the new service's active change; selecting `null` emits only the
+previous service change. An error includes the service id when known, a phase
+(`style`, `source`, `layer`, `tile`, or `lifecycle`), the original error, and
+whether the failure is fatal for the service.
+
+All events are post-mutation snapshots. Any manager method that continues
+after a synchronous `fire()` rechecks its operation/style revision first;
+event-listener reentrancy cannot resume an obsolete mutation.
 
 Validation rejects:
 
@@ -380,20 +471,50 @@ Validation rejects:
 - Unknown service IDs.
 - Calling a basemap operation on an overlay or an overlay operation on a
   basemap.
-- Role changes through `updateService()`.
+- Role or id changes through `updateService()`.
 - Duplicate overlay source or layer IDs.
-- Overlay layers whose source is not declared by the same service.
+- Overlay layers, except source-free native background layers, whose source is
+  not declared by the same service.
 - Invalid `defaultBasemap` references.
 
 Applying an overlay is transactional. If one source or layer fails, the
 manager removes only the layers and sources added for that attempt, restores
-the previous definition when updating, marks the service as errored, and
-leaves other services untouched.
+the previous definition when updating, and leaves other services untouched.
+An active-overlay update emits the fatal failure and rejects its promise; if
+the old definition and resources are restored successfully, it emits the
+restored `update` plus loading/ready status changes and finishes
+`active: true, status: 'ready'`. Only a failed rollback leaves that service in
+final `error` state.
 
 If a new basemap style fails before `style.load`, the manager marks that
-basemap errored and attempts to restore the last successfully loaded basemap.
-If there is none, it installs the blank style. Visible overlays are reconciled
-after either recovery path.
+basemap inactive with final status `error`, emits its fatal `error`, `status`,
+and inactive `basemap` changes, and rejects the matching public request. It
+then attempts to restore the last successfully loaded basemap only when the
+registry still contains the same service id at the same definition revision.
+Deleting or updating that inactive record invalidates the recovery candidate;
+the manager must not resurrect it or load an unproven replacement. A valid
+recovery emits that service's active `basemap` change, moves it through
+`loading` to `ready`, and reconciles visible overlays. Without a valid
+candidate, the manager installs the blank style, leaves every basemap
+inactive, and reconciles visible overlays without inventing a service change
+for the blank style. Recovery never converts the failed caller's rejected
+promise into a success.
+
+Definition revisions come from one manager-wide monotonically increasing
+counter on every add or update, so removing and re-adding the same service id
+cannot accidentally validate an older recovery candidate. A successful
+active-update rollback restores the retained old definition revision while
+advancing its operation token to invalidate replacement work.
+
+An active-basemap update is the same transaction with one identity: the old
+definition and its definition revision are retained until the replacement
+style commits. If the replacement fails, the service emits the same
+error/inactive transition, the retained record is restored before recovery
+candidate validation, and recovery moves that same service id back through
+active/loading to final `ready`. In this case the failure remains observable
+in the event sequence and rejected update promise, while the final registry
+state correctly describes the restored definition rather than retaining
+`error`.
 
 MapLibre tile-request errors are non-fatal service events because an
 individual network tile may fail transiently. Style parse/load errors and
@@ -419,15 +540,26 @@ event behavior deterministically.
 - Blank-style behavior when overlays are active without a basemap.
 - Overlay source/layer application order.
 - `setStyle` followed by matching `style.load` reconciliation.
-- Overlay preservation in both MapLibre diff-preserving and full-rebuild
-  simulations.
+- Managed-overlay detachment before every style change and deterministic
+  restoration in both MapLibre diff-preserving and full-rebuild simulations.
+- Base-style source/layer collisions after managed overlay detachment.
 - Rapid basemap switching, stale callback rejection, and `AbortError`.
+- A stale physical style error after a newer selection produces no stale
+  service-state events.
+- Overlay operation revisions across show/hide/add/update/remove races.
+- Overlay show/update racing a basemap switch applies only to the newest stable
+  style generation.
 - Add, update, remove, show, and hide before and after MapLibre creation.
 - Transactional overlay rollback without disturbing sibling services.
-- Failed basemap recovery to the previous successful basemap or blank style.
+- Failed basemap recovery states and change ordering for the previous
+  successful basemap or blank style.
+- Deleted or definition-revised recovery candidates fall back to blank.
+- Active overlay/base update rollback final states and rejected promises.
 - Fatal configuration errors versus non-fatal tile errors.
 - Raw MapLibre getter behavior before and after initialization.
-- Camera synchronization and Web Mercator preparation.
+- Camera synchronization, Web Mercator preparation, CRS suspension, and
+  restoration.
+- Suspended no-op/deactivation/update behavior versus explicit reactivation.
 - Complete MapLibre, DOM, and listener cleanup from `Emap.remove()`.
 
 ### Control and emap tests
