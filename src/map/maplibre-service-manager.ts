@@ -5,6 +5,7 @@ import type {
   MapLibreOverlayService,
   MapLibreService,
   MapLibreServiceChangeEvent,
+  MapLibreServiceErrorEvent,
   MapLibreServiceEventMap,
   MapLibreServiceManager,
   MapLibreServiceState,
@@ -29,7 +30,34 @@ interface ServiceRecord {
   state: MapLibreServiceState;
   definitionRevision: number;
   operationRevision: number;
+  ownedSources: Map<string, OwnedResource>;
+  ownedLayers: Map<string, OwnedResource>;
+  installedDefinition?: MapLibreOverlayService;
 }
+
+interface OwnedResource {
+  generation: number;
+  handle: unknown;
+}
+
+interface MutationContext {
+  serviceId: string;
+  phase: 'source' | 'layer';
+  resourceId: string;
+  error?: Error;
+}
+
+const EMPTY_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {},
+  layers: [],
+};
+
+const MAP_DEFAULTS = {
+  attributionControl: false,
+  maxPitch: 0,
+  renderWorldCopies: true,
+} as const;
 
 const SOURCE_OPTIONAL_LAYER_TYPES = new Set(['background', 'custom', 'sky']);
 
@@ -37,7 +65,10 @@ function cloneValue<T>(value: T): T {
   if (Array.isArray(value)) return value.map((item) => cloneValue(item)) as T;
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, cloneValue(item)]),
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        cloneValue(item),
+      ]),
     ) as T;
   }
   return value;
@@ -97,11 +128,17 @@ function validateOverlayDefinition(
   const sourceIds = new Set(Object.keys(service.sources));
   const layerIds = new Set<string>();
   for (const [sourceId] of Object.entries(service.sources)) {
-    if (sourceId.trim() === '') throw new Error('MapLibre overlay source id must be a non-empty string');
+    if (sourceId.trim() === '')
+      throw new Error('MapLibre overlay source id must be a non-empty string');
   }
 
   for (const layer of service.layers) {
-    if (!layer || typeof layer !== 'object' || typeof layer.id !== 'string' || layer.id.trim() === '') {
+    if (
+      !layer ||
+      typeof layer !== 'object' ||
+      typeof layer.id !== 'string' ||
+      layer.id.trim() === ''
+    ) {
       throw new Error('MapLibre overlay layer id must be a non-empty string');
     }
     if (layerIds.has(layer.id)) {
@@ -142,7 +179,8 @@ function validateService(
   registry: ReadonlyMap<string, ServiceRecord>,
   replacingId?: string,
 ): void {
-  if (!service || typeof service !== 'object') throw new Error('MapLibre service must be an object');
+  if (!service || typeof service !== 'object')
+    throw new Error('MapLibre service must be an object');
   validateServiceId(service.id);
   if (typeof service.name !== 'string' || service.name.trim() === '') {
     throw new Error(`MapLibre service "${service.id}" must have a name`);
@@ -161,15 +199,32 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   private _registry = new Map<string, ServiceRecord>();
   private _definitionRevision = 0;
   private _basemapRevision = 0;
+  private _map: maplibregl.Map | null = null;
+  private _mapPromise: Promise<maplibregl.Map> | null = null;
+  private _container: HTMLElement | null = null;
+  private _styleReady: Promise<void> | null = null;
+  private _resolveStyleReady: (() => void) | null = null;
+  private _rejectStyleReady: ((error: Error) => void) | null = null;
+  private _styleIsReady = false;
+  private _styleGeneration = 0;
+  private _destroyed = false;
+  private _suspended = false;
+  private _mutationContext: MutationContext | null = null;
+  private _resourceErrorPhases = new WeakMap<Error, 'source' | 'layer'>();
+  private _reconciliationJobs = new WeakMap<
+    ServiceRecord,
+    { revision: number; promise: Promise<void> }
+  >();
 
   constructor(
-    _host: MapLibreServiceHost,
-    _options: MapLibreIntegrationOptions = {},
-    _loadMapLibre: MapLibreModuleLoader = () => import('maplibre-gl'),
+    private _host: MapLibreServiceHost,
+    private _options: MapLibreIntegrationOptions = {},
+    private _loadMapLibre: MapLibreModuleLoader = () => import('maplibre-gl'),
   ) {
     super();
     for (const service of _options.services ?? []) this._register(service);
-    if (_options.defaultBasemap !== undefined) this._validateDefaultBasemap(_options.defaultBasemap);
+    if (_options.defaultBasemap !== undefined)
+      this._validateDefaultBasemap(_options.defaultBasemap);
   }
 
   on<K extends keyof MapLibreServiceEventMap>(
@@ -215,22 +270,43 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   async addService(service: MapLibreService): Promise<void> {
     const record = this._register(service);
     this._emitChange(record.definition, 'add', record.state);
+    if (record.definition.role === 'overlay' && record.state.active) {
+      await this._startOverlayReconciliation(record, record.operationRevision);
+    }
   }
 
   async updateService(id: string, service: MapLibreService): Promise<void> {
     const record = this._requireService(id);
     if (service.id !== id) throw new Error(`MapLibre service id must match "${id}"`);
-    if (service.role !== record.definition.role) throw new Error('MapLibre service role cannot change');
+    if (service.role !== record.definition.role)
+      throw new Error('MapLibre service role cannot change');
     validateService(service, this._registry, id);
 
+    record.operationRevision++;
+    const previousDefinition = cloneService(record.definition);
     const replacement: ServiceRecord = {
       definition: cloneService(service),
-      state: cloneState(record.state),
+      state: {
+        id,
+        active: record.state.active,
+        status: record.state.active ? 'idle' : record.state.status,
+      },
       definitionRevision: ++this._definitionRevision,
-      operationRevision: record.operationRevision + 1,
+      operationRevision: record.operationRevision,
+      ownedSources: new Map(record.ownedSources),
+      ownedLayers: new Map(record.ownedLayers),
+      installedDefinition: record.installedDefinition,
     };
     this._registry.set(id, replacement);
     this._emitChange(replacement.definition, 'update', replacement.state);
+    this._assertCurrentOperation(replacement, replacement.operationRevision);
+    if (replacement.definition.role === 'overlay' && replacement.state.active) {
+      await this._updateActiveOverlay(
+        replacement,
+        previousDefinition as MapLibreOverlayService,
+        replacement.operationRevision,
+      );
+    }
   }
 
   async removeService(id: string): Promise<void> {
@@ -238,6 +314,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     record.operationRevision++;
     this._registry.delete(id);
     this._emitChange(record.definition, 'remove');
+    this._syncVisibility();
+    if (record.definition.role === 'overlay' && this._map) {
+      await this._removeOverlayResources(record);
+    }
   }
 
   async setBasemap(id: string | null): Promise<void> {
@@ -251,11 +331,13 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
     if (current) {
       this._emitChange(current.definition, 'basemap', current.state);
-      if (revision !== this._basemapRevision) throw abortError('MapLibre basemap request was superseded');
+      if (revision !== this._basemapRevision)
+        throw abortError('MapLibre basemap request was superseded');
     }
     if (next) {
       this._emitChange(next.definition, 'basemap', next.state);
-      if (revision !== this._basemapRevision) throw abortError('MapLibre basemap request was superseded');
+      if (revision !== this._basemapRevision)
+        throw abortError('MapLibre basemap request was superseded');
     }
   }
 
@@ -264,9 +346,30 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (record.definition.role !== 'overlay') {
       throw new Error(`MapLibre service "${id}" is not an overlay`);
     }
-    if (record.state.active === visible) return;
+    if (record.state.active === visible) {
+      const job = this._reconciliationJobs.get(record);
+      if (visible && job?.revision === record.operationRevision) await job.promise;
+      return;
+    }
     this._setActive(record, visible);
+    const operationRevision = record.operationRevision;
     this._emitChange(record.definition, 'visibility', record.state);
+    this._assertCurrentOperation(record, operationRevision);
+    if (visible) {
+      await this._startOverlayReconciliation(record, operationRevision);
+    } else {
+      try {
+        this._setStatus(record, operationRevision, 'loading');
+        if (this._map) {
+          await this._removeOverlayResources(record, operationRevision);
+          this._assertCurrentOperation(record, operationRevision);
+        }
+        this._setStatus(record, operationRevision, 'ready');
+        this._syncVisibility();
+      } catch (error) {
+        this._handleTransitionFailure(record, operationRevision, error);
+      }
+    }
   }
 
   getServices(): readonly MapLibreService[] {
@@ -279,7 +382,47 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   }
 
   getMapLibreMap(): maplibregl.Map | null {
-    return null;
+    return this._map;
+  }
+
+  /** @internal */
+  async initialize(): Promise<void> {
+    const visibleOverlays = [...this._registry.values()].filter(
+      (record) => record.definition.role === 'overlay' && record.state.active,
+    );
+    if (visibleOverlays.length === 0) return;
+    await this._ensureWebMercator();
+    await this._ensureMap(EMPTY_STYLE);
+    await this._waitForStyleReady();
+    for (const record of visibleOverlays) {
+      this._setStatus(record, record.operationRevision, 'loading');
+    }
+    await this._reconcileVisibleOverlays(this._styleGeneration);
+    for (const record of visibleOverlays) {
+      this._setStatus(record, record.operationRevision, 'ready');
+    }
+    this._syncVisibility();
+  }
+
+  /** @internal */
+  destroy(): void {
+    if (this._destroyed) return;
+    this._destroyed = true;
+    for (const record of this._registry.values()) record.operationRevision++;
+    this._rejectPendingStyle(abortError('MapLibre service manager was destroyed'));
+
+    this._host.off('move', this._handleMove);
+    this._host.off('resize', this._handleResize);
+    this._host.off('crschange', this._handleCrsChange);
+    if (this._map) {
+      this._map.off('style.load', this._handleStyleLoad);
+      this._map.off('error', this._handleMapError);
+      this._map.remove();
+    }
+    this._container?.remove();
+    this._container = null;
+    this._map = null;
+    this._mapPromise = null;
   }
 
   private _register(service: MapLibreService): ServiceRecord {
@@ -297,6 +440,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       },
       definitionRevision: ++this._definitionRevision,
       operationRevision: 0,
+      ownedSources: new Map(),
+      ownedLayers: new Map(),
     };
     this._registry.set(definition.id, record);
     return record;
@@ -333,6 +478,499 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   private _setActive(record: ServiceRecord, active: boolean): void {
     record.operationRevision++;
     record.state = { id: record.definition.id, active, status: 'idle' };
+  }
+
+  private _startOverlayReconciliation(
+    record: ServiceRecord,
+    operationRevision: number,
+    ensureProjection = true,
+  ): Promise<void> {
+    const existing = this._reconciliationJobs.get(record);
+    if (existing?.revision === operationRevision) return existing.promise;
+    const job = {
+      revision: operationRevision,
+      promise: Promise.resolve(),
+    };
+    job.promise = (async () => {
+      try {
+        this._setStatus(record, operationRevision, 'loading');
+        if (ensureProjection) {
+          await this._ensureWebMercator();
+          this._assertCurrentOperation(record, operationRevision);
+        }
+        await this._ensureMap(EMPTY_STYLE);
+        this._assertCurrentOperation(record, operationRevision);
+        await this._waitForStyleReady();
+        this._assertCurrentOperation(record, operationRevision);
+        const generation = this._styleGeneration;
+        await this._reconcileOverlayForGeneration(record, operationRevision, generation);
+        this._assertCurrentOperation(record, operationRevision);
+        this._setStatus(record, operationRevision, 'ready');
+        this._syncVisibility();
+      } catch (error) {
+        this._handleTransitionFailure(record, operationRevision, error);
+      } finally {
+        if (this._reconciliationJobs.get(record) === job) {
+          this._reconciliationJobs.delete(record);
+        }
+      }
+    })();
+    this._reconciliationJobs.set(record, job);
+    return job.promise;
+  }
+
+  private async _updateActiveOverlay(
+    record: ServiceRecord,
+    previousDefinition: MapLibreOverlayService,
+    operationRevision: number,
+  ): Promise<void> {
+    try {
+      this._setStatus(record, operationRevision, 'loading');
+      await this._waitForStyleReady();
+      this._assertCurrentOperation(record, operationRevision);
+      await this._removeOverlayResources(record, operationRevision, previousDefinition);
+      this._assertCurrentOperation(record, operationRevision);
+      await this._reconcileOverlayForGeneration(record, operationRevision, this._styleGeneration);
+      this._setStatus(record, operationRevision, 'ready');
+    } catch (error) {
+      if (
+        toError(error).name !== 'AbortError' &&
+        this._isCurrentOperation(record, operationRevision)
+      ) {
+        record.definition = cloneService(previousDefinition);
+        try {
+          await this._removeOverlayResources(record, operationRevision);
+          await this._reconcileOverlayForGeneration(
+            record,
+            operationRevision,
+            this._styleGeneration,
+          );
+        } catch {
+          // The original update failure remains the actionable error.
+        }
+      }
+      this._handleTransitionFailure(record, operationRevision, error);
+    }
+  }
+
+  private async _reconcileVisibleOverlays(generation: number): Promise<void> {
+    for (const record of this._registry.values()) {
+      if (record.definition.role !== 'overlay' || !record.state.active) continue;
+      await this._reconcileOverlayForGeneration(record, record.operationRevision, generation);
+    }
+  }
+
+  private async _reconcileOverlayForGeneration(
+    record: ServiceRecord,
+    operationRevision: number,
+    generation: number,
+  ): Promise<void> {
+    this._assertCurrentOperation(record, operationRevision);
+    if (!record.state.active || record.definition.role !== 'overlay') {
+      throw abortError(`MapLibre service "${record.definition.id}" request was superseded`);
+    }
+    if (generation !== this._styleGeneration || !this._styleIsReady) {
+      throw abortError('MapLibre style generation was superseded');
+    }
+    this._installOverlay(record, operationRevision, generation);
+  }
+
+  private _installOverlay(
+    record: ServiceRecord,
+    operationRevision: number,
+    generation: number,
+  ): void {
+    const map = this._map;
+    if (!map || record.definition.role !== 'overlay') {
+      throw new Error('MapLibre overlay runtime is unavailable');
+    }
+    const definition = record.definition;
+    const addedSourceIds: string[] = [];
+    const addedLayerIds: string[] = [];
+    try {
+      for (const [sourceId, source] of Object.entries(definition.sources)) {
+        this._assertCurrentOperation(record, operationRevision);
+        const existing = map.getSource(sourceId);
+        const owned = record.ownedSources.get(sourceId);
+        if (existing !== undefined) {
+          if (owned?.generation === generation && owned.handle === existing) continue;
+          throw new Error(
+            `MapLibre overlay source "${sourceId}" collides with an unmanaged resource`,
+          );
+        }
+        this._mutateResource(
+          record.definition.id,
+          'source',
+          sourceId,
+          () => {
+            map.addSource(sourceId, source);
+          },
+          () => map.getSource(sourceId) !== undefined,
+        );
+        this._assertCurrentOperation(record, operationRevision);
+        const handle = map.getSource(sourceId);
+        if (handle === undefined)
+          throw new Error(`MapLibre overlay source "${sourceId}" was not added`);
+        record.ownedSources.set(sourceId, { generation, handle });
+        addedSourceIds.push(sourceId);
+      }
+
+      for (const layer of definition.layers) {
+        this._assertCurrentOperation(record, operationRevision);
+        const existing = map.getLayer(layer.id);
+        const owned = record.ownedLayers.get(layer.id);
+        if (existing !== undefined) {
+          if (owned?.generation === generation && owned.handle === existing) continue;
+          throw new Error(
+            `MapLibre overlay layer "${layer.id}" collides with an unmanaged resource`,
+          );
+        }
+        const beforeId = this._findFollowingManagedLayer(record, layer.id, generation);
+        this._mutateResource(
+          record.definition.id,
+          'layer',
+          layer.id,
+          () => {
+            map.addLayer(layer, beforeId);
+          },
+          () => map.getLayer(layer.id) !== undefined,
+        );
+        this._assertCurrentOperation(record, operationRevision);
+        const handle = map.getLayer(layer.id);
+        if (handle === undefined)
+          throw new Error(`MapLibre overlay layer "${layer.id}" was not added`);
+        record.ownedLayers.set(layer.id, { generation, handle });
+        addedLayerIds.push(layer.id);
+      }
+      record.installedDefinition = cloneService(definition) as MapLibreOverlayService;
+    } catch (error) {
+      this._rollbackAddedResources(record, addedLayerIds, addedSourceIds);
+      throw error;
+    }
+  }
+
+  private async _removeOverlayResources(
+    record: ServiceRecord,
+    operationRevision?: number,
+    definition = record.installedDefinition,
+  ): Promise<void> {
+    const map = this._map;
+    if (!map) return;
+    const assertCurrent = () => {
+      if (operationRevision !== undefined) this._assertCurrentOperation(record, operationRevision);
+    };
+    const orderedLayerIds = definition?.layers.map((layer) => layer.id) ?? [
+      ...record.ownedLayers.keys(),
+    ];
+    const remainingLayerIds = [...record.ownedLayers.keys()].filter(
+      (id) => !orderedLayerIds.includes(id),
+    );
+    for (const layerId of [...remainingLayerIds, ...orderedLayerIds].reverse()) {
+      const owned = record.ownedLayers.get(layerId);
+      if (!owned) continue;
+      assertCurrent();
+      const current = map.getLayer(layerId);
+      if (current !== undefined && current !== owned.handle) {
+        throw new Error(`MapLibre overlay layer "${layerId}" is no longer manager-owned`);
+      }
+      if (current !== undefined) {
+        this._mutateResource(
+          record.definition.id,
+          'layer',
+          layerId,
+          () => {
+            map.removeLayer(layerId);
+          },
+          () => map.getLayer(layerId) === undefined,
+        );
+      }
+      assertCurrent();
+      record.ownedLayers.delete(layerId);
+    }
+
+    const orderedSourceIds = definition
+      ? Object.keys(definition.sources)
+      : [...record.ownedSources.keys()];
+    const remainingSourceIds = [...record.ownedSources.keys()].filter(
+      (id) => !orderedSourceIds.includes(id),
+    );
+    for (const sourceId of [...remainingSourceIds, ...orderedSourceIds]) {
+      const owned = record.ownedSources.get(sourceId);
+      if (!owned) continue;
+      assertCurrent();
+      const current = map.getSource(sourceId);
+      if (current !== undefined && current !== owned.handle) {
+        throw new Error(`MapLibre overlay source "${sourceId}" is no longer manager-owned`);
+      }
+      if (current !== undefined) {
+        this._mutateResource(
+          record.definition.id,
+          'source',
+          sourceId,
+          () => {
+            map.removeSource(sourceId);
+          },
+          () => map.getSource(sourceId) === undefined,
+        );
+      }
+      assertCurrent();
+      record.ownedSources.delete(sourceId);
+    }
+    record.installedDefinition = undefined;
+  }
+
+  private _findFollowingManagedLayer(
+    targetRecord: ServiceRecord,
+    layerId: string,
+    generation: number,
+  ): string | undefined {
+    const map = this._map;
+    if (!map) return undefined;
+    const desired: Array<{ record: ServiceRecord; id: string }> = [];
+    for (const record of this._registry.values()) {
+      if (record.definition.role !== 'overlay' || !record.state.active) continue;
+      for (const layer of record.definition.layers) desired.push({ record, id: layer.id });
+    }
+    const index = desired.findIndex((item) => item.record === targetRecord && item.id === layerId);
+    for (const item of desired.slice(index + 1)) {
+      const owned = item.record.ownedLayers.get(item.id);
+      const current = map.getLayer(item.id);
+      if (owned?.generation === generation && owned.handle === current) return item.id;
+    }
+    return undefined;
+  }
+
+  private _mutateResource(
+    serviceId: string,
+    phase: 'source' | 'layer',
+    resourceId: string,
+    mutate: () => void,
+    verify: () => boolean,
+  ): void {
+    const context: MutationContext = { serviceId, phase, resourceId };
+    this._mutationContext = context;
+    try {
+      mutate();
+      if (context.error) throw context.error;
+      if (!verify()) {
+        throw new Error(`MapLibre ${phase} mutation failed its postcondition for "${resourceId}"`);
+      }
+    } catch (value) {
+      const error = toError(value);
+      this._resourceErrorPhases.set(error, phase);
+      throw error;
+    } finally {
+      if (this._mutationContext === context) this._mutationContext = null;
+    }
+  }
+
+  private _rollbackAddedResources(
+    record: ServiceRecord,
+    layerIds: readonly string[],
+    sourceIds: readonly string[],
+  ): void {
+    const map = this._map;
+    if (!map) return;
+    for (const layerId of [...layerIds].reverse()) {
+      const owned = record.ownedLayers.get(layerId);
+      if (owned && map.getLayer(layerId) === owned.handle) map.removeLayer(layerId);
+      record.ownedLayers.delete(layerId);
+    }
+    for (const sourceId of [...sourceIds].reverse()) {
+      const owned = record.ownedSources.get(sourceId);
+      if (owned && map.getSource(sourceId) === owned.handle) map.removeSource(sourceId);
+      record.ownedSources.delete(sourceId);
+    }
+  }
+
+  private async _ensureWebMercator(): Promise<void> {
+    if (this._destroyed) throw abortError('MapLibre service manager was destroyed');
+    if (!this._isWebMercator(this._host.getCRS())) {
+      await this._host.reproject('webmercator');
+      if (this._destroyed) throw abortError('MapLibre service manager was destroyed');
+    }
+    this._suspended = !this._isWebMercator(this._host.getCRS());
+  }
+
+  private async _ensureMap(
+    initialStyle: string | maplibregl.StyleSpecification,
+  ): Promise<maplibregl.Map> {
+    if (this._map) return this._map;
+    if (this._mapPromise) return this._mapPromise;
+    this._mapPromise = (async () => {
+      const maplibre = await this._loadMapLibre();
+      if (this._destroyed) throw abortError('MapLibre service manager was destroyed');
+
+      const canvasContainer = this._host.getCanvasContainer();
+      const container = document.createElement('div');
+      container.classList.add('emap-maplibre', 'emap-basemap');
+      container.style.position = 'absolute';
+      container.style.inset = '0';
+      container.style.zIndex = '0';
+      container.style.pointerEvents = 'none';
+      const firstCanvas = [...canvasContainer.children].find(
+        (child): child is HTMLCanvasElement => child instanceof HTMLCanvasElement,
+      );
+      canvasContainer.insertBefore(container, firstCanvas ?? canvasContainer.firstChild);
+
+      this._container = container;
+      this._styleReady = new Promise<void>((resolve, reject) => {
+        this._resolveStyleReady = resolve;
+        this._rejectStyleReady = reject;
+      });
+      void this._styleReady.catch(() => undefined);
+      const map = new maplibre.Map({
+        ...MAP_DEFAULTS,
+        ...this._options.mapOptions,
+        container,
+        style: initialStyle,
+        center: this._host.getCenter(),
+        zoom: this._host.getZoom(),
+        interactive: false,
+      });
+      this._map = map;
+      map.on('style.load', this._handleStyleLoad);
+      map.on('error', this._handleMapError);
+      this._host.on('move', this._handleMove);
+      this._host.on('resize', this._handleResize);
+      this._host.on('crschange', this._handleCrsChange);
+      this._syncVisibility();
+      return map;
+    })();
+    try {
+      return await this._mapPromise;
+    } catch (error) {
+      this._mapPromise = null;
+      throw error;
+    }
+  }
+
+  private async _waitForStyleReady(): Promise<void> {
+    if (this._styleIsReady) return;
+    if (!this._styleReady) throw new Error('MapLibre style readiness is unavailable');
+    await this._styleReady;
+  }
+
+  private _handleStyleLoad = (): void => {
+    if (this._destroyed || this._styleIsReady) return;
+    this._styleIsReady = true;
+    this._styleGeneration++;
+    this._resolveStyleReady?.();
+    this._resolveStyleReady = null;
+    this._rejectStyleReady = null;
+  };
+
+  private _handleMapError = (event?: unknown): void => {
+    const error = toError((event as { error?: unknown } | undefined)?.error ?? event);
+    if (this._mutationContext) {
+      this._mutationContext.error = error;
+      this._resourceErrorPhases.set(error, this._mutationContext.phase);
+      return;
+    }
+    if (this._styleIsReady) {
+      this.fire('error', { phase: 'tile', fatal: false, error });
+      return;
+    }
+    this._rejectPendingStyle(error);
+  };
+
+  private _rejectPendingStyle(error: Error): void {
+    this._rejectStyleReady?.(error);
+    this._resolveStyleReady = null;
+    this._rejectStyleReady = null;
+  }
+
+  private _handleMove = (): void => {
+    this._syncCamera();
+  };
+
+  private _handleResize = (): void => {
+    if (!this._map || this._suspended) return;
+    this._map.resize();
+  };
+
+  private _handleCrsChange = (): void => {
+    const suspended = !this._isWebMercator(this._host.getCRS());
+    this._suspended = suspended;
+    this._syncVisibility();
+    if (!suspended && this._map && this._hasActiveService()) {
+      this._map.resize();
+      this._syncCamera();
+    }
+  };
+
+  private _syncCamera(): void {
+    if (!this._map || this._suspended) return;
+    this._map.jumpTo({ center: this._host.getCenter(), zoom: this._host.getZoom() });
+  }
+
+  private _syncVisibility(): void {
+    if (!this._container) return;
+    this._container.hidden = this._suspended || !this._hasActiveService();
+  }
+
+  private _hasActiveService(): boolean {
+    return [...this._registry.values()].some((record) => record.state.active);
+  }
+
+  private _isWebMercator(crs: string): boolean {
+    const normalized = crs.toLowerCase();
+    return normalized === 'webmercator' || normalized === 'epsg:3857';
+  }
+
+  private _setStatus(
+    record: ServiceRecord,
+    operationRevision: number,
+    status: MapLibreServiceState['status'],
+  ): void {
+    this._assertCurrentOperation(record, operationRevision);
+    record.state = { id: record.definition.id, active: record.state.active, status };
+    this._emitChange(record.definition, 'status', record.state);
+    this._assertCurrentOperation(record, operationRevision);
+  }
+
+  private _assertCurrentOperation(record: ServiceRecord, operationRevision: number): void {
+    if (!this._isCurrentOperation(record, operationRevision)) {
+      throw abortError(`MapLibre service "${record.definition.id}" request was superseded`);
+    }
+  }
+
+  private _isCurrentOperation(record: ServiceRecord, operationRevision: number): boolean {
+    return (
+      !this._destroyed &&
+      this._registry.get(record.definition.id) === record &&
+      record.operationRevision === operationRevision
+    );
+  }
+
+  private _handleTransitionFailure(
+    record: ServiceRecord,
+    operationRevision: number,
+    value: unknown,
+  ): never {
+    const error = toError(value);
+    if (error.name === 'AbortError' || !this._isCurrentOperation(record, operationRevision)) {
+      throw error.name === 'AbortError'
+        ? error
+        : abortError(`MapLibre service "${record.definition.id}" request was superseded`);
+    }
+    record.state = {
+      id: record.definition.id,
+      active: record.state.active,
+      status: 'error',
+      error,
+    };
+    this._emitChange(record.definition, 'status', record.state);
+    this._assertCurrentOperation(record, operationRevision);
+    const phase: MapLibreServiceErrorEvent['phase'] =
+      this._resourceErrorPhases.get(error) ?? 'lifecycle';
+    this.fire('error', {
+      serviceId: record.definition.id,
+      phase,
+      error,
+      fatal: true,
+    });
+    throw error;
   }
 
   private _emitChange(
