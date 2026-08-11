@@ -58,6 +58,7 @@ const expectedIds = [
   'duckdb-geoparquet-query',
   'duckdb-overlay',
   'duckdb-query',
+  'duckdb-spatial-aggregate-join',
   'duckdb-spatial-ops',
 ] as const;
 
@@ -137,6 +138,10 @@ describe('example catalog metadata', () => {
     ]);
     expect(byId.get('duckdb-geoparquet-query')?.fixtures).toEqual([
       'fixtures/example-geoparquet.parquet',
+    ]);
+    expect(byId.get('duckdb-spatial-aggregate-join')?.fixtures).toEqual([
+      'fixtures/task-7-mask.geojson',
+      'fixtures/duckdb-spatial-aggregate-points.geojson',
     ]);
     expect(byId.get('web-worker')?.featureFlags).toContain('worker');
     expect(byId.get('geoparquet-viewer')?.featureFlags).toContain('formats');

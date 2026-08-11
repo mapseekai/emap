@@ -8,6 +8,7 @@ const duckDbExamples = [
   readExample('duckdb-geoparquet-query'),
   readExample('duckdb-overlay'),
   readExample('duckdb-query'),
+  readExample('duckdb-spatial-aggregate-join'),
   readExample('duckdb-spatial-ops'),
 ];
 const geoParquetExamples = [readExample('export-geoparquet'), readExample('geoparquet-viewer')];
@@ -53,6 +54,7 @@ describe('DuckDB new feature examples', () => {
     geoparquetQuery: readExample('duckdb-geoparquet-query'),
     overlay: readExample('duckdb-overlay'),
     query: readExample('duckdb-query'),
+    spatialAggregateJoin: readExample('duckdb-spatial-aggregate-join'),
   };
 
   it('lets Vite resolve DuckDB and Arrow dependencies', () => {
@@ -135,5 +137,37 @@ describe('DuckDB new feature examples', () => {
     expect(html).toContain('src: INPUT_SOURCE_ID');
     expect(html).toContain('mask: MASK_SOURCE_ID');
     expect(html).toContain('output: { sourceId: OUTPUT_SOURCE_ID }');
+  });
+
+  it('covers spatial aggregate join helper and map-op entrypoints', () => {
+    const html = examples.spatialAggregateJoin;
+    expect(html).toContain('spatialAggregateJoinDatasetWithDuckDb');
+    expect(html).toContain('duckDbSpatialAggregateJoinLayer');
+    expect(html).toContain("predicate: 'contains'");
+    expect(html).toContain('<option value="left">left</option>');
+    expect(html).toContain('<option value="inner">inner</option>');
+    for (const descriptor of [
+      '{ operation: "count", outputColumn: "match_count" }',
+      '{ operation: "sum", field: "sales", outputColumn: "sales_total" }',
+      '{ operation: "avg", field: "score", outputColumn: "score_avg" }',
+      '{ operation: "min", field: "sales", outputColumn: "sales_min" }',
+      '{ operation: "max", field: "sales", outputColumn: "sales_max" }',
+    ]) {
+      expect(html).toContain(descriptor);
+    }
+    expect(html).toContain('targetLayer: Number(targetLayerSelect.value)');
+    expect(html).toContain('joinLayer: Number(joinLayerSelect.value)');
+    expect(html).toContain('src: TARGET_SOURCE_ID');
+    expect(html).toContain('join: JOIN_SOURCE_ID');
+    expect(html).toContain('output: { sourceId: OUTPUT_SOURCE_ID }');
+  });
+
+  it('renders the aggregate join result and reports all five outputs', () => {
+    const html = examples.spatialAggregateJoin;
+    expect(html).toContain('addDatasetSource(OUTPUT_SOURCE_ID, resultDataset');
+    expect(html).toContain('map.setExtent(outputSource.getExtent())');
+    for (const column of ['match_count', 'sales_total', 'score_avg', 'sales_min', 'sales_max']) {
+      expect(html).toContain(column);
+    }
   });
 });

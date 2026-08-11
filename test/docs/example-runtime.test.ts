@@ -387,6 +387,36 @@ describe('example starter fixtures', () => {
     ).toEqual([['task-7-polygons.geojson'], ['task-7-mask.geojson']]);
   });
 
+  it('loads aggregate join fixtures through their two upload controls', async () => {
+    document.body.innerHTML = [
+      '<input id="target-file" type="file">',
+      '<input id="join-file" type="file">',
+    ].join('');
+    vi.stubGlobal('DataTransfer', TestDataTransfer);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}')),
+    );
+    allowSyntheticFiles(
+      document.querySelector<HTMLInputElement>('#target-file')!,
+      document.querySelector<HTMLInputElement>('#join-file')!,
+    );
+    const changed: string[] = [];
+    document
+      .querySelector('#target-file')
+      ?.addEventListener('change', () => changed.push('target'));
+    document.querySelector('#join-file')?.addEventListener('change', () => changed.push('join'));
+
+    await autoLoadExampleFixtures('duckdb-spatial-aggregate-join', document);
+
+    expect(changed).toEqual(['target', 'join']);
+    expect(
+      Array.from(document.querySelectorAll<HTMLInputElement>('input'), (input) =>
+        Array.from(input.files ?? [], (file) => file.name),
+      ),
+    ).toEqual([['task-7-mask.geojson'], ['duckdb-spatial-aggregate-points.geojson']]);
+  });
+
   it('fills join CSV and matching key defaults before loading geometry', async () => {
     document.body.innerHTML = [
       '<input id="file-input" type="file">',

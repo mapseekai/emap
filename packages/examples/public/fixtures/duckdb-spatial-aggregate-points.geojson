@@ -1,0 +1,26 @@
+{
+  "type": "FeatureCollection",
+  "name": "duckdb-spatial-aggregate-points",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "id": "west-only", "sales": 10, "score": 2 },
+      "geometry": { "type": "Point", "coordinates": [-122.42, 37.765] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "overlap", "sales": 20, "score": 4 },
+      "geometry": { "type": "Point", "coordinates": [-122.392, 37.79] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "east-only", "sales": 30, "score": 6 },
+      "geometry": { "type": "Point", "coordinates": [-122.36, 37.8] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "outside", "sales": 40, "score": 8 },
+      "geometry": { "type": "Point", "coordinates": [-122.33, 37.84] }
+    }
+  ]
+}

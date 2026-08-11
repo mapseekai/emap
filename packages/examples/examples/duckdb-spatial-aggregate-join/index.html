@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Emap 示例 - DuckDB 空间聚合连接</title>
+    <style>
+      :root {
+        --ink: #16232a;
+        --paper: #f3f0e7;
+        --line: #879399;
+        --target: #295e76;
+        --join: #d5653b;
+        --result: #b89235;
+      }
+
+      body {
+        margin: 0;
+        height: 100vh;
+        color: var(--ink);
+        background: var(--paper);
+        font-family: Georgia, "Noto Serif SC", serif;
+      }
+
+      #map {
+        width: 100vw;
+        height: 100vh;
+        background: #dfe7e5;
+      }
+
+      .panel {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 10;
+        width: min(510px, calc(100vw - 24px));
+        box-sizing: border-box;
+        padding: 14px;
+        border: 1px solid var(--ink);
+        background: rgb(243 240 231 / 0.96);
+        box-shadow: 5px 5px 0 rgb(22 35 42 / 0.26);
+      }
+
+      .panel h1,
+      .panel p {
+        margin: 0;
+      }
+
+      .panel h1 {
+        font-size: 17px;
+        letter-spacing: 0.03em;
+      }
+
+      .panel p {
+        margin-top: 5px;
+        color: #526168;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 126px minmax(0, 1fr);
+        gap: 9px;
+        align-items: center;
+        margin-top: 9px;
+        font-size: 13px;
+      }
+
+      input,
+      button,
+      select {
+        min-width: 0;
+        font: inherit;
+      }
+
+      input,
+      select {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid var(--line);
+        border-radius: 0;
+        padding: 4px 6px;
+        background: #fffdf7;
+      }
+
+      button {
+        width: 100%;
+        margin-top: 12px;
+        padding: 8px 10px;
+        border: 1px solid var(--ink);
+        border-radius: 0;
+        color: #fffdf7;
+        background: var(--ink);
+        cursor: pointer;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.48;
+      }
+
+      #status,
+      #result-summary {
+        margin-top: 10px;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      #result-summary {
+        max-height: 142px;
+        overflow: auto;
+        padding-top: 8px;
+        border-top: 1px dashed var(--line);
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body class="emap-example-with-floating-header">
+    <div id="header">
+      <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
+      <strong>DuckDB 空间聚合连接</strong>
+    </div>
+    <div id="map"></div>
+    <section class="panel" aria-label="DuckDB spatial aggregate join controls">
+      <h1>行政区 / 销售点聚合台</h1>
+      <p>目标面包含销售点后，输出计数与销售统计；重叠区域中的点会分别计入两个行政区。</p>
+      <div class="row">
+        <label for="target-file">目标行政区</label>
+        <input id="target-file" type="file" accept=".geojson,.json,.topojson,.zip,.kml,.msx" />
+      </div>
+      <div class="row">
+        <label for="join-file">销售点数据</label>
+        <input id="join-file" type="file" accept=".geojson,.json,.topojson,.zip,.kml,.msx" />
+      </div>
+      <div class="row">
+        <label for="target-layer">目标图层</label>
+        <select id="target-layer" disabled></select>
+      </div>
+      <div class="row">
+        <label for="join-layer">连接图层</label>
+        <select id="join-layer" disabled></select>
+      </div>
+      <div class="row">
+        <label for="join-type">连接类型</label>
+        <select id="join-type">
+          <option value="left">left</option>
+          <option value="inner">inner</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="entrypoint">执行入口</label>
+        <select id="entrypoint">
+          <option value="helper">dataset helper</option>
+          <option value="mapop">duckDbSpatialAggregateJoinLayer</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="output-layer">输出图层</label>
+        <input id="output-layer" type="text" value="zone_sales_statistics" />
+      </div>
+      <button id="run" disabled>运行 Aggregate Join</button>
+      <div id="status">分别加载行政区和销售点数据。</div>
+      <pre id="result-summary">统计结果会显示在这里。</pre>
+    </section>
+
+    <script type="module">
+      import { installExampleMapUi } from '/src/example-runtime.ts';
+      import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+      import {
+        closeDuckDbRuntime,
+        createDuckDbRuntimeFromJsDelivr,
+        duckDbSpatialAggregateJoinLayer,
+        setDuckDbRuntime,
+        spatialAggregateJoinDatasetWithDuckDb,
+      } from '@mapseekai/emap/duckdb';
+
+      const emap = await loadExampleRuntime();
+      const { Emap, NavigationControl, TopologySource } = emap;
+      const TARGET_SOURCE_ID = 'duckdb-aggregate-target';
+      const JOIN_SOURCE_ID = 'duckdb-aggregate-join';
+      const OUTPUT_SOURCE_ID = 'duckdb-aggregate-output';
+      const map = new Emap({ container: 'map' });
+      map.addControl(new NavigationControl(), 'top-left');
+      installExampleMapUi(map, emap);
+
+      const targetFile = document.getElementById('target-file');
+      const joinFile = document.getElementById('join-file');
+      const targetLayerSelect = document.getElementById('target-layer');
+      const joinLayerSelect = document.getElementById('join-layer');
+      const joinTypeSelect = document.getElementById('join-type');
+      const entrypointSelect = document.getElementById('entrypoint');
+      const outputLayerInput = document.getElementById('output-layer');
+      const runButton = document.getElementById('run');
+      const status = document.getElementById('status');
+      const resultSummary = document.getElementById('result-summary');
+
+      let targetDataset;
+      let joinDataset;
+      let runtimePromise;
+      const contextSources = new Map();
+      const aggregations = [
+        { operation: "count", outputColumn: "match_count" },
+        { operation: "sum", field: "sales", outputColumn: "sales_total" },
+        { operation: "avg", field: "score", outputColumn: "score_avg" },
+        { operation: "min", field: "sales", outputColumn: "sales_min" },
+        { operation: "max", field: "sales", outputColumn: "sales_max" },
+      ];
+
+      function getLayerId(layer, index) {
+        return String(layer?.name || layer?.id || `layer-${index}`);
+      }
+
+      function removeSourceWithLayers(id) {
+        for (const layer of map.getLayers().filter((layer) => layer.source === id)) {
+          map.removeLayer(layer.id);
+        }
+        if (map.getSource(id)) map.removeSource(id);
+      }
+
+      function clearAggregateOutput() {
+        removeSourceWithLayers(OUTPUT_SOURCE_ID);
+        contextSources.delete(OUTPUT_SOURCE_ID);
+        resultSummary.textContent = '统计结果会显示在这里。';
+      }
+
+      function addDisplayLayers(sourceId, source, prefix, colors) {
+        source.getLayers().forEach((layer, index) => {
+          const sourceLayer = getLayerId(layer, index);
+          const baseId = `${prefix}-${index}`;
+          if (layer?.geometry_type === 'polygon') {
+            map.addLayer({
+              id: `${baseId}-fill`,
+              source: sourceId,
+              'source-layer': sourceLayer,
+              type: 'fill',
+              paint: { 'fill-color': colors.fill, 'fill-opacity': colors.fillOpacity },
+            });
+            map.addLayer({
+              id: `${baseId}-line`,
+              source: sourceId,
+              'source-layer': sourceLayer,
+              type: 'line',
+              paint: { 'line-color': colors.line, 'line-width': colors.lineWidth },
+            });
+          } else if (layer?.geometry_type === 'point') {
+            map.addLayer({
+              id: `${baseId}-point`,
+              source: sourceId,
+              'source-layer': sourceLayer,
+              type: 'circle',
+              paint: {
+                'circle-color': colors.line,
+                'circle-radius': colors.pointRadius,
+                'circle-stroke-color': '#fffdf7',
+                'circle-stroke-width': 1.5,
+              },
+            });
+          }
+        });
+      }
+
+      async function addDatasetSource(id, dataset, prefix, colors) {
+        const source = new TopologySource(id);
+        removeSourceWithLayers(id);
+        source.setDataset(dataset);
+        await map.addSource(id, source);
+        addDisplayLayers(id, source, prefix, colors);
+        return source;
+      }
+
+      function populateLayerSelect(select, dataset) {
+        select.innerHTML = '';
+        dataset?.layers?.forEach((layer, index) => {
+          select.appendChild(new Option(`${getLayerId(layer, index)} (${layer?.geometry_type ?? '?'})`, String(index)));
+        });
+        select.disabled = select.options.length === 0;
+      }
+
+      function updateRunState() {
+        runButton.disabled = !targetDataset || !joinDataset || !targetLayerSelect.options.length || !joinLayerSelect.options.length;
+      }
+
+      async function getRuntime() {
+        runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
+          setDuckDbRuntime(runtime);
+          return runtime;
+        });
+        return runtimePromise;
+      }
+
+      function createMapOpContext() {
+        return {
+          getSource(id) {
+            if (id === TARGET_SOURCE_ID) return { getDataset: () => targetDataset };
+            if (id === JOIN_SOURCE_ID) return { getDataset: () => joinDataset };
+            return contextSources.get(id);
+          },
+          setSourceDataset(id, dataset) {
+            contextSources.set(id, { getDataset: () => dataset });
+          },
+        };
+      }
+
+      async function loadDatasetFromFile(file, sourceId, prefix, colors) {
+        const source = new TopologySource(sourceId);
+        const content = new Uint8Array(await file.arrayBuffer());
+        removeSourceWithLayers(sourceId);
+        await source.setData({ filename: file.name, content });
+        const dataset = source.getDataset();
+        if (!dataset) throw new Error(`${file.name} 未生成可用 dataset`);
+        await map.addSource(sourceId, source);
+        addDisplayLayers(sourceId, source, prefix, colors);
+        return { dataset, source };
+      }
+
+      targetFile.addEventListener('change', async () => {
+        const file = targetFile.files?.[0];
+        if (!file) return;
+        clearAggregateOutput();
+        status.textContent = `正在加载目标行政区 ${file.name}...`;
+        try {
+          const { dataset, source } = await loadDatasetFromFile(file, TARGET_SOURCE_ID, 'duckdb-aggregate-target', {
+            fill: '#86b6c9', fillOpacity: 0.28, line: '#295e76', lineWidth: 1.5, pointRadius: 4,
+          });
+          targetDataset = dataset;
+          populateLayerSelect(targetLayerSelect, targetDataset);
+          map.setExtent(source.getExtent());
+          status.textContent = `已加载目标行政区 ${file.name}。`;
+        } catch (err) {
+          console.error(err);
+          targetDataset = undefined;
+          populateLayerSelect(targetLayerSelect, undefined);
+          status.textContent = `目标数据加载失败: ${err?.message ?? err}`;
+        } finally {
+          updateRunState();
+        }
+      });
+
+      joinFile.addEventListener('change', async () => {
+        const file = joinFile.files?.[0];
+        if (!file) return;
+        clearAggregateOutput();
+        status.textContent = `正在加载销售点 ${file.name}...`;
+        try {
+          const { dataset, source } = await loadDatasetFromFile(file, JOIN_SOURCE_ID, 'duckdb-aggregate-join', {
+            fill: '#d5653b', fillOpacity: 0.3, line: '#d5653b', lineWidth: 1.5, pointRadius: 5,
+          });
+          joinDataset = dataset;
+          populateLayerSelect(joinLayerSelect, joinDataset);
+          map.setExtent(source.getExtent());
+          status.textContent = `已加载销售点 ${file.name}。`;
+        } catch (err) {
+          console.error(err);
+          joinDataset = undefined;
+          populateLayerSelect(joinLayerSelect, undefined);
+          status.textContent = `销售点数据加载失败: ${err?.message ?? err}`;
+        } finally {
+          updateRunState();
+        }
+      });
+
+      function renderSummary(dataset) {
+        const layer = dataset.layers?.[0];
+        const records = layer?.data?.getRecords?.() ?? [];
+        resultSummary.textContent = records.map((record) => [
+          record.id,
+          `match_count=${record.match_count}`,
+          `sales_total=${record.sales_total}`,
+          `score_avg=${record.score_avg}`,
+          `sales_min=${record.sales_min}`,
+          `sales_max=${record.sales_max}`,
+        ].join(' | ')).join('\n') || '没有匹配的目标要素。';
+      }
+
+      runButton.addEventListener('click', async () => {
+        if (!targetDataset || !joinDataset) return;
+        runButton.disabled = true;
+        clearAggregateOutput();
+        status.textContent = 'DuckDB-Wasm 正在汇总行政区销售统计...';
+        try {
+          const runtime = await getRuntime();
+          const opts = {
+            predicate: 'contains',
+            joinType: joinTypeSelect.value,
+            aggregations,
+            targetLayer: Number(targetLayerSelect.value),
+            joinLayer: Number(joinLayerSelect.value),
+            outputLayer: outputLayerInput.value.trim() || undefined,
+          };
+          let resultDataset;
+          if (entrypointSelect.value === 'mapop') {
+            const result = await duckDbSpatialAggregateJoinLayer(createMapOpContext(), {
+              src: TARGET_SOURCE_ID,
+              join: JOIN_SOURCE_ID,
+              predicate: 'contains',
+              joinType: joinTypeSelect.value,
+              aggregations,
+              targetLayer: Number(targetLayerSelect.value),
+              joinLayer: Number(joinLayerSelect.value),
+              outputLayer: outputLayerInput.value.trim() || undefined,
+              output: { sourceId: OUTPUT_SOURCE_ID },
+              runtime,
+            });
+            if (!result.ok) throw new Error(`${result.error.kind}: ${result.error.reason ?? result.error.id}`);
+            resultDataset = result.value.dataset;
+          } else {
+            resultDataset = await spatialAggregateJoinDatasetWithDuckDb(targetDataset, joinDataset, opts, runtime);
+          }
+          const outputSource = await addDatasetSource(OUTPUT_SOURCE_ID, resultDataset, 'duckdb-aggregate-output', {
+            fill: '#e4c36a', fillOpacity: 0.56, line: '#87651a', lineWidth: 2.5, pointRadius: 5,
+          });
+          map.setExtent(outputSource.getExtent());
+          renderSummary(resultDataset);
+          status.textContent = `聚合完成：${resultDataset.layers?.[0]?.shapes?.length ?? 0} 个目标行政区。`;
+        } catch (err) {
+          console.error(err);
+          status.textContent = `Aggregate Join 失败: ${err?.message ?? err}`;
+        } finally {
+          updateRunState();
+        }
+      });
+
+      window.addEventListener('resize', () => map.resize());
+      window.addEventListener('pagehide', () => {
+        void (runtimePromise?.then((runtime) => closeDuckDbRuntime(runtime)) ?? closeDuckDbRuntime());
+      });
+      await autoLoadExampleFixtures('duckdb-spatial-aggregate-join');
+    </script>
+  </body>
+</html>
