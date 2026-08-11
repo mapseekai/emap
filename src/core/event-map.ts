@@ -1,6 +1,7 @@
 import type { EditMode } from '../map/edit-state-store';
 import type { HistoryStateSnapshot } from '../edit/edit-history';
 import type { FeatureRef } from '../map/types';
+import type { LayerSpecification } from '../map/layer';
 import type { ValidatorResult } from '../validation/validator';
 import type { FeatureEvent } from './feature-event-dispatcher';
 import type { PointerMoveEvent } from './pointer-event-dispatcher';
@@ -14,6 +15,14 @@ export interface CameraEvent {
   center: [number, number];
   zoom: number;
   originalEvent: MouseEvent | null;
+}
+
+export type LayerChangeReason = 'add' | 'remove' | 'visibility' | 'effective';
+
+export interface LayerChangeEvent {
+  reason: LayerChangeReason;
+  layerId?: string;
+  layers: readonly LayerSpecification[];
 }
 
 /**
@@ -51,6 +60,7 @@ export interface EmapEventMap {
   crschange: Record<never, never>;
   resize: Record<never, never>;
   data: { sourceId?: string; reason?: 'edit' | 'load' | 'replace' | 'reproject' };
+  layerchange: LayerChangeEvent;
   editmodechange: { mode: EditMode };
   error: { error: Error };
   // Fired bare AND with a snapshot → Partial.

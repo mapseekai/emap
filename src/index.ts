@@ -235,7 +235,12 @@ export { EditOverlayRenderer } from './renderer/edit-overlay-renderer';
 // ===========================================================================
 export { EventDispatcher } from './core/events';
 export type { EventListener } from './core/events';
-export type { EmapEventMap, CameraEvent } from './core/event-map';
+export type {
+  EmapEventMap,
+  CameraEvent,
+  LayerChangeReason,
+  LayerChangeEvent,
+} from './core/event-map';
 export type { CameraOptions, AnimationOptions, FlyToOptions, FitBoundsOptions } from './geo/camera';
 export { HandlerManager } from './core/handler-manager';
 export { isHandler } from './core/handler';

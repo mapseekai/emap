@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll } from 'vitest';
 import { Emap } from '../map/map';
+import { TopologySource } from '../source/topology-source';
 
 beforeAll(() => {
   HTMLCanvasElement.prototype.getContext = () =>
@@ -64,5 +65,52 @@ describe('EmapEventMap runtime wiring (DX P10)', () => {
     });
     map.fire('myCustomThing', { payload: 'hi' });
     expect(got).toBe('hi');
+  });
+
+  it('delivers a cloned rendered-layer snapshot through the keyed listener', async () => {
+    const map = new Emap({ container: container() });
+    const source = new TopologySource('runtime');
+    source.setDataset({ layers: [], info: { crs_string: 'EPSG:4326' } });
+    const seen: unknown[] = [];
+    const committedSources: unknown[] = [];
+    map.on('layerchange', (event) => {
+      seen.push(event);
+      committedSources.push(map.getSource('runtime'));
+    });
+
+    await map.addSource('runtime', source);
+
+    expect(seen).toMatchObject([
+      {
+        type: 'layerchange',
+        reason: 'effective',
+        layers: [{ id: 'runtime:default', source: 'runtime' }],
+      },
+    ]);
+    expect(committedSources).toEqual([source]);
+    seen.length = 0;
+
+    map.addLayer({
+      id: 'runtime-line',
+      type: 'line',
+      source: 'runtime',
+      paint: { 'line-color': '#123456' },
+    });
+
+    expect(seen).toHaveLength(1);
+    const event = seen[0] as {
+      type: string;
+      reason: string;
+      layerId?: string;
+      layers: Array<{ paint?: { 'line-color'?: string } }>;
+    };
+    expect(event).toMatchObject({
+      type: 'layerchange',
+      reason: 'add',
+      layerId: 'runtime-line',
+      layers: [{ id: 'runtime-line', paint: { 'line-color': '#123456' } }],
+    });
+    event.layers[0].paint!['line-color'] = '#ffffff';
+    expect(map.getRenderedLayers()[0].paint).toMatchObject({ 'line-color': '#123456' });
   });
 });

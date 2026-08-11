@@ -702,6 +702,34 @@ describe('Emap layer management', () => {
       expect(map.getLayers()).toHaveLength(1);
     });
 
+    it('emits one defensive rendered-layer snapshot after adding a layer', () => {
+      const source = createMockSource();
+      registerMockSource(map, 'src1', source);
+      const listener = vi.fn();
+      map.on('layerchange', listener);
+
+      map.addLayer({
+        id: 'my-layer',
+        type: 'line',
+        source: 'src1',
+        paint: { 'line-color': '#f00', 'line-dasharray': [2, 3] },
+      });
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0][0]).toMatchObject({
+        reason: 'add',
+        layerId: 'my-layer',
+        layers: [{ id: 'my-layer', source: 'src1' }],
+      });
+      const eventLayer = listener.mock.calls[0][0].layers[0] as LayerSpecification;
+      (eventLayer.paint as { 'line-dasharray': number[] })['line-dasharray'][0] = 99;
+      expect(
+        (map.getRenderedLayers()[0].paint as { 'line-dasharray': readonly number[] })[
+          'line-dasharray'
+        ],
+      ).toEqual([2, 3]);
+    });
+
     it('throws if source does not exist', () => {
       expect(() => map.addLayer({ id: 'l1', type: 'line', source: 'nonexistent' })).toThrow(
         'Source "nonexistent" not found',
@@ -884,6 +912,24 @@ describe('Emap layer management', () => {
       map.removeLayer('nonexistent');
       expect(map.getLayers()).toHaveLength(0);
     });
+
+    it('emits one rendered-layer snapshot after removing a layer', () => {
+      const source = createMockSource();
+      registerMockSource(map, 'src1', source);
+      map.addLayer({ id: 'l1', type: 'line', source: 'src1' });
+      map.addLayer({ id: 'l2', type: 'line', source: 'src1' });
+      const listener = vi.fn();
+      map.on('layerchange', listener);
+
+      map.removeLayer('l1');
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0][0]).toMatchObject({
+        reason: 'remove',
+        layerId: 'l1',
+        layers: [{ id: 'l2' }],
+      });
+    });
   });
 
   describe('setLayerVisibility', () => {
@@ -908,6 +954,88 @@ describe('Emap layer management', () => {
 
       map.setLayerVisibility('l1', 'visible');
       expect(map.getLayer('l1')?.layout?.visibility).toBe('visible');
+    });
+
+    it('materializes every generated default only when one is actually hidden', () => {
+      const source = createMockSource([
+        { name: 'roads', geometry_type: 'polyline', shapes: [] },
+        { name: 'cities', geometry_type: 'point', shapes: [] },
+      ]);
+      registerMockSource(map, 'src1', source);
+      const scheduleRender = getPrivate(map, '_scheduleRender') as ReturnType<typeof vi.fn>;
+      const listener = vi.fn();
+      map.on('layerchange', listener);
+
+      map.setLayerVisibility('src1:roads', 'none');
+
+      expect(map.getLayers().map(({ id, layout }) => [id, layout?.visibility])).toEqual([
+        ['src1:roads', 'none'],
+        ['src1:cities', undefined],
+      ]);
+      expect(scheduleRender).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0][0]).toMatchObject({
+        reason: 'visibility',
+        layerId: 'src1:roads',
+        layers: [
+          { id: 'src1:roads', layout: { visibility: 'none' } },
+          { id: 'src1:cities' },
+        ],
+      });
+    });
+
+    it('does not materialize, render, or emit for unknown and already-visible defaults', () => {
+      const source = createMockSource([
+        { name: 'roads', geometry_type: 'polyline', shapes: [] },
+      ]);
+      registerMockSource(map, 'src1', source);
+      const scheduleRender = getPrivate(map, '_scheduleRender') as ReturnType<typeof vi.fn>;
+      const listener = vi.fn();
+      map.on('layerchange', listener);
+
+      map.setLayerVisibility('missing', 'none');
+      map.setLayerVisibility('src1:roads', 'visible');
+
+      expect(map.getLayers()).toEqual([]);
+      expect(scheduleRender).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('does not render or emit when an explicit layer already has the requested visibility', () => {
+      const source = createMockSource();
+      registerMockSource(map, 'src1', source);
+      map.addLayer({
+        id: 'l1',
+        type: 'line',
+        source: 'src1',
+        layout: { visibility: 'none' },
+      });
+      const scheduleRender = getPrivate(map, '_scheduleRender') as ReturnType<typeof vi.fn>;
+      scheduleRender.mockClear();
+      const listener = vi.fn();
+      map.on('layerchange', listener);
+
+      map.setLayerVisibility('l1', 'none');
+
+      expect(scheduleRender).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('emits one visibility snapshot after an explicit layer changes', () => {
+      const source = createMockSource();
+      registerMockSource(map, 'src1', source);
+      map.addLayer({ id: 'l1', type: 'line', source: 'src1' });
+      const listener = vi.fn();
+      map.on('layerchange', listener);
+
+      map.setLayerVisibility('l1', 'none');
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0][0]).toMatchObject({
+        reason: 'visibility',
+        layerId: 'l1',
+        layers: [{ id: 'l1', layout: { visibility: 'none' } }],
+      });
     });
   });
 
@@ -960,6 +1088,24 @@ describe('Emap layer management', () => {
       map.moveLayer('c', 'a');
       expect(map.getLayers().map((l) => l.id)).toEqual(['c', 'a', 'b']);
     });
+
+    it('emits the reordered effective snapshot', () => {
+      const source = createMockSource();
+      registerMockSource(map, 'src1', source);
+      map.addLayer({ id: 'a', type: 'line', source: 'src1' });
+      map.addLayer({ id: 'b', type: 'line', source: 'src1' });
+      const listener = vi.fn();
+      map.on('layerchange', listener);
+
+      map.moveLayer('b', 'a');
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0][0]).toMatchObject({
+        reason: 'effective',
+        layerId: 'b',
+        layers: [{ id: 'b' }, { id: 'a' }],
+      });
+    });
   });
 
   describe('_getEffectiveLayers', () => {
@@ -971,6 +1117,33 @@ describe('Emap layer management', () => {
       const effective = callPrivate(map, '_getEffectiveLayers') as LayerSpecification[];
       expect(effective).toHaveLength(1);
       expect(effective[0].id).toBe('l1');
+    });
+
+    it('returns deep-cloned rendered snapshots for explicit layers', () => {
+      const source = createMockSource();
+      registerMockSource(map, 'src1', source);
+      map.addLayer({
+        id: 'l1',
+        type: 'line',
+        source: 'src1',
+        paint: { 'line-color': '#123', 'line-dasharray': [2, 4] },
+        layout: { visibility: 'none' },
+      });
+
+      const snapshot = map.getRenderedLayers() as LayerSpecification[];
+      snapshot[0].id = 'changed';
+      snapshot[0].layout!.visibility = 'visible';
+      (snapshot[0].paint as { 'line-dasharray': number[] })['line-dasharray'][0] = 99;
+
+      expect(map.getRenderedLayers()).toEqual([
+        {
+          id: 'l1',
+          type: 'line',
+          source: 'src1',
+          paint: { 'line-color': '#123', 'line-dasharray': [2, 4] },
+          layout: { visibility: 'none' },
+        },
+      ]);
     });
 
     it('auto-generates defaults from sources when no layers added', () => {
@@ -990,6 +1163,107 @@ describe('Emap layer management', () => {
       expect((effective[1].paint as any)['circle-color']).toBe(
         (effective[0].paint as any)['line-color'],
       );
+    });
+
+    it('exposes generated defaults without changing explicit getLayers semantics', () => {
+      const source = createMockSource([
+        { name: 'roads', geometry_type: 'polyline', shapes: [] },
+      ]);
+      registerMockSource(map, 'src1', source);
+
+      expect(map.getRenderedLayers()).toMatchObject([
+        { id: 'src1:roads', type: 'line', source: 'src1', 'source-layer': 'roads' },
+      ]);
+      expect(map.getLayers()).toEqual([]);
+    });
+
+    it('does not expose the generated-layer cache through rendered snapshots', () => {
+      const source = createMockSource([
+        { name: 'roads', geometry_type: 'polyline', shapes: [] },
+      ]);
+      registerMockSource(map, 'src1', source);
+
+      const snapshot = map.getRenderedLayers() as LayerSpecification[];
+      snapshot[0].id = 'changed';
+      (snapshot[0].paint as { 'line-color': string })['line-color'] = '#fff';
+
+      expect(map.getRenderedLayers()).toMatchObject([
+        { id: 'src1:roads', paint: { 'line-color': '#1e88e5' } },
+      ]);
+      expect((callPrivate(map, '_getEffectiveLayers') as LayerSpecification[])[0].id).toBe(
+        'src1:roads',
+      );
+    });
+
+    it('emits effective after committed generated source changes and ignores unchanged data', () => {
+      let sourceLayers = [{ name: 'roads', geometry_type: 'polyline', shapes: [] }];
+      const source = createMockSource();
+      source.getLayers.mockImplementation(() => sourceLayers);
+      registerMockSource(map, 'src1', source);
+      expect(map.getRenderedLayers().map((layer) => layer.id)).toEqual(['src1:roads']);
+      const committedIds: string[][] = [];
+      const listener = vi.fn(() => {
+        committedIds.push(map.getRenderedLayers().map((layer) => layer.id));
+      });
+      map.on('layerchange', listener);
+
+      sourceLayers = [
+        { name: 'roads', geometry_type: 'polyline', shapes: [] },
+        { name: 'cities', geometry_type: 'point', shapes: [] },
+      ];
+      callPrivate(map, '_handleSourceData', 'src1', source, { reason: 'load' });
+      callPrivate(map, '_handleSourceData', 'src1', source, { reason: 'replace' });
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0][0]).toMatchObject({
+        reason: 'effective',
+        layers: [{ id: 'src1:roads' }, { id: 'src1:cities' }],
+      });
+      expect(committedIds).toEqual([['src1:roads', 'src1:cities']]);
+    });
+
+    it('emits effective after a generated source removal commits', () => {
+      registerMockSource(
+        map,
+        'keep',
+        createMockSource([{ name: 'roads', geometry_type: 'polyline', shapes: [] }]),
+      );
+      registerMockSource(
+        map,
+        'drop',
+        createMockSource([{ name: 'cities', geometry_type: 'point', shapes: [] }]),
+      );
+      expect(map.getRenderedLayers().map((layer) => layer.id)).toEqual([
+        'keep:roads',
+        'drop:cities',
+      ]);
+      const sourceAtEvent: unknown[] = [];
+      const listener = vi.fn(() => sourceAtEvent.push(map.getSource('drop')));
+      map.on('layerchange', listener);
+
+      map.removeSource('drop');
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0][0]).toMatchObject({
+        reason: 'effective',
+        layers: [{ id: 'keep:roads' }],
+      });
+      expect(sourceAtEvent).toEqual([undefined]);
+    });
+
+    it('emits on explicit source removal only when rendered layers are removed', () => {
+      registerMockSource(map, 'keep', createMockSource());
+      registerMockSource(map, 'drop', createMockSource());
+      map.addLayer({ id: 'keep-layer', type: 'line', source: 'keep' });
+      const listener = vi.fn();
+      map.on('layerchange', listener);
+
+      map.removeSource('drop');
+      expect(listener).not.toHaveBeenCalled();
+
+      map.removeSource('keep');
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0][0]).toMatchObject({ reason: 'effective', layers: [] });
     });
 
     it('creates a default line layer for source with no mapshaper layers', () => {
