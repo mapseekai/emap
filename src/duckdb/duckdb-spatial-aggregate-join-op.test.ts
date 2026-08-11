@@ -1,5 +1,19 @@
-import { tableFromArrays, type Table } from 'apache-arrow';
-import { describe, expect, it } from 'vitest';
+import {
+  Binary,
+  Bool,
+  DateDay,
+  Field,
+  Int32,
+  List,
+  Map_,
+  Schema,
+  Struct,
+  Table,
+  Utf8,
+  tableFromArrays,
+} from 'apache-arrow';
+import { describe, expect, it, vi } from 'vitest';
+import * as datasetToTable from '../arrow/dataset-to-table';
 import { datasetFromGeoJSON } from '../arrow/test-utils';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import { DuckDbOperationError } from './duckdb-errors';
@@ -54,6 +68,7 @@ const JOIN_FEATURES = {
 interface AggregateRuntimeOptions {
   connectError?: unknown;
   ensureSpatialError?: unknown;
+  insertError?: unknown;
   queryError?: unknown;
   dropErrors?: unknown[];
   closeError?: unknown;
@@ -73,6 +88,7 @@ class AggregateConnection implements DuckDbConnection {
   async insertArrowTable(table: Table, opts: { name: string }): Promise<void> {
     this.inserted.push({ table, opts });
     this.events.push(`insert:${opts.name}`);
+    if (this.options.insertError) throw this.options.insertError;
   }
 
   async query(sql: string): Promise<Table> {
@@ -129,6 +145,23 @@ async function joinDataset(): Promise<MapshaperDataset> {
 
 async function emptyJoinDataset(): Promise<MapshaperDataset> {
   return datasetFromGeoJSON({ type: 'FeatureCollection', features: [] });
+}
+
+async function expectOperationError(
+  promise: Promise<unknown>,
+  expected: Partial<Pick<DuckDbOperationError, 'kind' | 'field'>>,
+): Promise<DuckDbOperationError> {
+  await expect(promise).rejects.toMatchObject(expected);
+  try {
+    await promise;
+  } catch (err) {
+    return err as DuckDbOperationError;
+  }
+  throw new Error('Expected DuckDbOperationError');
+}
+
+function craftedJoinTable(field: Field): Table {
+  return new Table(new Schema([field, new Field('geometry', new Binary(), true)]));
 }
 
 const PREDICATE_FUNCTIONS = [
@@ -360,6 +393,9 @@ describe('spatialAggregateJoinDatasetWithDuckDb', () => {
     expect(result.layers[0]?.data?.getRecords?.().map((record) => record.id)).toEqual(['A', 'C']);
     expect(result.layers[0]?.shapes?.[0]).toEqual(target.layers[0]?.shapes?.[0]);
     expect(result.layers[0]?.shapes?.[0]).not.toBe(target.layers[0]?.shapes?.[0]);
+    expect((result.layers[0]?.shapes?.[0] as unknown[])?.[0]).not.toBe(
+      (target.layers[0]?.shapes?.[0] as unknown[])?.[0],
+    );
   });
 
   it.each([
@@ -472,6 +508,9 @@ describe('spatialAggregateJoinDatasetWithDuckDb', () => {
 
   it('uses a supplied output layer name without changing target CRS metadata', async () => {
     const target = await targetDataset();
+    const arcs = { sentinel: true };
+    target.arcs = arcs as never;
+    target.layers[0]!.id = 'target-layer';
     target.info = { crs_string: 'EPSG:3857', prj: 'original-prj', wkt1: 'original-wkt' };
     const runtime = new AggregateRuntime(
       tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [10] }),
@@ -487,6 +526,9 @@ describe('spatialAggregateJoinDatasetWithDuckDb', () => {
     expect(result.layers[0]?.name).toBe('statistics');
     expect(result.info).toEqual(target.info);
     expect(result.info).not.toBe(target.info);
+    expect(result.arcs).toBe(arcs);
+    expect(result.layers[0]?.id).toBe('target-layer');
+    expect(result.layers[0]?.geometry_type).toBe('point');
   });
 
   it.each([
@@ -614,26 +656,282 @@ describe('spatialAggregateJoinDatasetWithDuckDb', () => {
     ).rejects.toMatchObject({ kind: 'validation', field: 'aggregations' });
   });
 
+  it('uses fallback geometry names in Arrow tables and generated SQL', async () => {
+    const runtime = new AggregateRuntime(
+      tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [1] }),
+    );
+    await spatialAggregateJoinDatasetWithDuckDb(
+      await targetDataset(),
+      await joinDataset(),
+      { ...validOptions, targetGeometryColumn: '', joinGeometryColumn: '' },
+      runtime,
+    );
+    expect(runtime.connection.inserted[0]!.table.schema.fields.at(-1)?.name).toBe('geometry');
+    expect(runtime.connection.inserted[1]!.table.schema.fields.at(-1)?.name).toBe('geometry');
+    expect(runtime.connection.queries[0]).toContain('ST_Contains(t."geometry", j."geometry")');
+  });
+
+  it('resolves named and indexed non-default layers with independent geometry aliases', async () => {
+    const target = await targetDataset();
+    const join = await joinDataset();
+    target.layers.push({ ...target.layers[0]!, name: 'target-extra', id: 'target-extra' });
+    join.layers.push({ ...join.layers[0]!, name: 'join-extra', id: 'join-extra' });
+    const runtime = new AggregateRuntime(
+      tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [1] }),
+    );
+    await spatialAggregateJoinDatasetWithDuckDb(
+      target,
+      join,
+      {
+        ...validOptions,
+        targetLayer: 'target-extra',
+        joinLayer: 1,
+        targetGeometryColumn: 'target_geom',
+        joinGeometryColumn: 'join_geom',
+      },
+      runtime,
+    );
+    expect(runtime.connection.queries[0]).toContain('ST_Contains(t."target_geom", j."join_geom")');
+  });
+
+  it.each([
+    ['sum', new Field('sales', new Utf8(), true)],
+    ['avg', new Field('sales', new Bool(), true)],
+    ['sum', new Field('sales', new DateDay(), true)],
+    ['sum', new Field('sales', new List(new Field('item', new Int32(), true)), true)],
+    ['min', new Field('sales', new Struct([new Field('x', new Int32(), true)]), true)],
+    [
+      'max',
+      new Field(
+        'sales',
+        new Map_(
+          new Field(
+            'entries',
+            new Struct([
+              new Field('key', new Utf8(), false),
+              new Field('value', new Int32(), true),
+            ]),
+            false,
+          ),
+        ),
+        true,
+      ),
+    ],
+    ['min', new Field('sales', new Binary(), true)],
+  ] as const)('rejects invalid %s Arrow field types before connecting', async (operation, field) => {
+    const target = await targetDataset();
+    const join = await joinDataset();
+    const realToArrowTable = datasetToTable.toArrowTable;
+    const targetTable = realToArrowTable(target, { encoding: 'wkb' });
+    const spy = vi.spyOn(datasetToTable, 'toArrowTable');
+    spy.mockReturnValueOnce(targetTable).mockReturnValueOnce(craftedJoinTable(field));
+    try {
+      const runtime = new AggregateRuntime(tableFromArrays({ __emap_rowid: [] }));
+      await expectOperationError(
+        spatialAggregateJoinDatasetWithDuckDb(
+          target,
+          join,
+          {
+            predicate: 'contains',
+            aggregations: [{ operation, field: 'sales', outputColumn: 'value' }],
+          } as DuckDbSpatialAggregateJoinOptions,
+          runtime,
+        ),
+        { kind: 'validation', field: 'aggregations[0].field' },
+      );
+      expect(runtime.connection.inserted).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('preserves exact whitespace join field names rather than trimming lookup keys', async () => {
+    const join = await joinDataset();
+    join.layers[0]!.data = {
+      getFields: () => [' sales '],
+      getRecords: () => [{ ' sales ': 10 }],
+    };
+    const runtime = new AggregateRuntime(tableFromArrays({ __emap_rowid: [0], total: [10] }));
+    await spatialAggregateJoinDatasetWithDuckDb(
+      await targetDataset(),
+      join,
+      {
+        predicate: 'contains',
+        aggregations: [{ operation: 'sum', field: ' sales ', outputColumn: 'total' }],
+      },
+      runtime,
+    );
+    expect(runtime.connection.queries[0]).toContain('SUM(j." sales ")');
+  });
+
+  it('defaults omitted joinType to left and handles empty target and empty-join inner output', async () => {
+    const defaultRuntime = new AggregateRuntime(
+      tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [1] }),
+    );
+    const defaultResult = await spatialAggregateJoinDatasetWithDuckDb(
+      await targetDataset(),
+      await joinDataset(),
+      { predicate: 'contains', aggregations: validOptions.aggregations },
+      defaultRuntime,
+    );
+    expect(defaultResult.layers[0]?.data?.getRecords?.()).toHaveLength(3);
+
+    const emptyTarget = await datasetFromGeoJSON({ type: 'FeatureCollection', features: [] });
+    const emptyResult = await spatialAggregateJoinDatasetWithDuckDb(
+      emptyTarget,
+      await joinDataset(),
+      validOptions,
+      new AggregateRuntime(tableFromArrays({ __emap_rowid: [] })),
+    );
+    expect(emptyResult.layers).toHaveLength(1);
+    expect(emptyResult.layers[0]?.data?.getRecords?.()).toEqual([]);
+
+    const innerResult = await spatialAggregateJoinDatasetWithDuckDb(
+      await targetDataset(),
+      await emptyJoinDataset(),
+      {
+        predicate: 'contains',
+        joinType: 'inner',
+        aggregations: [{ operation: 'count', outputColumn: 'count' }],
+      },
+      new AggregateRuntime(tableFromArrays({ __emap_rowid: [] })),
+    );
+    expect(innerResult.layers[0]?.data?.getRecords?.()).toEqual([]);
+  });
+
+  it('treats typed null-geometry join rows as non-matches while retaining them in Arrow input', async () => {
+    const join = await joinDataset();
+    join.layers[0]!.shapes![0] = null;
+    const emptyAggregates = tableFromArrays({ __emap_rowid: [], match_count: [], sales_total: [] });
+    const leftRuntime = new AggregateRuntime(emptyAggregates);
+    const left = await spatialAggregateJoinDatasetWithDuckDb(
+      await targetDataset(),
+      join,
+      validOptions,
+      leftRuntime,
+    );
+    expect(leftRuntime.connection.inserted[1]!.table.numRows).toBe(1);
+    expect(leftRuntime.connection.queries[0]).toContain('WHERE "geometry" IS NOT NULL');
+    expect(left.layers[0]?.data?.getRecords?.()[0]).toMatchObject({
+      match_count: 0,
+      sales_total: null,
+    });
+    const inner = await spatialAggregateJoinDatasetWithDuckDb(
+      await targetDataset(),
+      join,
+      { ...validOptions, joinType: 'inner' },
+      new AggregateRuntime(emptyAggregates),
+    );
+    expect(inner.layers[0]?.data?.getRecords?.()).toEqual([]);
+  });
+
+  it('chooses an internal row id that avoids target fields, geometry aliases, and outputs', async () => {
+    const target = await targetDataset();
+    target.layers[0]!.data = {
+      getFields: () => ['id', '__emap_rowid', '__emap_rowid_1'],
+      getRecords: () => [
+        { id: 'A', __emap_rowid: 'user', __emap_rowid_1: 'user' },
+        { id: 'B', __emap_rowid: 'user', __emap_rowid_1: 'user' },
+        { id: 'C', __emap_rowid: 'user', __emap_rowid_1: 'user' },
+      ],
+    };
+    const runtime = new AggregateRuntime(
+      tableFromArrays({ __emap_rowid_4: [0], __emap_rowid_3: [1] }),
+    );
+    await spatialAggregateJoinDatasetWithDuckDb(
+      target,
+      await joinDataset(),
+      {
+        predicate: 'contains',
+        targetGeometryColumn: '__emap_rowid_2',
+        aggregations: [{ operation: 'count', outputColumn: '__emap_rowid_3' }],
+      },
+      runtime,
+    );
+    expect(
+      runtime.connection.inserted[0]!.table.schema.fields.map((field) => field.name),
+    ).toContain('__emap_rowid_4');
+  });
+
+  it.each([
+    [tableFromArrays({ match_count: [1], sales_total: [1] })],
+    [
+      tableFromArrays({
+        __emap_rowid: [BigInt(Number.MAX_SAFE_INTEGER) + 1n],
+        match_count: [1],
+        sales_total: [1],
+      }),
+    ],
+  ])('classifies missing or unsafe result row ids as conversion failures', async (result) => {
+    await expectOperationError(
+      spatialAggregateJoinDatasetWithDuckDb(
+        await targetDataset(),
+        await joinDataset(),
+        validOptions,
+        new AggregateRuntime(result),
+      ),
+      { kind: 'conversion-failed' },
+    );
+  });
+
+  it.each([
+    'connectError',
+    'insertError',
+  ] as const)('classifies %s as query-failed and preserves close execution', async (failure) => {
+    const error = new Error(failure);
+    const runtime = new AggregateRuntime(tableFromArrays({ __emap_rowid: [] }), {
+      [failure]: error,
+    });
+    const received = await expectOperationError(
+      spatialAggregateJoinDatasetWithDuckDb(
+        await targetDataset(),
+        await joinDataset(),
+        validOptions,
+        runtime,
+      ),
+      { kind: 'query-failed' },
+    );
+    expect(received.cause).toBe(error);
+    expect(runtime.events.at(-1)).toBe(failure === 'connectError' ? 'connect' : 'close');
+  });
+
   it.each([
     '',
     null,
     false,
     0,
-  ])('does not blame a fallback target geometry alias %j when geometry is missing', async (targetGeometryColumn) => {
+  ])('does not blame fallback target geometry alias %j when geometry is missing', async (targetGeometryColumn) => {
     const target = await targetDataset();
     delete target.layers[0]!.geometry_type;
-    const runtime = new AggregateRuntime(tableFromArrays({ __emap_rowid: [] }));
-
-    try {
-      await spatialAggregateJoinDatasetWithDuckDb(
+    const err = await expectOperationError(
+      spatialAggregateJoinDatasetWithDuckDb(
         target,
         await joinDataset(),
         { ...validOptions, targetGeometryColumn } as unknown as DuckDbSpatialAggregateJoinOptions,
-        runtime,
-      );
-    } catch (err) {
-      expect(err).toMatchObject({ kind: 'validation' });
-      expect((err as DuckDbOperationError).field).toBeUndefined();
-    }
+        new AggregateRuntime(tableFromArrays({ __emap_rowid: [] })),
+      ),
+      { kind: 'validation' },
+    );
+    expect(err.field).toBeUndefined();
+  });
+
+  it.each([
+    '',
+    null,
+    false,
+    0,
+  ])('does not blame fallback join geometry alias %j when geometry is missing', async (joinGeometryColumn) => {
+    const join = await joinDataset();
+    delete join.layers[0]!.geometry_type;
+    const err = await expectOperationError(
+      spatialAggregateJoinDatasetWithDuckDb(
+        await targetDataset(),
+        join,
+        { ...validOptions, joinGeometryColumn } as unknown as DuckDbSpatialAggregateJoinOptions,
+        new AggregateRuntime(tableFromArrays({ __emap_rowid: [] })),
+      ),
+      { kind: 'validation' },
+    );
+    expect(err.field).toBeUndefined();
   });
 });
