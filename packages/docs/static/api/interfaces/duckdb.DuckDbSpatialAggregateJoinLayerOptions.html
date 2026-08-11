@@ -1,0 +1,151 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>DuckDbSpatialAggregateJoinLayerOptions | @mapseekai/emap</title><meta name="description" content="Documentation for @mapseekai/emap"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">@mapseekai/emap</a>
+<div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
+<ul role="listbox" id="tsd-search-results"></ul>
+<div id="tsd-search-status" aria-live="polite" aria-atomic="true">
+<div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-menu"></use></svg></a></div></header>
+<div class="container container-main">
+<div class="col-content">
+<div class="tsd-page-title">
+<ul class="tsd-breadcrumb" aria-label="Breadcrumb">
+<li><a href="../modules/duckdb.html">duckdb</a></li>
+<li><a href="" aria-current="page">DuckDbSpatialAggregateJoinLayerOptions</a></li></ul>
+<h1>Interface DuckDbSpatialAggregateJoinLayerOptions</h1></div>
+<section class="tsd-panel tsd-comment">
+<div class="tsd-comment tsd-typography"><p>DuckDbSpatialAggregateJoinLayerOptions is a public emap interface documented for package consumers.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: duckdb-buffer, duckdb-geoparquet-query, duckdb-overlay.</p>
+</div></div></section>
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">DuckDbSpatialAggregateJoinLayerOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#aggregations">aggregations</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-keyword">readonly</span> <a href="../types/duckdb.DuckDbSpatialAggregation.html" class="tsd-signature-type tsd-kind-type-alias">DuckDbSpatialAggregation</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#join">join</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#joingeometrycolumn">joinGeometryColumn</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#joinlayer">joinLayer</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#jointype">joinType</a><span class="tsd-signature-symbol">?:</span> <a href="../types/duckdb.DuckDbSpatialAggregateJoinType.html" class="tsd-signature-type tsd-kind-type-alias">DuckDbSpatialAggregateJoinType</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#output">output</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">sourceId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#outputlayer">outputLayer</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#predicate">predicate</a><span class="tsd-signature-symbol">:</span> <a href="../types/duckdb.DuckDbSpatialAggregateJoinPredicate.html" class="tsd-signature-type tsd-kind-type-alias">DuckDbSpatialAggregateJoinPredicate</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#runtime">runtime</a><span class="tsd-signature-symbol">?:</span> <a href="duckdb.DuckDbRuntime.html" class="tsd-signature-type tsd-kind-interface">DuckDbRuntime</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#src">src</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#targetgeometrycolumn">targetGeometryColumn</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#targetlayer">targetLayer</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
+<section class="tsd-panel tsd-hierarchy" data-refl="706">
+<h4>Hierarchy (<a href="../hierarchy.html#duckdb.DuckDbSpatialAggregateJoinLayerOptions">View Summary</a>)</h4>
+<ul class="tsd-hierarchy">
+<li class="tsd-hierarchy-item"><a href="duckdb.DuckDbSpatialAggregateJoinOptions.html" class="tsd-signature-type tsd-kind-interface">DuckDbSpatialAggregateJoinOptions</a>
+<ul class="tsd-hierarchy">
+<li class="tsd-hierarchy-item"><span class="tsd-hierarchy-target">DuckDbSpatialAggregateJoinLayerOptions</span></li></ul></li></ul></section><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/2d2335bc392a0d081293e8cf77cc9dca91c8f19d/src/duckdb/map-op.ts#L121">src/duckdb/map-op.ts:121</a></li></ul></aside>
+<section class="tsd-panel-group tsd-index-group">
+<section class="tsd-panel tsd-index-panel">
+<details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h5 class="tsd-index-heading uppercase">Index</h5></summary>
+<div class="tsd-accordion-details">
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-index-list"><a href="#aggregations" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>aggregations</span></a>
+<a href="#join" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>join</span></a>
+<a href="#joingeometrycolumn" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>join<wbr/>Geometry<wbr/>Column?</span></a>
+<a href="#joinlayer" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>join<wbr/>Layer?</span></a>
+<a href="#jointype" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>join<wbr/>Type?</span></a>
+<a href="#output" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>output?</span></a>
+<a href="#outputlayer" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>output<wbr/>Layer?</span></a>
+<a href="#predicate" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>predicate</span></a>
+<a href="#runtime" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>runtime?</span></a>
+<a href="#src" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>src</span></a>
+<a href="#targetgeometrycolumn" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>target<wbr/>Geometry<wbr/>Column?</span></a>
+<a href="#targetlayer" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>target<wbr/>Layer?</span></a>
+</div></section></div></details></section></section>
+<details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
+<section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="aggregations"><span>aggregations</span><a href="#aggregations" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">aggregations</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-keyword">readonly</span> <a href="../types/duckdb.DuckDbSpatialAggregation.html" class="tsd-signature-type tsd-kind-type-alias">DuckDbSpatialAggregation</a><span class="tsd-signature-symbol">[]</span></div><aside class="tsd-sources">
+<p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#aggregations">aggregations</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/2d2335bc392a0d081293e8cf77cc9dca91c8f19d/src/duckdb/duckdb-spatial-aggregate-join-op.ts#L41">src/duckdb/duckdb-spatial-aggregate-join-op.ts:41</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="join"><span>join</span><a href="#join" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">join</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
+<div class="tsd-comment tsd-typography"><p>join is a public emap API documented for package consumers.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/2d2335bc392a0d081293e8cf77cc9dca91c8f19d/src/duckdb/map-op.ts#L123">src/duckdb/map-op.ts:123</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="joingeometrycolumn"><code class="tsd-tag">Optional</code><span>join<wbr/>Geometry<wbr/>Column</span><a href="#joingeometrycolumn" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">joinGeometryColumn</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
+<p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#joingeometrycolumn">joinGeometryColumn</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/2d2335bc392a0d081293e8cf77cc9dca91c8f19d/src/duckdb/duckdb-spatial-aggregate-join-op.ts#L46">src/duckdb/duckdb-spatial-aggregate-join-op.ts:46</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="joinlayer"><code class="tsd-tag">Optional</code><span>join<wbr/>Layer</span><a href="#joinlayer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">joinLayer</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">number</span></div><aside class="tsd-sources">
+<p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#joinlayer">joinLayer</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/2d2335bc392a0d081293e8cf77cc9dca91c8f19d/src/duckdb/duckdb-spatial-aggregate-join-op.ts#L44">src/duckdb/duckdb-spatial-aggregate-join-op.ts:44</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="jointype"><code class="tsd-tag">Optional</code><span>join<wbr/>Type</span><a href="#jointype" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">joinType</span><span class="tsd-signature-symbol">?:</span> <a href="../types/duckdb.DuckDbSpatialAggregateJoinType.html" class="tsd-signature-type tsd-kind-type-alias">DuckDbSpatialAggregateJoinType</a></div><aside class="tsd-sources">
+<p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#jointype">joinType</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/2d2335bc392a0d081293e8cf77cc9dca91c8f19d/src/duckdb/duckdb-spatial-aggregate-join-op.ts#L42">src/duckdb/duckdb-spatial-aggregate-join-op.ts:42</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="output"><code class="tsd-tag">Optional</code><span>output</span><a href="#output" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">output</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">sourceId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span></div>
+<div class="tsd-comment tsd-typography"><p>output is a public emap API documented for package consumers.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/2d2335bc392a0d081293e8cf77cc9dca91c8f19d/src/duckdb/map-op.ts#L124">src/duckdb/map-op.ts:124</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="outputlayer"><code class="tsd-tag">Optional</code><span>output<wbr/>Layer</span><a href="#outputlayer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">outputLayer</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
+<p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#outputlayer">outputLayer</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/2d2335bc392a0d081293e8cf77cc9dca91c8f19d/src/duckdb/duckdb-spatial-aggregate-join-op.ts#L47">src/duckdb/duckdb-spatial-aggregate-join-op.ts:47</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="predicate"><span>predicate</span><a href="#predicate" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">predicate</span><span class="tsd-signature-symbol">:</span> <a href="../types/duckdb.DuckDbSpatialAggregateJoinPredicate.html" class="tsd-signature-type tsd-kind-type-alias">DuckDbSpatialAggregateJoinPredicate</a></div><aside class="tsd-sources">
+<p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#predicate">predicate</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/2d2335bc392a0d081293e8cf77cc9dca91c8f19d/src/duckdb/duckdb-spatial-aggregate-join-op.ts#L40">src/duckdb/duckdb-spatial-aggregate-join-op.ts:40</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="runtime"><code class="tsd-tag">Optional</code><span>runtime</span><a href="#runtime" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">runtime</span><span class="tsd-signature-symbol">?:</span> <a href="duckdb.DuckDbRuntime.html" class="tsd-signature-type tsd-kind-interface">DuckDbRuntime</a></div>
+<div class="tsd-comment tsd-typography"><p>runtime is a public emap API documented for package consumers.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/2d2335bc392a0d081293e8cf77cc9dca91c8f19d/src/duckdb/map-op.ts#L125">src/duckdb/map-op.ts:125</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="src"><span>src</span><a href="#src" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">src</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
+<div class="tsd-comment tsd-typography"><p>src is a public emap API documented for package consumers.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/2d2335bc392a0d081293e8cf77cc9dca91c8f19d/src/duckdb/map-op.ts#L122">src/duckdb/map-op.ts:122</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="targetgeometrycolumn"><code class="tsd-tag">Optional</code><span>target<wbr/>Geometry<wbr/>Column</span><a href="#targetgeometrycolumn" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">targetGeometryColumn</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
+<p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#targetgeometrycolumn">targetGeometryColumn</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/2d2335bc392a0d081293e8cf77cc9dca91c8f19d/src/duckdb/duckdb-spatial-aggregate-join-op.ts#L45">src/duckdb/duckdb-spatial-aggregate-join-op.ts:45</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="targetlayer"><code class="tsd-tag">Optional</code><span>target<wbr/>Layer</span><a href="#targetlayer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">targetLayer</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">number</span></div><aside class="tsd-sources">
+<p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#targetlayer">targetLayer</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/2d2335bc392a0d081293e8cf77cc9dca91c8f19d/src/duckdb/duckdb-spatial-aggregate-join-op.ts#L43">src/duckdb/duckdb-spatial-aggregate-join-op.ts:43</a></li></ul></aside></section></section></details></div>
+<div class="col-sidebar">
+<div class="page-menu">
+<div class="tsd-navigation settings">
+<details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
+<div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
+<details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>On This Page</h3></summary>
+<div class="tsd-accordion-details">
+<details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
+<div><a href="#aggregations" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>aggregations</span></a><a href="#join"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>join</span></a><a href="#joingeometrycolumn" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>join<wbr/>Geometry<wbr/>Column</span></a><a href="#joinlayer" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>join<wbr/>Layer</span></a><a href="#jointype" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>join<wbr/>Type</span></a><a href="#output"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>output</span></a><a href="#outputlayer" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>output<wbr/>Layer</span></a><a href="#predicate" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>predicate</span></a><a href="#runtime"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>runtime</span></a><a href="#src"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>src</span></a><a href="#targetgeometrycolumn" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>target<wbr/>Geometry<wbr/>Column</span></a><a href="#targetlayer" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>target<wbr/>Layer</span></a></div></details></div></details></div>
+<div class="site-menu">
+<nav class="tsd-navigation"><a href="../index.html">@mapseekai/emap</a>
+<ul class="tsd-small-nested-navigation" id="tsd-nav-container">
+<li>Loading...</li></ul></nav></div></div></div><footer>
+<p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
+<div class="overlay"></div></body></html>
