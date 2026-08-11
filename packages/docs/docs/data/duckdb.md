@@ -2,8 +2,8 @@
 id: duckdb
 slug: /data/duckdb
 title: DuckDB
-api: ["areaDatasetWithDuckDb","boundaryDatasetWithDuckDb","bufferDatasetWithDuckDb","centroidDatasetWithDuckDb","centroidXDatasetWithDuckDb","centroidYDatasetWithDuckDb","closeDuckDbRuntime","containsAttributeDatasetWithDuckDb","containsDatasetWithDuckDb","overlapsDatasetWithDuckDb","overlapsAttributeDatasetWithDuckDb","equalsDatasetWithDuckDb","equalsAttributeDatasetWithDuckDb","crossesDatasetWithDuckDb","crossesAttributeDatasetWithDuckDb","coversDatasetWithDuckDb","coversAttributeDatasetWithDuckDb","coveredByDatasetWithDuckDb","coveredByAttributeDatasetWithDuckDb","containsProperlyDatasetWithDuckDb","containsProperlyAttributeDatasetWithDuckDb","convexHullDatasetWithDuckDb","createDuckDbGeoParquetQuerySource","createDuckDbRuntimeFromJsDelivr","CreateDuckDbRuntimeOptions","differenceDatasetWithDuckDb","disjointAttributeDatasetWithDuckDb","disjointDatasetWithDuckDb","distanceDatasetWithDuckDb","distanceWithinAttributeDatasetWithDuckDb","distanceWithinDatasetWithDuckDb","DUCKDB_ATTRIBUTE_OPERATION_SPECS","DUCKDB_UNARY_GEOMETRY_OPERATION_SPECS","duckDbAttributeLayer","DuckDbAttributeLayerOptions","DuckDbAttributeLayerResult","DuckDbAttributeOperationId","DuckDbAttributeOperationOptions","DuckDbAttributeOperationSpec","DuckDbAttributeOptions","duckDbBufferLayer","DuckDbBufferLayerOptions","DuckDbBufferLayerResult","DuckDbBufferOptions","DuckDbConnection","duckDbGeometryLayer","DuckDbGeometryLayerOptions","DuckDbGeometryLayerResult","DuckDbGeometryOperationSpec","duckDbGeoParquetQueryLayer","DuckDbGeoParquetQueryLayerOptions","DuckDbGeoParquetQueryLayerResult","DuckDbGeoParquetQueryOptions","DuckDbGeoParquetQuerySource","DuckDbMapOpContext","DuckDbMapOpSource","DuckDbNamedRelationOperationSpec","DuckDbOperationError","DuckDbOperationErrorKind","DuckDbOverlayHelperOptions","duckDbOverlayLayer","DuckDbOverlayLayerOptions","DuckDbOverlayLayerResult","DuckDbOverlayOperationId","DuckDbOverlayOperationSpec","DuckDbOverlayOptions","duckDbQueryLayer","DuckDbQueryLayerOptions","DuckDbQueryLayerResult","DuckDbQueryOptions","DuckDbRelationAttributeDistanceOperationSpec","DuckDbRelationAttributeDistanceWithinOperationSpec","DuckDbRelationAttributePredicateOperationSpec","DuckDbRelationFilterDistanceWithinOperationSpec","DuckDbRelationFilterPredicateOperationSpec","DuckDbRelationHelperOptions","duckDbRelationLayer","DuckDbRelationLayerOptions","DuckDbRelationLayerResult","DuckDbRelationMode","DuckDbRelationOperationId","DuckDbRelationOperationSpec","DuckDbRelationOptions","DuckDbRelationOutputKind","DuckDbRuntime","DuckDbSimplifyOptions","DuckDbUnaryGeometryOperationId","DuckDbUnaryGeometryOptions","DuckDbWasmModule","Emap","envelopeDatasetWithDuckDb","geometryTypeDatasetWithDuckDb","getDuckDbAttributeOperationSpec","getDuckDbOverlayOperationSpec","getDuckDbRelationOperationSpec","getDuckDbRuntime","getDuckDbUnaryGeometryOperationSpec","intersectionDatasetWithDuckDb","intersectsAttributeDatasetWithDuckDb","intersectsDatasetWithDuckDb","isEmptyDatasetWithDuckDb","isSimpleDatasetWithDuckDb","isValidDatasetWithDuckDb","lengthDatasetWithDuckDb","makeValidDatasetWithDuckDb","normalizeDuckDbBufferOptions","perimeterDatasetWithDuckDb","processAttributeWithDuckDb","processGeometryWithDuckDb","processOverlayWithDuckDb","processRelationWithDuckDb","queryDatasetWithDuckDb","queryGeoParquetWithDuckDb","resolveAttributeOutputColumn","resolveRelationOutputColumn","runRelationOperation","setDuckDbRuntime","simplifyDatasetWithDuckDb","simplifyPreserveTopologyDatasetWithDuckDb","touchesAttributeDatasetWithDuckDb","touchesDatasetWithDuckDb","ValidatedDuckDbSelectSql","ValidatedDuckDbSelectSqlWithoutRowId","ValidatedDuckDbSelectSqlWithRowId","validateDuckDbSelectSql","ValidateDuckDbSelectSqlOptions","withinAttributeDatasetWithDuckDb","withinDatasetWithDuckDb","xDatasetWithDuckDb","yDatasetWithDuckDb"]
-examples: ["duckdb-buffer","duckdb-geoparquet-query","duckdb-overlay","duckdb-query","duckdb-spatial-ops"]
+api: ["areaDatasetWithDuckDb","boundaryDatasetWithDuckDb","bufferDatasetWithDuckDb","centroidDatasetWithDuckDb","centroidXDatasetWithDuckDb","centroidYDatasetWithDuckDb","closeDuckDbRuntime","containsAttributeDatasetWithDuckDb","containsDatasetWithDuckDb","overlapsDatasetWithDuckDb","overlapsAttributeDatasetWithDuckDb","equalsDatasetWithDuckDb","equalsAttributeDatasetWithDuckDb","crossesDatasetWithDuckDb","crossesAttributeDatasetWithDuckDb","coversDatasetWithDuckDb","coversAttributeDatasetWithDuckDb","coveredByDatasetWithDuckDb","coveredByAttributeDatasetWithDuckDb","containsProperlyDatasetWithDuckDb","containsProperlyAttributeDatasetWithDuckDb","convexHullDatasetWithDuckDb","createDuckDbGeoParquetQuerySource","createDuckDbRuntimeFromJsDelivr","CreateDuckDbRuntimeOptions","differenceDatasetWithDuckDb","disjointAttributeDatasetWithDuckDb","disjointDatasetWithDuckDb","distanceDatasetWithDuckDb","distanceWithinAttributeDatasetWithDuckDb","distanceWithinDatasetWithDuckDb","DUCKDB_ATTRIBUTE_OPERATION_SPECS","DUCKDB_UNARY_GEOMETRY_OPERATION_SPECS","duckDbAttributeLayer","DuckDbAttributeLayerOptions","DuckDbAttributeLayerResult","DuckDbAttributeOperationId","DuckDbAttributeOperationOptions","DuckDbAttributeOperationSpec","DuckDbAttributeOptions","duckDbBufferLayer","DuckDbBufferLayerOptions","DuckDbBufferLayerResult","DuckDbBufferOptions","DuckDbConnection","duckDbGeometryLayer","DuckDbGeometryLayerOptions","DuckDbGeometryLayerResult","DuckDbGeometryOperationSpec","duckDbGeoParquetQueryLayer","DuckDbGeoParquetQueryLayerOptions","DuckDbGeoParquetQueryLayerResult","DuckDbGeoParquetQueryOptions","DuckDbGeoParquetQuerySource","DuckDbMapOpContext","DuckDbMapOpSource","DuckDbNamedRelationOperationSpec","DuckDbOperationError","DuckDbOperationErrorKind","DuckDbOverlayHelperOptions","duckDbOverlayLayer","DuckDbOverlayLayerOptions","DuckDbOverlayLayerResult","DuckDbOverlayOperationId","DuckDbOverlayOperationSpec","DuckDbOverlayOptions","duckDbQueryLayer","DuckDbQueryLayerOptions","DuckDbQueryLayerResult","DuckDbQueryOptions","DuckDbRelationAttributeDistanceOperationSpec","DuckDbRelationAttributeDistanceWithinOperationSpec","DuckDbRelationAttributePredicateOperationSpec","DuckDbRelationFilterDistanceWithinOperationSpec","DuckDbRelationFilterPredicateOperationSpec","DuckDbRelationHelperOptions","duckDbRelationLayer","DuckDbRelationLayerOptions","DuckDbRelationLayerResult","DuckDbRelationMode","DuckDbRelationOperationId","DuckDbRelationOperationSpec","DuckDbRelationOptions","DuckDbRelationOutputKind","DuckDbRuntime","DuckDbSimplifyOptions","DuckDbSpatialAggregateJoinPredicate","DuckDbSpatialAggregateJoinType","DuckDbSpatialAggregateOperation","DuckDbSpatialAggregation","DuckDbSpatialAggregateJoinOptions","spatialAggregateJoinDatasetWithDuckDb","DuckDbSpatialAggregateJoinLayerOptions","DuckDbSpatialAggregateJoinLayerResult","duckDbSpatialAggregateJoinLayer","DuckDbUnaryGeometryOperationId","DuckDbUnaryGeometryOptions","DuckDbWasmModule","Emap","envelopeDatasetWithDuckDb","geometryTypeDatasetWithDuckDb","getDuckDbAttributeOperationSpec","getDuckDbOverlayOperationSpec","getDuckDbRelationOperationSpec","getDuckDbRuntime","getDuckDbUnaryGeometryOperationSpec","intersectionDatasetWithDuckDb","intersectsAttributeDatasetWithDuckDb","intersectsDatasetWithDuckDb","isEmptyDatasetWithDuckDb","isSimpleDatasetWithDuckDb","isValidDatasetWithDuckDb","lengthDatasetWithDuckDb","makeValidDatasetWithDuckDb","normalizeDuckDbBufferOptions","perimeterDatasetWithDuckDb","processAttributeWithDuckDb","processGeometryWithDuckDb","processOverlayWithDuckDb","processRelationWithDuckDb","queryDatasetWithDuckDb","queryGeoParquetWithDuckDb","resolveAttributeOutputColumn","resolveRelationOutputColumn","runRelationOperation","setDuckDbRuntime","simplifyDatasetWithDuckDb","simplifyPreserveTopologyDatasetWithDuckDb","touchesAttributeDatasetWithDuckDb","touchesDatasetWithDuckDb","ValidatedDuckDbSelectSql","ValidatedDuckDbSelectSqlWithoutRowId","ValidatedDuckDbSelectSqlWithRowId","validateDuckDbSelectSql","ValidateDuckDbSelectSqlOptions","withinAttributeDatasetWithDuckDb","withinDatasetWithDuckDb","xDatasetWithDuckDb","yDatasetWithDuckDb"]
+examples: ["duckdb-buffer","duckdb-geoparquet-query","duckdb-overlay","duckdb-spatial-aggregate-join","duckdb-query","duckdb-spatial-ops"]
 stability: stable
 verifiedVersion: 0.5.0
 ---
@@ -138,6 +138,64 @@ DuckDB 始终按 `ST_Function(inputGeometry, maskGeometry)` 计算关系。`cove
 | `covers` | `ST_Covers` | `coversDatasetWithDuckDb` | `coversAttributeDatasetWithDuckDb` | `duckdb_covers` |
 | `coveredBy` | `ST_CoveredBy` | `coveredByDatasetWithDuckDb` | `coveredByAttributeDatasetWithDuckDb` | `duckdb_covered_by` |
 | `containsProperly` | `ST_ContainsProperly` | `containsProperlyDatasetWithDuckDb` | `containsProperlyAttributeDatasetWithDuckDb` | `duckdb_contains_properly` |
+
+## 空间聚合连接
+
+`spatialAggregateJoinDatasetWithDuckDb(targetDataset, joinDataset, options)` 用于在不改变
+目标要素的前提下，按空间匹配把多个 join 要素的统计值追加到目标 layer。它适合为行政区
+统计 POI 数量、销售额或评分，而不是复制 join 的原始字段或创建新 geometry。
+
+```ts
+const result = await spatialAggregateJoinDatasetWithDuckDb(zones, points, {
+  predicate: 'contains',
+  joinType: 'left',
+  aggregations: [
+    { operation: 'count', outputColumn: 'poi_count' },
+    { operation: 'sum', field: 'sales', outputColumn: 'sales_total' },
+    { operation: 'avg', field: 'score', outputColumn: 'score_avg' },
+  ],
+  outputLayer: 'zone_statistics',
+});
+```
+
+`targetLayer` 和 `joinLayer` 可分别选择两个 dataset 的 layer；省略时各自使用第一个
+layer。结果只包含所选 target layer，按原 target 顺序保留 geometry、shape、共享 arc、
+topology、属性、CRS 和 info，输入 dataset 不会被修改。
+
+`predicate` 支持 `intersects`、`contains`、`within`、`touches`、`overlaps`、`equals`、
+`crosses`、`covers`、`coveredBy` 和 `containsProperly`。参数方向始终是 target 在前、
+join 在后：`contains` 表示 target 包含 join，`within` 表示 target 位于 join 内；
+`covers` 表示 target 覆盖 join，`coveredBy` 表示 target 被 join 覆盖。
+
+`joinType` 默认为 `left`，为每个 target 要素产生一行；`inner` 只保留至少匹配一个
+join 要素的 target。两种模式都保持相对于 target 的原始顺序。null target geometry
+视为未匹配，故只在 `left` 保留；null join geometry 会被忽略。
+
+每个 `aggregations` 项可使用 `count`、`sum`、`avg`、`min` 或 `max`。`count` 不接受
+`field`；其他操作要求存在且非空的 join 字段。`sum` 和 `avg` 只接受数值字段，`min` 和
+`max` 只接受 DuckDB 可排序的标量字段。非 count 聚合忽略 null 字段值；某个匹配组的值
+全部为 null 时结果为 null。`left` 中未匹配 target 的 count 为 `0`，其他聚合为 `null`。
+
+`outputColumn` 会先 trim，之后必须非空、请求内唯一，并且不能与 target 属性或 geometry
+列同名；冲突会报错，绝不会自动加后缀或覆盖已有属性。
+
+地图 operation 使用 `duckDbSpatialAggregateJoinLayer(ctx, options)`，从 `src` 读取 target
+source、从 `join` 读取统计 source，并将结果写入 `output.sourceId`。`output` 的类型虽可选，
+但运行时必须提供非空 `output.sourceId`：
+
+```ts
+await duckDbSpatialAggregateJoinLayer(ctx, {
+  src: 'zones',
+  join: 'points',
+  predicate: 'contains',
+  aggregations: [{ operation: 'count', outputColumn: 'poi_count' }],
+  output: { sourceId: 'zone_statistics' },
+});
+```
+
+该 helper 不支持 `disjoint`、距离或 nearest 查询、任意 SQL、直接 GeoParquet 输入、复制
+原始 join 字段，或构造输出 geometry。查看可运行的
+[空间聚合连接示例](/mapseekai/emap/examples/duckdb-spatial-aggregate-join/)。
 
 ## 受限 SELECT
 
