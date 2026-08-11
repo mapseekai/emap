@@ -55,7 +55,7 @@ export class LayerControl implements Control {
 
     if (checkbox.dataset.layerKind === 'online' && this._manager) {
       void this._manager.setOverlayVisibility(checkbox.value, checkbox.checked).catch((error) => {
-        if (!isAbortError(error)) throw error;
+        if (!isAbortError(error)) console.error(error);
       });
     }
   };
@@ -117,7 +117,7 @@ export class LayerControl implements Control {
     this._trigger.type = 'button';
     this._trigger.className = 'emap-panel-trigger emap-layer-trigger';
     this._trigger.textContent = 'Layers';
-    this._trigger.setAttribute('aria-haspopup', 'true');
+    this._trigger.setAttribute('aria-haspopup', 'dialog');
     this._trigger.setAttribute('aria-expanded', 'false');
     this._trigger.setAttribute('aria-controls', panelId);
     this._trigger.addEventListener('click', this._handleTriggerClick);
@@ -126,6 +126,7 @@ export class LayerControl implements Control {
     this._panel.id = panelId;
     this._panel.className = 'emap-control-panel emap-layer-panel';
     this._panel.hidden = true;
+    this._panel.tabIndex = -1;
     this._panel.setAttribute('role', 'dialog');
     this._panel.setAttribute('aria-label', 'Layers');
     this._panel.setAttribute('aria-busy', 'false');
@@ -285,7 +286,7 @@ export class LayerControl implements Control {
     this._trigger.setAttribute('aria-expanded', String(open));
     if (open) {
       this._render();
-      this._getCheckboxes()[0]?.focus();
+      (this._getCheckboxes()[0] ?? this._panel).focus();
     }
   }
 }

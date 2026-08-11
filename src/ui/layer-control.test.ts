@@ -207,6 +207,11 @@ function panel(root: HTMLElement): HTMLElement {
   return element;
 }
 
+async function settlePromises(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 afterEach(() => {
   document.body.replaceChildren();
   vi.restoreAllMocks();
@@ -273,6 +278,32 @@ describe('LayerControl fixed layer groups', () => {
     await Promise.resolve();
 
     expect(manager.setOverlayVisibility).toHaveBeenCalledWith('weather', true);
+  });
+
+  it('reports a non-Abort overlay rejection once while the manager event owns status rendering', async () => {
+    const failure = new Error('Overlay update failed');
+    const reportError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { manager, root } = mount([], [overlay('weather', 'Weather')]);
+    manager.setOverlayVisibility.mockRejectedValueOnce(failure);
+    const [weather] = checkboxes(group(root, '.emap-layer-group--online'));
+
+    weather.checked = true;
+    weather.dispatchEvent(new Event('change', { bubbles: true }));
+    manager.setState('weather', { active: false, status: 'error', error: failure });
+    manager.emit('error', {
+      serviceId: 'weather',
+      phase: 'layer',
+      error: failure,
+      fatal: false,
+    });
+    await settlePromises();
+
+    expect(manager.setOverlayVisibility).toHaveBeenCalledTimes(1);
+    expect(reportError).toHaveBeenCalledTimes(1);
+    expect(reportError).toHaveBeenCalledWith(failure);
+    expect(root.querySelector<HTMLElement>('[role="status"]')?.textContent).toContain(
+      'Overlay update failed',
+    );
   });
 
   it('rerenders API-driven layer and manager state without invoking either mutation API', () => {
@@ -355,6 +386,7 @@ describe('LayerControl accessibility and lifecycle', () => {
     const online = group(root, '.emap-layer-group--online');
 
     expect(button.textContent).toBe('Layers');
+    expect(button.getAttribute('aria-haspopup')).toBe('dialog');
     expect(button.getAttribute('aria-controls')).toBe(layerPanel.id);
     expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(layerPanel.getAttribute('aria-label')).toBe('Layers');
@@ -381,6 +413,24 @@ describe('LayerControl accessibility and lifecycle', () => {
     document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     expect(layerPanel.hidden).toBe(true);
     expect(button.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('focuses an empty panel on open so Escape closes it and restores trigger focus', () => {
+    const { root } = mount([]);
+    const button = trigger(root);
+    const layerPanel = panel(root);
+
+    button.click();
+
+    expect(layerPanel.getAttribute('tabindex')).toBe('-1');
+    expect(document.activeElement).toBe(layerPanel);
+
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    expect(layerPanel.hidden).toBe(true);
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(button);
   });
 
   it('onRemove detaches exact event sources and document listeners without changing state', () => {
