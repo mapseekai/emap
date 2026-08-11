@@ -64,63 +64,20 @@ function removeFreshnessGuardBetween(source: string, after: number, before: numb
   );
 }
 
-function createDeferred<T>() {
-  let resolve: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve: (value: T) => resolve!(value) };
-}
-
-function createAggregateRunHarness({
-  invalidateInputs = true,
-  checkAfterOperation = true,
-}: {
-  invalidateInputs?: boolean;
-  checkAfterOperation?: boolean;
-} = {}) {
-  let inputGeneration = 0;
-  let runVersion = 0;
-  const publications: string[] = [];
-
-  function changeInput() {
-    if (!invalidateInputs) return;
-    inputGeneration += 1;
-    runVersion += 1;
-  }
-
-  async function run(operation: Promise<string>) {
-    const runInputGeneration = inputGeneration;
-    const runToken = ++runVersion;
-    const result = await operation;
-    if (
-      checkAfterOperation &&
-      (runInputGeneration !== inputGeneration || runToken !== runVersion)
-    ) {
-      return;
-    }
-    publications.push(result);
-  }
-
-  return { changeInput, publications, run };
-}
-
-function hasRunGuardAfter(source: string, after: number, before: number): boolean {
-  const guard = source.indexOf('if (!isCurrentRun(runInputGeneration, runToken))', after);
-  return guard > after && guard < before;
-}
-
-function removeRunGuardAfter(source: string, after: number, before: number): string {
-  const guard = 'if (!isCurrentRun(runInputGeneration, runToken))';
-  const index = source.indexOf(guard, after);
-  if (index < 0 || index >= before) return source;
-  return `${source.slice(0, index)}${source.slice(index + guard.length)}`;
-}
-
 function hasInputRunInvalidationBeforeLoad(source: string): boolean {
   const invalidation = source.indexOf('invalidateAggregateRuns();');
   const load = source.indexOf('await loadDatasetFromFile(');
   return invalidation > -1 && load > invalidation;
+}
+
+function hasIdentityAwareOutputCleanup(source: string): boolean {
+  const mapAdd = source.indexOf('await map.addSource(OUTPUT_SOURCE_ID, source);');
+  const cleanup = source.indexOf('map.getSource(OUTPUT_SOURCE_ID) === source');
+  return mapAdd > -1 && cleanup > mapAdd;
+}
+
+function hasIdentityAwareContextDiscard(source: string): boolean {
+  return source.includes('contextSources.get(OUTPUT_SOURCE_ID)?.getDataset?.() === dataset');
 }
 
 describe('DuckDB new feature examples', () => {
@@ -238,8 +195,8 @@ describe('DuckDB new feature examples', () => {
 
   it('renders the aggregate join result and reports all five outputs', () => {
     const html = examples.spatialAggregateJoin;
-    expect(html).toContain('const outputSource = await addDatasetSource(');
-    expect(html).toContain('map.setExtent(outputSource.getExtent())');
+    expect(html).toContain('async function registerAggregateOutput(dataset, isCurrent)');
+    expect(html).toContain('map.setExtent(registration.source.getExtent())');
     for (const column of ['match_count', 'sales_total', 'score_avg', 'sales_min', 'sales_max']) {
       expect(html).toContain(column);
     }
@@ -304,7 +261,7 @@ describe('DuckDB new feature examples', () => {
     ).toBe(false);
   });
 
-  it('invalidates stale aggregate runs when either input changes', async () => {
+  it('routes both aggregate query entrypoints through the shared stale-run coordinator', () => {
     const html = examples.spatialAggregateJoin;
     const targetHandlerStart = html.indexOf("targetFile.addEventListener('change'");
     const joinHandlerStart = html.indexOf("joinFile.addEventListener('change'");
@@ -312,59 +269,41 @@ describe('DuckDB new feature examples', () => {
     const targetHandler = html.slice(targetHandlerStart, joinHandlerStart);
     const joinHandler = html.slice(joinHandlerStart, runHandlerStart);
     const runHandler = html.slice(runHandlerStart);
-    const targetLoad = targetHandler.indexOf('await loadDatasetFromFile(');
-    const joinLoad = joinHandler.indexOf('await loadDatasetFromFile(');
-    const mapOpQuery = runHandler.indexOf('const result = await duckDbSpatialAggregateJoinLayer');
-    const mapOpResultCheck = runHandler.indexOf('if (!result.ok)', mapOpQuery);
-    const helperQuery = runHandler.indexOf(
-      'resultDataset = await spatialAggregateJoinDatasetWithDuckDb',
-    );
-    const resultRegistration = runHandler.indexOf('const outputSource = await addDatasetSource');
+    const registrationStart = html.indexOf('async function registerAggregateOutput');
+    const registrationEnd = html.indexOf('function populateLayerSelect', registrationStart);
+    const registration = html.slice(registrationStart, registrationEnd);
 
-    expect(html).toContain('function invalidateAggregateRuns()');
-    expect(html).toContain('function isCurrentRun(inputVersion, runToken)');
-    expect(targetLoad).toBeGreaterThan(-1);
-    expect(joinLoad).toBeGreaterThan(-1);
+    expect(html).toContain("from '/src/duckdb-spatial-aggregate-run-coordinator.ts'");
+    expect(html).toContain('const runCoordinator = createDuckDbSpatialAggregateRunCoordinator(');
     expect(hasInputRunInvalidationBeforeLoad(targetHandler)).toBe(true);
     expect(hasInputRunInvalidationBeforeLoad(joinHandler)).toBe(true);
-    expect(runHandler).toContain('const runInputGeneration = inputGeneration;');
-    expect(runHandler).toContain('const runToken = ++runVersion;');
-    expect(mapOpQuery).toBeGreaterThan(-1);
-    expect(helperQuery).toBeGreaterThan(mapOpQuery);
-    expect(resultRegistration).toBeGreaterThan(helperQuery);
-    expect(mapOpResultCheck).toBeGreaterThan(mapOpQuery);
-    expect(hasRunGuardAfter(runHandler, mapOpQuery, mapOpResultCheck)).toBe(true);
-    expect(hasRunGuardAfter(runHandler, helperQuery, resultRegistration)).toBe(true);
-
+    expect(hasIdentityAwareOutputCleanup(registration)).toBe(true);
+    expect(hasIdentityAwareContextDiscard(runHandler)).toBe(true);
     expect(
       hasInputRunInvalidationBeforeLoad(targetHandler.replace('invalidateAggregateRuns();', '')),
     ).toBe(false);
     expect(
-      hasRunGuardAfter(
-        removeRunGuardAfter(runHandler, mapOpQuery, mapOpResultCheck),
-        mapOpQuery,
-        mapOpResultCheck,
+      hasIdentityAwareOutputCleanup(
+        registration.replace('map.getSource(OUTPUT_SOURCE_ID) === source', 'true'),
       ),
     ).toBe(false);
-
-    const operation = createDeferred<string>();
-    const current = createAggregateRunHarness();
-    const currentRun = current.run(operation.promise);
-    current.changeInput();
-    operation.resolve('stale result');
-    await currentRun;
-    expect(current.publications).toEqual([]);
-
-    const missingInputInvalidation = createAggregateRunHarness({ invalidateInputs: false });
-    const invalidationRun = missingInputInvalidation.run(Promise.resolve('stale result'));
-    missingInputInvalidation.changeInput();
-    await invalidationRun;
-    expect(missingInputInvalidation.publications).toEqual(['stale result']);
-
-    const missingPostOperationGuard = createAggregateRunHarness({ checkAfterOperation: false });
-    const guardRun = missingPostOperationGuard.run(Promise.resolve('stale result'));
-    missingPostOperationGuard.changeInput();
-    await guardRun;
-    expect(missingPostOperationGuard.publications).toEqual(['stale result']);
+    expect(
+      hasIdentityAwareContextDiscard(
+        runHandler.replace(
+          'contextSources.get(OUTPUT_SOURCE_ID)?.getDataset?.() === dataset',
+          'true',
+        ),
+      ),
+    ).toBe(false);
+    expect(runHandler).toContain('await runCoordinator.run({');
+    expect(runHandler).toContain('const result = await duckDbSpatialAggregateJoinLayer');
+    expect(runHandler).toContain(
+      'return spatialAggregateJoinDatasetWithDuckDb(targetDataset, joinDataset, opts, runtime);',
+    );
+    expect(runHandler).toContain('discardResult(dataset)');
+    expect(runHandler).toContain('register: registerAggregateOutput');
+    expect(runHandler).toContain('publish({ dataset, registration })');
+    expect(runHandler).toContain('publishError(err)');
+    expect(runHandler).toContain('finish: updateRunState');
   });
 });
