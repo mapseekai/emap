@@ -20,7 +20,7 @@
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">CreateDuckDbRuntimeOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#createobjecturl">createObjectURL</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">blob</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Blob</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#customextensionrepository">customExtensionRepository</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#duckdb">duckdb</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">__module</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#revokeobjecturl">revokeObjectURL</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">url</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workerfactory">workerFactory</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">url</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">Worker</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Worker</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/duckdb/duckdb-runtime.ts#L19">src/duckdb/duckdb-runtime.ts:19</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/c65b823a4c5d31a1f2cf576adaafcd4ba1504251/src/duckdb/duckdb-runtime.ts#L19">src/duckdb/duckdb-runtime.ts:19</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -43,35 +43,35 @@
 <div class="tsd-comment tsd-typography"><p>createObjectURL is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/duckdb/duckdb-runtime.ts#L23">src/duckdb/duckdb-runtime.ts:23</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/c65b823a4c5d31a1f2cf576adaafcd4ba1504251/src/duckdb/duckdb-runtime.ts#L23">src/duckdb/duckdb-runtime.ts:23</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="customextensionrepository"><code class="tsd-tag">Optional</code><span>custom<wbr/>Extension<wbr/>Repository</span><a href="#customextensionrepository" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">customExtensionRepository</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>customExtensionRepository is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/duckdb/duckdb-runtime.ts#L21">src/duckdb/duckdb-runtime.ts:21</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/c65b823a4c5d31a1f2cf576adaafcd4ba1504251/src/duckdb/duckdb-runtime.ts#L21">src/duckdb/duckdb-runtime.ts:21</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="duckdb"><code class="tsd-tag">Optional</code><span>duckdb</span><a href="#duckdb" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">duckdb</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">__module</span></div>
 <div class="tsd-comment tsd-typography"><p>duckdb is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/duckdb/duckdb-runtime.ts#L20">src/duckdb/duckdb-runtime.ts:20</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/c65b823a4c5d31a1f2cf576adaafcd4ba1504251/src/duckdb/duckdb-runtime.ts#L20">src/duckdb/duckdb-runtime.ts:20</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="revokeobjecturl"><code class="tsd-tag">Optional</code><span>revoke<wbr/>Object<wbr/>URL</span><a href="#revokeobjecturl" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">revokeObjectURL</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">url</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span></div>
 <div class="tsd-comment tsd-typography"><p>revokeObjectURL is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/duckdb/duckdb-runtime.ts#L24">src/duckdb/duckdb-runtime.ts:24</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/c65b823a4c5d31a1f2cf576adaafcd4ba1504251/src/duckdb/duckdb-runtime.ts#L24">src/duckdb/duckdb-runtime.ts:24</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="workerfactory"><code class="tsd-tag">Optional</code><span>worker<wbr/>Factory</span><a href="#workerfactory" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">workerFactory</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">url</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">Worker</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Worker</span><span class="tsd-signature-symbol">&gt;</span></div>
 <div class="tsd-comment tsd-typography"><p>workerFactory is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/duckdb/duckdb-runtime.ts#L22">src/duckdb/duckdb-runtime.ts:22</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/c65b823a4c5d31a1f2cf576adaafcd4ba1504251/src/duckdb/duckdb-runtime.ts#L22">src/duckdb/duckdb-runtime.ts:22</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
