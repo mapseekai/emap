@@ -1713,16 +1713,31 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     for (const record of this._registry.values()) {
       if (this._desiredRequest !== request) break;
       if (record.definition.role !== 'overlay' || !record.state.active) continue;
+      const operationRevision = record.operationRevision;
+      const publishRecoveryStatus =
+        request.phase === 'recovery' &&
+        record.state.status === 'error' &&
+        !this._reconciliationJobs.has(record);
       try {
-        await this._reconcileOverlayForGeneration(record, record.operationRevision, generation);
+        if (publishRecoveryStatus) {
+          this._setStatus(record, operationRevision, 'loading');
+          if (this._desiredRequest !== request) break;
+        }
+        await this._reconcileOverlayForGeneration(record, operationRevision, generation);
+        this._assertCurrentOperation(record, operationRevision);
         this._reconciliationFailures.delete(record);
+        if (publishRecoveryStatus) {
+          if (this._desiredRequest !== request) break;
+          this._setStatus(record, operationRevision, 'ready');
+          if (this._desiredRequest !== request) break;
+        }
       } catch (value) {
         const error = toError(value);
         if (error.name === 'AbortError') break;
         this._reconciliationFailures.set(record, { generation, error });
         if (record.state.status !== 'idle' && !this._reconciliationJobs.has(record)) {
           try {
-            this._publishTransitionFailure(record, record.operationRevision, error);
+            this._publishTransitionFailure(record, operationRevision, error);
           } catch {
             // Reentrant listeners may supersede the failed overlay.
           }

@@ -778,6 +778,44 @@ describe('MapLibreServiceManager basemap style coordinator', () => {
     expect(map.setStyleCalls).toEqual([]);
   });
 
+  it('publishes a recovered visible overlay as ready after the initial basemap style fails', async () => {
+    const { manager } = createManager([base, { ...roads, visible: true }], {
+      defaultBasemap: 'light',
+    });
+    const statuses: string[] = [];
+    manager.on('change', (event) => {
+      if (event.serviceId === 'roads' && event.reason === 'status' && event.state) {
+        statuses.push(event.state.status);
+      }
+    });
+    const styleError = new Error('initial basemap style failed');
+    const initialization = manager.initialize().catch((error: unknown) => error);
+    const map = await waitForFakeMap();
+
+    map.emit('error', { error: styleError });
+    await waitForCondition(() => {
+      const style = map.setStyleCalls.at(-1);
+      return typeof style === 'object' && style !== null;
+    }, 'blank recovery did not start after the initial basemap failure');
+    expect(manager.getServiceState('roads')).toMatchObject({ active: true, status: 'error' });
+
+    map.emit('style.load');
+    await expect(initialization).resolves.toBe(styleError);
+    await waitForCondition(
+      () => manager.getServiceState('roads')?.status === 'ready',
+      'reinstalled overlay did not publish ready state',
+    );
+
+    expect([...map.sources.keys()]).toEqual(['roads']);
+    expect(map.layerOrder).toEqual(['roads-line']);
+    expect(manager.getServiceState('roads')).toEqual({
+      id: 'roads',
+      active: true,
+      status: 'ready',
+    });
+    expect(statuses).toEqual(['error', 'loading', 'ready']);
+  });
+
   it('treats constructor style readiness as the first in-flight request', async () => {
     const { manager } = createManager([base, roads]);
     const overlay = manager.setOverlayVisibility('roads', true);
