@@ -923,6 +923,7 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
   ] as const;
 
   it('forwards selected layers and inner output semantics before writing once', async () => {
+    const paddedSourceId = ' aggregate output 2026 ';
     const target = makeSelectableLayerDataset(
       await datasetFromGeoJSON({
         type: 'FeatureCollection',
@@ -971,19 +972,20 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
         targetGeometryColumn: 'target geom',
         joinGeometryColumn: 'join geom',
         outputLayer: 'joined statistics',
-        output: { sourceId: 'aggregate output 2026' },
+        output: { sourceId: paddedSourceId },
         runtime,
       },
     );
 
     expect(result.ok).toBe(true);
-    expect(ctx.outputDatasets.get('aggregate output 2026')).toBe(
+    expect(ctx.outputDatasets.get(paddedSourceId)).toBe(
       result.ok ? result.value.dataset : undefined,
     );
     expect(ctx.writes).toEqual([
-      { id: 'aggregate output 2026', dataset: result.ok ? result.value.dataset : undefined },
+      { id: paddedSourceId, dataset: result.ok ? result.value.dataset : undefined },
     ]);
-    expect(result.ok && result.value.sourceId).toBe('aggregate output 2026');
+    expect(result.ok && result.value.sourceId).toBe(paddedSourceId);
+    expect(ctx.outputDatasets.has(paddedSourceId.trim())).toBe(false);
     expect(result.ok && result.value.dataset.layers[0]!.name).toBe('joined statistics');
     expect(result.ok && result.value.dataset.layers[0]!.data?.getRecords()).toEqual([
       { id: 'matched', match_count: 1, sales_total: 12 },
