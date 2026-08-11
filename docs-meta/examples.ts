@@ -273,6 +273,7 @@ type ExampleId = keyof typeof exampleDescriptions;
 const seeds: readonly ExampleDefinition[] = [
   seed(
     'getting-started/geojson-viewer',
+    'map-data',
     'GeoJSON 查看器',
     'GeoJSON viewer',
     [docsEmap, docsSourceLayer, docsFitBounds],
@@ -282,6 +283,7 @@ const seeds: readonly ExampleDefinition[] = [
   ),
   seed(
     'getting-started/points',
+    'data-analysis',
     '几何转点',
     'Geometry to points',
     [docsSourceLayer, docsOperations, docsFileUpload],
@@ -291,6 +293,7 @@ const seeds: readonly ExampleDefinition[] = [
   ),
   seed(
     'getting-started/point-style',
+    'style-interaction',
     '点图层样式',
     'Point layer styling',
     [docsSourceLayer, docsStyling, docsFileUpload],
@@ -300,6 +303,7 @@ const seeds: readonly ExampleDefinition[] = [
   ),
   seed(
     'getting-started/lines',
+    'style-interaction',
     '线图层样式',
     'Line layer styling',
     [docsSourceLayer, docsStyling],
@@ -309,6 +313,7 @@ const seeds: readonly ExampleDefinition[] = [
   ),
   seed(
     'getting-started/polygons',
+    'data-analysis',
     '面边界',
     'Polygons',
     [docsStyling],
@@ -318,6 +323,7 @@ const seeds: readonly ExampleDefinition[] = [
   ),
   seed(
     'getting-started/polygon-fill',
+    'style-interaction',
     '面填充',
     'Polygon fill',
     [docsStyling],
@@ -387,10 +393,70 @@ const recipes: readonly ExampleDefinition[] = [
   recipe('duckdb-spatial-ops', 'duckdb', 'DuckDB 空间函数', 'DuckDB spatial functions', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap'], [task7Fixture]),
 ];
 
-export const examples: readonly ExampleDefinition[] = [...seeds, ...recipes];
+export const examples: readonly ExampleDefinition[] = [
+  seeds[0],
+  module(recipes[0], 'map-data'),
+  module(recipes[6], 'map-data'),
+  module(recipes[9], 'map-data'),
+  module(recipes[12], 'map-data'),
+  module(recipes[13], 'map-data'),
+  module(recipes[10], 'map-data'),
+  module(recipes[7], 'map-data'),
+  module(recipes[8], 'map-data'),
+  module(recipes[41], 'map-data'),
+  module(recipes[35], 'map-data'),
+  module(recipes[42], 'map-data'),
+  seeds[2],
+  seeds[3],
+  seeds[5],
+  module(recipes[14], 'style-interaction'),
+  module(recipes[4], 'style-interaction'),
+  module(recipes[15], 'style-interaction'),
+  module(recipes[16], 'style-interaction'),
+  module(recipes[17], 'style-interaction'),
+  module(recipes[1], 'data-editing'),
+  module(recipes[25], 'data-editing'),
+  module(recipes[2], 'data-editing'),
+  module(recipes[5], 'data-editing'),
+  module(recipes[3], 'data-editing'),
+  module(recipes[11], 'data-editing'),
+  module(recipes[26], 'data-editing'),
+  module(recipes[22], 'data-editing'),
+  module(recipes[21], 'data-editing'),
+  module(recipes[19], 'data-editing'),
+  module(recipes[20], 'data-editing'),
+  module(recipes[18], 'data-editing'),
+  module(recipes[24], 'data-editing'),
+  module(recipes[23], 'data-editing'),
+  seeds[1],
+  seeds[4],
+  module(recipes[32], 'data-analysis'),
+  module(recipes[27], 'data-analysis'),
+  module(recipes[38], 'data-analysis'),
+  module(recipes[37], 'data-analysis'),
+  module(recipes[30], 'data-analysis'),
+  module(recipes[33], 'data-analysis'),
+  module(recipes[40], 'data-analysis'),
+  module(recipes[29], 'data-analysis'),
+  module(recipes[31], 'data-analysis'),
+  module(recipes[39], 'data-analysis'),
+  module(recipes[34], 'data-analysis'),
+  module(recipes[28], 'data-analysis'),
+  module(recipes[36], 'data-analysis'),
+  module(recipes[46], 'data-analysis'),
+  module(recipes[44], 'data-analysis'),
+  module(recipes[43], 'data-analysis'),
+  module(recipes[45], 'data-analysis'),
+  module(recipes[47], 'data-analysis'),
+];
+
+function module(example: ExampleDefinition, category: string): ExampleDefinition {
+  return { ...example, category, tags: [category, example.id, ...example.featureFlags] };
+}
 
 function seed(
   id: ExampleId,
+  category: string,
   zh: string,
   en: string,
   docs: readonly string[],
@@ -400,7 +466,7 @@ function seed(
 ): ExampleDefinition {
   return {
     id,
-    category: 'getting-started',
+    category,
     title: { zh, en },
     description: exampleDescriptions[id],
     learningGoals: {

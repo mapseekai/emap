@@ -7,59 +7,71 @@ import { examplePublicHref, renderCatalog } from '../../packages/examples/src/ca
 
 const expectedIds = [
   'getting-started/geojson-viewer',
-  'getting-started/points',
-  'getting-started/point-style',
-  'getting-started/lines',
-  'getting-started/polygons',
-  'getting-started/polygon-fill',
   'getting-started/shapefile-viewer',
-  'attribute-editing',
-  'attribute-expressions',
-  'data-engineering',
-  'feature-attributes',
-  'filter-features',
   'geoparquet-viewer',
-  'export-geoparquet',
-  'export-roundtrip',
   'join',
-  'merge-layers',
-  'merge-selected',
   'rename-layer',
   'split-layer',
+  'merge-layers',
+  'export-geoparquet',
+  'export-roundtrip',
+  'crs-switch',
+  'project',
+  'web-worker',
+  'getting-started/point-style',
+  'getting-started/lines',
+  'getting-started/polygon-fill',
   'interaction-handlers',
+  'feature-attributes',
   'feature-selection',
   'box-select',
   'lasso-select',
-  'china-editing',
+  'attribute-editing',
+  'undo-redo',
+  'attribute-expressions',
+  'filter-features',
+  'data-engineering',
+  'merge-selected',
+  'vertex-editing',
+  'feature-translate',
+  'feature-rotate-scale',
   'draw-snap-clear',
   'draw-snap-edge',
-  'feature-rotate-scale',
-  'feature-translate',
-  'snapshot',
+  'china-editing',
   'transaction',
-  'undo-redo',
-  'vertex-editing',
-  'buffer',
-  'check-geometry',
-  'clip-erase',
-  'dissolve',
-  'divide',
+  'snapshot',
+  'getting-started/points',
+  'getting-started/polygons',
   'explode',
-  'innerlines',
-  'mosaic',
-  'project',
-  'rebuild-topology',
-  'simplify-control',
+  'buffer',
   'simplify',
-  'snap-layer',
+  'simplify-control',
+  'dissolve',
+  'innerlines',
   'union',
-  'crs-switch',
-  'web-worker',
-  'duckdb-buffer',
-  'duckdb-geoparquet-query',
-  'duckdb-overlay',
+  'clip-erase',
+  'divide',
+  'snap-layer',
+  'mosaic',
+  'check-geometry',
+  'rebuild-topology',
   'duckdb-query',
+  'duckdb-geoparquet-query',
+  'duckdb-buffer',
+  'duckdb-overlay',
   'duckdb-spatial-ops',
+] as const;
+
+const expectedModules = [
+  { key: 'map-data', zh: '地图与数据', en: 'Map & Data', count: 12 },
+  {
+    key: 'style-interaction',
+    zh: '样式与交互',
+    en: 'Styling & Interaction',
+    count: 8,
+  },
+  { key: 'data-editing', zh: '数据编辑', en: 'Data Editing', count: 14 },
+  { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 20 },
 ] as const;
 
 describe('example catalog metadata', () => {
@@ -73,6 +85,15 @@ describe('example catalog metadata', () => {
 
   it('defines the complete metadata-only catalog', () => {
     expect(examples.map(({ id }) => id)).toEqual(expectedIds);
+    expect(Array.from(new Set(examples.map(({ category }) => category)))).toEqual(
+      expectedModules.map(({ key }) => key),
+    );
+    for (const { key, count } of expectedModules) {
+      expect(
+        examples.filter(({ category }) => category === key),
+        key,
+      ).toHaveLength(count);
+    }
 
     const ids = new Set<string>();
     for (const example of examples) {
@@ -163,17 +184,20 @@ describe('example catalog metadata', () => {
     const root = document.createElement('div');
     renderCatalog(root, examples);
 
-    expect(root.querySelectorAll('.catalog-category-button')).toHaveLength(11);
-    expect(root.querySelectorAll('.catalog-group')).toHaveLength(10);
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(54);
+    expect(root.querySelectorAll('.catalog-category-button')).toHaveLength(5);
+    expect(root.querySelectorAll('.catalog-group')).toHaveLength(4);
+    expect(
+      Array.from(root.querySelectorAll('.catalog-group-title'), ({ textContent }) => textContent),
+    ).toEqual(expectedModules.map(({ zh }) => zh));
 
-    root.querySelector<HTMLButtonElement>('[data-category="data"]')?.click();
+    root.querySelector<HTMLButtonElement>('[data-category="map-data"]')?.click();
 
-    expect(root.querySelectorAll('.catalog-group')).toHaveLength(1);
-    expect(root.querySelector('.catalog-group-title')?.textContent).toBe('数据');
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(9);
-    expect(root.querySelector('[data-category="data"]')?.getAttribute('aria-pressed')).toBe('true');
-    expect(root.querySelector('.catalog-results-summary')?.textContent).toContain('9');
+    expect(root.querySelector('.catalog-group-title')?.textContent).toBe('地图与数据');
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(12);
+    expect(root.querySelector('[data-category="map-data"]')?.getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(root.querySelector('.catalog-results-summary')?.textContent).toContain('12');
   });
 
   it('searches localized text, ids, tags, and API identifiers', () => {
@@ -218,7 +242,7 @@ describe('example catalog metadata', () => {
   it('combines filters, clears search, and renders an empty result', () => {
     const root = document.createElement('div');
     renderCatalog(root, examples);
-    root.querySelector<HTMLButtonElement>('[data-category="data"]')?.click();
+    root.querySelector<HTMLButtonElement>('[data-category="map-data"]')?.click();
     const search = root.querySelector<HTMLInputElement>('.catalog-search-input');
     if (!search) throw new Error('Catalog search was not rendered');
 
@@ -231,7 +255,7 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-empty')).not.toBeNull();
 
     root.querySelector<HTMLButtonElement>('.catalog-empty-clear')?.click();
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(9);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(12);
     expect(root.querySelector<HTMLInputElement>('.catalog-search-input')?.value).toBe('');
   });
 
@@ -241,13 +265,13 @@ describe('example catalog metadata', () => {
 
     try {
       renderCatalog(root, examples);
-      const dataButton = root.querySelector<HTMLButtonElement>('[data-category="data"]');
-      if (!dataButton) throw new Error('Data category button was not rendered');
-      dataButton.focus();
-      dataButton.click();
+      const mapDataButton = root.querySelector<HTMLButtonElement>('[data-category="map-data"]');
+      if (!mapDataButton) throw new Error('Map & Data category button was not rendered');
+      mapDataButton.focus();
+      mapDataButton.click();
 
       expect(document.activeElement).toBe(
-        root.querySelector<HTMLButtonElement>('[data-category="data"]'),
+        root.querySelector<HTMLButtonElement>('[data-category="map-data"]'),
       );
 
       const liveRegion = root.querySelector('.catalog-results-summary');
@@ -289,11 +313,11 @@ describe('example catalog metadata', () => {
     );
 
     const mobileCategory = root.querySelector<HTMLSelectElement>('.catalog-mobile-category select');
-    expect(mobileCategory?.options).toHaveLength(11);
+    expect(mobileCategory?.options).toHaveLength(5);
     if (!mobileCategory) throw new Error('Mobile category selector was not rendered');
-    mobileCategory.value = 'duckdb';
+    mobileCategory.value = 'data-analysis';
     mobileCategory.dispatchEvent(new Event('change'));
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(5);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(20);
   });
 
   it('defaults to Chinese and switches the complete catalog to English', () => {
@@ -334,7 +358,7 @@ describe('example catalog metadata', () => {
   it('preserves the selected category and query when switching locale', () => {
     const root = document.createElement('div');
     renderCatalog(root, examples);
-    root.querySelector<HTMLButtonElement>('[data-category="data"]')?.click();
+    root.querySelector<HTMLButtonElement>('[data-category="map-data"]')?.click();
 
     const search = root.querySelector<HTMLInputElement>('.catalog-search-input');
     if (!search) throw new Error('Catalog search was not rendered');
@@ -347,7 +371,9 @@ describe('example catalog metadata', () => {
     language.dispatchEvent(new Event('change'));
 
     expect(root.querySelector<HTMLInputElement>('.catalog-search-input')?.value).toBe('export');
-    expect(root.querySelector('[data-category="data"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(root.querySelector('[data-category="map-data"]')?.getAttribute('aria-pressed')).toBe(
+      'true',
+    );
     expect(
       Array.from(root.querySelectorAll('.example-card-title'), ({ textContent }) => textContent),
     ).toEqual(['Export GeoParquet / GeoArrow', 'Export roundtrip']);

@@ -43,28 +43,16 @@ interface CatalogState {
 
 const categoryLabels: Record<ExampleLocale, Readonly<Record<string, string>>> = {
   zh: {
-    'getting-started': '快速开始',
-    data: '数据',
-    layers: '图层',
-    interaction: '交互',
-    editing: '编辑',
-    spatial: '空间分析',
-    validation: '验证',
-    crs: '坐标系',
-    platform: '平台',
-    duckdb: 'DuckDB',
+    'map-data': '地图与数据',
+    'style-interaction': '样式与交互',
+    'data-editing': '数据编辑',
+    'data-analysis': '数据分析',
   },
   en: {
-    'getting-started': 'Getting started',
-    data: 'Data',
-    layers: 'Layers',
-    interaction: 'Interaction',
-    editing: 'Editing',
-    spatial: 'Spatial',
-    validation: 'Validation',
-    crs: 'CRS',
-    platform: 'Platform',
-    duckdb: 'DuckDB',
+    'map-data': 'Map & Data',
+    'style-interaction': 'Styling & Interaction',
+    'data-editing': 'Data Editing',
+    'data-analysis': 'Data Analysis',
   },
 };
 
