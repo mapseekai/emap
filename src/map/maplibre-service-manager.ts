@@ -787,6 +787,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
             throw error;
           }
         }
+        this._assertCurrentOperation(record, operationRevision);
+        if (record.state.status !== 'loading') return;
         this._setStatus(record, operationRevision, 'ready');
         this._syncVisibility();
       } catch (error) {

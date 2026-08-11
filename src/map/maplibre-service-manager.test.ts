@@ -907,6 +907,36 @@ describe('MapLibreServiceManager basemap style coordinator', () => {
     expect(statuses).toEqual(['error', 'loading', 'error']);
   });
 
+  it('does not overwrite a source error raised after independent activation installation with ready', async () => {
+    const { manager } = createManager([roads]);
+    const statuses: string[] = [];
+    manager.on('change', (event) => {
+      if (event.serviceId === 'roads' && event.reason === 'status' && event.state) {
+        statuses.push(event.state.status);
+      }
+    });
+    const sourceError = new Error('roads source failed after activation installation');
+    const activation = manager.setOverlayVisibility('roads', true);
+    const map = await waitForFakeMap();
+    map.on('style.load', () => {
+      if (map.getSource('roads') !== undefined) {
+        map.emit('error', { sourceId: 'roads', error: sourceError });
+      }
+    });
+
+    map.emit('style.load');
+    await activation;
+
+    expect([...map.sources.keys()]).toEqual(['roads']);
+    expect(map.layerOrder).toEqual(['roads-line']);
+    expect(manager.getServiceState('roads')).toMatchObject({
+      active: true,
+      status: 'error',
+      error: { message: 'roads source failed after activation installation' },
+    });
+    expect(statuses).toEqual(['loading', 'error']);
+  });
+
   it('treats constructor style readiness as the first in-flight request', async () => {
     const { manager } = createManager([base, roads]);
     const overlay = manager.setOverlayVisibility('roads', true);
