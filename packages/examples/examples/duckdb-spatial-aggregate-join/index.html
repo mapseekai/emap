@@ -160,7 +160,7 @@
         <input id="output-layer" type="text" value="zone_sales_statistics" />
       </div>
       <button id="run" disabled>运行 Aggregate Join</button>
-      <div id="status">分别加载行政区和销售点数据。</div>
+      <div id="status" aria-live="polite">分别加载行政区和销售点数据。</div>
       <pre id="result-summary">统计结果会显示在这里。</pre>
     </section>
 
@@ -197,6 +197,10 @@
 
       let targetDataset;
       let joinDataset;
+      let targetExtent;
+      let joinExtent;
+      let targetLoadVersion = 0;
+      let joinLoadVersion = 0;
       let runtimePromise;
       const contextSources = new Map();
       const aggregations = [
@@ -281,6 +285,13 @@
         runButton.disabled = !targetDataset || !joinDataset || !targetLayerSelect.options.length || !joinLayerSelect.options.length;
       }
 
+      function fitLoadedExtents() {
+        if (!targetExtent || !joinExtent) return;
+        const extent = targetExtent.clone();
+        extent.merge(joinExtent);
+        map.setExtent(extent);
+      }
+
       async function getRuntime() {
         runtimePromise ??= createDuckDbRuntimeFromJsDelivr().then((runtime) => {
           setDuckDbRuntime(runtime);
@@ -302,11 +313,13 @@
         };
       }
 
-      async function loadDatasetFromFile(file, sourceId, prefix, colors) {
+      async function loadDatasetFromFile(file, sourceId, prefix, colors, isCurrent) {
         const source = new TopologySource(sourceId);
         const content = new Uint8Array(await file.arrayBuffer());
+        if (!isCurrent()) return undefined;
         removeSourceWithLayers(sourceId);
         await source.setData({ filename: file.name, content });
+        if (!isCurrent()) return undefined;
         const dataset = source.getDataset();
         if (!dataset) throw new Error(`${file.name} 未生成可用 dataset`);
         await map.addSource(sourceId, source);
@@ -317,46 +330,74 @@
       targetFile.addEventListener('change', async () => {
         const file = targetFile.files?.[0];
         if (!file) return;
+        const loadVersion = ++targetLoadVersion;
+        targetDataset = undefined;
+        targetExtent = undefined;
+        populateLayerSelect(targetLayerSelect, undefined);
+        updateRunState();
         clearAggregateOutput();
         status.textContent = `正在加载目标行政区 ${file.name}...`;
         try {
-          const { dataset, source } = await loadDatasetFromFile(file, TARGET_SOURCE_ID, 'duckdb-aggregate-target', {
-            fill: '#86b6c9', fillOpacity: 0.28, line: '#295e76', lineWidth: 1.5, pointRadius: 4,
-          });
+          const loaded = await loadDatasetFromFile(
+            file,
+            TARGET_SOURCE_ID,
+            'duckdb-aggregate-target',
+            { fill: '#86b6c9', fillOpacity: 0.28, line: '#295e76', lineWidth: 1.5, pointRadius: 4 },
+            () => loadVersion === targetLoadVersion,
+          );
+          if (!loaded || loadVersion !== targetLoadVersion) return;
+          const { dataset, source } = loaded;
           targetDataset = dataset;
+          targetExtent = source.getExtent();
           populateLayerSelect(targetLayerSelect, targetDataset);
-          map.setExtent(source.getExtent());
+          fitLoadedExtents();
           status.textContent = `已加载目标行政区 ${file.name}。`;
         } catch (err) {
+          if (loadVersion !== targetLoadVersion) return;
           console.error(err);
           targetDataset = undefined;
+          targetExtent = undefined;
           populateLayerSelect(targetLayerSelect, undefined);
           status.textContent = `目标数据加载失败: ${err?.message ?? err}`;
         } finally {
-          updateRunState();
+          if (loadVersion === targetLoadVersion) updateRunState();
         }
       });
 
       joinFile.addEventListener('change', async () => {
         const file = joinFile.files?.[0];
         if (!file) return;
+        const loadVersion = ++joinLoadVersion;
+        joinDataset = undefined;
+        joinExtent = undefined;
+        populateLayerSelect(joinLayerSelect, undefined);
+        updateRunState();
         clearAggregateOutput();
         status.textContent = `正在加载销售点 ${file.name}...`;
         try {
-          const { dataset, source } = await loadDatasetFromFile(file, JOIN_SOURCE_ID, 'duckdb-aggregate-join', {
-            fill: '#d5653b', fillOpacity: 0.3, line: '#d5653b', lineWidth: 1.5, pointRadius: 5,
-          });
+          const loaded = await loadDatasetFromFile(
+            file,
+            JOIN_SOURCE_ID,
+            'duckdb-aggregate-join',
+            { fill: '#d5653b', fillOpacity: 0.3, line: '#d5653b', lineWidth: 1.5, pointRadius: 5 },
+            () => loadVersion === joinLoadVersion,
+          );
+          if (!loaded || loadVersion !== joinLoadVersion) return;
+          const { dataset, source } = loaded;
           joinDataset = dataset;
+          joinExtent = source.getExtent();
           populateLayerSelect(joinLayerSelect, joinDataset);
-          map.setExtent(source.getExtent());
+          fitLoadedExtents();
           status.textContent = `已加载销售点 ${file.name}。`;
         } catch (err) {
+          if (loadVersion !== joinLoadVersion) return;
           console.error(err);
           joinDataset = undefined;
+          joinExtent = undefined;
           populateLayerSelect(joinLayerSelect, undefined);
           status.textContent = `销售点数据加载失败: ${err?.message ?? err}`;
         } finally {
-          updateRunState();
+          if (loadVersion === joinLoadVersion) updateRunState();
         }
       });
 

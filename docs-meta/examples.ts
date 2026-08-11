@@ -375,7 +375,7 @@ const recipes: readonly ExampleDefinition[] = [
   recipe('duckdb-geoparquet-query', 'duckdb', 'DuckDB GeoParquet 查询', 'DuckDB GeoParquet query', [docsDuckDb, docsFormats, docsStatusControl], 'Emap', ['duckdb', 'geoparquet', 'basemap'], ['fixtures/example-geoparquet.parquet']),
   recipe('duckdb-overlay', 'duckdb', 'DuckDB Overlay', 'DuckDB overlay', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'overlay', 'basemap'], [task7Fixture, task7MaskFixture]),
   recipe('duckdb-query', 'duckdb', 'DuckDB 受限 SELECT', 'DuckDB restricted SELECT', [docsDuckDb, docsStatusControl, docsErrorHandling], 'Emap', ['duckdb', 'query', 'basemap'], [task7Fixture]),
-  recipe('duckdb-spatial-aggregate-join', 'duckdb', 'DuckDB 空间聚合连接', 'DuckDB spatial aggregate join', [docsDuckDb, docsOperations], 'spatialAggregateJoinDatasetWithDuckDb', ['duckdb', 'spatial', 'join', 'aggregate', 'basemap'], [task7MaskFixture, duckDbSpatialAggregatePointsFixture]),
+  recipe('duckdb-spatial-aggregate-join', 'duckdb', 'DuckDB 空间聚合连接', 'DuckDB spatial aggregate join', [docsDuckDb, docsOperations], 'spatialAggregateJoinDatasetWithDuckDb', ['duckdb', 'spatial', 'join', 'aggregate', 'basemap'], [task7MaskFixture, duckDbSpatialAggregatePointsFixture], 'Each target polygon displays count and sales statistics.'),
   recipe('duckdb-spatial-ops', 'duckdb', 'DuckDB 空间函数', 'DuckDB spatial functions', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap'], [task7Fixture]),
 ];
 
@@ -423,6 +423,7 @@ function recipe(
   api: string,
   featureFlags: readonly string[],
   fixtures: readonly string[],
+  success?: string,
 ): ExampleDefinition {
   const html = sourceHtml(id);
   return {
@@ -445,6 +446,6 @@ function recipe(
     fixtures,
     source: { html },
     route: route(id),
-    success: `The ${en} example loads its fixtures and exposes its interaction controls.`,
+    success: success ?? `The ${en} example loads its fixtures and exposes its interaction controls.`,
   };
 }

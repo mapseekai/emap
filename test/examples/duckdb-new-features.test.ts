@@ -170,4 +170,34 @@ describe('DuckDB new feature examples', () => {
       expect(html).toContain(column);
     }
   });
+
+  it('keeps aggregate controls safe while both inputs load and fits their combined extent', () => {
+    const html = examples.spatialAggregateJoin;
+    const targetHandler = html.indexOf("targetFile.addEventListener('change'");
+    const joinHandler = html.indexOf("joinFile.addEventListener('change'");
+    const runHandler = html.indexOf("runButton.addEventListener('click'");
+
+    expect(html).toContain('<div id="status" aria-live="polite">');
+    expect(html).toContain('function fitLoadedExtents()');
+    expect(html).toContain('const extent = targetExtent.clone();');
+    expect(html).toContain('extent.merge(joinExtent);');
+    expect(html).toContain('map.setExtent(extent);');
+    expect(targetHandler).toBeGreaterThan(-1);
+    expect(joinHandler).toBeGreaterThan(targetHandler);
+    expect(runHandler).toBeGreaterThan(joinHandler);
+    expect(html.slice(targetHandler, joinHandler)).toContain('targetDataset = undefined;');
+    expect(html.slice(targetHandler, joinHandler)).toContain(
+      'const loadVersion = ++targetLoadVersion;',
+    );
+    expect(html.slice(targetHandler, joinHandler)).toContain(
+      'if (loadVersion !== targetLoadVersion) return;',
+    );
+    expect(html.slice(targetHandler, joinHandler)).toContain('updateRunState();');
+    expect(html.slice(joinHandler, runHandler)).toContain('joinDataset = undefined;');
+    expect(html.slice(joinHandler, runHandler)).toContain('const loadVersion = ++joinLoadVersion;');
+    expect(html.slice(joinHandler, runHandler)).toContain(
+      'if (loadVersion !== joinLoadVersion) return;',
+    );
+    expect(html.slice(joinHandler, runHandler)).toContain('updateRunState();');
+  });
 });

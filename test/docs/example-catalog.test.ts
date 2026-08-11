@@ -143,6 +143,9 @@ describe('example catalog metadata', () => {
       'fixtures/task-7-mask.geojson',
       'fixtures/duckdb-spatial-aggregate-points.geojson',
     ]);
+    expect(byId.get('duckdb-spatial-aggregate-join')?.success).toBe(
+      'Each target polygon displays count and sales statistics.',
+    );
     expect(byId.get('web-worker')?.featureFlags).toContain('worker');
     expect(byId.get('geoparquet-viewer')?.featureFlags).toContain('formats');
   });
