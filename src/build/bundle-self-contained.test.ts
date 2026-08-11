@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { JSDOM } from 'jsdom';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 const REPO = resolve(__dirname, '../..');
@@ -95,6 +96,33 @@ d('shipped bundles are self-contained', () => {
     expect(others, `unexpected non-adm-zip requires in dist/${f}: ${others.join(', ')}`).toEqual(
       [],
     );
+  });
+
+  it('bootstraps the browser bundles without global Buffer or process', () => {
+    const dom = new JSDOM('', { runScripts: 'outside-only', url: 'http://localhost/' });
+    const browserWindow = dom.window as unknown as Window & {
+      Buffer?: unknown;
+      process?: unknown;
+      mapshaper?: unknown;
+      emap?: { Emap?: unknown };
+    };
+    browserWindow.URL.createObjectURL = () => 'blob:http://localhost/emap-test';
+    browserWindow.URL.revokeObjectURL = () => {};
+
+    try {
+      expect(browserWindow.Buffer).toBeUndefined();
+      expect(browserWindow.process).toBeUndefined();
+
+      browserWindow.eval(readFileSync(resolve(DIST, 'mapshaper-vendor.js'), 'utf8'));
+      browserWindow.eval(readFileSync(resolve(DIST, 'emap.js'), 'utf8'));
+
+      expect(browserWindow.mapshaper).toEqual(expect.any(Object));
+      expect(browserWindow.emap?.Emap).toEqual(expect.any(Function));
+      expect(browserWindow.Buffer).toBeUndefined();
+      expect(browserWindow.process).toBeUndefined();
+    } finally {
+      dom.window.close();
+    }
   });
 
   it('does not embed full EPSG metadata in the browser ESM bundle', () => {
