@@ -1970,6 +1970,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   private _handleResize = (): void => {
     if (!this._map || this._suspended) return;
     this._map.resize();
+    this._syncCamera();
   };
 
   private _handleCrsChange = (): void => {

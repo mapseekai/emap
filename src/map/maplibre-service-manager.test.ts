@@ -363,9 +363,14 @@ async function activateOverlay(
 
 describe('MapLibreServiceManager registry', () => {
   it('does not load MapLibre when construction has no visible service', () => {
-    const { loadMapLibre } = createManager();
+    const { host, loadMapLibre, manager } = createManager();
 
+    host.emit('resize');
+
+    expect(host.listenerCount('resize')).toBe(0);
     expect(loadMapLibre).not.toHaveBeenCalled();
+    expect(FakeMap.constructorCalls).toBe(0);
+    expect(manager.getMapLibreMap()).toBeNull();
   });
 
   it('adds cloned inactive services and emits one add snapshot', async () => {
@@ -1745,13 +1750,38 @@ describe('MapLibreServiceManager lazy host lifecycle', () => {
     expect(container.hidden).toBe(true);
     expect(manager.getServiceState('roads')).toMatchObject({ active: true, status: 'ready' });
 
+    const suspendedResizeCalls = map.resizeCalls;
+    const suspendedJumpToCalls = map.jumpToCalls.length;
+    host.getCenter.mockReturnValue([122, 32]);
+    host.getZoom.mockReturnValue(8);
+    host.emit('resize');
+    expect(map.resizeCalls).toBe(suspendedResizeCalls);
+    expect(map.jumpToCalls).toHaveLength(suspendedJumpToCalls);
+    expect(container.hidden).toBe(true);
+    expect(host.reproject).not.toHaveBeenCalled();
+
     await manager.setOverlayVisibility('roads', true);
     expect(host.reproject).toHaveBeenCalledTimes(0);
     host.setCRS('epsg:3857');
     host.emit('crschange');
     expect(container.hidden).toBe(false);
-    expect(map.resizeCalls).toBe(2);
-    expect(map.jumpToCalls.at(-1)).toEqual({ center: [121, 31], zoom: 6 });
+    expect(map.resizeCalls).toBe(suspendedResizeCalls + 1);
+    expect(map.jumpToCalls.at(-1)).toEqual({ center: [122, 32], zoom: 8 });
+  });
+
+  it('resizes MapLibre before synchronizing the current host camera', async () => {
+    const { host, manager } = createManager([roads]);
+    const map = await activateOverlay(manager);
+    const resize = vi.spyOn(map, 'resize');
+    const jumpTo = vi.spyOn(map, 'jumpTo');
+    host.getCenter.mockReturnValue([121, 31]);
+    host.getZoom.mockReturnValue(6);
+
+    host.emit('resize');
+
+    expect(resize).toHaveBeenCalledTimes(1);
+    expect(jumpTo).toHaveBeenCalledExactlyOnceWith({ center: [121, 31], zoom: 6 });
+    expect(resize.mock.invocationCallOrder[0]).toBeLessThan(jumpTo.mock.invocationCallOrder[0]);
   });
 
   it('allows deactivation while suspended and only reprojects on a new activation', async () => {
