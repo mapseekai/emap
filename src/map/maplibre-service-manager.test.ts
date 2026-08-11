@@ -5,11 +5,16 @@ import type { MapLibreOverlayService, MapLibreService } from './maplibre-service
 import { createMapLibreServiceManager } from './maplibre-service-manager';
 
 type FakeMapListener = (event?: unknown) => void;
-type FakeAddFailure = { mode: 'throw' | 'event'; error: Error };
+type FakeAddFailure = {
+  mode: 'throw' | 'event' | 'post-throw' | 'post-event';
+  error: Error;
+};
 
 class FakeMap {
   static instances: FakeMap[] = [];
   static rebuildOnSetStyle = true;
+  static constructorError: Error | null = null;
+  static constructorCalls = 0;
 
   readonly options: maplibregl.MapOptions;
   readonly sources = new Map<string, unknown>();
@@ -25,6 +30,12 @@ class FakeMap {
   private readonly _listeners = new Map<string, Set<FakeMapListener>>();
 
   constructor(options: maplibregl.MapOptions) {
+    FakeMap.constructorCalls++;
+    if (FakeMap.constructorError) {
+      const error = FakeMap.constructorError;
+      FakeMap.constructorError = null;
+      throw error;
+    }
     this.options = options;
     FakeMap.instances.push(this);
   }
@@ -68,11 +79,15 @@ class FakeMap {
     const failure = this.addFailures.get(`source:${id}`);
     if (failure) {
       this.addFailures.delete(`source:${id}`);
-      if (failure.mode === 'event') this.emit('error', { error: failure.error });
-      else throw failure.error;
-      return;
+      if (failure.mode === 'event') {
+        this.emit('error', { error: failure.error });
+        return;
+      }
+      if (failure.mode === 'throw') throw failure.error;
     }
     this.sources.set(id, { id, specification: source });
+    if (failure?.mode === 'post-event') this.emit('error', { error: failure.error });
+    else if (failure?.mode === 'post-throw') throw failure.error;
   }
 
   getSource(id: string): unknown {
@@ -90,14 +105,18 @@ class FakeMap {
     const failure = this.addFailures.get(`layer:${layer.id}`);
     if (failure) {
       this.addFailures.delete(`layer:${layer.id}`);
-      if (failure.mode === 'event') this.emit('error', { error: failure.error });
-      else throw failure.error;
-      return;
+      if (failure.mode === 'event') {
+        this.emit('error', { error: failure.error });
+        return;
+      }
+      if (failure.mode === 'throw') throw failure.error;
     }
     this.layers.set(layer.id, { id: layer.id, specification: layer });
     const beforeIndex = beforeId === undefined ? -1 : this.layerOrder.indexOf(beforeId);
     if (beforeIndex === -1) this.layerOrder.push(layer.id);
     else this.layerOrder.splice(beforeIndex, 0, layer.id);
+    if (failure?.mode === 'post-event') this.emit('error', { error: failure.error });
+    else if (failure?.mode === 'post-throw') throw failure.error;
   }
 
   getLayer(id: string): unknown {
@@ -219,6 +238,8 @@ function createManager(
   options: { crs?: string; mapOptions?: maplibregl.MapOptions } = {},
 ) {
   FakeMap.instances.length = 0;
+  FakeMap.constructorError = null;
+  FakeMap.constructorCalls = 0;
   const host = createHost(options.crs);
   const loadMapLibre = vi.fn(
     async () => ({ Map: FakeMap }) as unknown as typeof import('maplibre-gl'),
@@ -610,6 +631,30 @@ describe('MapLibreServiceManager lazy host lifecycle', () => {
     expect(map.listenerCount('style.load')).toBe(0);
     expect(map.listenerCount('error')).toBe(0);
   });
+
+  it('rolls back failed map construction so a retry owns one clean underlay', async () => {
+    const { host, manager } = createManager([roads]);
+    FakeMap.constructorError = new Error('constructor failed');
+
+    await expect(manager.setOverlayVisibility('roads', true)).rejects.toThrow('constructor failed');
+
+    expect(manager.getMapLibreMap()).toBeNull();
+    expect(host.getCanvasContainer().querySelectorAll('.emap-maplibre')).toHaveLength(0);
+    expect(host.listenerCount('move')).toBe(0);
+
+    await manager.setOverlayVisibility('roads', false);
+    const retry = manager.setOverlayVisibility('roads', true);
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await retry;
+
+    expect(FakeMap.constructorCalls).toBe(2);
+    expect(FakeMap.instances).toEqual([map]);
+    expect(host.getCanvasContainer().querySelectorAll('.emap-maplibre')).toHaveLength(1);
+
+    manager.destroy();
+    expect(host.getCanvasContainer().querySelectorAll('.emap-maplibre')).toHaveLength(0);
+  });
 });
 
 describe('MapLibreServiceManager overlay rendering', () => {
@@ -664,6 +709,39 @@ describe('MapLibreServiceManager overlay rendering', () => {
     addedMap.emit('style.load');
     await addition;
     expect(addedMap.layerOrder).toEqual(['labels-symbol']);
+  });
+
+  it('marks every current initial overlay with one typed style failure', async () => {
+    const { manager } = createManager([
+      { ...roads, visible: true },
+      { ...traffic, visible: true },
+    ]);
+    const statuses: Array<{ serviceId: string; status: string }> = [];
+    const errors: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
+    manager.on('change', (event) => {
+      if (event.reason === 'status' && event.state) {
+        statuses.push({ serviceId: event.serviceId, status: event.state.status });
+      }
+    });
+    manager.on('error', (event) =>
+      errors.push({ serviceId: event.serviceId, phase: event.phase, fatal: event.fatal }),
+    );
+    const initialization = manager.initialize().catch((error: unknown) => error);
+    const map = await waitForFakeMap();
+
+    map.emit('error', { error: new Error('blank style failed') });
+
+    await expect(initialization).resolves.toBeInstanceOf(Error);
+    expect(manager.getServiceState('roads')).toMatchObject({ active: true, status: 'error' });
+    expect(manager.getServiceState('traffic')).toMatchObject({ active: true, status: 'error' });
+    expect(statuses).toEqual([
+      { serviceId: 'roads', status: 'error' },
+      { serviceId: 'traffic', status: 'error' },
+    ]);
+    expect(errors).toEqual([
+      { serviceId: 'roads', phase: 'style', fatal: true },
+      { serviceId: 'traffic', phase: 'style', fatal: true },
+    ]);
   });
 
   it.each([
@@ -877,6 +955,58 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(map.layerOrder).toEqual(['roads-casing', 'roads-line', 'labels-symbol']);
   });
 
+  it('restores the retained overlay definition and ready state when an active update fails', async () => {
+    const { manager } = createManager([roads]);
+    const map = await activateOverlay(manager);
+    const statuses: string[] = [];
+    const updatedNames: string[] = [];
+    const transitions: string[] = [];
+    const errors: Array<{ phase: string; message: string }> = [];
+    manager.on('change', (event) => {
+      if (event.reason === 'status' && event.state) {
+        statuses.push(event.state.status);
+        transitions.push(`status:${event.state.status}`);
+      }
+      if (event.reason === 'update') {
+        const currentName = manager.getServices()[0].name;
+        updatedNames.push(currentName);
+        transitions.push(`update:${currentName}`);
+      }
+    });
+    manager.on('error', (event) =>
+      errors.push({ phase: event.phase, message: event.error.message }),
+    );
+    const updateError = new Error('replacement layer failed');
+    map.addFailures.set('layer:roads-updated', {
+      mode: 'post-event',
+      error: updateError,
+    });
+    const updatedRoads = {
+      ...roads,
+      name: 'Updated roads',
+      layers: [{ id: 'roads-updated', type: 'line' as const, source: 'roads' }],
+    };
+
+    await expect(manager.updateService('roads', updatedRoads)).rejects.toBe(updateError);
+
+    expect(manager.getServices()).toEqual([roads]);
+    expect(manager.getServiceState('roads')).toEqual({
+      id: 'roads',
+      active: true,
+      status: 'ready',
+    });
+    expect(map.layerOrder).toEqual(['roads-line']);
+    expect(updatedNames).toEqual(['Updated roads', 'Roads']);
+    expect(statuses).toEqual(['loading', 'ready']);
+    expect(transitions).toEqual([
+      'update:Updated roads',
+      'status:loading',
+      'update:Roads',
+      'status:ready',
+    ]);
+    expect(errors).toEqual([{ phase: 'layer', message: 'replacement layer failed' }]);
+  });
+
   it('retains ownership when partial-install rollback cannot remove a resource', async () => {
     const { manager } = createManager([traffic]);
     const activation = manager
@@ -952,16 +1082,74 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(errors).toEqual([{ phase: scenario.phase, fatal: true }]);
   });
 
-  it('emits one typed fatal error when active remove cleanup fails', async () => {
+  it.each([
+    { phase: 'source' as const, key: 'source:roads', mode: 'post-throw' as const },
+    { phase: 'layer' as const, key: 'layer:roads-line', mode: 'post-event' as const },
+  ])('adopts and rolls back a $phase inserted before its mutation failure', async (scenario) => {
+    const { manager } = createManager([roads]);
+    const errors: Array<{ phase: string; message: string }> = [];
+    manager.on('error', (event) =>
+      errors.push({ phase: event.phase, message: event.error.message }),
+    );
+    const activationError = new Error(`${scenario.phase} failed after insertion`);
+    const activation = manager.setOverlayVisibility('roads', true);
+    const map = await waitForFakeMap();
+    map.addFailures.set(scenario.key, {
+      mode: scenario.mode,
+      error: activationError,
+    });
+
+    map.emit('style.load');
+
+    await expect(activation).rejects.toBe(activationError);
+    expect(map.layers.size).toBe(0);
+    expect(map.sources.size).toBe(0);
+    if (scenario.phase === 'layer') {
+      expect(map.operations).toEqual([
+        'addSource:roads',
+        'addLayer:roads-line:',
+        'removeLayer:roads-line',
+        'removeSource:roads',
+      ]);
+    }
+    expect(errors).toEqual([
+      { phase: scenario.phase, message: `${scenario.phase} failed after insertion` },
+    ]);
+  });
+
+  it('retains a failed active removal for one typed cleanup retry', async () => {
     const { manager } = createManager([traffic]);
     const map = await activateOverlay(manager, 'traffic');
     const errors: Array<{ phase: string; fatal: boolean; serviceId?: string }> = [];
+    const removals: Array<{ serviceId: string; state: unknown }> = [];
     manager.on('error', (event) =>
       errors.push({ phase: event.phase, fatal: event.fatal, serviceId: event.serviceId }),
     );
+    manager.on('change', (event) => {
+      if (event.reason === 'remove') {
+        removals.push({ serviceId: event.serviceId, state: event.state });
+      }
+    });
     map.ignoredRemovals.add('traffic-line');
 
     await expect(manager.removeService('traffic')).rejects.toThrow('traffic-line');
+    expect(manager.getServices()).toEqual([traffic]);
+    expect(manager.getServiceState('traffic')).toMatchObject({
+      active: false,
+      status: 'error',
+    });
+    expect((map.options.container as HTMLElement).hidden).toBe(true);
+    expect(removals).toEqual([]);
+    expect(errors).toEqual([{ phase: 'layer', fatal: true, serviceId: 'traffic' }]);
+
+    map.ignoredRemovals.delete('traffic-line');
+    await manager.removeService('traffic');
+
+    expect(manager.getServices()).toEqual([]);
+    expect(manager.getServiceState('traffic')).toBeUndefined();
+    expect(map.layers.size).toBe(0);
+    expect(map.sources.size).toBe(0);
+    expect(removals).toEqual([{ serviceId: 'traffic', state: undefined }]);
     expect(errors).toEqual([{ phase: 'layer', fatal: true, serviceId: 'traffic' }]);
   });
 
