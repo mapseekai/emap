@@ -426,6 +426,30 @@ describe('duckDbQueryLayer', () => {
     });
   });
 
+  it('returns structured validation for a runtime-bypass non-string output source id', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+    const runtime = new FakeRuntime(tableFromArrays({ __emap_rowid: [0], name: ['a'] }));
+
+    const result = await duckDbQueryLayer(ctx, {
+      src: 'src',
+      sql: 'SELECT name FROM input',
+      output: { sourceId: 42 as unknown as string },
+      runtime,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'output.sourceId',
+        reason: 'DuckDB operation requires output.sourceId',
+      },
+    });
+    expect(runtime.connection.queries).toHaveLength(0);
+    expect(ctx.writes).toHaveLength(0);
+  });
+
   it('maps SQL validation errors to DuckDB results', async () => {
     const dataset = await polygonDataset();
     const ctx = makeContext('src', dataset);
@@ -883,6 +907,21 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
     ],
   } as const satisfies Omit<DuckDbSpatialAggregateJoinLayerOptions, 'src' | 'join'>;
 
+  const invalidOutputSourceIds = [
+    ['undefined', undefined],
+    ['empty string', ''],
+    ['whitespace-only string', '   '],
+    ['null', null],
+    ['zero', 0],
+    ['number', 42],
+    ['false', false],
+    ['true', true],
+    ['object', { id: 'out' }],
+    ['array', ['out']],
+    ['symbol', Symbol('out')],
+    ['bigint', 42n],
+  ] as const;
+
   it('forwards selected layers and inner output semantics before writing once', async () => {
     const target = makeSelectableLayerDataset(
       await datasetFromGeoJSON({
@@ -932,18 +971,19 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
         targetGeometryColumn: 'target geom',
         joinGeometryColumn: 'join geom',
         outputLayer: 'joined statistics',
-        output: { sourceId: 'aggregate-output' },
+        output: { sourceId: 'aggregate output 2026' },
         runtime,
       },
     );
 
     expect(result.ok).toBe(true);
-    expect(ctx.outputDatasets.get('aggregate-output')).toBe(
+    expect(ctx.outputDatasets.get('aggregate output 2026')).toBe(
       result.ok ? result.value.dataset : undefined,
     );
     expect(ctx.writes).toEqual([
-      { id: 'aggregate-output', dataset: result.ok ? result.value.dataset : undefined },
+      { id: 'aggregate output 2026', dataset: result.ok ? result.value.dataset : undefined },
     ]);
+    expect(result.ok && result.value.sourceId).toBe('aggregate output 2026');
     expect(result.ok && result.value.dataset.layers[0]!.name).toBe('joined statistics');
     expect(result.ok && result.value.dataset.layers[0]!.data?.getRecords()).toEqual([
       { id: 'matched', match_count: 1, sales_total: 12 },
@@ -1053,6 +1093,35 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
         reason: 'DuckDB operation requires output.sourceId',
       },
     });
+    expect(ctx.writes).toHaveLength(0);
+  });
+
+  it.each(
+    invalidOutputSourceIds,
+  )('returns structured validation for runtime-bypass output source id %s', async (_label, sourceId) => {
+    const ctx = makeContext('target', await polygonDataset());
+    ctx.sources.set('join', new FakeSource(await polygonJoinDataset()));
+    const runtime = new FakeRuntime(
+      tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [12] }),
+    );
+
+    const result = await duckDbSpatialAggregateJoinLayer(ctx, {
+      src: 'target',
+      join: 'join',
+      ...aggregationOptions,
+      output: { sourceId: sourceId as unknown as string },
+      runtime,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'output.sourceId',
+        reason: 'DuckDB operation requires output.sourceId',
+      },
+    });
+    expect(runtime.connection.queries).toHaveLength(0);
     expect(ctx.writes).toHaveLength(0);
   });
 

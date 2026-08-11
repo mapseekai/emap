@@ -180,10 +180,11 @@ function readInputDataset(
 }
 
 function outputSourceId(output: { sourceId: string } | undefined): string | OpResult<never> {
-  if (!output?.sourceId) {
+  const sourceId = output?.sourceId;
+  if (typeof sourceId !== 'string' || !sourceId.trim()) {
     return Err.validation('output.sourceId', 'DuckDB operation requires output.sourceId');
   }
-  return output.sourceId;
+  return sourceId;
 }
 
 export async function duckDbBufferLayer(
