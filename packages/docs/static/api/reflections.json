@@ -80852,6 +80852,17 @@
 								"kind": "text",
 								"text": "ArrowDotPathOptions is a public emap interface documented for package consumers."
 							}
+						],
+						"blockTags": [
+							{
+								"tag": "@example",
+								"content": [
+									{
+										"kind": "text",
+										"text": "Runnable example association: geoparquet-viewer."
+									}
+								]
+							}
 						]
 					},
 					"children": [
@@ -122584,6 +122595,17 @@
 								"kind": "text",
 								"text": "Minimal read-only visibility lookup accepted by low-level rendering queries.\nImplementations expose membership only; their map/set storage stays private."
 							}
+						],
+						"blockTags": [
+							{
+								"tag": "@example",
+								"content": [
+									{
+										"kind": "text",
+										"text": "Runnable example association: getting-started/geojson-viewer."
+									}
+								]
+							}
 						]
 					},
 					"children": [
@@ -124266,6 +124288,17 @@
 							{
 								"kind": "text",
 								"text": "Named line patterns supported by line and polygon-outline paint."
+							}
+						],
+						"blockTags": [
+							{
+								"tag": "@example",
+								"content": [
+									{
+										"kind": "text",
+										"text": "Runnable example association: getting-started/lines, getting-started/point-style, getting-started/polygon-fill."
+									}
+								]
 							}
 						]
 					},
