@@ -83,12 +83,14 @@ class FakeSource implements DuckDbMapOpSource {
 class FakeContext implements DuckDbMapOpContext {
   readonly sources = new Map<string, DuckDbMapOpSource>();
   readonly outputDatasets = new Map<string, MapshaperDataset>();
+  readonly writes: Array<{ id: string; dataset: MapshaperDataset }> = [];
 
   getSource(id: string): DuckDbMapOpSource | null | undefined {
     return this.sources.get(id);
   }
 
   setSourceDataset(id: string, dataset: MapshaperDataset): void {
+    this.writes.push({ id, dataset });
     this.outputDatasets.set(id, dataset);
   }
 }
@@ -881,13 +883,41 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
     ],
   } as const satisfies Omit<DuckDbSpatialAggregateJoinLayerOptions, 'src' | 'join'>;
 
-  it('reads both datasets, forwards aggregate options, and writes the requested output', async () => {
-    const target = makeSelectableLayerDataset(await polygonDataset(), 'target-selected');
+  it('forwards selected layers and inner output semantics before writing once', async () => {
+    const target = makeSelectableLayerDataset(
+      await datasetFromGeoJSON({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: { id: 'unmatched' },
+            geometry: POLYGON_FC.features[0]!.geometry,
+          },
+          {
+            type: 'Feature',
+            properties: { id: 'matched' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [20, 20],
+                  [30, 20],
+                  [30, 30],
+                  [20, 30],
+                  [20, 20],
+                ],
+              ],
+            },
+          },
+        ],
+      }),
+      'target-selected',
+    );
     const join = makeSelectableLayerDataset(await polygonJoinDataset(), 'join-selected');
     const ctx = makeContext('target', target);
     ctx.sources.set('join', new FakeSource(join));
     const runtime = new FakeRuntime(
-      tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [12] }),
+      tableFromArrays({ __emap_rowid: [1], match_count: [1], sales_total: [12] }),
     );
 
     const result: DuckDbSpatialAggregateJoinLayerResult = await duckDbSpatialAggregateJoinLayer(
@@ -911,7 +941,13 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
     expect(ctx.outputDatasets.get('aggregate-output')).toBe(
       result.ok ? result.value.dataset : undefined,
     );
+    expect(ctx.writes).toEqual([
+      { id: 'aggregate-output', dataset: result.ok ? result.value.dataset : undefined },
+    ]);
     expect(result.ok && result.value.dataset.layers[0]!.name).toBe('joined statistics');
+    expect(result.ok && result.value.dataset.layers[0]!.data?.getRecords()).toEqual([
+      { id: 'matched', match_count: 1, sales_total: 12 },
+    ]);
     expect(runtime.connection.inserted).toHaveLength(2);
     expect(runtime.connection.queries.join('\n')).toContain(
       'ON ST_Contains(t."target geom", j."join geom")',
@@ -934,6 +970,29 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
       ok: false,
       error: { kind: 'not-found', what: 'source', id: 'missing' },
     });
+    expect(ctx.writes).toHaveLength(0);
+  });
+
+  it('returns src validation when the target source has no dataset', async () => {
+    const ctx = makeContext('target', null);
+    ctx.sources.set('join', new FakeSource(await polygonJoinDataset()));
+
+    await expect(
+      duckDbSpatialAggregateJoinLayer(ctx, {
+        src: 'target',
+        join: 'join',
+        ...aggregationOptions,
+        output: { sourceId: 'out' },
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'src',
+        reason: "Source 'target' does not have a loaded dataset",
+      },
+    });
+    expect(ctx.writes).toHaveLength(0);
   });
 
   it('returns not-found when the join source is missing', async () => {
@@ -950,6 +1009,7 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
       ok: false,
       error: { kind: 'not-found', what: 'source', id: 'missing' },
     });
+    expect(ctx.writes).toHaveLength(0);
   });
 
   it('returns join validation when the join source has no dataset', async () => {
@@ -971,6 +1031,7 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
         reason: "Source 'join' does not have a loaded dataset",
       },
     });
+    expect(ctx.writes).toHaveLength(0);
   });
 
   it('returns output validation before running the aggregate query', async () => {
@@ -992,6 +1053,7 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
         reason: 'DuckDB operation requires output.sourceId',
       },
     });
+    expect(ctx.writes).toHaveLength(0);
   });
 
   it('uses a collision-free aggregate row id from the dataset operation', async () => {
@@ -1048,6 +1110,7 @@ describe('duckDbSpatialAggregateJoinLayer', () => {
       },
     });
     expect(ctx.outputDatasets.has('out')).toBe(false);
+    expect(ctx.writes).toHaveLength(0);
   });
 });
 
