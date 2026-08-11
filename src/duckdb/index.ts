@@ -12,4 +12,5 @@ export * from './duckdb-overlay-op';
 export * from './duckdb-overlay-ops';
 export * from './duckdb-runtime';
 export * from './duckdb-spatial-ops';
+export * from './duckdb-spatial-aggregate-join-op';
 export * from './map-op';

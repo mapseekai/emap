@@ -20,6 +20,7 @@ import type { MapshaperDataset } from '../types/mapshaper-types';
 import * as datasetCrs from './dataset-crs';
 import { DuckDbOperationError } from './duckdb-errors';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
+import * as duckDb from './index';
 import {
   spatialAggregateJoinDatasetWithDuckDb,
   type DuckDbSpatialAggregateJoinOptions,
@@ -198,6 +199,10 @@ const buildSql = () =>
     .buildSpatialAggregateJoinSql as BuildSpatialAggregateJoinSql;
 
 describe('buildSpatialAggregateJoinSql', () => {
+  it('exports the dataset helper from the optional DuckDB barrel at runtime', () => {
+    expect(duckDb.spatialAggregateJoinDatasetWithDuckDb).toBeTypeOf('function');
+  });
+
   it('exports the builder', () => {
     expect((duckDbSql as Record<string, unknown>).buildSpatialAggregateJoinSql).toBeTypeOf(
       'function',
