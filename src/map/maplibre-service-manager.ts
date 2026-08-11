@@ -1521,6 +1521,21 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       this._registry.get(record.definition.id) === record &&
       record.definitionRevision === definitionRevision &&
       record.operationRevision === operationRevision;
+    const requireCurrent = (
+      record: ServiceRecord,
+      definitionRevision: number,
+      operationRevision: number,
+    ): boolean => {
+      if (isCurrent(record, definitionRevision, operationRevision)) return true;
+      if (this._desiredRequest === committed) {
+        this._desiredRequest = null;
+        this._committedRequest = null;
+        this._readyStyle = null;
+        this._lastReadyBasemap = null;
+        this._syncVisibility();
+      }
+      return false;
+    };
 
     let rollbackEvent:
       | { record: ServiceRecord; definitionRevision: number; operationRevision: number }
@@ -1573,10 +1588,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         status: 'error',
         error,
       };
+      if (!requireCurrent(owner, ownerDefinitionRevision, ownerOperationRevision)) return;
       this._emitChange(owner.definition, 'status', owner.state);
-      if (!isCurrent(owner, ownerDefinitionRevision, ownerOperationRevision)) return;
+      if (!requireCurrent(owner, ownerDefinitionRevision, ownerOperationRevision)) return;
       this._emitFatalError(owner.definition.id, error);
-      if (!isCurrent(owner, ownerDefinitionRevision, ownerOperationRevision)) return;
+      if (!requireCurrent(owner, ownerDefinitionRevision, ownerOperationRevision)) return;
     } else {
       this.fire('error', {
         serviceId: ownerId,
@@ -1589,16 +1605,18 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
     if (rollbackEvent) {
       const { record, definitionRevision, operationRevision } = rollbackEvent;
+      if (!requireCurrent(record, definitionRevision, operationRevision)) return;
       this._emitChange(record.definition, 'update', record.state);
-      if (!isCurrent(record, definitionRevision, operationRevision)) return;
+      if (!requireCurrent(record, definitionRevision, operationRevision)) return;
     }
 
     if (failedEvent) {
       const { record, definitionRevision, operationRevision } = failedEvent;
+      if (!requireCurrent(record, definitionRevision, operationRevision)) return;
       this._emitChange(record.definition, 'status', record.state);
-      if (!isCurrent(record, definitionRevision, operationRevision)) return;
+      if (!requireCurrent(record, definitionRevision, operationRevision)) return;
       this._emitChange(record.definition, 'basemap', record.state);
-      if (!isCurrent(record, definitionRevision, operationRevision)) return;
+      if (!requireCurrent(record, definitionRevision, operationRevision)) return;
     }
 
     if (committed?.basemapId !== null && committed?.basemapId !== undefined) {
@@ -1610,10 +1628,17 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         previous.operationRevision++;
         const previousOperationRevision = previous.operationRevision;
         previous.state = { id: previous.definition.id, active: true, status: 'ready' };
+        if (!requireCurrent(previous, committed.definitionRevision, previousOperationRevision)) {
+          return;
+        }
         this._emitChange(previous.definition, 'basemap', previous.state);
-        if (!isCurrent(previous, committed.definitionRevision, previousOperationRevision)) return;
+        if (!requireCurrent(previous, committed.definitionRevision, previousOperationRevision)) {
+          return;
+        }
         this._emitChange(previous.definition, 'status', previous.state);
-        if (!isCurrent(previous, committed.definitionRevision, previousOperationRevision)) return;
+        if (!requireCurrent(previous, committed.definitionRevision, previousOperationRevision)) {
+          return;
+        }
       }
     }
 

@@ -1542,6 +1542,69 @@ describe('MapLibreServiceManager coordinator review regressions', () => {
     },
   );
 
+  it.each(['status', 'basemap', 'error'] as const)(
+    'admits a later committed basemap after detachment %s listener removes the failed basemap',
+    async (trigger) => {
+      const { manager } = createManager(
+        [base, dark, { ...traffic, visible: true }],
+        { defaultBasemap: 'light' },
+      );
+      const initialization = manager.initialize();
+      const map = await waitForFakeMap();
+      map.emit('style.load');
+      await initialization;
+      const detachError = new Error('traffic detach failed before removing dark');
+      map.removeFailures.set('layer:traffic-line', detachError);
+      const events: string[] = [];
+      let triggerIndex = -1;
+      let removal: Promise<void> | undefined;
+      const removeFailed = () => {
+        if (removal) return;
+        triggerIndex = events.length - 1;
+        removal = manager.removeService('dark');
+      };
+      manager.on('change', (event) => {
+        if ((event.reason !== 'status' && event.reason !== 'basemap') || !event.state) return;
+        events.push(
+          `${event.reason}:${event.serviceId}:${event.state.active}:${event.state.status}`,
+        );
+        if (
+          event.serviceId === 'dark' &&
+          event.reason === trigger &&
+          event.state.status === 'error'
+        ) {
+          removeFailed();
+        }
+      });
+      manager.on('error', (event) => {
+        events.push(`error:${event.serviceId}:${event.phase}`);
+        if (trigger === 'error' && event.serviceId === 'traffic') removeFailed();
+      });
+
+      const selection = manager.setBasemap('dark').catch((error: unknown) => error);
+      await removal;
+      await expect(selection).resolves.toBe(detachError);
+
+      expect(triggerIndex).toBeGreaterThanOrEqual(0);
+      expect(events.slice(triggerIndex + 1)).toEqual([]);
+      expect(manager.getServiceState('dark')).toBeUndefined();
+      expect(manager.getServiceState('light')).toMatchObject({ active: false });
+      const callCount = map.setStyleCalls.length;
+
+      const later = manager.setBasemap('light');
+      expect(map.setStyleCalls).toHaveLength(callCount + 1);
+      expect(map.setStyleCalls.at(-1)).toBe(base.style);
+      map.emit('style.load');
+      await later;
+
+      expect(manager.getServiceState('light')).toEqual({
+        id: 'light',
+        active: true,
+        status: 'ready',
+      });
+    },
+  );
+
   it('publishes one fatal style error when a requested blank style fails, then recovers', async () => {
     const { manager } = createManager(
       [base, { ...roads, visible: true }],
