@@ -6,11 +6,14 @@ import {
   Int32,
   List,
   Map_,
+  RecordBatch,
   Schema,
   Struct,
   Table,
   Utf8,
+  makeData,
   tableFromArrays,
+  vectorFromArray,
 } from 'apache-arrow';
 import { describe, expect, it, vi } from 'vitest';
 import * as datasetToTable from '../arrow/dataset-to-table';
@@ -165,6 +168,23 @@ async function expectOperationError(
 
 function craftedJoinTable(field: Field): Table {
   return new Table(new Schema([field, new Field('geometry', new Binary(), true)]));
+}
+
+function prototypeAggregateResult(): Table {
+  const rowId = vectorFromArray([0], new Int32());
+  const aggregate = vectorFromArray([7], new Int32());
+  const fields = [
+    new Field('__emap_rowid', new Int32(), false),
+    new Field('__proto__', new Int32(), true),
+  ];
+  const schema = new Schema(fields);
+  const data = makeData({
+    type: new Struct(fields),
+    children: [rowId.data[0], aggregate.data[0]],
+    length: 1,
+    nullCount: 0,
+  });
+  return new Table(schema, [new RecordBatch(schema, data)]);
 }
 
 const PREDICATE_FUNCTIONS = [
@@ -1086,5 +1106,34 @@ describe('spatialAggregateJoinDatasetWithDuckDb', () => {
       { kind: 'validation' },
     );
     expect(err.field).toBeUndefined();
+  });
+
+  it('preserves prototype-named aggregate outputs for matched and unmatched rows', async () => {
+    const target = await targetDataset();
+    const before = structuredClone(target.layers[0]!.data!.getRecords!());
+    const runtime = new AggregateRuntime(prototypeAggregateResult());
+
+    const result = await spatialAggregateJoinDatasetWithDuckDb(
+      target,
+      await joinDataset(),
+      {
+        predicate: 'contains',
+        aggregations: [{ operation: 'count', outputColumn: '__proto__' }],
+      },
+      runtime,
+    );
+    const records = result.layers[0]!.data!.getRecords!();
+
+    expect(records.map((record) => record.__proto__)).toEqual([7, 0, 0]);
+    for (const record of records) {
+      expect(Object.getPrototypeOf(record)).toBe(Object.prototype);
+      expect(Object.hasOwn(record, '__proto__')).toBe(true);
+      expect(Object.getOwnPropertyDescriptor(record, '__proto__')?.enumerable).toBe(true);
+      expect(Object.keys(record).at(-1)).toBe('__proto__');
+    }
+    expect(target.layers[0]!.data!.getRecords!()).toEqual(before);
+    expect(
+      target.layers[0]!.data!.getRecords!().every((record) => !Object.hasOwn(record, '__proto__')),
+    ).toBe(true);
   });
 });

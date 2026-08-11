@@ -376,8 +376,14 @@ function aggregateRowsByTargetId(
       throw new Error(`DuckDB spatial aggregate join result has duplicate row id ${rowId}`);
     }
     const values: Record<string, unknown> = {};
-    for (const aggregation of aggregations)
-      values[aggregation.outputColumn] = record[aggregation.outputColumn];
+    for (const aggregation of aggregations) {
+      Object.defineProperty(values, aggregation.outputColumn, {
+        configurable: true,
+        enumerable: true,
+        value: record[aggregation.outputColumn],
+        writable: true,
+      });
+    }
     rows.set(rowId, values);
   }
   return rows;

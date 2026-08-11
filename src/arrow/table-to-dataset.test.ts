@@ -109,6 +109,25 @@ describe('recordsFromArrowTable', () => {
     expect(records).toEqual([{ name: 'alpha' }, { name: 'beta' }]);
   });
 
+  it('preserves an enumerable own __proto__ column without mutating the record prototype', () => {
+    const protoVec = vectorFromArray([7], new Int32());
+
+    const [record] = recordsFromArrowTable(
+      tableFromColumns([
+        { field: new Field('__proto__', new Int32(), true), data: protoVec.data[0] },
+      ]),
+    );
+
+    expect(Object.getPrototypeOf(record)).toBe(Object.prototype);
+    expect(Object.hasOwn(record, '__proto__')).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(record, '__proto__')).toMatchObject({
+      enumerable: true,
+      writable: true,
+      configurable: true,
+      value: 7,
+    });
+  });
+
   it('returns empty records for empty scalar results', () => {
     const idVec = vectorFromArray([], new Int32());
 
