@@ -154,8 +154,7 @@ function renderedLayersEqual(
       layer.type === candidate.type &&
       layer.source === candidate.source &&
       layer['source-layer'] === candidate['source-layer'] &&
-      (layer.layout?.visibility ?? 'visible') ===
-        (candidate.layout?.visibility ?? 'visible')
+      (layer.layout?.visibility ?? 'visible') === (candidate.layout?.visibility ?? 'visible')
     );
   });
 }
@@ -665,10 +664,7 @@ export class Emap extends EventDispatcher {
   }
 
   public get mapLibreServices(): MapLibreServiceManager {
-    return (this._mapLibreServices ??= createMapLibreServiceManager(
-      this,
-      this._mapLibreOptions,
-    ));
+    return (this._mapLibreServices ??= createMapLibreServiceManager(this, this._mapLibreOptions));
   }
 
   public getEditMode(): EditMode {
@@ -1192,13 +1188,7 @@ export class Emap extends EventDispatcher {
       source.on('data', onData);
 
       this._pendingSourceCommits.delete(id);
-      this._handleSourceData(
-        id,
-        source,
-        { reason: 'load' },
-        renderedLayersBefore,
-        adoptedMapCrs,
-      );
+      this._handleSourceData(id, source, { reason: 'load' }, renderedLayersBefore, adoptedMapCrs);
       return true;
     } catch (error: unknown) {
       source.off('data', onData);

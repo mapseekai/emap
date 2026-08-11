@@ -778,7 +778,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
             break;
           } catch (value) {
             const error = toError(value);
-            if (error.name === 'AbortError' && this._isCurrentOperation(record, operationRevision)) {
+            if (
+              error.name === 'AbortError' &&
+              this._isCurrentOperation(record, operationRevision)
+            ) {
               continue;
             }
             throw error;
@@ -1175,7 +1178,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (!map || record.definition.role !== 'overlay' || !record.installedDefinition) return false;
     const sourceIds = Object.keys(record.definition.sources);
     const layerIds = record.definition.layers.map((layer) => layer.id);
-    if (JSON.stringify(record.installedDefinition) !== JSON.stringify(record.definition)) return false;
+    if (JSON.stringify(record.installedDefinition) !== JSON.stringify(record.definition))
+      return false;
     return (
       sourceIds.every((id) => {
         const owned = record.ownedSources.get(id);
@@ -1415,11 +1419,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     for (;;) {
       if (this._destroyed) throw abortError('MapLibre service manager was destroyed');
       const desired = this._desiredRequest;
-      if (
-        desired &&
-        this._readyStyle?.requestRevision === desired.revision &&
-        desired.settled
-      ) {
+      if (desired && this._readyStyle?.requestRevision === desired.revision && desired.settled) {
         return;
       }
 
@@ -1467,11 +1467,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     ) {
       return;
     }
-    if (
-      request.basemapId === null &&
-      request.phase !== 'recovery' &&
-      !this._hasActiveOverlay()
-    ) {
+    if (request.basemapId === null && request.phase !== 'recovery' && !this._hasActiveOverlay()) {
       this._readyStyle = null;
       this._lastReadyBasemap = null;
       this._resolveStyleRequest(request);
@@ -1718,11 +1714,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       if (this._desiredRequest !== request) break;
       if (record.definition.role !== 'overlay' || !record.state.active) continue;
       try {
-        await this._reconcileOverlayForGeneration(
-          record,
-          record.operationRevision,
-          generation,
-        );
+        await this._reconcileOverlayForGeneration(record, record.operationRevision, generation);
         this._reconciliationFailures.delete(record);
       } catch (value) {
         const error = toError(value);
@@ -1936,9 +1928,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   };
 
   private _handleMapError = (event?: unknown): void => {
-    const details = event as
-      | { error?: unknown; sourceId?: string; tile?: unknown }
-      | undefined;
+    const details = event as { error?: unknown; sourceId?: string; tile?: unknown } | undefined;
     const error = toError(details?.error ?? event);
     if (this._mutationContext) {
       this._mutationContext.error = error;
@@ -2040,8 +2030,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       this._readyStyle?.generation === generation &&
       this._readyStyle.requestRevision === desiredRevision;
     const parsed =
-      this._styleGeneration === generation &&
-      this._parsedRequest?.revision === desiredRevision;
+      this._styleGeneration === generation && this._parsedRequest?.revision === desiredRevision;
     if (!ready && !parsed) throw abortError('MapLibre style generation was superseded');
   }
 

@@ -37,8 +37,7 @@ const raw: maplibregl.Map | null = manager.getMapLibreMap();
 
 manager.on('change', (event) => {
   const id: string = event.serviceId;
-  const reason: 'add' | 'update' | 'remove' | 'basemap' | 'visibility' | 'status' =
-    event.reason;
+  const reason: 'add' | 'update' | 'remove' | 'basemap' | 'visibility' | 'status' = event.reason;
   // @ts-expect-error MapLibre change events expose only documented reasons.
   const invalidReason: 'invalid' = event.reason;
   void id;

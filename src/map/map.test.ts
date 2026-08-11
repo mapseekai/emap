@@ -580,10 +580,7 @@ describe('Emap layer management', () => {
           type: event.type,
           reason: event.reason,
           layerId: event.layerId,
-          layers: event.layers.map((layer) => [
-            layer.id,
-            layer.layout?.visibility ?? 'visible',
-          ]),
+          layers: event.layers.map((layer) => [layer.id, layer.layout?.visibility ?? 'visible']),
         });
       });
       map.on('historychange', () => {
@@ -1034,17 +1031,12 @@ describe('Emap layer management', () => {
       expect(listener.mock.calls[0][0]).toMatchObject({
         reason: 'visibility',
         layerId: 'src1:roads',
-        layers: [
-          { id: 'src1:roads', layout: { visibility: 'none' } },
-          { id: 'src1:cities' },
-        ],
+        layers: [{ id: 'src1:roads', layout: { visibility: 'none' } }, { id: 'src1:cities' }],
       });
     });
 
     it('does not materialize, render, or emit for unknown and already-visible defaults', () => {
-      const source = createMockSource([
-        { name: 'roads', geometry_type: 'polyline', shapes: [] },
-      ]);
+      const source = createMockSource([{ name: 'roads', geometry_type: 'polyline', shapes: [] }]);
       registerMockSource(map, 'src1', source);
       const scheduleRender = getPrivate(map, '_scheduleRender') as ReturnType<typeof vi.fn>;
       const listener = vi.fn();
@@ -1223,9 +1215,7 @@ describe('Emap layer management', () => {
     });
 
     it('exposes generated defaults without changing explicit getLayers semantics', () => {
-      const source = createMockSource([
-        { name: 'roads', geometry_type: 'polyline', shapes: [] },
-      ]);
+      const source = createMockSource([{ name: 'roads', geometry_type: 'polyline', shapes: [] }]);
       registerMockSource(map, 'src1', source);
 
       expect(map.getRenderedLayers()).toMatchObject([
@@ -1235,9 +1225,7 @@ describe('Emap layer management', () => {
     });
 
     it('does not expose the generated-layer cache through rendered snapshots', () => {
-      const source = createMockSource([
-        { name: 'roads', geometry_type: 'polyline', shapes: [] },
-      ]);
+      const source = createMockSource([{ name: 'roads', geometry_type: 'polyline', shapes: [] }]);
       registerMockSource(map, 'src1', source);
 
       const snapshot = map.getRenderedLayers() as LayerSpecification[];
@@ -1291,10 +1279,7 @@ describe('Emap layer management', () => {
           type: event.type,
           reason: event.reason,
           layerId: event.layerId,
-          layers: event.layers.map((layer) => [
-            layer.id,
-            layer.layout?.visibility ?? 'visible',
-          ]),
+          layers: event.layers.map((layer) => [layer.id, layer.layout?.visibility ?? 'visible']),
         });
       });
       map.on('data', () => {
@@ -1390,10 +1375,7 @@ describe('Emap layer management', () => {
           type: event.type,
           reason: event.reason,
           layerId: event.layerId,
-          layers: event.layers.map((layer) => [
-            layer.id,
-            layer.layout?.visibility ?? 'visible',
-          ]),
+          layers: event.layers.map((layer) => [layer.id, layer.layout?.visibility ?? 'visible']),
         });
       });
       map.on('selectionchange', () => {

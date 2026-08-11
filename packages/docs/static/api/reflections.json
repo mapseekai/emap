@@ -45336,9 +45336,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 363,
+									"line": 362,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L363"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L362"
 								}
 							],
 							"signatures": [
@@ -45370,9 +45370,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 363,
+											"line": 362,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L363"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L362"
 										}
 									],
 									"parameters": [
@@ -45510,9 +45510,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 256,
+									"line": 255,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L256"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L255"
 								}
 							],
 							"type": {
@@ -45539,9 +45539,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 298,
+									"line": 297,
 									"character": 6,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L298"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L297"
 								}
 							],
 							"getSignature": {
@@ -45561,9 +45561,9 @@
 								"sources": [
 									{
 										"fileName": "src/map/map.ts",
-										"line": 298,
+										"line": 297,
 										"character": 6,
-										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L298"
+										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L297"
 									}
 								],
 								"type": {
@@ -45595,9 +45595,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1777,
+									"line": 1767,
 									"character": 6,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1777"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1767"
 								}
 							],
 							"getSignature": {
@@ -45617,9 +45617,9 @@
 								"sources": [
 									{
 										"fileName": "src/map/map.ts",
-										"line": 1777,
+										"line": 1767,
 										"character": 6,
-										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1777"
+										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1767"
 									}
 								],
 								"type": {
@@ -45655,9 +45655,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1773,
+									"line": 1763,
 									"character": 6,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1773"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1763"
 								}
 							],
 							"getSignature": {
@@ -45677,9 +45677,9 @@
 								"sources": [
 									{
 										"fileName": "src/map/map.ts",
-										"line": 1773,
+										"line": 1763,
 										"character": 6,
-										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1773"
+										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1763"
 									}
 								],
 								"type": {
@@ -45715,9 +45715,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1765,
+									"line": 1755,
 									"character": 6,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1765"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1755"
 								}
 							],
 							"getSignature": {
@@ -45737,9 +45737,9 @@
 								"sources": [
 									{
 										"fileName": "src/map/map.ts",
-										"line": 1765,
+										"line": 1755,
 										"character": 6,
-										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1765"
+										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1755"
 									}
 								],
 								"type": {
@@ -45775,9 +45775,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1789,
+									"line": 1779,
 									"character": 6,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1789"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1779"
 								}
 							],
 							"getSignature": {
@@ -45797,9 +45797,9 @@
 								"sources": [
 									{
 										"fileName": "src/map/map.ts",
-										"line": 1789,
+										"line": 1779,
 										"character": 6,
-										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1789"
+										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1779"
 									}
 								],
 								"type": {
@@ -45835,9 +45835,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 294,
+									"line": 293,
 									"character": 6,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L294"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L293"
 								}
 							],
 							"getSignature": {
@@ -45857,9 +45857,9 @@
 								"sources": [
 									{
 										"fileName": "src/map/map.ts",
-										"line": 294,
+										"line": 293,
 										"character": 6,
-										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L294"
+										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L293"
 									}
 								],
 								"type": {
@@ -45891,9 +45891,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1781,
+									"line": 1771,
 									"character": 6,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1781"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1771"
 								}
 							],
 							"getSignature": {
@@ -45913,9 +45913,9 @@
 								"sources": [
 									{
 										"fileName": "src/map/map.ts",
-										"line": 1781,
+										"line": 1771,
 										"character": 6,
-										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1781"
+										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1771"
 									}
 								],
 								"type": {
@@ -45951,9 +45951,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 193,
+									"line": 192,
 									"character": 6,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L193"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L192"
 								}
 							],
 							"getSignature": {
@@ -45965,9 +45965,9 @@
 								"sources": [
 									{
 										"fileName": "src/map/map.ts",
-										"line": 193,
+										"line": 192,
 										"character": 6,
-										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L193"
+										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L192"
 									}
 								],
 								"type": {
@@ -46001,9 +46001,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 667,
+									"line": 666,
 									"character": 13,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L667"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L666"
 								}
 							],
 							"getSignature": {
@@ -46015,9 +46015,9 @@
 								"sources": [
 									{
 										"fileName": "src/map/map.ts",
-										"line": 667,
+										"line": 666,
 										"character": 13,
-										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L667"
+										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L666"
 									}
 								],
 								"type": {
@@ -46045,9 +46045,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 290,
+									"line": 289,
 									"character": 6,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L290"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L289"
 								}
 							],
 							"getSignature": {
@@ -46067,9 +46067,9 @@
 								"sources": [
 									{
 										"fileName": "src/map/map.ts",
-										"line": 290,
+										"line": 289,
 										"character": 6,
-										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L290"
+										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L289"
 									}
 								],
 								"type": {
@@ -46101,9 +46101,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1769,
+									"line": 1759,
 									"character": 6,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1769"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1759"
 								}
 							],
 							"getSignature": {
@@ -46123,9 +46123,9 @@
 								"sources": [
 									{
 										"fileName": "src/map/map.ts",
-										"line": 1769,
+										"line": 1759,
 										"character": 6,
-										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1769"
+										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1759"
 									}
 								],
 								"type": {
@@ -46161,9 +46161,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1793,
+									"line": 1783,
 									"character": 6,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1793"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1783"
 								}
 							],
 							"getSignature": {
@@ -46183,9 +46183,9 @@
 								"sources": [
 									{
 										"fileName": "src/map/map.ts",
-										"line": 1793,
+										"line": 1783,
 										"character": 6,
-										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1793"
+										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1783"
 									}
 								],
 								"type": {
@@ -46223,9 +46223,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 276,
+									"line": 275,
 									"character": 13,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L276"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L275"
 								}
 							],
 							"getSignature": {
@@ -46245,9 +46245,9 @@
 								"sources": [
 									{
 										"fileName": "src/map/map.ts",
-										"line": 276,
+										"line": 275,
 										"character": 13,
-										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L276"
+										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L275"
 									}
 								],
 								"type": {
@@ -46275,9 +46275,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1785,
+									"line": 1775,
 									"character": 6,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1785"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1775"
 								}
 							],
 							"getSignature": {
@@ -46297,9 +46297,9 @@
 								"sources": [
 									{
 										"fileName": "src/map/map.ts",
-										"line": 1785,
+										"line": 1775,
 										"character": 6,
-										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1785"
+										"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1775"
 									}
 								],
 								"type": {
@@ -46337,9 +46337,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1814,
+									"line": 1804,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1814"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1804"
 								}
 							],
 							"signatures": [
@@ -46360,9 +46360,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1814,
+											"line": 1804,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1814"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1804"
 										}
 									],
 									"parameters": [
@@ -46448,9 +46448,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1436,
+									"line": 1426,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1436"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1426"
 								}
 							],
 							"signatures": [
@@ -46471,9 +46471,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1436,
+											"line": 1426,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1436"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1426"
 										}
 									],
 									"parameters": [
@@ -46538,9 +46538,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1050,
+									"line": 1046,
 									"character": 15,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1050"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1046"
 								}
 							],
 							"signatures": [
@@ -46561,9 +46561,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1050,
+											"line": 1046,
 											"character": 15,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1050"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1046"
 										}
 									],
 									"parameters": [
@@ -46660,9 +46660,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2324,
+									"line": 2314,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2324"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2314"
 								}
 							],
 							"signatures": [
@@ -46710,9 +46710,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2324,
+											"line": 2314,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2324"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2314"
 										}
 									],
 									"type": {
@@ -46735,9 +46735,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2333,
+									"line": 2323,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2333"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2323"
 								}
 							],
 							"signatures": [
@@ -46758,9 +46758,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2333,
+											"line": 2323,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2333"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2323"
 										}
 									],
 									"parameters": [
@@ -46829,9 +46829,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 527,
+									"line": 526,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L527"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L526"
 								}
 							],
 							"signatures": [
@@ -46852,9 +46852,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 527,
+											"line": 526,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L527"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L526"
 										}
 									],
 									"type": {
@@ -46883,9 +46883,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2296,
+									"line": 2286,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2296"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2286"
 								}
 							],
 							"signatures": [
@@ -46906,9 +46906,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2296,
+											"line": 2286,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2296"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2286"
 										}
 									],
 									"type": {
@@ -46937,9 +46937,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2292,
+									"line": 2282,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2292"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2282"
 								}
 							],
 							"signatures": [
@@ -46960,9 +46960,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2292,
+											"line": 2282,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2292"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2282"
 										}
 									],
 									"type": {
@@ -46991,9 +46991,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 715,
+									"line": 711,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L715"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L711"
 								}
 							],
 							"signatures": [
@@ -47014,9 +47014,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 715,
+											"line": 711,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L715"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L711"
 										}
 									],
 									"type": {
@@ -47045,9 +47045,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 707,
+									"line": 703,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L707"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L703"
 								}
 							],
 							"signatures": [
@@ -47068,9 +47068,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 707,
+											"line": 703,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L707"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L703"
 										}
 									],
 									"type": {
@@ -47099,9 +47099,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2122,
+									"line": 2112,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2122"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2112"
 								}
 							],
 							"signatures": [
@@ -47122,9 +47122,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2122,
+											"line": 2112,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2122"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2112"
 										}
 									],
 									"type": {
@@ -47145,9 +47145,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2301,
+									"line": 2291,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2301"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2291"
 								}
 							],
 							"signatures": [
@@ -47176,9 +47176,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2301,
+											"line": 2291,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2301"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2291"
 										}
 									],
 									"type": {
@@ -47199,9 +47199,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2163,
+									"line": 2153,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2163"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2153"
 								}
 							],
 							"signatures": [
@@ -47222,9 +47222,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2163,
+											"line": 2153,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2163"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2153"
 										}
 									],
 									"type": {
@@ -47245,9 +47245,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2103,
+									"line": 2093,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2103"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2093"
 								}
 							],
 							"signatures": [
@@ -47292,9 +47292,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2103,
+											"line": 2093,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2103"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2093"
 										}
 									],
 									"parameters": [
@@ -47338,9 +47338,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1075,
+									"line": 1071,
 									"character": 15,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1075"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1071"
 								}
 							],
 							"signatures": [
@@ -47361,9 +47361,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1075,
+											"line": 1071,
 											"character": 15,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1075"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1071"
 										}
 									],
 									"parameters": [
@@ -47419,9 +47419,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2201,
+									"line": 2191,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2201"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2191"
 								}
 							],
 							"signatures": [
@@ -47474,9 +47474,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2201,
+											"line": 2191,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2201"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2191"
 										}
 									],
 									"type": {
@@ -47497,9 +47497,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2157,
+									"line": 2147,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2157"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2147"
 								}
 							],
 							"signatures": [
@@ -47520,9 +47520,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2157,
+											"line": 2147,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2157"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2147"
 										}
 									],
 									"parameters": [
@@ -47573,9 +47573,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1852,
+									"line": 1842,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1852"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1842"
 								}
 							],
 							"signatures": [
@@ -47596,9 +47596,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1852,
+											"line": 1842,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1852"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1842"
 										}
 									],
 									"parameters": [
@@ -47653,9 +47653,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1375,
+									"line": 1365,
 									"character": 15,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1375"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1365"
 								}
 							],
 							"signatures": [
@@ -47718,9 +47718,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1375,
+											"line": 1365,
 											"character": 15,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1375"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1365"
 										}
 									],
 									"parameters": [
@@ -47891,9 +47891,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1877,
+									"line": 1867,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1877"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1867"
 								}
 							],
 							"signatures": [
@@ -47914,9 +47914,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1877,
+											"line": 1867,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1877"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1867"
 										}
 									],
 									"parameters": [
@@ -47982,9 +47982,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1872,
+									"line": 1862,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1872"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1862"
 								}
 							],
 							"signatures": [
@@ -48005,9 +48005,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1872,
+											"line": 1862,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1872"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1862"
 										}
 									],
 									"parameters": [
@@ -48059,9 +48059,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 663,
+									"line": 662,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L663"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L662"
 								}
 							],
 							"signatures": [
@@ -48082,9 +48082,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 663,
+											"line": 662,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L663"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L662"
 										}
 									],
 									"type": {
@@ -48119,9 +48119,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1753,
+									"line": 1743,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1753"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1743"
 								}
 							],
 							"signatures": [
@@ -48142,9 +48142,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1753,
+											"line": 1743,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1753"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1743"
 										}
 									],
 									"type": {
@@ -48182,9 +48182,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1648,
+									"line": 1638,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1648"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1638"
 								}
 							],
 							"signatures": [
@@ -48205,9 +48205,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1648,
+											"line": 1638,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1648"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1638"
 										}
 									],
 									"type": {
@@ -48236,9 +48236,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 674,
+									"line": 670,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L674"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L670"
 								}
 							],
 							"signatures": [
@@ -48259,9 +48259,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 674,
+											"line": 670,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L674"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L670"
 										}
 									],
 									"type": {
@@ -48296,9 +48296,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 535,
+									"line": 534,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L535"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L534"
 								}
 							],
 							"signatures": [
@@ -48319,9 +48319,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 535,
+											"line": 534,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L535"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L534"
 										}
 									],
 									"type": {
@@ -48352,9 +48352,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1801,
+									"line": 1791,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1801"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1791"
 								}
 							],
 							"signatures": [
@@ -48375,9 +48375,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1801,
+											"line": 1791,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1801"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1791"
 										}
 									],
 									"type": {
@@ -48408,9 +48408,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1467,
+									"line": 1457,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1467"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1457"
 								}
 							],
 							"signatures": [
@@ -48431,9 +48431,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1467,
+											"line": 1457,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1467"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1457"
 										}
 									],
 									"parameters": [
@@ -48494,9 +48494,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1472,
+									"line": 1462,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1472"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1462"
 								}
 							],
 							"signatures": [
@@ -48517,9 +48517,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1472,
+											"line": 1462,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1472"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1462"
 										}
 									],
 									"type": {
@@ -48557,9 +48557,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1476,
+									"line": 1466,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1476"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1466"
 								}
 							],
 							"signatures": [
@@ -48580,9 +48580,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1476,
+											"line": 1466,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1476"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1466"
 										}
 									],
 									"type": {
@@ -48612,9 +48612,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2169,
+									"line": 2159,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2169"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2159"
 								}
 							],
 							"signatures": [
@@ -48635,9 +48635,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2169,
+											"line": 2159,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2169"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2159"
 										}
 									],
 									"type": {
@@ -48671,9 +48671,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1356,
+									"line": 1346,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1356"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1346"
 								}
 							],
 							"signatures": [
@@ -48694,9 +48694,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1356,
+											"line": 1346,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1356"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1346"
 										}
 									],
 									"parameters": [
@@ -48757,9 +48757,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1797,
+									"line": 1787,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1797"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1787"
 								}
 							],
 							"signatures": [
@@ -48780,9 +48780,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1797,
+											"line": 1787,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1797"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1787"
 										}
 									],
 									"type": {
@@ -48813,9 +48813,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1760,
+									"line": 1750,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1760"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1750"
 								}
 							],
 							"signatures": [
@@ -48836,9 +48836,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1760,
+											"line": 1750,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1760"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1750"
 										}
 									],
 									"type": {
@@ -48859,9 +48859,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2174,
+									"line": 2164,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2174"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2164"
 								}
 							],
 							"signatures": [
@@ -48882,9 +48882,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2174,
+											"line": 2164,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2174"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2164"
 										}
 									],
 									"parameters": [
@@ -48928,9 +48928,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1837,
+									"line": 1827,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1837"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1827"
 								}
 							],
 							"signatures": [
@@ -48951,9 +48951,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1837,
+											"line": 1827,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1837"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1827"
 										}
 									],
 									"parameters": [
@@ -48997,9 +48997,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1397,
+									"line": 1387,
 									"character": 15,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1397"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1387"
 								}
 							],
 							"signatures": [
@@ -49092,9 +49092,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1397,
+											"line": 1387,
 											"character": 15,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1397"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1387"
 										}
 									],
 									"parameters": [
@@ -49224,9 +49224,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1506,
+									"line": 1496,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1506"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1496"
 								}
 							],
 							"signatures": [
@@ -49247,9 +49247,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1506,
+											"line": 1496,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1506"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1496"
 										}
 									],
 									"parameters": [
@@ -49318,33 +49318,33 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 591,
+									"line": 590,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L591"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L590"
 								},
 								{
 									"fileName": "src/map/map.ts",
-									"line": 593,
+									"line": 592,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L593"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L592"
 								},
 								{
 									"fileName": "src/map/map.ts",
-									"line": 598,
+									"line": 597,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L598"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L597"
 								},
 								{
 									"fileName": "src/map/map.ts",
-									"line": 600,
+									"line": 599,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L600"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L599"
 								},
 								{
 									"fileName": "src/map/map.ts",
-									"line": 602,
+									"line": 601,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L602"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L601"
 								}
 							],
 							"signatures": [
@@ -49365,9 +49365,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 591,
+											"line": 590,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L591"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L590"
 										}
 									],
 									"parameters": [
@@ -49471,9 +49471,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 593,
+											"line": 592,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L593"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L592"
 										}
 									],
 									"typeParameters": [
@@ -49575,9 +49575,9 @@
 																							"sources": [
 																								{
 																									"fileName": "src/map/map.ts",
-																									"line": 595,
+																									"line": 594,
 																									"character": 20,
-																									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L595"
+																									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L594"
 																								}
 																							],
 																							"type": {
@@ -49657,9 +49657,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 598,
+											"line": 597,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L598"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L597"
 										}
 									],
 									"typeParameters": [
@@ -49770,9 +49770,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 600,
+											"line": 599,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L600"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L599"
 										}
 									],
 									"parameters": [
@@ -49884,39 +49884,39 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 558,
+									"line": 557,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L558"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L557"
 								},
 								{
 									"fileName": "src/map/map.ts",
-									"line": 562,
+									"line": 561,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L562"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L561"
 								},
 								{
 									"fileName": "src/map/map.ts",
-									"line": 568,
+									"line": 567,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L568"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L567"
 								},
 								{
 									"fileName": "src/map/map.ts",
-									"line": 570,
+									"line": 569,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L570"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L569"
 								},
 								{
 									"fileName": "src/map/map.ts",
-									"line": 572,
+									"line": 571,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L572"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L571"
 								},
 								{
 									"fileName": "src/map/map.ts",
-									"line": 574,
+									"line": 573,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L574"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L573"
 								}
 							],
 							"signatures": [
@@ -49937,9 +49937,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 558,
+											"line": 557,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L558"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L557"
 										}
 									],
 									"parameters": [
@@ -50043,9 +50043,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 562,
+											"line": 561,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L562"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L561"
 										}
 									],
 									"typeParameters": [
@@ -50147,9 +50147,9 @@
 																							"sources": [
 																								{
 																									"fileName": "src/map/map.ts",
-																									"line": 564,
+																									"line": 563,
 																									"character": 20,
-																									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L564"
+																									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L563"
 																								}
 																							],
 																							"type": {
@@ -50229,9 +50229,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 568,
+											"line": 567,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L568"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L567"
 										}
 									],
 									"typeParameters": [
@@ -50342,9 +50342,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 570,
+											"line": 569,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L570"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L569"
 										}
 									],
 									"parameters": [
@@ -50449,9 +50449,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 572,
+											"line": 571,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L572"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L571"
 										}
 									],
 									"parameters": [
@@ -50576,39 +50576,39 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 617,
+									"line": 616,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L617"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L616"
 								},
 								{
 									"fileName": "src/map/map.ts",
-									"line": 619,
+									"line": 618,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L619"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L618"
 								},
 								{
 									"fileName": "src/map/map.ts",
-									"line": 624,
+									"line": 623,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L624"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L623"
 								},
 								{
 									"fileName": "src/map/map.ts",
-									"line": 626,
+									"line": 625,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L626"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L625"
 								},
 								{
 									"fileName": "src/map/map.ts",
-									"line": 628,
+									"line": 627,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L628"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L627"
 								},
 								{
 									"fileName": "src/map/map.ts",
-									"line": 630,
+									"line": 629,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L630"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L629"
 								}
 							],
 							"signatures": [
@@ -50637,9 +50637,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 617,
+											"line": 616,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L617"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L616"
 										}
 									],
 									"parameters": [
@@ -50743,9 +50743,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 619,
+											"line": 618,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L619"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L618"
 										}
 									],
 									"typeParameters": [
@@ -50847,9 +50847,9 @@
 																							"sources": [
 																								{
 																									"fileName": "src/map/map.ts",
-																									"line": 621,
+																									"line": 620,
 																									"character": 20,
-																									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L621"
+																									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L620"
 																								}
 																							],
 																							"type": {
@@ -50929,9 +50929,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 624,
+											"line": 623,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L624"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L623"
 										}
 									],
 									"typeParameters": [
@@ -51042,9 +51042,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 626,
+											"line": 625,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L626"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L625"
 										}
 									],
 									"parameters": [
@@ -51149,9 +51149,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 628,
+											"line": 627,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L628"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L627"
 										}
 									],
 									"parameters": [
@@ -51278,9 +51278,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1862,
+									"line": 1852,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1862"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1852"
 								}
 							],
 							"signatures": [
@@ -51301,9 +51301,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1862,
+											"line": 1852,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1862"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1852"
 										}
 									],
 									"parameters": [
@@ -51376,9 +51376,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1857,
+									"line": 1847,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1857"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1847"
 								}
 							],
 							"signatures": [
@@ -51399,9 +51399,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1857,
+											"line": 1847,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1857"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1847"
 										}
 									],
 									"parameters": [
@@ -51474,9 +51474,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2086,
+									"line": 2076,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2086"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2076"
 								}
 							],
 							"signatures": [
@@ -51521,9 +51521,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2086,
+											"line": 2076,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2086"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2076"
 										}
 									],
 									"parameters": [
@@ -51567,21 +51567,21 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 843,
+									"line": 839,
 									"character": 15,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L843"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L839"
+								},
+								{
+									"fileName": "src/map/map.ts",
+									"line": 840,
+									"character": 15,
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L840"
 								},
 								{
 									"fileName": "src/map/map.ts",
 									"line": 844,
 									"character": 15,
 									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L844"
-								},
-								{
-									"fileName": "src/map/map.ts",
-									"line": 848,
-									"character": 15,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L848"
 								}
 							],
 							"signatures": [
@@ -51612,9 +51612,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 843,
+											"line": 839,
 											"character": 15,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L843"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L839"
 										}
 									],
 									"parameters": [
@@ -51686,9 +51686,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 844,
+											"line": 840,
 											"character": 15,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L844"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L840"
 										}
 									],
 									"parameters": [
@@ -51775,9 +51775,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2016,
+									"line": 2006,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2016"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2006"
 								}
 							],
 							"signatures": [
@@ -51798,9 +51798,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2016,
+											"line": 2006,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2016"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2006"
 										}
 									],
 									"parameters": [
@@ -51870,9 +51870,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2243,
+									"line": 2233,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2243"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2233"
 								}
 							],
 							"signatures": [
@@ -51925,9 +51925,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2243,
+											"line": 2233,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2243"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2233"
 										}
 									],
 									"parameters": [
@@ -51979,9 +51979,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2042,
+									"line": 2032,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2042"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2032"
 								}
 							],
 							"signatures": [
@@ -52002,9 +52002,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2042,
+											"line": 2032,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2042"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2032"
 										}
 									],
 									"parameters": [
@@ -52127,9 +52127,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2269,
+									"line": 2259,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2269"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2259"
 								}
 							],
 							"signatures": [
@@ -52158,9 +52158,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2269,
+											"line": 2259,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2269"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2259"
 										}
 									],
 									"type": {
@@ -52181,9 +52181,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2428,
+									"line": 2418,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2428"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2418"
 								}
 							],
 							"signatures": [
@@ -52228,9 +52228,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2428,
+											"line": 2418,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2428"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2418"
 										}
 									],
 									"type": {
@@ -52259,9 +52259,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1821,
+									"line": 1811,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1821"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1811"
 								}
 							],
 							"signatures": [
@@ -52282,9 +52282,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1821,
+											"line": 1811,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1821"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1811"
 										}
 									],
 									"parameters": [
@@ -52348,9 +52348,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1457,
+									"line": 1447,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1457"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1447"
 								}
 							],
 							"signatures": [
@@ -52371,9 +52371,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1457,
+											"line": 1447,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1457"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1447"
 										}
 									],
 									"parameters": [
@@ -52423,9 +52423,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1321,
+									"line": 1311,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1321"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1311"
 								}
 							],
 							"signatures": [
@@ -52446,9 +52446,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1321,
+											"line": 1311,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1321"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1311"
 										}
 									],
 									"parameters": [
@@ -52498,9 +52498,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1936,
+									"line": 1926,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1936"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1926"
 								}
 							],
 							"signatures": [
@@ -52521,9 +52521,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1936,
+											"line": 1926,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1936"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1926"
 										}
 									],
 									"parameters": [
@@ -52581,9 +52581,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1670,
+									"line": 1660,
 									"character": 15,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1670"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1660"
 								}
 							],
 							"signatures": [
@@ -52604,9 +52604,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1670,
+											"line": 1660,
 											"character": 15,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1670"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1660"
 										}
 									],
 									"parameters": [
@@ -52668,9 +52668,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1810,
+									"line": 1800,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1810"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1800"
 								}
 							],
 							"signatures": [
@@ -52691,9 +52691,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1810,
+											"line": 1800,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1810"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1800"
 										}
 									],
 									"type": {
@@ -52722,9 +52722,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2024,
+									"line": 2014,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2024"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2014"
 								}
 							],
 							"signatures": [
@@ -52745,9 +52745,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2024,
+											"line": 2014,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2024"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2014"
 										}
 									],
 									"type": {
@@ -52768,9 +52768,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2150,
+									"line": 2140,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2150"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2140"
 								}
 							],
 							"signatures": [
@@ -52791,9 +52791,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2150,
+											"line": 2140,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2150"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2140"
 										}
 									],
 									"parameters": [
@@ -52905,9 +52905,9 @@
 															"sources": [
 																{
 																	"fileName": "src/map/map.ts",
-																	"line": 2150,
+																	"line": 2140,
 																	"character": 65,
-																	"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2150"
+																	"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2140"
 																}
 															],
 															"type": {
@@ -52948,9 +52948,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1842,
+									"line": 1832,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1842"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1832"
 								}
 							],
 							"signatures": [
@@ -52971,9 +52971,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1842,
+											"line": 1832,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1842"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1832"
 										}
 									],
 									"parameters": [
@@ -53024,9 +53024,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1658,
+									"line": 1648,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1658"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1648"
 								}
 							],
 							"signatures": [
@@ -53057,9 +53057,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1658,
+											"line": 1648,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1658"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1648"
 										}
 									],
 									"parameters": [
@@ -53109,9 +53109,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 711,
+									"line": 707,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L711"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L707"
 								}
 							],
 							"signatures": [
@@ -53132,9 +53132,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 711,
+											"line": 707,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L711"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L707"
 										}
 									],
 									"parameters": [
@@ -53190,9 +53190,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 678,
+									"line": 674,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L678"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L674"
 								}
 							],
 							"signatures": [
@@ -53213,9 +53213,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 678,
+											"line": 674,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L678"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L674"
 										}
 									],
 									"parameters": [
@@ -53271,9 +53271,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 703,
+									"line": 699,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L703"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L699"
 								}
 							],
 							"signatures": [
@@ -53294,9 +53294,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 703,
+											"line": 699,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L703"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L699"
 										}
 									],
 									"parameters": [
@@ -53352,9 +53352,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 531,
+									"line": 530,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L531"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L530"
 								}
 							],
 							"signatures": [
@@ -53375,9 +53375,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 531,
+											"line": 530,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L531"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L530"
 										}
 									],
 									"parameters": [
@@ -53429,9 +53429,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1805,
+									"line": 1795,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1805"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1795"
 								}
 							],
 							"signatures": [
@@ -53452,9 +53452,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1805,
+											"line": 1795,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1805"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1795"
 										}
 									],
 									"parameters": [
@@ -53506,9 +53506,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2114,
+									"line": 2104,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2114"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2104"
 								}
 							],
 							"signatures": [
@@ -53529,9 +53529,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2114,
+											"line": 2104,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2114"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2104"
 										}
 									],
 									"parameters": [
@@ -53620,9 +53620,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2128,
+									"line": 2118,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2128"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2118"
 								}
 							],
 							"signatures": [
@@ -53643,9 +53643,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2128,
+											"line": 2118,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2128"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2118"
 										}
 									],
 									"parameters": [
@@ -53697,9 +53697,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1480,
+									"line": 1470,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1480"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1470"
 								}
 							],
 							"signatures": [
@@ -53720,9 +53720,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1480,
+											"line": 1470,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1480"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1470"
 										}
 									],
 									"parameters": [
@@ -53800,9 +53800,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1497,
+									"line": 1487,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1497"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1487"
 								}
 							],
 							"signatures": [
@@ -53823,9 +53823,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1497,
+											"line": 1487,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1497"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1487"
 										}
 									],
 									"parameters": [
@@ -53905,9 +53905,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1847,
+									"line": 1837,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1847"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1837"
 								}
 							],
 							"signatures": [
@@ -53928,9 +53928,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1847,
+											"line": 1837,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1847"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1837"
 										}
 									],
 									"parameters": [
@@ -53972,9 +53972,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1882,
+									"line": 1872,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1882"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1872"
 								}
 							],
 							"signatures": [
@@ -53995,9 +53995,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1882,
+											"line": 1872,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1882"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1872"
 										}
 									],
 									"type": {
@@ -54018,9 +54018,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2252,
+									"line": 2242,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2252"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2242"
 								}
 							],
 							"signatures": [
@@ -54049,9 +54049,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2252,
+											"line": 2242,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2252"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2242"
 										}
 									],
 									"type": {
@@ -54080,9 +54080,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 2020,
+									"line": 2010,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2020"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2010"
 								}
 							],
 							"signatures": [
@@ -54103,9 +54103,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 2020,
+											"line": 2010,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2020"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L2010"
 										}
 									],
 									"parameters": [
@@ -54183,9 +54183,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1827,
+									"line": 1817,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1827"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1817"
 								}
 							],
 							"signatures": [
@@ -54206,9 +54206,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1827,
+											"line": 1817,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1827"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1817"
 										}
 									],
 									"type": {
@@ -54237,9 +54237,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1831,
+									"line": 1821,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1831"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1821"
 								}
 							],
 							"signatures": [
@@ -54260,9 +54260,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1831,
+											"line": 1821,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1831"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1821"
 										}
 									],
 									"type": {
@@ -54283,9 +54283,9 @@
 							"sources": [
 								{
 									"fileName": "src/map/map.ts",
-									"line": 1867,
+									"line": 1857,
 									"character": 9,
-									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1867"
+									"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1857"
 								}
 							],
 							"signatures": [
@@ -54306,9 +54306,9 @@
 									"sources": [
 										{
 											"fileName": "src/map/map.ts",
-											"line": 1867,
+											"line": 1857,
 											"character": 9,
-											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1867"
+											"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L1857"
 										}
 									],
 									"parameters": [
@@ -54480,9 +54480,9 @@
 					"sources": [
 						{
 							"fileName": "src/map/map.ts",
-							"line": 171,
+							"line": 170,
 							"character": 13,
-							"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L171"
+							"url": "https://github.com/mapseekai/emap/blob/4afbe7e8c330ce2773da5d56044c048ff5bbd3a9/src/map/map.ts#L170"
 						}
 					],
 					"extendedTypes": [
