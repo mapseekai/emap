@@ -1479,6 +1479,69 @@ describe('MapLibreServiceManager coordinator review regressions', () => {
     },
   );
 
+  it.each([
+    { trigger: 'status' as const, action: 'clear' as const },
+    { trigger: 'basemap' as const, action: 'clear' as const },
+    { trigger: 'error' as const, action: 'clear' as const },
+    { trigger: 'status' as const, action: 'remove' as const },
+    { trigger: 'basemap' as const, action: 'remove' as const },
+    { trigger: 'error' as const, action: 'remove' as const },
+  ])(
+    'does not restore a committed basemap after detachment $trigger listener $action',
+    async ({ trigger, action }) => {
+      const { manager } = createManager(
+        [base, dark, { ...traffic, visible: true }],
+        { defaultBasemap: 'light' },
+      );
+      const initialization = manager.initialize();
+      const map = await waitForFakeMap();
+      map.emit('style.load');
+      await initialization;
+      const detachError = new Error('traffic detach failed reentrantly');
+      map.removeFailures.set('layer:traffic-line', detachError);
+      const events: string[] = [];
+      let actionPromise: Promise<void> | undefined;
+      let invoked = false;
+      const runAction = () => {
+        if (invoked) return;
+        invoked = true;
+        actionPromise =
+          action === 'clear' ? manager.setBasemap(null) : manager.removeService('light');
+      };
+      manager.on('change', (event) => {
+        if ((event.reason !== 'status' && event.reason !== 'basemap') || !event.state) return;
+        events.push(
+          `${event.reason}:${event.serviceId}:${event.state.active}:${event.state.status}`,
+        );
+        if (
+          event.serviceId === 'dark' &&
+          event.reason === trigger &&
+          event.state.status === 'error'
+        ) {
+          runAction();
+        }
+      });
+      manager.on('error', (event) => {
+        events.push(`error:${event.serviceId}:${event.phase}`);
+        if (trigger === 'error' && event.serviceId === 'traffic') runAction();
+      });
+
+      const selection = manager.setBasemap('dark').catch((error: unknown) => error);
+      expect(invoked).toBe(true);
+      expect(actionPromise).toBeDefined();
+      expect(map.setStyleCalls.at(-1)).toEqual({ version: 8, sources: {}, layers: [] });
+      map.emit('style.load');
+      await actionPromise;
+
+      await expect(selection).resolves.toBe(detachError);
+      expect(events).not.toContain('basemap:light:true:ready');
+      expect(events).not.toContain('status:light:true:ready');
+      expect(manager.getServiceState('dark')).toMatchObject({ active: false, status: 'error' });
+      if (action === 'remove') expect(manager.getServiceState('light')).toBeUndefined();
+      else expect(manager.getServiceState('light')).toMatchObject({ active: false });
+    },
+  );
+
   it('publishes one fatal style error when a requested blank style fails, then recovers', async () => {
     const { manager } = createManager(
       [base, { ...roads, visible: true }],

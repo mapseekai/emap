@@ -1511,16 +1511,36 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       this._readyStyle?.requestRevision === this._committedRequest.revision
         ? this._committedRequest
         : null;
+    this._desiredRequest = committed;
+    const isCurrent = (
+      record: ServiceRecord,
+      definitionRevision: number,
+      operationRevision: number,
+    ): boolean =>
+      this._desiredRequest === committed &&
+      this._registry.get(record.definition.id) === record &&
+      record.definitionRevision === definitionRevision &&
+      record.operationRevision === operationRevision;
+
+    let rollbackEvent:
+      | { record: ServiceRecord; definitionRevision: number; operationRevision: number }
+      | undefined;
     if (request.rollback && request.basemapId !== null) {
       const rollback = this._registry.get(request.basemapId);
       if (rollback?.definition.role === 'basemap') {
         rollback.definition = cloneService(request.rollback.definition);
         rollback.definitionRevision = request.rollback.definitionRevision;
-        this._emitChange(rollback.definition, 'update', rollback.state);
+        rollbackEvent = {
+          record: rollback,
+          definitionRevision: rollback.definitionRevision,
+          operationRevision: rollback.operationRevision,
+        };
       }
     }
-    this._desiredRequest = committed;
 
+    let failedEvent:
+      | { record: ServiceRecord; definitionRevision: number; operationRevision: number }
+      | undefined;
     if (request.basemapId !== null && request.basemapId !== committed?.basemapId) {
       const failed = this._registry.get(request.basemapId);
       if (
@@ -1534,11 +1554,51 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           status: 'error',
           error,
         };
-        this._emitChange(failed.definition, 'status', failed.state);
-        if (this._desiredRequest === committed && this._registry.get(failed.definition.id) === failed) {
-          this._emitChange(failed.definition, 'basemap', failed.state);
-        }
+        failedEvent = {
+          record: failed,
+          definitionRevision: failed.definitionRevision,
+          operationRevision: failed.operationRevision,
+        };
       }
+    }
+
+    const ownerId = this._errorServiceIds.get(error);
+    const owner = ownerId ? this._registry.get(ownerId) : undefined;
+    if (owner?.definition.role === 'overlay') {
+      const ownerDefinitionRevision = owner.definitionRevision;
+      const ownerOperationRevision = owner.operationRevision;
+      owner.state = {
+        id: owner.definition.id,
+        active: owner.state.active,
+        status: 'error',
+        error,
+      };
+      this._emitChange(owner.definition, 'status', owner.state);
+      if (!isCurrent(owner, ownerDefinitionRevision, ownerOperationRevision)) return;
+      this._emitFatalError(owner.definition.id, error);
+      if (!isCurrent(owner, ownerDefinitionRevision, ownerOperationRevision)) return;
+    } else {
+      this.fire('error', {
+        serviceId: ownerId,
+        phase: this._errorPhases.get(error) ?? 'lifecycle',
+        error,
+        fatal: true,
+      });
+      if (this._desiredRequest !== committed) return;
+    }
+
+    if (rollbackEvent) {
+      const { record, definitionRevision, operationRevision } = rollbackEvent;
+      this._emitChange(record.definition, 'update', record.state);
+      if (!isCurrent(record, definitionRevision, operationRevision)) return;
+    }
+
+    if (failedEvent) {
+      const { record, definitionRevision, operationRevision } = failedEvent;
+      this._emitChange(record.definition, 'status', record.state);
+      if (!isCurrent(record, definitionRevision, operationRevision)) return;
+      this._emitChange(record.definition, 'basemap', record.state);
+      if (!isCurrent(record, definitionRevision, operationRevision)) return;
     }
 
     if (committed?.basemapId !== null && committed?.basemapId !== undefined) {
@@ -1548,32 +1608,13 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         previous.definitionRevision === committed.definitionRevision
       ) {
         previous.operationRevision++;
+        const previousOperationRevision = previous.operationRevision;
         previous.state = { id: previous.definition.id, active: true, status: 'ready' };
         this._emitChange(previous.definition, 'basemap', previous.state);
-        if (
-          this._desiredRequest === committed &&
-          this._registry.get(previous.definition.id) === previous
-        ) {
-          this._emitChange(previous.definition, 'status', previous.state);
-        }
+        if (!isCurrent(previous, committed.definitionRevision, previousOperationRevision)) return;
+        this._emitChange(previous.definition, 'status', previous.state);
+        if (!isCurrent(previous, committed.definitionRevision, previousOperationRevision)) return;
       }
-    }
-
-    const ownerId = this._errorServiceIds.get(error);
-    const owner = ownerId ? this._registry.get(ownerId) : undefined;
-    if (owner?.definition.role === 'overlay') {
-      try {
-        this._publishTransitionFailure(owner, owner.operationRevision, error);
-      } catch {
-        // Reentrant listeners may supersede the failing overlay.
-      }
-    } else {
-      this.fire('error', {
-        serviceId: ownerId,
-        phase: this._errorPhases.get(error) ?? 'lifecycle',
-        error,
-        fatal: true,
-      });
     }
 
     const generation = this._readyStyle?.generation;
