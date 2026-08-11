@@ -1718,11 +1718,6 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         request.phase === 'recovery' &&
         record.state.status === 'error' &&
         !this._reconciliationJobs.has(record);
-      const publishCoordinatorReady =
-        publishRecoveryLoading ||
-        (record.state.status === 'loading' &&
-          coordinatorLoadingRevisions.get(record) === operationRevision &&
-          !this._reconciliationJobs.has(record));
       try {
         if (publishRecoveryLoading) {
           coordinatorLoadingRevisions.set(record, operationRevision);
@@ -1732,8 +1727,22 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         await this._reconcileOverlayForGeneration(record, operationRevision, generation);
         this._assertCurrentOperation(record, operationRevision);
         this._reconciliationFailures.delete(record);
-        if (publishCoordinatorReady) {
-          if (this._desiredRequest !== request) break;
+        const coordinatorRevision = coordinatorLoadingRevisions.get(record);
+        const independentJob = this._reconciliationJobs.has(record);
+        if (
+          coordinatorRevision === operationRevision &&
+          (record.state.status !== 'loading' || independentJob)
+        ) {
+          coordinatorLoadingRevisions.delete(record);
+        }
+        if (
+          this._desiredRequest === request &&
+          record.state.status === 'loading' &&
+          coordinatorLoadingRevisions.get(record) === operationRevision &&
+          !this._reconciliationJobs.has(record)
+        ) {
+          this._assertCurrentOperation(record, operationRevision);
+          this._assertStyleGeneration(generation);
           this._setStatus(record, operationRevision, 'ready');
           if (coordinatorLoadingRevisions.get(record) === operationRevision) {
             coordinatorLoadingRevisions.delete(record);
