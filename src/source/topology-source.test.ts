@@ -202,6 +202,28 @@ describe('TopologySource.export', () => {
 });
 
 describe('TopologySource.setData', () => {
+  it('imports every shapefile in one zip', async () => {
+    const runImport = vi.fn(async () => FAKE_DATASET);
+    const source = new TopologySource('t', { adapter: { runImport } });
+    const content = zipSync({
+      'roads.shp': new Uint8Array([1]),
+      'roads.dbf': new Uint8Array([2]),
+      'districts.SHP': new Uint8Array([3]),
+      'districts.DBF': new Uint8Array([4]),
+    });
+
+    await source.setData({ filename: 'multiple.zip', content });
+
+    expect(runImport).toHaveBeenCalledTimes(1);
+    expect(runImport.mock.calls[0][0]).toBe('-i "roads.shp" "districts.SHP"');
+    expect(Object.keys(runImport.mock.calls[0][1]).sort()).toEqual([
+      'districts.DBF',
+      'districts.SHP',
+      'roads.dbf',
+      'roads.shp',
+    ]);
+  });
+
   it('derives filenames from root-relative URLs before import', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
@@ -721,6 +743,14 @@ describe('TopologySource._extractZip — resource limits', () => {
     const out = await callExtract(source, buf);
     expect(Object.keys(out).sort()).toEqual(['a.dbf', 'a.prj', 'a.shp']);
   });
+
+  it('accepts a 201 MiB archive with the default maxBytes limit', async () => {
+    const buf = zipSync({ 'large.shp': new Uint8Array(201 * 1024 * 1024) });
+    const source = new TopologySource('t', {
+      zipLimits: { maxRatio: Number.POSITIVE_INFINITY },
+    });
+    await expect(callExtract(source, buf)).resolves.toHaveProperty('large.shp');
+  }, 15_000);
 
   it('throws when entry count exceeds maxEntries', async () => {
     const entries: Record<string, Uint8Array> = {};

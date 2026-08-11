@@ -12,6 +12,7 @@ const expectedIds = [
   'getting-started/lines',
   'getting-started/polygons',
   'getting-started/polygon-fill',
+  'getting-started/shapefile-viewer',
   'attribute-editing',
   'attribute-expressions',
   'data-engineering',
@@ -146,13 +147,153 @@ describe('example catalog metadata', () => {
     const root = document.createElement('div');
     renderCatalog(root, examples);
 
-    const links = Array.from(root.querySelectorAll<HTMLAnchorElement>('.primary-link'));
+    const links = Array.from(root.querySelectorAll<HTMLAnchorElement>('a.example-card'));
     expect(links).toHaveLength(examples.length);
 
-    for (const [index, link] of links.entries()) {
-      expect(link.getAttribute('href')).toBe(`/mapseekai/emap/examples/${examples[index].id}/`);
+    const hrefs = links.map((link) => link.getAttribute('href'));
+    for (const example of examples) {
+      expect(hrefs).toContain(`/mapseekai/emap/examples/${example.id}/`);
+    }
+    for (const link of links) {
       expect(link.getAttribute('href')).not.toContain('#');
     }
+  });
+
+  it('groups examples by category and filters from the category rail', () => {
+    const root = document.createElement('div');
+    renderCatalog(root, examples);
+
+    expect(root.querySelectorAll('.catalog-category-button')).toHaveLength(11);
+    expect(root.querySelectorAll('.catalog-group')).toHaveLength(10);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(54);
+
+    root.querySelector<HTMLButtonElement>('[data-category="data"]')?.click();
+
+    expect(root.querySelectorAll('.catalog-group')).toHaveLength(1);
+    expect(root.querySelector('.catalog-group-title')?.textContent).toBe('数据');
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(9);
+    expect(root.querySelector('[data-category="data"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(root.querySelector('.catalog-results-summary')?.textContent).toContain('9');
+  });
+
+  it('searches localized text, ids, tags, and API identifiers', () => {
+    const root = document.createElement('div');
+    renderCatalog(root, examples);
+    const search = root.querySelector<HTMLInputElement>('.catalog-search-input');
+    if (!search) throw new Error('Catalog search was not rendered');
+
+    search.value = '自动缩放到全部要素范围';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(
+      Array.from(root.querySelectorAll('.example-card-title'), ({ textContent }) => textContent),
+    ).toEqual(['GeoJSON 查看器']);
+
+    search.value = '  topologySOURCE.FROMbytes  ';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(
+      Array.from(root.querySelectorAll('.example-card-title'), ({ textContent }) => textContent),
+    ).toEqual(['GeoParquet / GeoArrow 查看器', '导出 GeoParquet / GeoArrow', '导出往返']);
+
+    search.value = 'getting-started/lines';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(1);
+
+    search.value = 'box-select';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(2);
+
+    const language = root.querySelector<HTMLSelectElement>('.catalog-language select');
+    if (!language) throw new Error('Catalog language selector was not rendered');
+    language.value = 'en';
+    language.dispatchEvent(new Event('change'));
+    const englishSearch = root.querySelector<HTMLInputElement>('.catalog-search-input');
+    if (!englishSearch) throw new Error('English catalog search was not rendered');
+    englishSearch.value = 'immediately reimports a dataset';
+    englishSearch.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(
+      Array.from(root.querySelectorAll('.example-card-title'), ({ textContent }) => textContent),
+    ).toEqual(['Export roundtrip']);
+  });
+
+  it('combines filters, clears search, and renders an empty result', () => {
+    const root = document.createElement('div');
+    renderCatalog(root, examples);
+    root.querySelector<HTMLButtonElement>('[data-category="data"]')?.click();
+    const search = root.querySelector<HTMLInputElement>('.catalog-search-input');
+    if (!search) throw new Error('Catalog search was not rendered');
+
+    search.value = 'TopologySource.fromBytes';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(3);
+
+    search.value = 'no-such-example';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(root.querySelector('.catalog-empty')).not.toBeNull();
+
+    root.querySelector<HTMLButtonElement>('.catalog-empty-clear')?.click();
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(9);
+    expect(root.querySelector<HTMLInputElement>('.catalog-search-input')?.value).toBe('');
+  });
+
+  it('preserves control focus and the live result region across catalog updates', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+
+    try {
+      renderCatalog(root, examples);
+      const dataButton = root.querySelector<HTMLButtonElement>('[data-category="data"]');
+      if (!dataButton) throw new Error('Data category button was not rendered');
+      dataButton.focus();
+      dataButton.click();
+
+      expect(document.activeElement).toBe(
+        root.querySelector<HTMLButtonElement>('[data-category="data"]'),
+      );
+
+      const liveRegion = root.querySelector('.catalog-results-summary');
+      const search = root.querySelector<HTMLInputElement>('.catalog-search-input');
+      if (!search) throw new Error('Catalog search was not rendered');
+      search.value = 'TopologySource.fromBytes';
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+      expect(root.querySelector('.catalog-results-summary')).toBe(liveRegion);
+
+      const language = root.querySelector<HTMLSelectElement>('.catalog-language select');
+      if (!language) throw new Error('Catalog language selector was not rendered');
+      language.focus();
+      language.value = 'en';
+      language.dispatchEvent(new Event('change'));
+      expect(document.activeElement).toBe(
+        root.querySelector<HTMLSelectElement>('.catalog-language select'),
+      );
+    } finally {
+      root.remove();
+    }
+  });
+
+  it('renders the technical catalog shell and compact card metadata', () => {
+    const root = document.createElement('div');
+    renderCatalog(root, examples);
+
+    expect(document.body.classList.contains('catalog-root')).toBe(true);
+    expect(root.querySelector('.catalog-brand img')?.getAttribute('src')).toBe(
+      '/mapseekai/emap/examples/emap.svg',
+    );
+    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('54');
+
+    const firstCard = root.querySelector<HTMLAnchorElement>(
+      'a.example-card[href="/mapseekai/emap/examples/getting-started/geojson-viewer/"]',
+    );
+    expect(firstCard?.querySelector('.example-api-chip')?.textContent).toBe('Emap');
+    expect(firstCard?.querySelector('.example-card-arrow')?.getAttribute('aria-hidden')).toBe(
+      'true',
+    );
+
+    const mobileCategory = root.querySelector<HTMLSelectElement>('.catalog-mobile-category select');
+    expect(mobileCategory?.options).toHaveLength(11);
+    if (!mobileCategory) throw new Error('Mobile category selector was not rendered');
+    mobileCategory.value = 'duckdb';
+    mobileCategory.dispatchEvent(new Event('change'));
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(5);
   });
 
   it('defaults to Chinese and switches the complete catalog to English', () => {
@@ -162,11 +303,13 @@ describe('example catalog metadata', () => {
     expect(document.documentElement.lang).toBe('zh-CN');
     expect(document.title).toBe('Emap 文档示例');
     expect(root.querySelector('h1')?.textContent).toBe('Emap 文档示例');
-    expect(root.querySelector('h2')?.textContent).toBe(examples[0].title.zh);
+    expect(root.querySelector('.example-card-title')?.textContent).toBe(examples[0].title.zh);
     expect(root.querySelector('.example-description')?.textContent).toBe(
       examples[0].description.zh,
     );
-    expect(root.querySelector('.primary-link')?.textContent).toBe('打开示例');
+    expect(root.querySelector('a.example-card')?.getAttribute('aria-label')).toBe(
+      `打开示例：${examples[0].title.zh}`,
+    );
     expect(root.textContent).not.toContain('packages/examples/');
 
     const language = root.querySelector<HTMLSelectElement>('.catalog-language select');
@@ -176,14 +319,38 @@ describe('example catalog metadata', () => {
     language.dispatchEvent(new Event('change'));
 
     expect(document.documentElement.lang).toBe('en');
-    expect(root.querySelector('h2')?.textContent).toBe(examples[0].title.en);
+    expect(root.querySelector('.example-card-title')?.textContent).toBe(examples[0].title.en);
     expect(root.querySelector('.example-description')?.textContent).toBe(
       examples[0].description.en,
     );
     expect(document.title).toBe('Emap Documentation Example');
     expect(root.querySelector('h1')?.textContent).toBe('Emap Documentation Example');
-    expect(root.querySelector('.primary-link')?.textContent).toBe('Open example');
+    expect(root.querySelector('a.example-card')?.getAttribute('aria-label')).toBe(
+      `Open example: ${examples[0].title.en}`,
+    );
     expect(root.textContent).not.toContain('packages/examples/');
+  });
+
+  it('preserves the selected category and query when switching locale', () => {
+    const root = document.createElement('div');
+    renderCatalog(root, examples);
+    root.querySelector<HTMLButtonElement>('[data-category="data"]')?.click();
+
+    const search = root.querySelector<HTMLInputElement>('.catalog-search-input');
+    if (!search) throw new Error('Catalog search was not rendered');
+    search.value = 'export';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const language = root.querySelector<HTMLSelectElement>('.catalog-language select');
+    if (!language) throw new Error('Catalog language selector was not rendered');
+    language.value = 'en';
+    language.dispatchEvent(new Event('change'));
+
+    expect(root.querySelector<HTMLInputElement>('.catalog-search-input')?.value).toBe('export');
+    expect(root.querySelector('[data-category="data"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(
+      Array.from(root.querySelectorAll('.example-card-title'), ({ textContent }) => textContent),
+    ).toEqual(['Export GeoParquet / GeoArrow', 'Export roundtrip']);
   });
 
   it('ships one canonical runnable HTML page for every metadata entry', async () => {
@@ -212,6 +379,24 @@ describe('example catalog metadata', () => {
       );
       expect(html, `${example.id} uses local starter data`).not.toContain('https://geojson.cn/');
     }
+  });
+
+  it('keeps the Shapefile viewer map-first with one banner and one floating workbench', async () => {
+    const html = await readFile(
+      resolve('packages/examples/examples/getting-started/shapefile-viewer/index.html'),
+      'utf8',
+    );
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    const workbench = parsed.querySelector('body > details.shp-workbench.panel');
+
+    expect(parsed.body.classList.contains('emap-example-with-floating-header')).toBe(true);
+    expect(parsed.querySelectorAll('header, #header')).toHaveLength(1);
+    expect(parsed.querySelector('body > #header')).not.toBeNull();
+    expect(parsed.querySelector('body > #map')).not.toBeNull();
+    expect(workbench?.hasAttribute('open')).toBe(true);
+    expect(workbench?.querySelector('#shp-load-form')).not.toBeNull();
+    expect(workbench?.querySelector('#shp-metadata')).not.toBeNull();
+    expect(parsed.querySelector('.shp-page, .shp-topbar, .shp-content, .shp-workspace')).toBeNull();
   });
 
   it('exposes live line color, width, and dash controls', async () => {

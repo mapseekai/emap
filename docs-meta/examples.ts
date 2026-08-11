@@ -54,6 +54,10 @@ const exampleDescriptions = {
     zh: '加载同时包含点、线和面的 GeoJSON，并自动缩放到全部要素范围。',
     en: 'Loads GeoJSON containing points, lines, and polygons, then fits the map to every feature.',
   },
+  'getting-started/shapefile-viewer': {
+    zh: '加载 ZIP Shapefile，并在读取前指定或自动识别输入坐标系。',
+    en: 'Loads a ZIP Shapefile with an explicit or archive-detected input CRS.',
+  },
   'getting-started/points': {
     zh: '加载面或线要素，并按几何中心、顶点、端点或插值采样等方式转换为点图层。',
     en: 'Loads polygon or line features and converts them into points using centroids, vertices, endpoints, or interpolated samples.',
@@ -324,6 +328,16 @@ const seeds: readonly ExampleDefinition[] = [
 ];
 
 const recipes: readonly ExampleDefinition[] = [
+  recipe(
+    'getting-started/shapefile-viewer',
+    'getting-started',
+    'Shapefile 查看器',
+    'Shapefile viewer',
+    [docsFormats, docsCrs, docsFileUpload, docsErrorHandling],
+    'TopologySource',
+    ['shapefile', 'crs', 'formats'],
+    [],
+  ),
   recipe('attribute-editing', 'data', '属性编辑', 'Attribute editing', [docsAttributes, docsEditing, docsUndoRedo], 'Emap', ['attributes', 'history'], [task6Fixture]),
   recipe('attribute-expressions', 'data', '属性表达式批量更新', 'Attribute expressions', [docsAttributes, docsMigration], 'Emap', ['expressions', 'attributes', 'history'], [task6Fixture]),
   recipe('data-engineering', 'data', '数据工程批次', 'Data engineering batch', [docsOperations, docsAttributes], 'Emap', ['expressions', 'layer-ops', 'history'], [task6Fixture]),
