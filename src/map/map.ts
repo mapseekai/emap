@@ -126,6 +126,8 @@ import {
   type RenderAction,
   type AffineDelta,
 } from './types';
+import type { MapLibreIntegrationOptions, MapLibreServiceManager } from './maplibre-service';
+import { createMapLibreServiceManager } from './maplibre-service-manager';
 
 interface PreparedSourceRegistration {
   readonly token: symbol;
@@ -216,6 +218,9 @@ export class Emap extends EventDispatcher {
   // `removeControl()` — that would require both an Array and a Set —
   // and the array is short-lived so the duplicate is harmless.
   private _controls: ControlContract<Emap>[] = [];
+
+  private _mapLibreOptions?: MapLibreIntegrationOptions;
+  private _mapLibreServices?: ReturnType<typeof createMapLibreServiceManager>;
 
   // Delegated managers. `_selection` and `_history` are read by composed
   // managers via `EmapHostInternal`; the rest stay private.
@@ -474,6 +479,12 @@ export class Emap extends EventDispatcher {
         });
       }
     }
+
+    this._mapLibreOptions = options.mapLibre;
+    if (this._mapLibreOptions) {
+      this._mapLibreServices = createMapLibreServiceManager(this, this._mapLibreOptions);
+      void this._mapLibreServices.initialize().catch(() => undefined);
+    }
   }
 
   /**
@@ -623,6 +634,13 @@ export class Emap extends EventDispatcher {
 
   public getCanvasContainer(): HTMLElement {
     return this._canvasContainer;
+  }
+
+  public get mapLibreServices(): MapLibreServiceManager {
+    return (this._mapLibreServices ??= createMapLibreServiceManager(
+      this,
+      this._mapLibreOptions,
+    ));
   }
 
   public getEditMode(): EditMode {
@@ -2405,6 +2423,9 @@ export class Emap extends EventDispatcher {
     }
     controls.length = 0;
     this._controlContainers?.clear();
+
+    this._mapLibreServices?.destroy();
+    this._mapLibreServices = undefined;
 
     // Active edit overlay state — clearing through the store fires the
     // change callback, which is harmless after `_removed` because

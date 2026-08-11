@@ -69,6 +69,18 @@ export type {
   LoadSnapshotOptions,
 } from './map/map';
 export type { VisibleLayerLookup } from './map/structured-keys';
+export type {
+  MapLibreService,
+  MapLibreBasemapService,
+  MapLibreOverlayService,
+  MapLibreIntegrationOptions,
+  MapLibreServiceState,
+  MapLibreServiceChangeReason,
+  MapLibreServiceChangeEvent,
+  MapLibreServiceErrorEvent,
+  MapLibreServiceEventMap,
+  MapLibreServiceManager,
+} from './map/maplibre-service';
 
 // ===========================================================================
 // Layers + selection + highlights

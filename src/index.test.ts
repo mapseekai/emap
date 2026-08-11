@@ -18,4 +18,8 @@ describe('public export surface (DX P1 additions)', () => {
   it('exports the format-plugin registry hook (arrow-free core surface)', () => {
     expect(typeof emap.registerFormat).toBe('function');
   });
+
+  it('keeps BasemapControl as a runtime export', () => {
+    expect(typeof emap.BasemapControl).toBe('function');
+  });
 });
