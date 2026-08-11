@@ -816,6 +816,49 @@ describe('MapLibreServiceManager basemap style coordinator', () => {
     expect(statuses).toEqual(['error', 'loading', 'ready']);
   });
 
+  it('publishes ready when a recovery loading listener selects a newer basemap', async () => {
+    const { manager } = createManager([base, dark, { ...roads, visible: true }], {
+      defaultBasemap: 'light',
+    });
+    const statuses: string[] = [];
+    let replacement: Promise<void> | undefined;
+    manager.on('change', (event) => {
+      if (event.serviceId !== 'roads' || event.reason !== 'status' || !event.state) return;
+      statuses.push(event.state.status);
+      if (event.state.status === 'loading' && !replacement) {
+        replacement = manager.setBasemap('dark');
+      }
+    });
+    const styleError = new Error('initial basemap style failed');
+    const initialization = manager.initialize().catch((error: unknown) => error);
+    const map = await waitForFakeMap();
+
+    map.emit('error', { error: styleError });
+    await waitForCondition(() => {
+      const style = map.setStyleCalls.at(-1);
+      return typeof style === 'object' && style !== null;
+    }, 'blank recovery did not start after the initial basemap failure');
+    map.emit('style.load');
+    await waitForCondition(
+      () => map.setStyleCalls.at(-1) === dark.style,
+      'listener-selected basemap did not replace blank recovery',
+    );
+
+    map.emit('style.load');
+    await expect(initialization).resolves.toBe(styleError);
+    await replacement;
+
+    expect([...map.sources.keys()]).toEqual(['roads']);
+    expect(map.layerOrder).toEqual(['roads-line']);
+    expect(manager.getServiceState('roads')).toEqual({
+      id: 'roads',
+      active: true,
+      status: 'ready',
+    });
+    expect(manager.getServiceState('dark')).toMatchObject({ active: true, status: 'ready' });
+    expect(statuses).toEqual(['error', 'loading', 'ready']);
+  });
+
   it('treats constructor style readiness as the first in-flight request', async () => {
     const { manager } = createManager([base, roads]);
     const overlay = manager.setOverlayVisibility('roads', true);

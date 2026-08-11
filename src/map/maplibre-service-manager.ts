@@ -1714,26 +1714,46 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       if (this._desiredRequest !== request) break;
       if (record.definition.role !== 'overlay' || !record.state.active) continue;
       const operationRevision = record.operationRevision;
-      const publishRecoveryStatus =
+      const publishRecoveryLoading =
         request.phase === 'recovery' &&
         record.state.status === 'error' &&
         !this._reconciliationJobs.has(record);
+      const publishCoordinatorReady =
+        publishRecoveryLoading ||
+        (record.state.status === 'loading' &&
+          coordinatorLoadingRevisions.get(record) === operationRevision &&
+          !this._reconciliationJobs.has(record));
       try {
-        if (publishRecoveryStatus) {
+        if (publishRecoveryLoading) {
+          coordinatorLoadingRevisions.set(record, operationRevision);
           this._setStatus(record, operationRevision, 'loading');
           if (this._desiredRequest !== request) break;
         }
         await this._reconcileOverlayForGeneration(record, operationRevision, generation);
         this._assertCurrentOperation(record, operationRevision);
         this._reconciliationFailures.delete(record);
-        if (publishRecoveryStatus) {
+        if (publishCoordinatorReady) {
           if (this._desiredRequest !== request) break;
           this._setStatus(record, operationRevision, 'ready');
+          if (coordinatorLoadingRevisions.get(record) === operationRevision) {
+            coordinatorLoadingRevisions.delete(record);
+          }
           if (this._desiredRequest !== request) break;
         }
       } catch (value) {
         const error = toError(value);
-        if (error.name === 'AbortError') break;
+        if (error.name === 'AbortError') {
+          if (
+            !this._isCurrentOperation(record, operationRevision) &&
+            coordinatorLoadingRevisions.get(record) === operationRevision
+          ) {
+            coordinatorLoadingRevisions.delete(record);
+          }
+          break;
+        }
+        if (coordinatorLoadingRevisions.get(record) === operationRevision) {
+          coordinatorLoadingRevisions.delete(record);
+        }
         this._reconciliationFailures.set(record, { generation, error });
         if (record.state.status !== 'idle' && !this._reconciliationJobs.has(record)) {
           try {
@@ -2134,3 +2154,5 @@ export function createMapLibreServiceManager(
 ): MapLibreServiceManagerImpl {
   return new MapLibreServiceManagerImpl(host, options, loadMapLibre);
 }
+
+const coordinatorLoadingRevisions = new WeakMap<ServiceRecord, number>();
