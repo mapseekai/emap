@@ -222,9 +222,53 @@ handler.setOptions({...});
 handler.getOptions();
 ```
 
-内置控件包括 `NavigationControl`、`StatusControl`、`BasemapControl`、
-`HistoryControl`、`EditToolbar`、`VertexEditControl`、`DrawFeatureControl`、
-`BoxSelectControl`、`LassoSelectControl` 和 `SimplifyControl`。
+## 在线地图服务与内置控件
+
+可在创建地图时注册原生 MapLibre 底图和在线叠加层：
+
+```ts
+const map = new Emap({
+  container: 'map',
+  mapLibre: {
+    services: [
+      {
+        id: 'osm',
+        name: 'OpenStreetMap',
+        role: 'basemap',
+        style: {
+          version: 8,
+          sources: {
+            osm: {
+              type: 'raster',
+              tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+              tileSize: 256,
+            },
+          },
+          layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+        },
+      },
+    ],
+    defaultBasemap: 'osm',
+  },
+});
+```
+
+MapLibre 画布始终位于所有 Emap 图层下方，且同一时间最多只能激活一个已注册底图；
+在线叠加层也绘制在这个下层画布中。
+
+| 控件 | 用途 |
+|---|---|
+| `NavigationControl` | 放大、缩小和重置视图 |
+| `StatusControl` | 显示指针坐标与 CRS |
+| `BasemapControl` | 在已注册的 MapLibre 底图中单选 |
+| `LayerControl` | 切换 Emap 业务图层与 MapLibre 在线叠加层 |
+| `HistoryControl` | 撤销与重做 |
+| `EditToolbar` | 组合编辑工具栏 |
+| `VertexEditControl` | 切换 `map.vertexEdit` |
+| `DrawFeatureControl` | 切换 `map.drawFeature` |
+| `BoxSelectControl` | 切换 `map.boxSelect` |
+| `LassoSelectControl` | 切换 `map.lassoSelect` |
+| `SimplifyControl` | 简化操作界面 |
 
 ## 数据操作、事务与校验
 
@@ -298,7 +342,8 @@ pnpm run build          # 生产构建到 dist/
 
 ## 已知限制
 
-- 当前为 Canvas 2D 渲染器，不提供 WebGL 渲染、符号排布、矢量瓦片数据源或服务端瓦片管线。
+- Emap 业务图层使用 Canvas 2D 渲染；原生 MapLibre 服务使用独立的下层画布。Emap
+  本身不提供 WebGL 渲染、符号排布、矢量瓦片数据源或服务端瓦片管线。
 - 大型多边形数据的填充渲染比线条渲染开销更高；大数据浏览建议优先显示边线，并在适当
   比例尺或过滤条件下启用填充。
 - 坐标参考系支持依赖于内置 Mapshaper/投影路径；构建面向最终用户的编辑流程前，请验证

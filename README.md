@@ -888,11 +888,44 @@ Override CSS tokens at `:root` or an app-specific container:
 
 ## Built-In Controls
 
+Native MapLibre basemaps and online overlays can be registered with the map:
+
+```ts
+const map = new Emap({
+  container: 'map',
+  mapLibre: {
+    services: [
+      {
+        id: 'osm',
+        name: 'OpenStreetMap',
+        role: 'basemap',
+        style: {
+          version: 8,
+          sources: {
+            osm: {
+              type: 'raster',
+              tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+              tileSize: 256,
+            },
+          },
+          layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+        },
+      },
+    ],
+    defaultBasemap: 'osm',
+  },
+});
+```
+
+The MapLibre canvas always sits below every Emap layer. Only one registered
+basemap can be active at a time; online overlays share that lower canvas.
+
 | Control | Purpose |
 |---|---|
 | `NavigationControl` | Zoom in, zoom out, reset |
 | `StatusControl` | Pointer coordinates and CRS |
-| `BasemapControl` | MapLibre raster basemap toggle |
+| `BasemapControl` | Select one registered MapLibre basemap |
+| `LayerControl` | Toggle Emap business layers and MapLibre online overlays |
 | `HistoryControl` | Undo/redo buttons |
 | `EditToolbar` | Combined edit toolbar |
 | `VertexEditControl` | Button shell over `map.vertexEdit` |
@@ -909,8 +942,9 @@ Override CSS tokens at `:root` or an app-specific container:
   because area fills require full polygon path materialization and fill rules.
   For large-data browsing, keep polygon layers outline-first and enable fills
   only at suitable scales or for filtered subsets.
-- Rendering is Canvas 2D only. There is no WebGL renderer, symbol placement
-  engine, tiled vector source, or server-side tile pipeline.
+- Emap business layers render with Canvas 2D. Native MapLibre services use a
+  separate lower canvas; Emap itself does not provide a WebGL renderer, symbol
+  placement engine, tiled vector source, or server-side tile pipeline.
 - CRS support follows the bundled Mapshaper/projection path and common browser
   data workflows. Validate project-specific CRS definitions before building
   user-facing editing workflows around them.
