@@ -22,9 +22,11 @@ class FakeMap {
   readonly layerOrder: string[] = [];
   readonly resourceSnapshots: Array<{ sources: string[]; layers: string[] }> = [];
   readonly setStyleCalls: Array<string | maplibregl.StyleSpecification | null> = [];
+  readonly setStyleOptions: Array<{ diff?: boolean } | undefined> = [];
   readonly operations: string[] = [];
   readonly jumpToCalls: Array<{ center: [number, number]; zoom: number }> = [];
   readonly ignoredRemovals = new Set<string>();
+  readonly removeFailures = new Map<string, Error>();
   readonly addFailures = new Map<string, FakeAddFailure>();
   readonly offCalls: string[] = [];
   readonly offErrors = new Map<string, Error>();
@@ -36,6 +38,7 @@ class FakeMap {
   styleLoading = true;
   styleRevision = 0;
   operationHook: ((operation: string) => void) | null = null;
+  private _currentStyle: string | maplibregl.StyleSpecification | null;
   private readonly _listeners = new Map<string, Set<FakeMapListener>>();
 
   constructor(options: maplibregl.MapOptions) {
@@ -46,6 +49,7 @@ class FakeMap {
       throw error;
     }
     this.options = options;
+    this._currentStyle = options.style ?? null;
     FakeMap.instances.push(this);
   }
 
@@ -73,7 +77,10 @@ class FakeMap {
     return this._listeners.get(type)?.size ?? 0;
   }
 
-  setStyle(style: string | maplibregl.StyleSpecification | null): void {
+  setStyle(
+    style: string | maplibregl.StyleSpecification | null,
+    options?: { diff?: boolean },
+  ): void {
     this.styleRevision++;
     if (style !== null && this.styleLoading) this.setStyleWhileLoading++;
     this.resourceSnapshots.push({
@@ -82,11 +89,18 @@ class FakeMap {
     });
     this.operations.push('setStyle');
     this.setStyleCalls.push(style);
+    this.setStyleOptions.push(options);
     const error = this.nextSetStyleError;
     this.nextSetStyleError = null;
     if (error && style !== null) {
       this.styleLoading = false;
       throw error;
+    }
+    const sameStyle = JSON.stringify(style) === JSON.stringify(this._currentStyle);
+    this._currentStyle = style;
+    if (style !== null && sameStyle && options?.diff !== false) {
+      this.styleLoading = false;
+      return;
     }
     this.styleLoading = style !== null;
     if (style === null || FakeMap.rebuildOnSetStyle) {
@@ -127,6 +141,11 @@ class FakeMap {
 
   removeSource(id: string): void {
     this.operations.push(`removeSource:${id}`);
+    const failure = this.removeFailures.get(`source:${id}`);
+    if (failure) {
+      this.removeFailures.delete(`source:${id}`);
+      throw failure;
+    }
     if (this.ignoredRemovals.has(id)) return;
     this.sources.delete(id);
   }
@@ -158,6 +177,11 @@ class FakeMap {
 
   removeLayer(id: string): void {
     this.operations.push(`removeLayer:${id}`);
+    const failure = this.removeFailures.get(`layer:${id}`);
+    if (failure) {
+      this.removeFailures.delete(`layer:${id}`);
+      throw failure;
+    }
     if (this.ignoredRemovals.has(id)) return;
     this.layers.delete(id);
     const index = this.layerOrder.indexOf(id);
@@ -1269,6 +1293,268 @@ describe('MapLibreServiceManager style failures and transactional mutations', ()
       status: 'error',
       error: { message: 'source failed' },
     });
+  });
+});
+
+describe('MapLibreServiceManager coordinator review regressions', () => {
+  it('forces a terminal rebuild for identical basemap styles and admits the next request', async () => {
+    const sharedLight = { ...base, style: 'https://example.test/shared.json' };
+    const sharedDark = { ...dark, style: sharedLight.style };
+    const { manager } = createManager(
+      [sharedLight, sharedDark, streets, { ...roads, visible: true }],
+      { defaultBasemap: 'light' },
+    );
+    const initialization = manager.initialize();
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await initialization;
+
+    const identical = manager.setBasemap('dark');
+
+    expect(map.setStyleCalls.at(-1)).toBe(sharedDark.style);
+    expect(map.setStyleOptions.at(-1)).toEqual({ diff: false });
+    map.emit('style.load');
+    await identical;
+    expect(map.layerOrder).toEqual(['roads-line']);
+
+    const later = manager.setBasemap('streets');
+    expect(map.setStyleCalls.at(-1)).toBe(streets.style);
+    map.emit('style.load');
+    await later;
+
+    expect(manager.getServiceState('streets')).toEqual({
+      id: 'streets',
+      active: true,
+      status: 'ready',
+    });
+    expect(
+      map.operations.filter((operation) => operation === 'addSource:roads'),
+    ).toHaveLength(3);
+  });
+
+  it.each([
+    { trigger: 'error' as const, action: 'clear' as const },
+    { trigger: 'status' as const, action: 'clear' as const },
+    { trigger: 'basemap' as const, action: 'clear' as const },
+    { trigger: 'error' as const, action: 'remove' as const },
+    { trigger: 'status' as const, action: 'remove' as const },
+    { trigger: 'basemap' as const, action: 'remove' as const },
+  ])(
+    'lets a reentrant $action from the fatal $trigger event supersede failed publication',
+    async ({ trigger, action }) => {
+      const { manager } = createManager([base, dark]);
+      const activation = manager.setBasemap('light');
+      const map = await waitForFakeMap();
+      map.emit('style.load');
+      await activation;
+      const failed = manager.setBasemap('dark').catch((error: unknown) => error);
+      const events: string[] = [];
+      let actionPromise: Promise<void> | undefined;
+      let invoked = false;
+      const runAction = () => {
+        if (invoked) return;
+        invoked = true;
+        actionPromise =
+          action === 'clear' ? manager.setBasemap(null) : manager.removeService('dark');
+      };
+      manager.on('error', (event) => {
+        if (event.serviceId !== 'dark') return;
+        events.push('error');
+        if (trigger === 'error') runAction();
+      });
+      manager.on('change', (event) => {
+        if (event.serviceId !== 'dark' || !event.state) return;
+        if (event.reason === 'status' || event.reason === 'basemap') {
+          events.push(event.reason);
+          if (event.reason === trigger && event.state.status === 'error') runAction();
+        }
+      });
+      const styleError = new Error('dark failed reentrantly');
+      const callCount = map.setStyleCalls.length;
+
+      map.emit('error', { error: styleError });
+      await actionPromise;
+      await Promise.resolve();
+      const callsAfterFailure = map.setStyleCalls.slice(callCount);
+      if (map.styleLoading) map.emit('style.load');
+
+      await expect(failed).resolves.toBe(styleError);
+      expect(invoked).toBe(true);
+      expect(callsAfterFailure).toEqual([null]);
+      const triggerIndex = events.indexOf(trigger);
+      expect(triggerIndex).toBeGreaterThanOrEqual(0);
+      expect(events.slice(triggerIndex + 1)).toEqual([]);
+      if (action === 'remove') expect(manager.getServiceState('dark')).toBeUndefined();
+      else expect(manager.getServiceState('dark')).toMatchObject({ active: false, status: 'error' });
+      expect(manager.getServiceState('light')).toMatchObject({ active: false });
+    },
+  );
+
+  it('updates a suspended active basemap without reprojecting the host', async () => {
+    const { host, manager } = createManager(
+      [base, { ...roads, visible: true }],
+      { defaultBasemap: 'light' },
+    );
+    const initialization = manager.initialize();
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await initialization;
+    host.setCRS('epsg:4326');
+    host.emit('crschange');
+    host.reproject.mockClear();
+    const replacement = {
+      ...base,
+      name: 'Replacement light',
+      style: 'https://example.test/replacement-light.json',
+    };
+    const previousCalls = map.setStyleCalls.length;
+
+    const update = manager.updateService('light', replacement);
+    await waitForCondition(
+      () => host.reproject.mock.calls.length > 0 || map.setStyleCalls.length > previousCalls,
+      'suspended active basemap update did not start',
+    );
+
+    expect(host.reproject).not.toHaveBeenCalled();
+    expect(map.setStyleCalls.at(-1)).toBe(replacement.style);
+    map.emit('style.load');
+    await update;
+    expect((map.options.container as HTMLElement).hidden).toBe(true);
+  });
+
+  it.each(['clear', 'remove'] as const)(
+    '$s a suspended active basemap with a visible overlay without reprojecting',
+    async (action) => {
+      const { host, manager } = createManager(
+        [base, { ...roads, visible: true }],
+        { defaultBasemap: 'light' },
+      );
+      const initialization = manager.initialize();
+      const map = await waitForFakeMap();
+      map.emit('style.load');
+      await initialization;
+      host.setCRS('epsg:4326');
+      host.emit('crschange');
+      host.reproject.mockClear();
+      const previousCalls = map.setStyleCalls.length;
+
+      const mutation =
+        action === 'clear' ? manager.setBasemap(null) : manager.removeService('light');
+      await waitForCondition(
+        () => host.reproject.mock.calls.length > 0 || map.setStyleCalls.length > previousCalls,
+        'suspended basemap deactivation did not start',
+      );
+
+      expect(host.reproject).not.toHaveBeenCalled();
+      expect(map.setStyleCalls.at(-1)).toEqual({ version: 8, sources: {}, layers: [] });
+      map.emit('style.load');
+      await mutation;
+      expect((map.options.container as HTMLElement).hidden).toBe(true);
+      if (action === 'remove') expect(manager.getServiceState('light')).toBeUndefined();
+      else expect(manager.getServiceState('light')).toMatchObject({ active: false });
+    },
+  );
+
+  it.each(['layer', 'source'] as const)(
+    'preserves a managed $s detachment failure phase and owner before switching styles',
+    async (phase) => {
+      const { manager } = createManager([base, traffic]);
+      const map = await activateOverlay(manager, 'traffic');
+      const error = new Error(`${phase} detach failed`);
+      map.removeFailures.set(
+        phase === 'layer' ? 'layer:traffic-line' : 'source:traffic',
+        error,
+      );
+      const errors: Array<{ serviceId?: string; phase: string; error: Error }> = [];
+      manager.on('error', (event) =>
+        errors.push({ serviceId: event.serviceId, phase: event.phase, error: event.error }),
+      );
+      const callCount = map.setStyleCalls.length;
+
+      const selection = manager.setBasemap('light').catch((value: unknown) => value);
+
+      await expect(selection).resolves.toBe(error);
+      expect(errors).toEqual([{ serviceId: 'traffic', phase, error }]);
+      expect(map.setStyleCalls).toHaveLength(callCount);
+    },
+  );
+
+  it('publishes one fatal style error when a requested blank style fails, then recovers', async () => {
+    const { manager } = createManager(
+      [base, { ...roads, visible: true }],
+      { defaultBasemap: 'light' },
+    );
+    const initialization = manager.initialize();
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await initialization;
+    const errors: Array<{ serviceId?: string; phase: string; fatal: boolean; error: Error }> = [];
+    manager.on('error', (event) => errors.push(event));
+    const blankError = new Error('blank switch failed');
+
+    const clear = manager.setBasemap(null).catch((error: unknown) => error);
+    map.emit('error', { error: blankError });
+    await waitForCondition(
+      () => map.setStyleCalls.at(-1) === base.style,
+      'last-ready recovery did not start after the blank failure',
+    );
+    map.emit('style.load');
+
+    await expect(clear).resolves.toBe(blankError);
+    expect(errors).toEqual([
+      { type: 'error', phase: 'style', fatal: true, error: blankError },
+    ]);
+    expect(manager.getServiceState('light')).toEqual({
+      id: 'light',
+      active: true,
+      status: 'ready',
+    });
+  });
+
+  it('falls back from a failed target and failed last-ready recovery to one terminal blank', async () => {
+    const { manager } = createManager(
+      [base, dark, { ...roads, visible: true }],
+      { defaultBasemap: 'light' },
+    );
+    const initialization = manager.initialize();
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await initialization;
+    const errors: Array<{ serviceId?: string; phase: string; fatal: boolean; error: Error }> = [];
+    manager.on('error', (event) => errors.push(event));
+    const targetError = new Error('target failed');
+    const recoveryError = new Error('recovery failed');
+    const blankError = new Error('terminal blank failed');
+
+    const target = manager.setBasemap('dark').catch((error: unknown) => error);
+    map.emit('error', { error: targetError });
+    await waitForCondition(
+      () => map.setStyleCalls.at(-1) === base.style,
+      'last-ready recovery did not start',
+    );
+    map.emit('error', { error: recoveryError });
+    await waitForCondition(
+      () => {
+        const style = map.setStyleCalls.at(-1);
+        return typeof style === 'object' && style !== null;
+      },
+      'terminal blank fallback did not start',
+    );
+    const callCount = map.setStyleCalls.length;
+    map.emit('error', { error: blankError });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await expect(target).resolves.toBe(targetError);
+    expect(map.setStyleCalls.slice(callCount)).toEqual([null]);
+    expect(map.setStyleCalls.filter((style) => style === base.style)).toHaveLength(1);
+    expect(errors).toEqual([
+      { type: 'error', serviceId: 'dark', phase: 'style', fatal: true, error: targetError },
+      { type: 'error', serviceId: 'light', phase: 'style', fatal: true, error: recoveryError },
+      { type: 'error', phase: 'style', fatal: true, error: blankError },
+    ]);
+    expect(manager.getServiceState('dark')).toMatchObject({ active: false, status: 'error' });
+    expect(manager.getServiceState('light')).toMatchObject({ active: false, status: 'error' });
   });
 });
 

@@ -57,6 +57,7 @@ interface StyleRequest {
   resolve: () => void;
   reject: (error: Error) => void;
   settled: boolean;
+  requiresProjection: boolean;
   failure?: Error;
   rollback?: {
     definition: MapLibreService;
@@ -241,12 +242,14 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   private _desiredRequest: StyleRequest | null = null;
   private _appliedRequest: StyleRequest | null = null;
   private _parsedRequest: StyleRequest | null = null;
+  private _committedRequest: StyleRequest | null = null;
   private _readyStyle: ReadyStyle | null = null;
   private _lastReadyBasemap: LastReadyBasemap | null = null;
   private _destroyed = false;
   private _suspended = false;
   private _mutationContext: MutationContext | null = null;
   private _errorPhases = new WeakMap<Error, MapLibreServiceErrorEvent['phase']>();
+  private _errorServiceIds = new WeakMap<Error, string>();
   private _reconciliationJobs = new WeakMap<
     ServiceRecord,
     { revision: number; promise: Promise<void> }
@@ -366,7 +369,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
   async removeService(id: string): Promise<void> {
     const record = this._requireService(id);
-    if (record.definition.role === 'basemap' && record.state.active) {
+    if (
+      record.definition.role === 'basemap' &&
+      (record.state.active || this._desiredRequest?.basemapId === id)
+    ) {
       await this.setBasemap(null);
       if (this._registry.get(id) !== record) {
         throw abortError(`MapLibre service "${id}" request was superseded`);
@@ -392,9 +398,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   async setBasemap(id: string | null): Promise<void> {
     const next = id === null ? undefined : this._requireBasemap(id);
     const current = this._activeBasemap();
-    if (current?.definition.id === next?.definition.id) {
-      const request = this._desiredRequest;
-      if (request?.basemapId === id && !request.settled) await request.promise;
+    const desired = this._desiredRequest;
+    if (desired?.basemapId === id && !desired.failure) {
+      if (!desired.settled) await desired.promise;
+      return;
+    } else if (!desired && current?.definition.id === next?.definition.id) {
       return;
     }
     await this._requestBasemap(next);
@@ -415,6 +423,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       options.phase ?? (this._map || this._mapPromise ? 'switch' : 'initial'),
       next?.definitionRevision,
       options.rollback,
+      next !== undefined && current !== next,
     );
     this._desiredRequest = request;
     if (previous && previous !== request) {
@@ -442,6 +451,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
     if (!next && !this._hasActiveOverlay()) {
       this._readyStyle = null;
+      this._committedRequest = null;
       this._lastReadyBasemap = null;
       this._resolveStyleRequest(request);
       this._syncVisibility();
@@ -458,6 +468,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     phase: StyleRequest['phase'],
     definitionRevision?: number,
     rollback?: StyleRequest['rollback'],
+    requiresProjection = true,
   ): StyleRequest {
     let resolvePromise!: () => void;
     let rejectPromise!: (error: Error) => void;
@@ -476,6 +487,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       resolve: resolvePromise,
       reject: rejectPromise,
       settled: false,
+      requiresProjection,
       rollback,
     };
   }
@@ -494,13 +506,17 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   }
 
   private _prepareStyleRequest(request: StyleRequest): void {
-    if (this._map && this._isWebMercator(this._host.getCRS()) && !this._projectionPromise) {
+    if (
+      this._map &&
+      (!request.requiresProjection ||
+        (this._isWebMercator(this._host.getCRS()) && !this._projectionPromise))
+    ) {
       this._startDesiredStyleIfIdle();
       return;
     }
     void (async () => {
       try {
-        await this._ensureWebMercator();
+        if (request.requiresProjection) await this._ensureWebMercator();
         if (this._desiredRequest !== request) return;
         await this._ensureMap(request.style);
         if (this._desiredRequest !== request) return;
@@ -664,6 +680,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     this._desiredRequest = null;
     this._appliedRequest = null;
     this._parsedRequest = null;
+    this._committedRequest = null;
     this._readyStyle = null;
     if (firstError) throw firstError;
   }
@@ -1189,6 +1206,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     } catch (value) {
       const error = toError(value);
       this._errorPhases.set(error, phase);
+      this._errorServiceIds.set(error, serviceId);
       throw error;
     } finally {
       if (this._mutationContext === context) this._mutationContext = null;
@@ -1300,6 +1318,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     this._mapPromise = null;
     this._appliedRequest = null;
     this._parsedRequest = null;
+    this._committedRequest = null;
     this._readyStyle = null;
     for (const record of this._registry.values()) {
       record.ownedLayers.clear();
@@ -1462,11 +1481,18 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
     try {
       this._detachManagedOverlays();
-      if (this._desiredRequest !== request) return;
+    } catch (value) {
+      this._handleStyleDetachmentFailure(request, toError(value));
+      return;
+    }
+    if (this._desiredRequest !== request) return;
+
+    try {
       this._styleGeneration++;
       this._readyStyle = null;
       this._appliedRequest = request;
-      map.setStyle(request.style);
+      map.setStyle(request.style, { diff: false });
+      this._committedRequest = null;
     } catch (value) {
       const error = toError(value);
       this._errorPhases.set(error, 'style');
@@ -1474,6 +1500,87 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       this._detachFailedStyle();
       this._handleAppliedStyleFailure(request, error);
     }
+  }
+
+  private _handleStyleDetachmentFailure(request: StyleRequest, error: Error): void {
+    this._rejectStyleRequest(request, error);
+    if (this._desiredRequest !== request) return;
+
+    const committed =
+      this._committedRequest &&
+      this._readyStyle?.requestRevision === this._committedRequest.revision
+        ? this._committedRequest
+        : null;
+    if (request.rollback && request.basemapId !== null) {
+      const rollback = this._registry.get(request.basemapId);
+      if (rollback?.definition.role === 'basemap') {
+        rollback.definition = cloneService(request.rollback.definition);
+        rollback.definitionRevision = request.rollback.definitionRevision;
+        this._emitChange(rollback.definition, 'update', rollback.state);
+      }
+    }
+    this._desiredRequest = committed;
+
+    if (request.basemapId !== null && request.basemapId !== committed?.basemapId) {
+      const failed = this._registry.get(request.basemapId);
+      if (
+        failed?.definition.role === 'basemap' &&
+        failed.definitionRevision === request.definitionRevision
+      ) {
+        failed.operationRevision++;
+        failed.state = {
+          id: failed.definition.id,
+          active: false,
+          status: 'error',
+          error,
+        };
+        this._emitChange(failed.definition, 'status', failed.state);
+        if (this._desiredRequest === committed && this._registry.get(failed.definition.id) === failed) {
+          this._emitChange(failed.definition, 'basemap', failed.state);
+        }
+      }
+    }
+
+    if (committed?.basemapId !== null && committed?.basemapId !== undefined) {
+      const previous = this._registry.get(committed.basemapId);
+      if (
+        previous?.definition.role === 'basemap' &&
+        previous.definitionRevision === committed.definitionRevision
+      ) {
+        previous.operationRevision++;
+        previous.state = { id: previous.definition.id, active: true, status: 'ready' };
+        this._emitChange(previous.definition, 'basemap', previous.state);
+        if (
+          this._desiredRequest === committed &&
+          this._registry.get(previous.definition.id) === previous
+        ) {
+          this._emitChange(previous.definition, 'status', previous.state);
+        }
+      }
+    }
+
+    const ownerId = this._errorServiceIds.get(error);
+    const owner = ownerId ? this._registry.get(ownerId) : undefined;
+    if (owner?.definition.role === 'overlay') {
+      try {
+        this._publishTransitionFailure(owner, owner.operationRevision, error);
+      } catch {
+        // Reentrant listeners may supersede the failing overlay.
+      }
+    } else {
+      this.fire('error', {
+        serviceId: ownerId,
+        phase: this._errorPhases.get(error) ?? 'lifecycle',
+        error,
+        fatal: true,
+      });
+    }
+
+    const generation = this._readyStyle?.generation;
+    if (generation !== undefined) {
+      void this._reconcileVisibleOverlays(generation).catch(() => undefined);
+    }
+    this._syncVisibility();
   }
 
   private _detachManagedOverlays(): void {
@@ -1497,7 +1604,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       if (!owned) continue;
       const current = map.getLayer(id);
       if (current !== undefined && current !== owned.handle) {
-        throw this._phaseError('layer', `MapLibre overlay layer "${id}" is no longer manager-owned`);
+        throw this._phaseError(
+          'layer',
+          `MapLibre overlay layer "${id}" is no longer manager-owned`,
+          record.definition.id,
+        );
       }
       if (current !== undefined) {
         this._mutateResource(
@@ -1518,6 +1629,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           throw this._phaseError(
             'source',
             `MapLibre overlay source "${id}" is no longer manager-owned`,
+            record.definition.id,
           );
         }
         if (current !== undefined) {
@@ -1600,6 +1712,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
 
     this._readyStyle = { generation, requestRevision: request.revision };
+    this._committedRequest = request;
     this._parsedRequest = null;
     this._resolveStyleRequest(request);
     this._syncVisibility();
@@ -1645,6 +1758,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           if (this._desiredRequest !== request) return;
         }
       }
+    } else {
+      this.fire('error', { phase: 'style', error, fatal: true });
+      if (this._desiredRequest !== request) return;
     }
     this._enqueueRecovery(request);
   }
@@ -1666,19 +1782,27 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       status: 'error',
       error,
     };
+    const operationRevision = record.operationRevision;
+    const isCurrentFailure = (): boolean =>
+      this._desiredRequest === request &&
+      this._registry.get(record.definition.id) === record &&
+      record.operationRevision === operationRevision &&
+      record.definitionRevision === request.definitionRevision;
     this._emitFatalError(record.definition.id, error);
-    if (this._desiredRequest !== request) return false;
+    if (!isCurrentFailure()) return false;
     this._emitChange(record.definition, 'status', record.state);
-    if (this._desiredRequest !== request) return false;
+    if (!isCurrentFailure()) return false;
     this._emitChange(record.definition, 'basemap', record.state);
-    return this._desiredRequest === request;
+    return isCurrentFailure();
   }
 
   private _enqueueRecovery(failedRequest: StyleRequest): void {
     if (this._desiredRequest !== failedRequest) return;
+    if (failedRequest.phase === 'recovery' && failedRequest.basemapId === null) return;
     const lastReady = this._lastReadyBasemap;
     const candidate = lastReady ? this._registry.get(lastReady.id) : undefined;
     const validCandidate =
+      failedRequest.phase !== 'recovery' &&
       candidate?.definition.role === 'basemap' &&
       candidate.definitionRevision === lastReady?.definitionRevision
         ? candidate
@@ -1688,6 +1812,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       validCandidate?.definition.role === 'basemap' ? validCandidate.definition.style : EMPTY_STYLE,
       'recovery',
       validCandidate?.definitionRevision,
+      undefined,
+      false,
     );
     this._desiredRequest = request;
     if (validCandidate) {
@@ -1713,6 +1839,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
     this._readyStyle = null;
     this._parsedRequest = null;
+    this._committedRequest = null;
     for (const record of this._registry.values()) {
       record.ownedLayers.clear();
       record.ownedSources.clear();
@@ -1750,6 +1877,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (this._mutationContext) {
       this._mutationContext.error = error;
       this._errorPhases.set(error, this._mutationContext.phase);
+      this._errorServiceIds.set(error, this._mutationContext.serviceId);
       return;
     }
     if (details?.tile !== undefined) {
@@ -1892,9 +2020,14 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     this._emitFatalError(record.definition.id, error);
   }
 
-  private _phaseError(phase: MapLibreServiceErrorEvent['phase'], message: string): Error {
+  private _phaseError(
+    phase: MapLibreServiceErrorEvent['phase'],
+    message: string,
+    serviceId?: string,
+  ): Error {
     const error = new Error(message);
     this._errorPhases.set(error, phase);
+    if (serviceId !== undefined) this._errorServiceIds.set(error, serviceId);
     return error;
   }
 
