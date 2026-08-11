@@ -201,6 +201,8 @@
       let joinExtent;
       let targetLoadVersion = 0;
       let joinLoadVersion = 0;
+      let inputGeneration = 0;
+      let runVersion = 0;
       let runtimePromise;
       const contextSources = new Map();
       const aggregations = [
@@ -264,11 +266,17 @@
         });
       }
 
-      async function addDatasetSource(id, dataset, prefix, colors) {
+      async function addDatasetSource(id, dataset, prefix, colors, isCurrent = () => true) {
+        if (!isCurrent()) return undefined;
         const source = new TopologySource(id);
         removeSourceWithLayers(id);
         source.setDataset(dataset);
+        if (!isCurrent()) return undefined;
         await map.addSource(id, source);
+        if (!isCurrent()) {
+          if (map.getSource(id) === source) removeSourceWithLayers(id);
+          return undefined;
+        }
         addDisplayLayers(id, source, prefix, colors);
         return source;
       }
@@ -290,6 +298,15 @@
         const extent = targetExtent.clone();
         extent.merge(joinExtent);
         map.setExtent(extent);
+      }
+
+      function invalidateAggregateRuns() {
+        inputGeneration += 1;
+        runVersion += 1;
+      }
+
+      function isCurrentRun(inputVersion, runToken) {
+        return inputVersion === inputGeneration && runToken === runVersion;
       }
 
       async function getRuntime() {
@@ -330,6 +347,7 @@
       targetFile.addEventListener('change', async () => {
         const file = targetFile.files?.[0];
         if (!file) return;
+        invalidateAggregateRuns();
         const loadVersion = ++targetLoadVersion;
         targetDataset = undefined;
         targetExtent = undefined;
@@ -367,6 +385,7 @@
       joinFile.addEventListener('change', async () => {
         const file = joinFile.files?.[0];
         if (!file) return;
+        invalidateAggregateRuns();
         const loadVersion = ++joinLoadVersion;
         joinDataset = undefined;
         joinExtent = undefined;
@@ -416,11 +435,14 @@
 
       runButton.addEventListener('click', async () => {
         if (!targetDataset || !joinDataset) return;
+        const runInputGeneration = inputGeneration;
+        const runToken = ++runVersion;
         runButton.disabled = true;
         clearAggregateOutput();
         status.textContent = 'DuckDB-Wasm 正在汇总行政区销售统计...';
         try {
           const runtime = await getRuntime();
+          if (!isCurrentRun(runInputGeneration, runToken)) return;
           const opts = {
             predicate: 'contains',
             joinType: joinTypeSelect.value,
@@ -443,22 +465,42 @@
               output: { sourceId: OUTPUT_SOURCE_ID },
               runtime,
             });
+            if (!isCurrentRun(runInputGeneration, runToken)) {
+              if (contextSources.get(OUTPUT_SOURCE_ID)?.getDataset?.() === result.value?.dataset) {
+                contextSources.delete(OUTPUT_SOURCE_ID);
+              }
+              return;
+            }
             if (!result.ok) throw new Error(`${result.error.kind}: ${result.error.reason ?? result.error.id}`);
             resultDataset = result.value.dataset;
           } else {
             resultDataset = await spatialAggregateJoinDatasetWithDuckDb(targetDataset, joinDataset, opts, runtime);
+            if (!isCurrentRun(runInputGeneration, runToken)) return;
           }
-          const outputSource = await addDatasetSource(OUTPUT_SOURCE_ID, resultDataset, 'duckdb-aggregate-output', {
-            fill: '#e4c36a', fillOpacity: 0.56, line: '#87651a', lineWidth: 2.5, pointRadius: 5,
-          });
+          if (!isCurrentRun(runInputGeneration, runToken)) return;
+          const outputSource = await addDatasetSource(
+            OUTPUT_SOURCE_ID,
+            resultDataset,
+            'duckdb-aggregate-output',
+            { fill: '#e4c36a', fillOpacity: 0.56, line: '#87651a', lineWidth: 2.5, pointRadius: 5 },
+            () => isCurrentRun(runInputGeneration, runToken),
+          );
+          if (!isCurrentRun(runInputGeneration, runToken)) {
+            if (outputSource && map.getSource(OUTPUT_SOURCE_ID) === outputSource) {
+              removeSourceWithLayers(OUTPUT_SOURCE_ID);
+            }
+            return;
+          }
+          if (!outputSource) return;
           map.setExtent(outputSource.getExtent());
           renderSummary(resultDataset);
           status.textContent = `聚合完成：${resultDataset.layers?.[0]?.shapes?.length ?? 0} 个目标行政区。`;
         } catch (err) {
+          if (!isCurrentRun(runInputGeneration, runToken)) return;
           console.error(err);
           status.textContent = `Aggregate Join 失败: ${err?.message ?? err}`;
         } finally {
-          updateRunState();
+          if (isCurrentRun(runInputGeneration, runToken)) updateRunState();
         }
       });
 
