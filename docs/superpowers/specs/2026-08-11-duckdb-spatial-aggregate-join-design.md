@@ -260,6 +260,15 @@ An empty target produces an empty result. An empty join produces every target
 with zero/null aggregate values in `left` mode and an empty result in `inner`
 mode.
 
+Mapshaper does not retain attribute names or Arrow types for a completely
+schema-less zero-row DataTable. Such an input can therefore satisfy only a
+`count` aggregation; a non-count request correctly fails exact-field
+validation. The general zero/null rule for non-count aggregates applies when
+the join layer retains typed fields but has no valid participating geometry
+(for example, typed rows whose geometry is null). If Mapshaper later gains
+typed empty-table schemas, the same rule extends directly to zero-row
+non-count inputs.
+
 Null target geometries are treated as unmatched: `left` preserves them with
 zero/null aggregate values and `inner` removes them. Null join geometries do
 not participate in matching.
