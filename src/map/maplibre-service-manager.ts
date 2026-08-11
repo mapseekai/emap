@@ -201,6 +201,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   private _basemapRevision = 0;
   private _map: maplibregl.Map | null = null;
   private _mapPromise: Promise<maplibregl.Map> | null = null;
+  private _initializationPromise: Promise<void> | null = null;
   private _container: HTMLElement | null = null;
   private _styleReady: Promise<void> | null = null;
   private _resolveStyleReady: (() => void) | null = null;
@@ -397,18 +398,35 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   }
 
   /** @internal */
-  async initialize(): Promise<void> {
-    if (!this._hasActiveOverlay()) return;
-    await this._ensureWebMercator();
-    await this._ensureMap(EMPTY_STYLE);
+  initialize(): Promise<void> {
+    if (!this._initializationPromise) {
+      const initialRecords = new Map<ServiceRecord, number>();
+      for (const record of this._registry.values()) {
+        if (record.definition.role === 'overlay' && record.state.active) {
+          initialRecords.set(record, record.operationRevision);
+        }
+      }
+      this._initializationPromise = Promise.resolve().then(() => this._initialize(initialRecords));
+    }
+    return this._initializationPromise;
+  }
+
+  private async _initialize(initialRecords: ReadonlyMap<ServiceRecord, number>): Promise<void> {
+    if (initialRecords.size === 0) return;
     try {
+      await this._ensureWebMercator();
+      await this._ensureMap(EMPTY_STYLE);
       await this._waitForStyleReady();
     } catch (value) {
       const error = toError(value);
-      for (const serviceId of [...this._registry.keys()]) {
-        const record = this._registry.get(serviceId);
-        if (!record || record.definition.role !== 'overlay' || !record.state.active) continue;
-        const operationRevision = record.operationRevision;
+      for (const [record, operationRevision] of initialRecords) {
+        if (
+          !this._isCurrentOperation(record, operationRevision) ||
+          record.definition.role !== 'overlay' ||
+          !record.state.active
+        ) {
+          continue;
+        }
         try {
           this._publishTransitionFailure(record, operationRevision, error);
         } catch (publishValue) {
@@ -424,7 +442,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       }
       throw error;
     }
-    await this._reconcileVisibleOverlays(this._styleGeneration, true);
+    await this._reconcileVisibleOverlays(this._styleGeneration, true, initialRecords);
     this._syncVisibility();
   }
 
@@ -435,18 +453,25 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     for (const record of this._registry.values()) record.operationRevision++;
     this._rejectPendingStyle(abortError('MapLibre service manager was destroyed'));
 
-    this._host.off('move', this._handleMove);
-    this._host.off('resize', this._handleResize);
-    this._host.off('crschange', this._handleCrsChange);
-    if (this._map) {
-      this._map.off('style.load', this._handleStyleLoad);
-      this._map.off('error', this._handleMapError);
-      this._map.remove();
+    try {
+      this._host.off('move', this._handleMove);
+      this._host.off('resize', this._handleResize);
+      this._host.off('crschange', this._handleCrsChange);
+      if (this._map) {
+        this._map.off('style.load', this._handleStyleLoad);
+        this._map.off('error', this._handleMapError);
+        this._map.remove();
+      }
+    } finally {
+      this._container?.remove();
+      this._container = null;
+      this._map = null;
+      this._mapPromise = null;
+      this._styleReady = null;
+      this._resolveStyleReady = null;
+      this._rejectStyleReady = null;
+      this._styleIsReady = false;
     }
-    this._container?.remove();
-    this._container = null;
-    this._map = null;
-    this._mapPromise = null;
   }
 
   private _register(service: MapLibreService): ServiceRecord {
@@ -588,17 +613,23 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   private async _reconcileVisibleOverlays(
     generation: number,
     publishStatus = false,
+    candidates?: ReadonlyMap<ServiceRecord, number>,
   ): Promise<void> {
-    for (const serviceId of [...this._registry.keys()]) {
-      const record = this._registry.get(serviceId);
-      if (!record) continue;
+    const records =
+      candidates ??
+      new Map(
+        [...this._registry.values()].map((record) => [record, record.operationRevision] as const),
+      );
+    for (const [record, operationRevision] of records) {
+      if (!this._isCurrentOperation(record, operationRevision)) continue;
       if (record.definition.role !== 'overlay' || !record.state.active) continue;
-      const operationRevision = record.operationRevision;
       try {
-        if (publishStatus) this._setStatus(record, operationRevision, 'loading');
+        if (publishStatus) {
+          await this._startOverlayReconciliation(record, operationRevision, false);
+          continue;
+        }
         await this._reconcileOverlayForGeneration(record, operationRevision, generation);
         this._assertCurrentOperation(record, operationRevision);
-        if (publishStatus) this._setStatus(record, operationRevision, 'ready');
       } catch (value) {
         const error = toError(value);
         if (
@@ -1122,6 +1153,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     error: Error,
   ): void {
     this._assertCurrentOperation(record, operationRevision);
+    if (record.state.status === 'error' && record.state.error === error) return;
     record.state = {
       id: record.definition.id,
       active: record.state.active,
