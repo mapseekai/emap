@@ -49,6 +49,21 @@ function exportedDuckDbNames(): Set<string> {
   );
 }
 
+const freshnessGuard = /if\s*\(\s*!isCurrent\(\)\s*\)\s*return\s+undefined\s*;/g;
+
+function hasFreshnessGuardBetween(source: string, after: number, before: number): boolean {
+  return [...source.matchAll(freshnessGuard)].some((match) => {
+    const index = match.index ?? -1;
+    return index > after && index < before;
+  });
+}
+
+function removeFreshnessGuardBetween(source: string, after: number, before: number): string {
+  return source.replace(freshnessGuard, (match, index: number) =>
+    index > after && index < before ? '' : match,
+  );
+}
+
 describe('DuckDB new feature examples', () => {
   const examples = {
     geoparquetQuery: readExample('duckdb-geoparquet-query'),
@@ -176,6 +191,7 @@ describe('DuckDB new feature examples', () => {
     const targetHandler = html.indexOf("targetFile.addEventListener('change'");
     const joinHandler = html.indexOf("joinFile.addEventListener('change'");
     const runHandler = html.indexOf("runButton.addEventListener('click'");
+    const loaderStart = html.indexOf('async function loadDatasetFromFile');
 
     expect(html).toContain('<div id="status" aria-live="polite">');
     expect(html).toContain('function fitLoadedExtents()');
@@ -185,6 +201,7 @@ describe('DuckDB new feature examples', () => {
     expect(targetHandler).toBeGreaterThan(-1);
     expect(joinHandler).toBeGreaterThan(targetHandler);
     expect(runHandler).toBeGreaterThan(joinHandler);
+    expect(loaderStart).toBeGreaterThan(-1);
     expect(html.slice(targetHandler, joinHandler)).toContain('targetDataset = undefined;');
     expect(html.slice(targetHandler, joinHandler)).toContain(
       'const loadVersion = ++targetLoadVersion;',
@@ -199,5 +216,32 @@ describe('DuckDB new feature examples', () => {
       'if (loadVersion !== joinLoadVersion) return;',
     );
     expect(html.slice(joinHandler, runHandler)).toContain('updateRunState();');
+
+    const loader = html.slice(loaderStart, targetHandler);
+    const arrayBufferAwait = loader.indexOf('await file.arrayBuffer()');
+    const sourceRemoval = loader.indexOf('removeSourceWithLayers(sourceId);');
+    const setDataAwait = loader.indexOf('await source.setData(');
+    const datasetRead = loader.indexOf('const dataset = source.getDataset();');
+
+    expect(arrayBufferAwait).toBeGreaterThan(-1);
+    expect(sourceRemoval).toBeGreaterThan(arrayBufferAwait);
+    expect(setDataAwait).toBeGreaterThan(sourceRemoval);
+    expect(datasetRead).toBeGreaterThan(setDataAwait);
+    expect(hasFreshnessGuardBetween(loader, arrayBufferAwait, sourceRemoval)).toBe(true);
+    expect(hasFreshnessGuardBetween(loader, setDataAwait, datasetRead)).toBe(true);
+    expect(
+      hasFreshnessGuardBetween(
+        removeFreshnessGuardBetween(loader, arrayBufferAwait, sourceRemoval),
+        arrayBufferAwait,
+        sourceRemoval,
+      ),
+    ).toBe(false);
+    expect(
+      hasFreshnessGuardBetween(
+        removeFreshnessGuardBetween(loader, setDataAwait, datasetRead),
+        setDataAwait,
+        datasetRead,
+      ),
+    ).toBe(false);
   });
 });
