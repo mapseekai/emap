@@ -566,6 +566,63 @@ describe('Emap layer management', () => {
       expect(source.prepareReprojectDataset).not.toHaveBeenCalled();
     });
 
+    it('captures initial source layers before history and CRS listeners mutate them', async () => {
+      const source = createMockSource();
+      source.getDataset.mockReturnValue({ layers: [], info: { crs_string: 'EPSG:4490' } });
+      setPrivate(map, '_projection', new Projection());
+      setPrivate(map, '_viewport', new Viewport());
+      setPrivate(map, '_crsEstablished', false);
+      const history = getPrivate(map, '_history') as EditHistory;
+      history.push({ label: 'prior edit', do() {}, undo() {} });
+      const events: unknown[] = [];
+      map.on('layerchange', (event) => {
+        events.push({
+          type: event.type,
+          reason: event.reason,
+          layerId: event.layerId,
+          layers: event.layers.map((layer) => [
+            layer.id,
+            layer.layout?.visibility ?? 'visible',
+          ]),
+        });
+      });
+      map.on('historychange', () => {
+        events.push({ type: 'historychange' });
+        map.setLayerVisibility('first:default', 'none');
+      });
+      map.on('data', () => events.push({ type: 'data' }));
+      map.on('crschange', () => {
+        events.push({ type: 'crschange' });
+        map.moveLayer('first:default');
+      });
+
+      await map.addSource('first', source as any);
+
+      expect(events).toEqual([
+        {
+          type: 'layerchange',
+          reason: 'effective',
+          layerId: undefined,
+          layers: [['first:default', 'visible']],
+        },
+        { type: 'historychange' },
+        {
+          type: 'layerchange',
+          reason: 'visibility',
+          layerId: 'first:default',
+          layers: [['first:default', 'none']],
+        },
+        { type: 'crschange' },
+        {
+          type: 'layerchange',
+          reason: 'effective',
+          layerId: 'first:default',
+          layers: [['first:default', 'none']],
+        },
+        { type: 'data' },
+      ]);
+    });
+
     it('rejects the normalized commit when the source is unregistered before commit', async () => {
       const source = createMockSource();
       source.getDataset.mockReturnValue({ layers: [], info: { crs_string: 'EPSG:3857' } });
@@ -1222,6 +1279,58 @@ describe('Emap layer management', () => {
       expect(committedIds).toEqual([['src1:roads', 'src1:cities']]);
     });
 
+    it('captures changed source layers before a data listener changes visibility', () => {
+      let sourceLayers = [{ name: 'roads', geometry_type: 'polyline', shapes: [] }];
+      const source = createMockSource();
+      source.getLayers.mockImplementation(() => sourceLayers);
+      registerMockSource(map, 'src1', source);
+      expect(map.getRenderedLayers().map((layer) => layer.id)).toEqual(['src1:roads']);
+      const events: unknown[] = [];
+      map.on('layerchange', (event) => {
+        events.push({
+          type: event.type,
+          reason: event.reason,
+          layerId: event.layerId,
+          layers: event.layers.map((layer) => [
+            layer.id,
+            layer.layout?.visibility ?? 'visible',
+          ]),
+        });
+      });
+      map.on('data', () => {
+        events.push({ type: 'data' });
+        map.setLayerVisibility('src1:roads', 'none');
+      });
+
+      sourceLayers = [
+        { name: 'roads', geometry_type: 'polyline', shapes: [] },
+        { name: 'cities', geometry_type: 'point', shapes: [] },
+      ];
+      callPrivate(map, '_handleSourceData', 'src1', source, { reason: 'replace' });
+
+      expect(events).toEqual([
+        {
+          type: 'layerchange',
+          reason: 'effective',
+          layerId: undefined,
+          layers: [
+            ['src1:roads', 'visible'],
+            ['src1:cities', 'visible'],
+          ],
+        },
+        { type: 'data' },
+        {
+          type: 'layerchange',
+          reason: 'visibility',
+          layerId: 'src1:roads',
+          layers: [
+            ['src1:roads', 'none'],
+            ['src1:cities', 'visible'],
+          ],
+        },
+      ]);
+    });
+
     it('emits effective after a generated source removal commits', () => {
       registerMockSource(
         map,
@@ -1264,6 +1373,71 @@ describe('Emap layer management', () => {
       map.removeSource('keep');
       expect(listener).toHaveBeenCalledTimes(1);
       expect(listener.mock.calls[0][0]).toMatchObject({ reason: 'effective', layers: [] });
+    });
+
+    it('captures removed-source layers before selection and history listeners mutate them', () => {
+      registerMockSource(map, 'keep', createMockSource());
+      registerMockSource(map, 'drop', createMockSource());
+      map.addLayer({ id: 'keep-a', type: 'line', source: 'keep' });
+      map.addLayer({ id: 'keep-b', type: 'line', source: 'keep' });
+      map.addLayer({ id: 'drop-layer', type: 'line', source: 'drop' });
+      map.select([{ source: 'drop', layer: 'drop-layer', id: 0 }]);
+      const history = getPrivate(map, '_history') as EditHistory;
+      history.push({ label: 'prior edit', do() {}, undo() {} });
+      const events: unknown[] = [];
+      map.on('layerchange', (event) => {
+        events.push({
+          type: event.type,
+          reason: event.reason,
+          layerId: event.layerId,
+          layers: event.layers.map((layer) => [
+            layer.id,
+            layer.layout?.visibility ?? 'visible',
+          ]),
+        });
+      });
+      map.on('selectionchange', () => {
+        events.push({ type: 'selectionchange' });
+        map.moveLayer('keep-b', 'keep-a');
+      });
+      map.on('historychange', () => {
+        events.push({ type: 'historychange' });
+        map.setLayerVisibility('keep-b', 'none');
+      });
+
+      map.removeSource('drop');
+
+      expect(events).toEqual([
+        {
+          type: 'layerchange',
+          reason: 'effective',
+          layerId: undefined,
+          layers: [
+            ['keep-a', 'visible'],
+            ['keep-b', 'visible'],
+          ],
+        },
+        { type: 'selectionchange' },
+        {
+          type: 'layerchange',
+          reason: 'effective',
+          layerId: 'keep-b',
+          layers: [
+            ['keep-b', 'visible'],
+            ['keep-a', 'visible'],
+          ],
+        },
+        { type: 'historychange' },
+        {
+          type: 'layerchange',
+          reason: 'visibility',
+          layerId: 'keep-b',
+          layers: [
+            ['keep-b', 'none'],
+            ['keep-a', 'visible'],
+          ],
+        },
+      ]);
     });
 
     it('creates a default line layer for source with no mapshaper layers', () => {
