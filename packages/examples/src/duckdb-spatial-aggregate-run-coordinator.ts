@@ -26,6 +26,48 @@ export interface DuckDbSpatialAggregateRunCoordinator {
   ) => Promise<void>;
 }
 
+export interface DuckDbSpatialAggregateSourceMap {
+  getLayers: () => ReadonlyArray<{ id: string; source?: string }>;
+  removeLayer: (id: string) => void;
+  removeSource: (id: string) => void;
+}
+
+export interface DuckDbSpatialAggregateMapOpResult<Dataset> {
+  ok: boolean;
+  value?: { dataset: Dataset };
+  error?: { id?: string; kind: string; reason?: string };
+}
+
+export interface DuckDbSpatialAggregateQueryOptions<Dataset> {
+  entrypoint: 'helper' | 'mapop';
+  runHelper: () => Promise<Dataset>;
+  runMapOp: () => Promise<DuckDbSpatialAggregateMapOpResult<Dataset>>;
+}
+
+export function removeDuckDbSpatialAggregateSource(
+  map: DuckDbSpatialAggregateSourceMap,
+  sourceId: string,
+) {
+  for (const layer of map.getLayers()) {
+    if (layer.source === sourceId) map.removeLayer(layer.id);
+  }
+  map.removeSource(sourceId);
+}
+
+export async function executeDuckDbSpatialAggregateQuery<Dataset>({
+  entrypoint,
+  runHelper,
+  runMapOp,
+}: DuckDbSpatialAggregateQueryOptions<Dataset>): Promise<Dataset> {
+  if (entrypoint === 'helper') return runHelper();
+
+  const result = await runMapOp();
+  if (!result.ok || !result.value) {
+    throw new Error(`${result.error?.kind ?? 'unknown'}: ${result.error?.reason ?? result.error?.id}`);
+  }
+  return result.value.dataset;
+}
+
 export function createDuckDbSpatialAggregateRunCoordinator(
   getInputGeneration: () => number,
 ): DuckDbSpatialAggregateRunCoordinator {

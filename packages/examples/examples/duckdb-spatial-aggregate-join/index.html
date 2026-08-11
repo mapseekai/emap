@@ -167,7 +167,11 @@
     <script type="module">
       import { installExampleMapUi } from '/src/example-runtime.ts';
       import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
-      import { createDuckDbSpatialAggregateRunCoordinator } from '/src/duckdb-spatial-aggregate-run-coordinator.ts';
+      import {
+        createDuckDbSpatialAggregateRunCoordinator,
+        executeDuckDbSpatialAggregateQuery,
+        removeDuckDbSpatialAggregateSource,
+      } from '/src/duckdb-spatial-aggregate-run-coordinator.ts';
       import {
         closeDuckDbRuntime,
         createDuckDbRuntimeFromJsDelivr,
@@ -219,10 +223,7 @@
       }
 
       function removeSourceWithLayers(id) {
-        for (const layer of map.getLayers().filter((layer) => layer.source === id)) {
-          map.removeLayer(layer.id);
-        }
-        if (map.getSource(id)) map.removeSource(id);
+        removeDuckDbSpatialAggregateSource(map, id);
       }
 
       function clearAggregateOutput() {
@@ -435,6 +436,33 @@
         ].join(' | ')).join('\n') || '没有匹配的目标要素。';
       }
 
+      async function executeAggregateQuery(runtime) {
+        const opts = {
+          predicate: 'contains',
+          joinType: joinTypeSelect.value,
+          aggregations,
+          targetLayer: Number(targetLayerSelect.value),
+          joinLayer: Number(joinLayerSelect.value),
+          outputLayer: outputLayerInput.value.trim() || undefined,
+        };
+        return executeDuckDbSpatialAggregateQuery({
+          entrypoint: entrypointSelect.value === 'mapop' ? 'mapop' : 'helper',
+          runMapOp: () => duckDbSpatialAggregateJoinLayer(createMapOpContext(), {
+            src: TARGET_SOURCE_ID,
+            join: JOIN_SOURCE_ID,
+            predicate: 'contains',
+            joinType: joinTypeSelect.value,
+            aggregations,
+            targetLayer: Number(targetLayerSelect.value),
+            joinLayer: Number(joinLayerSelect.value),
+            outputLayer: outputLayerInput.value.trim() || undefined,
+            output: { sourceId: OUTPUT_SOURCE_ID },
+            runtime,
+          }),
+          runHelper: () => spatialAggregateJoinDatasetWithDuckDb(targetDataset, joinDataset, opts, runtime),
+        });
+      }
+
       runButton.addEventListener('click', async () => {
         if (!targetDataset || !joinDataset) return;
         runButton.disabled = true;
@@ -442,33 +470,7 @@
         status.textContent = 'DuckDB-Wasm 正在汇总行政区销售统计...';
         await runCoordinator.run({
           getRuntime,
-          execute: async (runtime) => {
-            const opts = {
-              predicate: 'contains',
-              joinType: joinTypeSelect.value,
-              aggregations,
-              targetLayer: Number(targetLayerSelect.value),
-              joinLayer: Number(joinLayerSelect.value),
-              outputLayer: outputLayerInput.value.trim() || undefined,
-            };
-            if (entrypointSelect.value === 'mapop') {
-              const result = await duckDbSpatialAggregateJoinLayer(createMapOpContext(), {
-                src: TARGET_SOURCE_ID,
-                join: JOIN_SOURCE_ID,
-                predicate: 'contains',
-                joinType: joinTypeSelect.value,
-                aggregations,
-                targetLayer: Number(targetLayerSelect.value),
-                joinLayer: Number(joinLayerSelect.value),
-                outputLayer: outputLayerInput.value.trim() || undefined,
-                output: { sourceId: OUTPUT_SOURCE_ID },
-                runtime,
-              });
-              if (!result.ok) throw new Error(`${result.error.kind}: ${result.error.reason ?? result.error.id}`);
-              return result.value.dataset;
-            }
-            return spatialAggregateJoinDatasetWithDuckDb(targetDataset, joinDataset, opts, runtime);
-          },
+          execute: executeAggregateQuery,
           discardResult(dataset) {
             if (contextSources.get(OUTPUT_SOURCE_ID)?.getDataset?.() === dataset) {
               contextSources.delete(OUTPUT_SOURCE_ID);

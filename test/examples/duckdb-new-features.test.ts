@@ -80,6 +80,33 @@ function hasIdentityAwareContextDiscard(source: string): boolean {
   return source.includes('contextSources.get(OUTPUT_SOURCE_ID)?.getDataset?.() === dataset');
 }
 
+function scopedBlock(source: string, marker: string): string {
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex < 0) throw new Error(`Missing source marker: ${marker}`);
+  const open = source.indexOf('{', markerIndex);
+  if (open < 0) throw new Error(`Missing opening brace after: ${marker}`);
+  let depth = 0;
+  for (let index = open; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1;
+    if (source[index] === '}') depth -= 1;
+    if (depth === 0) return source.slice(markerIndex, index + 1);
+  }
+  throw new Error(`Unclosed block after: ${marker}`);
+}
+
+function usesAggregateQueryCoordinator(runHandler: string): boolean {
+  const options = scopedBlock(runHandler, 'await runCoordinator.run(');
+  const outsideCoordinator = runHandler.replace(options, '');
+  return (
+    options.includes('execute: executeAggregateQuery') &&
+    options.includes('register: registerAggregateOutput') &&
+    !outsideCoordinator.includes('executeAggregateQuery(') &&
+    !outsideCoordinator.includes('registerAggregateOutput(') &&
+    !outsideCoordinator.includes('duckDbSpatialAggregateJoinLayer(') &&
+    !outsideCoordinator.includes('spatialAggregateJoinDatasetWithDuckDb(')
+  );
+}
+
 describe('DuckDB new feature examples', () => {
   const examples = {
     geoparquetQuery: readExample('duckdb-geoparquet-query'),
@@ -268,17 +295,22 @@ describe('DuckDB new feature examples', () => {
     const runHandlerStart = html.indexOf("runButton.addEventListener('click'");
     const targetHandler = html.slice(targetHandlerStart, joinHandlerStart);
     const joinHandler = html.slice(joinHandlerStart, runHandlerStart);
-    const runHandler = html.slice(runHandlerStart);
+    const runHandler = scopedBlock(html, "runButton.addEventListener('click'");
+    const coordinatorOptions = scopedBlock(runHandler, 'await runCoordinator.run(');
+    const queryExecutor = scopedBlock(html, 'async function executeAggregateQuery');
+    const removeOutput = scopedBlock(html, 'function removeSourceWithLayers');
     const registrationStart = html.indexOf('async function registerAggregateOutput');
     const registrationEnd = html.indexOf('function populateLayerSelect', registrationStart);
     const registration = html.slice(registrationStart, registrationEnd);
 
     expect(html).toContain("from '/src/duckdb-spatial-aggregate-run-coordinator.ts'");
     expect(html).toContain('const runCoordinator = createDuckDbSpatialAggregateRunCoordinator(');
+    expect(html).toContain('removeDuckDbSpatialAggregateSource');
     expect(hasInputRunInvalidationBeforeLoad(targetHandler)).toBe(true);
     expect(hasInputRunInvalidationBeforeLoad(joinHandler)).toBe(true);
     expect(hasIdentityAwareOutputCleanup(registration)).toBe(true);
     expect(hasIdentityAwareContextDiscard(runHandler)).toBe(true);
+    expect(removeOutput).toContain('removeDuckDbSpatialAggregateSource(map, id);');
     expect(
       hasInputRunInvalidationBeforeLoad(targetHandler.replace('invalidateAggregateRuns();', '')),
     ).toBe(false);
@@ -295,15 +327,39 @@ describe('DuckDB new feature examples', () => {
         ),
       ),
     ).toBe(false);
-    expect(runHandler).toContain('await runCoordinator.run({');
-    expect(runHandler).toContain('const result = await duckDbSpatialAggregateJoinLayer');
-    expect(runHandler).toContain(
-      'return spatialAggregateJoinDatasetWithDuckDb(targetDataset, joinDataset, opts, runtime);',
-    );
-    expect(runHandler).toContain('discardResult(dataset)');
-    expect(runHandler).toContain('register: registerAggregateOutput');
-    expect(runHandler).toContain('publish({ dataset, registration })');
-    expect(runHandler).toContain('publishError(err)');
-    expect(runHandler).toContain('finish: updateRunState');
+    expect(usesAggregateQueryCoordinator(runHandler)).toBe(true);
+    expect(coordinatorOptions).toContain('discardResult(dataset)');
+    expect(coordinatorOptions).toContain('publish({ dataset, registration })');
+    expect(coordinatorOptions).toContain('publishError(err)');
+    expect(coordinatorOptions).toContain('finish: updateRunState');
+    expect(queryExecutor).toContain('runMapOp: () => duckDbSpatialAggregateJoinLayer(');
+    expect(queryExecutor).toContain('runHelper: () => spatialAggregateJoinDatasetWithDuckDb(');
+    expect(queryExecutor).not.toContain('await runCoordinator.run(');
+    expect(
+      usesAggregateQueryCoordinator(
+        runHandler.replace('execute: executeAggregateQuery', 'execute: runQueryOutsideCoordinator'),
+      ),
+    ).toBe(false);
+    expect(
+      usesAggregateQueryCoordinator(
+        runHandler.replace(
+          'register: registerAggregateOutput',
+          'register: runQueryOutsideCoordinator',
+        ),
+      ),
+    ).toBe(false);
+    for (const bypassedEntrypoint of [
+      'await spatialAggregateJoinDatasetWithDuckDb();',
+      'await duckDbSpatialAggregateJoinLayer();',
+    ]) {
+      expect(
+        usesAggregateQueryCoordinator(
+          runHandler.replace(
+            'await runCoordinator.run(',
+            `${bypassedEntrypoint}\n        await runCoordinator.run(`,
+          ),
+        ),
+      ).toBe(false);
+    }
   });
 });
