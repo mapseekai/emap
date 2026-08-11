@@ -259,9 +259,9 @@ function createManager(
   return { host, loadMapLibre, manager };
 }
 
-async function waitForFakeMap(): Promise<FakeMap> {
+async function waitForFakeMap(index = 0): Promise<FakeMap> {
   for (let attempt = 0; attempt < 20; attempt++) {
-    const map = FakeMap.instances[0];
+    const map = FakeMap.instances[index];
     if (map) return map;
     await Promise.resolve();
   }
@@ -972,6 +972,102 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(map.layerOrder).toEqual(['roads-line']);
   });
 
+  it('rebuilds one clean runtime when initialization retries after blank-style failure', async () => {
+    const { host, loadMapLibre, manager } = createManager([{ ...roads, visible: true }]);
+    const statuses: string[] = [];
+    const errors: Array<{ phase: string; message: string }> = [];
+    manager.on('change', (event) => {
+      if (event.reason === 'status' && event.state) statuses.push(event.state.status);
+    });
+    manager.on('error', (event) =>
+      errors.push({ phase: event.phase, message: event.error.message }),
+    );
+
+    const styleError = new Error('first blank style failed');
+    const first = manager.initialize();
+    const failedMap = await waitForFakeMap();
+    failedMap.emit('error', { error: styleError });
+
+    await expect(first).rejects.toBe(styleError);
+    expect(manager.getMapLibreMap()).toBeNull();
+    expect(failedMap.removed).toBe(true);
+    expect(failedMap.listenerCount('style.load')).toBe(0);
+    expect(failedMap.listenerCount('error')).toBe(0);
+    expect(host.listenerCount('move')).toBe(0);
+    expect(host.listenerCount('resize')).toBe(0);
+    expect(host.listenerCount('crschange')).toBe(0);
+    expect(host.getCanvasContainer().querySelectorAll('.emap-maplibre')).toHaveLength(0);
+
+    const retry = manager.initialize();
+    void retry.catch(() => undefined);
+    const readyMap = await waitForFakeMap(1);
+    readyMap.emit('style.load');
+    await retry;
+
+    expect(loadMapLibre).toHaveBeenCalledTimes(2);
+    expect(FakeMap.instances).toEqual([failedMap, readyMap]);
+    expect(host.getCanvasContainer().querySelectorAll('.emap-maplibre')).toHaveLength(1);
+    expect(manager.getMapLibreMap()).toBe(readyMap);
+    expect(readyMap.layerOrder).toEqual(['roads-line']);
+    expect(statuses).toEqual(['error', 'loading', 'ready']);
+    expect(errors).toEqual([{ phase: 'style', message: 'first blank style failed' }]);
+    expect(manager.getServiceState('roads')).toEqual({
+      id: 'roads',
+      active: true,
+      status: 'ready',
+    });
+  });
+
+  it('continues initializing visible siblings after an earlier overlay installation fails', async () => {
+    const { manager } = createManager([
+      { ...roads, visible: true },
+      { ...labels, visible: true },
+    ]);
+    const statuses: string[] = [];
+    const errors: Array<{ serviceId?: string; phase: string; message: string }> = [];
+    manager.on('change', (event) => {
+      if (event.reason === 'status' && event.state) {
+        statuses.push(`${event.serviceId}:${event.state.status}`);
+      }
+    });
+    manager.on('error', (event) =>
+      errors.push({
+        serviceId: event.serviceId,
+        phase: event.phase,
+        message: event.error.message,
+      }),
+    );
+
+    const layerError = new Error('roads layer failed');
+    const initialization = manager.initialize();
+    const map = await waitForFakeMap();
+    map.addFailures.set('layer:roads-line', { mode: 'throw', error: layerError });
+    map.emit('style.load');
+
+    await expect(initialization).rejects.toBe(layerError);
+    expect(manager.getServiceState('roads')).toMatchObject({
+      active: true,
+      status: 'error',
+      error: { message: 'roads layer failed' },
+    });
+    expect(manager.getServiceState('labels')).toEqual({
+      id: 'labels',
+      active: true,
+      status: 'ready',
+    });
+    expect(statuses).toEqual([
+      'roads:loading',
+      'roads:error',
+      'labels:loading',
+      'labels:ready',
+    ]);
+    expect(errors).toEqual([
+      { serviceId: 'roads', phase: 'layer', message: 'roads layer failed' },
+    ]);
+    expect([...map.sources.keys()]).toEqual(['labels']);
+    expect(map.layerOrder).toEqual(['labels-symbol']);
+  });
+
   it('marks every current initial overlay with one typed style failure', async () => {
     const { manager } = createManager([
       { ...roads, visible: true },
@@ -1246,6 +1342,52 @@ describe('MapLibreServiceManager overlay rendering', () => {
       status: 'ready',
     });
     expect(map.layerOrder).toEqual(['roads-updated']);
+  });
+
+  it('shares one in-flight reprojection across concurrent activations and an active update', async () => {
+    FakeMap.instances.length = 0;
+    const host = createHost('epsg:4326');
+    const projection = deferred<void>();
+    host.reproject.mockImplementation(async (nextCrs: string) => {
+      await projection.promise;
+      host.setCRS(nextCrs);
+    });
+    const manager = createMapLibreServiceManager(
+      host,
+      { services: [roads, traffic] },
+      async () => fakeModule(),
+    );
+    const updatedRoads = {
+      ...roads,
+      name: 'Updated roads',
+      layers: [{ id: 'roads-updated', type: 'line' as const, source: 'roads' }],
+    };
+
+    const roadsActivation = manager
+      .setOverlayVisibility('roads', true)
+      .catch((error: unknown) => error);
+    const trafficActivation = manager.setOverlayVisibility('traffic', true);
+    await Promise.resolve();
+    const update = manager.updateService('roads', updatedRoads);
+    projection.resolve();
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+
+    await expect(roadsActivation).resolves.toMatchObject({ name: 'AbortError' });
+    await trafficActivation;
+    await update;
+    expect(host.reproject).toHaveBeenCalledTimes(1);
+    expect(manager.getServiceState('roads')).toEqual({
+      id: 'roads',
+      active: true,
+      status: 'ready',
+    });
+    expect(manager.getServiceState('traffic')).toEqual({
+      id: 'traffic',
+      active: true,
+      status: 'ready',
+    });
+    expect(map.layerOrder).toEqual(['roads-updated', 'traffic-casing', 'traffic-line']);
   });
 
   it('keeps an update pending until removal supersedes its in-flight import', async () => {

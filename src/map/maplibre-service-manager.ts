@@ -207,6 +207,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   private _basemapRevision = 0;
   private _map: maplibregl.Map | null = null;
   private _mapPromise: Promise<maplibregl.Map> | null = null;
+  private _projectionPromise: Promise<void> | null = null;
   private _initializationPromise: Promise<void> | null = null;
   private _container: HTMLElement | null = null;
   private _styleReady: Promise<void> | null = null;
@@ -433,6 +434,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       await this._waitForStyleReady();
     } catch (value) {
       const error = toError(value);
+      let failure = error;
       for (const [record, operationRevision] of initialRecords) {
         if (
           !this._isCurrentOperation(record, operationRevision) ||
@@ -451,10 +453,18 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           ) {
             continue;
           }
-          throw publishError;
+          failure = publishError;
+          break;
         }
       }
-      throw error;
+      if (this._errorPhases.get(error) === 'style') {
+        try {
+          this._resetRuntime();
+        } catch {
+          // Preserve the style failure while leaving runtime fields reset for a retry.
+        }
+      }
+      throw failure;
     }
     await this._reconcileVisibleOverlays(this._styleGeneration, true, initialRecords);
     this._syncVisibility();
@@ -663,6 +673,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       new Map(
         [...this._registry.values()].map((record) => [record, record.operationRevision] as const),
       );
+    let firstError: Error | undefined;
     for (const [record, operationRevision] of records) {
       if (!this._isCurrentOperation(record, operationRevision)) continue;
       if (record.definition.role !== 'overlay' || !record.state.active) continue;
@@ -681,9 +692,21 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         ) {
           continue;
         }
-        this._handleTransitionFailure(record, operationRevision, error);
+        try {
+          this._handleTransitionFailure(record, operationRevision, error);
+        } catch (failureValue) {
+          const failure = toError(failureValue);
+          if (
+            failure.name === 'AbortError' &&
+            (!this._isCurrentOperation(record, operationRevision) || !record.state.active)
+          ) {
+            continue;
+          }
+          firstError ??= failure;
+        }
       }
     }
+    if (firstError) throw firstError;
   }
 
   private async _reconcileOverlayForGeneration(
@@ -975,18 +998,59 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
   }
 
-  private async _ensureWebMercator(): Promise<void> {
-    if (this._destroyed) throw abortError('MapLibre service manager was destroyed');
-    const wasSuspended = this._suspended || !this._isWebMercator(this._host.getCRS());
-    if (!this._isWebMercator(this._host.getCRS())) {
-      await this._host.reproject('webmercator');
-      if (this._destroyed) throw abortError('MapLibre service manager was destroyed');
+  private _ensureWebMercator(): Promise<void> {
+    if (this._destroyed) {
+      return Promise.reject(abortError('MapLibre service manager was destroyed'));
     }
-    this._suspended = !this._isWebMercator(this._host.getCRS());
-    if (wasSuspended && !this._suspended && this._map && this._hasActiveService()) {
-      this._map.resize();
-      this._syncCamera();
+    if (this._projectionPromise) return this._projectionPromise;
+    const projection = (async () => {
+      const wasSuspended = this._suspended || !this._isWebMercator(this._host.getCRS());
+      if (!this._isWebMercator(this._host.getCRS())) {
+        await this._host.reproject('webmercator');
+        if (this._destroyed) throw abortError('MapLibre service manager was destroyed');
+      }
+      this._suspended = !this._isWebMercator(this._host.getCRS());
+      if (wasSuspended && !this._suspended && this._map && this._hasActiveService()) {
+        this._map.resize();
+        this._syncCamera();
+      }
+    })();
+    this._projectionPromise = projection;
+    const clearProjection = (): void => {
+      if (this._projectionPromise === projection) this._projectionPromise = null;
+    };
+    void projection.then(clearProjection, clearProjection);
+    return projection;
+  }
+
+  private _resetRuntime(): void {
+    const map = this._map;
+    const container = this._container;
+    let firstError: Error | undefined;
+    const attempt = (action: () => void): void => {
+      try {
+        action();
+      } catch (value) {
+        firstError ??= toError(value);
+      }
+    };
+    attempt(() => this._host.off('move', this._handleMove));
+    attempt(() => this._host.off('resize', this._handleResize));
+    attempt(() => this._host.off('crschange', this._handleCrsChange));
+    if (map) {
+      attempt(() => map.off('style.load', this._handleStyleLoad));
+      attempt(() => map.off('error', this._handleMapError));
+      attempt(() => map.remove());
     }
+    attempt(() => container?.remove());
+    this._container = null;
+    this._map = null;
+    this._mapPromise = null;
+    this._styleReady = null;
+    this._resolveStyleReady = null;
+    this._rejectStyleReady = null;
+    this._styleIsReady = false;
+    if (firstError) throw firstError;
   }
 
   private async _ensureMap(
