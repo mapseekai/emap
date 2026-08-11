@@ -1,6 +1,7 @@
 import { Control } from './control';
 import { Emap } from '../map/map';
 import type { HistoryStateSnapshot } from '../edit/edit-history';
+import { createControlIcon } from './control-icons';
 
 export interface HistoryControlOptions {
   /** Tooltip text for the undo button. Default: "Undo (Ctrl+Z)". */
@@ -36,7 +37,7 @@ export class HistoryControl implements Control {
 
     this._undoBtn = this._createButton(
       'undo',
-      '↶',
+      createControlIcon('undo'),
       this._options.undoTitle ?? 'Undo (Ctrl+Z)',
       () => {
         this._map?.undo();
@@ -44,7 +45,7 @@ export class HistoryControl implements Control {
     );
     this._redoBtn = this._createButton(
       'redo',
-      '↷',
+      createControlIcon('redo'),
       this._options.redoTitle ?? 'Redo (Ctrl+Shift+Z)',
       () => {
         this._map?.redo();
@@ -81,7 +82,7 @@ export class HistoryControl implements Control {
 
   private _createButton(
     id: string,
-    label: string,
+    iconNode: Node,
     title: string,
     onClick: () => void,
   ): HTMLButtonElement {
@@ -92,7 +93,7 @@ export class HistoryControl implements Control {
     btn.disabled = true;
     const icon = document.createElement('span');
     icon.className = 'emap-ctrl-icon';
-    icon.textContent = label;
+    icon.appendChild(iconNode);
     btn.appendChild(icon);
     btn.addEventListener('click', onClick);
     this._container?.appendChild(btn);

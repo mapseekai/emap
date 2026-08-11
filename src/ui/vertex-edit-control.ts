@@ -1,5 +1,6 @@
 import type { Control } from './control';
 import type { Emap } from '../map/map';
+import { createControlIcon } from './control-icons';
 
 export interface VertexEditControlOptions {
   /** Polygon hover fill, forwarded to map.vertexEdit. Default unchanged. */
@@ -28,7 +29,10 @@ export class VertexEditControl implements Control {
     this._btn.type = 'button';
     this._btn.title = 'Edit Vertices';
     this._btn.setAttribute('aria-pressed', 'false');
-    this._btn.innerHTML = '<span class="emap-ctrl-icon">✏</span>';
+    const icon = document.createElement('span');
+    icon.className = 'emap-ctrl-icon';
+    icon.appendChild(createControlIcon('edit'));
+    this._btn.appendChild(icon);
     this._btn.addEventListener('click', () => this._toggle());
     this._container.appendChild(this._btn);
     return this._container;

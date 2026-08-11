@@ -30,6 +30,7 @@ describe('SimplifyControl', () => {
     const btns = el.querySelectorAll('button');
     expect(btns).toHaveLength(2); // toggle button + Apply (inside popup)
     expect((btns[0] as HTMLButtonElement).title).toBe('Simplify geometry');
+    expect(btns[0].querySelector('span.emap-ctrl-icon svg')).toBeTruthy();
   });
 
   it('keeps the popup hidden by default', () => {

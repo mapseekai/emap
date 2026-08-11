@@ -12,6 +12,7 @@
 import { Control } from './control';
 import type { Emap } from '../map/map';
 import type { SimplifyMethod } from '../map/types';
+import { createControlIcon } from './control-icons';
 
 export interface SimplifyControlOptions {
   /** Source ID to simplify. Required. */
@@ -61,7 +62,10 @@ export class SimplifyControl implements Control {
     this._btn = document.createElement('button');
     this._btn.type = 'button';
     this._btn.className = 'emap-ctrl-simplify';
-    this._btn.innerHTML = '<span class="emap-ctrl-icon">≈</span>';
+    const icon = document.createElement('span');
+    icon.className = 'emap-ctrl-icon';
+    icon.appendChild(createControlIcon('simplify'));
+    this._btn.appendChild(icon);
     this._btn.title = this._opts.title ?? 'Simplify geometry';
     this._btn.setAttribute('aria-expanded', 'false');
     this._btn.onclick = (e) => {

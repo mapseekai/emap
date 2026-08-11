@@ -20,7 +20,7 @@
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">ArcCollection</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-call-signature" href="#arcintersectsbbox-1">arcIntersectsBBox</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">i</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">bbox</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#arcissmaller-1">arcIsSmaller</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">i</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">minLen</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#flatten-1">flatten</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#foreacharcsegment-1">forEachArcSegment</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">arcId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">cb</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">i</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">j</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">xx</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Float64Array</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">yy</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Float64Array</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#foreachsegment-1">forEachSegment</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">cb</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">i</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">j</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">xx</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Float64Array</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">yy</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Float64Array</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getarciter-1">getArcIter</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">arcId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.ArcIterator.html" class="tsd-signature-type tsd-kind-interface">ArcIterator</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getcopy-1">getCopy</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-interface">ArcCollection</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getfilteredcopy-1">getFilteredCopy</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-interface">ArcCollection</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getpointcount-1">getPointCount</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getretainedinterval-1">getRetainedInterval</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getshapeiter-1">getShapeIter</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">part</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.ArcIterator.html" class="tsd-signature-type tsd-kind-interface">ArcIterator</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getsimpleshapebbox-1">getSimpleShapeBbox</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">shapeIds</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">bbox</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getthresholdbypct-1">getThresholdByPct</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">pct</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">nth</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getvertex2-1">getVertex2</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">vertexId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getvertexdata-1">getVertexData</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.ArcVertexData.html" class="tsd-signature-type tsd-kind-interface">ArcVertexData</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#isflat-1">isFlat</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setretainedinterval-1">setRetainedInterval</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">interval</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-interface">ArcCollection</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setthresholds-1">setThresholds</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">zz</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Float64Array</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#size-1">size</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#transformpoints-1">transformPoints</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">cb</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">x</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">y</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">arcId</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#updatearcbounds-1">updateArcBounds</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">arcId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#updatevertexdata-1">updateVertexData</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">nn</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Int32Array</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">ArrayBufferLike</span><span class="tsd-signature-symbol">&gt;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Uint32Array</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">ArrayBufferLike</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">xx</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Float64Array</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">yy</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Float64Array</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">zz</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Float64Array</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">ArrayBufferLike</span><span class="tsd-signature-symbol">&gt;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L52">src/types/mapshaper-types.ts:52</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L52">src/types/mapshaper-types.ts:52</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -73,7 +73,7 @@
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L91">src/types/mapshaper-types.ts:91</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L91">src/types/mapshaper-types.ts:91</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="arcissmaller"><code class="tsd-tag">Optional</code><span>arc<wbr/>Is<wbr/>Smaller</span><a href="#arcissmaller" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -93,7 +93,7 @@
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L90">src/types/mapshaper-types.ts:90</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L90">src/types/mapshaper-types.ts:90</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="flatten"><code class="tsd-tag">Optional</code><span>flatten</span><a href="#flatten" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -104,7 +104,7 @@
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L69">src/types/mapshaper-types.ts:69</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L69">src/types/mapshaper-types.ts:69</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="foreacharcsegment"><code class="tsd-tag">Optional</code><span>for<wbr/>Each<wbr/>Arc<wbr/>Segment</span><a href="#foreacharcsegment" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -124,7 +124,7 @@
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L58">src/types/mapshaper-types.ts:58</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L58">src/types/mapshaper-types.ts:58</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="foreachsegment"><code class="tsd-tag">Optional</code><span>for<wbr/>Each<wbr/>Segment</span><a href="#foreachsegment" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -141,7 +141,7 @@
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L57">src/types/mapshaper-types.ts:57</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L57">src/types/mapshaper-types.ts:57</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getarciter"><span>get<wbr/>Arc<wbr/>Iter</span><a href="#getarciter" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -158,7 +158,7 @@
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="index.ArcIterator.html" class="tsd-signature-type tsd-kind-interface">ArcIterator</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L55">src/types/mapshaper-types.ts:55</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L55">src/types/mapshaper-types.ts:55</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getcopy"><code class="tsd-tag">Optional</code><span>get<wbr/>Copy</span><a href="#getcopy" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -169,7 +169,7 @@
 </div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L71">src/types/mapshaper-types.ts:71</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L71">src/types/mapshaper-types.ts:71</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getfilteredcopy"><code class="tsd-tag">Optional</code><span>get<wbr/>Filtered<wbr/>Copy</span><a href="#getfilteredcopy" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -180,7 +180,7 @@
 </div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L70">src/types/mapshaper-types.ts:70</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L70">src/types/mapshaper-types.ts:70</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getpointcount"><code class="tsd-tag">Optional</code><span>get<wbr/>Point<wbr/>Count</span><a href="#getpointcount" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -191,7 +191,7 @@
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L74">src/types/mapshaper-types.ts:74</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L74">src/types/mapshaper-types.ts:74</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getretainedinterval"><code class="tsd-tag">Optional</code><span>get<wbr/>Retained<wbr/>Interval</span><a href="#getretainedinterval" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -202,7 +202,7 @@
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L65">src/types/mapshaper-types.ts:65</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L65">src/types/mapshaper-types.ts:65</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getshapeiter"><code class="tsd-tag">Optional</code><span>get<wbr/>Shape<wbr/>Iter</span><a href="#getshapeiter" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -219,7 +219,7 @@
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="index.ArcIterator.html" class="tsd-signature-type tsd-kind-interface">ArcIterator</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L56">src/types/mapshaper-types.ts:56</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L56">src/types/mapshaper-types.ts:56</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getsimpleshapebbox"><code class="tsd-tag">Optional</code><span>get<wbr/>Simple<wbr/>Shape<wbr/>Bbox</span><a href="#getsimpleshapebbox" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -239,7 +239,7 @@
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L89">src/types/mapshaper-types.ts:89</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L89">src/types/mapshaper-types.ts:89</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getthresholdbypct"><code class="tsd-tag">Optional</code><span>get<wbr/>Threshold<wbr/>By<wbr/>Pct</span><a href="#getthresholdbypct" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -259,7 +259,7 @@
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L66">src/types/mapshaper-types.ts:66</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L66">src/types/mapshaper-types.ts:66</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getvertex2"><code class="tsd-tag">Optional</code><span>get<wbr/>Vertex2</span><a href="#getvertex2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -276,7 +276,7 @@
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L76">src/types/mapshaper-types.ts:76</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L76">src/types/mapshaper-types.ts:76</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getvertexdata"><code class="tsd-tag">Optional</code><span>get<wbr/>Vertex<wbr/>Data</span><a href="#getvertexdata" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -287,7 +287,7 @@
 </div>
 <h4 class="tsd-returns-title">Returns <a href="index.ArcVertexData.html" class="tsd-signature-type tsd-kind-interface">ArcVertexData</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L75">src/types/mapshaper-types.ts:75</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L75">src/types/mapshaper-types.ts:75</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="isflat"><code class="tsd-tag">Optional</code><span>is<wbr/>Flat</span><a href="#isflat" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -298,7 +298,7 @@
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L68">src/types/mapshaper-types.ts:68</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L68">src/types/mapshaper-types.ts:68</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="setretainedinterval"><code class="tsd-tag">Optional</code><span>set<wbr/>Retained<wbr/>Interval</span><a href="#setretainedinterval" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -315,7 +315,7 @@
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L64">src/types/mapshaper-types.ts:64</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L64">src/types/mapshaper-types.ts:64</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="setthresholds"><code class="tsd-tag">Optional</code><span>set<wbr/>Thresholds</span><a href="#setthresholds" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -332,7 +332,7 @@
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L67">src/types/mapshaper-types.ts:67</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L67">src/types/mapshaper-types.ts:67</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="size"><span>size</span><a href="#size" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -343,7 +343,7 @@
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L54">src/types/mapshaper-types.ts:54</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L54">src/types/mapshaper-types.ts:54</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="transformpoints"><code class="tsd-tag">Optional</code><span>transform<wbr/>Points</span><a href="#transformpoints" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -360,7 +360,7 @@
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L77">src/types/mapshaper-types.ts:77</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L77">src/types/mapshaper-types.ts:77</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="updatearcbounds"><code class="tsd-tag">Optional</code><span>update<wbr/>Arc<wbr/>Bounds</span><a href="#updatearcbounds" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -377,7 +377,7 @@
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L86">src/types/mapshaper-types.ts:86</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L86">src/types/mapshaper-types.ts:86</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="updatevertexdata"><code class="tsd-tag">Optional</code><span>update<wbr/>Vertex<wbr/>Data</span><a href="#updatevertexdata" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -403,7 +403,7 @@
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/da43b08eeb9df0a02779f6002d7d8c3145036b7f/src/types/mapshaper-types.ts#L79">src/types/mapshaper-types.ts:79</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/types/mapshaper-types.ts#L79">src/types/mapshaper-types.ts:79</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

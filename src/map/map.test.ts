@@ -6,6 +6,7 @@ import type { LayerSpecification } from './layer';
 import { Selection } from './selection';
 import { Projection } from '../geo/projection';
 import { Viewport } from '../geo/viewport';
+import { Bounds } from '../geo/bounds';
 import { AffineTransform } from '../geo/transform';
 import { EditHistory } from '../edit/edit-history';
 import { CompositeCommand } from '../edit/commands/composite';
@@ -205,6 +206,24 @@ function createBareMap(): Emap {
 }
 
 describe('Emap rendering', () => {
+  it('publishes a move after reset restores the initial view', () => {
+    const map = createBareMap();
+    const viewport = new Viewport();
+    viewport.updateSize(800, 600);
+    viewport.setExtent(new Bounds(0, 0, 100, 100));
+    const initialTransform = viewport.transform.clone();
+    viewport.pan(80, 40);
+    const moves: string[] = [];
+
+    setPrivate(map, '_viewport', viewport);
+    map.on('move', () => moves.push('move'));
+
+    map.reset();
+
+    expect(viewport.transform).toEqual(initialTransform);
+    expect(moves).toEqual(['move']);
+  });
+
   it('preserves a first nav render request until the RAF callback runs', () => {
     const map = Object.create(Emap.prototype) as Emap;
     const callbacks: FrameRequestCallback[] = [];

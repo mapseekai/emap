@@ -55,12 +55,14 @@ describe('DrawFeatureControl (thin shell)', () => {
   });
 
   it('default icon/title when no icon option (per geometry type)', () => {
-    const map = fakeMap();
-    const c = new DrawFeatureControl({ source: 's', type: 'point' });
-    const root = c.onAdd(map);
-    const btn = root.querySelector('button') as HTMLButtonElement;
-    expect(btn.title).toBe('Draw Point');
-    expect(btn.querySelector('span.emap-ctrl-icon')?.textContent).toBe('●');
+    for (const type of ['polygon', 'polyline', 'point'] as const) {
+      const map = fakeMap();
+      const c = new DrawFeatureControl({ source: 's', type });
+      const root = c.onAdd(map);
+      const btn = root.querySelector('button') as HTMLButtonElement;
+      expect(btn.title).toBe(`Draw ${type[0].toUpperCase()}${type.slice(1)}`);
+      expect(btn.querySelector('span.emap-ctrl-icon svg')).toBeTruthy();
+    }
   });
 
   it('cross-mode editmodechange un-presses the button', () => {

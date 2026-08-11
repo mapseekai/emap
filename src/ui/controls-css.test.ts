@@ -30,21 +30,37 @@ afterEach(() => {
 
 describe('controls.css Mapseek behavior', () => {
   it('exposes the 32px geometry and flat-surface values consumed by controls', () => {
-    const { host } = mountControls();
+    const { host, group, button } = mountControls();
+    button.classList.remove('active');
     const icon = document.createElement('span');
     icon.className = 'emap-ctrl-icon';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    icon.append(svg);
+    button.append(icon);
     const status = document.createElement('div');
     status.className = 'emap-status-ctrl';
-    host.append(icon, status);
+    host.append(status);
 
     const tokenStyle = getComputedStyle(document.documentElement);
+    const buttonStyle = getComputedStyle(button);
     const iconStyle = getComputedStyle(icon);
+    const svgStyle = getComputedStyle(svg);
     const statusStyle = getComputedStyle(status);
 
     expect(tokenStyle.getPropertyValue('--emap-control-size')).toBe('32px');
     expect(tokenStyle.getPropertyValue('--emap-radius')).toBe('0');
     expect(tokenStyle.getPropertyValue('--emap-surface-shadow')).toBe('none');
+    expect(buttonStyle.display).toBe('flex');
+    expect(buttonStyle.alignItems).toBe('center');
+    expect(buttonStyle.justifyContent).toBe('center');
+    expect(buttonStyle.color).toBe(getComputedStyle(group).color);
     expect(iconStyle.fontSize).toBe('18px');
+    expect(iconStyle.display).toBe('inline-flex');
+    expect(iconStyle.width).toBe('100%');
+    expect(iconStyle.height).toBe('100%');
+    expect(svgStyle.display).toBe('block');
+    expect(svgStyle.width).toBe('1em');
+    expect(svgStyle.height).toBe('1em');
     expect(statusStyle.padding).toBe('4px 8px');
   });
 
@@ -130,6 +146,19 @@ describe('controls.css Mapseek behavior', () => {
 
     expect(groupStyle.display).toBe('flex');
     expect(buttonStyle.cursor).toBe('pointer');
+  });
+
+  it('keeps dividers out of the icon button box geometry', () => {
+    const { group, button } = mountControls();
+    const lastButton = document.createElement('button');
+    group.append(lastButton);
+
+    const buttonStyle = getComputedStyle(button);
+    const lastButtonStyle = getComputedStyle(lastButton);
+
+    expect(buttonStyle.borderBottomWidth).toBe('0px');
+    expect(buttonStyle.boxShadow).toContain('inset 0 -1px');
+    expect(lastButtonStyle.boxShadow).toBe('none');
   });
 
   it('lays out semantic simplify fields with themed form controls', () => {

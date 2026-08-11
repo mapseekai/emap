@@ -1,6 +1,7 @@
 import type { DrawFeatureOptions, DrawGeometryType } from '../core/handlers/draw-feature';
 import type { Control } from './control';
 import type { Emap } from '../map/map';
+import { createControlIcon, type ControlIconName } from './control-icons';
 
 export type { DrawGeometryType } from '../core/handlers/draw-feature';
 
@@ -8,10 +9,10 @@ export interface DrawFeatureControlOptions extends DrawFeatureOptions {
   icon?: string | Node;
 }
 
-const DEFAULT_ICONS: Record<DrawGeometryType, string> = {
-  polygon: '▢',
-  polyline: '╱',
-  point: '●',
+const DEFAULT_ICON_NAMES: Record<DrawGeometryType, ControlIconName> = {
+  polygon: 'polygon',
+  polyline: 'polyline',
+  point: 'point',
 };
 
 const DEFAULT_TITLES: Record<DrawGeometryType, string> = {
@@ -48,7 +49,7 @@ export class DrawFeatureControl implements Control {
     this._btn.setAttribute('aria-pressed', 'false');
     const iconSpan = document.createElement('span');
     iconSpan.className = 'emap-ctrl-icon';
-    const icon = this._opts.icon ?? DEFAULT_ICONS[this._opts.type];
+    const icon = this._opts.icon ?? createControlIcon(DEFAULT_ICON_NAMES[this._opts.type]);
     if (typeof icon === 'string') {
       iconSpan.textContent = icon;
     } else {

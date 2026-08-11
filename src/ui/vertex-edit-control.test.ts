@@ -24,6 +24,7 @@ describe('VertexEditControl (thin shell)', () => {
     const root = c.onAdd(map);
     const btn = root.querySelector('button') as HTMLButtonElement;
     expect(btn).toBeTruthy();
+    expect(btn.querySelector('span.emap-ctrl-icon svg')).toBeTruthy();
     expect(btn.getAttribute('aria-pressed')).toBe('false');
     btn.click();
     expect(map.vertexEdit.enable).toHaveBeenCalledTimes(1);

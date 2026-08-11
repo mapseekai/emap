@@ -97,10 +97,18 @@
   cursor: pointer;
 }
 
-.emap-ctrl-group > button { width: var(--emap-control-size); }
+.emap-ctrl-group > button {
+  display: flex;
+  width: var(--emap-control-size);
+  align-items: center;
+  justify-content: center;
+  border-block-end: 0;
+  box-shadow: inset 0 -1px 0 var(--emap-current-border);
+}
 .emap-basemap-btn { width: auto; padding-inline: 10px; }
 .emap-ctrl-group > button:last-child,
 .emap-basemap-btn { border-block-end: 0; }
+.emap-ctrl-group > button:last-child { box-shadow: none; }
 
 .emap-ctrl-group > button:hover:not(:disabled),
 .emap-basemap-btn:hover:not(:disabled) { background: var(--emap-current-hover-bg); }
@@ -141,7 +149,20 @@
   height: 2px;
 }
 
-.emap-ctrl-icon { font-size: 18px; line-height: var(--emap-control-size); }
+.emap-ctrl-icon {
+  display: inline-flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: var(--emap-control-size);
+}
+.emap-ctrl-icon svg {
+  display: block;
+  width: 1em;
+  height: 1em;
+}
 
 /* Status controls */
 .emap-status-ctrl {

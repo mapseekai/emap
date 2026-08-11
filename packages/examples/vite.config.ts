@@ -14,6 +14,7 @@ const assetIntegrity = JSON.parse(process.env.EMAP_EXAMPLES_ASSET_INTEGRITY ?? '
 
 const routeIds = [
   'getting-started/geojson-viewer',
+  'getting-started/shapefile-viewer',
   'getting-started/points',
   'getting-started/point-style',
   'getting-started/lines',
