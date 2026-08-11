@@ -14,8 +14,10 @@ import {
 } from 'apache-arrow';
 import { describe, expect, it, vi } from 'vitest';
 import * as datasetToTable from '../arrow/dataset-to-table';
+import * as tableToDataset from '../arrow/table-to-dataset';
 import { datasetFromGeoJSON } from '../arrow/test-utils';
 import type { MapshaperDataset } from '../types/mapshaper-types';
+import * as datasetCrs from './dataset-crs';
 import { DuckDbOperationError } from './duckdb-errors';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
 import {
@@ -375,6 +377,9 @@ describe('spatialAggregateJoinDatasetWithDuckDb', () => {
       { id: 'B', name: 'bravo' },
       { id: 'C', name: 'charlie' },
     ]);
+    expect(result.layers[0]?.data?.getRecords?.()[0]).not.toBe(
+      target.layers[0]?.data?.getRecords?.()[0],
+    );
   });
 
   it('uses target-relative order for inner joins and clones retained shapes', async () => {
@@ -699,7 +704,11 @@ describe('spatialAggregateJoinDatasetWithDuckDb', () => {
     ['avg', new Field('sales', new Bool(), true)],
     ['sum', new Field('sales', new DateDay(), true)],
     ['sum', new Field('sales', new List(new Field('item', new Int32(), true)), true)],
+    ['min', new Field('sales', new List(new Field('item', new Int32(), true)), true)],
+    ['max', new Field('sales', new List(new Field('item', new Int32(), true)), true)],
     ['min', new Field('sales', new Struct([new Field('x', new Int32(), true)]), true)],
+    ['sum', new Field('sales', new Struct([new Field('x', new Int32(), true)]), true)],
+    ['avg', new Field('sales', new Struct([new Field('x', new Int32(), true)]), true)],
     [
       'max',
       new Field(
@@ -718,6 +727,8 @@ describe('spatialAggregateJoinDatasetWithDuckDb', () => {
       ),
     ],
     ['min', new Field('sales', new Binary(), true)],
+    ['sum', new Field('sales', new Binary(), true)],
+    ['avg', new Field('sales', new Binary(), true)],
   ] as const)('rejects invalid %s Arrow field types before connecting', async (operation, field) => {
     const target = await targetDataset();
     const join = await joinDataset();
@@ -893,6 +904,143 @@ describe('spatialAggregateJoinDatasetWithDuckDb', () => {
     );
     expect(received.cause).toBe(error);
     expect(runtime.events.at(-1)).toBe(failure === 'connectError' ? 'connect' : 'close');
+  });
+
+  it('reports close cleanup failures after a successful aggregate query', async () => {
+    const cause = new Error('close');
+    const runtime = new AggregateRuntime(
+      tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [1] }),
+      { closeError: cause },
+    );
+    const err = await expectOperationError(
+      spatialAggregateJoinDatasetWithDuckDb(
+        await targetDataset(),
+        await joinDataset(),
+        validOptions,
+        runtime,
+      ),
+      { kind: 'query-failed' },
+    );
+    expect(err.message).toMatch(/cleanup/i);
+    expect(err.cause).toBe(cause);
+    expect(runtime.events.at(-1)).toBe('close');
+  });
+
+  it('retains the first successful-query cleanup DROP error while attempting both drops and close', async () => {
+    const first = new Error('first drop');
+    const runtime = new AggregateRuntime(
+      tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [1] }),
+      { dropErrors: [first, new Error('second drop')], closeError: new Error('close') },
+    );
+    const err = await expectOperationError(
+      spatialAggregateJoinDatasetWithDuckDb(
+        await targetDataset(),
+        await joinDataset(),
+        validOptions,
+        runtime,
+      ),
+      { kind: 'query-failed' },
+    );
+    expect(err.message).toMatch(/cleanup/i);
+    expect(err.cause).toBe(first);
+    expect(runtime.events.filter((event) => event.startsWith('drop:'))).toHaveLength(2);
+    expect(runtime.events.at(-1)).toBe('close');
+  });
+
+  it.each([
+    [
+      'target conversion',
+      async () => {
+        const spy = vi.spyOn(datasetToTable, 'toArrowTable').mockImplementation(() => {
+          throw new Error('target conversion');
+        });
+        return spy;
+      },
+    ],
+    [
+      'join conversion',
+      async () => {
+        const target = await targetDataset();
+        const real = datasetToTable.toArrowTable;
+        const targetTable = real(target, { encoding: 'wkb' });
+        const spy = vi.spyOn(datasetToTable, 'toArrowTable');
+        spy.mockReturnValueOnce(targetTable).mockImplementationOnce(() => {
+          throw new Error('join conversion');
+        });
+        return spy;
+      },
+    ],
+  ] as const)('preserves %s failure causes as conversion-failed', async (_label, setup) => {
+    const spy = await setup();
+    try {
+      const err = await expectOperationError(
+        spatialAggregateJoinDatasetWithDuckDb(
+          await targetDataset(),
+          await joinDataset(),
+          validOptions,
+          new AggregateRuntime(tableFromArrays({ __emap_rowid: [] })),
+        ),
+        { kind: 'conversion-failed' },
+      );
+      expect(err.cause).toBeInstanceOf(Error);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('preserves CRS alignment and result decoding causes as conversion-failed', async () => {
+    const crsCause = new Error('CRS alignment');
+    const crsSpy = vi.spyOn(datasetCrs, 'alignSecondaryDatasetCrs').mockRejectedValue(crsCause);
+    try {
+      const err = await expectOperationError(
+        spatialAggregateJoinDatasetWithDuckDb(
+          await targetDataset(),
+          await joinDataset(),
+          validOptions,
+          new AggregateRuntime(tableFromArrays({ __emap_rowid: [] })),
+        ),
+        { kind: 'conversion-failed' },
+      );
+      expect(err.cause).toBe(crsCause);
+    } finally {
+      crsSpy.mockRestore();
+    }
+
+    const decodeCause = new Error('decode');
+    const recordsSpy = vi.spyOn(tableToDataset, 'recordsFromArrowTable').mockImplementation(() => {
+      throw decodeCause;
+    });
+    try {
+      const err = await expectOperationError(
+        spatialAggregateJoinDatasetWithDuckDb(
+          await targetDataset(),
+          await joinDataset(),
+          validOptions,
+          new AggregateRuntime(
+            tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [1] }),
+          ),
+        ),
+        { kind: 'conversion-failed' },
+      );
+      expect(err.cause).toBe(decodeCause);
+    } finally {
+      recordsSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    [tableFromArrays({ __emap_rowid: [0], sales_total: [1] })],
+    [tableFromArrays({ __emap_rowid: [0], match_count: [1] })],
+  ])('requires every requested aggregate result column', async (result) => {
+    await expectOperationError(
+      spatialAggregateJoinDatasetWithDuckDb(
+        await targetDataset(),
+        await joinDataset(),
+        validOptions,
+        new AggregateRuntime(result),
+      ),
+      { kind: 'conversion-failed' },
+    );
   });
 
   it.each([
