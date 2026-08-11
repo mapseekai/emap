@@ -119,6 +119,18 @@ describe('buildSpatialAggregateJoinSql', () => {
       duckDbFunction: 'ST_Intersects',
       aggregations: [{ operation: 'median', outputColumn: 'median' }],
     },
+    {
+      duckDbFunction: 'ST_Intersects',
+      aggregations: [{ operation: 'toString', field: 'sales', outputColumn: 'invalid' }],
+    },
+    {
+      duckDbFunction: 'ST_Intersects',
+      aggregations: [{ operation: 'constructor', field: 'sales', outputColumn: 'invalid' }],
+    },
+    {
+      duckDbFunction: 'ST_Intersects',
+      aggregations: [{ operation: '__proto__', field: 'sales', outputColumn: 'invalid' }],
+    },
     { duckDbFunction: 'ST_Intersects', aggregations: [] },
   ])('rejects runtime-bypass invalid input %#', ({ duckDbFunction, aggregations }) => {
     expect(() =>

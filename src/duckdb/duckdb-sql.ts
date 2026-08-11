@@ -310,7 +310,9 @@ export function buildSpatialAggregateJoinSql(opts: BuildSpatialAggregateJoinSqlO
   const joinGeometryColumn = quoteIdentifier(opts.joinGeometryColumn);
   const targetRowIdColumn = quoteIdentifier(opts.targetRowIdColumn);
   const aggregations = opts.aggregations.map((aggregation) => {
-    if (!(aggregation.operation in SPATIAL_AGGREGATE_SQL_FUNCTIONS)) {
+    if (
+      !Object.prototype.hasOwnProperty.call(SPATIAL_AGGREGATE_SQL_FUNCTIONS, aggregation.operation)
+    ) {
       throw new Error(
         `Unsupported spatial aggregate operation: ${JSON.stringify(aggregation.operation)}`,
       );
