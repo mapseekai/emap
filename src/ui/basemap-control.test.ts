@@ -486,6 +486,48 @@ describe('BasemapControl manager-driven UI', () => {
     expect(manager.setBasemap).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { phase: 'tile' as const, serviceId: 'light', message: 'tile request failed' },
+    { phase: 'lifecycle' as const, serviceId: undefined, message: 'runtime warning' },
+  ])('shows a transient $phase error whose service state remains ready', ({
+    phase,
+    serviceId,
+    message,
+  }) => {
+    const manager = new FakeManager([basemap('light', 'Light')]);
+    manager.setState('light', { active: true, status: 'ready' });
+    const { root } = mount(manager);
+
+    manager.emit('error', {
+      serviceId,
+      phase,
+      error: new Error(message),
+      fatal: false,
+    });
+
+    expect(manager.getServiceState('light')).toEqual({
+      id: 'light',
+      active: true,
+      status: 'ready',
+    });
+    expect(root.querySelector('[role="status"]')?.textContent).toContain(message);
+    expect(panel(root).getAttribute('aria-busy')).toBe('false');
+    expect(radios(root).find((radio) => radio.value === 'light')?.checked).toBe(true);
+    expect(manager.addService).not.toHaveBeenCalled();
+    expect(manager.updateService).not.toHaveBeenCalled();
+    expect(manager.removeService).not.toHaveBeenCalled();
+    expect(manager.setBasemap).not.toHaveBeenCalled();
+    expect(manager.setOverlayVisibility).not.toHaveBeenCalled();
+
+    manager.emit('change', {
+      serviceId: 'light',
+      role: 'basemap',
+      reason: 'status',
+      state: manager.getServiceState('light'),
+    });
+    expect(root.querySelector('[role="status"]')?.textContent).toBe('Light selected');
+  });
+
   it('reports non-abort promise failures but ignores superseded AbortErrors', async () => {
     const manager = new FakeManager([basemap('light', 'Light')]);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);

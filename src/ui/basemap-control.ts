@@ -95,9 +95,9 @@ export class BasemapControl implements Control {
   };
 
   private readonly _handleManagerError = (
-    _event: { type: 'error' } & MapLibreServiceErrorEvent,
+    event: { type: 'error' } & MapLibreServiceErrorEvent,
   ): void => {
-    this._render();
+    this._render(event.error);
   };
 
   private readonly _handleTriggerClick = (): void => {
@@ -263,7 +263,7 @@ export class BasemapControl implements Control {
     this._observeManagerOperation(operation);
   }
 
-  private _render(): void {
+  private _render(transientError?: Error): void {
     if (!this._manager || !this._panel || !this._radioGroup || !this._status) return;
 
     const focusedValue = this._radioGroup.contains(document.activeElement)
@@ -303,7 +303,9 @@ export class BasemapControl implements Control {
 
     const loading = activeState?.status === 'loading';
     this._panel.setAttribute('aria-busy', String(loading));
-    if (activeBasemap && activeState?.status === 'loading') {
+    if (transientError) {
+      this._status.textContent = `Basemap error: ${transientError.message}`;
+    } else if (activeBasemap && activeState?.status === 'loading') {
       this._status.textContent = `Loading ${activeBasemap.name}…`;
     } else if (erroredBasemap) {
       this._status.textContent = `${erroredBasemap.name}: ${errorState?.error?.message ?? 'Basemap error'}`;
