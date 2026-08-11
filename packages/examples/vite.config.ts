@@ -60,6 +60,7 @@ const routeIds = [
   'snap-layer',
   'union',
   'crs-switch',
+  'online-map-services',
   'web-worker',
   'duckdb-buffer',
   'duckdb-geoparquet-query',

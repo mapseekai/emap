@@ -238,6 +238,10 @@ const exampleDescriptions = {
     zh: '在 EPSG:3857、EPSG:4326 和数据原始坐标系之间切换地图显示。',
     en: 'Switches the map among EPSG:3857, EPSG:4326, and the dataset’s original coordinate system.',
   },
+  'online-map-services': {
+    zh: '在构造地图时注册在线底图和叠加服务，并通过共享控件切换或显隐服务。',
+    en: 'Registers online basemap and overlay services at construction time and manages them with shared controls.',
+  },
   'web-worker': {
     zh: '把耗时的地图处理命令交给 Web Worker 执行，并显示运行状态和结果。',
     en: 'Runs expensive map-processing commands in a Web Worker and reports progress and results.',
@@ -365,6 +369,7 @@ const recipes: readonly ExampleDefinition[] = [
   recipe('snap-layer', 'spatial', '批量吸附', 'Snap layer', [docsOperations], 'Emap', ['spatial', 'export', 'history'], [task7LineFixture]),
   recipe('union', 'spatial', '面并集', 'Union polygons', [docsOperations], 'Emap', ['spatial', 'overlay', 'history'], [task7Fixture, task7MaskFixture]),
   recipe('crs-switch', 'crs', '坐标系切换', 'CRS switch', [docsCrs], 'Emap', ['crs', 'history', 'basemap'], [task7Fixture]),
+  recipe('online-map-services', 'platform', '在线地图服务', 'Online map services', [docsControls], 'MapLibreServiceManager', ['maplibre', 'basemap', 'overlay', 'controls'], [task6Fixture]),
   recipe('web-worker', 'platform', 'Web Worker 重命令', 'Web Worker heavy operations', [docsWorker, docsPerformance], 'Emap', ['worker', 'history'], [task7Fixture]),
   recipe('duckdb-buffer', 'duckdb', 'DuckDB 缓冲区', 'DuckDB buffer', [docsDuckDb, docsErrorHandling], 'Emap', ['duckdb', 'basemap'], [task7Fixture]),
   recipe('duckdb-geoparquet-query', 'duckdb', 'DuckDB GeoParquet 查询', 'DuckDB GeoParquet query', [docsDuckDb, docsFormats, docsStatusControl], 'Emap', ['duckdb', 'geoparquet', 'basemap'], ['fixtures/example-geoparquet.parquet']),

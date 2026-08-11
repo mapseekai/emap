@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { access, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { examples } from '../../docs-meta/examples';
 import { examplePublicHref, renderCatalog } from '../../packages/examples/src/catalog';
 
@@ -53,6 +53,7 @@ const expectedIds = [
   'snap-layer',
   'union',
   'crs-switch',
+  'online-map-services',
   'web-worker',
   'duckdb-buffer',
   'duckdb-geoparquet-query',
@@ -60,6 +61,118 @@ const expectedIds = [
   'duckdb-query',
   'duckdb-spatial-ops',
 ] as const;
+
+async function executeOnlineMapServicesExample(html: string) {
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  const moduleScript = parsed.querySelector<HTMLScriptElement>('script[type="module"]');
+  if (!moduleScript?.textContent) throw new Error('online-map-services module script is missing');
+
+  const script = moduleScript.textContent.replace(
+    /^\s*import\s+\{[^}]+\}\s+from\s+['"][^'"]+['"];\s*$/gm,
+    '',
+  );
+  const originalHead = document.head.innerHTML;
+  const originalBody = document.body.innerHTML;
+  document.head.innerHTML = parsed.head.innerHTML;
+  document.body.innerHTML = parsed.body.innerHTML;
+
+  const constructorOptions: unknown[] = [];
+  const maps: FakeEmap[] = [];
+  const controls: unknown[] = [];
+  const layers: Array<Record<string, unknown>> = [];
+  const sharedUiCalls: Array<{ map: unknown; runtime: unknown }> = [];
+  const fixtureRequests: string[] = [];
+
+  class FakeLayerControl {}
+  class FakeNavigationControl {}
+  class FakeTopologySource {
+    public readonly id: string;
+
+    public constructor(id: string) {
+      this.id = id;
+    }
+
+    public async setData(): Promise<void> {}
+
+    public getExtent(): [number, number, number, number] {
+      return [-10, -10, 10, 10];
+    }
+  }
+  class FakeEmap {
+    public constructor(options: unknown) {
+      constructorOptions.push(options);
+      maps.push(this);
+    }
+
+    public addControl(control: unknown): void {
+      controls.push(control);
+    }
+
+    public async addSource(): Promise<void> {}
+
+    public addLayer(layer: Record<string, unknown>): void {
+      layers.push(layer);
+    }
+
+    public setExtent(): void {}
+
+    public resize(): void {}
+  }
+
+  const runtime = {
+    Emap: FakeEmap,
+    LayerControl: FakeLayerControl,
+    NavigationControl: FakeNavigationControl,
+    TopologySource: FakeTopologySource,
+  };
+  const installExampleMapUi = (map: unknown, suppliedRuntime: unknown): void => {
+    sharedUiCalls.push({ map, runtime: suppliedRuntime });
+  };
+  const autoLoadExampleFixtures = async (id: string): Promise<void> => {
+    fixtureRequests.push(id);
+    const input = document.querySelector<HTMLInputElement>('#file-input');
+    if (!input) throw new Error('online-map-services #file-input is missing');
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [{ name: 'task-6-polygons.geojson', arrayBuffer: async () => new ArrayBuffer(0) }],
+    });
+    input.dispatchEvent(new Event('change'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+  const loadExampleRuntime = async () => runtime;
+  const fakeWindow = { addEventListener: vi.fn() };
+  const fetchSpy = vi
+    .spyOn(globalThis, 'fetch')
+    .mockRejectedValue(new Error('online-map-services example must not use network in tests'));
+
+  try {
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+    await new AsyncFunction(
+      'installExampleMapUi',
+      'autoLoadExampleFixtures',
+      'loadExampleRuntime',
+      'document',
+      'window',
+      script,
+    )(installExampleMapUi, autoLoadExampleFixtures, loadExampleRuntime, document, fakeWindow);
+
+    return {
+      constructorOptions,
+      maps,
+      controls,
+      layers,
+      sharedUiCalls,
+      fixtureRequests,
+      fetchCalls: fetchSpy.mock.calls,
+      runtime,
+      FakeLayerControl,
+    };
+  } finally {
+    fetchSpy.mockRestore();
+    document.head.innerHTML = originalHead;
+    document.body.innerHTML = originalBody;
+  }
+}
 
 describe('example catalog metadata', () => {
   it('builds stable public hrefs for flat and nested IDs', () => {
@@ -140,6 +253,16 @@ describe('example catalog metadata', () => {
     ]);
     expect(byId.get('web-worker')?.featureFlags).toContain('worker');
     expect(byId.get('geoparquet-viewer')?.featureFlags).toContain('formats');
+
+    const onlineServices = byId.get('online-map-services');
+    expect(onlineServices).toMatchObject({
+      category: 'platform',
+      docs: ['/docs/guides/controls'],
+      api: ['MapLibreServiceManager'],
+      featureFlags: ['maplibre', 'basemap', 'overlay', 'controls'],
+      fixtures: ['fixtures/task-6-polygons.geojson'],
+      route: '/examples/online-map-services/',
+    });
   });
 
   it('renders catalog cards as direct public routes without hashes', () => {
@@ -212,6 +335,59 @@ describe('example catalog metadata', () => {
       );
       expect(html, `${example.id} uses local starter data`).not.toContain('https://geojson.cn/');
     }
+  });
+
+  it('constructs the online services registry and installs map UI and business layers', async () => {
+    const html = await readFile(
+      resolve('packages/examples/examples/online-map-services/index.html'),
+      'utf8',
+    );
+    const result = await executeOnlineMapServicesExample(html);
+    const options = result.constructorOptions[0] as {
+      container: string;
+      mapLibre: {
+        services: Array<{
+          id: string;
+          name: string;
+          role: string;
+          visible?: boolean;
+          sources?: Record<string, { tiles: string[] }>;
+        }>;
+        defaultBasemap: string;
+      };
+    };
+    const { services } = options.mapLibre;
+
+    expect(result.constructorOptions).toHaveLength(1);
+    expect(options.container).toBe('map');
+    expect(options.mapLibre.defaultBasemap).toBe('osm');
+    expect(
+      services.filter(({ role }) => role === 'basemap').map(({ id, name }) => ({ id, name })),
+    ).toEqual([
+      { id: 'osm', name: 'OpenStreetMap' },
+      { id: 'carto-light', name: 'Carto Light' },
+    ]);
+    expect(
+      services.filter(({ role }) => role === 'overlay').map(({ id, visible }) => ({ id, visible })),
+    ).toEqual([
+      { id: 'states-wms', visible: true },
+      { id: 'usgs-imagery', visible: true },
+    ]);
+    expect(services[2].sources?.['states-wms'].tiles).toEqual([
+      'https://ahocevar.com/geoserver/wms?service=WMS&request=GetMap&layers=topp:states&styles=&format=image/png&transparent=true&version=1.1.1&srs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256',
+    ]);
+    expect(services[3].sources?.['usgs-imagery'].tiles).toEqual([
+      'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}',
+    ]);
+    expect(result.sharedUiCalls).toEqual([{ map: result.maps[0], runtime: result.runtime }]);
+    expect(
+      result.controls.filter((control) => control instanceof result.FakeLayerControl),
+    ).toHaveLength(1);
+    expect(result.layers).toEqual([
+      expect.objectContaining({ id: 'business-polygons', source: 'business-data', type: 'fill' }),
+    ]);
+    expect(result.fixtureRequests).toEqual(['online-map-services']);
+    expect(result.fetchCalls).toHaveLength(0);
   });
 
   it('exposes live line color, width, and dash controls', async () => {
