@@ -75,6 +75,15 @@ const expectedModules = [
 ] as const;
 
 describe('example catalog metadata', () => {
+  it('declares one directly ordered metadata array', async () => {
+    const source = await readFile(resolve('docs-meta/examples.ts'), 'utf8');
+
+    expect(source).not.toContain('const seeds:');
+    expect(source).not.toContain('const recipes:');
+    expect(source).not.toContain('function module(');
+    expect(source).not.toContain('recipes[');
+  });
+
   it('builds stable public hrefs for flat and nested IDs', () => {
     expect(examplePublicHref('buffer')).toBe('/mapseekai/emap/examples/buffer/');
     expect(examplePublicHref('getting-started/points')).toBe(
