@@ -482,7 +482,16 @@ export class Emap extends EventDispatcher {
 
     this._mapLibreOptions = options.mapLibre;
     if (this._mapLibreOptions) {
-      this._mapLibreServices = createMapLibreServiceManager(this, this._mapLibreOptions);
+      try {
+        this._mapLibreServices = createMapLibreServiceManager(this, this._mapLibreOptions);
+      } catch (error) {
+        try {
+          this.remove();
+        } catch {
+          // Preserve the original synchronous configuration error.
+        }
+        throw error;
+      }
       void this._mapLibreServices.initialize().catch(() => undefined);
     }
   }
@@ -2424,8 +2433,14 @@ export class Emap extends EventDispatcher {
     controls.length = 0;
     this._controlContainers?.clear();
 
-    this._mapLibreServices?.destroy();
-    this._mapLibreServices = undefined;
+    let mapLibreDestroyFailure: { error: unknown } | undefined;
+    try {
+      this._mapLibreServices?.destroy();
+    } catch (error) {
+      mapLibreDestroyFailure = { error };
+    } finally {
+      this._mapLibreServices = undefined;
+    }
 
     // Active edit overlay state — clearing through the store fires the
     // change callback, which is harmless after `_removed` because
@@ -2435,6 +2450,8 @@ export class Emap extends EventDispatcher {
     if (this._container && this._canvasContainer) {
       this._container.removeChild(this._canvasContainer);
     }
+
+    if (mapLibreDestroyFailure) throw mapLibreDestroyFailure.error;
   }
   /** Read by composed managers via `EmapHostInternal._removed`. */
   _removed = false;

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import type { Control } from '../ui/control';
 import { Emap } from './map';
 import type { MapLibreServiceManager } from './maplibre-service';
@@ -108,16 +109,6 @@ describe('Emap MapLibre service ownership', () => {
     expect(mapLibreModuleLoaded).not.toHaveBeenCalled();
   });
 
-  it('rejects an invalid default basemap synchronously during construction', () => {
-    expect(
-      () =>
-        new Emap({
-          container: createContainer(),
-          mapLibre: { services: [basemap], defaultBasemap: 'missing' },
-        }),
-    ).toThrow('MapLibre default basemap "missing" does not exist');
-  });
-
   it('initializes configured visible overlays and the default basemap exactly once', () => {
     const initialize = vi
       .spyOn(MapLibreServiceManagerImpl.prototype, 'initialize')
@@ -159,5 +150,68 @@ describe('Emap MapLibre service ownership', () => {
     expect(order).toEqual(['control', 'manager']);
     expect(destroy).toHaveBeenCalledTimes(1);
     expect(getOwnedManager(map)).toBeUndefined();
+  });
+
+  it('finishes teardown before rethrowing a manager destroy failure', () => {
+    const order: string[] = [];
+    const container = createContainer();
+    const map = new Emap({ container });
+    maps.push(map);
+    const manager = map.mapLibreServices as MapLibreServiceManagerImpl;
+    const destroy = vi.spyOn(manager, 'destroy').mockImplementation(() => {
+      order.push('manager');
+      throw new Error('manager destroy failed');
+    });
+    const control: Control = {
+      onAdd: () => document.createElement('div'),
+      onRemove: () => {
+        order.push('control');
+      },
+    };
+    map.addControl(control);
+
+    expect(() => map.remove()).toThrow('manager destroy failed');
+
+    expect(order).toEqual(['control', 'manager']);
+    expect(getOwnedManager(map)).toBeUndefined();
+    expect(container.childElementCount).toBe(0);
+    expect(() => map.remove()).not.toThrow();
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('cleans partial DOM, handler, and worker ownership when configured validation throws', async () => {
+    const container = createContainer();
+    const workerPool = new MapshaperWorkerPool({ workerUrl: 'emap-worker.js' });
+    let canvasContainer: HTMLElement | undefined;
+    const appendChild = container.appendChild.bind(container);
+    container.appendChild = (<T extends Node>(node: T): T => {
+      if (node instanceof HTMLElement && node.classList.contains('emap-canvas-container')) {
+        canvasContainer = node;
+      }
+      return appendChild(node);
+    }) as typeof container.appendChild;
+
+    expect(
+      () =>
+        new Emap({
+          container,
+          useWorker: true,
+          workerPool,
+          mapLibre: { services: [basemap], defaultBasemap: 'missing' },
+        }),
+    ).toThrow('MapLibre default basemap "missing" does not exist');
+
+    expect(container.querySelector('.emap-canvas-container')).toBeNull();
+    expect(container.querySelector('canvas')).toBeNull();
+    expect(canvasContainer).toBeDefined();
+    const detachedCanvasContainer = canvasContainer as HTMLElement;
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 10, clientY: 10 }));
+    expect(detachedCanvasContainer.style.cursor).toBe('');
+    const wheel = new WheelEvent('wheel', { cancelable: true, deltaY: 1 });
+    detachedCanvasContainer.dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(false);
+    await expect(workerPool.run('-clip', { datasets: [] })).rejects.toThrow(
+      'MapshaperWorkerPool: destroyed',
+    );
   });
 });
