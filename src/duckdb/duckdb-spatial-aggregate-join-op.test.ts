@@ -51,40 +51,70 @@ const JOIN_FEATURES = {
   ],
 } as const;
 
+interface AggregateRuntimeOptions {
+  connectError?: unknown;
+  ensureSpatialError?: unknown;
+  queryError?: unknown;
+  dropErrors?: unknown[];
+  closeError?: unknown;
+}
+
 class AggregateConnection implements DuckDbConnection {
   readonly inserted: Array<{ table: Table; opts: { name: string } }> = [];
   readonly queries: string[] = [];
   closed = false;
 
-  constructor(private readonly result: Table) {}
+  constructor(
+    private readonly result: Table,
+    private readonly events: string[],
+    private readonly options: AggregateRuntimeOptions = {},
+  ) {}
 
   async insertArrowTable(table: Table, opts: { name: string }): Promise<void> {
     this.inserted.push({ table, opts });
+    this.events.push(`insert:${opts.name}`);
   }
 
   async query(sql: string): Promise<Table> {
     this.queries.push(sql);
+    this.events.push(sql.startsWith('DROP TABLE IF EXISTS') ? `drop:${sql}` : 'query:aggregate');
+    if (sql.startsWith('DROP TABLE IF EXISTS')) {
+      const error = this.options.dropErrors?.shift();
+      if (error) throw error;
+    } else if (this.options.queryError) {
+      throw this.options.queryError;
+    }
     return this.result;
   }
 
   async close(): Promise<void> {
     this.closed = true;
+    this.events.push('close');
+    if (this.options.closeError) throw this.options.closeError;
   }
 }
 
 class AggregateRuntime implements DuckDbRuntime {
   ensured = false;
+  readonly events: string[] = [];
   readonly connection: AggregateConnection;
 
-  constructor(result: Table) {
-    this.connection = new AggregateConnection(result);
+  constructor(
+    result: Table,
+    private readonly options: AggregateRuntimeOptions = {},
+  ) {
+    this.connection = new AggregateConnection(result, this.events, options);
   }
 
   async ensureSpatial(): Promise<void> {
     this.ensured = true;
+    this.events.push('ensureSpatial');
+    if (this.options.ensureSpatialError) throw this.options.ensureSpatialError;
   }
 
   async connect(): Promise<DuckDbConnection> {
+    this.events.push('connect');
+    if (this.options.connectError) throw this.options.connectError;
     return this.connection;
   }
 }
@@ -282,8 +312,23 @@ describe('spatialAggregateJoinDatasetWithDuckDb', () => {
     expect(runtime.connection.inserted[1]!.opts.name).toMatch(
       /^emap_duckdb_spatial_aggregate_join_/,
     );
+    expect(
+      runtime.connection.inserted[0]!.table.schema.fields.map((field) => field.name),
+    ).toContain('__emap_rowid');
+    expect(
+      runtime.connection.inserted[1]!.table.schema.fields.map((field) => field.name),
+    ).not.toContain('__emap_rowid');
     expect(runtime.connection.queries[0]).toContain('ST_Contains');
-    expect(runtime.connection.queries).toHaveLength(3);
+    expect(runtime.events).toEqual([
+      'ensureSpatial',
+      'connect',
+      `insert:${runtime.connection.inserted[0]!.opts.name}`,
+      `insert:${runtime.connection.inserted[1]!.opts.name}`,
+      'query:aggregate',
+      `drop:DROP TABLE IF EXISTS "${runtime.connection.inserted[0]!.opts.name}"`,
+      `drop:DROP TABLE IF EXISTS "${runtime.connection.inserted[1]!.opts.name}"`,
+      'close',
+    ]);
     expect(runtime.connection.closed).toBe(true);
 
     expect(result.layers).toHaveLength(1);
@@ -321,6 +366,11 @@ describe('spatialAggregateJoinDatasetWithDuckDb', () => {
     [{ ...validOptions, predicate: 'buffer' }, 'predicate'],
     [{ ...validOptions, joinType: 'outer' }, 'joinType'],
     [{ ...validOptions, aggregations: [] }, 'aggregations'],
+    [{ ...validOptions, aggregations: [null] }, 'aggregations[0]'],
+    [
+      { ...validOptions, aggregations: [{ operation: 'median', outputColumn: 'median' }] },
+      'aggregations[0].operation',
+    ],
     [
       { ...validOptions, aggregations: [{ operation: 'count', outputColumn: ' ' }] },
       'aggregations[0].outputColumn',
@@ -336,6 +386,29 @@ describe('spatialAggregateJoinDatasetWithDuckDb', () => {
       },
       'aggregations[0].field',
     ],
+    [
+      {
+        ...validOptions,
+        aggregations: [
+          { operation: 'count', outputColumn: 'one' },
+          { operation: 'count', outputColumn: ' one ' },
+        ],
+      },
+      'aggregations[1].outputColumn',
+    ],
+    [
+      {
+        ...validOptions,
+        aggregations: [{ operation: 'count', field: 'sales', outputColumn: 'count' }],
+      },
+      'aggregations[0].field',
+    ],
+    [
+      { ...validOptions, aggregations: [{ operation: 'sum', field: ' ', outputColumn: 'total' }] },
+      'aggregations[0].field',
+    ],
+    [{ ...validOptions, targetLayer: 99 }, 'targetLayer'],
+    [{ ...validOptions, joinLayer: -1 }, 'joinLayer'],
   ])('rejects invalid input before connecting (%s)', async (opts, field) => {
     const runtime = new AggregateRuntime(tableFromArrays({ __emap_rowid: [] }));
 
@@ -414,5 +487,153 @@ describe('spatialAggregateJoinDatasetWithDuckDb', () => {
     expect(result.layers[0]?.name).toBe('statistics');
     expect(result.info).toEqual(target.info);
     expect(result.info).not.toBe(target.info);
+  });
+
+  it.each([
+    [null],
+    [-1],
+    [1.5],
+    [99],
+    [0, 0],
+  ])('rejects malformed result row ids %#', async (...rowIds) => {
+    const runtime = new AggregateRuntime(
+      tableFromArrays({
+        __emap_rowid: rowIds,
+        match_count: rowIds.map(() => 1),
+        sales_total: rowIds.map(() => 1),
+      }),
+    );
+    await expect(
+      spatialAggregateJoinDatasetWithDuckDb(
+        await targetDataset(),
+        await joinDataset(),
+        validOptions,
+        runtime,
+      ),
+    ).rejects.toMatchObject({ kind: 'conversion-failed' });
+  });
+
+  it('classifies extension, query, cleanup, and primary-error precedence', async () => {
+    const extensionError = new Error('extension');
+    await expect(
+      spatialAggregateJoinDatasetWithDuckDb(
+        await targetDataset(),
+        await joinDataset(),
+        validOptions,
+        new AggregateRuntime(tableFromArrays({ __emap_rowid: [] }), {
+          ensureSpatialError: extensionError,
+        }),
+      ),
+    ).rejects.toMatchObject({ kind: 'spatial-extension-unavailable', cause: extensionError });
+
+    const queryError = new Error('query');
+    const primaryRuntime = new AggregateRuntime(tableFromArrays({ __emap_rowid: [] }), {
+      queryError,
+      dropErrors: [new Error('first drop'), new Error('second drop')],
+      closeError: new Error('close'),
+    });
+    await expect(
+      spatialAggregateJoinDatasetWithDuckDb(
+        await targetDataset(),
+        await joinDataset(),
+        validOptions,
+        primaryRuntime,
+      ),
+    ).rejects.toMatchObject({ kind: 'query-failed', cause: queryError });
+    expect(primaryRuntime.events.filter((event) => event.startsWith('drop:'))).toHaveLength(2);
+    expect(primaryRuntime.events.at(-1)).toBe('close');
+
+    const cleanupError = new Error('drop');
+    await expect(
+      spatialAggregateJoinDatasetWithDuckDb(
+        await targetDataset(),
+        await joinDataset(),
+        validOptions,
+        new AggregateRuntime(
+          tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [1] }),
+          { dropErrors: [cleanupError] },
+        ),
+      ),
+    ).rejects.toMatchObject({ kind: 'query-failed', cause: cleanupError, message: /cleanup/i });
+  });
+
+  it('keeps null target shapes as unmatched left rows and removes them from inner output', async () => {
+    const target = await targetDataset();
+    target.layers[0]!.shapes![1] = null;
+    const left = await spatialAggregateJoinDatasetWithDuckDb(
+      target,
+      await joinDataset(),
+      validOptions,
+      new AggregateRuntime(
+        tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [1] }),
+      ),
+    );
+    const inner = await spatialAggregateJoinDatasetWithDuckDb(
+      target,
+      await joinDataset(),
+      { ...validOptions, joinType: 'inner' },
+      new AggregateRuntime(
+        tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [1] }),
+      ),
+    );
+    expect(left.layers[0]?.shapes?.[1]).toBeNull();
+    expect(left.layers[0]?.data?.getRecords?.()[1]).toMatchObject({
+      match_count: 0,
+      sales_total: null,
+    });
+    expect(inner.layers[0]?.data?.getRecords?.().map((record) => record.id)).toEqual(['A']);
+  });
+
+  it('rejects null joinType rather than treating it as the default', async () => {
+    const runtime = new AggregateRuntime(tableFromArrays({ __emap_rowid: [] }));
+
+    await expect(
+      spatialAggregateJoinDatasetWithDuckDb(
+        await targetDataset(),
+        await joinDataset(),
+        { ...validOptions, joinType: null } as unknown as DuckDbSpatialAggregateJoinOptions,
+        runtime,
+      ),
+    ).rejects.toMatchObject({ kind: 'validation', field: 'joinType' });
+  });
+
+  it('validates aggregations before layer selectors', async () => {
+    const runtime = new AggregateRuntime(tableFromArrays({ __emap_rowid: [] }));
+
+    await expect(
+      spatialAggregateJoinDatasetWithDuckDb(
+        await targetDataset(),
+        await joinDataset(),
+        {
+          predicate: 'contains',
+          targetLayer: 'missing',
+          aggregations: [],
+        } as unknown as DuckDbSpatialAggregateJoinOptions,
+        runtime,
+      ),
+    ).rejects.toMatchObject({ kind: 'validation', field: 'aggregations' });
+  });
+
+  it.each([
+    '',
+    null,
+    false,
+    0,
+  ])('does not blame a fallback target geometry alias %j when geometry is missing', async (targetGeometryColumn) => {
+    const target = await targetDataset();
+    delete target.layers[0]!.geometry_type;
+    const runtime = new AggregateRuntime(tableFromArrays({ __emap_rowid: [] }));
+
+    try {
+      await spatialAggregateJoinDatasetWithDuckDb(
+        target,
+        await joinDataset(),
+        { ...validOptions, targetGeometryColumn } as unknown as DuckDbSpatialAggregateJoinOptions,
+        runtime,
+      );
+    } catch (err) {
+      expect(err).toMatchObject({ kind: 'validation' });
+      expect((err as DuckDbOperationError).field).toBeUndefined();
+    }
   });
 });

@@ -228,7 +228,7 @@ function validateOptions(rawOptions: unknown): {
   if (typeof options.predicate !== 'string' || !isOwnKey(PREDICATE_FUNCTIONS, options.predicate)) {
     throw validation('predicate is invalid', 'predicate');
   }
-  const joinType = options.joinType ?? 'left';
+  const joinType = options.joinType === undefined ? 'left' : options.joinType;
   if (joinType !== 'left' && joinType !== 'inner') {
     throw validation('joinType is invalid', 'joinType');
   }
@@ -246,12 +246,12 @@ function validateGeometryLayer(
   role: 'target' | 'join',
   geometryColumn: string,
   geometryField: 'targetGeometryColumn' | 'joinGeometryColumn',
-  suppliedGeometryColumn: unknown,
+  usesFallbackGeometryColumn: boolean,
 ): void {
   if (featureCount(layer) > 0 && !layer.geometry_type) {
     throw validation(
       `${role} layer has no geometry type for ${geometryColumn}`,
-      suppliedGeometryColumn === undefined ? undefined : geometryField,
+      usesFallbackGeometryColumn ? undefined : geometryField,
     );
   }
 }
@@ -429,6 +429,7 @@ export async function spatialAggregateJoinDatasetWithDuckDb(
 ): Promise<MapshaperDataset> {
   const { options, predicate, joinType, targetGeometryColumn, joinGeometryColumn } =
     validateOptions(opts);
+  normalizeAggregations(options, new Set(), targetGeometryColumn);
   const target = resolveSelectedLayer(targetDataset, options.targetLayer, 'targetLayer', 'target');
   const join = resolveSelectedLayer(joinDataset, options.joinLayer, 'joinLayer', 'join');
   validateGeometryLayer(
@@ -436,14 +437,14 @@ export async function spatialAggregateJoinDatasetWithDuckDb(
     'target',
     targetGeometryColumn,
     'targetGeometryColumn',
-    options.targetGeometryColumn,
+    !options.targetGeometryColumn,
   );
   validateGeometryLayer(
     join.layer,
     'join',
     joinGeometryColumn,
     'joinGeometryColumn',
-    options.joinGeometryColumn,
+    !options.joinGeometryColumn,
   );
   const targetFields = collectLayerFieldNames(target.layer);
   const aggregations = normalizeAggregations(options, targetFields, targetGeometryColumn);
