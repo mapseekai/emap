@@ -210,7 +210,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   private _destroyed = false;
   private _suspended = false;
   private _mutationContext: MutationContext | null = null;
-  private _resourceErrorPhases = new WeakMap<Error, 'source' | 'layer'>();
+  private _errorPhases = new WeakMap<Error, MapLibreServiceErrorEvent['phase']>();
   private _reconciliationJobs = new WeakMap<
     ServiceRecord,
     { revision: number; promise: Promise<void> }
@@ -316,7 +316,13 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     this._emitChange(record.definition, 'remove');
     this._syncVisibility();
     if (record.definition.role === 'overlay' && this._map) {
-      await this._removeOverlayResources(record);
+      try {
+        await this._removeOverlayResources(record);
+      } catch (value) {
+        const error = toError(value);
+        this._emitFatalError(record.definition.id, error);
+        throw error;
+      }
     }
   }
 
@@ -358,6 +364,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (visible) {
       await this._startOverlayReconciliation(record, operationRevision);
     } else {
+      this._syncVisibility();
       try {
         this._setStatus(record, operationRevision, 'loading');
         if (this._map) {
@@ -387,20 +394,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
   /** @internal */
   async initialize(): Promise<void> {
-    const visibleOverlays = [...this._registry.values()].filter(
-      (record) => record.definition.role === 'overlay' && record.state.active,
-    );
-    if (visibleOverlays.length === 0) return;
+    if (!this._hasActiveOverlay()) return;
     await this._ensureWebMercator();
     await this._ensureMap(EMPTY_STYLE);
     await this._waitForStyleReady();
-    for (const record of visibleOverlays) {
-      this._setStatus(record, record.operationRevision, 'loading');
-    }
-    await this._reconcileVisibleOverlays(this._styleGeneration);
-    for (const record of visibleOverlays) {
-      this._setStatus(record, record.operationRevision, 'ready');
-    }
+    await this._reconcileVisibleOverlays(this._styleGeneration, true);
     this._syncVisibility();
   }
 
@@ -553,10 +551,30 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
   }
 
-  private async _reconcileVisibleOverlays(generation: number): Promise<void> {
-    for (const record of this._registry.values()) {
+  private async _reconcileVisibleOverlays(
+    generation: number,
+    publishStatus = false,
+  ): Promise<void> {
+    for (const serviceId of [...this._registry.keys()]) {
+      const record = this._registry.get(serviceId);
+      if (!record) continue;
       if (record.definition.role !== 'overlay' || !record.state.active) continue;
-      await this._reconcileOverlayForGeneration(record, record.operationRevision, generation);
+      const operationRevision = record.operationRevision;
+      try {
+        if (publishStatus) this._setStatus(record, operationRevision, 'loading');
+        await this._reconcileOverlayForGeneration(record, operationRevision, generation);
+        this._assertCurrentOperation(record, operationRevision);
+        if (publishStatus) this._setStatus(record, operationRevision, 'ready');
+      } catch (value) {
+        const error = toError(value);
+        if (
+          error.name === 'AbortError' &&
+          (!this._isCurrentOperation(record, operationRevision) || !record.state.active)
+        ) {
+          continue;
+        }
+        this._handleTransitionFailure(record, operationRevision, error);
+      }
     }
   }
 
@@ -594,7 +612,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         const owned = record.ownedSources.get(sourceId);
         if (existing !== undefined) {
           if (owned?.generation === generation && owned.handle === existing) continue;
-          throw new Error(
+          throw this._phaseError(
+            'source',
             `MapLibre overlay source "${sourceId}" collides with an unmanaged resource`,
           );
         }
@@ -621,7 +640,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         const owned = record.ownedLayers.get(layer.id);
         if (existing !== undefined) {
           if (owned?.generation === generation && owned.handle === existing) continue;
-          throw new Error(
+          throw this._phaseError(
+            'layer',
             `MapLibre overlay layer "${layer.id}" collides with an unmanaged resource`,
           );
         }
@@ -671,7 +691,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       assertCurrent();
       const current = map.getLayer(layerId);
       if (current !== undefined && current !== owned.handle) {
-        throw new Error(`MapLibre overlay layer "${layerId}" is no longer manager-owned`);
+        throw this._phaseError(
+          'layer',
+          `MapLibre overlay layer "${layerId}" is no longer manager-owned`,
+        );
       }
       if (current !== undefined) {
         this._mutateResource(
@@ -700,7 +723,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       assertCurrent();
       const current = map.getSource(sourceId);
       if (current !== undefined && current !== owned.handle) {
-        throw new Error(`MapLibre overlay source "${sourceId}" is no longer manager-owned`);
+        throw this._phaseError(
+          'source',
+          `MapLibre overlay source "${sourceId}" is no longer manager-owned`,
+        );
       }
       if (current !== undefined) {
         this._mutateResource(
@@ -757,7 +783,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       }
     } catch (value) {
       const error = toError(value);
-      this._resourceErrorPhases.set(error, phase);
+      this._errorPhases.set(error, phase);
       throw error;
     } finally {
       if (this._mutationContext === context) this._mutationContext = null;
@@ -773,23 +799,64 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (!map) return;
     for (const layerId of [...layerIds].reverse()) {
       const owned = record.ownedLayers.get(layerId);
-      if (owned && map.getLayer(layerId) === owned.handle) map.removeLayer(layerId);
-      record.ownedLayers.delete(layerId);
+      if (!owned) continue;
+      const current = map.getLayer(layerId);
+      if (current !== undefined && current !== owned.handle) {
+        throw this._phaseError(
+          'layer',
+          `MapLibre overlay layer "${layerId}" is no longer manager-owned`,
+        );
+      }
+      if (current !== undefined) {
+        this._mutateResource(
+          record.definition.id,
+          'layer',
+          layerId,
+          () => {
+            map.removeLayer(layerId);
+          },
+          () => map.getLayer(layerId) === undefined,
+        );
+      }
+      if (map.getLayer(layerId) === undefined) record.ownedLayers.delete(layerId);
     }
     for (const sourceId of [...sourceIds].reverse()) {
       const owned = record.ownedSources.get(sourceId);
-      if (owned && map.getSource(sourceId) === owned.handle) map.removeSource(sourceId);
-      record.ownedSources.delete(sourceId);
+      if (!owned) continue;
+      const current = map.getSource(sourceId);
+      if (current !== undefined && current !== owned.handle) {
+        throw this._phaseError(
+          'source',
+          `MapLibre overlay source "${sourceId}" is no longer manager-owned`,
+        );
+      }
+      if (current !== undefined) {
+        this._mutateResource(
+          record.definition.id,
+          'source',
+          sourceId,
+          () => {
+            map.removeSource(sourceId);
+          },
+          () => map.getSource(sourceId) === undefined,
+        );
+      }
+      if (map.getSource(sourceId) === undefined) record.ownedSources.delete(sourceId);
     }
   }
 
   private async _ensureWebMercator(): Promise<void> {
     if (this._destroyed) throw abortError('MapLibre service manager was destroyed');
+    const wasSuspended = this._suspended || !this._isWebMercator(this._host.getCRS());
     if (!this._isWebMercator(this._host.getCRS())) {
       await this._host.reproject('webmercator');
       if (this._destroyed) throw abortError('MapLibre service manager was destroyed');
     }
     this._suspended = !this._isWebMercator(this._host.getCRS());
+    if (wasSuspended && !this._suspended && this._map && this._hasActiveService()) {
+      this._map.resize();
+      this._syncCamera();
+    }
   }
 
   private async _ensureMap(
@@ -800,6 +867,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     this._mapPromise = (async () => {
       const maplibre = await this._loadMapLibre();
       if (this._destroyed) throw abortError('MapLibre service manager was destroyed');
+      if (!this._hasActiveOverlay()) {
+        throw abortError('MapLibre runtime request was superseded');
+      }
 
       const canvasContainer = this._host.getCanvasContainer();
       const container = document.createElement('div');
@@ -864,13 +934,14 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     const error = toError((event as { error?: unknown } | undefined)?.error ?? event);
     if (this._mutationContext) {
       this._mutationContext.error = error;
-      this._resourceErrorPhases.set(error, this._mutationContext.phase);
+      this._errorPhases.set(error, this._mutationContext.phase);
       return;
     }
     if (this._styleIsReady) {
       this.fire('error', { phase: 'tile', fatal: false, error });
       return;
     }
+    this._errorPhases.set(error, 'style');
     this._rejectPendingStyle(error);
   };
 
@@ -911,6 +982,12 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
   private _hasActiveService(): boolean {
     return [...this._registry.values()].some((record) => record.state.active);
+  }
+
+  private _hasActiveOverlay(): boolean {
+    return [...this._registry.values()].some(
+      (record) => record.definition.role === 'overlay' && record.state.active,
+    );
   }
 
   private _isWebMercator(crs: string): boolean {
@@ -962,15 +1039,24 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     };
     this._emitChange(record.definition, 'status', record.state);
     this._assertCurrentOperation(record, operationRevision);
-    const phase: MapLibreServiceErrorEvent['phase'] =
-      this._resourceErrorPhases.get(error) ?? 'lifecycle';
+    this._emitFatalError(record.definition.id, error);
+    throw error;
+  }
+
+  private _phaseError(phase: MapLibreServiceErrorEvent['phase'], message: string): Error {
+    const error = new Error(message);
+    this._errorPhases.set(error, phase);
+    return error;
+  }
+
+  private _emitFatalError(serviceId: string, error: Error): void {
+    const phase = this._errorPhases.get(error) ?? 'lifecycle';
     this.fire('error', {
-      serviceId: record.definition.id,
+      serviceId,
       phase,
       error,
       fatal: true,
     });
-    throw error;
   }
 
   private _emitChange(
