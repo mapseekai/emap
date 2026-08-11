@@ -359,6 +359,7 @@ export { StatusControl } from './ui/status-control';
 export type { StatusOptions } from './ui/status-control';
 export { BasemapControl } from './ui/basemap-control';
 export type { BasemapOptions, BasemapStyle } from './ui/basemap-control';
+export { LayerControl } from './ui/layer-control';
 export { VertexEditControl } from './ui/vertex-edit-control';
 export type { VertexEditControlOptions } from './ui/vertex-edit-control';
 export { EditToolbar } from './ui/edit-toolbar';

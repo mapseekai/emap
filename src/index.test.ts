@@ -22,4 +22,8 @@ describe('public export surface (DX P1 additions)', () => {
   it('keeps BasemapControl as a runtime export', () => {
     expect(typeof emap.BasemapControl).toBe('function');
   });
+
+  it('keeps LayerControl as a runtime export', () => {
+    expect(typeof (emap as Record<string, unknown>).LayerControl).toBe('function');
+  });
 });
