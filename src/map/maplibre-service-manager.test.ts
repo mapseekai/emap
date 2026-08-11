@@ -25,6 +25,8 @@ class FakeMap {
   readonly jumpToCalls: Array<{ center: [number, number]; zoom: number }> = [];
   readonly ignoredRemovals = new Set<string>();
   readonly addFailures = new Map<string, FakeAddFailure>();
+  readonly offCalls: string[] = [];
+  readonly offErrors = new Map<string, Error>();
   resizeCalls = 0;
   removed = false;
   removeError: Error | null = null;
@@ -49,7 +51,10 @@ class FakeMap {
   }
 
   off(type: string, listener: FakeMapListener): this {
+    this.offCalls.push(type);
     this._listeners.get(type)?.delete(listener);
+    const error = this.offErrors.get(type);
+    if (error) throw error;
     return this;
   }
 
@@ -613,6 +618,30 @@ describe('MapLibreServiceManager lazy host lifecycle', () => {
     expect((map.options.container as HTMLElement).hidden).toBe(false);
   });
 
+  it('updates an active suspended overlay without reprojection', async () => {
+    const { host, manager } = createManager([roads]);
+    const map = await activateOverlay(manager);
+    host.setCRS('epsg:4326');
+    host.emit('crschange');
+    host.reproject.mockClear();
+    const updatedRoads = {
+      ...roads,
+      name: 'Updated roads',
+      layers: [{ id: 'roads-updated', type: 'line' as const, source: 'roads' }],
+    };
+
+    await manager.updateService('roads', updatedRoads);
+
+    expect(host.reproject).not.toHaveBeenCalled();
+    expect(map.layerOrder).toEqual(['roads-updated']);
+    expect((map.options.container as HTMLElement).hidden).toBe(true);
+    expect(manager.getServiceState('roads')).toEqual({
+      id: 'roads',
+      active: true,
+      status: 'ready',
+    });
+  });
+
   it('destroys once, aborts pending readiness, and detaches every listener', async () => {
     const { host, manager } = createManager([roads]);
     const activation = manager.setOverlayVisibility('roads', true);
@@ -651,6 +680,47 @@ describe('MapLibreServiceManager lazy host lifecycle', () => {
     expect(host.listenerCount('crschange')).toBe(0);
     expect(map.listenerCount('style.load')).toBe(0);
     expect(map.listenerCount('error')).toBe(0);
+    expect(() => manager.destroy()).not.toThrow();
+  });
+
+  it('attempts every teardown step when a host listener detach throws', async () => {
+    const { host, manager } = createManager([roads]);
+    const map = await activateOverlay(manager);
+    const container = map.options.container as HTMLElement;
+    const hostOffError = new Error('host move detach failed');
+    const removeError = new Error('native removal also failed');
+    const detach = host.off.getMockImplementation();
+    host.off.mockImplementation((type, listener) => {
+      detach?.(type, listener);
+      if (type === 'move') throw hostOffError;
+    });
+    map.removeError = removeError;
+
+    expect(() => manager.destroy()).toThrow(hostOffError);
+
+    expect(host.off.mock.calls.map(([type]) => type)).toEqual(['move', 'resize', 'crschange']);
+    expect(map.offCalls).toEqual(['style.load', 'error']);
+    expect(map.removed).toBe(true);
+    expect(container.isConnected).toBe(false);
+    expect(manager.getMapLibreMap()).toBeNull();
+    expect(() => manager.destroy()).not.toThrow();
+  });
+
+  it('attempts later map detach and removal after a map listener detach throws', async () => {
+    const { host, manager } = createManager([roads]);
+    const map = await activateOverlay(manager);
+    const container = map.options.container as HTMLElement;
+    const mapOffError = new Error('style listener detach failed');
+    map.offErrors.set('style.load', mapOffError);
+    map.removeError = new Error('native removal also failed');
+
+    expect(() => manager.destroy()).toThrow(mapOffError);
+
+    expect(host.off.mock.calls.map(([type]) => type)).toEqual(['move', 'resize', 'crschange']);
+    expect(map.offCalls).toEqual(['style.load', 'error']);
+    expect(map.removed).toBe(true);
+    expect(container.isConnected).toBe(false);
+    expect(manager.getMapLibreMap()).toBeNull();
     expect(() => manager.destroy()).not.toThrow();
   });
 
@@ -862,6 +932,46 @@ describe('MapLibreServiceManager overlay rendering', () => {
     ]);
   });
 
+  it('retries initialization after a rejected loader and retains the successful promise', async () => {
+    FakeMap.instances.length = 0;
+    const host = createHost();
+    const loaderError = new Error('first loader failed');
+    const loadMapLibre = vi
+      .fn<() => Promise<typeof import('maplibre-gl')>>()
+      .mockRejectedValueOnce(loaderError)
+      .mockResolvedValue(fakeModule());
+    const manager = createMapLibreServiceManager(
+      host,
+      { services: [{ ...roads, visible: true }] },
+      loadMapLibre,
+    );
+    const statuses: string[] = [];
+    const errors: Array<{ phase: string; message: string }> = [];
+    manager.on('change', (event) => {
+      if (event.reason === 'status' && event.state) statuses.push(event.state.status);
+    });
+    manager.on('error', (event) =>
+      errors.push({ phase: event.phase, message: event.error.message }),
+    );
+
+    await expect(manager.initialize()).rejects.toBe(loaderError);
+    const retry = manager.initialize();
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await retry;
+    await manager.initialize();
+
+    expect(loadMapLibre).toHaveBeenCalledTimes(2);
+    expect(statuses).toEqual(['error', 'loading', 'ready']);
+    expect(errors).toEqual([{ phase: 'lifecycle', message: 'first loader failed' }]);
+    expect(manager.getServiceState('roads')).toEqual({
+      id: 'roads',
+      active: true,
+      status: 'ready',
+    });
+    expect(map.layerOrder).toEqual(['roads-line']);
+  });
+
   it('marks every current initial overlay with one typed style failure', async () => {
     const { manager } = createManager([
       { ...roads, visible: true },
@@ -1049,6 +1159,128 @@ describe('MapLibreServiceManager overlay rendering', () => {
     await finalShow;
     expect(map.layerOrder).toEqual(['roads-line']);
     expect(manager.getServiceState('roads')).toMatchObject({ active: true, status: 'ready' });
+  });
+
+  it.each([
+    'import',
+    'reprojection',
+  ] as const)('lets an active update take over pending %s setup', async (setup) => {
+    FakeMap.instances.length = 0;
+    const host = createHost(setup === 'reprojection' ? 'epsg:4326' : 'webmercator');
+    const moduleLoad = deferred<typeof import('maplibre-gl')>();
+    const projection = deferred<void>();
+    if (setup === 'reprojection') {
+      host.reproject.mockImplementation(async (nextCrs: string) => {
+        await projection.promise;
+        host.setCRS(nextCrs);
+      });
+    }
+    const loadMapLibre = vi.fn(() =>
+      setup === 'import' ? moduleLoad.promise : Promise.resolve(fakeModule()),
+    );
+    const manager = createMapLibreServiceManager(host, {}, loadMapLibre);
+    const updatedRoads = {
+      ...roads,
+      name: 'Updated roads',
+      layers: [{ id: 'roads-updated', type: 'line' as const, source: 'roads' }],
+    };
+
+    const addition = manager
+      .addService({ ...roads, visible: true })
+      .catch((error: unknown) => error);
+    await Promise.resolve();
+    const update = manager.updateService('roads', updatedRoads).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    if (setup === 'import') moduleLoad.resolve(fakeModule());
+    else projection.resolve();
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+
+    await expect(addition).resolves.toMatchObject({ name: 'AbortError' });
+    await expect(update).resolves.toBeUndefined();
+    expect(manager.getServices()).toEqual([updatedRoads]);
+    expect(manager.getServiceState('roads')).toEqual({
+      id: 'roads',
+      active: true,
+      status: 'ready',
+    });
+    expect(map.layerOrder).toEqual(['roads-updated']);
+    if (setup === 'reprojection') expect(host.reproject).toHaveBeenCalledTimes(1);
+  });
+
+  it('joins initialization reprojection before applying an active update', async () => {
+    FakeMap.instances.length = 0;
+    const host = createHost('epsg:4326');
+    const projection = deferred<void>();
+    host.reproject.mockImplementation(async (nextCrs: string) => {
+      await projection.promise;
+      host.setCRS(nextCrs);
+    });
+    const manager = createMapLibreServiceManager(
+      host,
+      { services: [{ ...roads, visible: true }] },
+      async () => fakeModule(),
+    );
+    const updatedRoads = {
+      ...roads,
+      name: 'Updated roads',
+      layers: [{ id: 'roads-updated', type: 'line' as const, source: 'roads' }],
+    };
+
+    const initialization = manager.initialize();
+    await Promise.resolve();
+    const update = manager.updateService('roads', updatedRoads);
+    projection.resolve();
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+
+    await initialization;
+    await update;
+    expect(host.reproject).toHaveBeenCalledTimes(1);
+    expect(manager.getServices()).toEqual([updatedRoads]);
+    expect(manager.getServiceState('roads')).toEqual({
+      id: 'roads',
+      active: true,
+      status: 'ready',
+    });
+    expect(map.layerOrder).toEqual(['roads-updated']);
+  });
+
+  it('keeps an update pending until removal supersedes its in-flight import', async () => {
+    FakeMap.instances.length = 0;
+    const moduleLoad = deferred<typeof import('maplibre-gl')>();
+    const manager = createMapLibreServiceManager(createHost(), {}, () => moduleLoad.promise);
+    const updatedRoads = {
+      ...roads,
+      name: 'Updated roads',
+      layers: [{ id: 'roads-updated', type: 'line' as const, source: 'roads' }],
+    };
+    const addition = manager
+      .addService({ ...roads, visible: true })
+      .catch((error: unknown) => error);
+    await Promise.resolve();
+    let updateSettled = false;
+    const update = manager.updateService('roads', updatedRoads).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    void update.finally(() => {
+      updateSettled = true;
+    });
+
+    for (let index = 0; index < 6; index++) await Promise.resolve();
+    expect(updateSettled).toBe(false);
+
+    await manager.removeService('roads');
+    moduleLoad.resolve(fakeModule());
+
+    await expect(addition).resolves.toMatchObject({ name: 'AbortError' });
+    await expect(update).resolves.toMatchObject({ name: 'AbortError' });
+    expect(manager.getServices()).toEqual([]);
+    expect(manager.getMapLibreMap()).toBeNull();
+    expect(FakeMap.instances).toHaveLength(0);
   });
 
   it('aborts visible add and active update when a later removal wins', async () => {

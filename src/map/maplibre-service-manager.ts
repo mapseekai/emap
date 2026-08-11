@@ -113,6 +113,12 @@ function abortError(message: string): DOMException {
   return new DOMException(message, 'AbortError');
 }
 
+function isAbortError(value: unknown): boolean {
+  return (
+    typeof value === 'object' && value !== null && 'name' in value && value.name === 'AbortError'
+  );
+}
+
 function validateOverlayDefinition(
   service: MapLibreOverlayService,
   registry: ReadonlyMap<string, ServiceRecord>,
@@ -283,6 +289,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       throw new Error('MapLibre service role cannot change');
     validateService(service, this._registry, id);
 
+    const pendingReconciliation = this._reconciliationJobs.get(record)?.promise;
+    const pendingInitialization = this._initializationPromise ?? undefined;
     record.operationRevision++;
     const previousDefinition = cloneService(record.definition);
     const previousDefinitionRevision = record.definitionRevision;
@@ -308,6 +316,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         previousDefinition as MapLibreOverlayService,
         previousDefinitionRevision,
         replacement.operationRevision,
+        pendingReconciliation,
+        pendingInitialization,
       );
     }
   }
@@ -406,7 +416,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           initialRecords.set(record, record.operationRevision);
         }
       }
-      this._initializationPromise = Promise.resolve().then(() => this._initialize(initialRecords));
+      const initialization = Promise.resolve().then(() => this._initialize(initialRecords));
+      this._initializationPromise = initialization;
+      void initialization.catch(() => {
+        if (this._initializationPromise === initialization) this._initializationPromise = null;
+      });
     }
     return this._initializationPromise;
   }
@@ -453,25 +467,31 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     for (const record of this._registry.values()) record.operationRevision++;
     this._rejectPendingStyle(abortError('MapLibre service manager was destroyed'));
 
-    try {
-      this._host.off('move', this._handleMove);
-      this._host.off('resize', this._handleResize);
-      this._host.off('crschange', this._handleCrsChange);
-      if (this._map) {
-        this._map.off('style.load', this._handleStyleLoad);
-        this._map.off('error', this._handleMapError);
-        this._map.remove();
+    let firstError: Error | undefined;
+    const attempt = (action: () => void): void => {
+      try {
+        action();
+      } catch (value) {
+        firstError ??= toError(value);
       }
-    } finally {
-      this._container?.remove();
-      this._container = null;
-      this._map = null;
-      this._mapPromise = null;
-      this._styleReady = null;
-      this._resolveStyleReady = null;
-      this._rejectStyleReady = null;
-      this._styleIsReady = false;
+    };
+    attempt(() => this._host.off('move', this._handleMove));
+    attempt(() => this._host.off('resize', this._handleResize));
+    attempt(() => this._host.off('crschange', this._handleCrsChange));
+    if (this._map) {
+      attempt(() => this._map?.off('style.load', this._handleStyleLoad));
+      attempt(() => this._map?.off('error', this._handleMapError));
+      attempt(() => this._map?.remove());
     }
+    attempt(() => this._container?.remove());
+    this._container = null;
+    this._map = null;
+    this._mapPromise = null;
+    this._styleReady = null;
+    this._resolveStyleReady = null;
+    this._rejectStyleReady = null;
+    this._styleIsReady = false;
+    if (firstError) throw firstError;
   }
 
   private _register(service: MapLibreService): ServiceRecord {
@@ -573,9 +593,32 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     previousDefinition: MapLibreOverlayService,
     previousDefinitionRevision: number,
     operationRevision: number,
+    pendingReconciliation?: Promise<void>,
+    pendingInitialization?: Promise<void>,
   ): Promise<void> {
     try {
       this._setStatus(record, operationRevision, 'loading');
+      if (pendingReconciliation) {
+        try {
+          await pendingReconciliation;
+        } catch (value) {
+          if (!isAbortError(value)) throw value;
+        }
+        this._assertCurrentOperation(record, operationRevision);
+      } else if (pendingInitialization) {
+        try {
+          await pendingInitialization;
+        } catch {
+          // The current update takes over setup after a failed initial attempt.
+        }
+        this._assertCurrentOperation(record, operationRevision);
+      }
+      if (!this._map && !this._mapPromise) {
+        await this._ensureWebMercator();
+        this._assertCurrentOperation(record, operationRevision);
+      }
+      await this._ensureMap(EMPTY_STYLE);
+      this._assertCurrentOperation(record, operationRevision);
       await this._waitForStyleReady();
       this._assertCurrentOperation(record, operationRevision);
       await this._removeOverlayResources(record, operationRevision, previousDefinition);
