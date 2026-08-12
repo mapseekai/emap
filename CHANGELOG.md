@@ -9,20 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Source loading now provides a two-phase `preflightSource()` and
+  `confirmSource()` workflow. Applications can parse and validate detached
+  inputs, request missing CRS information without reading the data again, and
+  confirm a single-use plan only after it is ready.
+- The optional DuckDB module now supports six additional topological relation
+  predicates: `overlaps`, `equals`, `crosses`, `covers`, `coveredBy`, and
+  `containsProperly`. Each predicate is available through dataset filters,
+  attribute helpers, and map-operation routing with target-first semantics.
+- DuckDB-Wasm spatial aggregate joins can now preserve a target layer while
+  appending ordered `count`, `sum`, `avg`, `min`, and `max` results from a
+  second dataset. The API supports ten spatial predicates and `left` or `inner`
+  output modes, with dataset and map-operation entrypoints plus a runnable
+  two-input example.
 - Point layers now support the `circle-shape` paint property with circle,
   square, upward and downward triangles, diamond, pentagon, star, cross, X,
   hexagon, and octagon markers. A new runnable point-style example loads point
   data and demonstrates live shape, color, radius, opacity, and stroke updates.
-- Line layers and polygon outlines now support `line-dasharray` with
-  device-pixel-aware dash and gap lengths, including reliable reset to solid
-  strokes between layers. The runnable line-style example demonstrates live
-  color, width, solid, dashed, dotted, and dash-dot controls.
-
-### Fixed
-
-- TypeDoc generation now classifies intentionally internal symbols explicitly,
-  resolves all public JSDoc links, and treats future documentation warnings as
-  build failures.
+- Line layers and polygon outlines now support device-pixel-aware
+  `line-dasharray` values and named `line-dashstyle` presets. The new
+  `arrow-dot` style renders batched directional markers with configurable
+  screen-space spacing and size; the runnable line-style example exposes all
+  solid, dashed, dotted, dash-dot, and directional controls.
+- ZIP Shapefile imports can now load every `.shp` dataset in an archive as a
+  separate layer. A new runnable Shapefile viewer supports archive-detected,
+  preset, or custom input CRS selection before registration.
 
 ### Changed
 
@@ -38,14 +49,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   views. Layer specifications are a discriminated union, layer lookup is
   centralized in `LayerRegistry`, and source processing uses the unified
   `MapshaperAdapter` contract.
-- Runnable examples now syntax-highlight their **View source** dialogs with
-  Prism's HTML grammar and theme.
+- The runnable-examples catalog now groups recipes into map/data,
+  styling/interaction, editing, and analysis modules, with bilingual category
+  navigation and search across titles, APIs, tags, and IDs.
+- Runnable examples now open their exact bundled HTML in an in-page **View
+  source** dialog and syntax-highlight it with Prism, without navigation or a
+  runtime network request.
+- Built-in Canvas colors, selection/edit overlays, controls, popups, and menus
+  now resolve semantic Mapseek theme variables from each map host, including
+  local and dark themes. Controls use a shared accessible SVG icon set, and the
+  Home/reset action fits the current registered-source extent.
 - The former point-layer example is now identified as a feature-to-point
   conversion example and demonstrates centroid, vertex, endpoint, and
   interpolated point generation from polygon and line inputs.
 
 ### Fixed
 
+- TypeDoc generation now classifies intentionally internal symbols explicitly,
+  resolves all public JSDoc links, and treats future documentation warnings as
+  build failures.
 - Feature-event filtering and one-shot registration now dispatch consistently,
   while source removal, map teardown, vertex context menus, and worker failures
   release their listeners, pending jobs, highlights, indexes, and caches.
@@ -55,6 +77,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The DuckDB spatial-operations example now processes the live registered
   datasets instead of retaining original/display copies, and multi-input DuckDB
   operations align secondary datasets to the active input CRS.
+- DuckDB overlay functions now serialize their internal geometry results to
+  standard WKB before crossing the Arrow boundary, so overlay outputs import as
+  valid emap geometry.
+- Internal source, layer, and feature lookups now use structured keys, so legal
+  public IDs containing delimiters cannot alias visibility, selection, event,
+  highlight, or render-cache state.
 - Registering a source now clears undo/redo history (matching source removal),
   so undoing an earlier map reprojection can no longer strand newly added
   sources on a stale CRS. Normalization commits re-validate the owning
