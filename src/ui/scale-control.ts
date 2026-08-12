@@ -46,14 +46,17 @@ export class ScaleControl implements Control {
     this._map = map;
     this._container = document.createElement('div');
     this._container.className = `emap-ctrl emap-scale-ctrl ${this._options.className ?? ''}`;
-    this._container.setAttribute('aria-live', 'polite');
+    this._container.setAttribute('aria-label', 'Map scale');
 
     this._summary = document.createElement('div');
     this._summary.className = 'emap-scale-summary';
     this._labels = document.createElement('div');
     this._labels.className = 'emap-scale-labels';
+    this._labels.setAttribute('aria-hidden', 'true');
+    this._labels.classList.toggle('emap-scale-labels-dual', this._options.units === 'dual');
     this._bar = document.createElement('div');
     this._bar.className = 'emap-scale-bar';
+    this._bar.setAttribute('aria-hidden', 'true');
     for (let index = 0; index < 4; index += 1) {
       const segment = document.createElement('span');
       segment.className = 'emap-scale-segment';
@@ -135,14 +138,15 @@ export class ScaleControl implements Control {
       return;
     }
 
-    const midpoint = formatScaleDistance(scale.distance / 2, this._options.units);
+    const dual = this._options.units === 'dual';
+    const midpoint = dual ? null : formatScaleDistance(scale.distance / 2, this._options.units);
     const end = formatScaleDistance(scale.distance, this._options.units);
-    if (!midpoint || !end) {
+    if (!end || (!dual && !midpoint)) {
       this._labels.textContent = '';
       this._bar.hidden = true;
       return;
     }
-    this._labels.replaceChildren(...['0', midpoint, end].map((label) => {
+    this._labels.replaceChildren(...(dual ? ['0', end] : ['0', midpoint, end]).map((label) => {
       const element = document.createElement('span');
       element.textContent = label;
       return element;

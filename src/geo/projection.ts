@@ -2,6 +2,7 @@ import { Bounds } from './bounds';
 import type { MutableTopologySource } from '../source/source';
 import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
 import type { MapshaperDataset } from '../types/mapshaper-types';
+import { isWebMercatorCrs } from './crs-resolver';
 
 /** WGS84 semi-major axis (Earth radius in meters) */
 const WGS84_SEMI_MAJOR_AXIS = 6378137;
@@ -46,8 +47,7 @@ export class Projection {
    * For Web Mercator, converts projected coords to lat/lng.
    */
   getCenter(cx: number, cy: number): [number, number] {
-    const crs = this._crs.toLowerCase();
-    if (crs === 'epsg:3857' || crs === 'webmercator') {
+    if (isWebMercatorCrs(this._crs)) {
       return this._webMercatorToLatLng(cx, cy);
     }
     return [cx, cy];
@@ -59,8 +59,7 @@ export class Projection {
    * (not a sentinel; prefer the {@link getScale} round-trip to detect CRS).
    */
   getZoom(mx: number): number {
-    const crs = this._crs.toLowerCase();
-    if (crs === 'epsg:3857' || crs === 'webmercator') {
+    if (isWebMercatorCrs(this._crs)) {
       return Math.log2((mx * EARTH_CIRCUMFERENCE_WEB_MERCATOR) / 512);
     }
     return 0;
@@ -72,8 +71,7 @@ export class Projection {
    * can detect "zoom not applicable for this CRS" and fall back to scale.
    */
   getScale(zoom: number): number {
-    const crs = this._crs.toLowerCase();
-    if (crs === 'epsg:3857' || crs === 'webmercator') {
+    if (isWebMercatorCrs(this._crs)) {
       return (Math.pow(2, zoom) * 512) / EARTH_CIRCUMFERENCE_WEB_MERCATOR;
     }
     return NaN;

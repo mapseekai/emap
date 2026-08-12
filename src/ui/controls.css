@@ -214,10 +214,14 @@
   width: var(--emap-scale-width);
   grid-template-columns: repeat(3, 1fr);
   font-size: 0.85em;
+  white-space: nowrap;
 }
 
 .emap-scale-labels > :nth-child(2) { text-align: center; }
 .emap-scale-labels > :nth-child(3) { text-align: end; }
+
+.emap-scale-labels-dual { grid-template-columns: max-content 1fr; }
+.emap-scale-labels-dual > :nth-child(2) { text-align: end; }
 
 .emap-scale-bar {
   display: flex;

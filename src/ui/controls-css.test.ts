@@ -206,24 +206,24 @@ describe('controls.css Mapseek behavior', () => {
     expect(getComputedStyle(group).overflow).toBe('visible');
   });
 
-  it.each([
-    [undefined, {
-      foreground: 'oklch(0.2500 0.0100 149)',
-      card: 'oklch(1 0 0)',
-      border: 'oklch(0.9200 0.0050 149)',
-    }],
-    ['dark', {
-      foreground: 'oklch(0.9500 0.0050 149)',
-      card: 'oklch(0.2000 0.0100 149)',
-      border: 'oklch(1 0 0 / 12%)',
-    }],
-  ] as const)('themes scale controls on %s hosts', (themeClass, expected) => {
-    // jsdom does not resolve CSS custom properties for computed border colors.
-    // Render the same stylesheet with its scale-control theme variables resolved.
+  it.each([undefined, 'dark'] as const)('themes scale controls on %s hosts', (themeClass) => {
+    // jsdom cannot resolve CSS custom properties for computed border colors.
+    // Derive the expected theme colors by walking the same --emap-current-*
+    // chain the control consumes, then render the stylesheet with those
+    // variables substituted for the assertions.
+    const probe = mountControls(themeClass);
+    const probeScale = document.createElement('div');
+    probeScale.className = 'emap-ctrl emap-scale-ctrl';
+    probe.host.append(probeScale);
+    const readVariable = (name: string) => getComputedStyle(probeScale).getPropertyValue(name);
+    const foreground = resolveThemeColor(readVariable('--emap-current-card-foreground'), 'transparent', readVariable);
+    const card = resolveThemeColor(readVariable('--emap-current-card'), 'transparent', readVariable);
+    const border = resolveThemeColor(readVariable('--emap-current-border'), 'transparent', readVariable);
+
     const stylesheetText = css
-      .replaceAll('var(--emap-current-card-foreground)', expected.foreground)
-      .replaceAll('var(--emap-current-card)', expected.card)
-      .replaceAll('var(--emap-current-border)', expected.border);
+      .replaceAll('var(--emap-current-card-foreground)', foreground)
+      .replaceAll('var(--emap-current-card)', card)
+      .replaceAll('var(--emap-current-border)', border);
     const { host } = mountControls(themeClass, stylesheetText);
     const scale = document.createElement('div');
     scale.className = 'emap-ctrl emap-scale-ctrl';
@@ -238,9 +238,9 @@ describe('controls.css Mapseek behavior', () => {
     host.append(scale);
 
     const expectedControl = document.createElement('div');
-    expectedControl.style.color = expected.foreground;
-    expectedControl.style.background = expected.card;
-    expectedControl.style.border = `1px solid ${expected.border}`;
+    expectedControl.style.color = foreground;
+    expectedControl.style.background = card;
+    expectedControl.style.border = `1px solid ${border}`;
     host.append(expectedControl);
 
     const scaleStyle = getComputedStyle(scale);

@@ -76,9 +76,9 @@ describe('ScaleControl', () => {
     expect(map.on).toHaveBeenCalledWith('move', expect.any(Function));
     expect(map.on).toHaveBeenCalledWith('resize', expect.any(Function));
     expect(map.on).toHaveBeenCalledWith('crschange', expect.any(Function));
-    expect(root.getAttribute('aria-live')).toBe('polite');
-    expect(root.querySelector('.emap-scale-summary')).toBeTruthy();
-    expect(root.querySelector('.emap-scale-labels')).toBeTruthy();
+    expect(root.getAttribute('aria-label')).toBe('Map scale');
+    expect(root.querySelector('.emap-scale-labels')?.getAttribute('aria-hidden')).toBe('true');
+    expect(root.querySelector('.emap-scale-bar')?.getAttribute('aria-hidden')).toBe('true');
     expect(root.querySelector('.emap-scale-bar')).toBeTruthy();
 
     await flushFrame();
@@ -93,16 +93,19 @@ describe('ScaleControl', () => {
   });
 
   it.each([
-    ['metric', '200 m'],
-    ['imperial', '656 ft'],
-    ['dual', '200 m / 656 ft'],
-  ] as const)('renders %s distance labels', async (units, expected) => {
+    ['metric', '200 m', 3, false],
+    ['imperial', '656 ft', 3, false],
+    ['dual', '200 m / 656 ft', 2, true],
+  ] as const)('renders %s distance labels', async (units, expected, labelCount, dualLayout) => {
     const map = stubMap(Promise.resolve(metrics));
     const root = new ScaleControl({ units }).onAdd(map as any);
 
     await flushFrame();
 
-    expect(root.querySelector('.emap-scale-labels')?.textContent).toContain(expected);
+    const labels = root.querySelector('.emap-scale-labels');
+    expect(labels?.textContent).toContain(expected);
+    expect(root.querySelectorAll('.emap-scale-labels > span')).toHaveLength(labelCount);
+    expect(labels?.classList.contains('emap-scale-labels-dual')).toBe(dualLayout);
   });
 
   it('honors showScale and showZoom independently', async () => {

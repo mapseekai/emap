@@ -18,6 +18,7 @@ import {
 } from '../geo/scale-calculator';
 import {
   EpsgProjectionError,
+  isWebMercatorCrs,
   normalizeProjectCrs,
   normalizeProjectCrsMetadata,
   resolveDatasetCRSMetadata,
@@ -1816,14 +1817,23 @@ export class Emap extends EventDispatcher {
     return this._projection.getZoom(Math.abs(this._viewport.transform.mx));
   }
 
+  /**
+   * Measure ground scale for the current view.
+   *
+   * Converts the center-row pixel step through the CRS ellipsoid geodesic
+   * inverse, returning meters-per-pixel and the nominal 1:N denominator at
+   * the requested DPI. The Web Mercator zoom level is attached only when
+   * the map CRS is Web Mercator. Resolves `null` for unsupported or
+   * non-Earth CRSs, empty views, or when the view changed while the
+   * measurement was in flight.
+   */
   public async getScaleMetrics(
     options: GetScaleMetricsOptions = {},
   ): Promise<(ScaleMetrics & { zoom?: number }) | null> {
     const crs = this.getCRS();
     const snapshot = captureScaleView(this._viewport, crs);
     if (!snapshot) return null;
-    const normalizedCrs = crs.toLowerCase();
-    const zoom = normalizedCrs === 'epsg:3857' || normalizedCrs === 'webmercator' ? this.getZoom() : undefined;
+    const zoom = isWebMercatorCrs(crs) ? this.getZoom() : undefined;
     const metrics = await this._scaleCalculatorInstance().getMetrics(snapshot.view, options);
     if (!metrics || !isScaleViewCurrent(this._viewport, this.getCRS(), snapshot)) return null;
     return zoom === undefined ? metrics : { ...metrics, zoom };
