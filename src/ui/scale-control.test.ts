@@ -79,9 +79,9 @@ describe('ScaleControl', () => {
 
     expect(root.textContent).toContain('1:7,559');
     expect(root.textContent).toContain('Zoom 12.25');
-    expect(root.querySelector('.emap-scale-labels')?.textContent).toContain('0');
-    expect(root.querySelector('.emap-scale-labels')?.textContent).toContain('100 m');
-    expect(root.querySelector('.emap-scale-labels')?.textContent).toContain('200 m');
+    const labels = root.querySelectorAll('.emap-scale-labels > span');
+    expect(labels).toHaveLength(3);
+    expect([...labels].map((label) => label.textContent)).toEqual(['0', '100 m', '200 m']);
     expect(Number.parseFloat(root.style.getPropertyValue('--emap-scale-width'))).toBeLessThanOrEqual(140);
     expect(root.querySelectorAll('.emap-scale-segment')).toHaveLength(4);
   });

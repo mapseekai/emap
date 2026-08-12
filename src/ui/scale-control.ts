@@ -142,7 +142,11 @@ export class ScaleControl implements Control {
       this._bar.hidden = true;
       return;
     }
-    this._labels.replaceChildren('0', midpoint, end);
+    this._labels.replaceChildren(...['0', midpoint, end].map((label) => {
+      const element = document.createElement('span');
+      element.textContent = label;
+      return element;
+    }));
     this._container.style.setProperty('--emap-scale-width', `${scale.width}px`);
     this._bar.hidden = false;
   }

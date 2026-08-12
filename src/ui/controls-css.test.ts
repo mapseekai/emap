@@ -206,8 +206,22 @@ describe('controls.css Mapseek behavior', () => {
     expect(getComputedStyle(group).overflow).toBe('visible');
   });
 
-  it.each([undefined, 'dark'])('themes scale controls on %s hosts', (themeClass) => {
+  it.each([
+    [undefined, {
+      foreground: 'oklch(0.2500 0.0100 149)',
+      card: 'oklch(1 0 0)',
+      border: 'oklch(0.9200 0.0050 149)',
+    }],
+    ['dark', {
+      foreground: 'oklch(0.9500 0.0050 149)',
+      card: 'oklch(0.2000 0.0100 149)',
+      border: 'oklch(1 0 0 / 12%)',
+    }],
+  ] as const)('themes scale controls on %s hosts', (themeClass, expected) => {
     const { host } = mountControls(themeClass);
+    host.style.setProperty('--card-foreground', expected.foreground);
+    host.style.setProperty('--card', expected.card);
+    host.style.setProperty('--border', expected.border);
     const scale = document.createElement('div');
     scale.className = 'emap-ctrl emap-scale-ctrl';
     const bar = document.createElement('div');
@@ -222,10 +236,8 @@ describe('controls.css Mapseek behavior', () => {
 
     const scaleStyle = getComputedStyle(scale);
     const readVariable = (name: string) => scaleStyle.getPropertyValue(name);
-    expect(css).toMatch(/\.emap-scale-ctrl\s*\{[^}]*color: var\(--emap-current-card-foreground\);[^}]*background: var\(--emap-current-card\);[^}]*border: 1px solid var\(--emap-current-border\);/s);
-    expect(css).toMatch(/\.emap-scale-bar\s*\{[^}]*border: 1px solid var\(--emap-current-card-foreground\);/s);
-    expect(readVariable('--emap-current-card-foreground')).toContain('--card-foreground');
-    expect(readVariable('--emap-current-card')).toContain('--card');
-    expect(readVariable('--emap-current-border')).toContain('--border');
+    expect(resolveThemeColor(scaleStyle.color, 'transparent', readVariable)).toBe(expected.foreground);
+    expect(resolveThemeColor(scaleStyle.background, 'transparent', readVariable)).toBe(expected.card);
+    expect(resolveThemeColor('var(--emap-current-border)', 'transparent', readVariable)).toBe(expected.border);
   });
 });
