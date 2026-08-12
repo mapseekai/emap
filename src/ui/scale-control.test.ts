@@ -62,6 +62,12 @@ describe('ScaleControl', () => {
     await Promise.resolve();
   }
 
+  it('exports ScaleControl from the package entry point', async () => {
+    const api = await import('../index');
+
+    expect(api.ScaleControl).toBe(ScaleControl);
+  });
+
   it('subscribes through the Emap lifecycle and renders a metric scale reading', async () => {
     const map = stubMap(Promise.resolve(metrics));
     const control = new ScaleControl();

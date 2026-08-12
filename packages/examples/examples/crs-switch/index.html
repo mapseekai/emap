@@ -106,6 +106,7 @@
       通过 <code>map.reproject(crs)</code> 原子切换整张地图的坐标系；CRS 可为
       <code>EPSG:NNNN</code>、mapshaper 别名（<code>wgs84</code>/<code>webmercator</code>/<code>natearth</code>/<code>wintri</code>/<code>robinson</code>/<code>lcc</code>/<code>aea</code>），
       或完整 Proj.4 字符串。投影后自动 <code>setExtent</code>，Ctrl+Z 撤销。
+      比例尺测量本地地面距离，在支持的 CRS 下于 EPSG:4326 和 EPSG:3857 之间切换后仍可使用。
     </span>
   </div>
 
@@ -118,7 +119,7 @@
     import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
     const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const { Emap, TopologySource, NavigationControl, HistoryControl, ScaleControl } = emap;
 
     const SOURCE_ID = 'crs-demo';
 
@@ -126,6 +127,7 @@
     map.addControl(new NavigationControl(), 'top-left');
     installExampleMapUi(map, emap);
     map.addControl(new HistoryControl(), 'top-left');
+    map.addControl(new ScaleControl({ units: 'metric', calculationMethod: 'center' }), 'bottom-left');
     map.bindHistoryShortcuts();
 
     const status = document.getElementById('status');

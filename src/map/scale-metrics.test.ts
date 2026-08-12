@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 import { beforeAll, describe, expect, it } from 'vitest';
+import type { GetScaleMetricsOptions, ScaleMetrics } from '../index';
 import { Bounds } from '../geo/bounds';
 import { Emap } from './map';
+
+const rootExportedMetricTypes: [GetScaleMetricsOptions, ScaleMetrics] = [
+  { calculationMethod: 'center' },
+  { metersPerPixel: 1, scaleDenominator: 1, calculationMethod: 'center' },
+];
+void rootExportedMetricTypes;
 
 beforeAll(() => {
   HTMLCanvasElement.prototype.getContext = () =>

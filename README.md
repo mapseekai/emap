@@ -70,12 +70,14 @@ import {
   TopologySource,
   NavigationControl,
   HistoryControl,
+  ScaleControl,
 } from '@mapseekai/emap';
 import '@mapseekai/emap/style.css';
 
 const map = new Emap({ container: 'map' });
 map.addControl(new NavigationControl(), 'top-left');
 map.addControl(new HistoryControl(), 'top-left');
+map.addControl(new ScaleControl(), 'bottom-left');
 
 const source = await TopologySource.fromUrl(
   'china',
@@ -924,6 +926,7 @@ basemap can be active at a time; online overlays share that lower canvas.
 |---|---|
 | `NavigationControl` | Zoom in, zoom out, reset |
 | `StatusControl` | Pointer coordinates and CRS |
+| `ScaleControl` | Local ellipsoidal distance bar, nominal `1:N`, and Web Mercator zoom |
 | `BasemapControl` | Select one registered MapLibre basemap |
 | `LayerControl` | Toggle Emap business layers and MapLibre online overlays |
 | `HistoryControl` | Undo/redo buttons |
@@ -933,6 +936,18 @@ basemap can be active at a time; online overlays share that lower canvas.
 | `BoxSelectControl` | Thin shell over `map.boxSelect` |
 | `LassoSelectControl` | Thin shell over `map.lassoSelect` |
 | `SimplifyControl` | Simplification UI |
+
+Configure the scale display with local measurement options:
+
+```ts
+map.addControl(new ScaleControl({
+  units: 'dual',
+  calculationMethod: 'average',
+  dpi: 144,
+}), 'bottom-left');
+```
+
+Unsupported or non-Earth CRSs hide measurements rather than guessing.
 
 ## Known Limitations
 
