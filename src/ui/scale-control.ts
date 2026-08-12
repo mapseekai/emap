@@ -94,17 +94,17 @@ export class ScaleControl implements Control {
   }
 
   private _scheduleUpdate(): void {
+    this._revision += 1;
     if (this._frameId !== null) return;
     this._frameId = requestAnimationFrame(() => {
       this._frameId = null;
-      void this._update();
+      void this._update(this._revision);
     });
   }
 
-  private async _update(): Promise<void> {
+  private async _update(revision: number): Promise<void> {
     const map = this._map;
     if (!map) return;
-    const revision = ++this._revision;
     const metrics = await map.getScaleMetrics({
       calculationMethod: this._options.calculationMethod,
       dpi: this._options.dpi,

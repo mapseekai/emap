@@ -436,6 +436,7 @@ interface MprojInternals {
 
 export interface GeographicCoordinateTransformer {
   readonly isGeographic: boolean;
+  readonly isEarthCompatible: boolean;
   readonly semiMajorAxis: number;
   readonly flattening: number;
   inverse(point: readonly [number, number]): [number, number] | null;
@@ -451,6 +452,7 @@ type MapshaperRuntimeCrs = NonNullable<NonNullable<MapshaperDataset['info']>['cr
 
 const WGS84_SEMI_MAJOR_AXIS = 6378137;
 const WGS84_FLATTENING = 1 / 298.257223563;
+const EARTH_SEMI_MAJOR_AXIS_TOLERANCE = 0.01;
 const PROJECTION_NUMBER_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
 
 /** Parse a CRS definition into Mapshaper's runtime projection representation. */
@@ -476,6 +478,12 @@ export function createGeographicCoordinateTransformer(
 
   return {
     isGeographic: projection.is_latlong === true,
+    // PROJ identifies celestial bodies by approximate semi-major radius. A 1%
+    // window includes historical terrestrial ellipsoids and common Earth
+    // spheres without treating Mars- or Moon-sized bodies as Earth.
+    isEarthCompatible:
+      Math.abs(a - WGS84_SEMI_MAJOR_AXIS) / WGS84_SEMI_MAJOR_AXIS <=
+      EARTH_SEMI_MAJOR_AXIS_TOLERANCE,
     semiMajorAxis: a,
     flattening: f,
     inverse(point): [number, number] | null {

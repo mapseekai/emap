@@ -125,6 +125,20 @@ describe('ScaleControl', () => {
     expect(root.hidden).toBe(true);
   });
 
+  it('hides a previous reading when a non-Earth CRS has no metrics', async () => {
+    const map = stubMap(Promise.resolve(metrics));
+    map.getScaleMetrics.mockReturnValueOnce(Promise.resolve(metrics)).mockReturnValueOnce(Promise.resolve(null));
+    const root = new ScaleControl().onAdd(map as any);
+    await flushFrame();
+
+    map._emit('crschange');
+    await flushFrame();
+
+    expect(root.hidden).toBe(true);
+    expect(root.querySelector('.emap-scale-summary')?.textContent).toBe('');
+    expect(root.querySelector('.emap-scale-labels')?.textContent).toBe('');
+  });
+
   it('coalesces consecutive move events into one animation frame', () => {
     const map = stubMap(Promise.resolve(metrics));
     new ScaleControl().onAdd(map as any);
@@ -185,5 +199,28 @@ describe('ScaleControl', () => {
     expect(root.querySelector('.emap-scale-summary')?.textContent).toContain('1:2,500');
     expect(root.querySelector('.emap-scale-summary')?.textContent).toContain('Zoom 8');
     expect(root.querySelector('.emap-scale-summary')?.textContent).not.toContain('1:7,559');
+  });
+
+  it('invalidates a pending request when a newer frame is scheduled', async () => {
+    const stale = deferred<typeof metrics | null>();
+    const next = deferred<typeof metrics | null>();
+    const map = stubMap(Promise.resolve(metrics));
+    map.getScaleMetrics
+      .mockReturnValueOnce(Promise.resolve(metrics))
+      .mockReturnValueOnce(stale.promise)
+      .mockReturnValueOnce(next.promise);
+    const root = new ScaleControl().onAdd(map as any);
+    await flushFrame();
+    expect(root.querySelector('.emap-scale-summary')?.textContent).toContain('1:7,559');
+
+    map._emit('move');
+    await flushFrame();
+    map._emit('move');
+    stale.resolve({ ...metrics, scaleDenominator: 2500, zoom: 8 });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(root.querySelector('.emap-scale-summary')?.textContent).toContain('1:7,559');
+    expect(root.querySelector('.emap-scale-summary')?.textContent).not.toContain('1:2,500');
   });
 });

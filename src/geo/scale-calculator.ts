@@ -97,6 +97,7 @@ export class ScaleCalculator {
     try {
       const { definition, signature } = await resolveProjectCrsDefinition(view.crs);
       const transformer = await this._getTransformer(signature, definition);
+      if (!transformer.isEarthCompatible) return null;
       const requestedMethod = options.calculationMethod ?? 'center';
       const calculationMethod =
         requestedMethod === 'equator' && !transformer.isGeographic ? 'center' : requestedMethod;

@@ -45,11 +45,77 @@ describe('ScaleCalculator', () => {
     expect(await calculator.getMetrics(utmView)).toMatchObject({ calculationMethod: 'center' });
   });
 
+  it('uses the requested top, center, bottom, and average samples', async () => {
+    const calculator = new ScaleCalculator();
+    const view = {
+      crs: 'EPSG:4326',
+      width: 200,
+      height: 100,
+      unproject: (px: number, py: number): [number, number] => [
+        -1 + px / 100,
+        60 - py * 0.6,
+      ],
+    };
+
+    const top = await calculator.getMetrics(view, { calculationMethod: 'top' });
+    const center = await calculator.getMetrics(view, { calculationMethod: 'center' });
+    const bottom = await calculator.getMetrics(view, { calculationMethod: 'bottom' });
+    const average = await calculator.getMetrics(view, { calculationMethod: 'average' });
+
+    expect(top?.calculationMethod).toBe('top');
+    expect(center?.calculationMethod).toBe('center');
+    expect(bottom?.calculationMethod).toBe('bottom');
+    expect(average?.calculationMethod).toBe('average');
+    expect(top!.metersPerPixel).toBeLessThan(center!.metersPerPixel);
+    expect(center!.metersPerPixel).toBeLessThan(bottom!.metersPerPixel);
+    expect(average!.metersPerPixel).toBeCloseTo(
+      (top!.metersPerPixel + center!.metersPerPixel + bottom!.metersPerPixel) / 3,
+    );
+  });
+
+  it('measures geographic equator scale independently of the sampled latitude', async () => {
+    const calculator = new ScaleCalculator();
+    const local = await calculator.getMetrics(geographicView(60), { calculationMethod: 'center' });
+    const equator = await calculator.getMetrics(geographicView(60), { calculationMethod: 'equator' });
+    const equatorControl = await calculator.getMetrics(geographicView(0), { calculationMethod: 'center' });
+
+    expect(equator?.calculationMethod).toBe('equator');
+    expect(equator!.metersPerPixel).toBeGreaterThan(local!.metersPerPixel);
+    expect(equator!.metersPerPixel).toBeCloseTo(equatorControl!.metersPerPixel);
+  });
+
+  it('returns null for a non-Earth ellipsoid without rejecting custom Earth ellipsoids', async () => {
+    const calculator = new ScaleCalculator();
+    const mars = {
+      ...geographicView(0),
+      crs: '+proj=longlat +a=3396190 +b=3376200 +no_defs',
+    };
+    const customEarth = {
+      ...geographicView(0),
+      crs: '+proj=longlat +a=6371000 +b=6371000 +no_defs',
+    };
+
+    await expect(calculator.getMetrics(mars)).resolves.toBeNull();
+    await expect(calculator.getMetrics(customEarth)).resolves.toMatchObject({
+      calculationMethod: 'center',
+    });
+  });
+
   it('returns null for invalid CRS views', async () => {
     const calculator = new ScaleCalculator();
     const invalidView = { ...geographicView(0), crs: 'EPSG:999999999' };
 
     expect(await calculator.getMetrics(invalidView)).toBeNull();
+  });
+
+  it.each([
+    ['throwing', () => { throw new Error('unproject failed'); }],
+    ['non-finite', () => [Number.NaN, 0] as [number, number]],
+  ])('returns null when a valid CRS has no %s sample', async (_case, unproject) => {
+    const calculator = new ScaleCalculator();
+    const view = { ...geographicView(0), unproject };
+
+    await expect(calculator.getMetrics(view)).resolves.toBeNull();
   });
 
   it('falls back from equator to center for projected views', async () => {

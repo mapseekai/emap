@@ -14,6 +14,7 @@ import {
   ScaleCalculator,
   type GetScaleMetricsOptions,
   type ScaleMetrics,
+  type ScaleView,
 } from '../geo/scale-calculator';
 import {
   EpsgProjectionError,
@@ -162,6 +163,64 @@ function renderedLayersEqual(
       (layer.layout?.visibility ?? 'visible') === (candidate.layout?.visibility ?? 'visible')
     );
   });
+}
+
+interface ScaleViewSample {
+  px: number;
+  py: number;
+  coordinate: [number, number];
+}
+
+interface ScaleViewSnapshot {
+  view: ScaleView;
+  samples: ScaleViewSample[];
+}
+
+function captureScaleView(viewport: Viewport, crs: string): ScaleViewSnapshot | null {
+  const width = viewport.width;
+  const height = viewport.height;
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+
+  const x = width / 2;
+  const samples: ScaleViewSample[] = [];
+  try {
+    for (const py of [0, height / 2, height]) {
+      for (const px of [x, x + 1]) {
+        samples.push({ px, py, coordinate: viewport.unproject(px, py) });
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return {
+    samples,
+    view: {
+      crs,
+      width,
+      height,
+      unproject(px, py): [number, number] {
+        const sample = samples.find((candidate) => candidate.px === px && candidate.py === py);
+        if (!sample) throw new Error('Scale view requested a coordinate outside its snapshot');
+        return [...sample.coordinate];
+      },
+    },
+  };
+}
+
+function isScaleViewCurrent(viewport: Viewport, crs: string, snapshot: ScaleViewSnapshot): boolean {
+  if (crs !== snapshot.view.crs || viewport.width !== snapshot.view.width || viewport.height !== snapshot.view.height) {
+    return false;
+  }
+
+  try {
+    return snapshot.samples.every((sample) => {
+      const current = viewport.unproject(sample.px, sample.py);
+      return current[0] === sample.coordinate[0] && current[1] === sample.coordinate[1];
+    });
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -1760,20 +1819,14 @@ export class Emap extends EventDispatcher {
   public async getScaleMetrics(
     options: GetScaleMetricsOptions = {},
   ): Promise<(ScaleMetrics & { zoom?: number }) | null> {
-    const metrics = await this._scaleCalculatorInstance().getMetrics(
-      {
-        crs: this.getCRS(),
-        width: this._viewport.width,
-        height: this._viewport.height,
-        unproject: (px, py) => this._viewport.unproject(px, py),
-      },
-      options,
-    );
-    if (!metrics) return null;
-    const crs = this.getCRS().toLowerCase();
-    return crs === 'epsg:3857' || crs === 'webmercator'
-      ? { ...metrics, zoom: this.getZoom() }
-      : metrics;
+    const crs = this.getCRS();
+    const snapshot = captureScaleView(this._viewport, crs);
+    if (!snapshot) return null;
+    const normalizedCrs = crs.toLowerCase();
+    const zoom = normalizedCrs === 'epsg:3857' || normalizedCrs === 'webmercator' ? this.getZoom() : undefined;
+    const metrics = await this._scaleCalculatorInstance().getMetrics(snapshot.view, options);
+    if (!metrics || !isScaleViewCurrent(this._viewport, this.getCRS(), snapshot)) return null;
+    return zoom === undefined ? metrics : { ...metrics, zoom };
   }
 
   private _scaleCalculatorInstance(): ScaleCalculator {
