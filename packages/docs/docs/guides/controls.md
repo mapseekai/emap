@@ -2,10 +2,10 @@
 id: controls
 slug: /guides/controls
 title: 控件
-api: ["BasemapControl","BasemapOptions","BasemapStyle","BoxSelectControl","BoxSelectControlOptions","Control","ControlPosition","DrawFeatureControl","DrawFeatureControlOptions","EditToolbar","EditToolbarOptions","Emap","HistoryControl","HistoryControlOptions","LassoSelectControl","LassoSelectControlOptions","NavigationControl","NavigationOptions","SimplifyControl","SimplifyControlOptions","StatusControl","StatusOptions","VertexEditControl","VertexEditControlOptions"]
-examples: ["box-select","china-editing","draw-snap-edge","interaction-handlers","lasso-select","simplify-control","vertex-editing"]
+api: ["BasemapControl","BasemapOptions","BasemapStyle","BoxSelectControl","BoxSelectControlOptions","Control","ControlPosition","DrawFeatureControl","DrawFeatureControlOptions","EditToolbar","EditToolbarOptions","Emap","HistoryControl","HistoryControlOptions","LassoSelectControl","LassoSelectControlOptions","LayerChangeEvent","LayerChangeReason","LayerControl","MapLibreBasemapService","MapLibreIntegrationOptions","MapLibreOverlayService","MapLibreService","MapLibreServiceChangeEvent","MapLibreServiceChangeReason","MapLibreServiceErrorEvent","MapLibreServiceEventMap","MapLibreServiceManager","MapLibreServiceState","MapOptions","NavigationControl","NavigationOptions","SimplifyControl","SimplifyControlOptions","StatusControl","StatusOptions","VertexEditControl","VertexEditControlOptions"]
+examples: ["box-select","china-editing","draw-snap-edge","interaction-handlers","lasso-select","online-map-services","simplify-control","vertex-editing"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.6.0
 ---
 
 # 控件
@@ -49,13 +49,229 @@ import '@mapseekai/emap/style.css';
 | `NavigationControl` | 放大、缩小和视图导航 |
 | `HistoryControl` | 撤销与重做 |
 | `StatusControl` | 显示指针坐标与 EPSG |
-| `BasemapControl` | 切换应用提供的底图样式 |
+| `BasemapControl` | 在已注册的 MapLibre 底图中单选 |
+| `LayerControl` | 切换 Emap 业务图层与 MapLibre 在线叠加层 |
 | `BoxSelectControl` | 拉框选择 |
 | `LassoSelectControl` | 套索选择 |
 | `VertexEditControl` | 顶点编辑模式 |
 | `DrawFeatureControl` | 绘制点、线或面 |
 | `EditToolbar` | 组合常用编辑模式 |
 | `SimplifyControl` | 调整并提交简化操作 |
+
+## 原生 MapLibre 在线服务
+
+`mapLibre.services` 直接接收原生 MapLibre 样式与 source 规范。底图拥有一份完整样式；
+叠加层拥有命名 source 和 layer，管理器会在切换底图样式后恢复这些托管资源。
+
+### 栅格服务模板
+
+下面的辅助函数在保留原生 MapLibre source 配置的同时，减少完整叠加层定义的重复代码：
+
+```ts
+import type { MapLibreOverlayService } from '@mapseekai/emap';
+
+function rasterOverlay(
+  id: string,
+  name: string,
+  source: MapLibreOverlayService['sources'][string],
+): MapLibreOverlayService {
+  return {
+    id,
+    name,
+    role: 'overlay',
+    sources: { [id]: source },
+    layers: [{ id: `${id}-layer`, type: 'raster', source: id }],
+  };
+}
+
+const overlays: MapLibreOverlayService[] = [
+  // XYZ 栅格瓦片
+  rasterOverlay('xyz', 'XYZ imagery', {
+    type: 'raster',
+    tiles: ['https://tiles.example.com/xyz/{z}/{x}/{y}.png'],
+    tileSize: 256,
+  }),
+
+  // TMS 会翻转原生 {y} 瓦片坐标。
+  rasterOverlay('tms', 'TMS imagery', {
+    type: 'raster',
+    tiles: ['https://tiles.example.com/tms/{z}/{x}/{y}.png'],
+    scheme: 'tms',
+    tileSize: 256,
+  }),
+
+  // Web Mercator 下的 WMS GetMap
+  rasterOverlay('wms', 'WMS weather', {
+    type: 'raster',
+    tiles: [
+      'https://maps.example.com/wms?service=WMS&request=GetMap&version=1.1.1&layers=weather&styles=&format=image/png&transparent=true&srs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256',
+    ],
+    tileSize: 256,
+  }),
+
+  // 服务提供方给出的 RESTful WMTS 模板
+  rasterOverlay('wmts', 'WMTS imagery', {
+    type: 'raster',
+    tiles: [
+      'https://tiles.example.com/wmts/world/default/WebMercatorQuad/{z}/{y}/{x}.png',
+    ],
+    tileSize: 256,
+  }),
+
+  // URL 指向 TileJSON 文档，而不是单个瓦片。
+  rasterOverlay('tilejson', 'TileJSON imagery', {
+    type: 'raster',
+    url: 'https://tiles.example.com/imagery/tiles.json',
+  }),
+];
+```
+
+这些配置只是 URL/source 描述，不会发起服务发现请求。Emap 不读取 WMS/WMTS
+GetCapabilities，也不会转换任意服务 CRS；请使用直接提供 Web Mercator
+（`EPSG:3857`）瓦片的端点与瓦片矩阵。
+
+### 完整样式底图与构造配置
+
+底图的 `style` 可以是完整 MapLibre 样式 URL，也可以是完整的样式 JSON 对象：
+
+```ts
+import {
+  Emap,
+  type MapLibreBasemapService,
+} from '@mapseekai/emap';
+
+const basemaps: MapLibreBasemapService[] = [
+  {
+    id: 'provider-style',
+    name: 'Provider style',
+    role: 'basemap',
+    style: 'https://tiles.example.com/styles/streets/style.json',
+  },
+  {
+    id: 'osm-json',
+    name: 'OpenStreetMap raster',
+    role: 'basemap',
+    style: {
+      version: 8,
+      sources: {
+        osm: {
+          type: 'raster',
+          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          tileSize: 256,
+        },
+      },
+      layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+    },
+  },
+];
+
+const providerToken = 'YOUR_TOKEN';
+const map = new Emap({
+  container: 'map',
+  mapLibre: {
+    services: [...basemaps, ...overlays],
+    defaultBasemap: 'provider-style',
+    mapOptions: {
+      transformRequest: (url, resourceType) => {
+        if (!url.startsWith('https://tiles.example.com/')) return { url };
+        const rewritten = url.replace(
+          'https://tiles.example.com/',
+          'https://cdn.example.com/',
+        );
+        const separator = rewritten.includes('?') ? '&' : '?';
+        return {
+          url: `${rewritten}${separator}access_token=${encodeURIComponent(providerToken)}`,
+          headers:
+            resourceType === 'Tile'
+              ? { 'X-Map-Client': 'emap-documentation' }
+              : {},
+        };
+      },
+    },
+  },
+});
+```
+
+`transformRequest` 是处理服务商 URL 重写、查询参数令牌与请求头的原生入口。Emap
+负责 MapLibre 的 container、style、center、zoom 与非交互模式，因此
+`mapOptions` 不开放这些键。
+
+激活底图或可见叠加层需要 Web Mercator。必要时，管理器会先把当前 Emap 数据重投影到
+`webmercator`（`EPSG:3857`），再显示服务；启用在线服务时需考虑这一数据 CRS 变化。
+
+### 运行时注册表与状态
+
+使用地图持有的管理器添加、替换、删除、显示或隐藏服务。更新服务时必须保持相同的
+`id` 和 `role`。
+
+```ts
+const services = map.mapLibreServices;
+const live = rasterOverlay('live', 'Live overlay', {
+  type: 'raster',
+  tiles: ['https://tiles.example.com/live/{z}/{x}/{y}.png'],
+  tileSize: 256,
+});
+
+await services.addService(live);
+await services.updateService('live', {
+  ...live,
+  name: 'Live overlay (updated)',
+});
+await services.setOverlayVisibility('live', false); // 隐藏
+await services.setOverlayVisibility('live', true);  // 显示
+await services.setBasemap('osm-json');
+await services.setBasemap(null); // 不激活任何底图
+
+const state = services.getServiceState('live');
+if (state?.status === 'error') console.error(state.error);
+
+services.on('error', ({ serviceId, phase, fatal, error }) => {
+  console.error({ serviceId, phase, fatal, error });
+});
+
+await services.removeService('live');
+```
+
+`getServiceState()` 返回 `idle`、`loading`、`ready` 或 `error`，发生错误时还包含
+最近一次错误。注册表 `change` 事件和有类型的 `error` 事件可用于让应用界面跟踪异步的
+样式、source、layer 与瓦片工作。
+
+### 访问原始 MapLibre 地图
+
+底层地图只有在激活服务并完成创建后才存在，此前 `getMapLibreMap()` 返回 `null`：
+
+```ts
+const rawMap = map.mapLibreServices.getMapLibreMap();
+rawMap?.addSource('unmanaged-debug-source', {
+  type: 'geojson',
+  data: { type: 'FeatureCollection', features: [] },
+});
+```
+
+通过原始地图添加的资源不受 Emap 管理，切换底图样式时可能消失。需要长期保留的在线内容
+应注册为服务。
+
+### 控件职责、画布顺序与 CSS
+
+`BasemapControl` 是已注册底图的单选器，同一时间最多激活一个底图；`LayerControl`
+为 Emap 业务图层和 MapLibre 叠加层提供可见性复选框。两者都不提供透明度或排序界面。
+
+MapLibre 画布固定在所有 Emap 图层下方。所有托管底图和在线叠加层都在这个下层画布中
+渲染，因此无法把 MapLibre 与 Emap 图层交错排列为同一个跨画布顺序。
+
+Emap 样式已包含托管画布所需的最小布局：
+
+```ts
+import '@mapseekai/emap/style.css';
+```
+
+如果应用通过 `getMapLibreMap()` 添加 MapLibre 控件、popup 或 marker，还必须导入
+MapLibre 组件样式：
+
+```ts
+import '@mapseekai/emap/style.css';
+import 'maplibre-gl/dist/maplibre-gl.css';
+```
 
 ## 导航、历史与状态
 

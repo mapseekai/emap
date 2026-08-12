@@ -69,6 +69,18 @@ export type {
   LoadSnapshotOptions,
 } from './map/map';
 export type { VisibleLayerLookup } from './map/structured-keys';
+export type {
+  MapLibreService,
+  MapLibreBasemapService,
+  MapLibreOverlayService,
+  MapLibreIntegrationOptions,
+  MapLibreServiceState,
+  MapLibreServiceChangeReason,
+  MapLibreServiceChangeEvent,
+  MapLibreServiceErrorEvent,
+  MapLibreServiceEventMap,
+  MapLibreServiceManager,
+} from './map/maplibre-service';
 
 // ===========================================================================
 // Layers + selection + highlights
@@ -223,7 +235,12 @@ export { EditOverlayRenderer } from './renderer/edit-overlay-renderer';
 // ===========================================================================
 export { EventDispatcher } from './core/events';
 export type { EventListener } from './core/events';
-export type { EmapEventMap, CameraEvent } from './core/event-map';
+export type {
+  EmapEventMap,
+  CameraEvent,
+  LayerChangeReason,
+  LayerChangeEvent,
+} from './core/event-map';
 export type { CameraOptions, AnimationOptions, FlyToOptions, FitBoundsOptions } from './geo/camera';
 export { HandlerManager } from './core/handler-manager';
 export { isHandler } from './core/handler';
@@ -342,6 +359,7 @@ export { StatusControl } from './ui/status-control';
 export type { StatusOptions } from './ui/status-control';
 export { BasemapControl } from './ui/basemap-control';
 export type { BasemapOptions, BasemapStyle } from './ui/basemap-control';
+export { LayerControl } from './ui/layer-control';
 export { VertexEditControl } from './ui/vertex-edit-control';
 export type { VertexEditControlOptions } from './ui/vertex-edit-control';
 export { EditToolbar } from './ui/edit-toolbar';

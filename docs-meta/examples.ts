@@ -243,6 +243,10 @@ const exampleDescriptions = {
     zh: '在 EPSG:3857、EPSG:4326 和数据原始坐标系之间切换地图显示。',
     en: 'Switches the map among EPSG:3857, EPSG:4326, and the dataset’s original coordinate system.',
   },
+  'online-map-services': {
+    zh: '在构造地图时注册在线底图和叠加服务，并通过共享控件切换或显隐服务。',
+    en: 'Registers online basemap and overlay services at construction time and manages them with shared controls.',
+  },
   'web-worker': {
     zh: '把耗时的地图处理命令交给 Web Worker 执行，并显示运行状态和结果。',
     en: 'Runs expensive map-processing commands in a Web Worker and reports progress and results.',
@@ -304,6 +308,7 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('export-geoparquet', 'map-data', '导出 GeoParquet / GeoArrow', 'Export GeoParquet / GeoArrow', [docsFormats], 'TopologySource.fromBytes', ['formats', 'export', 'basemap'], [task6Fixture]),
   recipe('export-roundtrip', 'map-data', '导出往返', 'Export roundtrip', [docsFormats, docsEditing], 'TopologySource.fromBytes', ['export', 'editing'], [task6Fixture]),
   recipe('crs-switch', 'map-data', '坐标系切换', 'CRS switch', [docsCrs], 'Emap', ['crs', 'history', 'basemap'], [task7Fixture]),
+  recipe('online-map-services', 'map-data', '在线地图服务', 'Online map services', [docsControls], 'MapLibreServiceManager', ['maplibre', 'basemap', 'overlay', 'controls'], [task6Fixture]),
   recipe('project', 'map-data', '投影转换', 'Project CRS', [docsCrs, docsOperations], 'Emap', ['crs', 'history', 'basemap'], [task7Fixture]),
   recipe('web-worker', 'map-data', 'Web Worker 重命令', 'Web Worker heavy operations', [docsWorker, docsPerformance], 'Emap', ['worker', 'history'], [task7Fixture]),
   seed(

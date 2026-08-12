@@ -58,7 +58,7 @@ import {
 } from '../core/feature-event-dispatcher';
 import { PointerEventDispatcher, type PointerMoveEvent } from '../core/pointer-event-dispatcher';
 import { type EventListener } from '../core/events';
-import type { EmapEventMap } from '../core/event-map';
+import type { EmapEventMap, LayerChangeReason } from '../core/event-map';
 import { FeatureQuery } from './feature-query';
 import { FeatureAccessor } from './feature-accessor';
 import { ValidatorRegistry } from '../validation/registry';
@@ -126,6 +126,8 @@ import {
   type RenderAction,
   type AffineDelta,
 } from './types';
+import type { MapLibreIntegrationOptions, MapLibreServiceManager } from './maplibre-service';
+import { createMapLibreServiceManager } from './maplibre-service-manager';
 
 interface PreparedSourceRegistration {
   readonly token: symbol;
@@ -137,6 +139,24 @@ interface PreparedSourceRegistration {
 
 function sourceLoadError(code: SourceLoadDiagnostic['code'], message: string): SourceLoadError {
   return new SourceLoadError(code, [{ code, severity: 'error', message }]);
+}
+
+function renderedLayersEqual(
+  left: readonly LayerSpecification[],
+  right: readonly LayerSpecification[],
+): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((layer, index) => {
+    const candidate = right[index];
+    return (
+      candidate !== undefined &&
+      layer.id === candidate.id &&
+      layer.type === candidate.type &&
+      layer.source === candidate.source &&
+      layer['source-layer'] === candidate['source-layer'] &&
+      (layer.layout?.visibility ?? 'visible') === (candidate.layout?.visibility ?? 'visible')
+    );
+  });
 }
 
 /**
@@ -216,6 +236,9 @@ export class Emap extends EventDispatcher {
   // `removeControl()` — that would require both an Array and a Set —
   // and the array is short-lived so the duplicate is harmless.
   private _controls: ControlContract<Emap>[] = [];
+
+  private _mapLibreOptions?: MapLibreIntegrationOptions;
+  private _mapLibreServices?: ReturnType<typeof createMapLibreServiceManager>;
 
   // Delegated managers. `_selection` and `_history` are read by composed
   // managers via `EmapHostInternal`; the rest stay private.
@@ -474,6 +497,21 @@ export class Emap extends EventDispatcher {
         });
       }
     }
+
+    this._mapLibreOptions = options.mapLibre;
+    if (this._mapLibreOptions) {
+      try {
+        this._mapLibreServices = createMapLibreServiceManager(this, this._mapLibreOptions);
+      } catch (error) {
+        try {
+          this.remove();
+        } catch {
+          // Preserve the original synchronous configuration error.
+        }
+        throw error;
+      }
+      void this._mapLibreServices.initialize().catch(() => undefined);
+    }
   }
 
   /**
@@ -623,6 +661,10 @@ export class Emap extends EventDispatcher {
 
   public getCanvasContainer(): HTMLElement {
     return this._canvasContainer;
+  }
+
+  public get mapLibreServices(): MapLibreServiceManager {
+    return (this._mapLibreServices ??= createMapLibreServiceManager(this, this._mapLibreOptions));
   }
 
   public getEditMode(): EditMode {
@@ -1124,6 +1166,7 @@ export class Emap extends EventDispatcher {
     const previousMapCrs = this._projection.crs;
     const previousCrsEstablished = this._crsEstablished;
     const previousDefaultLayersDirty = this._defaultLayersDirty;
+    const renderedLayersBefore = this.getRenderedLayers();
     const adoptedMapCrs = expectedMapCrs === undefined;
     const onData: EventListener<{ reason?: 'load' | 'replace' | 'reproject' }> = (event) => {
       this._handleSourceData(id, source, event);
@@ -1144,10 +1187,8 @@ export class Emap extends EventDispatcher {
       this._sourceListeners.set(id, onData);
       source.on('data', onData);
 
-      this._clearHistory();
       this._pendingSourceCommits.delete(id);
-      if (adoptedMapCrs) this.fire('crschange');
-      this._handleSourceData(id, source, { reason: 'load' });
+      this._handleSourceData(id, source, { reason: 'load' }, renderedLayersBefore, adoptedMapCrs);
       return true;
     } catch (error: unknown) {
       source.off('data', onData);
@@ -1186,13 +1227,20 @@ export class Emap extends EventDispatcher {
     id: string,
     source: MutableTopologySource,
     event: { reason?: 'load' | 'replace' | 'reproject' },
+    renderedLayersBefore = this.getRenderedLayers(),
+    crsChanged = false,
   ): void {
     if (this._sources.get(id) !== source) return;
     this._defaultLayersDirty = true;
     this._invalidateShapeCachesForSources([id]);
+    const renderedLayersAfter = this.getRenderedLayers();
+    if (!renderedLayersEqual(renderedLayersBefore, renderedLayersAfter)) {
+      this._fireLayerChange('effective', undefined, renderedLayersAfter);
+    }
     if (event.reason === 'load') {
       this._clearHistory();
     }
+    if (crsChanged) this.fire('crschange');
     this.fire('data', { sourceId: id, reason: event.reason });
     this._scheduleRender();
   }
@@ -1267,6 +1315,7 @@ export class Emap extends EventDispatcher {
     this._pendingSourceCommits?.delete(id);
     const source = this._sources.get(id);
     if (!source) return;
+    const renderedLayersBefore = this.getRenderedLayers();
 
     const listener = this._sourceListeners.get(id);
     if (listener) source.off('data', listener);
@@ -1280,6 +1329,10 @@ export class Emap extends EventDispatcher {
     this._featureQuery.clear(id);
     this._invalidateShapeCachesForSources([id]);
     this._highlightManager.removeSource(id);
+    const renderedLayersAfter = this.getRenderedLayers();
+    if (!renderedLayersEqual(renderedLayersBefore, renderedLayersAfter)) {
+      this._fireLayerChange('effective', undefined, renderedLayersAfter);
+    }
 
     const selected = this._selection.getAll().filter((ref) => ref.source === id);
     if (selected.length > 0) {
@@ -1388,6 +1441,7 @@ export class Emap extends EventDispatcher {
     }
     this._defaultLayersDirty = true;
     this._scheduleRender();
+    this._fireLayerChange('add', layer.id);
   }
 
   public removeLayer(id: string): void {
@@ -1396,6 +1450,7 @@ export class Emap extends EventDispatcher {
       this._layers.splice(idx, 1);
       this._defaultLayersDirty = true;
       this._scheduleRender();
+      this._fireLayerChange('remove', id);
     }
   }
 
@@ -1408,13 +1463,25 @@ export class Emap extends EventDispatcher {
     return this._layers.map(cloneLayerSpecification);
   }
 
+  public getRenderedLayers(): readonly LayerSpecification[] {
+    return this._getEffectiveLayers().map(cloneLayerSpecification);
+  }
+
   public setLayerVisibility(id: string, visibility: 'visible' | 'none'): void {
-    const layer = this._layers.find((l) => l.id === id);
-    if (layer) {
-      if (!layer.layout) layer.layout = {};
-      layer.layout.visibility = visibility;
-      this._scheduleRender();
+    let layer = this._layers.find((candidate) => candidate.id === id);
+    if (!layer && this._layers.length === 0) {
+      const effectiveLayers = this._getEffectiveLayers();
+      const index = effectiveLayers.findIndex((candidate) => candidate.id === id);
+      if (index === -1) return;
+      if ((effectiveLayers[index].layout?.visibility ?? 'visible') === visibility) return;
+      this._layers = effectiveLayers.map(cloneLayerSpecification);
+      layer = this._layers[index];
     }
+    if (!layer || (layer.layout?.visibility ?? 'visible') === visibility) return;
+    if (!layer.layout) layer.layout = {};
+    layer.layout.visibility = visibility;
+    this._scheduleRender();
+    this._fireLayerChange('visibility', id);
   }
 
   public setPaintProperty(id: string, name: string, value: unknown): void {
@@ -1442,6 +1509,18 @@ export class Emap extends EventDispatcher {
     }
     this._defaultLayersDirty = true;
     this._scheduleRender();
+    this._fireLayerChange('effective', id);
+  }
+
+  private _fireLayerChange(
+    reason: LayerChangeReason,
+    layerId?: string,
+    renderedLayers?: readonly LayerSpecification[],
+  ): void {
+    const layers = renderedLayers
+      ? renderedLayers.map(cloneLayerSpecification)
+      : this.getRenderedLayers();
+    this.fire('layerchange', { reason, layerId, layers });
   }
 
   private _getEffectiveLayers(): LayerSpecification[] {
@@ -2417,6 +2496,15 @@ export class Emap extends EventDispatcher {
     controls.length = 0;
     this._controlContainers?.clear();
 
+    let mapLibreDestroyFailure: { error: unknown } | undefined;
+    try {
+      this._mapLibreServices?.destroy();
+    } catch (error) {
+      mapLibreDestroyFailure = { error };
+    } finally {
+      this._mapLibreServices = undefined;
+    }
+
     // Active edit overlay state — clearing through the store fires the
     // change callback, which is harmless after `_removed` because
     // `_scheduleRender` short-circuits.
@@ -2425,6 +2513,8 @@ export class Emap extends EventDispatcher {
     if (this._container && this._canvasContainer) {
       this._container.removeChild(this._canvasContainer);
     }
+
+    if (mapLibreDestroyFailure) throw mapLibreDestroyFailure.error;
   }
   /** Read by composed managers via `EmapHostInternal._removed`. */
   _removed = false;

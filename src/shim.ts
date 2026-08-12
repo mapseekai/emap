@@ -1,3 +1,4 @@
+import * as buffer from 'buffer';
 import mproj from 'mproj';
 import Flatbush from 'flatbush';
 import KDBush from 'kdbush';
@@ -19,6 +20,7 @@ if (typeof window === 'undefined') {
   if (!g.window!.document) g.window!.document = {};
 }
 const modules = (g.window!.modules = g.window!.modules || {});
+modules['buffer'] = buffer;
 modules['mproj'] = mproj;
 modules['flatbush'] = Flatbush;
 modules['kdbush'] = KDBush;

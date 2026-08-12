@@ -2,10 +2,10 @@
 id: controls
 slug: /guides/controls
 title: Controls
-api: ["BasemapControl","BasemapOptions","BasemapStyle","BoxSelectControl","BoxSelectControlOptions","Control","ControlPosition","DrawFeatureControl","DrawFeatureControlOptions","EditToolbar","EditToolbarOptions","Emap","HistoryControl","HistoryControlOptions","LassoSelectControl","LassoSelectControlOptions","NavigationControl","NavigationOptions","SimplifyControl","SimplifyControlOptions","StatusControl","StatusOptions","VertexEditControl","VertexEditControlOptions"]
-examples: ["box-select","china-editing","draw-snap-edge","interaction-handlers","lasso-select","simplify-control","vertex-editing"]
+api: ["BasemapControl","BasemapOptions","BasemapStyle","BoxSelectControl","BoxSelectControlOptions","Control","ControlPosition","DrawFeatureControl","DrawFeatureControlOptions","EditToolbar","EditToolbarOptions","Emap","HistoryControl","HistoryControlOptions","LassoSelectControl","LassoSelectControlOptions","LayerChangeEvent","LayerChangeReason","LayerControl","MapLibreBasemapService","MapLibreIntegrationOptions","MapLibreOverlayService","MapLibreService","MapLibreServiceChangeEvent","MapLibreServiceChangeReason","MapLibreServiceErrorEvent","MapLibreServiceEventMap","MapLibreServiceManager","MapLibreServiceState","MapOptions","NavigationControl","NavigationOptions","SimplifyControl","SimplifyControlOptions","StatusControl","StatusOptions","VertexEditControl","VertexEditControlOptions"]
+examples: ["box-select","china-editing","draw-snap-edge","interaction-handlers","lasso-select","online-map-services","simplify-control","vertex-editing"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.6.0
 ---
 
 # Controls
@@ -45,13 +45,239 @@ class.
 | `NavigationControl` | Zoom and view navigation |
 | `HistoryControl` | Undo and redo |
 | `StatusControl` | Pointer coordinates and EPSG display |
-| `BasemapControl` | Application-provided basemap styles |
+| `BasemapControl` | Select one registered MapLibre basemap |
+| `LayerControl` | Toggle Emap business layers and MapLibre online overlays |
 | `BoxSelectControl` | Box selection |
 | `LassoSelectControl` | Lasso selection |
 | `VertexEditControl` | Vertex-edit mode |
 | `DrawFeatureControl` | Point, line, or polygon drawing |
 | `EditToolbar` | Common editing modes |
 | `SimplifyControl` | Preview and commit simplification |
+
+## Native MapLibre online services
+
+`mapLibre.services` accepts native MapLibre style and source specifications.
+A basemap owns a complete style; an overlay owns named sources and layers that
+the manager restores after a basemap style change.
+
+### Raster service templates
+
+The following helper keeps complete overlay definitions compact while leaving
+each source as native MapLibre configuration:
+
+```ts
+import type { MapLibreOverlayService } from '@mapseekai/emap';
+
+function rasterOverlay(
+  id: string,
+  name: string,
+  source: MapLibreOverlayService['sources'][string],
+): MapLibreOverlayService {
+  return {
+    id,
+    name,
+    role: 'overlay',
+    sources: { [id]: source },
+    layers: [{ id: `${id}-layer`, type: 'raster', source: id }],
+  };
+}
+
+const overlays: MapLibreOverlayService[] = [
+  // XYZ raster tiles
+  rasterOverlay('xyz', 'XYZ imagery', {
+    type: 'raster',
+    tiles: ['https://tiles.example.com/xyz/{z}/{x}/{y}.png'],
+    tileSize: 256,
+  }),
+
+  // TMS flips the native {y} tile coordinate.
+  rasterOverlay('tms', 'TMS imagery', {
+    type: 'raster',
+    tiles: ['https://tiles.example.com/tms/{z}/{x}/{y}.png'],
+    scheme: 'tms',
+    tileSize: 256,
+  }),
+
+  // WMS GetMap in Web Mercator
+  rasterOverlay('wms', 'WMS weather', {
+    type: 'raster',
+    tiles: [
+      'https://maps.example.com/wms?service=WMS&request=GetMap&version=1.1.1&layers=weather&styles=&format=image/png&transparent=true&srs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256',
+    ],
+    tileSize: 256,
+  }),
+
+  // RESTful WMTS template supplied by the provider
+  rasterOverlay('wmts', 'WMTS imagery', {
+    type: 'raster',
+    tiles: [
+      'https://tiles.example.com/wmts/world/default/WebMercatorQuad/{z}/{y}/{x}.png',
+    ],
+    tileSize: 256,
+  }),
+
+  // The URL points to a TileJSON document instead of an individual tile.
+  rasterOverlay('tilejson', 'TileJSON imagery', {
+    type: 'raster',
+    url: 'https://tiles.example.com/imagery/tiles.json',
+  }),
+];
+```
+
+These are URL/source descriptions, not service-discovery requests. Emap does
+not fetch WMS/WMTS GetCapabilities or convert an arbitrary service CRS. Use an
+endpoint and tile matrix that deliver Web Mercator (`EPSG:3857`) tiles.
+
+### Full-style basemaps and construction
+
+A basemap `style` may be either a full MapLibre style URL or a complete style
+JSON object:
+
+```ts
+import {
+  Emap,
+  type MapLibreBasemapService,
+} from '@mapseekai/emap';
+
+const basemaps: MapLibreBasemapService[] = [
+  {
+    id: 'provider-style',
+    name: 'Provider style',
+    role: 'basemap',
+    style: 'https://tiles.example.com/styles/streets/style.json',
+  },
+  {
+    id: 'osm-json',
+    name: 'OpenStreetMap raster',
+    role: 'basemap',
+    style: {
+      version: 8,
+      sources: {
+        osm: {
+          type: 'raster',
+          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          tileSize: 256,
+        },
+      },
+      layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+    },
+  },
+];
+
+const providerToken = 'YOUR_TOKEN';
+const map = new Emap({
+  container: 'map',
+  mapLibre: {
+    services: [...basemaps, ...overlays],
+    defaultBasemap: 'provider-style',
+    mapOptions: {
+      transformRequest: (url, resourceType) => {
+        if (!url.startsWith('https://tiles.example.com/')) return { url };
+        const rewritten = url.replace(
+          'https://tiles.example.com/',
+          'https://cdn.example.com/',
+        );
+        const separator = rewritten.includes('?') ? '&' : '?';
+        return {
+          url: `${rewritten}${separator}access_token=${encodeURIComponent(providerToken)}`,
+          headers:
+            resourceType === 'Tile'
+              ? { 'X-Map-Client': 'emap-documentation' }
+              : {},
+        };
+      },
+    },
+  },
+});
+```
+
+`transformRequest` is the native place for provider URL rewrites, query-token
+injection, and request headers. Emap owns the MapLibre container, style,
+center, zoom, and non-interactive mode, so those keys are intentionally not
+available through `mapOptions`.
+
+Activating a basemap or visible overlay requires Web Mercator. If necessary,
+the manager reprojects the current Emap data to `webmercator` (`EPSG:3857`)
+before displaying the service; account for that data-CRS change when enabling
+online services.
+
+### Runtime registry and state
+
+Use the map-owned manager to add, replace, remove, show, or hide services. A
+service keeps the same `id` and `role` when updated.
+
+```ts
+const services = map.mapLibreServices;
+const live = rasterOverlay('live', 'Live overlay', {
+  type: 'raster',
+  tiles: ['https://tiles.example.com/live/{z}/{x}/{y}.png'],
+  tileSize: 256,
+});
+
+await services.addService(live);
+await services.updateService('live', {
+  ...live,
+  name: 'Live overlay (updated)',
+});
+await services.setOverlayVisibility('live', false); // hide
+await services.setOverlayVisibility('live', true);  // show
+await services.setBasemap('osm-json');
+await services.setBasemap(null); // no active basemap
+
+const state = services.getServiceState('live');
+if (state?.status === 'error') console.error(state.error);
+
+services.on('error', ({ serviceId, phase, fatal, error }) => {
+  console.error({ serviceId, phase, fatal, error });
+});
+
+await services.removeService('live');
+```
+
+`getServiceState()` reports `idle`, `loading`, `ready`, or `error`, plus the
+last error when applicable. Registry `change` and typed `error` events let
+application UI follow asynchronous style/source/layer/tile work.
+
+### Raw MapLibre access
+
+`getMapLibreMap()` returns `null` until an active service has created the
+underlying map:
+
+```ts
+const rawMap = map.mapLibreServices.getMapLibreMap();
+rawMap?.addSource('unmanaged-debug-source', {
+  type: 'geojson',
+  data: { type: 'FeatureCollection', features: [] },
+});
+```
+
+Resources added through the raw map are unmanaged. A basemap style change can
+remove them; register durable online content as a service instead.
+
+### Control roles, canvas order, and CSS
+
+`BasemapControl` is a single-choice selector for registered basemaps; only one
+basemap can be active. `LayerControl` exposes visibility checkboxes for Emap
+business layers and MapLibre overlays. Neither control provides opacity or
+ordering UI.
+
+The MapLibre canvas has a fixed position below every Emap layer. All managed
+basemaps and online overlays render in that lower canvas, so MapLibre and Emap
+layers cannot be interleaved into one cross-canvas order.
+
+The minimal managed-canvas layout is included in Emap's stylesheet:
+
+```ts
+import '@mapseekai/emap/style.css';
+```
+
+If application code uses `getMapLibreMap()` to add MapLibre controls, popups,
+or markers, import MapLibre's component CSS as well:
+
+```ts
+import '@mapseekai/emap/style.css';
+import 'maplibre-gl/dist/maplibre-gl.css';
+```
 
 ## Navigation, history, and status
 

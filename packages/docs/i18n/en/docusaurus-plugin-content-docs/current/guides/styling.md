@@ -2,7 +2,7 @@
 id: styling
 slug: /guides/styling
 title: Styling layers
-api: ["FillPaint","LayerSpecification","LinePaint","PointMarkerShape"]
+api: ["FillPaint","LayerSpecification","LineDashStyle","LinePaint","PointMarkerShape"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons"]
 stability: stable
 verifiedVersion: 0.5.0

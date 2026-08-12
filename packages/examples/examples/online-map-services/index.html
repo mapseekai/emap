@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 在线地图服务</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; display: flex; flex-direction: column; height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    #header {
+      padding: 10px 14px; background: #2c3e50; color: white;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px;
+    }
+    #map { flex: 1; min-height: 0; position: relative; background: #eef2f5; }
+    #status { margin-left: auto; color: #d7e4ec; }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
+    <strong>在线地图服务</strong>
+    <label>业务图层: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
+    <span id="status">正在加载本地示例数据…</span>
+  </div>
+  <div id="map"></div>
+
+  <script type="module">
+    import { installExampleMapUi } from '/src/example-runtime.ts';
+    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+
+    const emap = await loadExampleRuntime();
+    const { Emap, TopologySource } = emap;
+
+    const services = [
+      {
+        id: 'osm',
+        name: 'OpenStreetMap',
+        role: 'basemap',
+        style: {
+          version: 8,
+          sources: {
+            osm: {
+              type: 'raster',
+              tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+              tileSize: 256,
+            },
+          },
+          layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+        },
+      },
+      {
+        id: 'carto-light',
+        name: 'Carto Light',
+        role: 'basemap',
+        style: {
+          version: 8,
+          sources: {
+            carto: {
+              type: 'raster',
+              tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'],
+              tileSize: 256,
+            },
+          },
+          layers: [{ id: 'carto', type: 'raster', source: 'carto' }],
+        },
+      },
+      {
+        id: 'states-wms',
+        name: 'WMS states',
+        role: 'overlay',
+        visible: true,
+        sources: {
+          'states-wms': {
+            type: 'raster',
+            tiles: [
+              'https://ahocevar.com/geoserver/wms?service=WMS&request=GetMap&layers=topp:states&styles=&format=image/png&transparent=true&version=1.1.1&srs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256',
+            ],
+            tileSize: 256,
+          },
+        },
+        layers: [
+          {
+            id: 'states-wms-layer',
+            type: 'raster',
+            source: 'states-wms',
+            paint: { 'raster-opacity': 0.45 },
+          },
+        ],
+      },
+      {
+        id: 'usgs-imagery',
+        name: 'USGS imagery',
+        role: 'overlay',
+        visible: true,
+        sources: {
+          'usgs-imagery': {
+            type: 'raster',
+            tiles: [
+              'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}',
+            ],
+            tileSize: 256,
+          },
+        },
+        layers: [
+          {
+            id: 'usgs-imagery-layer',
+            type: 'raster',
+            source: 'usgs-imagery',
+            paint: { 'raster-opacity': 0.3 },
+          },
+        ],
+      },
+    ];
+
+    const map = new Emap({
+      container: 'map',
+      mapLibre: { services, defaultBasemap: 'osm' },
+    });
+    map.addControl(new emap.NavigationControl(), 'top-left');
+    installExampleMapUi(map, emap);
+    map.addControl(new emap.LayerControl(), 'top-right');
+
+    const SOURCE_ID = 'business-data';
+    const LAYER_ID = 'business-polygons';
+    const fileInput = document.getElementById('file-input');
+    const status = document.getElementById('status');
+    let hasBusinessLayer = false;
+
+    async function loadBusinessLayer(file) {
+      fileInput.disabled = true;
+      status.textContent = `正在加载 ${file.name}…`;
+      try {
+        if (hasBusinessLayer) {
+          map.removeLayer(LAYER_ID);
+          map.removeSource(SOURCE_ID);
+        }
+        const source = new TopologySource(SOURCE_ID);
+        const content = new Uint8Array(await file.arrayBuffer());
+        await source.setData({ filename: file.name, content });
+        await map.addSource(SOURCE_ID, source);
+        map.addLayer({
+          id: LAYER_ID,
+          type: 'fill',
+          source: SOURCE_ID,
+          paint: {
+            'fill-color': '#e76f51',
+            'fill-opacity': 0.5,
+            'fill-outline-color': '#8f2d1d',
+          },
+        });
+        map.setExtent(source.getExtent());
+        hasBusinessLayer = true;
+        status.textContent = `${file.name} 已加载；右上角可切换底图和叠加层。`;
+      } catch (error) {
+        console.error(error);
+        status.textContent = `加载失败: ${error?.message ?? error}`;
+      } finally {
+        fileInput.disabled = false;
+      }
+    }
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files?.[0];
+      if (file) void loadBusinessLayer(file);
+    });
+    window.addEventListener('resize', () => map.resize());
+
+    await autoLoadExampleFixtures('online-map-services');
+  </script>
+</body>
+
+</html>

@@ -6,6 +6,7 @@ import type { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import type { AffineMatrix } from '../edit/commands/feature-affine';
 import type { DrawOverlayState, DrawOverlaySnapKind } from '../renderer/painter';
 import type { ExportFormat } from '../source/source';
+import type { MapLibreIntegrationOptions } from './maplibre-service';
 
 // `EditDrawState` originally lived here; the canonical definition now sits in
 // `src/renderer/painter.ts` (it is the input to `Painter.drawDrawingOverlay`).
@@ -32,6 +33,8 @@ export interface RenderRequest {
 export interface MapOptions {
   container: string | HTMLElement;
   interactive?: boolean;
+  /** Native MapLibre basemap and online-overlay integration. */
+  mapLibre?: MapLibreIntegrationOptions;
   /**
    * Controls APIs that forward JavaScript expressions to mapshaper
    * (`applyExpression`, `filterFeatures`, `sortFeatures`, `splitLayer`, and

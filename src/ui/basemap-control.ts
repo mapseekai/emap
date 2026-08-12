@@ -1,9 +1,10 @@
-import { Control } from './control';
-import { Emap } from '../map/map';
-
-type MapLibreModule = typeof import('maplibre-gl');
-type MapLibreMap = import('maplibre-gl').Map;
-type MapLibreStyle = import('maplibre-gl').StyleSpecification | string;
+import type { Emap } from '../map/map';
+import type {
+  MapLibreBasemapService,
+  MapLibreServiceErrorEvent,
+  MapLibreServiceManager,
+} from '../map/maplibre-service';
+import type { Control } from './control';
 
 export interface BasemapStyle {
   name: string;
@@ -16,7 +17,6 @@ export interface BasemapOptions {
   defaultStyle?: string;
 }
 
-// Default styles using free tile services
 const DEFAULT_STYLES: BasemapStyle[] = [
   {
     name: 'OSM',
@@ -35,226 +35,318 @@ const DEFAULT_STYLES: BasemapStyle[] = [
   },
 ];
 
-/** MapLibre tile size - must match zoom calculation in map.ts */
 const MAPLIBRE_TILE_SIZE = 512;
+const LEGACY_ID_PREFIX = 'emap-legacy-basemap-';
+
+let basemapControlSequence = 0;
+
+function toLegacyBasemapService(style: BasemapStyle, index: number): MapLibreBasemapService {
+  const mapLibreStyle: MapLibreBasemapService['style'] =
+    style.type === 'raster' || style.url.includes('{z}')
+      ? {
+          version: 8,
+          sources: {
+            'basemap-tiles': {
+              type: 'raster',
+              tiles: [style.url],
+              tileSize: MAPLIBRE_TILE_SIZE,
+            },
+          },
+          layers: [
+            {
+              id: 'basemap-layer',
+              type: 'raster',
+              source: 'basemap-tiles',
+              minzoom: 0,
+              maxzoom: 22,
+            },
+          ],
+        }
+      : style.url;
+
+  return {
+    id: `${LEGACY_ID_PREFIX}${index}`,
+    name: style.name,
+    role: 'basemap',
+    style: mapLibreStyle,
+  };
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === 'AbortError'
+    : error instanceof Error && error.name === 'AbortError';
+}
 
 export class BasemapControl implements Control {
-  private _map: Emap | null = null;
+  private readonly _legacyStyles: readonly BasemapStyle[];
+  private readonly _defaultStyle: string | undefined;
+  private readonly _hasLegacyOptions: boolean;
+  private readonly _instanceId: number;
+  private _manager: MapLibreServiceManager | null = null;
   private _container: HTMLElement | null = null;
-  private _basemapContainer: HTMLElement | null = null;
-  private _maplibre: MapLibreModule | null = null;
-  private _maplibreMap: MapLibreMap | null = null;
-  private _styles: BasemapStyle[];
-  private _activeStyle: BasemapStyle | null = null;
-  private _isOn: boolean = false;
-  private _syncBasemapBound: () => void;
+  private _trigger: HTMLButtonElement | null = null;
+  private _panel: HTMLElement | null = null;
+  private _radioGroup: HTMLElement | null = null;
+  private _status: HTMLElement | null = null;
+
+  private readonly _handleManagerChange = (): void => {
+    this._render();
+  };
+
+  private readonly _handleManagerError = (
+    event: { type: 'error' } & MapLibreServiceErrorEvent,
+  ): void => {
+    this._render(event.error);
+  };
+
+  private readonly _handleTriggerClick = (): void => {
+    this._setOpen(this._panel?.hidden ?? true);
+  };
+
+  private readonly _handleRadioChange = (event: Event): void => {
+    const radio = event.target;
+    if (!(radio instanceof HTMLInputElement) || radio.type !== 'radio' || !radio.checked) return;
+    this._selectBasemap(radio.value);
+  };
+
+  private readonly _handleRadioKeydown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this._setOpen(false);
+      this._trigger?.focus();
+      return;
+    }
+
+    const current = event.target;
+    if (!(current instanceof HTMLInputElement) || current.type !== 'radio') return;
+    const radios = this._getRadios();
+    const currentIndex = radios.indexOf(current);
+    if (currentIndex === -1) return;
+
+    let nextIndex: number;
+    switch (event.key) {
+      case 'ArrowDown':
+      case 'ArrowRight':
+        nextIndex = (currentIndex + 1) % radios.length;
+        break;
+      case 'ArrowUp':
+      case 'ArrowLeft':
+        nextIndex = (currentIndex - 1 + radios.length) % radios.length;
+        break;
+      case 'Home':
+        nextIndex = 0;
+        break;
+      case 'End':
+        nextIndex = radios.length - 1;
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    const next = radios[nextIndex];
+    next.focus();
+    this._selectBasemap(next.value);
+  };
+
+  private readonly _handleDocumentMouseDown = (event: MouseEvent): void => {
+    if (this._container && !this._container.contains(event.target as Node)) {
+      this._setOpen(false);
+    }
+  };
 
   constructor(options: BasemapOptions = {}) {
-    this._styles = options.styles || DEFAULT_STYLES;
-    this._syncBasemapBound = this._syncBasemap.bind(this);
+    this._hasLegacyOptions =
+      Object.hasOwn(options, 'styles') || Object.hasOwn(options, 'defaultStyle');
+    this._legacyStyles = Object.hasOwn(options, 'styles')
+      ? (options.styles ?? DEFAULT_STYLES)
+      : DEFAULT_STYLES;
+    this._defaultStyle = options.defaultStyle;
+    this._instanceId = ++basemapControlSequence;
   }
 
   onAdd(map: Emap): HTMLElement {
-    this._map = map;
-
-    // Create control container for buttons
-    this._container = document.createElement('div');
-    this._container.className = 'emap-ctrl emap-basemap-ctrl';
-
-    // Create buttons for each style
-    this._styles.forEach((style) => {
-      const btn = document.createElement('button');
-      btn.className = 'emap-basemap-btn';
-      btn.textContent = style.name;
-      btn.setAttribute('aria-pressed', 'false');
-      btn.onclick = () => this._toggleStyle(style);
-      this._container!.appendChild(btn);
-    });
-
-    // Create basemap container (behind canvas)
-    this._createBasemapLayer();
-
-    // Listen for map move events to sync basemap
-    this._map.on('move', this._syncBasemapBound);
-
-    return this._container;
-  }
-
-  private _createBasemapLayer(): void {
-    if (!this._map) return;
-
-    const canvasContainer = this._map.getCanvasContainer();
-
-    // Create basemap container and insert before canvas
-    this._basemapContainer = document.createElement('div');
-    this._basemapContainer.className = 'emap-basemap';
-    this._basemapContainer.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 0;
-      display: none;
-    `;
-
-    // Insert basemap BEHIND the canvas (Z = 0, canvas has higher Z)
-    canvasContainer.insertBefore(this._basemapContainer, canvasContainer.firstChild);
-  }
-
-  private _toggleStyle(style: BasemapStyle): void {
-    if (this._activeStyle === style) {
-      // Turn off basemap
-      this._turnOff();
-    } else {
-      // Turn on or switch style
-      this._showBasemap(style);
-    }
-    this._updateButtons();
-  }
-
-  private async _showBasemap(style: BasemapStyle): Promise<void> {
-    this._activeStyle = style;
-    this._isOn = true;
-
-    if (!this._basemapContainer || !this._map) return;
-    this._basemapContainer.style.display = 'block';
-
-    // Ensure Map is in Web Mercator if it's not already
-    const currentCrs = (this._map.getCRS() || '').toLowerCase();
-    if (currentCrs !== 'webmercator' && currentCrs !== 'epsg:3857' && this._map.reproject) {
-      // Use 'webmercator' as the target for mapshaper
-      await this._map.reproject('webmercator');
-      if (!this._basemapContainer || !this._map) return;
+    const manager = map.mapLibreServices;
+    const registeredServices = manager.getServices();
+    if (this._hasLegacyOptions && registeredServices.length > 0) {
+      throw new Error(
+        'BasemapControl legacy options conflict with the existing MapLibre service registry',
+      );
     }
 
-    if (!this._maplibreMap) {
-      await this._initMapLibre(style);
-    } else {
-      this._maplibreMap.resize(); // Ensure map handles container visibility change
-      this._setStyle(style);
-      this._syncBasemap();
-    }
-  }
+    this._manager = manager;
+    this._createDom();
+    manager.on('change', this._handleManagerChange);
+    manager.on('error', this._handleManagerError);
+    document.addEventListener('mousedown', this._handleDocumentMouseDown);
 
-  private async _initMapLibre(style: BasemapStyle): Promise<void> {
-    if (!this._basemapContainer || !this._map) return;
-
-    const maplibregl = await this._loadMapLibre();
-    if (!this._basemapContainer || !this._map) return;
-    const maplibreStyle = this._createMapLibreStyle(style);
-
-    this._maplibreMap = new maplibregl.Map({
-      container: this._basemapContainer,
-      style: maplibreStyle,
-      center: this._map.getCenter(),
-      zoom: this._map.getZoom(),
-      interactive: false, // Disable all interaction - we sync from parent map
-      attributionControl: false,
-      maxPitch: 0,
-
-      renderWorldCopies: true,
-    });
-
-    this._maplibreMap.on('load', () => {
-      this._syncBasemap();
-    });
-  }
-
-  private async _loadMapLibre(): Promise<MapLibreModule> {
-    if (!this._maplibre) {
-      this._maplibre = await import('maplibre-gl');
-    }
-    return this._maplibre;
-  }
-
-  private _setStyle(style: BasemapStyle): void {
-    if (!this._maplibreMap) return;
-    const maplibreStyle = this._createMapLibreStyle(style);
-    this._maplibreMap.setStyle(maplibreStyle);
-  }
-
-  private _createMapLibreStyle(style: BasemapStyle): MapLibreStyle {
-    if (style.type === 'raster' || style.url.includes('{z}')) {
-      // Raster tile style
-      return {
-        version: 8,
-        sources: {
-          'basemap-tiles': {
-            type: 'raster',
-            tiles: [style.url],
-            tileSize: MAPLIBRE_TILE_SIZE,
-          },
-        },
-        layers: [
-          {
-            id: 'basemap-layer',
-            type: 'raster',
-            source: 'basemap-tiles',
-            minzoom: 0,
-            maxzoom: 22,
-          },
-        ],
-      };
-    } else {
-      // Assume vector style URL
-      return style.url;
-    }
-  }
-
-  private _syncBasemap(): void {
-    if (!this._maplibreMap || !this._map || !this._isOn) return;
-    try {
-      this._maplibreMap.jumpTo({
-        center: this._map.getCenter(),
-        zoom: this._map.getZoom(),
-      });
-    } catch (e) {
-      console.warn('Sync basemap failed:', e);
-    }
-  }
-
-  private _turnOff(): void {
-    this._activeStyle = null;
-    this._isOn = false;
-    if (this._basemapContainer) {
-      this._basemapContainer.style.display = 'none';
-    }
-  }
-
-  private _updateButtons(): void {
-    if (!this._container) return;
-
-    const buttons = this._container.querySelectorAll('.emap-basemap-btn');
-    buttons.forEach((btn, index) => {
-      const isActive = this._styles[index] === this._activeStyle;
-      btn.classList.toggle('active', isActive);
-      btn.setAttribute('aria-pressed', String(isActive));
-    });
+    if (registeredServices.length === 0) this._registerLegacyStyles();
+    this._render();
+    return this._container!;
   }
 
   isOn(): boolean {
-    return this._isOn;
+    if (!this._manager) return false;
+    return this._manager
+      .getServices()
+      .some(
+        (service) =>
+          service.role === 'basemap' && this._manager?.getServiceState(service.id)?.active === true,
+      );
   }
 
   onRemove(): void {
-    if (this._map) {
-      this._map.off('move', this._syncBasemapBound);
-    }
-    if (this._maplibreMap) {
-      this._maplibreMap.remove();
-      this._maplibreMap = null;
-    }
-    if (this._basemapContainer?.parentNode) {
-      this._basemapContainer.parentNode.removeChild(this._basemapContainer);
-    }
-    if (this._container?.parentNode) {
-      this._container.parentNode.removeChild(this._container);
-    }
-    this._map = null;
-    this._basemapContainer = null;
+    this._manager?.off('change', this._handleManagerChange);
+    this._manager?.off('error', this._handleManagerError);
+    document.removeEventListener('mousedown', this._handleDocumentMouseDown);
+    this._trigger?.removeEventListener('click', this._handleTriggerClick);
+    this._radioGroup?.removeEventListener('change', this._handleRadioChange);
+    this._radioGroup?.removeEventListener('keydown', this._handleRadioKeydown);
+    this._container?.remove();
+
+    this._manager = null;
     this._container = null;
-    this._activeStyle = null;
-    this._isOn = false;
+    this._trigger = null;
+    this._panel = null;
+    this._radioGroup = null;
+    this._status = null;
+  }
+
+  private _createDom(): void {
+    const panelId = `emap-basemap-panel-${this._instanceId}`;
+
+    this._container = document.createElement('div');
+    this._container.className = 'emap-ctrl emap-panel-control emap-basemap-ctrl';
+
+    this._trigger = document.createElement('button');
+    this._trigger.type = 'button';
+    this._trigger.className = 'emap-panel-trigger emap-basemap-trigger';
+    this._trigger.textContent = 'Basemap';
+    this._trigger.setAttribute('aria-haspopup', 'true');
+    this._trigger.setAttribute('aria-expanded', 'false');
+    this._trigger.setAttribute('aria-controls', panelId);
+    this._trigger.addEventListener('click', this._handleTriggerClick);
+
+    this._panel = document.createElement('div');
+    this._panel.id = panelId;
+    this._panel.className = 'emap-control-panel emap-basemap-panel';
+    this._panel.hidden = true;
+    this._panel.setAttribute('aria-busy', 'false');
+
+    this._radioGroup = document.createElement('div');
+    this._radioGroup.className = 'emap-control-group emap-basemap-options';
+    this._radioGroup.setAttribute('role', 'radiogroup');
+    this._radioGroup.setAttribute('aria-label', 'Basemap');
+    this._radioGroup.addEventListener('change', this._handleRadioChange);
+    this._radioGroup.addEventListener('keydown', this._handleRadioKeydown);
+
+    this._status = document.createElement('div');
+    this._status.className = 'emap-control-status emap-basemap-status';
+    this._status.setAttribute('role', 'status');
+    this._status.setAttribute('aria-live', 'polite');
+    this._status.setAttribute('aria-atomic', 'true');
+
+    this._panel.append(this._radioGroup, this._status);
+    this._container.append(this._trigger, this._panel);
+  }
+
+  private _registerLegacyStyles(): void {
+    if (!this._manager) return;
+    const services = this._legacyStyles.map(toLegacyBasemapService);
+    const registration = Promise.all(services.map((service) => this._manager!.addService(service)));
+    const defaultIndex = this._legacyStyles.findIndex((style) => style.name === this._defaultStyle);
+    const operation =
+      defaultIndex === -1
+        ? registration
+        : registration.then(() => this._manager?.setBasemap(`${LEGACY_ID_PREFIX}${defaultIndex}`));
+    this._observeManagerOperation(operation);
+  }
+
+  private _render(transientError?: Error): void {
+    if (!this._manager || !this._panel || !this._radioGroup || !this._status) return;
+
+    const focusedValue = this._radioGroup.contains(document.activeElement)
+      ? (document.activeElement as HTMLInputElement).value
+      : undefined;
+    const basemaps = this._manager
+      .getServices()
+      .filter((service): service is MapLibreBasemapService => service.role === 'basemap');
+    const states = new Map(
+      basemaps.map((service) => [service.id, this._manager!.getServiceState(service.id)]),
+    );
+    const activeBasemap = basemaps.find((service) => states.get(service.id)?.active === true);
+    const activeState = activeBasemap ? states.get(activeBasemap.id) : undefined;
+    const erroredBasemap = basemaps.find((service) => states.get(service.id)?.status === 'error');
+    const errorState = erroredBasemap ? states.get(erroredBasemap.id) : undefined;
+
+    const choices: Array<{ id: string; name: string }> = [
+      { id: '', name: 'No basemap' },
+      ...basemaps.map((service) => ({ id: service.id, name: service.name })),
+    ];
+    const groupName = `emap-basemap-choice-${this._instanceId}`;
+    const rows = choices.map((choice, index) => {
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = groupName;
+      input.id = `${groupName}-${index}`;
+      input.value = choice.id;
+      input.checked = choice.id === (activeBasemap?.id ?? '');
+
+      const label = document.createElement('label');
+      label.className = 'emap-control-row emap-basemap-row';
+      label.htmlFor = input.id;
+      label.append(input, document.createTextNode(choice.name));
+      return label;
+    });
+    this._radioGroup.replaceChildren(...rows);
+
+    const loading = activeState?.status === 'loading';
+    this._panel.setAttribute('aria-busy', String(loading));
+    if (transientError) {
+      this._status.textContent = `Basemap error: ${transientError.message}`;
+    } else if (activeBasemap && activeState?.status === 'loading') {
+      this._status.textContent = `Loading ${activeBasemap.name}…`;
+    } else if (erroredBasemap) {
+      this._status.textContent = `${erroredBasemap.name}: ${errorState?.error?.message ?? 'Basemap error'}`;
+    } else if (!activeBasemap) {
+      this._status.textContent = 'No basemap selected';
+    } else {
+      this._status.textContent = `${activeBasemap.name} selected`;
+    }
+
+    if (focusedValue !== undefined && !this._panel.hidden) {
+      this._getRadios()
+        .find((radio) => radio.value === focusedValue)
+        ?.focus();
+    }
+  }
+
+  private _getRadios(): HTMLInputElement[] {
+    return this._radioGroup
+      ? [...this._radioGroup.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
+      : [];
+  }
+
+  private _selectBasemap(value: string): void {
+    if (!this._manager) return;
+    this._observeManagerOperation(this._manager.setBasemap(value || null));
+  }
+
+  private _observeManagerOperation(operation: Promise<unknown>): void {
+    void operation.catch((error: unknown) => {
+      if (!isAbortError(error)) console.error(error);
+    });
+  }
+
+  private _setOpen(open: boolean): void {
+    if (!this._panel || !this._trigger) return;
+    this._panel.hidden = !open;
+    this._trigger.setAttribute('aria-expanded', String(open));
+    if (open) {
+      this._render();
+      const selected = this._getRadios().find((radio) => radio.checked);
+      (selected ?? this._getRadios()[0])?.focus();
+    }
   }
 }

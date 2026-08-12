@@ -2,6 +2,8 @@
 // (tsconfig excludes only *.test.ts / *.test.tsx — this file IS checked).
 // Vitest globs *.test.ts so this file is never executed.
 import type { Emap } from '../map/map';
+import type { LayerSpecification } from '../map/layer';
+import type { LayerChangeEvent, LayerChangeReason } from '../index';
 
 declare const map: Emap;
 
@@ -26,6 +28,23 @@ map.on('selectionchange', (e) => {
   const n: number = e.selected.length + e.added.length + e.removed.length;
   void n;
 });
+
+map.on('layerchange', (event) => {
+  const reason: 'add' | 'remove' | 'visibility' | 'effective' = event.reason;
+  const layerId: string | undefined = event.layerId;
+  const layers: readonly LayerSpecification[] = event.layers;
+  // @ts-expect-error a layer change never has an arbitrary reason
+  const invalidReason: 'invalid' = event.reason;
+  void reason;
+  void layerId;
+  void layers;
+  void invalidReason;
+});
+
+declare const exportedLayerChangeReason: LayerChangeReason;
+declare const exportedLayerChangeEvent: LayerChangeEvent;
+void exportedLayerChangeReason;
+void exportedLayerChangeEvent;
 
 // `move` is Partial<CameraEvent> — center is optional
 map.on('move', (e) => {

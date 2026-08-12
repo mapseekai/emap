@@ -193,8 +193,119 @@
 
 .emap-status-epsg { margin-right: 0; }
 
+/* Shared MapLibre basemap and layer panels */
+.emap-panel-control {
+  position: relative;
+  display: flex;
+  overflow: visible;
+  color: var(--emap-current-card-foreground);
+  background: var(--emap-current-card);
+  border: 1px solid var(--emap-current-border);
+  border-radius: var(--emap-radius);
+  box-shadow: var(--emap-surface-shadow);
+  font: var(--emap-font);
+}
+
+.emap-panel-trigger {
+  min-width: 64px;
+  min-height: var(--emap-control-size);
+  padding: 6px 10px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: var(--emap-radius);
+  font: inherit;
+  cursor: pointer;
+}
+
+.emap-panel-trigger:hover { background: var(--emap-current-hover-bg); }
+.emap-panel-trigger[aria-expanded="true"] {
+  color: var(--emap-current-primary-foreground);
+  background: var(--emap-current-primary);
+}
+
+.emap-panel-trigger:focus-visible,
+.emap-control-panel :is(button, input):focus-visible {
+  outline: 3px solid color-mix(in oklch, var(--emap-current-ring), transparent 80%);
+  outline-offset: -3px;
+}
+
+.emap-control-panel {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: calc(100% + 8px);
+  box-sizing: border-box;
+  min-width: 220px;
+  max-width: min(280px, calc(100vw - 40px));
+  max-height: min(360px, calc(100vh - 40px));
+  overflow-y: auto;
+  padding: 8px;
+  color: var(--emap-current-popover-foreground);
+  background: var(--emap-current-popover);
+  border: 1px solid var(--emap-current-border);
+  border-radius: var(--emap-radius);
+  box-shadow: var(--emap-surface-shadow);
+  font: var(--emap-font);
+}
+
+.emap-control-panel[hidden] { display: none; }
+
+.emap-ctrl-top-right .emap-control-panel,
+.emap-ctrl-bottom-right .emap-control-panel {
+  right: calc(100% + 8px);
+  left: auto;
+}
+
+.emap-ctrl-bottom-left .emap-control-panel,
+.emap-ctrl-bottom-right .emap-control-panel {
+  top: auto;
+  bottom: 0;
+}
+
+.emap-control-group + .emap-control-group,
+.emap-control-status {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--emap-current-border);
+}
+
+.emap-control-row {
+  display: flex;
+  min-height: 30px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--emap-radius);
+  cursor: pointer;
+}
+
+.emap-control-row:hover { background: var(--emap-current-hover-bg); }
+.emap-control-row input { flex: 0 0 auto; margin: 0; }
+
+.emap-control-status {
+  min-height: 1.5em;
+  font-size: 12px;
+}
+
+.emap-control-status--loading { font-weight: 600; }
+.emap-control-status--error {
+  padding-left: 6px;
+  color: var(--emap-current-destructive);
+  border-left: 3px solid var(--emap-current-destructive);
+  font-weight: 600;
+}
+
+.emap-layer-group-title {
+  padding: 0 6px 4px;
+  font-weight: 600;
+}
+
 /* Basemap container needs MapLibre CSS import */
 .emap-basemap { pointer-events: none; }
+.emap-maplibre.maplibregl-map { overflow: hidden; }
+.emap-maplibre .maplibregl-canvas { position: absolute; top: 0; left: 0; }
 
 /* Vertex edit, draw, box select, and lasso controls */
 .emap-ctrl-edit,
