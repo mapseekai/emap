@@ -1719,7 +1719,18 @@ export class Emap extends EventDispatcher {
   }
 
   public reset(): void {
-    this._viewport.reset();
+    const dataExtent = new Bounds();
+    for (const source of this._sources?.values() ?? []) {
+      dataExtent.merge(source.getExtent());
+    }
+    if (dataExtent.hasBounds()) {
+      this._viewport.clearInitialState();
+      this._viewport.setExtent(dataExtent);
+    } else {
+      this._viewport.reset();
+    }
+    this._scheduleRender();
+    this.fire('move');
   }
 
   public addControl(control: ControlContract<Emap>, position: ControlPosition = 'top-left'): void {

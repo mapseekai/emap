@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { Emap } from './map';
+import { Bounds } from '../geo/bounds';
+import { TopologySource } from '../source/topology-source';
+import { VertexMoveCommand } from '../edit/commands/vertex-move';
+
+const clearRect = vi.fn();
 
 beforeAll(() => {
   HTMLCanvasElement.prototype.getContext = () =>
     ({
       scale: () => {},
-      clearRect: () => {},
+      clearRect,
       fillRect: () => {},
       strokeRect: () => {},
       beginPath: () => {},
@@ -92,5 +97,106 @@ describe('Emap camera facade (DX P9)', () => {
     expect(map.getCenter()).toBeDefined();
     expect(typeof map.getZoom()).toBe('number');
     expect(Array.isArray(c0)).toBe(true);
+  });
+
+  it('redraws the restored view when reset interrupts active navigation', () => {
+    const callbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+    globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      callbacks.push(callback);
+      return callbacks.length;
+    }) as unknown as typeof requestAnimationFrame;
+    globalThis.cancelAnimationFrame = vi.fn();
+    const map = new Emap({ container: container() });
+
+    try {
+      map.setExtent(new Bounds(0, 0, 100, 100));
+      while (callbacks.length) callbacks.shift()?.(0);
+      const initialTransform = map.getTransform();
+      Reflect.set(map, '_navSnapshotTransform', {
+        mx: initialTransform.mx,
+        my: initialTransform.my,
+        bx: initialTransform.bx,
+        by: initialTransform.by,
+      });
+      const viewport = Reflect.get(map, '_viewport') as { pan: (dx: number, dy: number) => void };
+      viewport.pan(80, 40);
+      map.render();
+      clearRect.mockClear();
+
+      map.reset();
+      while (callbacks.length) callbacks.shift()?.(0);
+
+      expect(map.getTransform()).toEqual(initialTransform);
+      expect(clearRect).toHaveBeenCalledTimes(1);
+    } finally {
+      map.remove();
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    }
+  });
+
+  it('resets to the latest data extent after a vertex edit', async () => {
+    const map = new Emap({ container: container() });
+    const source = new TopologySource('edited');
+    const geojson = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [0, 0],
+                [10, 0],
+                [10, 10],
+                [0, 10],
+                [0, 0],
+              ],
+            ],
+          },
+        },
+      ],
+    });
+
+    try {
+      await source.setData({
+        filename: 'edited.geojson',
+        content: Uint8Array.from(Array.from(geojson, (char) => char.charCodeAt(0))),
+      });
+      await map.addSource('edited', source);
+      const initialExtent = source.getExtent();
+      map.setExtent(initialExtent);
+
+      const arcs = source.getDataset()?.arcs;
+      if (!arcs) throw new Error('Expected polygon arcs');
+      const vertexData = arcs.getVertexData();
+      const vertexId = Array.from(vertexData.xx).findIndex((x) => x === initialExtent.xmax);
+      if (vertexId < 0) throw new Error('Expected an eastern vertex');
+      const from: [number, number] = [vertexData.xx[vertexId], vertexData.yy[vertexId]];
+      new VertexMoveCommand({
+        vertexIds: [vertexId],
+        from,
+        to: [30, from[1]],
+        arcs,
+        source,
+      }).do();
+
+      const editedExtent = source.getExtent();
+      expect(editedExtent.xmax).toBe(30);
+
+      map.reset();
+
+      const [east] = map.project(editedExtent.xmax, editedExtent.centerY);
+      expect(east).toBeGreaterThanOrEqual(0);
+      expect(east).toBeLessThanOrEqual(800);
+      const viewport = Reflect.get(map, '_viewport') as { getMapScale: () => number };
+      expect(viewport.getMapScale()).toBeCloseTo(1);
+    } finally {
+      map.remove();
+    }
   });
 });

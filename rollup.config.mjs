@@ -5,7 +5,7 @@ import terser from '@rollup/plugin-terser';
 import alias from '@rollup/plugin-alias';
 import json from '@rollup/plugin-json';
 import postcss from 'rollup-plugin-postcss';
-import { copyFileSync } from 'node:fs';
+import { copyFileSync, readFileSync } from 'node:fs';
 import { transform } from 'esbuild';
 
 // `src/ui/controls.css` is a hand-maintained standalone stylesheet — it is
@@ -18,6 +18,22 @@ function copyControlsCss() {
     writeBundle() {
       copyFileSync('src/ui/controls.css', 'dist/emap.css');
       copyFileSync('src/types/style.css.d.ts', 'dist/style.css.d.ts');
+    },
+  };
+}
+
+function rawSvgAssets() {
+  return {
+    name: 'raw-svg-assets',
+    load(id) {
+      const queryIndex = id.indexOf('?');
+      const filePath = queryIndex === -1 ? id : id.slice(0, queryIndex);
+      const query = queryIndex === -1 ? '' : id.slice(queryIndex + 1);
+      if (query !== 'raw' || !filePath.endsWith('.svg')) return null;
+      return {
+        code: `export default ${JSON.stringify(readFileSync(filePath, 'utf8'))};`,
+        map: null,
+      };
     },
   };
 }
@@ -180,6 +196,7 @@ function esbuildTypeScript() {
 
 function commonPlugins() {
   return [
+    rawSvgAssets(),
     alias({
       entries: [{ find: 'iconv-lite', replacement: 'src/types/iconv-shim.ts' }],
     }),

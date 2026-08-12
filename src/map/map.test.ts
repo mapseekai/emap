@@ -6,6 +6,7 @@ import type { LayerSpecification } from './layer';
 import { Selection } from './selection';
 import { Projection } from '../geo/projection';
 import { Viewport } from '../geo/viewport';
+import { Bounds } from '../geo/bounds';
 import { AffineTransform } from '../geo/transform';
 import { EditHistory } from '../edit/edit-history';
 import { CompositeCommand } from '../edit/commands/composite';
@@ -13,6 +14,7 @@ import { ValidatorRegistry } from '../validation/registry';
 import { FeatureAccessor } from './feature-accessor';
 import { TopologySource } from '../source/topology-source';
 import { FeatureQuery } from './feature-query';
+import { EMAP_THEME_COLORS } from '../theme/colors';
 
 // Snapshot the real mapshaper.internal entry points at module-load time,
 // BEFORE any test has had a chance to mock them. Some test blocks below
@@ -204,6 +206,24 @@ function createBareMap(): Emap {
 }
 
 describe('Emap rendering', () => {
+  it('publishes a move after reset restores the initial view', () => {
+    const map = createBareMap();
+    const viewport = new Viewport();
+    viewport.updateSize(800, 600);
+    viewport.setExtent(new Bounds(0, 0, 100, 100));
+    const initialTransform = viewport.transform.clone();
+    viewport.pan(80, 40);
+    const moves: string[] = [];
+
+    setPrivate(map, '_viewport', viewport);
+    map.on('move', () => moves.push('move'));
+
+    map.reset();
+
+    expect(viewport.transform).toEqual(initialTransform);
+    expect(moves).toEqual(['move']);
+  });
+
   it('preserves a first nav render request until the RAF callback runs', () => {
     const map = Object.create(Emap.prototype) as Emap;
     const callbacks: FrameRequestCallback[] = [];
@@ -1012,7 +1032,7 @@ describe('Emap layer management', () => {
 
       const effective = callPrivate(map, '_getEffectiveLayers') as LayerSpecification[];
       expect(effective[0].type).toBe('line');
-      expect((effective[0].paint as any)['line-color']).toBe('#1e88e5');
+      expect((effective[0].paint as any)['line-color']).toBe(EMAP_THEME_COLORS.primary);
     });
   });
 
