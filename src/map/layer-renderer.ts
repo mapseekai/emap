@@ -4,6 +4,7 @@ import type { MutableTopologySource } from '../source/source';
 import type { ArcCollection, MapshaperLayer, PathShape } from '../types/mapshaper-types';
 import { resolvePointStyle, resolveStrokeStyle } from './layer';
 import type { FillLayerSpecification, LayerSpecification, LineLayerSpecification } from './layer';
+import { EMAP_THEME_COLORS } from '../theme/colors';
 
 export interface LayerRendererContext {
   layers: readonly LayerSpecification[];
@@ -80,7 +81,7 @@ function renderFillLayer(
   lineScale: number,
 ): void {
   const fillPaint = layer.paint;
-  const fillColor = fillPaint?.['fill-color'] || 'rgba(200, 200, 200, 0.4)';
+  const fillColor = fillPaint?.['fill-color'] || EMAP_THEME_COLORS.muted;
   const fillOpacity = fillPaint?.['fill-opacity'];
   const viewportFilter = ctx.viewport.getArcFilter(arcs);
   // Near full extent every part is visible anyway, so per-part bbox culling

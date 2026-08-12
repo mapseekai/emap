@@ -66,6 +66,31 @@ describe('LassoSelectHandler', () => {
     expect(map.select).not.toHaveBeenCalled();
   });
 
+  it('uses primary stroke and selection fill for the default overlay', () => {
+    const map = fakeMap();
+    const h = new LassoSelectHandler(map as any);
+    h.enable();
+
+    h.handlePointer(ev('down', 0, 0, true));
+
+    const poly = map.getCanvasContainer().querySelector('polyline');
+    expect(poly?.getAttribute('stroke')).toBe('var(--emap-current-primary)');
+    expect(poly?.getAttribute('fill')).toBe('var(--emap-current-selection-bg)');
+  });
+
+  it('preserves supplied overlay stroke and fill', () => {
+    const map = fakeMap();
+    const h = new LassoSelectHandler(map as any);
+    h.setOptions({ style: { stroke: 'var(--caller-stroke)', fill: 'var(--caller-fill)' } });
+    h.enable();
+
+    h.handlePointer(ev('down', 0, 0, true));
+
+    const poly = map.getCanvasContainer().querySelector('polyline');
+    expect(poly?.getAttribute('stroke')).toBe('var(--caller-stroke)');
+    expect(poly?.getAttribute('fill')).toBe('var(--caller-fill)');
+  });
+
   it('keeps distinct refs whose pipe-joined forms collide', () => {
     const map = fakeMap();
     const first = { source: 'a|b', layer: 'c', id: 1 };

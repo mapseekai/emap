@@ -20,7 +20,7 @@
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">HistoryStateSnapshot</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#canredo">canRedo</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#canundo">canUndo</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#label">label</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#skippedstale">skippedStale</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#stalecount">staleCount</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#topisstale">topIsStale</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/5879ca7555cc206671e4e707d22151c1afead104/src/edit/edit-history.ts#L11">src/edit/edit-history.ts:11</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/edit/edit-history.ts#L11">src/edit/edit-history.ts:11</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -44,21 +44,21 @@
 <div class="tsd-comment tsd-typography"><p>canRedo is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/5879ca7555cc206671e4e707d22151c1afead104/src/edit/edit-history.ts#L13">src/edit/edit-history.ts:13</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/edit/edit-history.ts#L13">src/edit/edit-history.ts:13</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="canundo"><span>can<wbr/>Undo</span><a href="#canundo" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">canUndo</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
 <div class="tsd-comment tsd-typography"><p>canUndo is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/5879ca7555cc206671e4e707d22151c1afead104/src/edit/edit-history.ts#L12">src/edit/edit-history.ts:12</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/edit/edit-history.ts#L12">src/edit/edit-history.ts:12</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="label"><code class="tsd-tag">Optional</code><span>label</span><a href="#label" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">label</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Label of the most recent command at the top of the undo stack, if any.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/5879ca7555cc206671e4e707d22151c1afead104/src/edit/edit-history.ts#L15">src/edit/edit-history.ts:15</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/edit/edit-history.ts#L15">src/edit/edit-history.ts:15</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="skippedstale"><code class="tsd-tag">Optional</code><span>skipped<wbr/>Stale</span><a href="#skippedstale" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">skippedStale</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
@@ -67,7 +67,7 @@ after <code>undo()</code> skipped a stale command. Resets on the next event.
 Used by UI to surface a one-shot toast.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/5879ca7555cc206671e4e707d22151c1afead104/src/edit/edit-history.ts#L34">src/edit/edit-history.ts:34</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/edit/edit-history.ts#L34">src/edit/edit-history.ts:34</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="stalecount"><span>stale<wbr/>Count</span><a href="#stalecount" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">staleCount</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
@@ -76,7 +76,7 @@ Used by UI to surface a one-shot toast.</p>
 can render a divider in the history list at the boundary.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/5879ca7555cc206671e4e707d22151c1afead104/src/edit/edit-history.ts#L21">src/edit/edit-history.ts:21</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/edit/edit-history.ts#L21">src/edit/edit-history.ts:21</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="topisstale"><span>top<wbr/>Is<wbr/>Stale</span><a href="#topisstale" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">topIsStale</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
@@ -86,7 +86,7 @@ tooltips like &quot;the next undo crosses a topology rebuild — earlier
 edits cannot be replayed&quot;.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/5879ca7555cc206671e4e707d22151c1afead104/src/edit/edit-history.ts#L28">src/edit/edit-history.ts:28</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/edit/edit-history.ts#L28">src/edit/edit-history.ts:28</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

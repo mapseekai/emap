@@ -7,11 +7,11 @@ import type { SelectionHandlerHost } from './selection-handler-host';
 
 /** Visual style for the rubber-band rectangle. */
 export interface BoxSelectStyle {
-  /** Stroke color. Default `'#0078ff'`. */
+  /** Stroke color. Default current theme primary. */
   stroke?: string;
   /** Stroke width in CSS pixels. Default `1.5`. */
   strokeWidth?: number;
-  /** Fill color. Default `'rgba(0, 120, 255, 0.1)'`. */
+  /** Fill color. Default current theme selection. */
   fill?: string;
 }
 export interface BoxSelectHandlerOptions extends SelectHandlerOptions {
@@ -93,8 +93,8 @@ export class BoxSelectHandler extends EventDispatcher implements Handler<BoxSele
     o.style.display = 'none';
     o.style.boxSizing = 'border-box';
     const s = this._opts.style ?? {};
-    o.style.border = `${s.strokeWidth ?? 1.5}px solid ${s.stroke ?? '#0078ff'}`;
-    o.style.background = s.fill ?? 'rgba(0, 120, 255, 0.1)';
+    o.style.border = `${s.strokeWidth ?? 1.5}px solid ${s.stroke ?? 'var(--emap-current-primary)'}`;
+    o.style.background = s.fill ?? 'var(--emap-current-selection-bg)';
     this._map.getCanvasContainer().appendChild(o);
     this._overlay = o;
     return o;

@@ -4,6 +4,7 @@ import type {
   PointStyle,
   StrokeStyle,
 } from '../types/mapshaper-types';
+import { EMAP_THEME_COLORS } from '../theme/colors';
 
 /**
  * Paint options for polygon fills.
@@ -127,7 +128,7 @@ export function cloneLayerSpecification(layer: LayerSpecification): LayerSpecifi
   }
 }
 
-export const DEFAULT_LAYER_COLOR = '#1e88e5';
+export const DEFAULT_LAYER_COLOR = EMAP_THEME_COLORS.primary;
 
 export function resolveStrokeStyle(
   paint: LinePaint | FillLayerPaint | undefined,

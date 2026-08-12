@@ -2,8 +2,9 @@ import type { EditPainter } from './painter';
 import type { ArcCollection } from '../types/mapshaper-types';
 import type { EditVertexState, EditDrawState } from '../map/types';
 import type { EditMode } from '../map/edit-state-store';
+import { EMAP_THEME_COLORS } from '../theme/colors';
 
-const EDIT_VERTEX_COLOR = '#2e7d32';
+const EDIT_VERTEX_COLOR = EMAP_THEME_COLORS.primary;
 
 /**
  * Draws edit-mode-only decorations on top of the regular layer pass:

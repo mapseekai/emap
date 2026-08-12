@@ -5,6 +5,7 @@ import { getLayerId } from '../source/layer-utils';
 import type { HighlightStyle, HighlightFeatureRef, QueriedFeature } from './types';
 import type { FeatureShape } from '../types/mapshaper-types';
 import { hasLayerKey, type VisibleLayerLookup } from './structured-keys';
+import { EMAP_THEME_COLORS } from '../theme/colors';
 
 /**
  * Manages feature highlighting state and rendering.
@@ -15,7 +16,7 @@ export class HighlightManager {
     new globalThis.Map();
 
   private _highlightStyle: HighlightStyle = {
-    color: '#ff7a00',
+    color: EMAP_THEME_COLORS.primary,
     width: 2.2,
     radius: 6,
     fill: true,
@@ -65,7 +66,7 @@ export class HighlightManager {
     visibleLayers?: VisibleLayerLookup,
   ): void {
     if (this._highlighted.size === 0) return;
-    const highlightColor = this._highlightStyle.color || '#ff7a00';
+    const highlightColor = this._highlightStyle.color || EMAP_THEME_COLORS.primary;
     const highlightWidth = (this._highlightStyle.width ?? 2.2) * lineScale;
     const highlightRadius = this._highlightStyle.radius ?? 6;
     const highlightFill = this._highlightStyle.fill !== false;

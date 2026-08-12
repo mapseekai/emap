@@ -43,21 +43,26 @@ describe('DrawFeatureControl (thin shell)', () => {
     expect(btn.className).toBe('emap-ctrl-draw');
     expect(btn.title).toBe('Draw Polygon');
     expect(btn.querySelector('span.emap-ctrl-icon')?.textContent).toBe('★');
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
     btn.click();
     expect(map.drawFeature.enable).toHaveBeenCalledTimes(1);
     expect(btn.classList.contains('active')).toBe(true);
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
     btn.click();
     expect(map.drawFeature.disable).toHaveBeenCalledTimes(1);
     expect(btn.classList.contains('active')).toBe(false);
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
   });
 
   it('default icon/title when no icon option (per geometry type)', () => {
-    const map = fakeMap();
-    const c = new DrawFeatureControl({ source: 's', type: 'point' });
-    const root = c.onAdd(map);
-    const btn = root.querySelector('button') as HTMLButtonElement;
-    expect(btn.title).toBe('Draw Point');
-    expect(btn.querySelector('span.emap-ctrl-icon')?.textContent).toBe('●');
+    for (const type of ['polygon', 'polyline', 'point'] as const) {
+      const map = fakeMap();
+      const c = new DrawFeatureControl({ source: 's', type });
+      const root = c.onAdd(map);
+      const btn = root.querySelector('button') as HTMLButtonElement;
+      expect(btn.title).toBe(`Draw ${type[0].toUpperCase()}${type.slice(1)}`);
+      expect(btn.querySelector('span.emap-ctrl-icon svg')).toBeTruthy();
+    }
   });
 
   it('cross-mode editmodechange un-presses the button', () => {
@@ -67,8 +72,10 @@ describe('DrawFeatureControl (thin shell)', () => {
     const btn = root.querySelector('button') as HTMLButtonElement;
     btn.click();
     expect(btn.classList.contains('active')).toBe(true);
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
     map._fireMode('vertex');
     expect(btn.classList.contains('active')).toBe(false);
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
   });
 
   it('reapplies options and switches active draw buttons when used in a toolbar', () => {
@@ -86,6 +93,7 @@ describe('DrawFeatureControl (thin shell)', () => {
       expect.objectContaining({ type: 'polyline' }),
     );
     expect(lineBtn.classList.contains('active')).toBe(true);
+    expect(lineBtn.getAttribute('aria-pressed')).toBe('true');
 
     pointBtn.click();
     expect(map.drawFeature.disable).toHaveBeenCalledTimes(1);
@@ -94,7 +102,9 @@ describe('DrawFeatureControl (thin shell)', () => {
       expect.objectContaining({ type: 'point' }),
     );
     expect(lineBtn.classList.contains('active')).toBe(false);
+    expect(lineBtn.getAttribute('aria-pressed')).toBe('false');
     expect(pointBtn.classList.contains('active')).toBe(true);
+    expect(pointBtn.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('onRemove disables if active', () => {
