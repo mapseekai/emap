@@ -453,6 +453,7 @@ type MapshaperRuntimeCrs = NonNullable<NonNullable<MapshaperDataset['info']>['cr
 const WGS84_SEMI_MAJOR_AXIS = 6378137;
 const WGS84_FLATTENING = 1 / 298.257223563;
 const EARTH_SEMI_MAJOR_AXIS_TOLERANCE = 0.01;
+const EARTH_MAX_FLATTENING = 0.01;
 const PROJECTION_NUMBER_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
 
 /** Parse a CRS definition into Mapshaper's runtime projection representation. */
@@ -467,7 +468,11 @@ export function createGeographicCoordinateTransformer(
   const projection = parseMapshaperCrs(definition) as MprojProjection;
   const semiMajorAxis = projection.a;
   const eccentricitySquared = projection.es;
-  const hasEllipsoid = Number.isFinite(semiMajorAxis) && Number.isFinite(eccentricitySquared);
+  const hasEllipsoid =
+    Number.isFinite(semiMajorAxis) &&
+    Number.isFinite(eccentricitySquared) &&
+    Number(eccentricitySquared) >= 0 &&
+    Number(eccentricitySquared) < 1;
   const a = hasEllipsoid ? Number(semiMajorAxis) : WGS84_SEMI_MAJOR_AXIS;
   const f = hasEllipsoid
     ? 1 - Math.sqrt(1 - Number(eccentricitySquared))
@@ -478,12 +483,17 @@ export function createGeographicCoordinateTransformer(
 
   return {
     isGeographic: projection.is_latlong === true,
-    // PROJ identifies celestial bodies by approximate semi-major radius. A 1%
-    // window includes historical terrestrial ellipsoids and common Earth
-    // spheres without treating Mars- or Moon-sized bodies as Earth.
+    // Proj.4 does not reliably identify the celestial body. Require usable
+    // ellipsoid evidence whose size and flattening are compatible with common
+    // terrestrial ellipsoids, including Earth spheres, and reject unknown or
+    // clearly incompatible bodies conservatively.
     isEarthCompatible:
+      hasEllipsoid &&
       Math.abs(a - WGS84_SEMI_MAJOR_AXIS) / WGS84_SEMI_MAJOR_AXIS <=
-      EARTH_SEMI_MAJOR_AXIS_TOLERANCE,
+        EARTH_SEMI_MAJOR_AXIS_TOLERANCE &&
+      Number.isFinite(f) &&
+      f >= 0 &&
+      f <= EARTH_MAX_FLATTENING,
     semiMajorAxis: a,
     flattening: f,
     inverse(point): [number, number] | null {

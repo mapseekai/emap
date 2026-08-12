@@ -84,11 +84,23 @@ describe('ScaleCalculator', () => {
     expect(equator!.metersPerPixel).toBeCloseTo(equatorControl!.metersPerPixel);
   });
 
-  it('returns null for a non-Earth ellipsoid without rejecting custom Earth ellipsoids', async () => {
+  it('rejects incompatible ellipsoids without rejecting terrestrial ones', async () => {
     const calculator = new ScaleCalculator();
     const mars = {
       ...geographicView(0),
       crs: '+proj=longlat +a=3396190 +b=3376200 +no_defs',
+    };
+    const pathologicallyFlattened = {
+      ...geographicView(0),
+      crs: '+proj=longlat +a=6378137 +b=6000000 +no_defs',
+    };
+    const wgs84 = {
+      ...geographicView(0),
+      crs: '+proj=longlat +datum=WGS84 +no_defs',
+    };
+    const clarke1866 = {
+      ...geographicView(0),
+      crs: '+proj=longlat +ellps=clrk66 +no_defs',
     };
     const customEarth = {
       ...geographicView(0),
@@ -96,9 +108,24 @@ describe('ScaleCalculator', () => {
     };
 
     await expect(calculator.getMetrics(mars)).resolves.toBeNull();
+    await expect(calculator.getMetrics(pathologicallyFlattened)).resolves.toBeNull();
+    await expect(calculator.getMetrics(wgs84)).resolves.toMatchObject({ calculationMethod: 'center' });
+    await expect(calculator.getMetrics(clarke1866)).resolves.toMatchObject({
+      calculationMethod: 'center',
+    });
     await expect(calculator.getMetrics(customEarth)).resolves.toMatchObject({
       calculationMethod: 'center',
     });
+  });
+
+  it.each([
+    ['missing axis', '+proj=longlat +no_defs'],
+    ['negative eccentricity', '+proj=longlat +a=6378137 +es=-0.1 +no_defs'],
+    ['unit eccentricity', '+proj=longlat +a=6378137 +es=1 +no_defs'],
+  ])('returns null for %s ellipsoid evidence', async (_case, crs) => {
+    const calculator = new ScaleCalculator();
+
+    await expect(calculator.getMetrics({ ...geographicView(0), crs })).resolves.toBeNull();
   });
 
   it('returns null for invalid CRS views', async () => {
