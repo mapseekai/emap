@@ -12,6 +12,7 @@
 import { Control } from './control';
 import type { Emap } from '../map/map';
 import type { SimplifyMethod } from '../map/types';
+import { createControlIcon } from './control-icons';
 
 export interface SimplifyControlOptions {
   /** Source ID to simplify. Required. */
@@ -61,8 +62,12 @@ export class SimplifyControl implements Control {
     this._btn = document.createElement('button');
     this._btn.type = 'button';
     this._btn.className = 'emap-ctrl-simplify';
-    this._btn.innerHTML = '<span class="emap-ctrl-icon">≈</span>';
+    const icon = document.createElement('span');
+    icon.className = 'emap-ctrl-icon';
+    icon.appendChild(createControlIcon('simplify'));
+    this._btn.appendChild(icon);
     this._btn.title = this._opts.title ?? 'Simplify geometry';
+    this._btn.setAttribute('aria-expanded', 'false');
     this._btn.onclick = (e) => {
       e.stopPropagation();
       this._togglePopup();
@@ -97,41 +102,34 @@ export class SimplifyControl implements Control {
     const popup = document.createElement('div');
     popup.className = 'emap-simplify-popup';
     popup.style.display = 'none';
-    // Inline minimum styles so users don't need extra CSS to make it usable.
-    // Visual polish lives in controls.css and can override these.
-    popup.style.cssText += `
-      position:absolute; top:36px; left:0; min-width:240px; padding:10px;
-      background:#fff; border:1px solid #ccc; border-radius:4px;
-      box-shadow:0 2px 8px rgba(0,0,0,.15); font-size:13px;
-      z-index:10; color:#222;`;
     popup.onclick = (e) => e.stopPropagation();
 
     const percentage = this._opts.initialPercentage ?? 10;
     const method = this._opts.initialMethod ?? '';
 
     popup.innerHTML = `
-      <div style="margin-bottom:8px;">
-        <label style="display:flex; align-items:center; gap:6px;">
+      <div class="emap-simplify-field">
+        <label class="emap-simplify-label">
           <span>Percentage:</span>
-          <input type="range" min="0" max="100" step="0.1" value="${percentage}" style="flex:1;" />
-          <span class="value" style="min-width:48px; text-align:right;">${percentage}%</span>
+          <input class="emap-simplify-range" type="range" min="0" max="100" step="0.1" value="${percentage}" />
+          <span class="emap-simplify-value value">${percentage}%</span>
         </label>
       </div>
-      <div style="margin-bottom:8px;">
-        <label style="display:flex; align-items:center; gap:6px;">
+      <div class="emap-simplify-field">
+        <label class="emap-simplify-label">
           <span>Method:</span>
-          <select style="flex:1;">
+          <select class="emap-simplify-select">
             ${METHODS.map((m) => `<option value="${m.value}"${m.value === method ? ' selected' : ''}>${m.label}</option>`).join('')}
           </select>
         </label>
       </div>
-      <div style="margin-bottom:8px; display:flex; gap:12px; flex-wrap:wrap;">
+      <div class="emap-simplify-flags">
         <label><input type="checkbox" data-flag="keep-shapes" checked /> keep-shapes</label>
         <label><input type="checkbox" data-flag="planar" /> planar</label>
       </div>
-      <div style="display:flex; gap:6px; align-items:center;">
-        <button type="button" class="apply" style="padding:4px 12px;">Apply</button>
-        <span class="status" style="opacity:.8; font-size:12px;"></span>
+      <div class="emap-simplify-actions">
+        <button type="button" class="emap-simplify-apply apply">Apply</button>
+        <span class="emap-simplify-status status"></span>
       </div>
     `;
 
@@ -159,6 +157,7 @@ export class SimplifyControl implements Control {
     const open = this._popup.style.display === 'none';
     this._popup.style.display = open ? 'block' : 'none';
     this._btn?.classList.toggle('active', open);
+    this._btn?.setAttribute('aria-expanded', String(open));
     if (open) {
       this._setupDocListeners();
       this._setStatus('');

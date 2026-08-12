@@ -96,7 +96,7 @@ function isNormalizedDatasetCommit(
  * should lower them.
  */
 export interface ZipExtractionLimits {
-  /** Max summed uncompressed size of all kept entries, in bytes. Default 200 MB. */
+  /** Max summed uncompressed size of all kept entries, in bytes. Default 500 MiB. */
   maxBytes?: number;
   /** Max entry count fflate may yield. Default 5000. */
   maxEntries?: number;
@@ -105,7 +105,7 @@ export interface ZipExtractionLimits {
 }
 
 const DEFAULT_ZIP_LIMITS: Required<ZipExtractionLimits> = {
-  maxBytes: 200 * 1024 * 1024,
+  maxBytes: 500 * 1024 * 1024,
   maxEntries: 5000,
   maxRatio: 100,
 };
@@ -324,14 +324,14 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         for (const entry of data) {
           if (this._isZipFile(entry.filename)) {
             const extracted = await this._extractZip(entry.content);
-            const primary = this._findPrimaryFile(extracted);
-            if (!primary) {
+            const primaries = this._findPrimaryFiles(extracted);
+            if (primaries.length === 0) {
               throw new Error(`No importable file found in zip archive: ${entry.filename}`);
             }
             for (const [name, content] of Object.entries(extracted)) {
               inputFiles[name] = content;
             }
-            primaryFiles.push(primary);
+            primaryFiles.push(...primaries);
           } else {
             inputFiles[entry.filename] = entry.content;
             primaryFiles.push(entry.filename);
@@ -369,14 +369,14 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
         if (this._isZipFile(input.filename)) {
           const extracted = await this._extractZip(input.content);
-          const primary = this._findPrimaryFile(extracted);
-          if (!primary) {
+          const primaries = this._findPrimaryFiles(extracted);
+          if (primaries.length === 0) {
             throw new Error('No importable file found in zip archive');
           }
           for (const [name, content] of Object.entries(extracted)) {
             inputFiles[name] = content;
           }
-          primaryFiles.push(primary);
+          primaryFiles.push(...primaries);
         } else {
           inputFiles[input.filename] = input.content;
           primaryFiles.push(input.filename);
@@ -869,6 +869,14 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
     // Return first importable file
     return filenames.find((f) => !this._isAuxiliaryFile(f)) || '';
+  }
+
+  private _findPrimaryFiles(files: Record<string, unknown>): string[] {
+    const shapefiles = Object.keys(files).filter((filename) => /\.shp$/i.test(filename));
+    if (shapefiles.length > 0) return shapefiles;
+
+    const primary = this._findPrimaryFile(files);
+    return primary ? [primary] : [];
   }
 
   private _isAuxiliaryFile(filename: string): boolean {
