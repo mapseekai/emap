@@ -6,45 +6,65 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - 重建拓扑 (Rebuild Topology)</title>
   <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
-    #header input[type="text"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; width: 120px; }
-    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
-    #header button.alt { background: #2980b9; }
-    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
-    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
-    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
-    .group { display: flex; gap: 6px; align-items: center; }
-    #stats { background: #34495e; padding: 4px 8px; border-radius: 3px; font-family: monospace; font-size: 12px; }
+    #stats {
+      margin: 12px 0 0;
+      padding: 8px 10px;
+      border: 1px solid var(--emap-example-border);
+      background: var(--emap-example-muted);
+      font-size: 11px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
   </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <span class="group">
-      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    </span>
-    <span class="group">
-      <label>平移 dx: <input id="dx" type="text" value="0.5" /></label>
-      <label>dy: <input id="dy" type="text" value="0.5" /></label>
-      <button id="translate-btn" class="alt" disabled>平移所选</button>
-    </span>
-    <span class="group">
-      <label>snap-interval (可选): <input id="snap" type="text" placeholder="自动" /></label>
-      <label><input id="no-snap" type="checkbox" /> no-snap</label>
-      <label><input id="rebuild-flag" type="checkbox" /> rebuild_topology</label>
-      <button id="rebuild-btn" disabled>重建拓扑</button>
-    </span>
-    <span id="stats">arcs: -, vertices: -</span>
-    <span id="status">加载一个含面/线的数据文件,点击要素选中,平移 → 拓扑可能错乱 → 重建拓扑修复</span>
-    <span class="hint">
-      <code>Emap.rebuildTopology</code> 调用 mapshaper 内部 <code>addIntersectionCuts</code> —— 重新检测共享弧、
-      在交点处插入顶点、清理退化形状。比 <code>cleanLayer</code> 轻量(后者还会消除毛刺/小面)。
-      作为历史屏障(此前细粒度撤销会被清空,但重建本身可撤销一次)。
-    </span>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>重建拓扑 (Rebuild Topology)</strong>
   </div>
   <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>重建拓扑 (Rebuild Topology)</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <div class="emap-example-field">
+          <label for="dx">平移 dx</label>
+          <input id="dx" type="text" value="0.5" />
+        </div>
+        <div class="emap-example-field">
+          <label for="dy">平移 dy</label>
+          <input id="dy" type="text" value="0.5" />
+        </div>
+        <div class="emap-example-row">
+          <button id="translate-btn" class="alt" disabled>平移所选</button>
+        </div>
+      </section>
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="snap">snap-interval (可选)</label>
+          <input id="snap" type="text" placeholder="自动" />
+        </div>
+        <div class="emap-example-field">
+          <label class="emap-example-check"><input id="no-snap" type="checkbox" /> no-snap</label>
+          <label class="emap-example-check"><input id="rebuild-flag" type="checkbox" /> rebuild_topology</label>
+        </div>
+        <button id="rebuild-btn" class="emap-example-primary-button" disabled>重建拓扑</button>
+        <p id="stats">arcs: -, vertices: -</p>
+        <p id="status" class="emap-example-status">加载一个含面/线的数据文件,点击要素选中,平移 → 拓扑可能错乱 → 重建拓扑修复</p>
+        <p class="emap-example-hint">
+          <code>Emap.rebuildTopology</code> 调用 mapshaper 内部 <code>addIntersectionCuts</code> —— 重新检测共享弧、
+          在交点处插入顶点、清理退化形状。比 <code>cleanLayer</code> 轻量(后者还会消除毛刺/小面)。
+          作为历史屏障(此前细粒度撤销会被清空,但重建本身可撤销一次)。
+        </p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

@@ -5,50 +5,63 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - 点图层样式 (Point layer styling)</title>
-  <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px; }
-    #header select, #header input[type="color"], #header input[type="range"] { padding: 3px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; background: #fff; }
-    #header input[type="color"] { padding: 0; width: 38px; height: 26px; }
-    #header label { display: inline-flex; align-items: center; gap: 4px; }
-    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
-    .group { display: flex; gap: 8px; align-items: center; padding-left: 10px; border-left: 1px solid #4a5d70; }
-    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
-  </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    <label>点图层: <select id="target"></select></label>
-    <span class="group">
-      <label>形状:
-        <select id="circle-shape">
-          <option value="circle">圆形</option>
-          <option value="square">正方形</option>
-          <option value="triangle">三角形</option>
-          <option value="triangle-down">倒三角形</option>
-          <option value="diamond">菱形</option>
-          <option value="pentagon">五边形</option>
-          <option value="star">五角星</option>
-          <option value="cross">十字形</option>
-          <option value="x">X 形</option>
-          <option value="hexagon">六边形</option>
-          <option value="octagon">八边形</option>
-        </select>
-      </label>
-      <label>颜色: <input id="circle-color" type="color" value="#e4572e" /></label>
-      <label>半径: <input id="circle-radius" type="range" min="2" max="20" step="1" value="8" /> <span id="radius-output">8</span></label>
-      <label><input id="circle-fill" type="checkbox" checked /> 填充</label>
-    </span>
-    <span id="status">加载一个含 point 图层的数据文件</span>
-    <span class="hint">
-      使用 <code>circle</code> 图层渲染点数据，并通过 <code>setPaintProperty</code>
-      实时修改 <code>circle-shape</code>、<code>circle-color</code>、<code>circle-radius</code> 和 <code>circle-fill</code>。
-    </span>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>点图层样式 (Point layer styling)</strong>
   </div>
   <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>点图层样式 (Point layer styling)</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <div class="emap-example-field">
+          <label for="target">点图层</label>
+          <select id="target"></select>
+        </div>
+        <div class="emap-example-field">
+          <label for="circle-shape">形状</label>
+          <select id="circle-shape">
+            <option value="circle">圆形</option>
+            <option value="square">正方形</option>
+            <option value="triangle">三角形</option>
+            <option value="triangle-down">倒三角形</option>
+            <option value="diamond">菱形</option>
+            <option value="pentagon">五边形</option>
+            <option value="star">五角星</option>
+            <option value="cross">十字形</option>
+            <option value="x">X 形</option>
+            <option value="hexagon">六边形</option>
+            <option value="octagon">八边形</option>
+          </select>
+        </div>
+        <div class="emap-example-field">
+          <label for="circle-color">颜色</label>
+          <input id="circle-color" type="color" value="#e4572e" />
+        </div>
+        <div class="emap-example-field">
+          <label for="circle-radius">半径</label>
+          <input id="circle-radius" type="range" min="2" max="20" step="1" value="8" />
+          <span id="radius-output" class="emap-example-hint">8</span>
+        </div>
+        <div class="emap-example-field">
+          <label class="emap-example-check"><input id="circle-fill" type="checkbox" checked /> 填充</label>
+        </div>
+        <p id="status" class="emap-example-status">加载一个含 point 图层的数据文件</p>
+        <p class="emap-example-hint">
+          使用 <code>circle</code> 图层渲染点数据，并通过 <code>setPaintProperty</code>
+          实时修改 <code>circle-shape</code>、<code>circle-color</code>、<code>circle-radius</code> 和 <code>circle-fill</code>。
+        </p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

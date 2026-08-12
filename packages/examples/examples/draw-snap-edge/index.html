@@ -6,38 +6,43 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - 绘制时吸附顶点 + 边</title>
   <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
-    #header input[type="number"], #header input[type="text"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; }
-    #header input[type="number"] { width: 70px; }
-    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
-    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
-    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
-    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
-    .group { display: flex; gap: 6px; align-items: center; }
+    .snap-swatch { color: #ff4444; }
   </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <span class="group">
-      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    </span>
-    <span class="group">
-      <label>吸附阈值 (px): <input id="snap-threshold" type="number" value="12" /></label>
-      <label><input id="snap-vertex" type="checkbox" checked /> 吸附顶点</label>
-      <label><input id="snap-edge" type="checkbox" checked /> 吸附边</label>
-      <button id="apply-snap">应用吸附设置</button>
-    </span>
-    <span id="status">加载数据后,工具栏选择"编辑节点 / 绘制折线 / 多边形",拖动鼠标观察吸附</span>
-    <span class="hint">
-      <span style="color:#ff4444">红色圆环</span> = 顶点吸附 ·
-      <span style="color:#ff4444">红色方框</span> = 边吸附(线段上的最近点)。
-      绘制时控制光标吸附;编辑节点时控制拖动节点到其它要素的吸附。
-    </span>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>绘制时吸附顶点 + 边</strong>
   </div>
   <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>绘制时吸附顶点 + 边</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <div class="emap-example-field">
+          <label for="snap-threshold">吸附阈值 (px)</label>
+          <input id="snap-threshold" type="number" value="12" />
+        </div>
+        <div class="emap-example-field">
+          <label class="emap-example-check"><input id="snap-vertex" type="checkbox" checked /> 吸附顶点</label>
+          <label class="emap-example-check"><input id="snap-edge" type="checkbox" checked /> 吸附边</label>
+        </div>
+        <button id="apply-snap" class="emap-example-primary-button">应用吸附设置</button>
+        <p id="status" class="emap-example-status">加载数据后,工具栏选择"编辑节点 / 绘制折线 / 多边形",拖动鼠标观察吸附</p>
+        <p class="emap-example-hint">
+          <span class="snap-swatch">红色圆环</span> = 顶点吸附 ·
+          <span class="snap-swatch">红色方框</span> = 边吸附(线段上的最近点)。
+          绘制时控制光标吸附;编辑节点时控制拖动节点到其它要素的吸附。
+        </p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

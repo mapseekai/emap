@@ -6,71 +6,63 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - Transaction + Validation</title>
   <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-    #header {
-      padding: 10px;
-      background: #2c3e50;
-      color: white;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-      font-size: 13px;
-    }
-    #header button {
-      padding: 5px 12px;
-      background: #16a085;
-      color: white;
-      border: 0;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
-    #header button.danger { background: #c0392b; }
-    #header button.muted { background: #34495e; }
-    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
-
+    .emap-example-workbench button.danger { border-color: var(--emap-example-error); color: var(--emap-example-error); }
     #log {
       max-height: 180px;
+      margin: 0;
       overflow-y: auto;
       padding: 6px 10px;
-      background: #ecf0f1;
-      border-top: 1px solid #bdc3c7;
-      font-family: monospace;
-      font-size: 12px;
+      background: var(--emap-example-muted);
+      border: 1px solid var(--emap-example-border);
+      font-size: 11px;
     }
     #log div { padding: 1px 0; }
     #log .commit { color: #27ae60; }
     #log .rollback { color: #c0392b; }
     #log .validation-failed { color: #d35400; font-weight: bold; }
     #log .validation-ok { color: #2980b9; }
-    #log .info { color: #555; }
-
-    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
+    #log .info { color: var(--emap-example-muted-foreground); }
   </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple /></label>
-    <button id="tx-btn" disabled>开启 Transaction</button>
-    <button id="run-clip-btn" disabled>事务内执行: clip</button>
-    <button id="run-dissolve-btn" disabled>事务内执行: dissolve</button>
-    <button id="commit-btn" disabled class="muted">Commit</button>
-    <button id="rollback-btn" disabled class="danger">Rollback</button>
-    <button id="toggle-validator-btn" disabled>启用 topologyValidator</button>
-    <button id="undo-btn" disabled>Undo</button>
-    <span id="status">上传一个含 polygon 图层的 GeoJSON / TopoJSON / Shapefile</span>
-    <div class="hint">
-      Transaction 示例：在事务里跑 clip → dissolve，commit 时只产生 1 条 history；rollback 时数据恢复到事务开始前。
-      Validator 示例：开启后每次提交（包括事务 commit）会跑拓扑校验，失败时打印到下方日志，引擎不会自动撤销。
-    </div>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>Transaction + Validation</strong>
   </div>
 
   <div id="map" tabindex="0"></div>
-  <div id="log"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>Transaction + Validation</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple />
+        </div>
+        <button id="tx-btn" class="emap-example-primary-button" disabled>开启 Transaction</button>
+        <div class="emap-example-row">
+          <button id="run-clip-btn" disabled>事务内执行: clip</button>
+          <button id="run-dissolve-btn" disabled>事务内执行: dissolve</button>
+        </div>
+        <div class="emap-example-row">
+          <button id="commit-btn" disabled>Commit</button>
+          <button id="rollback-btn" class="danger" disabled>Rollback</button>
+        </div>
+        <div class="emap-example-row">
+          <button id="toggle-validator-btn" disabled>启用 topologyValidator</button>
+          <button id="undo-btn" disabled>Undo</button>
+        </div>
+        <p id="status" class="emap-example-status">上传一个含 polygon 图层的 GeoJSON / TopoJSON / Shapefile</p>
+        <p class="emap-example-hint">
+          Transaction 示例：在事务里跑 clip → dissolve,commit 时只产生 1 条 history;rollback 时数据恢复到事务开始前。
+          Validator 示例：开启后每次提交（包括事务 commit）会跑拓扑校验,失败时打印到下方日志,引擎不会自动撤销。
+        </p>
+        <div id="log"></div>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

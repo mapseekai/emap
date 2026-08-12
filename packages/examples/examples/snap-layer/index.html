@@ -5,42 +5,54 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - 图层顶点批量吸附 (snapLayer)</title>
-  <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
-    #header select, #header input[type="text"] {
-      padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px;
-    }
-    #header input[type="text"] { width: 110px; }
-    #header button {
-      padding: 5px 12px; background: #16a085; color: white; border: 0;
-      border-radius: 3px; cursor: pointer; font-size: 13px;
-    }
-    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
-    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
-  </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    <label>目标图层: <select id="target"></select></label>
-    <label>容差距离: <input id="interval" type="text" placeholder="默认" /></label>
-    <label>坐标精度: <input id="precision" type="text" placeholder="可选" /></label>
-    <label><input id="endpoints" type="checkbox" /> 仅吸附端点</label>
-    <button id="btn" disabled>吸附</button>
-    <label>导出格式:
-      <select id="format">
-        <option value="geojson">GeoJSON</option>
-        <option value="topojson">TopoJSON</option>
-        <option value="shapefile">Shapefile (zip)</option>
-      </select>
-    </label>
-    <button id="export-btn" disabled>导出并下载</button>
-    <span id="status">加载数据</span>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>图层顶点批量吸附 (snapLayer)</strong>
   </div>
   <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>图层顶点批量吸附 (snapLayer)</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <div class="emap-example-field">
+          <label for="target">目标图层</label>
+          <select id="target"></select>
+        </div>
+        <div class="emap-example-field">
+          <label for="interval">容差距离</label>
+          <input id="interval" type="text" placeholder="默认" />
+        </div>
+        <div class="emap-example-field">
+          <label for="precision">坐标精度</label>
+          <input id="precision" type="text" placeholder="可选" />
+        </div>
+        <div class="emap-example-field">
+          <label class="emap-example-check"><input id="endpoints" type="checkbox" /> 仅吸附端点</label>
+        </div>
+        <button id="btn" class="emap-example-primary-button" disabled>吸附</button>
+      </section>
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="format">导出格式</label>
+          <select id="format">
+            <option value="geojson">GeoJSON</option>
+            <option value="topojson">TopoJSON</option>
+            <option value="shapefile">Shapefile (zip)</option>
+          </select>
+        </div>
+        <button id="export-btn" class="emap-example-primary-button" disabled>导出并下载</button>
+        <p id="status" class="emap-example-status">加载数据</p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

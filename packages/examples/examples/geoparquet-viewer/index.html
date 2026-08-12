@@ -5,82 +5,36 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - GeoParquet / GeoArrow 查看器</title>
-  <style>
-    body {
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      font-family: sans-serif;
-    }
-
-    #header {
-      padding: 10px;
-      background: #1a3a5c;
-      color: white;
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    #header label {
-      font-size: 13px;
-    }
-
-    #header button {
-      padding: 4px 12px;
-      background: #2980b9;
-      color: white;
-      border: 0;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-
-    #header button:disabled {
-      background: #7f8c8d;
-      cursor: not-allowed;
-    }
-
-    #header select {
-      font-size: 13px;
-    }
-
-    #map {
-      flex: 1;
-      background: #ffffff;
-      position: relative;
-    }
-
-    #status {
-      font-size: 12px;
-      opacity: 0.85;
-      margin-left: auto;
-    }
-  </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
     <strong>GeoParquet / GeoArrow 查看器</strong>
-    <label>
-      文件:
-      <input id="file-input" type="file" accept=".parquet,.geoparquet,.arrow,.arrows,.feather" disabled />
-    </label>
-    <label>
-      导出格式:
-      <select id="format">
-        <option value="geoparquet">GeoParquet (.parquet)</option>
-        <option value="geoarrow">GeoArrow IPC (.arrow)</option>
-        <option value="geojson">GeoJSON</option>
-      </select>
-    </label>
-    <button id="export-btn" disabled>导出并下载</button>
-    <span id="status">正在初始化 GeoParquet 支持...</span>
   </div>
-  <div id="map"></div>
+  <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>GeoParquet / GeoArrow 查看器</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".parquet,.geoparquet,.arrow,.arrows,.feather" disabled />
+        </div>
+        <div class="emap-example-field">
+          <label for="format">导出格式</label>
+          <select id="format">
+            <option value="geoparquet">GeoParquet (.parquet)</option>
+            <option value="geoarrow">GeoArrow IPC (.arrow)</option>
+            <option value="geojson">GeoJSON</option>
+          </select>
+        </div>
+        <button id="export-btn" class="emap-example-primary-button" disabled>导出并下载</button>
+        <p id="status" class="emap-example-status">正在初始化 GeoParquet 支持...</p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

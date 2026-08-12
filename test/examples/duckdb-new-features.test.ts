@@ -236,7 +236,7 @@ describe('DuckDB new feature examples', () => {
     const runHandler = html.indexOf("runButton.addEventListener('click'");
     const loaderStart = html.indexOf('async function loadDatasetFromFile');
 
-    expect(html).toContain('<div id="status" aria-live="polite">');
+    expect(html).toContain('<p id="status" class="emap-example-status" aria-live="polite">');
     expect(html).toContain('function fitLoadedExtents()');
     expect(html).toContain('const extent = targetExtent.clone();');
     expect(html).toContain('extent.merge(joinExtent);');

@@ -6,56 +6,68 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - 属性表连接 (Join)</title>
   <style>
-    body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; }
-    #left { width: 360px; padding: 10px; background: #2c3e50; color: white; display: flex; flex-direction: column; gap: 8px; font-size: 13px; overflow-y: auto; }
-    #left label { display: flex; flex-direction: column; gap: 2px; }
-    #left input[type="text"], #left textarea { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; background: white; color: black; font-family: monospace; }
-    #left textarea { resize: vertical; min-height: 100px; }
-    #left button { padding: 6px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
-    #left button:disabled { background: #7f8c8d; cursor: not-allowed; }
-    #right { flex: 1; display: flex; flex-direction: column; }
-    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
-    #attrs { max-height: 200px; overflow: auto; background: #f4f4f4; padding: 8px; font-family: monospace; font-size: 12px; border-top: 1px solid #ccc; }
-    .hint { opacity: 0.85; font-size: 12px; }
+    #attrs {
+      max-height: 160px;
+      overflow: auto;
+      margin: 16px 0 0;
+      padding: 8px 10px;
+      border: 1px solid var(--emap-example-border);
+      background: var(--emap-example-muted);
+      font-size: 11px;
+      line-height: 1.5;
+    }
   </style>
 </head>
 
 <body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
     <strong>属性表连接 (Join)</strong>
   </div>
-  <div id="left">
-    <label>1. 加载几何数据
-      <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
-    </label>
-    <label>2. 目标图层
-      <select id="target" disabled></select>
-    </label>
-    <label>3. 在下方粘贴 CSV
-      <textarea id="csv" placeholder="fips,pop&#10;AL,4900000&#10;AK,730000"></textarea>
-    </label>
-    <label>4. 目标键(target_key)
-      <input id="target-key" type="text" placeholder="例如 fips" />
-    </label>
-    <label>5. 源键(source_key,即 CSV 列名)
-      <input id="source-key" type="text" placeholder="例如 fips" />
-    </label>
-    <label>保留字段 (可选,逗号分隔)
-      <input id="fields" type="text" placeholder="例如 pop,gdp" />
-    </label>
-    <label>字段前缀 (可选)
-      <input id="prefix" type="text" placeholder="例如 p_" />
-    </label>
-    <label><input id="unjoined" type="checkbox" /> unjoined (保留未匹配的目标记录)</label>
-    <button id="btn" disabled>执行 Join</button>
-    <div id="status" class="hint">先加载几何数据并选择目标图层</div>
-    <div class="hint">Ctrl+Z 撤销。</div>
-  </div>
-  <div id="right">
-    <div id="map" tabindex="0"></div>
-    <div id="attrs">attrs preview</div>
-  </div>
+  <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>属性表连接 (Join)</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">1. 加载几何数据</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <div class="emap-example-field">
+          <label for="target">2. 目标图层</label>
+          <select id="target" disabled></select>
+        </div>
+        <div class="emap-example-field">
+          <label for="csv">3. 在下方粘贴 CSV</label>
+          <textarea id="csv" placeholder="fips,pop&#10;AL,4900000&#10;AK,730000"></textarea>
+        </div>
+        <div class="emap-example-field">
+          <label for="target-key">4. 目标键(target_key)</label>
+          <input id="target-key" type="text" placeholder="例如 fips" />
+        </div>
+        <div class="emap-example-field">
+          <label for="source-key">5. 源键(source_key,即 CSV 列名)</label>
+          <input id="source-key" type="text" placeholder="例如 fips" />
+        </div>
+        <div class="emap-example-field">
+          <label for="fields">保留字段 (可选,逗号分隔)</label>
+          <input id="fields" type="text" placeholder="例如 pop,gdp" />
+        </div>
+        <div class="emap-example-field">
+          <label for="prefix">字段前缀 (可选)</label>
+          <input id="prefix" type="text" placeholder="例如 p_" />
+        </div>
+        <div class="emap-example-field">
+          <label class="emap-example-check"><input id="unjoined" type="checkbox" /> unjoined (保留未匹配的目标记录)</label>
+        </div>
+        <button id="btn" class="emap-example-primary-button" disabled>执行 Join</button>
+        <p id="status" class="emap-example-status">先加载几何数据并选择目标图层</p>
+        <p class="emap-example-hint">Ctrl+Z 撤销。</p>
+        <div id="attrs">attrs preview</div>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

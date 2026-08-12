@@ -5,73 +5,70 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - 缓冲区</title>
-  <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-    #header {
-      padding: 10px;
-      background: #2c3e50;
-      color: white;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-      font-size: 13px;
-    }
-    #header input[type="text"] {
-      width: 130px;
-      padding: 4px 6px;
-      border: 1px solid #4a5d70;
-      border-radius: 3px;
-      font-size: 13px;
-    }
-    #header select {
-      padding: 4px 6px;
-      font-size: 13px;
-    }
-    #header button {
-      padding: 5px 12px;
-      background: #16a085;
-      color: white;
-      border: 0;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
-    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
-  </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    <label>目标图层: <select id="target"></select></label>
-    <label>半径: <input id="radius" type="text" value="1000" placeholder="数字或表达式"/></label>
-    <label>端点样式: <select id="cap">
-      <option value="">圆形 (默认)</option>
-      <option value="round">圆形</option>
-      <option value="flat">平直</option>
-    </select></label>
-    <label>vertices: <input id="vertices" type="number" min="3" step="1" placeholder="72"/></label>
-    <label>arc-quality: <input id="arc-quality" type="number" min="1" step="1" placeholder=""/></label>
-    <label>type: <select id="type">
-      <option value="">全 (默认)</option>
-      <option value="left">left</option>
-      <option value="right">right</option>
-      <option value="outer">outer</option>
-      <option value="inner">inner</option>
-    </select></label>
-    <label><input id="planar" type="checkbox"/> planar</label>
-    <label><input id="v2" type="checkbox"/> v2</label>
-    <button id="buffer-btn" disabled>生成缓冲区</button>
-    <span id="status">加载数据</span>
-    <small style="flex-basis:100%; opacity:0.85; padding-top:4px;">
-      单位: 点 buffer 半径 = <strong>米</strong>（勾选 planar 则改为源 CRS 单位）；线/面 buffer 半径 = 源 CRS 单位（lat/lng 数据为<strong>度</strong>）。
-      参考: 国境尺度点 buffer 建议 <code>50000</code>（50 km）起；lat/lng 线/面建议 <code>0.05</code>~<code>1</code>；投影到米后线/面再用米值。
-    </small>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>缓冲区</strong>
   </div>
   <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>缓冲区</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <div class="emap-example-field">
+          <label for="target">目标图层</label>
+          <select id="target"></select>
+        </div>
+        <div class="emap-example-field">
+          <label for="radius">半径</label>
+          <input id="radius" type="text" value="1000" placeholder="数字或表达式"/>
+        </div>
+        <div class="emap-example-field">
+          <label for="cap">端点样式</label>
+          <select id="cap">
+            <option value="">圆形 (默认)</option>
+            <option value="round">圆形</option>
+            <option value="flat">平直</option>
+          </select>
+        </div>
+        <div class="emap-example-field">
+          <label for="vertices">vertices</label>
+          <input id="vertices" type="number" min="3" step="1" placeholder="72"/>
+        </div>
+        <div class="emap-example-field">
+          <label for="arc-quality">arc-quality</label>
+          <input id="arc-quality" type="number" min="1" step="1" placeholder=""/>
+        </div>
+        <div class="emap-example-field">
+          <label for="type">type</label>
+          <select id="type">
+            <option value="">全 (默认)</option>
+            <option value="left">left</option>
+            <option value="right">right</option>
+            <option value="outer">outer</option>
+            <option value="inner">inner</option>
+          </select>
+        </div>
+        <div class="emap-example-field">
+          <label class="emap-example-check"><input id="planar" type="checkbox"/> planar</label>
+          <label class="emap-example-check"><input id="v2" type="checkbox"/> v2</label>
+        </div>
+        <button id="buffer-btn" class="emap-example-primary-button" disabled>生成缓冲区</button>
+        <p id="status" class="emap-example-status">加载数据</p>
+        <p class="emap-example-hint">
+          单位: 点 buffer 半径 = <strong>米</strong>（勾选 planar 则改为源 CRS 单位）；线/面 buffer 半径 = 源 CRS 单位（lat/lng 数据为<strong>度</strong>）。
+          参考: 国境尺度点 buffer 建议 <code>50000</code>（50 km）起；lat/lng 线/面建议 <code>0.05</code>~<code>1</code>；投影到米后线/面再用米值。
+        </p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

@@ -93,8 +93,21 @@ function examplesBrandPlugin(): Plugin {
           tag: 'style',
           children: `
             :root {
-              --emap-banner-bg: #2c3e50;
-              --emap-banner-ink: #ffffff;
+              --emap-banner-bg: oklch(1 0 0);
+              --emap-banner-ink: oklch(0.25 0.01 149);
+              --emap-example-background: oklch(0.99 0.002 149);
+              --emap-example-muted: oklch(0.97 0.002 149);
+              --emap-example-muted-foreground: oklch(0.5 0.02 149);
+              --emap-example-accent: oklch(0.96 0.01 149);
+              --emap-example-input: oklch(0.94 0.005 149);
+              --emap-example-border: oklch(0.92 0.005 149);
+              --emap-example-border-strong: oklch(0.85 0.008 149);
+              --emap-example-primary: oklch(0.627 0.194 149);
+              --emap-example-primary-foreground: oklch(1 0 0);
+              --emap-example-selection: oklch(0.95 0.03 149);
+              --emap-example-error: oklch(0.6 0.18 25);
+              --emap-example-info: oklch(0.623 0.17 245);
+              --emap-example-font: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
             }
 
             #header {
@@ -104,7 +117,8 @@ function examplesBrandPlugin(): Plugin {
               padding-right: 410px !important;
               background: var(--emap-banner-bg) !important;
               color: var(--emap-banner-ink) !important;
-              border-bottom: 1px solid #1f2d3a;
+              border-bottom: 1px solid var(--emap-example-border) !important;
+              box-shadow: none;
             }
 
             .emap-example-banner-brand {
@@ -113,16 +127,16 @@ function examplesBrandPlugin(): Plugin {
               flex: 0 0 auto;
               gap: 6px;
               color: inherit;
-              font: 700 14px/1 ui-sans-serif, system-ui, sans-serif;
+              font: 600 13px/1.3333 var(--emap-example-font);
               text-decoration: none;
             }
 
             .emap-example-banner-brand:hover {
-              color: #b8e0c1;
+              color: var(--emap-example-primary);
             }
 
             .emap-example-banner-brand:focus-visible {
-              outline: 2px solid #8acb99;
+              outline: 3px solid color-mix(in oklch, var(--emap-example-primary) 20%, transparent);
               outline-offset: 2px;
             }
 
@@ -130,6 +144,15 @@ function examplesBrandPlugin(): Plugin {
               width: 18px;
               height: 18px;
               display: block;
+            }
+
+            #header > strong {
+              min-width: 0;
+              overflow: hidden;
+              color: var(--emap-example-muted-foreground);
+              font: 500 11px/1.3333 var(--emap-example-font);
+              text-overflow: ellipsis;
+              white-space: nowrap;
             }
 
             .emap-example-map-tools {
@@ -143,7 +166,7 @@ function examplesBrandPlugin(): Plugin {
               order: 999;
               margin-left: 0;
               color: var(--emap-banner-ink);
-              font: 12px/1.2 ui-sans-serif, system-ui, sans-serif;
+              font: 11px/1.2 var(--emap-example-font);
               white-space: nowrap;
             }
 
@@ -153,28 +176,30 @@ function examplesBrandPlugin(): Plugin {
               min-height: 28px;
               box-sizing: border-box;
               padding: 3px 9px;
-              border: 1px solid #8acb99;
-              border-radius: 4px;
+              border: 1px solid var(--emap-example-input);
+              border-radius: 0;
               background: transparent;
-              color: #ffffff;
-              font: 600 12px/1.2 ui-sans-serif, system-ui, sans-serif;
+              color: var(--emap-banner-ink);
+              box-shadow: none;
+              font: 500 11px/1.2 var(--emap-example-font);
               cursor: pointer;
             }
 
             #header .emap-example-source-button:hover {
-              background: #365669;
-              color: #b8e0c1;
+              background: color-mix(in oklch, var(--emap-example-accent) 50%, transparent);
+              color: var(--emap-banner-ink);
             }
 
             #header .emap-example-source-button:disabled {
               background: transparent;
-              color: #cbd5df;
+              color: var(--emap-example-muted-foreground);
               cursor: wait;
               opacity: 0.75;
             }
 
-            #header .emap-example-source-button:focus-visible {
-              outline: 2px solid #8acb99;
+            #header .emap-example-source-button:focus-visible,
+            #header .emap-example-crs-select:focus-visible {
+              outline: 3px solid color-mix(in oklch, var(--emap-example-primary) 20%, transparent);
               outline-offset: 2px;
             }
 
@@ -185,11 +210,11 @@ function examplesBrandPlugin(): Plugin {
               max-height: none;
               box-sizing: border-box;
               padding: 0;
-              border: 1px solid #526578;
-              border-radius: 8px;
-              background: #111827;
-              color: #e5edf5;
-              box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+              border: 1px solid var(--emap-example-border-strong);
+              border-radius: 0;
+              background: var(--emap-banner-bg);
+              color: var(--emap-banner-ink);
+              box-shadow: none;
             }
 
             .emap-example-source-dialog[open] {
@@ -198,7 +223,7 @@ function examplesBrandPlugin(): Plugin {
             }
 
             .emap-example-source-dialog::backdrop {
-              background: rgba(15, 23, 42, 0.72);
+              background: rgb(0 0 0 / 0.1);
             }
 
             .emap-example-source-header {
@@ -207,26 +232,27 @@ function examplesBrandPlugin(): Plugin {
               justify-content: space-between;
               flex: 0 0 auto;
               padding: 12px 16px;
-              border-bottom: 1px solid #334155;
-              background: #1f2d3a;
-              font: 14px/1.2 ui-sans-serif, system-ui, sans-serif;
+              border-bottom: 1px solid var(--emap-example-border);
+              background: var(--emap-example-muted);
+              color: var(--emap-banner-ink);
+              font: 13px/1.2 var(--emap-example-font);
             }
 
             .emap-example-source-close {
               padding: 5px 10px;
-              border: 1px solid #64788c;
-              border-radius: 4px;
+              border: 1px solid var(--emap-example-input);
+              border-radius: 0;
               background: transparent;
-              color: #ffffff;
+              color: var(--emap-banner-ink);
               cursor: pointer;
             }
 
             .emap-example-source-close:hover {
-              background: #365669;
+              background: color-mix(in oklch, var(--emap-example-accent) 50%, transparent);
             }
 
             .emap-example-source-close:focus-visible {
-              outline: 2px solid #8acb99;
+              outline: 3px solid color-mix(in oklch, var(--emap-example-primary) 20%, transparent);
               outline-offset: 2px;
             }
 
@@ -236,8 +262,8 @@ function examplesBrandPlugin(): Plugin {
               margin: 0;
               padding: 16px;
               overflow: auto;
-              background: #0b1220;
-              color: #d8e2ec;
+              background: var(--emap-example-background);
+              color: var(--emap-banner-ink);
               tab-size: 2;
             }
 
@@ -252,29 +278,37 @@ function examplesBrandPlugin(): Plugin {
               gap: 6px;
             }
 
-            .emap-example-crs-select {
+            #header .emap-example-crs-select {
               min-height: 28px;
               padding: 3px 26px 3px 8px;
-              border: 1px solid #64788c;
-              border-radius: 4px;
-              background: #1f2d3a;
-              color: #ffffff;
-              font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-            }
-
-            .emap-example-crs-select:focus-visible {
-              outline: 2px solid #8acb99;
-              outline-offset: 2px;
+              border: 1px solid var(--emap-example-input);
+              border-radius: 0;
+              background: transparent;
+              color: var(--emap-banner-ink);
+              box-shadow: none;
+              font: 500 11px/1 var(--emap-example-font);
             }
 
             .emap-example-basemap-state {
-              color: #cbd5df;
+              color: var(--emap-example-muted-foreground);
+            }
+
+            html:has(> body.emap-example-with-floating-header),
+            body.emap-example-with-floating-header {
+              width: 100%;
+              height: 100%;
+              overflow: hidden;
             }
 
             body.emap-example-with-floating-header {
               box-sizing: border-box;
+              min-width: 320px;
               height: 100vh;
+              margin: 0;
               padding-top: 48px;
+              background: var(--emap-example-background);
+              color: var(--emap-banner-ink);
+              font: 13px/1.3333 var(--emap-example-font);
             }
 
             body.emap-example-with-floating-header > #header {
@@ -285,15 +319,18 @@ function examplesBrandPlugin(): Plugin {
               left: 0;
               box-sizing: border-box;
               min-height: 48px;
-              padding: 10px 14px;
+              padding: 8px 12px;
               display: flex;
               align-items: center;
               gap: 10px;
             }
 
             body.emap-example-with-floating-header > #map {
+              position: relative;
+              min-width: 0;
               width: 100%;
               height: 100%;
+              background: var(--emap-example-muted);
             }
 
             body.emap-example-with-floating-header > .panel {
@@ -301,6 +338,261 @@ function examplesBrandPlugin(): Plugin {
               max-height: calc(100vh - 72px);
               overflow: auto;
               box-sizing: border-box;
+            }
+
+            body.emap-example-with-floating-header > .emap-example-workbench {
+              position: absolute;
+              z-index: 10;
+              left: 64px;
+              width: min(376px, calc(100vw - 80px));
+              margin: 0;
+              padding: 0;
+              border: 1px solid var(--emap-example-border);
+              border-radius: 0;
+              background: var(--emap-banner-bg);
+              color: var(--emap-banner-ink);
+              box-shadow: none;
+              font: inherit;
+            }
+
+            .emap-example-workbench > summary {
+              position: relative;
+              min-height: 36px;
+              box-sizing: border-box;
+              padding: 8px 72px 8px 16px;
+              border-bottom: 1px solid var(--emap-example-border);
+              cursor: pointer;
+              list-style: none;
+            }
+
+            .emap-example-workbench > summary::-webkit-details-marker {
+              display: none;
+            }
+
+            .emap-example-workbench > summary::after {
+              position: absolute;
+              top: 11px;
+              right: 16px;
+              color: var(--emap-example-muted-foreground);
+              content: "收起";
+              font-size: 11px;
+              font-weight: 500;
+            }
+
+            .emap-example-workbench:not([open]) > summary {
+              border-bottom: 0;
+            }
+
+            .emap-example-workbench:not([open]) > summary::after {
+              content: "展开";
+            }
+
+            .emap-example-workbench > summary > h1 {
+              margin: 0;
+              font-size: 14px;
+              font-weight: 600;
+              letter-spacing: -0.01em;
+              line-height: 1.3;
+            }
+
+            .emap-example-workbench h1,
+            .emap-example-workbench h2,
+            .emap-example-workbench p {
+              overflow-wrap: anywhere;
+            }
+
+            .emap-example-workbench-body {
+              padding: 16px;
+            }
+
+            .emap-example-workbench-body h2 {
+              margin: 0 0 12px;
+              font-size: 13px;
+              font-weight: 600;
+              letter-spacing: -0.01em;
+              line-height: 1.3;
+            }
+
+            .emap-example-section {
+              margin-top: 16px;
+              padding-top: 16px;
+              border-top: 1px solid var(--emap-example-border);
+            }
+
+            .emap-example-section:first-child {
+              margin-top: 0;
+              padding-top: 0;
+              border-top: 0;
+            }
+
+            .emap-example-field {
+              display: grid;
+              gap: 6px;
+              margin-top: 12px;
+            }
+
+            .emap-example-field:first-child,
+            .emap-example-field:first-of-type {
+              margin-top: 0;
+            }
+
+            .emap-example-field[hidden] {
+              display: none;
+            }
+
+            .emap-example-field > label,
+            .emap-example-label {
+              color: var(--emap-example-muted-foreground);
+              font-size: 11px;
+              font-weight: 500;
+            }
+
+            .emap-example-row {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 8px;
+              align-items: center;
+              margin-top: 12px;
+            }
+
+            .emap-example-check {
+              display: flex;
+              gap: 6px;
+              align-items: center;
+            }
+
+            .emap-example-workbench button,
+            .emap-example-workbench input,
+            .emap-example-workbench select,
+            .emap-example-workbench textarea {
+              min-height: 32px;
+              box-sizing: border-box;
+              border: 1px solid var(--emap-example-input);
+              border-radius: 0;
+              background: transparent;
+              color: inherit;
+              font: inherit;
+            }
+
+            .emap-example-workbench button {
+              padding: 0 10px;
+              cursor: pointer;
+            }
+
+            .emap-example-workbench button:disabled {
+              cursor: not-allowed;
+              opacity: 0.5;
+            }
+
+            .emap-example-workbench input[type="text"],
+            .emap-example-workbench input[type="number"],
+            .emap-example-workbench input[type="file"],
+            .emap-example-workbench select,
+            .emap-example-workbench textarea {
+              width: 100%;
+              padding: 0 10px;
+            }
+
+            .emap-example-workbench input[type="file"] {
+              padding: 5px 8px;
+            }
+
+            .emap-example-workbench input[type="file"]::file-selector-button {
+              min-height: 24px;
+              margin-right: 8px;
+              padding: 0 8px;
+              border: 1px solid var(--emap-example-border-strong);
+              border-radius: 0;
+              background: var(--emap-example-muted);
+              color: inherit;
+              font: inherit;
+              cursor: pointer;
+            }
+
+            .emap-example-workbench input[type="checkbox"],
+            .emap-example-workbench input[type="radio"] {
+              width: auto;
+              min-height: 0;
+            }
+
+            .emap-example-workbench input[type="range"] {
+              width: 100%;
+              padding: 0;
+            }
+
+            .emap-example-workbench input[type="color"] {
+              width: 100%;
+              height: 32px;
+              padding: 0;
+            }
+
+            .emap-example-workbench textarea {
+              min-height: 96px;
+              padding: 8px 10px;
+              resize: vertical;
+            }
+
+            .emap-example-workbench button:focus-visible,
+            .emap-example-workbench input:focus-visible,
+            .emap-example-workbench select:focus-visible,
+            .emap-example-workbench textarea:focus-visible,
+            .emap-example-workbench > summary:focus-visible,
+            body.emap-example-with-floating-header > #map:focus-visible {
+              outline: 3px solid color-mix(in oklch, var(--emap-example-primary) 20%, transparent);
+              outline-offset: 2px;
+            }
+
+            .emap-example-primary-button {
+              width: 100%;
+              margin-top: 16px;
+              border-color: var(--emap-example-primary);
+              background: var(--emap-example-primary);
+              color: var(--emap-example-primary-foreground);
+              font-weight: 500;
+            }
+
+            .emap-example-primary-button:hover:not(:disabled) {
+              background: color-mix(in oklch, var(--emap-example-primary), transparent 20%);
+            }
+
+            .emap-example-hint {
+              margin: 6px 0 0;
+              color: var(--emap-example-muted-foreground);
+              font-size: 11px;
+              line-height: 1.5;
+            }
+
+            .emap-example-status {
+              margin: 16px 0 0;
+              padding: 8px 10px;
+              border-left: 3px solid var(--emap-example-border-strong);
+              background: var(--emap-example-muted);
+              color: var(--emap-example-muted-foreground);
+              font-size: 11px;
+              line-height: 1.5;
+              overflow-wrap: anywhere;
+            }
+
+            .emap-example-status[data-state="ready"] {
+              border-left-color: var(--emap-example-primary);
+              background: var(--emap-example-selection);
+              color: var(--emap-banner-ink);
+            }
+
+            .emap-example-status[data-state="error"] {
+              border-left-color: var(--emap-example-error);
+              color: var(--emap-example-error);
+            }
+
+            .emap-example-status[data-state="loading"] {
+              border-left-color: var(--emap-example-info);
+              color: var(--emap-example-info);
+            }
+
+            @media (max-width: 1023px) {
+              #header > strong {
+                display: none;
+              }
             }
 
             @media (max-width: 720px) {
@@ -315,6 +607,27 @@ function examplesBrandPlugin(): Plugin {
 
               .emap-example-basemap-state {
                 display: none;
+              }
+            }
+
+            @media (max-width: 520px) {
+              .emap-example-banner-brand span {
+                display: none;
+              }
+
+              #header .emap-example-crs-field > span {
+                display: none;
+              }
+
+              #header .emap-example-crs-select {
+                width: 108px;
+                padding-right: 20px;
+              }
+
+              .emap-example-workbench > summary,
+              .emap-example-workbench-body {
+                padding-right: 12px;
+                padding-left: 12px;
               }
             }
           `,

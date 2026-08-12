@@ -6,50 +6,55 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - 多源快照 (.msx) 保存 / 恢复</title>
   <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
-    #header input[type="file"] { font-size: 13px; }
-    #header input[type="text"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; width: 200px; }
-    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
-    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
-    #header button.alt { background: #2980b9; }
-    #header button.danger { background: #c0392b; }
-    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
-    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
-    .group { display: flex; gap: 6px; align-items: center; }
-    .source-list { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; }
-    .source-list span { background: #34495e; padding: 3px 8px; border-radius: 3px; font-size: 12px; }
-    .source-list span.empty { opacity: 0.5; }
+    .emap-example-workbench button.danger { border-color: var(--emap-example-error); color: var(--emap-example-error); }
+    .source-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
+    .source-list span {
+      padding: 3px 8px;
+      border: 1px solid var(--emap-example-border);
+      background: var(--emap-example-muted);
+      font-size: 11px;
+    }
+    .source-list span.empty { color: var(--emap-example-muted-foreground); }
   </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <span class="group">
-      <label>添加数据源 (每个文件 = 一个新源):
-        <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple />
-      </label>
-    </span>
-    <span class="group">
-      <label>恢复快照 (.msx,可包含多源):
-        <input id="snapshot-input" type="file" accept=".msx" />
-      </label>
-    </span>
-    <span class="group">
-      <label>快照文件名: <input id="filename" type="text" value="workspace.msx" /></label>
-      <button id="save-btn" disabled>保存全部源 (.msx)</button>
-      <button id="clear-btn" class="danger" disabled>清空</button>
-    </span>
-    <span id="status">添加多个数据源,然后保存为单个 .msx 文件;之后可整体恢复。</span>
-    <div class="source-list" id="source-list"><span class="empty">(尚无数据源)</span></div>
-    <span class="hint">
-      <code>Emap.exportSnapshot()</code> 把所有 topology 源打成一个 .msx,带上源 ID。
-      <code>Emap.loadSnapshot(blob)</code> 反向恢复,返回新源的 ID 列表。
-      历史与选择会被清空(因为旧的 feature ID 已不再有效)。
-    </span>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>多源快照 (.msx) 保存 / 恢复</strong>
   </div>
   <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>多源快照 (.msx) 保存 / 恢复</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">添加数据源 (每个文件 = 一个新源)</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple />
+        </div>
+        <div class="emap-example-field">
+          <label for="snapshot-input">恢复快照 (.msx,可包含多源)</label>
+          <input id="snapshot-input" type="file" accept=".msx" />
+        </div>
+        <div class="emap-example-field">
+          <label for="filename">快照文件名</label>
+          <input id="filename" type="text" value="workspace.msx" />
+        </div>
+        <button id="save-btn" class="emap-example-primary-button" disabled>保存全部源 (.msx)</button>
+        <div class="emap-example-row">
+          <button id="clear-btn" class="danger" disabled>清空</button>
+        </div>
+        <p id="status" class="emap-example-status">添加多个数据源,然后保存为单个 .msx 文件;之后可整体恢复。</p>
+        <div class="source-list" id="source-list"><span class="empty">(尚无数据源)</span></div>
+        <p class="emap-example-hint">
+          <code>Emap.exportSnapshot()</code> 把所有 topology 源打成一个 .msx,带上源 ID。
+          <code>Emap.loadSnapshot(blob)</code> 反向恢复,返回新源的 ID 列表。
+          历史与选择会被清空(因为旧的 feature ID 已不再有效)。
+        </p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

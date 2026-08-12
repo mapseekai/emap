@@ -6,54 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - DuckDB 空间函数</title>
   <style>
-    body {
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      font-family: sans-serif;
-    }
-
-    #header {
-      padding: 10px;
-      background: #233142;
-      color: white;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    #header label {
-      font-size: 13px;
-    }
-
-    #header input,
-    #header select {
-      font-size: 13px;
-    }
-
-    #header button {
-      padding: 5px 12px;
-      background: #16817a;
-      color: white;
-      border: 0;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-
-    #header button:disabled {
-      background: #7f8c8d;
-      cursor: not-allowed;
-    }
-
-    #map {
-      flex: 1;
-      background: #ffffff;
-      position: relative;
-    }
-
     #attribute-panel {
       position: absolute;
       right: 12px;
@@ -64,15 +16,10 @@
       flex-direction: column;
       gap: 8px;
       padding: 12px;
-      background: rgba(255, 255, 255, 0.94);
-      border: 1px solid #d1d5db;
-      border-radius: 8px;
-      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
-      font: 12px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--emap-banner-bg);
+      border: 1px solid var(--emap-example-border);
+      font-size: 11px;
       z-index: 2;
-    }
-    #attribute-panel strong {
-      font-size: 13px;
     }
     #picked-attributes {
       margin: 0;
@@ -80,93 +27,99 @@
       overflow: auto;
       white-space: pre-wrap;
       word-break: break-word;
-      color: #111827;
-    }
-    #status {
-      font-size: 12px;
-      opacity: 0.9;
     }
   </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <label>
-      文件:
-      <input id="file" type="file" accept=".geojson,.json,.topojson,.zip" />
-    </label>
-    <label>
-      图层:
-      <select id="target" disabled></select>
-    </label>
-    <label>
-      操作:
-      <select id="operation">
-        <option value="centroid">Centroid</option>
-        <option value="envelope">Envelope</option>
-        <option value="convexHull">Convex Hull</option>
-        <option value="boundary">Boundary</option>
-      <option value="simplify">Simplify</option>
-      <option value="simplifyPreserveTopology">Simplify Preserve Topology</option>
-      <option value="makeValid">Make Valid</option>
-      <option value="area">Area Attribute</option>
-      <option value="length">Length Attribute</option>
-      <option value="perimeter">Perimeter Attribute</option>
-      <option value="geometryType">Geometry Type Attribute</option>
-      <option value="isValid">Is Valid Attribute</option>
-      <option value="isEmpty">Is Empty Attribute</option>
-      <option value="isSimple">Is Simple Attribute</option>
-          <option value="x">X Attribute</option>
-          <option value="y">Y Attribute</option>
-          <option value="centroidX">Centroid X Attribute</option>
-          <option value="centroidY">Centroid Y Attribute</option>
-          <option value="intersects">Intersects</option>
-          <option value="contains">Contains</option>
-          <option value="within">Within</option>
-          <option value="touches">Touches</option>
-          <option value="disjoint">Disjoint</option>
-          <option value="overlaps">Overlaps</option>
-          <option value="equals">Equals</option>
-          <option value="crosses">Crosses</option>
-          <option value="covers">Covers</option>
-          <option value="coveredBy">Covered By</option>
-          <option value="containsProperly">Contains Properly</option>
-          <option value="distance">Distance</option>
-          <option value="distanceWithin">Distance Within</option>
-        </select>
-      </label>
-      <label id="relation-mode-label" style="display: none">
-        关系模式:
-        <select id="relation-mode">
-          <option value="filter">Filter</option>
-          <option value="attribute">Attribute</option>
-        </select>
-      </label>
-      <label id="mask-layer-label" style="display: none">
-        Mask:
-        <select id="mask-layer"></select>
-      </label>
-      <label id="distance-label" style="display: none">
-        距离:
-        <input id="distance" type="number" value="0" min="0" step="1" style="width: 72px" />
-      </label>
-      <label id="tolerance-label">
-        容差:
-        <input id="tolerance" type="number" value="10" min="0" step="1" style="width: 72px" />
-      </label>
-    <label>
-      CRS:
-      <input id="crs" type="text" value="EPSG:4326" style="width: 92px" />
-    </label>
-    <label>
-      <input id="allow-geographic" type="checkbox" />
-      允许经纬度简化
-    </label>
-    <button id="run" disabled>运行 DuckDB</button>
-    <span id="status">加载文件后选择空间函数。</span>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>DuckDB 空间函数</strong>
   </div>
-  <div id="map"></div>
+  <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>DuckDB 空间函数</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file">文件</label>
+          <input id="file" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <div class="emap-example-field">
+          <label for="target">图层</label>
+          <select id="target" disabled></select>
+        </div>
+        <div class="emap-example-field">
+          <label for="operation">操作</label>
+          <select id="operation">
+            <option value="centroid">Centroid</option>
+            <option value="envelope">Envelope</option>
+            <option value="convexHull">Convex Hull</option>
+            <option value="boundary">Boundary</option>
+            <option value="simplify">Simplify</option>
+            <option value="simplifyPreserveTopology">Simplify Preserve Topology</option>
+            <option value="makeValid">Make Valid</option>
+            <option value="area">Area Attribute</option>
+            <option value="length">Length Attribute</option>
+            <option value="perimeter">Perimeter Attribute</option>
+            <option value="geometryType">Geometry Type Attribute</option>
+            <option value="isValid">Is Valid Attribute</option>
+            <option value="isEmpty">Is Empty Attribute</option>
+            <option value="isSimple">Is Simple Attribute</option>
+            <option value="x">X Attribute</option>
+            <option value="y">Y Attribute</option>
+            <option value="centroidX">Centroid X Attribute</option>
+            <option value="centroidY">Centroid Y Attribute</option>
+            <option value="intersects">Intersects</option>
+            <option value="contains">Contains</option>
+            <option value="within">Within</option>
+            <option value="touches">Touches</option>
+            <option value="disjoint">Disjoint</option>
+            <option value="overlaps">Overlaps</option>
+            <option value="equals">Equals</option>
+            <option value="crosses">Crosses</option>
+            <option value="covers">Covers</option>
+            <option value="coveredBy">Covered By</option>
+            <option value="containsProperly">Contains Properly</option>
+            <option value="distance">Distance</option>
+            <option value="distanceWithin">Distance Within</option>
+          </select>
+        </div>
+        <div class="emap-example-field" id="relation-mode-label" style="display: none">
+          <label for="relation-mode">关系模式</label>
+          <select id="relation-mode">
+            <option value="filter">Filter</option>
+            <option value="attribute">Attribute</option>
+          </select>
+        </div>
+        <div class="emap-example-field" id="mask-layer-label" style="display: none">
+          <label for="mask-layer">Mask</label>
+          <select id="mask-layer"></select>
+        </div>
+        <div class="emap-example-field" id="distance-label" style="display: none">
+          <label for="distance">距离</label>
+          <input id="distance" type="number" value="0" min="0" step="1" />
+        </div>
+        <div class="emap-example-field" id="tolerance-label">
+          <label for="tolerance">容差</label>
+          <input id="tolerance" type="number" value="10" min="0" step="1" />
+        </div>
+        <div class="emap-example-field">
+          <label for="crs">CRS</label>
+          <input id="crs" type="text" value="EPSG:4326" />
+        </div>
+        <div class="emap-example-field">
+          <label class="emap-example-check">
+            <input id="allow-geographic" type="checkbox" />
+            允许经纬度简化
+          </label>
+        </div>
+        <button id="run" class="emap-example-primary-button" disabled>运行 DuckDB</button>
+        <p id="status" class="emap-example-status">加载文件后选择空间函数。</p>
+      </section>
+    </div>
+  </details>
   <aside id="attribute-panel" aria-label="拾取属性">
     <strong>点击拾取属性</strong>
     <pre id="picked-attributes">(点击地图上的要素)</pre>

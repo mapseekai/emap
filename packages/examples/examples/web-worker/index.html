@@ -6,22 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - Web Worker 卸载重命令</title>
   <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px; }
-    #header button { padding: 6px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
-    #header button.alt { background: #2980b9; }
-    #header button.danger { background: #c0392b; }
-    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
-    #header label { display: flex; align-items: center; gap: 4px; }
-    #header select, #header input[type="number"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; background: white; color: black; }
-    #header input[type="number"] { width: 90px; }
-    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
-    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
-    .group { display: flex; gap: 6px; align-items: center; }
     /* Main-thread heartbeat. Pauses when blocked. */
     #freeze-dot {
       width: 12px; height: 12px; border-radius: 50%;
-      background: #e74c3c;
+      background: var(--emap-example-error);
       animation: pulse 1s infinite linear;
     }
     @keyframes pulse {
@@ -29,60 +17,81 @@
       50%  { transform: scale(1.0); opacity: 1.0; }
       100% { transform: scale(0.6); opacity: 0.4; }
     }
-    #stats { background: #34495e; padding: 4px 10px; border-radius: 3px; font-family: monospace; font-size: 12px; min-width: 200px; }
-    #event-log {
-      flex-basis: 100%; max-height: 100px; overflow: auto;
-      background: #1c2833; padding: 6px 10px; border-radius: 3px;
-      font-family: monospace; font-size: 11px; line-height: 1.4;
-      color: #ecf0f1;
+    #stats {
+      margin: 0;
+      padding: 4px 10px;
+      border: 1px solid var(--emap-example-border);
+      background: var(--emap-example-muted);
+      font-size: 11px;
     }
-    #event-log .ok    { color: #2ecc71; }
-    #event-log .err   { color: #e74c3c; }
-    #event-log .start { color: #3498db; }
+    #event-log {
+      max-height: 140px;
+      margin: 0;
+      overflow: auto;
+      padding: 6px 10px;
+      border: 1px solid var(--emap-example-border);
+      background: var(--emap-example-muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    #event-log .ok    { color: #27ae60; }
+    #event-log .err   { color: #c0392b; }
+    #event-log .start { color: #2980b9; }
   </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <span class="group">
-      <span id="freeze-dot" title="Main-thread heartbeat — pauses when blocked"></span>
-      <span>主线程心跳</span>
-    </span>
-    <span class="group">
-      <label>Worker 模式:
-        <select id="mode">
-          <option value="off">off (主线程)</option>
-          <option value="on">on (始终用 worker)</option>
-          <option value="auto" selected>auto (按阈值)</option>
-        </select>
-      </label>
-      <label id="threshold-label">
-        阈值(顶点数): <input id="threshold" type="number" value="50000" />
-      </label>
-      <button id="rebuild-btn">应用模式</button>
-    </span>
-    <span class="group">
-      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    </span>
-    <span class="group">
-      <button id="dissolve-btn" disabled>Dissolve 全部</button>
-      <button id="simplify-btn" disabled>Simplify 5%</button>
-      <button id="union-btn" disabled>Union 全部多边形层</button>
-      <button id="clean-btn" disabled>Clean</button>
-    </span>
-    <span class="group">
-      <button id="cancel-btn" class="danger">取消 (cancelWorkerJobs)</button>
-      <button id="clear-log-btn" class="alt">清空日志</button>
-    </span>
-    <span id="stats">layers: -, arcs: -, vertices: -</span>
-    <div id="event-log">事件日志(workerjobstart / workerjobend)将在此显示...</div>
-    <span class="hint">
-      模式 = <code>auto</code>:小数据集走主线程,大数据集走 worker。心跳点连续闪 → 主线程响应中。
-      取消按钮硬终止 worker(mapshaper 不可中途取消,但能整体放弃),pool 仍可用,下一次操作会新起一个 worker。
-    </span>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>Web Worker 卸载重命令</strong>
   </div>
   <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>Web Worker 卸载重命令</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <span class="emap-example-label emap-example-check"><span id="freeze-dot" title="Main-thread heartbeat — pauses when blocked"></span> 主线程心跳</span>
+        </div>
+        <div class="emap-example-field">
+          <label for="mode">Worker 模式</label>
+          <select id="mode">
+            <option value="off">off (主线程)</option>
+            <option value="on">on (始终用 worker)</option>
+            <option value="auto" selected>auto (按阈值)</option>
+          </select>
+        </div>
+        <div class="emap-example-field" id="threshold-label">
+          <label for="threshold">阈值(顶点数)</label>
+          <input id="threshold" type="number" value="50000" />
+        </div>
+        <div class="emap-example-row">
+          <button id="rebuild-btn">应用模式</button>
+        </div>
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <div class="emap-example-row">
+          <button id="dissolve-btn" disabled>Dissolve 全部</button>
+          <button id="simplify-btn" disabled>Simplify 5%</button>
+          <button id="union-btn" disabled>Union 全部多边形层</button>
+          <button id="clean-btn" disabled>Clean</button>
+        </div>
+        <div class="emap-example-row">
+          <button id="cancel-btn">取消 (cancelWorkerJobs)</button>
+          <button id="clear-log-btn">清空日志</button>
+        </div>
+        <p id="stats">layers: -, arcs: -, vertices: -</p>
+        <div id="event-log">事件日志(workerjobstart / workerjobend)将在此显示...</div>
+        <p class="emap-example-hint">
+          模式 = <code>auto</code>:小数据集走主线程,大数据集走 worker。心跳点连续闪 → 主线程响应中。
+          取消按钮硬终止 worker(mapshaper 不可中途取消,但能整体放弃),pool 仍可用,下一次操作会新起一个 worker。
+        </p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

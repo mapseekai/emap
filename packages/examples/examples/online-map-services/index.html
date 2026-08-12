@@ -5,29 +5,27 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - 在线地图服务</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; display: flex; flex-direction: column; height: 100vh;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-    #header {
-      padding: 10px 14px; background: #2c3e50; color: white;
-      display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px;
-    }
-    #map { flex: 1; min-height: 0; position: relative; background: #eef2f5; }
-    #status { margin-left: auto; color: #d7e4ec; }
-  </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
     <strong>在线地图服务</strong>
-    <label>业务图层: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    <span id="status">正在加载本地示例数据…</span>
   </div>
-  <div id="map"></div>
+  <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>在线地图服务</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">业务图层</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <p id="status" class="emap-example-status">正在加载本地示例数据…</p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

@@ -6,36 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - 属性表达式批量更新</title>
   <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-    #header {
-      padding: 10px;
-      background: #2c3e50;
-      color: white;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-      font-size: 13px;
-    }
-    #header select, #header input[type="text"] {
-      padding: 4px 8px;
-      font-size: 13px;
-      border: 1px solid #4a5d70;
-      border-radius: 3px;
-    }
-    #header input[type="text"] { width: 280px; font-family: monospace; }
-    #header button {
-      padding: 5px 12px;
-      background: #16a085;
-      color: white;
-      border: 0;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
-    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
-    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
     #panel {
       position: absolute;
       top: 12px;
@@ -44,12 +14,10 @@
       width: 380px;
       box-sizing: border-box;
       overflow: auto;
-      background: rgba(255, 255, 255, 0.96);
-      border: 1px solid #d0d0d0;
-      border-radius: 6px;
+      background: var(--emap-banner-bg);
+      border: 1px solid var(--emap-example-border);
       padding: 10px;
       font-size: 12px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
       z-index: 20;
     }
     #panel h3 { margin: 0 0 8px 0; font-size: 13px; }
@@ -57,7 +25,7 @@
     .panel-section + .panel-section {
       margin-top: 10px;
       padding-top: 10px;
-      border-top: 1px solid #e3e7ea;
+      border-top: 1px solid var(--emap-example-border);
     }
     .reference-list {
       display: grid;
@@ -71,14 +39,13 @@
       align-items: start;
     }
     #panel code {
-      color: #1f5f8b;
-      font-family: Consolas, Monaco, monospace;
+      color: var(--emap-example-info);
       font-size: 11px;
       white-space: nowrap;
     }
     .reference-list span,
     .reference-note {
-      color: #4a5560;
+      color: var(--emap-example-muted-foreground);
       line-height: 1.45;
     }
     .reference-note {
@@ -87,20 +54,10 @@
   </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    <label>目标图层: <select id="target"></select></label>
-    <label>表达式: <input id="expr" type="text" value="density = pop / area" /></label>
-    <label>where 过滤: <input id="where" type="text" placeholder="可选" /></label>
-    <button id="apply-btn" disabled>执行</button>
-    <span id="status">加载数据</span>
-    <span class="hint">
-      示例 — <code>density = pop / area</code> &middot;
-      <code>name = name.toUpperCase()</code> &middot;
-      <code>STATE = CNTY_FIPS.substr(0, 2)</code>
-    </span>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>属性表达式批量更新</strong>
   </div>
   <div id="map" tabindex="0">
     <div id="panel">
@@ -165,6 +122,37 @@
       </div>
     </div>
   </div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>属性表达式批量更新</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <div class="emap-example-field">
+          <label for="target">目标图层</label>
+          <select id="target"></select>
+        </div>
+        <div class="emap-example-field">
+          <label for="expr">表达式</label>
+          <input id="expr" type="text" value="density = pop / area" />
+        </div>
+        <div class="emap-example-field">
+          <label for="where">where 过滤</label>
+          <input id="where" type="text" placeholder="可选" />
+        </div>
+        <button id="apply-btn" class="emap-example-primary-button" disabled>执行</button>
+        <p id="status" class="emap-example-status">加载数据</p>
+        <p class="emap-example-hint">
+          示例 — <code>density = pop / area</code> &middot;
+          <code>name = name.toUpperCase()</code> &middot;
+          <code>STATE = CNTY_FIPS.substr(0, 2)</code>
+        </p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

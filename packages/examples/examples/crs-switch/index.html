@@ -6,112 +6,126 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - 切换坐标系 (CRS Switch)</title>
   <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-    #header {
-      padding: 10px 14px; background: #2c3e50; color: white;
-      display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px;
-    }
-    .group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-    .group-label { opacity: 0.8; font-size: 12px; padding-right: 4px; border-right: 1px solid #4a5d70; }
-    #header button {
-      padding: 5px 10px; background: #16a085; color: white;
-      border: 0; border-radius: 3px; cursor: pointer; font-size: 12px;
-    }
-    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
-    #header button.active { background: #1abc9c; box-shadow: 0 0 0 2px #ecf0f1 inset; }
-    #header button.aux { background: #34495e; }
+    .emap-example-row button.active { border-color: var(--emap-example-primary); background: var(--emap-example-selection); }
     .pill {
-      padding: 3px 8px; background: #34495e; border-radius: 10px;
-      font-family: ui-monospace, Menlo, monospace; font-size: 12px; max-width: 360px;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      display: inline-block;
+      max-width: 100%;
+      padding: 3px 8px;
+      border: 1px solid var(--emap-example-border);
+      background: var(--emap-example-muted);
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
-    .hint { opacity: 0.8; font-size: 12px; flex-basis: 100%; }
     #loading-overlay {
       position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      background: rgba(255, 255, 255, 0.7); font-size: 14px; z-index: 10;
+      background: rgba(255, 255, 255, 0.7); font-size: 13px; z-index: 10;
     }
     #loading-overlay.hidden { display: none; }
   </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <span class="group">
-      <span class="group-label">当前:</span>
-      <span id="current-crs" class="pill" title="">—</span>
-    </span>
-
-    <span class="group">
-      <span class="group-label">地理 (经纬度):</span>
-      <!-- Buttons get their CRS from data-crs; data-label is the friendly name -->
-      <button data-key="wgs84" data-label="WGS84 (EPSG:4326)"
-              data-crs="EPSG:4326">WGS84</button>
-      <button data-key="cgcs2000" data-label="CGCS2000 (EPSG:4490)"
-              data-crs="EPSG:4490">CGCS2000</button>
-      <button data-key="beijing54" data-label="Beijing 1954 (EPSG:4214)"
-              data-crs="EPSG:4214">Beijing 1954</button>
-      <button data-key="xian80" data-label="Xi'an 1980 (EPSG:4610)"
-              data-crs="EPSG:4610">Xi'an 1980</button>
-    </span>
-
-    <span class="group">
-      <span class="group-label">投影 (China):</span>
-      <button data-key="lcc-cn" data-label="Lambert LCC (China)"
-              data-crs="+proj=lcc +lat_1=25 +lat_2=47 +lat_0=0 +lon_0=110 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs">Lambert</button>
-      <button data-key="aea-cn" data-label="Albers AEA (China)"
-              data-crs="+proj=aea +lat_1=25 +lat_2=47 +lat_0=0 +lon_0=105 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs">Albers</button>
-      <button data-key="webmerc" data-label="Web Mercator (EPSG:3857)"
-              data-crs="EPSG:3857">Web Mercator</button>
-    </span>
-
-    <span class="group">
-      <span class="group-label">高斯-克吕格 (GK，CGCS2000):</span>
-      <!-- Gauss-Krüger = Transverse Mercator with k=1, x_0=500000.
-           6° zones: zone N central meridian = 6N - 3; common China zones 19-22 (111-129°E).
-           3° zones: zone N central meridian = 3N; common China zones 37-40 (111-120°E). -->
-      <button data-key="gk6-117" data-label="GK 6° / 117°E (EPSG:4509)"
-              data-crs="EPSG:4509">6° 117°E</button>
-      <button data-key="gk3-114" data-label="GK 3° / 114°E (EPSG:4547)"
-              data-crs="EPSG:4547">3° 114°E</button>
-      <button data-key="gk3-117" data-label="GK 3° / 117°E (EPSG:4548)"
-              data-crs="EPSG:4548">3° 117°E</button>
-      <button data-key="gk3-120" data-label="GK 3° / 120°E (EPSG:4549)"
-              data-crs="EPSG:4549">3° 120°E</button>
-      <label class="group-label" style="border:none;padding-left:8px;">自定义中央经线:
-        <input id="gk-lon" type="number" min="-180" max="180" step="1" placeholder="例 117"
-               style="width:64px;padding:3px 5px;font-size:12px;border:1px solid #4a5d70;border-radius:3px;" />
-      </label>
-      <button id="btn-gk-custom" class="aux">应用</button>
-    </span>
-
-    <span class="group">
-      <span class="group-label">世界:</span>
-      <button data-key="robinson" data-label="Robinson"
-              data-crs="robinson">Robinson</button>
-      <button data-key="natearth" data-label="Natural Earth"
-              data-crs="natearth">Natural Earth</button>
-      <button data-key="wintri" data-label="Winkel Tripel"
-              data-crs="wintri">Winkel Tripel</button>
-    </span>
-
-    <span class="group">
-      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-      <button id="btn-reload" class="aux">↺ 重置</button>
-    </span>
-
-    <span id="status" class="group-label">加载中…</span>
-    <span class="hint">
-      通过 <code>map.reproject(crs)</code> 原子切换整张地图的坐标系；CRS 可为
-      <code>EPSG:NNNN</code>、mapshaper 别名（<code>wgs84</code>/<code>webmercator</code>/<code>natearth</code>/<code>wintri</code>/<code>robinson</code>/<code>lcc</code>/<code>aea</code>），
-      或完整 Proj.4 字符串。投影后自动 <code>setExtent</code>，Ctrl+Z 撤销。
-    </span>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>切换坐标系 (CRS Switch)</strong>
   </div>
 
   <div id="map" tabindex="0">
     <div id="loading-overlay"><span id="loading-text">加载中…</span></div>
   </div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>切换坐标系 (CRS Switch)</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <span class="emap-example-label">当前:</span>
+          <span id="current-crs" class="pill" title="">—</span>
+        </div>
+        <p id="status" class="emap-example-status">加载中…</p>
+      </section>
+
+      <section class="emap-example-section">
+        <h2>地理 (经纬度)</h2>
+        <!-- Buttons get their CRS from data-crs; data-label is the friendly name -->
+        <div class="emap-example-row">
+          <button data-key="wgs84" data-label="WGS84 (EPSG:4326)"
+                  data-crs="EPSG:4326">WGS84</button>
+          <button data-key="cgcs2000" data-label="CGCS2000 (EPSG:4490)"
+                  data-crs="EPSG:4490">CGCS2000</button>
+          <button data-key="beijing54" data-label="Beijing 1954 (EPSG:4214)"
+                  data-crs="EPSG:4214">Beijing 1954</button>
+          <button data-key="xian80" data-label="Xi'an 1980 (EPSG:4610)"
+                  data-crs="EPSG:4610">Xi'an 1980</button>
+        </div>
+      </section>
+
+      <section class="emap-example-section">
+        <h2>投影 (China)</h2>
+        <div class="emap-example-row">
+          <button data-key="lcc-cn" data-label="Lambert LCC (China)"
+                  data-crs="+proj=lcc +lat_1=25 +lat_2=47 +lat_0=0 +lon_0=110 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs">Lambert</button>
+          <button data-key="aea-cn" data-label="Albers AEA (China)"
+                  data-crs="+proj=aea +lat_1=25 +lat_2=47 +lat_0=0 +lon_0=105 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs">Albers</button>
+          <button data-key="webmerc" data-label="Web Mercator (EPSG:3857)"
+                  data-crs="EPSG:3857">Web Mercator</button>
+        </div>
+      </section>
+
+      <section class="emap-example-section">
+        <h2>高斯-克吕格 (GK,CGCS2000)</h2>
+        <!-- Gauss-Krüger = Transverse Mercator with k=1, x_0=500000.
+             6° zones: zone N central meridian = 6N - 3; common China zones 19-22 (111-129°E).
+             3° zones: zone N central meridian = 3N; common China zones 37-40 (111-120°E). -->
+        <div class="emap-example-row">
+          <button data-key="gk6-117" data-label="GK 6° / 117°E (EPSG:4509)"
+                  data-crs="EPSG:4509">6° 117°E</button>
+          <button data-key="gk3-114" data-label="GK 3° / 114°E (EPSG:4547)"
+                  data-crs="EPSG:4547">3° 114°E</button>
+          <button data-key="gk3-117" data-label="GK 3° / 117°E (EPSG:4548)"
+                  data-crs="EPSG:4548">3° 117°E</button>
+          <button data-key="gk3-120" data-label="GK 3° / 120°E (EPSG:4549)"
+                  data-crs="EPSG:4549">3° 120°E</button>
+        </div>
+        <div class="emap-example-field">
+          <label for="gk-lon">自定义中央经线</label>
+          <input id="gk-lon" type="number" min="-180" max="180" step="1" placeholder="例 117" />
+        </div>
+        <div class="emap-example-row">
+          <button id="btn-gk-custom">应用</button>
+        </div>
+      </section>
+
+      <section class="emap-example-section">
+        <h2>世界</h2>
+        <div class="emap-example-row">
+          <button data-key="robinson" data-label="Robinson"
+                  data-crs="robinson">Robinson</button>
+          <button data-key="natearth" data-label="Natural Earth"
+                  data-crs="natearth">Natural Earth</button>
+          <button data-key="wintri" data-label="Winkel Tripel"
+                  data-crs="wintri">Winkel Tripel</button>
+        </div>
+      </section>
+
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <div class="emap-example-row">
+          <button id="btn-reload">↺ 重置</button>
+        </div>
+        <p class="emap-example-hint">
+          通过 <code>map.reproject(crs)</code> 原子切换整张地图的坐标系；CRS 可为
+          <code>EPSG:NNNN</code>、mapshaper 别名（<code>wgs84</code>/<code>webmercator</code>/<code>natearth</code>/<code>wintri</code>/<code>robinson</code>/<code>lcc</code>/<code>aea</code>），
+          或完整 Proj.4 字符串。投影后自动 <code>setExtent</code>，Ctrl+Z 撤销。
+        </p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

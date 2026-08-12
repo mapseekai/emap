@@ -6,46 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - 要素选择</title>
   <style>
-    body {
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      font-family: sans-serif;
-    }
-
-    #header {
-      padding: 10px;
-      background: #2c3e50;
-      color: white;
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      flex-wrap: wrap;
-      font-size: 13px;
-    }
-
-    #header button {
-      padding: 4px 10px;
-      background: #c0392b;
-      color: white;
-      border: 0;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-
-    #header button:disabled {
-      background: #7f8c8d;
-      cursor: not-allowed;
-    }
-
-    #map {
-      flex: 1;
-      background: #ffffff;
-      position: relative;
-    }
-
     #panel {
       position: absolute;
       top: 12px;
@@ -53,12 +13,10 @@
       width: 280px;
       max-height: 60vh;
       overflow: auto;
-      background: rgba(255, 255, 255, 0.95);
-      border: 1px solid #e0e0e0;
-      border-radius: 6px;
+      background: var(--emap-banner-bg);
+      border: 1px solid var(--emap-example-border);
       padding: 10px;
       font-size: 12px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
       /* 高于 emap 控件容器的 z-index (10),否则会被画布覆盖无法操作 */
       z-index: 20;
     }
@@ -73,32 +31,38 @@
       max-height: 200px;
       overflow: auto;
     }
-
-    .hint {
-      opacity: 0.85;
-      font-size: 12px;
-    }
   </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <label>
-      文件:
-      <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
-    </label>
-    <span class="hint">单击 = 替换 · Shift+单击 = 加入 · Ctrl/Cmd+单击 = 切换</span>
-    <button id="clear-btn" disabled>清空选择</button>
-    <button id="delete-btn" disabled>删除选中</button>
-    <span id="status">加载文件以开始</span>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>要素选择</strong>
   </div>
-  <div id="map">
+  <div id="map" tabindex="0">
     <div id="panel">
       <h3>当前选中</h3>
       <pre id="info">(无)</pre>
     </div>
   </div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>要素选择</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <p class="emap-example-hint">单击 = 替换 · Shift+单击 = 加入 · Ctrl/Cmd+单击 = 切换</p>
+        <div class="emap-example-row">
+          <button id="clear-btn" disabled>清空选择</button>
+          <button id="delete-btn" disabled>删除选中</button>
+        </div>
+        <p id="status" class="emap-example-status">加载文件以开始</p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

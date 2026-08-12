@@ -5,29 +5,34 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - 旋转 / 缩放选中要素</title>
-  <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
-    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
-    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
-    kbd { background: #1d2733; padding: 1px 6px; border-radius: 3px; font-family: monospace; }
-  </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    <span id="status">加载数据</span>
-    <span class="hint">
-      单击要素选中,Shift+单击多选,空白处单击清除。然后在已选要素上按住鼠标左键拖动 → 松开落位整个选区。
-      <kbd>R</kbd> 进入旋转 · <kbd>S</kbd> 进入缩放 · <kbd>T</kbd>(默认) 平移 · <kbd>Esc</kbd> 取消。
-      旋转: 鼠标绕枢轴旋转的角度即为变换。 缩放: 鼠标到枢轴的距离比即为缩放因子。
-      平移仍可用 <kbd>←</kbd>/<kbd>→</kbd>/<kbd>↑</kbd>/<kbd>↓</kbd>(空闲时), <kbd>[</kbd>/<kbd>]</kbd>±5° 步进, <kbd>+</kbd>/<kbd>-</kbd> ×1.1/×0.9。
-      <kbd>Ctrl+Z</kbd> 撤销。
-    </span>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>旋转 / 缩放选中要素</strong>
   </div>
   <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>旋转 / 缩放选中要素</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <p id="status" class="emap-example-status">加载数据</p>
+        <p class="emap-example-hint">
+          单击要素选中,Shift+单击多选,空白处单击清除。然后在已选要素上按住鼠标左键拖动 → 松开落位整个选区。
+          <kbd>R</kbd> 进入旋转 · <kbd>S</kbd> 进入缩放 · <kbd>T</kbd>(默认) 平移 · <kbd>Esc</kbd> 取消。
+          旋转: 鼠标绕枢轴旋转的角度即为变换。 缩放: 鼠标到枢轴的距离比即为缩放因子。
+          平移仍可用 <kbd>←</kbd>/<kbd>→</kbd>/<kbd>↑</kbd>/<kbd>↓</kbd>(空闲时), <kbd>[</kbd>/<kbd>]</kbd>±5° 步进, <kbd>+</kbd>/<kbd>-</kbd> ×1.1/×0.9。
+          <kbd>Ctrl+Z</kbd> 撤销。
+        </p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

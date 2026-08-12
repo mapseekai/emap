@@ -5,63 +5,74 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - 面填充 (Fill) 与轮廓 (Line) 切换</title>
-  <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px; }
-    #header select, #header input[type="color"], #header input[type="number"], #header input[type="range"] {
-      padding: 3px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; background: #fff;
-    }
-    #header input[type="color"] { padding: 0; height: 26px; width: 38px; }
-    #header input[type="number"] { width: 60px; }
-    #header label { display: inline-flex; align-items: center; gap: 4px; }
-    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
-    .group { display: flex; gap: 6px; align-items: center; padding: 0 4px; border-left: 1px solid #4a5d70; }
-    .group:first-child { border-left: 0; padding-left: 0; }
-    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
-  </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <span class="group">
-      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    </span>
-    <span class="group">
-      <label>面图层:
-        <select id="target"></select>
-      </label>
-    </span>
-    <span class="group">
-      <label><input type="radio" name="mode" value="line" checked /> 轮廓 (line)</label>
-      <label><input type="radio" name="mode" value="fill" /> 填充 (fill)</label>
-    </span>
-    <span class="group" id="fill-group" style="opacity:0.5">
-      <label>填充: <input id="fill-color" type="color" value="#1e88e5" /></label>
-      <label>不透明度: <input id="fill-alpha" type="range" min="0" max="100" value="35" /> <span id="fill-alpha-out">0.35</span></label>
-    </span>
-    <span class="group">
-      <label>描边: <input id="line-color" type="color" value="#222222" /></label>
-      <label>线宽: <input id="line-width" type="number" min="0" max="10" step="0.5" value="1" /></label>
-      <label>线型:
-        <select id="line-dash">
-          <option value="">实线</option>
-          <option value="8,4">虚线</option>
-          <option value="2,4">点线</option>
-          <option value="12,4,3,4">点划线</option>
-        </select>
-      </label>
-    </span>
-    <span id="status">加载一个含 polygon 图层的文件</span>
-    <span class="hint">
-      <code>type: 'line'</code> 只画弧;
-      <code>type: 'fill'</code> 先 <code>drawPolygonFill</code> 填面再 <code>drawPaths</code> 画轮廓——同一份共享 paint 决定两者样式。
-      <code>line-dasharray</code> 使用 CSS 像素定义交替的实线和间隔长度。
-      <code>fill-opacity</code> 通过 canvas <code>globalAlpha</code> 叠在 <code>fill-color</code> 自带的 alpha 之上(MapLibre 语义)。
-      切换时通过 <code>removeLayer</code> + <code>addLayer</code> 替换图层规格。
-    </span>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>面填充 (Fill) 与轮廓 (Line) 切换</strong>
   </div>
   <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>面填充 (Fill) 与轮廓 (Line) 切换</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <div class="emap-example-field">
+          <label for="target">面图层</label>
+          <select id="target"></select>
+        </div>
+        <div class="emap-example-field">
+          <label class="emap-example-check"><input type="radio" name="mode" value="line" checked /> 轮廓 (line)</label>
+          <label class="emap-example-check"><input type="radio" name="mode" value="fill" /> 填充 (fill)</label>
+        </div>
+      </section>
+      <section class="emap-example-section" id="fill-group" style="opacity:0.5">
+        <h2>填充样式</h2>
+        <div class="emap-example-field">
+          <label for="fill-color">填充</label>
+          <input id="fill-color" type="color" value="#1e88e5" />
+        </div>
+        <div class="emap-example-field">
+          <label for="fill-alpha">不透明度</label>
+          <input id="fill-alpha" type="range" min="0" max="100" value="35" />
+          <span id="fill-alpha-out" class="emap-example-hint">0.35</span>
+        </div>
+      </section>
+      <section class="emap-example-section">
+        <h2>轮廓样式</h2>
+        <div class="emap-example-field">
+          <label for="line-color">描边</label>
+          <input id="line-color" type="color" value="#222222" />
+        </div>
+        <div class="emap-example-field">
+          <label for="line-width">线宽</label>
+          <input id="line-width" type="number" min="0" max="10" step="0.5" value="1" />
+        </div>
+        <div class="emap-example-field">
+          <label for="line-dash">线型</label>
+          <select id="line-dash">
+            <option value="">实线</option>
+            <option value="8,4">虚线</option>
+            <option value="2,4">点线</option>
+            <option value="12,4,3,4">点划线</option>
+          </select>
+        </div>
+        <p id="status" class="emap-example-status">加载一个含 polygon 图层的文件</p>
+        <p class="emap-example-hint">
+          <code>type: 'line'</code> 只画弧;
+          <code>type: 'fill'</code> 先 <code>drawPolygonFill</code> 填面再 <code>drawPaths</code> 画轮廓——同一份共享 paint 决定两者样式。
+          <code>line-dasharray</code> 使用 CSS 像素定义交替的实线和间隔长度。
+          <code>fill-opacity</code> 通过 canvas <code>globalAlpha</code> 叠在 <code>fill-color</code> 自带的 alpha 之上(MapLibre 语义)。
+          切换时通过 <code>removeLayer</code> + <code>addLayer</code> 替换图层规格。
+        </p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';

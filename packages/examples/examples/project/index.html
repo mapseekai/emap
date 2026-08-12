@@ -5,62 +5,66 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Emap 示例 - 投影变换 (Project)</title>
-  <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-    #header { padding: 10px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
-    #header select, #header input[type="text"] { padding: 4px 6px; font-size: 13px; border: 1px solid #4a5d70; border-radius: 3px; }
-    #header input[type="text"] { width: 200px; }
-    #header button { padding: 5px 12px; background: #16a085; color: white; border: 0; border-radius: 3px; cursor: pointer; font-size: 13px; }
-    #header button:disabled { background: #7f8c8d; cursor: not-allowed; }
-    #map { flex: 1; background: #ffffff; position: relative; outline: none; }
-    .hint { opacity: 0.85; font-size: 12px; flex-basis: 100%; }
-    .group { display: flex; gap: 6px; align-items: center; }
-  </style>
 </head>
 
-<body>
+<body class="emap-example-with-floating-header">
   <div id="header">
-    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="Open the Emap examples catalog"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap</span></a>
-    <span class="group">
-      <label>文件: <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></label>
-    </span>
-    <span class="group">
-       <label>导出图层:
-         <select id="scope">
-         </select>
-       </label>
-    </span>
-    <span class="group">
-      <label>目标 CRS:
-        <select id="crs-preset">
-          <option value="">— 选预设或在右侧输入 —</option>
-          <option value="EPSG:3857">EPSG:3857 (Web Mercator)</option>
-          <option value="EPSG:4326">EPSG:4326 (WGS84 经纬度)</option>
-          <option value="webmercator">webmercator</option>
-          <option value="wgs84">wgs84</option>
-          <option value="robinson">robinson</option>
-          <option value="natearth">natearth (Natural Earth)</option>
-          <option value="wintri">wintri (Winkel Tripel)</option>
-          <option value="albersusa">albersusa</option>
-        </select>
-      </label>
-      <input id="crs-text" type="text" placeholder="自定义,例如 EPSG:32633 或 +proj=utm +zone=33" />
-    </span>
-    <span class="group">
-      <label>源 CRS (init=,可选): <input id="init" type="text" placeholder="例如 EPSG:4326" /></label>
-      <label><input id="densify" type="checkbox" /> densify</label>
-    </span>
-    <span class="group">
-      <label>输出文件: <input id="filename" type="text" placeholder="默认: 图层名.geojson" /></label>
-    </span>
-    <button id="btn" disabled>投影并下载</button>
-    <span id="status">加载一个数据文件；选择图层和目标 CRS 后导出</span>
-    <span class="hint">
-      <code>projectLayer</code> 在隔离副本上运行 mapshaper <code>-proj</code> 并下载 GeoJSON；
-      当前地图、数据源、CRS 和视图不会改变。整图坐标系切换请使用 <code>map.reproject()</code>。
-    </span>
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>投影变换 (Project)</strong>
   </div>
   <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>投影变换 (Project)</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <div class="emap-example-field">
+          <label for="scope">导出图层</label>
+          <select id="scope">
+          </select>
+        </div>
+        <div class="emap-example-field">
+          <label for="crs-preset">目标 CRS</label>
+          <select id="crs-preset">
+            <option value="">— 选预设或在右侧输入 —</option>
+            <option value="EPSG:3857">EPSG:3857 (Web Mercator)</option>
+            <option value="EPSG:4326">EPSG:4326 (WGS84 经纬度)</option>
+            <option value="webmercator">webmercator</option>
+            <option value="wgs84">wgs84</option>
+            <option value="robinson">robinson</option>
+            <option value="natearth">natearth (Natural Earth)</option>
+            <option value="wintri">wintri (Winkel Tripel)</option>
+            <option value="albersusa">albersusa</option>
+          </select>
+        </div>
+        <div class="emap-example-field">
+          <label for="crs-text">自定义 CRS</label>
+          <input id="crs-text" type="text" placeholder="自定义,例如 EPSG:32633 或 +proj=utm +zone=33" />
+        </div>
+        <div class="emap-example-field">
+          <label for="init">源 CRS (init=,可选)</label>
+          <input id="init" type="text" placeholder="例如 EPSG:4326" />
+        </div>
+        <div class="emap-example-field">
+          <label class="emap-example-check"><input id="densify" type="checkbox" /> densify</label>
+        </div>
+        <div class="emap-example-field">
+          <label for="filename">输出文件</label>
+          <input id="filename" type="text" placeholder="默认: 图层名.geojson" />
+        </div>
+        <button id="btn" class="emap-example-primary-button" disabled>投影并下载</button>
+        <p id="status" class="emap-example-status">加载一个数据文件；选择图层和目标 CRS 后导出</p>
+        <p class="emap-example-hint">
+          <code>projectLayer</code> 在隔离副本上运行 mapshaper <code>-proj</code> 并下载 GeoJSON；
+          当前地图、数据源、CRS 和视图不会改变。整图坐标系切换请使用 <code>map.reproject()</code>。
+        </p>
+      </section>
+    </div>
+  </details>
 
   <script type="module">
     import { installExampleMapUi } from '/src/example-runtime.ts';
