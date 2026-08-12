@@ -193,6 +193,47 @@
 
 .emap-status-epsg { margin-right: 0; }
 
+/* Scale control */
+.emap-scale-ctrl {
+  box-sizing: border-box;
+  padding: 4px 8px;
+  color: var(--emap-current-card-foreground);
+  background: var(--emap-current-card);
+  border: 1px solid var(--emap-current-border);
+  border-radius: var(--emap-radius);
+  box-shadow: var(--emap-surface-shadow);
+  font: var(--emap-font);
+  font-variant-numeric: tabular-nums;
+  pointer-events: auto;
+}
+
+.emap-scale-summary { margin-bottom: 2px; }
+
+.emap-scale-labels {
+  display: grid;
+  width: var(--emap-scale-width);
+  grid-template-columns: repeat(3, 1fr);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.emap-scale-labels > :nth-child(2) { text-align: center; }
+.emap-scale-labels > :nth-child(3) { text-align: end; }
+
+.emap-scale-labels-dual { grid-template-columns: max-content 1fr; }
+.emap-scale-labels-dual > :nth-child(2) { text-align: end; }
+
+.emap-scale-bar {
+  display: flex;
+  box-sizing: border-box;
+  width: var(--emap-scale-width);
+  height: 6px;
+  border: 1px solid var(--emap-current-card-foreground);
+}
+
+.emap-scale-segment { flex: 1; background: var(--emap-current-card); }
+.emap-scale-segment:nth-child(odd) { background: var(--emap-current-card-foreground); }
+
 /* Shared MapLibre basemap and layer panels */
 .emap-panel-control {
   position: relative;

@@ -216,6 +216,11 @@ export { Bounds } from './geo/bounds';
 export { AffineTransform, AffineTransform as Transform } from './geo/transform';
 export { Viewport } from './geo/viewport';
 export { Projection } from './geo/projection';
+export type {
+  GetScaleMetricsOptions,
+  ScaleCalculationMethod,
+  ScaleMetrics,
+} from './geo/scale-calculator';
 export {
   DEFAULT_CRS,
   inferFromPrj,
@@ -357,6 +362,8 @@ export { NavigationControl } from './ui/navigation-control';
 export type { NavigationOptions } from './ui/navigation-control';
 export { StatusControl } from './ui/status-control';
 export type { StatusOptions } from './ui/status-control';
+export { ScaleControl } from './ui/scale-control';
+export type { ScaleControlOptions } from './ui/scale-control';
 export { BasemapControl } from './ui/basemap-control';
 export type { BasemapOptions, BasemapStyle } from './ui/basemap-control';
 export { LayerControl } from './ui/layer-control';

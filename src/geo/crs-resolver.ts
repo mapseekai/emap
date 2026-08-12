@@ -161,6 +161,17 @@ function parseEpsgCode(crs: string): string | null {
   const httpMatch = trimmed.match(EPSG_HTTP_RE);
   return httpMatch ? httpMatch[1] : null;
 }
+/**
+ * Whether the CRS label denotes Web Mercator — the `webmercator` mapshaper
+ * alias or one of the EPSG codes (`3857`, `900913`, `102100`) that
+ * {@link resolveProjectCrs} maps to it.
+ */
+export function isWebMercatorCrs(crs: string): boolean {
+  const trimmed = crs.trim().toLowerCase();
+  if (trimmed === 'webmercator') return true;
+  const code = parseEpsgCode(trimmed);
+  return code !== null && WEB_MERCATOR_CODES.has(code);
+}
 
 function formatEpsgCode(code: string): string {
   return `EPSG:${code}`;

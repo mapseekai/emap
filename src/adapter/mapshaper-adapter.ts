@@ -434,12 +434,88 @@ interface MprojInternals {
   get_normalized_proj_defn(projection: unknown): string;
 }
 
+export interface GeographicCoordinateTransformer {
+  readonly isGeographic: boolean;
+  readonly isEarthCompatible: boolean;
+  readonly semiMajorAxis: number;
+  readonly flattening: number;
+  inverse(point: readonly [number, number]): [number, number] | null;
+}
+
+interface MprojProjection {
+  is_latlong?: boolean;
+  a?: number;
+  es?: number;
+}
+
+type MapshaperRuntimeCrs = NonNullable<NonNullable<MapshaperDataset['info']>['crs']>;
+
+const WGS84_SEMI_MAJOR_AXIS = 6378137;
+const WGS84_FLATTENING = 1 / 298.257223563;
+const EARTH_SEMI_MAJOR_AXIS_TOLERANCE = 0.01;
+const EARTH_MAX_FLATTENING = 0.01;
 const PROJECTION_NUMBER_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
 
-export function resolveMapshaperCrsSignature(crs: string): string {
+/** Parse a CRS definition into Mapshaper's runtime projection representation. */
+export function parseMapshaperCrs(crs: string): MapshaperRuntimeCrs {
   const projectionApi = mapshaper.internal as unknown as MapshaperProjectionInternals;
+  return projectionApi.parseCrsString(crs) as MapshaperRuntimeCrs;
+}
+
+export function createGeographicCoordinateTransformer(
+  definition: string,
+): GeographicCoordinateTransformer {
+  const projection = parseMapshaperCrs(definition) as MprojProjection;
+  const semiMajorAxis = projection.a;
+  const eccentricitySquared = projection.es;
+  const hasEllipsoid =
+    Number.isFinite(semiMajorAxis) &&
+    Number.isFinite(eccentricitySquared) &&
+    Number(eccentricitySquared) >= 0 &&
+    Number(eccentricitySquared) < 1;
+  const a = hasEllipsoid ? Number(semiMajorAxis) : WGS84_SEMI_MAJOR_AXIS;
+  const f = hasEllipsoid
+    ? 1 - Math.sqrt(1 - Number(eccentricitySquared))
+    : WGS84_FLATTENING;
+  const mprojApi = mproj as unknown as {
+    pj_inv(point: { x: number; y: number }, projection: MprojProjection): { lam: number; phi: number };
+  };
+
+  return {
+    isGeographic: projection.is_latlong === true,
+    // Proj.4 does not reliably identify the celestial body. Require usable
+    // ellipsoid evidence whose size and flattening are compatible with common
+    // terrestrial ellipsoids, including Earth spheres, and reject unknown or
+    // clearly incompatible bodies conservatively.
+    isEarthCompatible:
+      hasEllipsoid &&
+      Math.abs(a - WGS84_SEMI_MAJOR_AXIS) / WGS84_SEMI_MAJOR_AXIS <=
+        EARTH_SEMI_MAJOR_AXIS_TOLERANCE &&
+      Number.isFinite(f) &&
+      f >= 0 &&
+      f <= EARTH_MAX_FLATTENING,
+    semiMajorAxis: a,
+    flattening: f,
+    inverse(point): [number, number] | null {
+      if (projection.is_latlong) {
+        return Number.isFinite(point[0]) && Number.isFinite(point[1]) ? [point[0], point[1]] : null;
+      }
+
+      try {
+        const lp = mprojApi.pj_inv({ x: point[0], y: point[1] }, projection);
+        const longitude = lp.lam * (180 / Math.PI);
+        const latitude = lp.phi * (180 / Math.PI);
+        return Number.isFinite(longitude) && Number.isFinite(latitude) ? [longitude, latitude] : null;
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
+export function resolveMapshaperCrsSignature(crs: string): string {
   const mprojApi = mproj as unknown as { internal: MprojInternals };
-  const projection = projectionApi.parseCrsString(crs);
+  const projection = parseMapshaperCrs(crs);
   return mprojApi.internal
     .get_normalized_proj_defn(projection)
     .split(/\s+/)

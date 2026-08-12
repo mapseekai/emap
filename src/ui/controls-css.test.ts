@@ -6,9 +6,9 @@ import { resolveThemeColor } from '../theme/colors';
 
 const css = readFileSync(resolve('src/ui/controls.css'), 'utf8');
 
-function mountControls(themeClass?: string) {
+function mountControls(themeClass?: string, stylesheetText = css) {
   const stylesheet = document.createElement('style');
-  stylesheet.textContent = css;
+  stylesheet.textContent = stylesheetText;
   document.head.append(stylesheet);
 
   const host = document.createElement('div');
@@ -204,5 +204,49 @@ describe('controls.css Mapseek behavior', () => {
     group.append(popup);
 
     expect(getComputedStyle(group).overflow).toBe('visible');
+  });
+
+  it.each([undefined, 'dark'] as const)('themes scale controls on %s hosts', (themeClass) => {
+    // jsdom cannot resolve CSS custom properties for computed border colors.
+    // Derive the expected theme colors by walking the same --emap-current-*
+    // chain the control consumes, then render the stylesheet with those
+    // variables substituted for the assertions.
+    const probe = mountControls(themeClass);
+    const probeScale = document.createElement('div');
+    probeScale.className = 'emap-ctrl emap-scale-ctrl';
+    probe.host.append(probeScale);
+    const readVariable = (name: string) => getComputedStyle(probeScale).getPropertyValue(name);
+    const foreground = resolveThemeColor(readVariable('--emap-current-card-foreground'), 'transparent', readVariable);
+    const card = resolveThemeColor(readVariable('--emap-current-card'), 'transparent', readVariable);
+    const border = resolveThemeColor(readVariable('--emap-current-border'), 'transparent', readVariable);
+
+    const stylesheetText = css
+      .replaceAll('var(--emap-current-card-foreground)', foreground)
+      .replaceAll('var(--emap-current-card)', card)
+      .replaceAll('var(--emap-current-border)', border);
+    const { host } = mountControls(themeClass, stylesheetText);
+    const scale = document.createElement('div');
+    scale.className = 'emap-ctrl emap-scale-ctrl';
+    const bar = document.createElement('div');
+    bar.className = 'emap-scale-bar';
+    for (let index = 0; index < 4; index += 1) {
+      const segment = document.createElement('span');
+      segment.className = 'emap-scale-segment';
+      bar.append(segment);
+    }
+    scale.append(bar);
+    host.append(scale);
+
+    const expectedControl = document.createElement('div');
+    expectedControl.style.color = foreground;
+    expectedControl.style.background = card;
+    expectedControl.style.border = `1px solid ${border}`;
+    host.append(expectedControl);
+
+    const scaleStyle = getComputedStyle(scale);
+    const expectedStyle = getComputedStyle(expectedControl);
+    expect(scaleStyle.color).toBe(expectedStyle.color);
+    expect(scaleStyle.backgroundColor).toBe(expectedStyle.backgroundColor);
+    expect(scaleStyle.borderTopColor).toBe(expectedStyle.borderTopColor);
   });
 });

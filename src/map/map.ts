@@ -11,7 +11,14 @@ import {
 } from '../geo/camera';
 import { Projection } from '../geo/projection';
 import {
+  ScaleCalculator,
+  type GetScaleMetricsOptions,
+  type ScaleMetrics,
+  type ScaleView,
+} from '../geo/scale-calculator';
+import {
   EpsgProjectionError,
+  isWebMercatorCrs,
   normalizeProjectCrs,
   normalizeProjectCrsMetadata,
   resolveDatasetCRSMetadata,
@@ -159,6 +166,64 @@ function renderedLayersEqual(
   });
 }
 
+interface ScaleViewSample {
+  px: number;
+  py: number;
+  coordinate: [number, number];
+}
+
+interface ScaleViewSnapshot {
+  view: ScaleView;
+  samples: ScaleViewSample[];
+}
+
+function captureScaleView(viewport: Viewport, crs: string): ScaleViewSnapshot | null {
+  const width = viewport.width;
+  const height = viewport.height;
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+
+  const x = width / 2;
+  const samples: ScaleViewSample[] = [];
+  try {
+    for (const py of [0, height / 2, height]) {
+      for (const px of [x, x + 1]) {
+        samples.push({ px, py, coordinate: viewport.unproject(px, py) });
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return {
+    samples,
+    view: {
+      crs,
+      width,
+      height,
+      unproject(px, py): [number, number] {
+        const sample = samples.find((candidate) => candidate.px === px && candidate.py === py);
+        if (!sample) throw new Error('Scale view requested a coordinate outside its snapshot');
+        return [...sample.coordinate];
+      },
+    },
+  };
+}
+
+function isScaleViewCurrent(viewport: Viewport, crs: string, snapshot: ScaleViewSnapshot): boolean {
+  if (crs !== snapshot.view.crs || viewport.width !== snapshot.view.width || viewport.height !== snapshot.view.height) {
+    return false;
+  }
+
+  try {
+    return snapshot.samples.every((sample) => {
+      const current = viewport.unproject(sample.px, sample.py);
+      return current[0] === sample.coordinate[0] && current[1] === sample.coordinate[1];
+    });
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Canvas map engine that owns sources, layers, camera state, controls, and edit history.
  *
@@ -175,6 +240,7 @@ export class Emap extends EventDispatcher {
   private _editOverlay: EditOverlayRenderer;
   private _scheduler!: RenderScheduler;
   private _viewport: Viewport = new Viewport();
+  private _scaleCalculator?: ScaleCalculator;
   private _projection: Projection = new Projection();
   private _camera!: Camera;
   // Accessed by composed managers via `EmapHostInternal`. Treat as
@@ -1749,6 +1815,32 @@ export class Emap extends EventDispatcher {
 
   public getZoom(): number {
     return this._projection.getZoom(Math.abs(this._viewport.transform.mx));
+  }
+
+  /**
+   * Measure ground scale for the current view.
+   *
+   * Converts the center-row pixel step through the CRS ellipsoid geodesic
+   * inverse, returning meters-per-pixel and the nominal 1:N denominator at
+   * the requested DPI. The Web Mercator zoom level is attached only when
+   * the map CRS is Web Mercator. Resolves `null` for unsupported or
+   * non-Earth CRSs, empty views, or when the view changed while the
+   * measurement was in flight.
+   */
+  public async getScaleMetrics(
+    options: GetScaleMetricsOptions = {},
+  ): Promise<(ScaleMetrics & { zoom?: number }) | null> {
+    const crs = this.getCRS();
+    const snapshot = captureScaleView(this._viewport, crs);
+    if (!snapshot) return null;
+    const zoom = isWebMercatorCrs(crs) ? this.getZoom() : undefined;
+    const metrics = await this._scaleCalculatorInstance().getMetrics(snapshot.view, options);
+    if (!metrics || !isScaleViewCurrent(this._viewport, this.getCRS(), snapshot)) return null;
+    return zoom === undefined ? metrics : { ...metrics, zoom };
+  }
+
+  private _scaleCalculatorInstance(): ScaleCalculator {
+    return this._scaleCalculator ?? (this._scaleCalculator = new ScaleCalculator());
   }
 
   /** The drag-to-pan interaction handler. */

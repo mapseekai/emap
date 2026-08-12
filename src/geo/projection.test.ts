@@ -14,4 +14,11 @@ describe('Projection.getScale (inverse of getZoom)', () => {
     const p = new Projection(); // default EPSG:4326
     expect(Number.isNaN(p.getScale(5))).toBe(true);
   });
+  it.each(['EPSG:900913', 'EPSG:102100'] as const)('recognizes the %s Web Mercator alias', (crs) => {
+    const p = new Projection();
+    p.setCRS(crs);
+    const scale = p.getScale(3);
+    expect(Number.isFinite(scale)).toBe(true);
+    expect(p.getZoom(scale)).toBeCloseTo(3, 9);
+  });
 });
