@@ -6,9 +6,9 @@ import { resolveThemeColor } from '../theme/colors';
 
 const css = readFileSync(resolve('src/ui/controls.css'), 'utf8');
 
-function mountControls(themeClass?: string) {
+function mountControls(themeClass?: string, stylesheetText = css) {
   const stylesheet = document.createElement('style');
-  stylesheet.textContent = css;
+  stylesheet.textContent = stylesheetText;
   document.head.append(stylesheet);
 
   const host = document.createElement('div');
@@ -218,10 +218,13 @@ describe('controls.css Mapseek behavior', () => {
       border: 'oklch(1 0 0 / 12%)',
     }],
   ] as const)('themes scale controls on %s hosts', (themeClass, expected) => {
-    const { host } = mountControls(themeClass);
-    host.style.setProperty('--card-foreground', expected.foreground);
-    host.style.setProperty('--card', expected.card);
-    host.style.setProperty('--border', expected.border);
+    // jsdom does not resolve CSS custom properties for computed border colors.
+    // Render the same stylesheet with its scale-control theme variables resolved.
+    const stylesheetText = css
+      .replaceAll('var(--emap-current-card-foreground)', expected.foreground)
+      .replaceAll('var(--emap-current-card)', expected.card)
+      .replaceAll('var(--emap-current-border)', expected.border);
+    const { host } = mountControls(themeClass, stylesheetText);
     const scale = document.createElement('div');
     scale.className = 'emap-ctrl emap-scale-ctrl';
     const bar = document.createElement('div');
@@ -234,10 +237,16 @@ describe('controls.css Mapseek behavior', () => {
     scale.append(bar);
     host.append(scale);
 
+    const expectedControl = document.createElement('div');
+    expectedControl.style.color = expected.foreground;
+    expectedControl.style.background = expected.card;
+    expectedControl.style.border = `1px solid ${expected.border}`;
+    host.append(expectedControl);
+
     const scaleStyle = getComputedStyle(scale);
-    const readVariable = (name: string) => scaleStyle.getPropertyValue(name);
-    expect(resolveThemeColor(scaleStyle.color, 'transparent', readVariable)).toBe(expected.foreground);
-    expect(resolveThemeColor(scaleStyle.background, 'transparent', readVariable)).toBe(expected.card);
-    expect(resolveThemeColor('var(--emap-current-border)', 'transparent', readVariable)).toBe(expected.border);
+    const expectedStyle = getComputedStyle(expectedControl);
+    expect(scaleStyle.color).toBe(expectedStyle.color);
+    expect(scaleStyle.backgroundColor).toBe(expectedStyle.backgroundColor);
+    expect(scaleStyle.borderTopColor).toBe(expectedStyle.borderTopColor);
   });
 });
