@@ -5,6 +5,7 @@ import { parseGeoMetadata } from '../arrow/geoparquet-metadata';
 import { datasetFromGeoJSON } from '../arrow/test-utils';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
+import { DuckDbOperationError } from './duckdb-errors';
 import type { DuckDbGeoParquetQuerySource } from './duckdb-geoparquet-query-op';
 import {
   duckDbBufferLayer,
@@ -13,8 +14,11 @@ import {
   duckDbOverlayLayer,
   duckDbQueryLayer,
   duckDbRelationLayer,
+  duckDbSpatialAggregateJoinLayer,
   type DuckDbMapOpContext,
   type DuckDbMapOpSource,
+  type DuckDbSpatialAggregateJoinLayerOptions,
+  type DuckDbSpatialAggregateJoinLayerResult,
 } from './map-op';
 import { buildBufferSql } from './duckdb-sql';
 
@@ -48,6 +52,14 @@ async function polygonDataset(crs = 'EPSG:3857'): Promise<MapshaperDataset> {
   return dataset;
 }
 
+async function polygonJoinDataset(): Promise<MapshaperDataset> {
+  const dataset = await polygonDataset();
+  const records = dataset.layers[0]!.data?.getRecords();
+  if (!records?.[0]) throw new Error('Expected polygon fixture record');
+  records[0].sales = 12;
+  return dataset;
+}
+
 class FakeSource implements DuckDbMapOpSource {
   constructor(
     private readonly dataset: MapshaperDataset | null | undefined,
@@ -71,12 +83,14 @@ class FakeSource implements DuckDbMapOpSource {
 class FakeContext implements DuckDbMapOpContext {
   readonly sources = new Map<string, DuckDbMapOpSource>();
   readonly outputDatasets = new Map<string, MapshaperDataset>();
+  readonly writes: Array<{ id: string; dataset: MapshaperDataset }> = [];
 
   getSource(id: string): DuckDbMapOpSource | null | undefined {
     return this.sources.get(id);
   }
 
   setSourceDataset(id: string, dataset: MapshaperDataset): void {
+    this.writes.push({ id, dataset });
     this.outputDatasets.set(id, dataset);
   }
 }
@@ -410,6 +424,30 @@ describe('duckDbQueryLayer', () => {
         reason: 'DuckDB operation requires output.sourceId',
       },
     });
+  });
+
+  it('returns structured validation for a runtime-bypass non-string output source id', async () => {
+    const dataset = await polygonDataset();
+    const ctx = makeContext('src', dataset);
+    const runtime = new FakeRuntime(tableFromArrays({ __emap_rowid: [0], name: ['a'] }));
+
+    const result = await duckDbQueryLayer(ctx, {
+      src: 'src',
+      sql: 'SELECT name FROM input',
+      output: { sourceId: 42 as unknown as string },
+      runtime,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'output.sourceId',
+        reason: 'DuckDB operation requires output.sourceId',
+      },
+    });
+    expect(runtime.connection.queries).toHaveLength(0);
+    expect(ctx.writes).toHaveLength(0);
   });
 
   it('maps SQL validation errors to DuckDB results', async () => {
@@ -857,6 +895,293 @@ describe('duckDbRelationLayer', () => {
 
     expect(result.ok).toBe(true);
     expect(runtime.connection.queries.join('\n')).toContain('12.5');
+  });
+});
+
+describe('duckDbSpatialAggregateJoinLayer', () => {
+  const aggregationOptions = {
+    predicate: 'contains',
+    aggregations: [
+      { operation: 'count', outputColumn: 'match_count' },
+      { operation: 'sum', field: 'sales', outputColumn: 'sales_total' },
+    ],
+  } as const satisfies Omit<DuckDbSpatialAggregateJoinLayerOptions, 'src' | 'join'>;
+
+  const invalidOutputSourceIds = [
+    ['undefined', undefined],
+    ['empty string', ''],
+    ['whitespace-only string', '   '],
+    ['null', null],
+    ['zero', 0],
+    ['number', 42],
+    ['false', false],
+    ['true', true],
+    ['object', { id: 'out' }],
+    ['array', ['out']],
+    ['symbol', Symbol('out')],
+    ['bigint', 42n],
+  ] as const;
+
+  it('forwards selected layers and inner output semantics before writing once', async () => {
+    const paddedSourceId = ' aggregate output 2026 ';
+    const target = makeSelectableLayerDataset(
+      await datasetFromGeoJSON({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: { id: 'unmatched' },
+            geometry: POLYGON_FC.features[0]!.geometry,
+          },
+          {
+            type: 'Feature',
+            properties: { id: 'matched' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [20, 20],
+                  [30, 20],
+                  [30, 30],
+                  [20, 30],
+                  [20, 20],
+                ],
+              ],
+            },
+          },
+        ],
+      }),
+      'target-selected',
+    );
+    const join = makeSelectableLayerDataset(await polygonJoinDataset(), 'join-selected');
+    const ctx = makeContext('target', target);
+    ctx.sources.set('join', new FakeSource(join));
+    const runtime = new FakeRuntime(
+      tableFromArrays({ __emap_rowid: [1], match_count: [1], sales_total: [12] }),
+    );
+
+    const result: DuckDbSpatialAggregateJoinLayerResult = await duckDbSpatialAggregateJoinLayer(
+      ctx,
+      {
+        src: 'target',
+        join: 'join',
+        ...aggregationOptions,
+        joinType: 'inner',
+        targetLayer: 'target-selected',
+        joinLayer: 'join-selected',
+        targetGeometryColumn: 'target geom',
+        joinGeometryColumn: 'join geom',
+        outputLayer: 'joined statistics',
+        output: { sourceId: paddedSourceId },
+        runtime,
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(ctx.outputDatasets.get(paddedSourceId)).toBe(
+      result.ok ? result.value.dataset : undefined,
+    );
+    expect(ctx.writes).toEqual([
+      { id: paddedSourceId, dataset: result.ok ? result.value.dataset : undefined },
+    ]);
+    expect(result.ok && result.value.sourceId).toBe(paddedSourceId);
+    expect(ctx.outputDatasets.has(paddedSourceId.trim())).toBe(false);
+    expect(result.ok && result.value.dataset.layers[0]!.name).toBe('joined statistics');
+    expect(result.ok && result.value.dataset.layers[0]!.data?.getRecords()).toEqual([
+      { id: 'matched', match_count: 1, sales_total: 12 },
+    ]);
+    expect(runtime.connection.inserted).toHaveLength(2);
+    expect(runtime.connection.queries.join('\n')).toContain(
+      'ON ST_Contains(t."target geom", j."join geom")',
+    );
+    expect(runtime.connection.queries.join('\n')).toContain('COUNT(*) AS "match_count"');
+    expect(runtime.connection.queries.join('\n')).toContain('SUM(j."sales") AS "sales_total"');
+  });
+
+  it('returns not-found when the target source is missing', async () => {
+    const ctx = new FakeContext();
+
+    await expect(
+      duckDbSpatialAggregateJoinLayer(ctx, {
+        src: 'missing',
+        join: 'join',
+        ...aggregationOptions,
+        output: { sourceId: 'out' },
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: { kind: 'not-found', what: 'source', id: 'missing' },
+    });
+    expect(ctx.writes).toHaveLength(0);
+  });
+
+  it('returns src validation when the target source has no dataset', async () => {
+    const ctx = makeContext('target', null);
+    ctx.sources.set('join', new FakeSource(await polygonJoinDataset()));
+
+    await expect(
+      duckDbSpatialAggregateJoinLayer(ctx, {
+        src: 'target',
+        join: 'join',
+        ...aggregationOptions,
+        output: { sourceId: 'out' },
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'src',
+        reason: "Source 'target' does not have a loaded dataset",
+      },
+    });
+    expect(ctx.writes).toHaveLength(0);
+  });
+
+  it('returns not-found when the join source is missing', async () => {
+    const ctx = makeContext('target', await polygonDataset());
+
+    await expect(
+      duckDbSpatialAggregateJoinLayer(ctx, {
+        src: 'target',
+        join: 'missing',
+        ...aggregationOptions,
+        output: { sourceId: 'out' },
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: { kind: 'not-found', what: 'source', id: 'missing' },
+    });
+    expect(ctx.writes).toHaveLength(0);
+  });
+
+  it('returns join validation when the join source has no dataset', async () => {
+    const ctx = makeContext('target', await polygonDataset());
+    ctx.sources.set('join', new FakeSource(null));
+
+    await expect(
+      duckDbSpatialAggregateJoinLayer(ctx, {
+        src: 'target',
+        join: 'join',
+        ...aggregationOptions,
+        output: { sourceId: 'out' },
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'join',
+        reason: "Source 'join' does not have a loaded dataset",
+      },
+    });
+    expect(ctx.writes).toHaveLength(0);
+  });
+
+  it('returns output validation before running the aggregate query', async () => {
+    const target = await polygonDataset();
+    const ctx = makeContext('target', target);
+    ctx.sources.set('join', new FakeSource(await polygonDataset()));
+
+    await expect(
+      duckDbSpatialAggregateJoinLayer(ctx, {
+        src: 'target',
+        join: 'join',
+        ...aggregationOptions,
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'output.sourceId',
+        reason: 'DuckDB operation requires output.sourceId',
+      },
+    });
+    expect(ctx.writes).toHaveLength(0);
+  });
+
+  it.each(
+    invalidOutputSourceIds,
+  )('returns structured validation for runtime-bypass output source id %s', async (_label, sourceId) => {
+    const ctx = makeContext('target', await polygonDataset());
+    ctx.sources.set('join', new FakeSource(await polygonJoinDataset()));
+    const runtime = new FakeRuntime(
+      tableFromArrays({ __emap_rowid: [0], match_count: [1], sales_total: [12] }),
+    );
+
+    const result = await duckDbSpatialAggregateJoinLayer(ctx, {
+      src: 'target',
+      join: 'join',
+      ...aggregationOptions,
+      output: { sourceId: sourceId as unknown as string },
+      runtime,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'validation',
+        field: 'output.sourceId',
+        reason: 'DuckDB operation requires output.sourceId',
+      },
+    });
+    expect(runtime.connection.queries).toHaveLength(0);
+    expect(ctx.writes).toHaveLength(0);
+  });
+
+  it('uses a collision-free aggregate row id from the dataset operation', async () => {
+    const target = await polygonDataset();
+    const targetRecords = target.layers[0]!.data?.getRecords();
+    targetRecords![0]!.__emap_rowid = 'reserved';
+    const ctx = makeContext('target', target);
+    ctx.sources.set('join', new FakeSource(await polygonJoinDataset()));
+    const runtime = new FakeRuntime(
+      tableFromArrays({ __emap_rowid_1: [0], match_count: [1], sales_total: [2] }),
+    );
+
+    const result = await duckDbSpatialAggregateJoinLayer(ctx, {
+      src: 'target',
+      join: 'join',
+      ...aggregationOptions,
+      output: { sourceId: 'out' },
+      runtime,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(runtime.connection.queries.join('\n')).toContain('t."__emap_rowid_1"');
+  });
+
+  it('maps aggregate errors without writing an output dataset', async () => {
+    const cause = new Error('aggregate query failed');
+    const ctx = makeContext('target', await polygonDataset());
+    ctx.sources.set('join', new FakeSource(await polygonJoinDataset()));
+    const runtime = new FakeRuntime(
+      tableFromArrays({ __emap_rowid: [] }),
+      new DuckDbOperationError('validation', 'aggregate validation failed', {
+        field: 'predicate',
+        cause,
+      }),
+    );
+
+    const result = await duckDbSpatialAggregateJoinLayer(ctx, {
+      src: 'target',
+      join: 'join',
+      ...aggregationOptions,
+      output: { sourceId: 'out' },
+      runtime,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: 'duckdb',
+        operation: 'duckdb-spatial-aggregate-join',
+        duckDbKind: 'validation',
+        field: 'predicate',
+        reason: 'aggregate validation failed',
+        cause,
+      },
+    });
+    expect(ctx.outputDatasets.has('out')).toBe(false);
+    expect(ctx.writes).toHaveLength(0);
   });
 });
 

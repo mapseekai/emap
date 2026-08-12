@@ -59,6 +59,7 @@ const expectedIds = [
   'duckdb-geoparquet-query',
   'duckdb-buffer',
   'duckdb-overlay',
+  'duckdb-spatial-aggregate-join',
   'duckdb-spatial-ops',
 ] as const;
 
@@ -71,7 +72,7 @@ const expectedModules = [
     count: 8,
   },
   { key: 'data-editing', zh: '数据编辑', en: 'Data Editing', count: 14 },
-  { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 20 },
+  { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 21 },
 ] as const;
 
 describe('example catalog metadata', () => {
@@ -311,7 +312,7 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-brand img')?.getAttribute('src')).toBe(
       '/mapseekai/emap/examples/emap.svg',
     );
-    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('54');
+    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('55');
 
     const firstCard = root.querySelector<HTMLAnchorElement>(
       'a.example-card[href="/mapseekai/emap/examples/getting-started/geojson-viewer/"]',
@@ -326,7 +327,7 @@ describe('example catalog metadata', () => {
     if (!mobileCategory) throw new Error('Mobile category selector was not rendered');
     mobileCategory.value = 'data-analysis';
     mobileCategory.dispatchEvent(new Event('change'));
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(20);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(21);
   });
 
   it('defaults to Chinese and switches the complete catalog to English', () => {

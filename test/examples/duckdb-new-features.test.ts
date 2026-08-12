@@ -8,6 +8,7 @@ const duckDbExamples = [
   readExample('duckdb-geoparquet-query'),
   readExample('duckdb-overlay'),
   readExample('duckdb-query'),
+  readExample('duckdb-spatial-aggregate-join'),
   readExample('duckdb-spatial-ops'),
 ];
 const geoParquetExamples = [readExample('export-geoparquet'), readExample('geoparquet-viewer')];
@@ -48,11 +49,70 @@ function exportedDuckDbNames(): Set<string> {
   );
 }
 
+const freshnessGuard = /if\s*\(\s*!isCurrent\(\)\s*\)\s*return\s+undefined\s*;/g;
+
+function hasFreshnessGuardBetween(source: string, after: number, before: number): boolean {
+  return [...source.matchAll(freshnessGuard)].some((match) => {
+    const index = match.index ?? -1;
+    return index > after && index < before;
+  });
+}
+
+function removeFreshnessGuardBetween(source: string, after: number, before: number): string {
+  return source.replace(freshnessGuard, (match, index: number) =>
+    index > after && index < before ? '' : match,
+  );
+}
+
+function hasInputRunInvalidationBeforeLoad(source: string): boolean {
+  const invalidation = source.indexOf('invalidateAggregateRuns();');
+  const load = source.indexOf('await loadDatasetFromFile(');
+  return invalidation > -1 && load > invalidation;
+}
+
+function hasIdentityAwareOutputCleanup(source: string): boolean {
+  const mapAdd = source.indexOf('await map.addSource(OUTPUT_SOURCE_ID, source);');
+  const cleanup = source.indexOf('map.getSource(OUTPUT_SOURCE_ID) === source');
+  return mapAdd > -1 && cleanup > mapAdd;
+}
+
+function hasIdentityAwareContextDiscard(source: string): boolean {
+  return source.includes('contextSources.get(OUTPUT_SOURCE_ID)?.getDataset?.() === dataset');
+}
+
+function scopedBlock(source: string, marker: string): string {
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex < 0) throw new Error(`Missing source marker: ${marker}`);
+  const open = source.indexOf('{', markerIndex);
+  if (open < 0) throw new Error(`Missing opening brace after: ${marker}`);
+  let depth = 0;
+  for (let index = open; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1;
+    if (source[index] === '}') depth -= 1;
+    if (depth === 0) return source.slice(markerIndex, index + 1);
+  }
+  throw new Error(`Unclosed block after: ${marker}`);
+}
+
+function usesAggregateQueryCoordinator(runHandler: string): boolean {
+  const options = scopedBlock(runHandler, 'await runCoordinator.run(');
+  const outsideCoordinator = runHandler.replace(options, '');
+  return (
+    options.includes('execute: executeAggregateQuery') &&
+    options.includes('register: registerAggregateOutput') &&
+    !outsideCoordinator.includes('executeAggregateQuery(') &&
+    !outsideCoordinator.includes('registerAggregateOutput(') &&
+    !outsideCoordinator.includes('duckDbSpatialAggregateJoinLayer(') &&
+    !outsideCoordinator.includes('spatialAggregateJoinDatasetWithDuckDb(')
+  );
+}
+
 describe('DuckDB new feature examples', () => {
   const examples = {
     geoparquetQuery: readExample('duckdb-geoparquet-query'),
     overlay: readExample('duckdb-overlay'),
     query: readExample('duckdb-query'),
+    spatialAggregateJoin: readExample('duckdb-spatial-aggregate-join'),
   };
 
   it('lets Vite resolve DuckDB and Arrow dependencies', () => {
@@ -135,5 +195,171 @@ describe('DuckDB new feature examples', () => {
     expect(html).toContain('src: INPUT_SOURCE_ID');
     expect(html).toContain('mask: MASK_SOURCE_ID');
     expect(html).toContain('output: { sourceId: OUTPUT_SOURCE_ID }');
+  });
+
+  it('covers spatial aggregate join helper and map-op entrypoints', () => {
+    const html = examples.spatialAggregateJoin;
+    expect(html).toContain('spatialAggregateJoinDatasetWithDuckDb');
+    expect(html).toContain('duckDbSpatialAggregateJoinLayer');
+    expect(html).toContain("predicate: 'contains'");
+    expect(html).toContain('<option value="left">left</option>');
+    expect(html).toContain('<option value="inner">inner</option>');
+    for (const descriptor of [
+      '{ operation: "count", outputColumn: "match_count" }',
+      '{ operation: "sum", field: "sales", outputColumn: "sales_total" }',
+      '{ operation: "avg", field: "score", outputColumn: "score_avg" }',
+      '{ operation: "min", field: "sales", outputColumn: "sales_min" }',
+      '{ operation: "max", field: "sales", outputColumn: "sales_max" }',
+    ]) {
+      expect(html).toContain(descriptor);
+    }
+    expect(html).toContain('targetLayer: Number(targetLayerSelect.value)');
+    expect(html).toContain('joinLayer: Number(joinLayerSelect.value)');
+    expect(html).toContain('src: TARGET_SOURCE_ID');
+    expect(html).toContain('join: JOIN_SOURCE_ID');
+    expect(html).toContain('output: { sourceId: OUTPUT_SOURCE_ID }');
+  });
+
+  it('renders the aggregate join result and reports all five outputs', () => {
+    const html = examples.spatialAggregateJoin;
+    expect(html).toContain('async function registerAggregateOutput(dataset, isCurrent)');
+    expect(html).toContain('map.setExtent(registration.source.getExtent())');
+    for (const column of ['match_count', 'sales_total', 'score_avg', 'sales_min', 'sales_max']) {
+      expect(html).toContain(column);
+    }
+  });
+
+  it('keeps aggregate controls safe while both inputs load and fits their combined extent', () => {
+    const html = examples.spatialAggregateJoin;
+    const targetHandler = html.indexOf("targetFile.addEventListener('change'");
+    const joinHandler = html.indexOf("joinFile.addEventListener('change'");
+    const runHandler = html.indexOf("runButton.addEventListener('click'");
+    const loaderStart = html.indexOf('async function loadDatasetFromFile');
+
+    expect(html).toContain('<div id="status" aria-live="polite">');
+    expect(html).toContain('function fitLoadedExtents()');
+    expect(html).toContain('const extent = targetExtent.clone();');
+    expect(html).toContain('extent.merge(joinExtent);');
+    expect(html).toContain('map.setExtent(extent);');
+    expect(targetHandler).toBeGreaterThan(-1);
+    expect(joinHandler).toBeGreaterThan(targetHandler);
+    expect(runHandler).toBeGreaterThan(joinHandler);
+    expect(loaderStart).toBeGreaterThan(-1);
+    expect(html.slice(targetHandler, joinHandler)).toContain('targetDataset = undefined;');
+    expect(html.slice(targetHandler, joinHandler)).toContain(
+      'const loadVersion = ++targetLoadVersion;',
+    );
+    expect(html.slice(targetHandler, joinHandler)).toContain(
+      'if (loadVersion !== targetLoadVersion) return;',
+    );
+    expect(html.slice(targetHandler, joinHandler)).toContain('updateRunState();');
+    expect(html.slice(joinHandler, runHandler)).toContain('joinDataset = undefined;');
+    expect(html.slice(joinHandler, runHandler)).toContain('const loadVersion = ++joinLoadVersion;');
+    expect(html.slice(joinHandler, runHandler)).toContain(
+      'if (loadVersion !== joinLoadVersion) return;',
+    );
+    expect(html.slice(joinHandler, runHandler)).toContain('updateRunState();');
+
+    const loader = html.slice(loaderStart, targetHandler);
+    const arrayBufferAwait = loader.indexOf('await file.arrayBuffer()');
+    const sourceRemoval = loader.indexOf('removeSourceWithLayers(sourceId);');
+    const setDataAwait = loader.indexOf('await source.setData(');
+    const datasetRead = loader.indexOf('const dataset = source.getDataset();');
+
+    expect(arrayBufferAwait).toBeGreaterThan(-1);
+    expect(sourceRemoval).toBeGreaterThan(arrayBufferAwait);
+    expect(setDataAwait).toBeGreaterThan(sourceRemoval);
+    expect(datasetRead).toBeGreaterThan(setDataAwait);
+    expect(hasFreshnessGuardBetween(loader, arrayBufferAwait, sourceRemoval)).toBe(true);
+    expect(hasFreshnessGuardBetween(loader, setDataAwait, datasetRead)).toBe(true);
+    expect(
+      hasFreshnessGuardBetween(
+        removeFreshnessGuardBetween(loader, arrayBufferAwait, sourceRemoval),
+        arrayBufferAwait,
+        sourceRemoval,
+      ),
+    ).toBe(false);
+    expect(
+      hasFreshnessGuardBetween(
+        removeFreshnessGuardBetween(loader, setDataAwait, datasetRead),
+        setDataAwait,
+        datasetRead,
+      ),
+    ).toBe(false);
+  });
+
+  it('routes both aggregate query entrypoints through the shared stale-run coordinator', () => {
+    const html = examples.spatialAggregateJoin;
+    const targetHandlerStart = html.indexOf("targetFile.addEventListener('change'");
+    const joinHandlerStart = html.indexOf("joinFile.addEventListener('change'");
+    const runHandlerStart = html.indexOf("runButton.addEventListener('click'");
+    const targetHandler = html.slice(targetHandlerStart, joinHandlerStart);
+    const joinHandler = html.slice(joinHandlerStart, runHandlerStart);
+    const runHandler = scopedBlock(html, "runButton.addEventListener('click'");
+    const coordinatorOptions = scopedBlock(runHandler, 'await runCoordinator.run(');
+    const queryExecutor = scopedBlock(html, 'async function executeAggregateQuery');
+    const removeOutput = scopedBlock(html, 'function removeSourceWithLayers');
+    const registrationStart = html.indexOf('async function registerAggregateOutput');
+    const registrationEnd = html.indexOf('function populateLayerSelect', registrationStart);
+    const registration = html.slice(registrationStart, registrationEnd);
+
+    expect(html).toContain("from '/src/duckdb-spatial-aggregate-run-coordinator.ts'");
+    expect(html).toContain('const runCoordinator = createDuckDbSpatialAggregateRunCoordinator(');
+    expect(html).toContain('removeDuckDbSpatialAggregateSource');
+    expect(hasInputRunInvalidationBeforeLoad(targetHandler)).toBe(true);
+    expect(hasInputRunInvalidationBeforeLoad(joinHandler)).toBe(true);
+    expect(hasIdentityAwareOutputCleanup(registration)).toBe(true);
+    expect(hasIdentityAwareContextDiscard(runHandler)).toBe(true);
+    expect(removeOutput).toContain('removeDuckDbSpatialAggregateSource(map, id);');
+    expect(
+      hasInputRunInvalidationBeforeLoad(targetHandler.replace('invalidateAggregateRuns();', '')),
+    ).toBe(false);
+    expect(
+      hasIdentityAwareOutputCleanup(
+        registration.replace('map.getSource(OUTPUT_SOURCE_ID) === source', 'true'),
+      ),
+    ).toBe(false);
+    expect(
+      hasIdentityAwareContextDiscard(
+        runHandler.replace(
+          'contextSources.get(OUTPUT_SOURCE_ID)?.getDataset?.() === dataset',
+          'true',
+        ),
+      ),
+    ).toBe(false);
+    expect(usesAggregateQueryCoordinator(runHandler)).toBe(true);
+    expect(coordinatorOptions).toContain('discardResult(dataset)');
+    expect(coordinatorOptions).toContain('publish({ dataset, registration })');
+    expect(coordinatorOptions).toContain('publishError(err)');
+    expect(coordinatorOptions).toContain('finish: updateRunState');
+    expect(queryExecutor).toContain('runMapOp: () => duckDbSpatialAggregateJoinLayer(');
+    expect(queryExecutor).toContain('runHelper: () => spatialAggregateJoinDatasetWithDuckDb(');
+    expect(queryExecutor).not.toContain('await runCoordinator.run(');
+    expect(
+      usesAggregateQueryCoordinator(
+        runHandler.replace('execute: executeAggregateQuery', 'execute: runQueryOutsideCoordinator'),
+      ),
+    ).toBe(false);
+    expect(
+      usesAggregateQueryCoordinator(
+        runHandler.replace(
+          'register: registerAggregateOutput',
+          'register: runQueryOutsideCoordinator',
+        ),
+      ),
+    ).toBe(false);
+    for (const bypassedEntrypoint of [
+      'await spatialAggregateJoinDatasetWithDuckDb();',
+      'await duckDbSpatialAggregateJoinLayer();',
+    ]) {
+      expect(
+        usesAggregateQueryCoordinator(
+          runHandler.replace(
+            'await runCoordinator.run(',
+            `${bypassedEntrypoint}\n        await runCoordinator.run(`,
+          ),
+        ),
+      ).toBe(false);
+    }
   });
 });

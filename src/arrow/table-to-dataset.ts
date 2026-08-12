@@ -38,7 +38,12 @@ export function recordsFromArrowTable(
       if (skipColumns.has(field.name)) continue;
       const vector = table.getChildAt(col);
       const wrapDate = DataType.isTimestamp(field.type) || DataType.isDate(field.type);
-      record[field.name] = toRecordValue(vector?.get(row), wrapDate);
+      Object.defineProperty(record, field.name, {
+        configurable: true,
+        enumerable: true,
+        value: toRecordValue(vector?.get(row), wrapDate),
+        writable: true,
+      });
     }
     records[row] = record;
   }

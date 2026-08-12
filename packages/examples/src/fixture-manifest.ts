@@ -21,6 +21,12 @@ function bindingsFor(id: string, fixtures: readonly string[]): readonly FixtureB
       { selector: '#mask-file', paths: filePaths.slice(1, 2) },
     ];
   }
+  if (id === 'duckdb-spatial-aggregate-join') {
+    return [
+      { selector: '#target-file', paths: filePaths.slice(0, 1) },
+      { selector: '#join-file', paths: filePaths.slice(1, 2) },
+    ];
+  }
   if (filePaths.length === 0) return [];
   return [
     {

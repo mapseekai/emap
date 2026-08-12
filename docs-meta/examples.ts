@@ -45,6 +45,7 @@ const task6MergeFixture = 'fixtures/task-6-polygons-alt.geojson';
 const task7Fixture = 'fixtures/task-7-polygons.geojson';
 const task7LineFixture = 'fixtures/task-7-lines.geojson';
 const task7MaskFixture = 'fixtures/task-7-mask.geojson';
+const duckDbSpatialAggregatePointsFixture = 'fixtures/duckdb-spatial-aggregate-points.geojson';
 
 const route = (id: string) => `/examples/${id}/`;
 const sourceHtml = (id: string) => `packages/examples/examples/${id}/index.html`;
@@ -262,6 +263,10 @@ const exampleDescriptions = {
     zh: '校验并执行受限 SELECT 查询，将安全的查询结果转换为地图数据。',
     en: 'Validates and executes a restricted SELECT statement, then converts the safe result into map data.',
   },
+  'duckdb-spatial-aggregate-join': {
+    zh: '用 DuckDB-Wasm 把点位销售统计聚合到行政区域，并比较左连接和内连接结果。',
+    en: 'Uses DuckDB-Wasm to aggregate point-sales statistics into administrative areas and compares left and inner results.',
+  },
   'duckdb-spatial-ops': {
     zh: '集中演示 DuckDB 几何、属性和空间关系函数，并在共享图层选择器中查看结果。',
     en: 'Demonstrates DuckDB geometry, attribute, and spatial-relation functions through a shared layer picker.',
@@ -387,6 +392,7 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('duckdb-geoparquet-query', 'data-analysis', 'DuckDB GeoParquet 查询', 'DuckDB GeoParquet query', [docsDuckDb, docsFormats, docsStatusControl], 'Emap', ['duckdb', 'geoparquet', 'basemap'], ['fixtures/example-geoparquet.parquet']),
   recipe('duckdb-buffer', 'data-analysis', 'DuckDB 缓冲区', 'DuckDB buffer', [docsDuckDb, docsErrorHandling], 'Emap', ['duckdb', 'basemap'], [task7Fixture]),
   recipe('duckdb-overlay', 'data-analysis', 'DuckDB Overlay', 'DuckDB overlay', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'overlay', 'basemap'], [task7Fixture, task7MaskFixture]),
+  recipe('duckdb-spatial-aggregate-join', 'data-analysis', 'DuckDB 空间聚合连接', 'DuckDB spatial aggregate join', [docsDuckDb, docsOperations], 'spatialAggregateJoinDatasetWithDuckDb', ['duckdb', 'spatial', 'join', 'aggregate', 'basemap'], [task7MaskFixture, duckDbSpatialAggregatePointsFixture], 'Each target polygon displays count and sales statistics.'),
   recipe('duckdb-spatial-ops', 'data-analysis', 'DuckDB 空间函数', 'DuckDB spatial functions', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap'], [task7Fixture]),
 ];
 

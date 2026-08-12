@@ -66,6 +66,7 @@ const routeIds = [
   'duckdb-geoparquet-query',
   'duckdb-overlay',
   'duckdb-query',
+  'duckdb-spatial-aggregate-join',
   'duckdb-spatial-ops',
 ] as const;
 

@@ -71,6 +71,10 @@ import {
   queryGeoParquetWithDuckDb,
   type DuckDbGeoParquetQueryOptions,
 } from './duckdb-geoparquet-query-op';
+import {
+  spatialAggregateJoinDatasetWithDuckDb,
+  type DuckDbSpatialAggregateJoinOptions,
+} from './duckdb-spatial-aggregate-join-op';
 
 export interface DuckDbMapOpSource {
   getBytes?(): Uint8Array | ArrayBuffer | null | undefined;
@@ -114,6 +118,13 @@ export interface DuckDbRelationLayerOptions extends DuckDbRelationHelperOptions 
   runtime?: DuckDbRuntime;
 }
 
+export interface DuckDbSpatialAggregateJoinLayerOptions extends DuckDbSpatialAggregateJoinOptions {
+  src: string;
+  join: string;
+  output?: { sourceId: string };
+  runtime?: DuckDbRuntime;
+}
+
 export interface DuckDbQueryLayerOptions extends DuckDbQueryOptions {
   src: string;
   output?: { sourceId: string };
@@ -135,6 +146,7 @@ export type DuckDbBufferLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbGeometryLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbAttributeLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbRelationLayerResult = OpResult<DuckDbLayerSuccess>;
+export type DuckDbSpatialAggregateJoinLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbQueryLayerResult = OpResult<DuckDbLayerSuccess>;
 export type DuckDbGeoParquetQueryLayerResult = OpResult<DuckDbLayerSuccess>;
 
@@ -168,10 +180,11 @@ function readInputDataset(
 }
 
 function outputSourceId(output: { sourceId: string } | undefined): string | OpResult<never> {
-  if (!output?.sourceId) {
+  const sourceId = output?.sourceId;
+  if (typeof sourceId !== 'string' || !sourceId.trim()) {
     return Err.validation('output.sourceId', 'DuckDB operation requires output.sourceId');
   }
-  return output.sourceId;
+  return sourceId;
 }
 
 export async function duckDbBufferLayer(
@@ -525,6 +538,33 @@ export async function duckDbRelationLayer(
     return okValue({ sourceId, dataset });
   } catch (err) {
     return duckDbErrorToOpResult(err, `duckdb-relation-${opts.operation}`);
+  }
+}
+
+export async function duckDbSpatialAggregateJoinLayer(
+  ctx: DuckDbMapOpContext,
+  opts: DuckDbSpatialAggregateJoinLayerOptions,
+): Promise<DuckDbSpatialAggregateJoinLayerResult> {
+  const target = readInputDataset(ctx, opts.src);
+  if (!target.ok) return target.result;
+
+  const join = readInputDataset(ctx, opts.join, 'join');
+  if (!join.ok) return join.result;
+
+  const sourceId = outputSourceId(opts.output);
+  if (typeof sourceId !== 'string') return sourceId;
+
+  try {
+    const dataset = await spatialAggregateJoinDatasetWithDuckDb(
+      target.dataset,
+      join.dataset,
+      opts,
+      opts.runtime,
+    );
+    await ctx.setSourceDataset(sourceId, dataset);
+    return okValue({ sourceId, dataset });
+  } catch (err) {
+    return duckDbErrorToOpResult(err, 'duckdb-spatial-aggregate-join');
   }
 }
 
