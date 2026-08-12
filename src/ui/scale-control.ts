@@ -126,7 +126,7 @@ export class ScaleControl implements Control {
     if (!this._container || !this._summary || !this._labels || !this._bar) return;
     const summary = [];
     if (this._options.showScale) summary.push(`1:${Math.round(metrics.scaleDenominator).toLocaleString('en-US')}`);
-    if (metrics.zoom !== undefined && this._options.showZoom) summary.push(`Zoom ${metrics.zoom}`);
+    if (metrics.zoom !== undefined && this._options.showZoom) summary.push(`Zoom ${Math.round(metrics.zoom * 100) / 100}`);
     this._summary.textContent = summary.join(' · ');
 
     const scale = this._options.showScale

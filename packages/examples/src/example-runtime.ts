@@ -22,7 +22,7 @@ declare global {
 }
 
 type RuntimeAssetName = 'vendor' | 'core' | 'css';
-type ExampleUiRuntime = Pick<typeof globalThis.emap, 'BasemapControl' | 'StatusControl'>;
+type ExampleUiRuntime = Pick<typeof globalThis.emap, 'BasemapControl' | 'ScaleControl' | 'StatusControl'>;
 
 const mapsWithExampleUi = new WeakSet<Emap>();
 
@@ -246,6 +246,7 @@ export function installExampleMapUi(
     new runtime.StatusControl({ alignment: 'right', showMousePos: true, showEPSG: true }),
     'bottom-right',
   );
+  map.addControl(new runtime.ScaleControl(), 'bottom-left');
 
   let basemapControl: Control | null = null;
   const syncUi = (): void => {

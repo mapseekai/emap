@@ -133,7 +133,7 @@
     import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
 
     const emap = await loadExampleRuntime();
-    const { Emap, TopologySource, NavigationControl, HistoryControl, ScaleControl } = emap;
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
 
     const SOURCE_ID = 'crs-demo';
 
@@ -141,7 +141,6 @@
     map.addControl(new NavigationControl(), 'top-left');
     installExampleMapUi(map, emap);
     map.addControl(new HistoryControl(), 'top-left');
-    map.addControl(new ScaleControl({ units: 'metric', calculationMethod: 'center' }), 'bottom-left');
     map.bindHistoryShortcuts();
 
     const status = document.getElementById('status');

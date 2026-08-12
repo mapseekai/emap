@@ -91,9 +91,18 @@ class BasemapControlStub implements Control {
   onRemove(): void {}
 }
 
+class ScaleControlStub implements Control {
+  onAdd(): HTMLElement {
+    return document.createElement('div');
+  }
+
+  onRemove(): void {}
+}
+
 const exampleRuntimeStub = {
   StatusControl: StatusControlStub,
   BasemapControl: BasemapControlStub,
+  ScaleControl: ScaleControlStub,
 } as unknown as typeof globalThis.emap;
 
 class TestDataTransfer {
@@ -237,9 +246,11 @@ describe('shared example map UI', () => {
 
     installExampleMapUi(map as unknown as Emap, exampleRuntimeStub);
 
-    expect(map.controls).toHaveLength(1);
+    expect(map.controls).toHaveLength(2);
     expect(map.controls[0]?.control).toBeInstanceOf(StatusControlStub);
     expect(map.controls[0]?.position).toBe('bottom-right');
+    expect(map.controls[1]?.control).toBeInstanceOf(ScaleControlStub);
+    expect(map.controls[1]?.position).toBe('bottom-left');
     expect(document.querySelector('.emap-example-basemap-state')?.textContent).toContain('3857');
 
     const selector = document.querySelector<HTMLSelectElement>('.emap-example-crs-select')!;
@@ -248,9 +259,9 @@ describe('shared example map UI', () => {
     await settleDomEvents();
 
     expect(map.reprojectCalls).toEqual(['EPSG:3857']);
-    expect(map.controls).toHaveLength(2);
-    expect(map.controls[1]?.control).toBeInstanceOf(BasemapControlStub);
-    expect(map.controls[1]?.position).toBe('top-right');
+    expect(map.controls).toHaveLength(3);
+    expect(map.controls[2]?.control).toBeInstanceOf(BasemapControlStub);
+    expect(map.controls[2]?.position).toBe('top-right');
     expect(document.querySelector('.emap-example-basemap-state')?.textContent).toContain('右上角');
 
     selector.value = 'EPSG:4326';
@@ -258,7 +269,7 @@ describe('shared example map UI', () => {
     await settleDomEvents();
 
     expect(map.reprojectCalls).toEqual(['EPSG:3857', 'EPSG:4326']);
-    expect(map.controls).toHaveLength(1);
+    expect(map.controls).toHaveLength(2);
     expect(map.controls[0]?.control).toBeInstanceOf(StatusControlStub);
   });
 
@@ -306,7 +317,7 @@ describe('shared example map UI', () => {
       'EPSG:4490',
     );
     expect(document.querySelectorAll('.emap-example-map-tools')).toHaveLength(1);
-    expect(map.controls).toHaveLength(1);
+    expect(map.controls).toHaveLength(2);
   });
 });
 
