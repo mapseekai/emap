@@ -6,10 +6,16 @@ import { datasetFromGeoJSON } from '../arrow/test-utils';
 import type MapshaperDataset from '../types/mapshaper-types';
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
 import {
+  containsProperlyAttributeDatasetWithDuckDb,
+  coveredByDatasetWithDuckDb,
+  coversAttributeDatasetWithDuckDb,
+  crossesDatasetWithDuckDb,
   distanceDatasetWithDuckDb,
   distanceWithinDatasetWithDuckDb,
+  equalsAttributeDatasetWithDuckDb,
   intersectsAttributeDatasetWithDuckDb,
   intersectsDatasetWithDuckDb,
+  overlapsDatasetWithDuckDb,
 } from './duckdb-relation-ops';
 
 const describeDuckDbIntegration =
@@ -187,6 +193,47 @@ async function maskDataset(crs = 'EPSG:3857'): Promise<MapshaperDataset> {
   return dataset;
 }
 
+function square(id: string, minX: number, minY: number, maxX: number, maxY: number) {
+  return {
+    type: 'Feature',
+    properties: { id },
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [minX, minY],
+          [maxX, minY],
+          [maxX, maxY],
+          [minX, maxY],
+          [minX, minY],
+        ],
+      ],
+    },
+  };
+}
+
+function line(id: string, coordinates: number[][]) {
+  return {
+    type: 'Feature',
+    properties: { id },
+    geometry: { type: 'LineString', coordinates },
+  };
+}
+
+function point(id: string, coordinates: number[]) {
+  return {
+    type: 'Feature',
+    properties: { id },
+    geometry: { type: 'Point', coordinates },
+  };
+}
+
+async function fixtureDataset(features: unknown[]): Promise<MapshaperDataset> {
+  const dataset = await datasetFromGeoJSON({ type: 'FeatureCollection', features });
+  dataset.info = { ...dataset.info, crs_string: 'EPSG:3857' };
+  return dataset;
+}
+
 function records(dataset: MapshaperDataset): Array<Record<string, unknown>> {
   return dataset.layers[0]?.data?.getRecords?.() ?? [];
 }
@@ -302,4 +349,73 @@ describeDuckDbIntegration('DuckDB-Wasm relation integration', () => {
     expect(records(result).map((record) => record.duckdb_distance)).toEqual([0, 3, 38]);
     expect(result.info?.crs_string).toBe('EPSG:4326');
   }, 60_000);
+
+  it('executes the additional topological predicates with directional semantics', async () => {
+    const duckDbRuntime = await getIntegrationRuntime();
+
+    const overlaps = await overlapsDatasetWithDuckDb(
+      await fixtureDataset([square('overlap', 0, 0, 10, 10), square('far', 20, 20, 30, 30)]),
+      await fixtureDataset([square('mask', 5, 5, 15, 15)]),
+      {},
+      duckDbRuntime,
+    );
+    expect(records(overlaps).map((record) => record.id)).toEqual(['overlap']);
+
+    const equals = await equalsAttributeDatasetWithDuckDb(
+      await fixtureDataset([square('same', 0, 0, 10, 10), square('shifted', 5, 5, 15, 15)]),
+      await fixtureDataset([square('mask', 0, 0, 10, 10)]),
+      {},
+      duckDbRuntime,
+    );
+    expect(records(equals).map((record) => record.duckdb_equals)).toEqual([true, false]);
+
+    const crosses = await crossesDatasetWithDuckDb(
+      await fixtureDataset([
+        line('crossing', [
+          [0, 5],
+          [10, 5],
+        ]),
+        line('far', [
+          [0, 20],
+          [10, 20],
+        ]),
+      ]),
+      await fixtureDataset([
+        line('mask', [
+          [5, 0],
+          [5, 10],
+        ]),
+      ]),
+      {},
+      duckDbRuntime,
+    );
+    expect(records(crosses).map((record) => record.id)).toEqual(['crossing']);
+
+    const covers = await coversAttributeDatasetWithDuckDb(
+      await fixtureDataset([square('covering', 0, 0, 10, 10), square('far', 20, 20, 30, 30)]),
+      await fixtureDataset([point('boundary', [0, 5])]),
+      {},
+      duckDbRuntime,
+    );
+    expect(records(covers).map((record) => record.duckdb_covers)).toEqual([true, false]);
+
+    const coveredBy = await coveredByDatasetWithDuckDb(
+      await fixtureDataset([point('boundary', [0, 5]), point('outside', [20, 20])]),
+      await fixtureDataset([square('mask', 0, 0, 10, 10)]),
+      {},
+      duckDbRuntime,
+    );
+    expect(records(coveredBy).map((record) => record.id)).toEqual(['boundary']);
+
+    const containsProperly = await containsProperlyAttributeDatasetWithDuckDb(
+      await fixtureDataset([square('interior', 0, 0, 10, 10), square('boundary', 5, 5, 15, 15)]),
+      await fixtureDataset([point('mask', [5, 5])]),
+      {},
+      duckDbRuntime,
+    );
+    expect(records(containsProperly).map((record) => record.duckdb_contains_properly)).toEqual([
+      true,
+      false,
+    ]);
+  }, 120_000);
 });

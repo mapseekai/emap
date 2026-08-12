@@ -67,7 +67,13 @@ export type RelationDuckDbFunction =
   | 'ST_Contains'
   | 'ST_Within'
   | 'ST_Touches'
-  | 'ST_Disjoint';
+  | 'ST_Disjoint'
+  | 'ST_Overlaps'
+  | 'ST_Equals'
+  | 'ST_Crosses'
+  | 'ST_Covers'
+  | 'ST_CoveredBy'
+  | 'ST_ContainsProperly';
 
 export type OverlayDuckDbFunction = 'ST_Intersection' | 'ST_Difference';
 

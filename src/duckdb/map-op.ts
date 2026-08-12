@@ -30,14 +30,26 @@ import {
 } from './duckdb-attribute-ops';
 import {
   containsAttributeDatasetWithDuckDb,
+  containsProperlyAttributeDatasetWithDuckDb,
+  containsProperlyDatasetWithDuckDb,
   containsDatasetWithDuckDb,
+  coveredByAttributeDatasetWithDuckDb,
+  coveredByDatasetWithDuckDb,
+  coversAttributeDatasetWithDuckDb,
+  coversDatasetWithDuckDb,
+  crossesAttributeDatasetWithDuckDb,
+  crossesDatasetWithDuckDb,
   disjointAttributeDatasetWithDuckDb,
   disjointDatasetWithDuckDb,
   distanceDatasetWithDuckDb,
   distanceWithinAttributeDatasetWithDuckDb,
   distanceWithinDatasetWithDuckDb,
+  equalsAttributeDatasetWithDuckDb,
+  equalsDatasetWithDuckDb,
   intersectsAttributeDatasetWithDuckDb,
   intersectsDatasetWithDuckDb,
+  overlapsAttributeDatasetWithDuckDb,
+  overlapsDatasetWithDuckDb,
   touchesAttributeDatasetWithDuckDb,
   touchesDatasetWithDuckDb,
   withinAttributeDatasetWithDuckDb,
@@ -336,6 +348,23 @@ export async function runRelationOperation(
           return touchesDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
         case 'disjoint':
           return disjointDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
+        case 'overlaps':
+          return overlapsDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
+        case 'equals':
+          return equalsDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
+        case 'crosses':
+          return crossesDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
+        case 'covers':
+          return coversDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
+        case 'coveredBy':
+          return coveredByDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
+        case 'containsProperly':
+          return containsProperlyDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
         case 'distanceWithin':
           return distanceWithinDatasetWithDuckDb(
             inputDataset,
@@ -388,6 +417,48 @@ export async function runRelationOperation(
           );
         case 'disjoint':
           return disjointAttributeDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
+        case 'overlaps':
+          return overlapsAttributeDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
+        case 'equals':
+          return equalsAttributeDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
+        case 'crosses':
+          return crossesAttributeDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
+        case 'covers':
+          return coversAttributeDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
+        case 'coveredBy':
+          return coveredByAttributeDatasetWithDuckDb(
+            inputDataset,
+            maskDataset,
+            helperOptions,
+            opts.runtime,
+          );
+        case 'containsProperly':
+          return containsProperlyAttributeDatasetWithDuckDb(
             inputDataset,
             maskDataset,
             helperOptions,

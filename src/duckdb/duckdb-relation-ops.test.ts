@@ -5,15 +5,27 @@ import { processRelationWithDuckDb, type DuckDbRelationOperationSpec } from './d
 import { buildRelationAttributeSql, buildRelationFilterSql } from './duckdb-sql';
 import {
   containsAttributeDatasetWithDuckDb,
+  containsProperlyAttributeDatasetWithDuckDb,
+  containsProperlyDatasetWithDuckDb,
   containsDatasetWithDuckDb,
+  coveredByAttributeDatasetWithDuckDb,
+  coveredByDatasetWithDuckDb,
+  coversAttributeDatasetWithDuckDb,
+  coversDatasetWithDuckDb,
+  crossesAttributeDatasetWithDuckDb,
+  crossesDatasetWithDuckDb,
   disjointAttributeDatasetWithDuckDb,
   disjointDatasetWithDuckDb,
   distanceDatasetWithDuckDb,
   distanceWithinAttributeDatasetWithDuckDb,
   distanceWithinDatasetWithDuckDb,
+  equalsAttributeDatasetWithDuckDb,
+  equalsDatasetWithDuckDb,
   getDuckDbRelationOperationSpec,
   intersectsAttributeDatasetWithDuckDb,
   intersectsDatasetWithDuckDb,
+  overlapsAttributeDatasetWithDuckDb,
+  overlapsDatasetWithDuckDb,
   touchesAttributeDatasetWithDuckDb,
   touchesDatasetWithDuckDb,
   withinAttributeDatasetWithDuckDb,
@@ -106,6 +118,19 @@ async function expectValidationError(action: () => Promise<unknown>, field: stri
 }
 
 describe('named DuckDB relation helpers', () => {
+  const ADDITIONAL_RELATION_CASES = [
+    { id: 'overlaps', duckDbFunction: 'ST_Overlaps', outputColumn: 'duckdb_overlaps' },
+    { id: 'equals', duckDbFunction: 'ST_Equals', outputColumn: 'duckdb_equals' },
+    { id: 'crosses', duckDbFunction: 'ST_Crosses', outputColumn: 'duckdb_crosses' },
+    { id: 'covers', duckDbFunction: 'ST_Covers', outputColumn: 'duckdb_covers' },
+    { id: 'coveredBy', duckDbFunction: 'ST_CoveredBy', outputColumn: 'duckdb_covered_by' },
+    {
+      id: 'containsProperly',
+      duckDbFunction: 'ST_ContainsProperly',
+      outputColumn: 'duckdb_contains_properly',
+    },
+  ] as const;
+
   beforeEach(() => {
     processRelationWithDuckDbMock.mockClear();
   });
@@ -142,6 +167,12 @@ describe('named DuckDB relation helpers', () => {
     [withinDatasetWithDuckDb, 'within', 'ST_Within'],
     [touchesDatasetWithDuckDb, 'touches', 'ST_Touches'],
     [disjointDatasetWithDuckDb, 'disjoint', 'ST_Disjoint'],
+    [overlapsDatasetWithDuckDb, 'overlaps', 'ST_Overlaps'],
+    [equalsDatasetWithDuckDb, 'equals', 'ST_Equals'],
+    [crossesDatasetWithDuckDb, 'crosses', 'ST_Crosses'],
+    [coversDatasetWithDuckDb, 'covers', 'ST_Covers'],
+    [coveredByDatasetWithDuckDb, 'coveredBy', 'ST_CoveredBy'],
+    [containsProperlyDatasetWithDuckDb, 'containsProperly', 'ST_ContainsProperly'],
   ])('builds %s filter relation specs', async (helper, id, duckDbFunction) => {
     await helper(dataset(), dataset());
 
@@ -159,6 +190,17 @@ describe('named DuckDB relation helpers', () => {
     [withinAttributeDatasetWithDuckDb, 'within', 'ST_Within', 'duckdb_within'],
     [touchesAttributeDatasetWithDuckDb, 'touches', 'ST_Touches', 'duckdb_touches'],
     [disjointAttributeDatasetWithDuckDb, 'disjoint', 'ST_Disjoint', 'duckdb_disjoint'],
+    [overlapsAttributeDatasetWithDuckDb, 'overlaps', 'ST_Overlaps', 'duckdb_overlaps'],
+    [equalsAttributeDatasetWithDuckDb, 'equals', 'ST_Equals', 'duckdb_equals'],
+    [crossesAttributeDatasetWithDuckDb, 'crosses', 'ST_Crosses', 'duckdb_crosses'],
+    [coversAttributeDatasetWithDuckDb, 'covers', 'ST_Covers', 'duckdb_covers'],
+    [coveredByAttributeDatasetWithDuckDb, 'coveredBy', 'ST_CoveredBy', 'duckdb_covered_by'],
+    [
+      containsProperlyAttributeDatasetWithDuckDb,
+      'containsProperly',
+      'ST_ContainsProperly',
+      'duckdb_contains_properly',
+    ],
   ])('builds %s attribute relation specs with default columns', async (helper, id, duckDbFunction, outputColumn) => {
     await helper(dataset(), dataset());
 
@@ -238,11 +280,23 @@ describe('named DuckDB relation helpers', () => {
     ['within filter', withinDatasetWithDuckDb],
     ['touches filter', touchesDatasetWithDuckDb],
     ['disjoint filter', disjointDatasetWithDuckDb],
+    ['overlaps filter', overlapsDatasetWithDuckDb],
+    ['equals filter', equalsDatasetWithDuckDb],
+    ['crosses filter', crossesDatasetWithDuckDb],
+    ['covers filter', coversDatasetWithDuckDb],
+    ['coveredBy filter', coveredByDatasetWithDuckDb],
+    ['containsProperly filter', containsProperlyDatasetWithDuckDb],
     ['intersects attribute', intersectsAttributeDatasetWithDuckDb],
     ['contains attribute', containsAttributeDatasetWithDuckDb],
     ['within attribute', withinAttributeDatasetWithDuckDb],
     ['touches attribute', touchesAttributeDatasetWithDuckDb],
     ['disjoint attribute', disjointAttributeDatasetWithDuckDb],
+    ['overlaps attribute', overlapsAttributeDatasetWithDuckDb],
+    ['equals attribute', equalsAttributeDatasetWithDuckDb],
+    ['crosses attribute', crossesAttributeDatasetWithDuckDb],
+    ['covers attribute', coversAttributeDatasetWithDuckDb],
+    ['coveredBy attribute', coveredByAttributeDatasetWithDuckDb],
+    ['containsProperly attribute', containsProperlyAttributeDatasetWithDuckDb],
   ])('allows topological helper %s with EPSG:4326', async (_name, helper) => {
     await helper(dataset('EPSG:4326'), dataset('EPSG:4326'));
 
@@ -342,9 +396,26 @@ describe('named DuckDB relation helpers', () => {
     });
   });
 
+  it.each(ADDITIONAL_RELATION_CASES)('returns the additional $id operation spec', ({
+    id,
+    duckDbFunction,
+    outputColumn,
+  }) => {
+    expect(getDuckDbRelationOperationSpec(id)).toEqual({
+      id,
+      duckDbFunction,
+      outputColumn,
+      output: 'predicate',
+      supportsFilter: true,
+      supportsAttribute: true,
+      requiresDistance: false,
+      rejectGeographicCrs: false,
+    });
+  });
+
   it('throws validation errors for unknown operation specs', () => {
-    expect(() => getDuckDbRelationOperationSpec('crosses')).toThrowError(DuckDbOperationError);
-    expect(() => getDuckDbRelationOperationSpec('crosses')).toThrowError(
+    expect(() => getDuckDbRelationOperationSpec('unsupported')).toThrowError(DuckDbOperationError);
+    expect(() => getDuckDbRelationOperationSpec('unsupported')).toThrowError(
       /Unsupported DuckDB relation operation/,
     );
   });

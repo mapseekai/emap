@@ -19,14 +19,14 @@
 <h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: duckdb-buffer, duckdb-geoparquet-query, duckdb-overlay.</p>
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">DuckDbAttributeLayerOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#failongeographiccrs">failOnGeographicCrs</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#geometrycolumn">geometryColumn</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#layer">layer</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#operation">operation</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#output">output</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">sourceId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#outputcolumn">outputColumn</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#outputlayer">outputLayer</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#runtime">runtime</a><span class="tsd-signature-symbol">?:</span> <a href="duckdb.DuckDbRuntime.html" class="tsd-signature-type tsd-kind-interface">DuckDbRuntime</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#src">src</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
-<section class="tsd-panel tsd-hierarchy" data-refl="574">
+<section class="tsd-panel tsd-hierarchy" data-refl="646">
 <h4>Hierarchy (<a href="../hierarchy.html#duckdb.DuckDbAttributeLayerOptions">View Summary</a>)</h4>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><a href="duckdb.DuckDbAttributeOperationOptions.html" class="tsd-signature-type tsd-kind-interface">DuckDbAttributeOperationOptions</a>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><span class="tsd-hierarchy-target">DuckDbAttributeLayerOptions</span></li></ul></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/duckdb/map-op.ts#L89">src/duckdb/map-op.ts:89</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4a0604382adce260fd39b847e5b5cd607abe7e23/src/duckdb/map-op.ts#L101">src/duckdb/map-op.ts:101</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -52,59 +52,59 @@
 <div class="tsd-signature"><span class="tsd-kind-property">failOnGeographicCrs</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div><aside class="tsd-sources">
 <p>Inherited from <a href="duckdb.DuckDbAttributeOperationOptions.html">DuckDbAttributeOperationOptions</a>.<a href="duckdb.DuckDbAttributeOperationOptions.html#failongeographiccrs">failOnGeographicCrs</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/duckdb/duckdb-attribute-ops.ts#L25">src/duckdb/duckdb-attribute-ops.ts:25</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4a0604382adce260fd39b847e5b5cd607abe7e23/src/duckdb/duckdb-attribute-ops.ts#L25">src/duckdb/duckdb-attribute-ops.ts:25</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="geometrycolumn"><code class="tsd-tag">Optional</code><span>geometry<wbr/>Column</span><a href="#geometrycolumn" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">geometryColumn</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
 <p>Inherited from <a href="duckdb.DuckDbAttributeOperationOptions.html">DuckDbAttributeOperationOptions</a>.<a href="duckdb.DuckDbAttributeOperationOptions.html#geometrycolumn">geometryColumn</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/duckdb/duckdb-attribute-op.ts#L15">src/duckdb/duckdb-attribute-op.ts:15</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4a0604382adce260fd39b847e5b5cd607abe7e23/src/duckdb/duckdb-attribute-op.ts#L15">src/duckdb/duckdb-attribute-op.ts:15</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="layer"><code class="tsd-tag">Optional</code><span>layer</span><a href="#layer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">layer</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">number</span></div><aside class="tsd-sources">
 <p>Inherited from <a href="duckdb.DuckDbAttributeOperationOptions.html">DuckDbAttributeOperationOptions</a>.<a href="duckdb.DuckDbAttributeOperationOptions.html#layer">layer</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/duckdb/duckdb-attribute-op.ts#L13">src/duckdb/duckdb-attribute-op.ts:13</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4a0604382adce260fd39b847e5b5cd607abe7e23/src/duckdb/duckdb-attribute-op.ts#L13">src/duckdb/duckdb-attribute-op.ts:13</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="operation"><span>operation</span><a href="#operation" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">operation</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>operation is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/duckdb/map-op.ts#L91">src/duckdb/map-op.ts:91</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4a0604382adce260fd39b847e5b5cd607abe7e23/src/duckdb/map-op.ts#L103">src/duckdb/map-op.ts:103</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="output"><code class="tsd-tag">Optional</code><span>output</span><a href="#output" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">output</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">sourceId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span></div>
 <div class="tsd-comment tsd-typography"><p>output is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/duckdb/map-op.ts#L92">src/duckdb/map-op.ts:92</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4a0604382adce260fd39b847e5b5cd607abe7e23/src/duckdb/map-op.ts#L104">src/duckdb/map-op.ts:104</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="outputcolumn"><code class="tsd-tag">Optional</code><span>output<wbr/>Column</span><a href="#outputcolumn" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">outputColumn</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
 <p>Inherited from <a href="duckdb.DuckDbAttributeOperationOptions.html">DuckDbAttributeOperationOptions</a>.<a href="duckdb.DuckDbAttributeOperationOptions.html#outputcolumn">outputColumn</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/duckdb/duckdb-attribute-op.ts#L16">src/duckdb/duckdb-attribute-op.ts:16</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4a0604382adce260fd39b847e5b5cd607abe7e23/src/duckdb/duckdb-attribute-op.ts#L16">src/duckdb/duckdb-attribute-op.ts:16</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="outputlayer"><code class="tsd-tag">Optional</code><span>output<wbr/>Layer</span><a href="#outputlayer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">outputLayer</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
 <p>Inherited from <a href="duckdb.DuckDbAttributeOperationOptions.html">DuckDbAttributeOperationOptions</a>.<a href="duckdb.DuckDbAttributeOperationOptions.html#outputlayer">outputLayer</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/duckdb/duckdb-attribute-op.ts#L14">src/duckdb/duckdb-attribute-op.ts:14</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4a0604382adce260fd39b847e5b5cd607abe7e23/src/duckdb/duckdb-attribute-op.ts#L14">src/duckdb/duckdb-attribute-op.ts:14</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="runtime"><code class="tsd-tag">Optional</code><span>runtime</span><a href="#runtime" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">runtime</span><span class="tsd-signature-symbol">?:</span> <a href="duckdb.DuckDbRuntime.html" class="tsd-signature-type tsd-kind-interface">DuckDbRuntime</a></div>
 <div class="tsd-comment tsd-typography"><p>runtime is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/duckdb/map-op.ts#L93">src/duckdb/map-op.ts:93</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4a0604382adce260fd39b847e5b5cd607abe7e23/src/duckdb/map-op.ts#L105">src/duckdb/map-op.ts:105</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="src"><span>src</span><a href="#src" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">src</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>src is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/8323c33cba3601d80ba3b4407d0d057a6f07e301/src/duckdb/map-op.ts#L90">src/duckdb/map-op.ts:90</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/4a0604382adce260fd39b847e5b5cd607abe7e23/src/duckdb/map-op.ts#L102">src/duckdb/map-op.ts:102</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
