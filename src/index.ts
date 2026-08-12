@@ -216,6 +216,11 @@ export { Bounds } from './geo/bounds';
 export { AffineTransform, AffineTransform as Transform } from './geo/transform';
 export { Viewport } from './geo/viewport';
 export { Projection } from './geo/projection';
+export type {
+  GetScaleMetricsOptions,
+  ScaleCalculationMethod,
+  ScaleMetrics,
+} from './geo/scale-calculator';
 export {
   DEFAULT_CRS,
   inferFromPrj,

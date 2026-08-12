@@ -11,6 +11,11 @@ import {
 } from '../geo/camera';
 import { Projection } from '../geo/projection';
 import {
+  ScaleCalculator,
+  type GetScaleMetricsOptions,
+  type ScaleMetrics,
+} from '../geo/scale-calculator';
+import {
   EpsgProjectionError,
   normalizeProjectCrs,
   normalizeProjectCrsMetadata,
@@ -175,6 +180,7 @@ export class Emap extends EventDispatcher {
   private _editOverlay: EditOverlayRenderer;
   private _scheduler!: RenderScheduler;
   private _viewport: Viewport = new Viewport();
+  private _scaleCalculator?: ScaleCalculator;
   private _projection: Projection = new Projection();
   private _camera!: Camera;
   // Accessed by composed managers via `EmapHostInternal`. Treat as
@@ -1749,6 +1755,29 @@ export class Emap extends EventDispatcher {
 
   public getZoom(): number {
     return this._projection.getZoom(Math.abs(this._viewport.transform.mx));
+  }
+
+  public async getScaleMetrics(
+    options: GetScaleMetricsOptions = {},
+  ): Promise<(ScaleMetrics & { zoom?: number }) | null> {
+    const metrics = await this._scaleCalculatorInstance().getMetrics(
+      {
+        crs: this.getCRS(),
+        width: this._viewport.width,
+        height: this._viewport.height,
+        unproject: (px, py) => this._viewport.unproject(px, py),
+      },
+      options,
+    );
+    if (!metrics) return null;
+    const crs = this.getCRS().toLowerCase();
+    return crs === 'epsg:3857' || crs === 'webmercator'
+      ? { ...metrics, zoom: this.getZoom() }
+      : metrics;
+  }
+
+  private _scaleCalculatorInstance(): ScaleCalculator {
+    return this._scaleCalculator ?? (this._scaleCalculator = new ScaleCalculator());
   }
 
   /** The drag-to-pan interaction handler. */
