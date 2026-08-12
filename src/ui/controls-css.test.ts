@@ -205,4 +205,27 @@ describe('controls.css Mapseek behavior', () => {
 
     expect(getComputedStyle(group).overflow).toBe('visible');
   });
+
+  it.each([undefined, 'dark'])('themes scale controls on %s hosts', (themeClass) => {
+    const { host } = mountControls(themeClass);
+    const scale = document.createElement('div');
+    scale.className = 'emap-ctrl emap-scale-ctrl';
+    const bar = document.createElement('div');
+    bar.className = 'emap-scale-bar';
+    for (let index = 0; index < 4; index += 1) {
+      const segment = document.createElement('span');
+      segment.className = 'emap-scale-segment';
+      bar.append(segment);
+    }
+    scale.append(bar);
+    host.append(scale);
+
+    const scaleStyle = getComputedStyle(scale);
+    const readVariable = (name: string) => scaleStyle.getPropertyValue(name);
+    expect(css).toMatch(/\.emap-scale-ctrl\s*\{[^}]*color: var\(--emap-current-card-foreground\);[^}]*background: var\(--emap-current-card\);[^}]*border: 1px solid var\(--emap-current-border\);/s);
+    expect(css).toMatch(/\.emap-scale-bar\s*\{[^}]*border: 1px solid var\(--emap-current-card-foreground\);/s);
+    expect(readVariable('--emap-current-card-foreground')).toContain('--card-foreground');
+    expect(readVariable('--emap-current-card')).toContain('--card');
+    expect(readVariable('--emap-current-border')).toContain('--border');
+  });
 });
