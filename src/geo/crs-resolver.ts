@@ -304,7 +304,7 @@ export function inferFromPrj(prj: string): string | null {
     return 'EPSG:3857';
   }
 
-  if (/DATUM\["WGS_1984"/i.test(prj) && /GEOGCS/i.test(prj)) {
+  if (/DATUM\["(?:D_)?WGS_1984"/i.test(prj) && /GEOGCS/i.test(prj)) {
     return 'EPSG:4326';
   }
 

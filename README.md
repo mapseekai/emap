@@ -528,8 +528,12 @@ demos and prototypes — **prefer an injected, self-hosted runtime in production
   executes the DuckDB-Wasm worker and `.wasm` from the jsDelivr CDN at runtime,
   and `INSTALL spatial; LOAD spatial;` downloads the spatial extension from
   DuckDB's extension repository. For production, self-host the bundles, pin
-  versions / add Subresource Integrity, and point `customExtensionRepository` at
-  a repository you control.
+  versions / add Subresource Integrity, and either point
+  `customExtensionRepository` at a repository you control or serve the extension
+  yourself via `spatialExtensionUrls: { eh, mvp, coi? }` — the URL for the
+  bundle DuckDB-Wasm actually selects is fetched once from your origin and
+  loaded without touching DuckDB's extension repository. The setting is
+  mutually exclusive with `customExtensionRepository`.
 - **Content-Security-Policy.** The CDN loader needs `script-src` to allow the
   bundle origin, `worker-src blob:` (the worker is created from a `Blob`), and a
   WASM-capable policy (`wasm-unsafe-eval` on modern browsers). Self-hosted

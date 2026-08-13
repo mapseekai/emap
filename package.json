@@ -135,7 +135,7 @@
     "flatbush": "^4.5.0",
     "geographiclib-geodesic": "^2.2.0",
     "kdbush": "^4.0.2",
-    "maplibre-gl": "^5.17.0",
+    "maplibre-gl": "^6.3.0",
     "mapshaper": "^0.6.113",
     "mproj": "^0.1.2",
     "parquet-wasm": "^0.7.1"

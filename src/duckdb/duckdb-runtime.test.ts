@@ -1,5 +1,5 @@
 import { tableFromArrays, tableFromIPC, type Table } from 'apache-arrow';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   closeDuckDbRuntime,
   createDuckDbRuntimeFromJsDelivr,
@@ -42,7 +42,9 @@ class FakeAsyncDuckDB {
   static instances: FakeAsyncDuckDB[] = [];
 
   readonly connections: FakeDuckDbConnection[] = [];
+  readonly droppedFiles: string[] = [];
   readonly instantiateCalls: Array<{ mainModule: string; pthreadWorker?: string }> = [];
+  readonly registeredFiles: Array<{ name: string; buffer: Uint8Array }> = [];
   readonly queryErrors: unknown[] = [];
   terminateError: unknown;
   terminateCalls = 0;
@@ -64,6 +66,14 @@ class FakeAsyncDuckDB {
     const conn = new FakeDuckDbConnection(this.resultTable, this.queryErrors.shift());
     this.connections.push(conn);
     return conn;
+  }
+
+  async registerFileBuffer(name: string, buffer: Uint8Array): Promise<void> {
+    this.registeredFiles.push({ name, buffer });
+  }
+
+  async dropFile(name: string): Promise<void> {
+    this.droppedFiles.push(name);
   }
 
   async terminate(): Promise<void> {
@@ -96,6 +106,65 @@ async function makeRuntime(duckdb = fakeDuckDbModule()): Promise<DuckDbRuntime> 
     createObjectURL: vi.fn(() => 'blob:duckdb-worker'),
     revokeObjectURL: vi.fn(),
   });
+}
+
+function fakeDuckDbModuleWithMainModule(mainModule: string): DuckDbWasmModule {
+  const duckdb = fakeDuckDbModule();
+  const platform = /duckdb-(eh|mvp)\.wasm/.exec(mainModule)?.[1] as 'eh' | 'mvp';
+  vi.mocked(duckdb.getJsDelivrBundles).mockReturnValue({
+    mvp: {
+      mainModule: platform === 'mvp' ? mainModule : 'https://cdn.test/duckdb-mvp.wasm',
+      mainWorker: 'mvp.worker.js',
+    },
+    eh: {
+      mainModule: platform === 'eh' ? mainModule : 'https://cdn.test/duckdb-eh.wasm',
+      mainWorker: 'eh.worker.js',
+    },
+  });
+  vi.mocked(duckdb.selectBundle).mockResolvedValue({
+    mainModule,
+    mainWorker: 'selected.worker.js',
+  });
+  return duckdb;
+}
+
+function fakeDuckDbModuleWithSelectedBundle(
+  bundleKey: 'mvp' | 'eh' | 'coi',
+  mainModule: string,
+): DuckDbWasmModule {
+  const duckdb = fakeDuckDbModule();
+  const bundles = {
+    mvp: { mainModule: 'https://cdn.test/default-mvp.wasm', mainWorker: 'mvp.worker.js' },
+    eh: { mainModule: 'https://cdn.test/default-eh.wasm', mainWorker: 'eh.worker.js' },
+    coi: {
+      mainModule: 'https://cdn.test/default-coi.wasm',
+      mainWorker: 'coi.worker.js',
+      pthreadWorker: 'coi.pthread.worker.js',
+    },
+  };
+  bundles[bundleKey].mainModule = mainModule;
+  vi.mocked(duckdb.getJsDelivrBundles).mockReturnValue(
+    bundles as unknown as ReturnType<DuckDbWasmModule['getJsDelivrBundles']>,
+  );
+  vi.mocked(duckdb.selectBundle).mockResolvedValue({
+    ...bundles[bundleKey],
+    pthreadWorker: bundles[bundleKey].pthreadWorker ?? null,
+  });
+  return duckdb;
+}
+
+function fakeDuckDbModuleWithoutDropFile(mainModule: string): DuckDbWasmModule {
+  class FakeAsyncDuckDBWithoutDropFile extends FakeAsyncDuckDB {
+    constructor(logger: unknown, worker: Worker) {
+      super(logger, worker);
+      Object.assign(this, { dropFile: undefined });
+    }
+  }
+
+  return {
+    ...fakeDuckDbModuleWithMainModule(mainModule),
+    AsyncDuckDB: FakeAsyncDuckDBWithoutDropFile,
+  } as unknown as DuckDbWasmModule;
 }
 
 function fakeWorker(): Worker {
@@ -336,5 +405,233 @@ describe('createDuckDbRuntimeFromJsDelivr', () => {
     expect(duckdbConn?.queries).toEqual(['select * from input']);
     expect(duckdbConn?.closed).toBe(true);
     expect(result).toBe(duckdbConn?.['resultTable']);
+  });
+
+  describe('bundled spatial extension', () => {
+    const extensionUrl = 'https://assets.test/duckdb-eh/spatial.duckdb_extension.wasm';
+    const extensionBytes = new Uint8Array([1, 2, 3, 4]);
+    const virtualExtensionFile = 'spatial.duckdb_extension.wasm';
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    function stubExtensionFetch(impl?: () => Promise<Response>) {
+      const fetchMock = vi.fn(impl ?? (async () => new Response(extensionBytes)));
+      vi.stubGlobal('fetch', fetchMock);
+      return fetchMock;
+    }
+
+    function makeBundledRuntime(
+      duckdb: DuckDbWasmModule,
+      spatialExtensionUrls: { coi?: string; eh?: string; mvp?: string },
+    ): Promise<DuckDbRuntime> {
+      return createDuckDbRuntimeFromJsDelivr({
+        duckdb,
+        spatialExtensionUrls,
+        workerFactory: (url) => ({ url }) as unknown as Worker,
+        createObjectURL: vi.fn(() => 'blob:duckdb-worker'),
+        revokeObjectURL: vi.fn(),
+      });
+    }
+
+    it('fetches the bundled URL but loads the extension from a fixed virtual file', async () => {
+      const fetchMock = stubExtensionFetch();
+      const runtime = await makeBundledRuntime(
+        fakeDuckDbModuleWithMainModule('https://cdn.test/duckdb-eh.wasm'),
+        { eh: extensionUrl },
+      );
+
+      await runtime.ensureSpatial();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(extensionUrl);
+      const db = FakeAsyncDuckDB.instances[0]!;
+      expect(db.registeredFiles).toEqual([{ name: virtualExtensionFile, buffer: extensionBytes }]);
+      expect(db.connections).toHaveLength(1);
+      expect(db.connections[0]?.queries).toEqual([`LOAD '${virtualExtensionFile}';`]);
+      expect(db.connections[0]?.closed).toBe(true);
+    });
+
+    it('selects the extension URL matching the detected bundle platform', async () => {
+      const fetchMock = stubExtensionFetch();
+      const mvpUrl = 'https://assets.test/duckdb-mvp/spatial.duckdb_extension.wasm';
+      const runtime = await makeBundledRuntime(
+        fakeDuckDbModuleWithMainModule('https://cdn.test/duckdb-mvp.wasm'),
+        { eh: extensionUrl, mvp: mvpUrl },
+      );
+
+      await runtime.ensureSpatial();
+
+      expect(fetchMock).toHaveBeenCalledWith(mvpUrl);
+      expect(FakeAsyncDuckDB.instances[0]?.connections[0]?.queries).toEqual([
+        `LOAD '${virtualExtensionFile}';`,
+      ]);
+    });
+
+    it('uses the selected bundle key instead of parsing the WASM URL', async () => {
+      const fetchMock = stubExtensionFetch();
+      const mvpUrl = 'https://assets.test/duckdb-mvp/spatial.duckdb_extension.wasm';
+      const runtime = await makeBundledRuntime(
+        fakeDuckDbModuleWithSelectedBundle('eh', 'https://cdn.test/custom-runtime.wasm'),
+        { eh: extensionUrl, mvp: mvpUrl },
+      );
+
+      await runtime.ensureSpatial();
+
+      expect(fetchMock).toHaveBeenCalledWith(extensionUrl);
+    });
+
+    it('uses an explicit COI extension URL when DuckDB selects a COI bundle', async () => {
+      const fetchMock = stubExtensionFetch();
+      const coiUrl = 'https://assets.test/duckdb-coi/spatial.duckdb_extension.wasm';
+      const runtime = await makeBundledRuntime(
+        fakeDuckDbModuleWithSelectedBundle('coi', 'https://cdn.test/duckdb-coi.wasm'),
+        { coi: coiUrl, eh: extensionUrl },
+      );
+
+      await runtime.ensureSpatial();
+
+      expect(fetchMock).toHaveBeenCalledWith(coiUrl);
+    });
+
+    it('rejects when the detected bundle platform has no configured URL', async () => {
+      const fetchMock = stubExtensionFetch();
+      const runtime = await makeBundledRuntime(
+        fakeDuckDbModuleWithMainModule('https://cdn.test/duckdb-eh.wasm'),
+        { mvp: extensionUrl },
+      );
+
+      await expect(runtime.ensureSpatial()).rejects.toThrow(
+        "spatial extension URL for the 'eh' bundle is not configured",
+      );
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(FakeAsyncDuckDB.instances[0]?.connections).toHaveLength(0);
+    });
+
+    it('rejects when the selected bundle cannot be identified in the bundle table', async () => {
+      const fetchMock = stubExtensionFetch();
+      const runtime = await makeBundledRuntime(fakeDuckDbModule(), {
+        eh: extensionUrl,
+        mvp: 'https://assets.test/duckdb-mvp/spatial.duckdb_extension.wasm',
+      });
+
+      await expect(runtime.ensureSpatial()).rejects.toThrow('could not be identified');
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the selected bundle is not in the DuckDB bundle table', async () => {
+      const fetchMock = stubExtensionFetch();
+      const runtime = await makeBundledRuntime(fakeDuckDbModule(), { mvp: extensionUrl });
+
+      await expect(runtime.ensureSpatial()).rejects.toThrow('could not be identified');
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('fetches and registers the bundled extension only once', async () => {
+      const fetchMock = stubExtensionFetch();
+      const runtime = await makeBundledRuntime(
+        fakeDuckDbModuleWithMainModule('https://cdn.test/duckdb-eh.wasm'),
+        { eh: extensionUrl },
+      );
+
+      await runtime.ensureSpatial();
+      await runtime.ensureSpatial();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const db = FakeAsyncDuckDB.instances[0]!;
+      expect(db.registeredFiles).toHaveLength(1);
+      expect(db.connections).toHaveLength(1);
+    });
+
+    it('retries the bundled load after a failed fetch', async () => {
+      const fetchMock = vi
+        .fn(async () => new Response(extensionBytes))
+        .mockRejectedValueOnce(new Error('network down'));
+      vi.stubGlobal('fetch', fetchMock);
+      const runtime = await makeBundledRuntime(
+        fakeDuckDbModuleWithMainModule('https://cdn.test/duckdb-eh.wasm'),
+        { eh: extensionUrl },
+      );
+
+      await expect(runtime.ensureSpatial()).rejects.toThrow('network down');
+      await runtime.ensureSpatial();
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(FakeAsyncDuckDB.instances[0]?.connections).toHaveLength(1);
+    });
+
+    it('rejects when the extension fetch returns an HTTP error', async () => {
+      stubExtensionFetch(async () => new Response('missing', { status: 404 }));
+      const runtime = await makeBundledRuntime(
+        fakeDuckDbModuleWithMainModule('https://cdn.test/duckdb-eh.wasm'),
+        { eh: extensionUrl },
+      );
+
+      await expect(runtime.ensureSpatial()).rejects.toThrow('HTTP 404');
+
+      const db = FakeAsyncDuckDB.instances[0]!;
+      expect(db.registeredFiles).toHaveLength(0);
+      expect(db.connections).toHaveLength(0);
+    });
+
+    it('requires dropFile support before fetching a bundled extension', async () => {
+      const fetchMock = stubExtensionFetch();
+      const runtime = await makeBundledRuntime(
+        fakeDuckDbModuleWithoutDropFile('https://cdn.test/duckdb-eh.wasm'),
+        { eh: extensionUrl },
+      );
+
+      await expect(runtime.ensureSpatial()).rejects.toThrow('does not support dropFile');
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('cleans up the virtual extension file before retrying a failed load', async () => {
+      stubExtensionFetch();
+      const runtime = await makeBundledRuntime(
+        fakeDuckDbModuleWithMainModule('https://cdn.test/duckdb-eh.wasm'),
+        { eh: extensionUrl },
+      );
+      const db = FakeAsyncDuckDB.instances[0]!;
+      db.queryErrors.push(new Error('extension load failed'));
+
+      await expect(runtime.ensureSpatial()).rejects.toThrow('extension load failed');
+      await runtime.ensureSpatial();
+
+      expect(db.droppedFiles).toEqual([virtualExtensionFile]);
+      expect(db.connections).toHaveLength(2);
+    });
+
+    it('does not place the extension download URL into SQL', async () => {
+      stubExtensionFetch();
+      const quotedUrl = "https://assets.test/duck's/spatial.duckdb_extension.wasm";
+      const runtime = await makeBundledRuntime(
+        fakeDuckDbModuleWithMainModule('https://cdn.test/duckdb-eh.wasm'),
+        { eh: quotedUrl },
+      );
+
+      await runtime.ensureSpatial();
+
+      expect(FakeAsyncDuckDB.instances[0]?.connections[0]?.queries).toEqual([
+        `LOAD '${virtualExtensionFile}';`,
+      ]);
+    });
+
+    it('rejects conflicting spatial extension sources during runtime creation', async () => {
+      await expect(
+        createDuckDbRuntimeFromJsDelivr({
+          customExtensionRepository: 'https://extensions.test',
+          duckdb: fakeDuckDbModuleWithMainModule('https://cdn.test/duckdb-eh.wasm'),
+          spatialExtensionUrls: { eh: extensionUrl },
+          workerFactory: (url) => ({ url }) as unknown as Worker,
+          createObjectURL: vi.fn(() => 'blob:duckdb-worker'),
+          revokeObjectURL: vi.fn(),
+        }),
+      ).rejects.toThrow('cannot be used together');
+    });
   });
 });

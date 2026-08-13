@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   predicates: `overlaps`, `equals`, `crosses`, `covers`, `coveredBy`, and
   `containsProperly`. Each predicate is available through dataset filters,
   attribute helpers, and map-operation routing with target-first semantics.
+- `createDuckDbRuntimeFromJsDelivr()` accepts `spatialExtensionUrls` for
+  self-hosted DuckDB spatial extension files keyed by the selected `mvp`, `eh`,
+  or optional `coi` bundle. The matching URL is fetched once and loaded from a
+  fixed DuckDB in-memory file, so signed URLs and arbitrary filenames work
+  without contacting DuckDB's extension repository on every session.
 - DuckDB-Wasm spatial aggregate joins can now preserve a target layer while
   appending ordered `count`, `sum`, `avg`, `min`, and `max` results from a
   second dataset. The API supports ten spatial predicates and `left` or `inner`

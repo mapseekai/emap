@@ -16,9 +16,25 @@ export interface DuckDbRuntime {
 
 export type DuckDbWasmModule = typeof import('@duckdb/duckdb-wasm');
 
+/** Self-hosted DuckDB spatial extension `.wasm` URLs, one per DuckDB-Wasm bundle platform. */
+export interface DuckDbSpatialExtensionUrls {
+  /** Spatial extension URL for the `eh` (exception-handling) bundle. */
+  eh?: string;
+  /** Spatial extension URL for the `mvp` bundle. */
+  mvp?: string;
+  /** Spatial extension URL for the `coi` (cross-origin-isolated) bundle. */
+  coi?: string;
+}
+
 export interface CreateDuckDbRuntimeOptions {
   duckdb?: DuckDbWasmModule;
   customExtensionRepository?: string;
+  /**
+   * Self-hosted spatial extension files. When set, `ensureSpatial()` fetches the URL
+   * matching the selected bundle once and loads it from DuckDB's in-memory filesystem
+   * instead of installing the extension from the DuckDB extension repository.
+   */
+  spatialExtensionUrls?: DuckDbSpatialExtensionUrls;
   workerFactory?: (url: string) => Worker | Promise<Worker>;
   createObjectURL?: (blob: Blob) => string;
   revokeObjectURL?: (url: string) => void;
@@ -40,6 +56,8 @@ type DuckDbWasmDatabaseLike = {
   registerFileBuffer?(name: string, buffer: Uint8Array): Promise<void>;
   terminate(): Promise<unknown>;
 };
+
+const SPATIAL_EXTENSION_FILE = 'spatial.duckdb_extension.wasm';
 
 let injectedRuntime: DuckDbRuntime | null = null;
 
@@ -66,6 +84,36 @@ async function loadDuckDbWasm(): Promise<DuckDbWasmModule> {
 
 function quoteSqlString(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
+}
+
+function resolveSpatialExtensionUrl(
+  urls: DuckDbSpatialExtensionUrls | undefined,
+  bundles: object,
+  selectedBundle: { mainModule: string },
+): string | null {
+  if (!urls) return null;
+  const matchingPlatforms = Object.entries(bundles)
+    .filter(
+      ([, bundle]) =>
+        typeof bundle === 'object' &&
+        bundle !== null &&
+        'mainModule' in bundle &&
+        bundle.mainModule === selectedBundle.mainModule,
+    )
+    .map(([platform]) => platform);
+  if (matchingPlatforms.length !== 1) {
+    throw new Error(
+      `DuckDB-Wasm selected bundle could not be identified from the configured bundle table`,
+    );
+  }
+  const platform = matchingPlatforms[0] as keyof DuckDbSpatialExtensionUrls;
+  const url = urls[platform];
+  if (!url) {
+    throw new Error(
+      `DuckDB-Wasm spatial extension URL for the '${platform}' bundle is not configured`,
+    );
+  }
+  return url;
 }
 
 function createJsDelivrWorkerUrl(
@@ -133,8 +181,12 @@ async function terminateDuckDbRuntime(db: DuckDbWasmDatabaseLike, worker: Worker
 export async function createDuckDbRuntimeFromJsDelivr(
   opts: CreateDuckDbRuntimeOptions = {},
 ): Promise<DuckDbRuntime> {
+  if (opts.customExtensionRepository && opts.spatialExtensionUrls) {
+    throw new Error('customExtensionRepository and spatialExtensionUrls cannot be used together');
+  }
   const duckdb = opts.duckdb ?? (await loadDuckDbWasm());
-  const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
+  const bundles = duckdb.getJsDelivrBundles();
+  const bundle = await duckdb.selectBundle(bundles);
   if (!bundle.mainWorker) {
     throw new Error('Selected DuckDB-Wasm bundle does not include a worker script');
   }
@@ -163,6 +215,11 @@ export async function createDuckDbRuntimeFromJsDelivr(
 
   function createSpatialReadyPromise(): Promise<void> {
     const ready = (async () => {
+      const bundledUrl = resolveSpatialExtensionUrl(opts.spatialExtensionUrls, bundles, bundle);
+      if (bundledUrl) {
+        await loadBundledSpatialExtension(bundledUrl);
+        return;
+      }
       const conn = (await db.connect()) as unknown as DuckDbWasmConnectionLike;
       try {
         if (opts.customExtensionRepository) {
@@ -179,6 +236,44 @@ export async function createDuckDbRuntimeFromJsDelivr(
       if (spatialReady === ready) spatialReady = null;
     });
     return ready;
+  }
+
+  async function loadBundledSpatialExtension(url: string): Promise<void> {
+    if (typeof db.registerFileBuffer !== 'function') {
+      throw new Error('DuckDB-Wasm runtime does not support registerFileBuffer');
+    }
+    if (typeof db.dropFile !== 'function') {
+      throw new Error('DuckDB-Wasm runtime does not support dropFile for bundled extensions');
+    }
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(
+        `DuckDB-Wasm spatial extension fetch failed with HTTP ${response.status} for ${url}`,
+      );
+    }
+    let registered = false;
+    try {
+      await db.registerFileBuffer(
+        SPATIAL_EXTENSION_FILE,
+        new Uint8Array(await response.arrayBuffer()),
+      );
+      registered = true;
+      const conn = (await db.connect()) as unknown as DuckDbWasmConnectionLike;
+      try {
+        await conn.query(`LOAD ${quoteSqlString(SPATIAL_EXTENSION_FILE)};`);
+      } finally {
+        await conn.close();
+      }
+    } catch (err) {
+      if (registered) {
+        try {
+          await db.dropFile(SPATIAL_EXTENSION_FILE);
+        } catch {
+          // Preserve the extension load failure; cleanup can only be best-effort.
+        }
+      }
+      throw err;
+    }
   }
 
   async function ensureSpatial(): Promise<void> {

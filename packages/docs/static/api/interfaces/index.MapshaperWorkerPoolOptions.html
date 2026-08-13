@@ -37,7 +37,7 @@ around; useful for callers that toggle <code>useWorker</code> at runtime.</p>
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">MapshaperWorkerPoolOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#jobtimeoutms">jobTimeoutMs</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#poolsize">poolSize</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workerctor">WorkerCtor</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span><br/>        <span class="tsd-kind-property">prototype</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Worker</span><span class="tsd-signature-symbol">;</span><br/>        <span class="tsd-signature-keyword">new</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">scriptURL</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">URL</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">WorkerOptions</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Worker</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workerurl">workerUrl</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/20c7eeba/src/core/mapshaper-worker-pool.ts#L26">src/core/mapshaper-worker-pool.ts:26</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/5e55b30c80d13b4d5a1c1ace18d0af922bd49039/src/core/mapshaper-worker-pool.ts#L26">src/core/mapshaper-worker-pool.ts:26</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -59,7 +59,7 @@ around; useful for callers that toggle <code>useWorker</code> at runtime.</p>
 <div class="tsd-comment tsd-typography"><p>Maximum time for one worker request before its worker is restarted. Default 120 seconds.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/20c7eeba/src/core/mapshaper-worker-pool.ts#L51">src/core/mapshaper-worker-pool.ts:51</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/5e55b30c80d13b4d5a1c1ace18d0af922bd49039/src/core/mapshaper-worker-pool.ts#L51">src/core/mapshaper-worker-pool.ts:51</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="poolsize"><code class="tsd-tag">Optional</code><span>pool<wbr/>Size</span><a href="#poolsize" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">poolSize</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
@@ -73,7 +73,7 @@ first dispatch creates one, the second creates a second only if
 the first is busy, and so on.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/20c7eeba/src/core/mapshaper-worker-pool.ts#L49">src/core/mapshaper-worker-pool.ts:49</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/5e55b30c80d13b4d5a1c1ace18d0af922bd49039/src/core/mapshaper-worker-pool.ts#L49">src/core/mapshaper-worker-pool.ts:49</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="workerctor"><code class="tsd-tag">Optional</code><span>Worker<wbr/>Ctor</span><a href="#workerctor" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">WorkerCtor</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span><br/>    <span class="tsd-kind-property">prototype</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Worker</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-signature-keyword">new</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">scriptURL</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">URL</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">WorkerOptions</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Worker</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
@@ -81,7 +81,7 @@ the first is busy, and so on.</p>
 to inject a <code>MockWorker</code>. Defaults to the global <code>Worker</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/20c7eeba/src/core/mapshaper-worker-pool.ts#L37">src/core/mapshaper-worker-pool.ts:37</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/5e55b30c80d13b4d5a1c1ace18d0af922bd49039/src/core/mapshaper-worker-pool.ts#L37">src/core/mapshaper-worker-pool.ts:37</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="workerurl"><span>worker<wbr/>Url</span><a href="#workerurl" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">workerUrl</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
@@ -90,7 +90,7 @@ the same way as any <code>new Worker(url)</code> argument — pass the absolute 
 page-relative URL where the file is served.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/20c7eeba/src/core/mapshaper-worker-pool.ts#L32">src/core/mapshaper-worker-pool.ts:32</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/5e55b30c80d13b4d5a1c1ace18d0af922bd49039/src/core/mapshaper-worker-pool.ts#L32">src/core/mapshaper-worker-pool.ts:32</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

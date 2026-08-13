@@ -16,7 +16,11 @@ import type {
   ExportOptions,
   NormalizedDatasetCommit,
 } from './source';
-import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../adapter/mapshaper-adapter';
+import {
+  getDefaultMapshaperAdapter,
+  parseMapshaperCrs,
+  type MapshaperAdapter,
+} from '../adapter/mapshaper-adapter';
 import {
   normalizeProjectCrsMetadata,
   resolveDatasetCRS,
@@ -105,7 +109,7 @@ export interface ZipExtractionLimits {
 }
 
 const DEFAULT_ZIP_LIMITS: Required<ZipExtractionLimits> = {
-  maxBytes: 500 * 1024 * 1024,
+  maxBytes: 2048 * 1024 * 1024,
   maxEntries: 5000,
   maxRatio: 100,
 };
@@ -557,6 +561,13 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     const metadataCrs = targetCrsMetadata ?? normalizeProjectCrsMetadata(targetCrs);
     const working = this._adapter.copyDataset(dataset);
     working.arcs?.setRetainedInterval?.(0);
+    // GeoParquet carries a serializable CRS label in `crs_string`, while
+    // Mapshaper's `-proj` reads the source CRS from this runtime object.
+    // Imported Shapefiles already have `info.crs` or `info.prj`; only fill
+    // the missing operational representation here.
+    if (!working.info?.crs && working.info?.crs_string) {
+      working.info.crs = parseMapshaperCrs(await resolveProjectCrs(working.info.crs_string));
+    }
     const result = await this._adapter.runOnDataset(`-proj ${resolvedTargetCrs}`, working);
     if (result.info) {
       delete result.info.crs_string;

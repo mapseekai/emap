@@ -398,6 +398,38 @@ describe('TopologySource.reproject', () => {
     expect(extent.ymin).toBeGreaterThan(4_000_000);
   });
 
+  it('reprojects projected coordinates whose CRS is represented only by crs_string', async () => {
+    const source = new TopologySource('test');
+    const content = new TextEncoder().encode(
+      JSON.stringify({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'Point', coordinates: [-7_000_000, 5_500_000] },
+          },
+        ],
+      }),
+    );
+
+    await source.setData({ filename: 'point.geojson', content });
+    const dataset = source.getDataset()!;
+    setPrivate(source, '_dataset', {
+      ...dataset,
+      info: { crs_string: 'EPSG:3857' },
+    });
+
+    await source.reproject('EPSG:4326');
+
+    const extent = source.getExtent();
+    expect(source.getCRS()).toBe('EPSG:4326');
+    expect(extent.xmin).toBeGreaterThan(-70);
+    expect(extent.xmin).toBeLessThan(-50);
+    expect(extent.ymin).toBeGreaterThan(30);
+    expect(extent.ymin).toBeLessThan(50);
+  });
+
   it('resolves EPSG targets before calling mapshaper directly', async () => {
     const source = new TopologySource('test');
     const dataset = { ...FAKE_DATASET, info: {} };

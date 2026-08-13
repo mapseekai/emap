@@ -149,6 +149,14 @@ describe('inferFromPrj', () => {
     expect(inferFromPrj('GEOGCS["WGS",DATUM["WGS_1984"]]')).toBe('EPSG:4326');
   });
 
+  it('detects ESRI D_WGS_1984 WKT1 as WGS84', () => {
+    expect(
+      inferFromPrj(
+        'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]',
+      ),
+    ).toBe('EPSG:4326');
+  });
+
   it('returns null when nothing matches', () => {
     expect(inferFromPrj('PROJCS["Custom Projection"]')).toBeNull();
     expect(inferFromPrj('')).toBeNull();

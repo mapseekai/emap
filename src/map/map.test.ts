@@ -1249,11 +1249,13 @@ describe('Emap layer management', () => {
       registerMockSource(map, 'src1', source);
 
       const snapshot = map.getRenderedLayers() as LayerSpecification[];
+      const originalId = snapshot[0].id;
+      const originalLineColor = (snapshot[0].paint as { 'line-color': string })['line-color'];
       snapshot[0].id = 'changed';
       (snapshot[0].paint as { 'line-color': string })['line-color'] = '#fff';
 
       expect(map.getRenderedLayers()).toMatchObject([
-        { id: 'src1:roads', paint: { 'line-color': '#1e88e5' } },
+        { id: originalId, paint: { 'line-color': originalLineColor } },
       ]);
       expect((callPrivate(map, '_getEffectiveLayers') as LayerSpecification[])[0].id).toBe(
         'src1:roads',
