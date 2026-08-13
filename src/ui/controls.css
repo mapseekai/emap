@@ -83,8 +83,7 @@
 .emap-ctrl-group { flex-direction: column; }
 .emap-basemap-ctrl { flex-direction: row; }
 
-.emap-ctrl-group > button,
-.emap-basemap-btn {
+.emap-ctrl-group > button {
   position: relative;
   box-sizing: border-box;
   height: var(--emap-control-size);
@@ -105,33 +104,26 @@
   border-block-end: 0;
   box-shadow: inset 0 -1px 0 var(--emap-current-border);
 }
-.emap-basemap-btn { width: auto; padding-inline: 10px; }
-.emap-ctrl-group > button:last-child,
-.emap-basemap-btn { border-block-end: 0; }
+.emap-ctrl-group > button:last-child { border-block-end: 0; }
 .emap-ctrl-group > button:last-child { box-shadow: none; }
 
-.emap-ctrl-group > button:hover:not(:disabled),
-.emap-basemap-btn:hover:not(:disabled) { background: var(--emap-current-hover-bg); }
+.emap-ctrl-group > button:hover:not(:disabled) { background: var(--emap-current-hover-bg); }
 
 .emap-ctrl-group > button:focus-visible,
-.emap-basemap-btn:focus-visible,
 .emap-simplify-popup :is(button, input, select):focus-visible,
 .emap-ctx-menu-item:focus-visible {
   outline: 3px solid color-mix(in oklch, var(--emap-current-ring), transparent 80%);
   outline-offset: -3px;
 }
 
-.emap-ctrl-group > button:disabled,
-.emap-basemap-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+.emap-ctrl-group > button:disabled { cursor: not-allowed; opacity: 0.5; }
 
-.emap-ctrl-group > button.active,
-.emap-basemap-btn.active {
+.emap-ctrl-group > button.active {
   color: var(--emap-current-primary);
   background: var(--emap-current-selection-bg);
 }
 
-.emap-ctrl-group > button.active::before,
-.emap-basemap-btn.active::before {
+.emap-ctrl-group > button.active::before {
   position: absolute;
   content: "";
   background: var(--emap-current-primary);
@@ -141,12 +133,6 @@
   inset-block: 0;
   inset-inline-start: 0;
   width: 2px;
-}
-
-.emap-basemap-btn.active::before {
-  inset-inline: 0;
-  inset-block-end: 0;
-  height: 2px;
 }
 
 .emap-ctrl-icon {
@@ -234,6 +220,74 @@
 .emap-scale-segment { flex: 1; background: var(--emap-current-card); }
 .emap-scale-segment:nth-child(odd) { background: var(--emap-current-card-foreground); }
 
+.emap-scale-bar[hidden] { display: none; }
+
+.emap-scale-bar-text { display: none; }
+
+/* Scale control style variants */
+.emap-scale-ctrl-line .emap-scale-bar {
+  height: 7px;
+  border: none;
+  border-right: 1px solid var(--emap-current-card-foreground);
+  border-bottom: 2px solid var(--emap-current-card-foreground);
+  border-left: 1px solid var(--emap-current-card-foreground);
+}
+
+.emap-scale-ctrl-line .emap-scale-segment { display: none; }
+
+.emap-scale-ctrl-ruler .emap-scale-bar {
+  height: 7px;
+  border: none;
+  border-bottom: 2px solid var(--emap-current-card-foreground);
+  border-left: 1px solid var(--emap-current-card-foreground);
+}
+
+.emap-scale-ctrl-ruler .emap-scale-segment {
+  background: transparent;
+  border-right: 1px solid var(--emap-current-card-foreground);
+}
+
+.emap-scale-ctrl-steps .emap-scale-bar { height: 8px; border: none; }
+
+.emap-scale-ctrl-steps .emap-scale-segment:nth-child(odd) {
+  background: transparent;
+  border-top: 2px solid var(--emap-current-card-foreground);
+}
+
+.emap-scale-ctrl-steps .emap-scale-segment:nth-child(even) {
+  background: transparent;
+  border-bottom: 2px solid var(--emap-current-card-foreground);
+  border-left: 2px solid var(--emap-current-card-foreground);
+}
+
+.emap-scale-ctrl-steps .emap-scale-segment:first-child { border-left: 2px solid var(--emap-current-card-foreground); }
+
+.emap-scale-ctrl-solid .emap-scale-labels { display: none; }
+
+.emap-scale-ctrl-solid .emap-scale-bar { height: 18px; border: none; }
+
+.emap-scale-ctrl-solid .emap-scale-segment { display: none; }
+
+.emap-scale-ctrl-solid .emap-scale-bar-text {
+  display: flex;
+  overflow: hidden;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  color: var(--emap-current-card);
+  background: var(--emap-current-card-foreground);
+  font-size: 0.75em;
+  white-space: nowrap;
+}
+
+.emap-scale-ctrl-minimal .emap-scale-labels {
+  grid-template-columns: 1fr;
+  border-bottom: 2px solid var(--emap-current-card-foreground);
+  text-align: center;
+}
+
+.emap-scale-ctrl-minimal .emap-scale-bar { display: none; }
+
 /* Shared MapLibre basemap and layer panels */
 .emap-panel-control {
   position: relative;
@@ -247,10 +301,15 @@
   font: var(--emap-font);
 }
 
+/* Panel triggers are square icon buttons (zoom, undo, redo style) */
 .emap-panel-trigger {
-  min-width: 64px;
-  min-height: var(--emap-control-size);
-  padding: 6px 10px;
+  box-sizing: border-box;
+  display: flex;
+  width: var(--emap-control-size);
+  height: var(--emap-control-size);
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   color: inherit;
   background: transparent;
   border: 0;
@@ -261,8 +320,8 @@
 
 .emap-panel-trigger:hover { background: var(--emap-current-hover-bg); }
 .emap-panel-trigger[aria-expanded="true"] {
-  color: var(--emap-current-primary-foreground);
-  background: var(--emap-current-primary);
+  color: var(--emap-current-primary);
+  background: var(--emap-current-selection-bg);
 }
 
 .emap-panel-trigger:focus-visible,
@@ -324,6 +383,7 @@
 
 .emap-control-row:hover { background: var(--emap-current-hover-bg); }
 .emap-control-row input { flex: 0 0 auto; margin: 0; }
+.emap-control-row input[type="radio"] { accent-color: var(--emap-current-primary); }
 
 .emap-control-status {
   min-height: 1.5em;

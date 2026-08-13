@@ -77,6 +77,7 @@ describe('ScaleControl', () => {
     expect(map.on).toHaveBeenCalledWith('resize', expect.any(Function));
     expect(map.on).toHaveBeenCalledWith('crschange', expect.any(Function));
     expect(root.getAttribute('aria-label')).toBe('Map scale');
+    expect(root.classList.contains('emap-scale-ctrl-checker')).toBe(true);
     expect(root.querySelector('.emap-scale-labels')?.getAttribute('aria-hidden')).toBe('true');
     expect(root.querySelector('.emap-scale-bar')?.getAttribute('aria-hidden')).toBe('true');
     expect(root.querySelector('.emap-scale-bar')).toBeTruthy();
@@ -106,6 +107,25 @@ describe('ScaleControl', () => {
     expect(labels?.textContent).toContain(expected);
     expect(root.querySelectorAll('.emap-scale-labels > span')).toHaveLength(labelCount);
     expect(labels?.classList.contains('emap-scale-labels-dual')).toBe(dualLayout);
+  });
+
+  it.each([
+    ['line', ['0', '200 m'], true, ''],
+    ['ruler', ['0', '100 m', '200 m'], false, ''],
+    ['steps', ['0', '100 m', '200 m'], false, ''],
+    ['solid', [], false, '200 m'],
+    ['minimal', ['200 m'], false, ''],
+  ] as const)('renders the %s style', async (style, expectedLabels, dualLayout, barText) => {
+    const map = stubMap(Promise.resolve(metrics));
+    const root = new ScaleControl({ style }).onAdd(map as any);
+
+    await flushFrame();
+
+    expect(root.classList.contains(`emap-scale-ctrl-${style}`)).toBe(true);
+    const labels = root.querySelectorAll('.emap-scale-labels > span');
+    expect([...labels].map((label) => label.textContent)).toEqual(expectedLabels);
+    expect(root.querySelector('.emap-scale-labels')?.classList.contains('emap-scale-labels-dual')).toBe(dualLayout);
+    expect(root.querySelector('.emap-scale-bar-text')?.textContent).toBe(barText);
   });
 
   it('honors showScale and showZoom independently', async () => {

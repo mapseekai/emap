@@ -11,6 +11,8 @@ const iconNames = [
   'polygon',
   'point',
   'edit',
+  'basemap',
+  'layers',
   'undo',
   'redo',
 ] as const;

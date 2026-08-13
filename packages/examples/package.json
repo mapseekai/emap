@@ -15,6 +15,7 @@
     "prismjs": "^1.30.0"
   },
   "devDependencies": {
-    "@types/prismjs": "^1.26.6"
+    "@types/prismjs": "^1.26.6",
+    "flatgeobuf": "^4.4.0"
   }
 }

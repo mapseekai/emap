@@ -9,6 +9,7 @@ const expectedIds = [
   'getting-started/geojson-viewer',
   'getting-started/shapefile-viewer',
   'geoparquet-viewer',
+  'flatgeobuf-viewer',
   'join',
   'rename-layer',
   'split-layer',
@@ -65,7 +66,7 @@ const expectedIds = [
 ] as const;
 
 const expectedModules = [
-  { key: 'map-data', zh: '地图与数据', en: 'Map & Data', count: 13 },
+  { key: 'map-data', zh: '地图与数据', en: 'Map & Data', count: 14 },
   {
     key: 'style-interaction',
     zh: '样式与交互',
@@ -324,11 +325,11 @@ describe('example catalog metadata', () => {
     root.querySelector<HTMLButtonElement>('[data-category="map-data"]')?.click();
 
     expect(root.querySelector('.catalog-group-title')?.textContent).toBe('地图与数据');
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(13);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(14);
     expect(root.querySelector('[data-category="map-data"]')?.getAttribute('aria-pressed')).toBe(
       'true',
     );
-    expect(root.querySelector('.catalog-results-summary')?.textContent).toContain('13');
+    expect(root.querySelector('.catalog-results-summary')?.textContent).toContain('14');
   });
 
   it('searches localized text, ids, tags, and API identifiers', () => {
@@ -386,7 +387,7 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-empty')).not.toBeNull();
 
     root.querySelector<HTMLButtonElement>('.catalog-empty-clear')?.click();
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(13);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(14);
     expect(root.querySelector<HTMLInputElement>('.catalog-search-input')?.value).toBe('');
   });
 
@@ -433,7 +434,7 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-brand img')?.getAttribute('src')).toBe(
       '/mapseekai/emap/examples/emap.svg',
     );
-    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('56');
+    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('57');
 
     const firstCard = root.querySelector<HTMLAnchorElement>(
       'a.example-card[href="/mapseekai/emap/examples/getting-started/geojson-viewer/"]',

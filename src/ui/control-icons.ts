@@ -6,6 +6,8 @@ import polylineSvg from './assets/controls/polyline.svg?raw';
 import polygonSvg from './assets/controls/polygon.svg?raw';
 import pointSvg from './assets/controls/point.svg?raw';
 import editSvg from './assets/controls/edit.svg?raw';
+import basemapSvg from './assets/controls/basemap.svg?raw';
+import layersSvg from './assets/controls/layers.svg?raw';
 import undoSvg from './assets/controls/help-larrow.svg?raw';
 import redoSvg from './assets/controls/help-rarrow.svg?raw';
 
@@ -20,6 +22,8 @@ export type ControlIconName =
   | 'polygon'
   | 'point'
   | 'edit'
+  | 'basemap'
+  | 'layers'
   | 'undo'
   | 'redo';
 
@@ -32,6 +36,8 @@ const CONTROL_ICON_SVGS: Readonly<Record<ControlIconName, string>> = {
   polygon: polygonSvg,
   point: pointSvg,
   edit: editSvg,
+  basemap: basemapSvg,
+  layers: layersSvg,
   undo: undoSvg,
   redo: redoSvg,
 };

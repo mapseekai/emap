@@ -220,6 +220,7 @@ export type {
   GetScaleMetricsOptions,
   ScaleCalculationMethod,
   ScaleMetrics,
+  ScaleViewMetrics,
 } from './geo/scale-calculator';
 export {
   DEFAULT_CRS,
@@ -363,7 +364,7 @@ export type { NavigationOptions } from './ui/navigation-control';
 export { StatusControl } from './ui/status-control';
 export type { StatusOptions } from './ui/status-control';
 export { ScaleControl } from './ui/scale-control';
-export type { ScaleControlOptions } from './ui/scale-control';
+export type { ScaleControlOptions, ScaleControlStyle } from './ui/scale-control';
 export { BasemapControl } from './ui/basemap-control';
 export type { BasemapOptions, BasemapStyle } from './ui/basemap-control';
 export { LayerControl } from './ui/layer-control';

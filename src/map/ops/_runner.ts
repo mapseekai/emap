@@ -20,7 +20,13 @@ import type { EmapHostInternal } from '../emap-host';
 import type { MutableTopologySource } from '../../source/source';
 import type { TransactionInternal } from '../../edit/transaction-internal';
 import { Err, OK, type OpResult } from '../op-result';
-import { getDefaultMapshaperAdapter, type ParsedCommand } from '../../adapter/mapshaper-adapter';
+import {
+  getDefaultMapshaperAdapter,
+  resolveMapshaperCrsSignature,
+  type PackedSession,
+  type ParsedCommand,
+} from '../../adapter/mapshaper-adapter';
+import { resolveProjectCrs } from '../../geo/crs-resolver';
 import { parseCommandHeads, shouldUseWorkerForHeads } from '../worker-routing';
 
 /**
@@ -362,6 +368,34 @@ export function _runDatasetTransform(
   return operation;
 }
 
+// mapshaper treats a packed dataset's `info.crs_string` as a parsable CRS
+// definition (importInfo → parseCrsString) and expands bare `EPSG:NNNN`
+// labels to `+init=epsg:NNNN`, which is a fatal init-file lookup in the
+// browser bundle (mproj's disk fallback is patched out). emap stamps such
+// canonical EPSG labels as metadata (crs-resolver), so the worker
+// round-trip swaps them for an equivalent parseable Proj.4 defn on the
+// wire; `_runViaWorker` re-stamps the original label on the result.
+const MAPSHAPER_INIT_STRING_RE = /^(esri|epsg|nad83|nad27):\d+$/i;
+
+/**
+ * Replace an init-style `crs_string` in a freshly packed session with a
+ * parseable Proj.4 definition. Returns the original label so the caller
+ * can restore it after the round-trip, or `undefined` when nothing was
+ * swapped. Unresolvable labels are left untouched (the worker then fails
+ * exactly as the main thread would).
+ */
+async function sanitizePackedSessionCrs(packed: PackedSession): Promise<string | undefined> {
+  const info = (packed.datasets?.[0] as { info?: { crs_string?: unknown } } | undefined)?.info;
+  const label = typeof info?.crs_string === 'string' ? info.crs_string : undefined;
+  if (!info || !label || !MAPSHAPER_INIT_STRING_RE.test(label)) return undefined;
+  try {
+    info.crs_string = resolveMapshaperCrsSignature(await resolveProjectCrs(label));
+  } catch {
+    return undefined;
+  }
+  return label;
+}
+
 async function _runViaWorker(
   host: EmapHostInternal,
   dataset: MapshaperDataset,
@@ -380,6 +414,7 @@ async function _runViaWorker(
   try {
     const adapter = getDefaultMapshaperAdapter();
     const packed = await adapter.exportDatasetsToPack([dataset], { compact: false });
+    const crsLabel = await sanitizePackedSessionCrs(packed);
     const transferList = collectTransferables(packed);
     const command = request.kind === 'string' ? request.cmd : request.commands;
     const resultPacked = await host._workerPool.dispatchWithId(
@@ -392,6 +427,14 @@ async function _runViaWorker(
     const restored = await adapter.restoreSessionData(resultPacked);
     if (!restored.datasets || restored.datasets.length === 0) {
       throw new Error('worker: no dataset in response');
+    }
+    // Re-stamp emap's canonical CRS label when the command could not have
+    // changed the CRS (projCmd re-stamps crs_string itself for crs-changing
+    // commands, using the already browser-safe -proj target string).
+    const effect = inferEffectForHeads(request.heads);
+    if (crsLabel !== undefined && effect !== 'crs-only' && effect !== 'unknown') {
+      const info = (restored.datasets[0].info ??= {});
+      info.crs_string = crsLabel;
     }
     const durationMs =
       (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;

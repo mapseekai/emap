@@ -66,7 +66,7 @@ describe('LassoSelectHandler', () => {
     expect(map.select).not.toHaveBeenCalled();
   });
 
-  it('uses primary stroke and selection fill for the default overlay', () => {
+  it('uses primary stroke and no fill for the default overlay', () => {
     const map = fakeMap();
     const h = new LassoSelectHandler(map as any);
     h.enable();
@@ -75,7 +75,7 @@ describe('LassoSelectHandler', () => {
 
     const poly = map.getCanvasContainer().querySelector('polyline');
     expect(poly?.getAttribute('stroke')).toBe('var(--emap-current-primary)');
-    expect(poly?.getAttribute('fill')).toBe('var(--emap-current-selection-bg)');
+    expect(poly?.getAttribute('fill')).toBe('none');
   });
 
   it('preserves supplied overlay stroke and fill', () => {

@@ -6,6 +6,7 @@ import type {
   MapLibreServiceManager,
 } from '../map/maplibre-service';
 import type { Control } from './control';
+import { createControlIcon } from './control-icons';
 
 let layerControlSequence = 0;
 
@@ -116,7 +117,12 @@ export class LayerControl implements Control {
     this._trigger = document.createElement('button');
     this._trigger.type = 'button';
     this._trigger.className = 'emap-panel-trigger emap-layer-trigger';
-    this._trigger.textContent = 'Layers';
+    this._trigger.title = 'Layers';
+    this._trigger.setAttribute('aria-label', 'Layers');
+    const icon = document.createElement('span');
+    icon.className = 'emap-ctrl-icon';
+    icon.appendChild(createControlIcon('layers'));
+    this._trigger.appendChild(icon);
     this._trigger.setAttribute('aria-haspopup', 'dialog');
     this._trigger.setAttribute('aria-expanded', 'false');
     this._trigger.setAttribute('aria-controls', panelId);

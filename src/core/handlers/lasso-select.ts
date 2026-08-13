@@ -13,7 +13,7 @@ export interface LassoSelectStyle {
   stroke?: string;
   /** Stroke width in CSS pixels. Default `1.5`. */
   strokeWidth?: number;
-  /** Fill color of the closed shape preview. Default current theme selection. */
+  /** Fill color of the closed shape preview. Default no fill. */
   fill?: string;
   /** SVG `stroke-dasharray`. Default `'4 3'` (subtly dashed). */
   strokeDasharray?: string;
@@ -106,7 +106,7 @@ export class LassoSelectHandler
     svg.setAttribute('class', 'emap-lasso-select');
     const poly = document.createElementNS(SVG_NS, 'polyline') as SVGPolylineElement;
     const s = this._opts.style ?? {};
-    poly.setAttribute('fill', s.fill ?? 'var(--emap-current-selection-bg)');
+    poly.setAttribute('fill', s.fill ?? 'none');
     poly.setAttribute('stroke', s.stroke ?? 'var(--emap-current-primary)');
     poly.setAttribute('stroke-width', String(s.strokeWidth ?? 1.5));
     poly.setAttribute('stroke-dasharray', s.strokeDasharray ?? '4 3');

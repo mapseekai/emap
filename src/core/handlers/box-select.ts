@@ -11,7 +11,7 @@ export interface BoxSelectStyle {
   stroke?: string;
   /** Stroke width in CSS pixels. Default `1.5`. */
   strokeWidth?: number;
-  /** Fill color. Default current theme selection. */
+  /** Fill color. Default no fill (transparent). */
   fill?: string;
 }
 export interface BoxSelectHandlerOptions extends SelectHandlerOptions {
@@ -93,8 +93,8 @@ export class BoxSelectHandler extends EventDispatcher implements Handler<BoxSele
     o.style.display = 'none';
     o.style.boxSizing = 'border-box';
     const s = this._opts.style ?? {};
-    o.style.border = `${s.strokeWidth ?? 1.5}px solid ${s.stroke ?? 'var(--emap-current-primary)'}`;
-    o.style.background = s.fill ?? 'var(--emap-current-selection-bg)';
+    o.style.border = `${s.strokeWidth ?? 1.5}px dashed ${s.stroke ?? 'var(--emap-current-primary)'}`;
+    o.style.background = s.fill ?? 'transparent';
     this._map.getCanvasContainer().appendChild(o);
     this._overlay = o;
     return o;

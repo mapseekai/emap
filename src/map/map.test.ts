@@ -6624,6 +6624,10 @@ describe('Emap useWorker routing', () => {
   let exportSpy: ReturnType<typeof vi.fn>;
   let restoreSpy: ReturnType<typeof vi.fn>;
   let setDatasetSpy: ReturnType<typeof vi.fn>;
+  let beforeDs: {
+    layers: { name: string; shapes: unknown[]; geometry_type: string }[];
+    info?: { crs_string: string };
+  };
 
   const originalExport = Reflect.get(mapshaper.internal as object, 'exportDatasetsToPack');
   const originalRestore = Reflect.get(mapshaper.internal as object, 'restoreSessionData');
@@ -6636,7 +6640,7 @@ describe('Emap useWorker routing', () => {
     setPrivate(map, '_viewport', { setCRS: vi.fn() });
 
     setDatasetSpy = vi.fn();
-    const beforeDs = { layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }] };
+    beforeDs = { layers: [{ name: 'states', shapes: [], geometry_type: 'polygon' }] };
     const afterDs = { layers: [{ name: 'states-out', shapes: [] }] };
     const source = {
       id: 'src1',
@@ -6724,6 +6728,39 @@ describe('Emap useWorker routing', () => {
     expect(ok.ok).toBe(true);
     const args = runSpy.mock.calls[0] as unknown[];
     expect(args[2]).toEqual({ '.emap-join.csv': 'a,b\n1,2' });
+  });
+
+  it('sends a parseable crs_string to the worker and re-stamps the EPSG label', async () => {
+    // A dataset reprojected for display carries emap's canonical EPSG label
+    // as metadata. That label is NOT parseable in the browser bundle
+    // (+init=epsg:* init-file lookup is a fatal there), so the worker
+    // round-trip must swap it for a Proj.4 defn and restore the label on
+    // the result (simplify does not change the CRS).
+    beforeDs.info = { crs_string: 'EPSG:3857' };
+    exportSpy.mockImplementationOnce(async (datasets: { info?: object }[]) => ({
+      datasets: datasets.map((d) => ({ info: { ...d.info }, layers: [] })),
+    }));
+    restoreSpy.mockImplementationOnce(
+      async (packed: { datasets: { info?: object }[] }) => ({
+        datasets: [{ layers: [], info: packed.datasets[0].info }],
+      }),
+    );
+
+    const ok = await map.ops.simplifyLayer({ source: 'src1', target: 'states', percentage: 5 });
+    expect(ok.ok).toBe(true);
+
+    const [, packed] = runSpy.mock.calls[0] as unknown[];
+    const wireCrs = (packed as { datasets: { info: { crs_string: string } }[] }).datasets[0].info
+      .crs_string;
+    expect(wireCrs).not.toMatch(/^(esri|epsg|nad83|nad27):\d+$/i);
+    const parseCrsString = Reflect.get(mapshaper.internal as object, 'parseCrsString') as (
+      crs: string,
+    ) => unknown;
+    expect(() => parseCrsString(wireCrs)).not.toThrow();
+
+    expect(setDatasetSpy).toHaveBeenCalledTimes(1);
+    const committed = setDatasetSpy.mock.calls[0][0] as { info: { crs_string: string } };
+    expect(committed.info.crs_string).toBe('EPSG:3857');
   });
 
   it('worker rejection fires error event + returns false', async () => {

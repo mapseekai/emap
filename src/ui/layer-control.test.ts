@@ -385,7 +385,9 @@ describe('LayerControl accessibility and lifecycle', () => {
     const business = group(root, '.emap-layer-group--business');
     const online = group(root, '.emap-layer-group--online');
 
-    expect(button.textContent).toBe('Layers');
+    expect(button.title).toBe('Layers');
+    expect(button.getAttribute('aria-label')).toBe('Layers');
+    expect(button.querySelector('span.emap-ctrl-icon svg')).toBeTruthy();
     expect(button.getAttribute('aria-haspopup')).toBe('dialog');
     expect(button.getAttribute('aria-controls')).toBe(layerPanel.id);
     expect(button.getAttribute('aria-expanded')).toBe('false');

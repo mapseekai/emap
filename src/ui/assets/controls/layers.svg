@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+   xmlns="http://www.w3.org/2000/svg"
+   width="100"
+   height="100"
+   viewBox="0 0 100 100"
+   version="1.1">
+  <path
+     fill-rule="evenodd"
+     d="M 50 10 L 93 29 L 50 48 L 7 29 Z M 50 15.5 L 86 29 L 50 42.5 L 14 29 Z M 7 51 L 50 70 L 93 51 L 86 51 L 50 64.5 L 14 51 Z M 7 73 L 50 92 L 93 73 L 86 73 L 50 86.5 L 14 73 Z" />
+</svg>

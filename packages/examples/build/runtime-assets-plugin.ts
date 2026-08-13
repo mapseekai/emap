@@ -42,6 +42,16 @@ const runtimeAssetEntries: readonly RuntimeAssetEntry[] = [
     contentType: 'text/css; charset=utf-8',
   },
   {
+    // Worker sibling: dist/emap-worker.js boots with a relative
+    // importScripts('mapshaper-vendor.js'), so the vendor file must also
+    // resolve next to the worker URL, not only under vendor/.
+    requestPath: 'mapshaper-vendor.js',
+    buildPath: 'mapshaper-vendor.js',
+    developmentSource: 'mapshaper-vendor.js',
+    productionSource: 'mapshaper-vendor.js',
+    contentType: 'application/javascript; charset=utf-8',
+  },
+  {
     requestPath: 'emap-worker.js',
     buildPath: 'emap-worker.js',
     developmentSource: 'emap-worker.js',

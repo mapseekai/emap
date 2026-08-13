@@ -11,6 +11,11 @@ export interface ScaleMetrics {
   calculationMethod: ScaleCalculationMethod;
 }
 
+/** Scale metrics for the current map view; `zoom` is attached only for Web Mercator CRSs. */
+export interface ScaleViewMetrics extends ScaleMetrics {
+  zoom?: number;
+}
+
 export interface GetScaleMetricsOptions {
   calculationMethod?: ScaleCalculationMethod;
   dpi?: number;

@@ -68,6 +68,10 @@ describe('example runtime build assets', () => {
       ['dist/emap.js', 'vendor/emap.js'],
       ['dist/emap.css', 'vendor/emap.css'],
       ['dist/emap-worker.js', 'emap-worker.js'],
+      // Worker sibling: emap-worker.js boots with a relative
+      // importScripts('mapshaper-vendor.js'), so the vendor file must also
+      // be emitted next to the worker bundle.
+      ['dist/mapshaper-vendor.js', 'mapshaper-vendor.js'],
     ] as const;
 
     for (const [source, fileName] of expectedOutputs) {
@@ -108,6 +112,13 @@ describe('example runtime build assets', () => {
     const vendorBytes = await readFile(resolve(repoRoot, 'dist/mapshaper-vendor.js'));
     expect(vendorResponse?.body.byteLength).toBe(vendorBytes.byteLength);
     expect(vendorResponse?.body.equals(vendorBytes)).toBe(true);
+
+    const workerSiblingResponse = await invokeMiddleware(
+      runtimeMiddleware,
+      '/mapseekai/emap/examples/mapshaper-vendor.js',
+    );
+    expect(workerSiblingResponse?.statusCode).toBe(200);
+    expect(workerSiblingResponse?.body.equals(vendorBytes)).toBe(true);
 
     await expect(
       invokeMiddleware(runtimeMiddleware, '/mapseekai/emap/examples/vendor/package.json'),

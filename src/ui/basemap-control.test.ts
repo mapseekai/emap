@@ -525,7 +525,9 @@ describe('BasemapControl manager-driven UI', () => {
       reason: 'status',
       state: manager.getServiceState('light'),
     });
-    expect(root.querySelector('[role="status"]')?.textContent).toBe('Light selected');
+    const recoveredStatus = root.querySelector<HTMLElement>('[role="status"]');
+    expect(recoveredStatus?.textContent).toBe('');
+    expect(recoveredStatus?.hidden).toBe(true);
   });
 
   it('reports non-abort promise failures but ignores superseded AbortErrors', async () => {
@@ -555,6 +557,9 @@ describe('BasemapControl manager-driven UI', () => {
 
     expect(first.className).toBe('emap-ctrl emap-panel-control emap-basemap-ctrl');
     expect(firstTrigger.tagName).toBe('BUTTON');
+    expect(firstTrigger.title).toBe('Basemap');
+    expect(firstTrigger.getAttribute('aria-label')).toBe('Basemap');
+    expect(firstTrigger.querySelector('span.emap-ctrl-icon svg')).toBeTruthy();
     expect(firstTrigger.getAttribute('aria-haspopup')).toBe('true');
     expect(firstTrigger.getAttribute('aria-expanded')).toBe('false');
     expect(firstTrigger.getAttribute('aria-controls')).toBe(firstPanel.id);

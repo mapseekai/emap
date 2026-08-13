@@ -34,7 +34,7 @@ export interface DatasetFormatPlugin {
  * a helpful "import the Arrow module" error instead of a generic mapshaper
  * parse failure when the plugin is not registered.
  */
-const KNOWN_PLUGIN_EXTENSIONS = ['parquet', 'geoparquet', 'arrow', 'arrows', 'feather'];
+const KNOWN_PLUGIN_EXTENSIONS = ['parquet', 'geoparquet', 'arrow', 'arrows', 'feather', 'fgb'];
 
 /**
  * Registry state lives on `globalThis` under a well-known symbol. The core

@@ -495,8 +495,8 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     const plugin = getFormatForExtension(ext);
     if (!plugin) {
       throw new Error(
-        `'.${ext}' import requires the emap Arrow module — ` +
-          `import '@mapseekai/emap/arrow' (or call registerFormat) before setData`,
+        `'.${ext}' import requires a registered format plugin — ` +
+          `call registerFormat (or import '@mapseekai/emap/arrow' for Arrow/GeoParquet) before setData`,
       );
     }
     if (primaryFiles.length > 1) {
@@ -510,7 +510,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   }
 
   private _hasSupportedExtension(filename: string): boolean {
-    return /\.(json|geojson|topojson|zip|shp|kml|msx|parquet|geoparquet|arrow|arrows|feather)$/i.test(
+    return /\.(json|geojson|topojson|zip|shp|kml|msx|parquet|geoparquet|arrow|arrows|feather|fgb)$/i.test(
       filename,
     );
   }

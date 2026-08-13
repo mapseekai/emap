@@ -144,18 +144,6 @@
           await map.addSource(SOURCE_ID, source);
           map.setExtent(source.getExtent());
           status.textContent = `已加载 ${file.name}。Shift+拖拽框选/套索。`;
-
-          // Default outline styling so selections are visible.
-          const lyrs = source.getLayers?.() ?? [];
-          lyrs.forEach((lyr, i) => {
-            const id = `${lyr?.name || `layer-${i}`}-default`;
-            if (map.getLayer(id)) return;
-            if (lyr?.geometry_type === 'polygon' || lyr?.geometry_type === 'polyline') {
-              map.addLayer({ id, type: 'line', source: SOURCE_ID, 'source-layer': lyr.name, paint: { 'line-color': '#888', 'line-width': 1 } });
-            } else if (lyr?.geometry_type === 'point') {
-              map.addLayer({ id, type: 'circle', source: SOURCE_ID, 'source-layer': lyr.name, paint: { 'circle-color': '#888', 'circle-radius': 3 } });
-            }
-          });
         } catch (err) {
           console.error(err);
           status.textContent = "处理文件出错";

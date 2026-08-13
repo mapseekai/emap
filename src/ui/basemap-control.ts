@@ -5,6 +5,7 @@ import type {
   MapLibreServiceManager,
 } from '../map/maplibre-service';
 import type { Control } from './control';
+import { createControlIcon } from './control-icons';
 
 export interface BasemapStyle {
   name: string;
@@ -222,7 +223,12 @@ export class BasemapControl implements Control {
     this._trigger = document.createElement('button');
     this._trigger.type = 'button';
     this._trigger.className = 'emap-panel-trigger emap-basemap-trigger';
-    this._trigger.textContent = 'Basemap';
+    this._trigger.title = 'Basemap';
+    this._trigger.setAttribute('aria-label', 'Basemap');
+    const icon = document.createElement('span');
+    icon.className = 'emap-ctrl-icon';
+    icon.appendChild(createControlIcon('basemap'));
+    this._trigger.appendChild(icon);
     this._trigger.setAttribute('aria-haspopup', 'true');
     this._trigger.setAttribute('aria-expanded', 'false');
     this._trigger.setAttribute('aria-controls', panelId);
@@ -243,6 +249,7 @@ export class BasemapControl implements Control {
 
     this._status = document.createElement('div');
     this._status.className = 'emap-control-status emap-basemap-status';
+    this._status.hidden = true;
     this._status.setAttribute('role', 'status');
     this._status.setAttribute('aria-live', 'polite');
     this._status.setAttribute('aria-atomic', 'true');
@@ -303,17 +310,16 @@ export class BasemapControl implements Control {
 
     const loading = activeState?.status === 'loading';
     this._panel.setAttribute('aria-busy', String(loading));
+    let statusMessage = '';
     if (transientError) {
-      this._status.textContent = `Basemap error: ${transientError.message}`;
+      statusMessage = `Basemap error: ${transientError.message}`;
     } else if (activeBasemap && activeState?.status === 'loading') {
-      this._status.textContent = `Loading ${activeBasemap.name}…`;
+      statusMessage = `Loading ${activeBasemap.name}…`;
     } else if (erroredBasemap) {
-      this._status.textContent = `${erroredBasemap.name}: ${errorState?.error?.message ?? 'Basemap error'}`;
-    } else if (!activeBasemap) {
-      this._status.textContent = 'No basemap selected';
-    } else {
-      this._status.textContent = `${activeBasemap.name} selected`;
+      statusMessage = `${erroredBasemap.name}: ${errorState?.error?.message ?? 'Basemap error'}`;
     }
+    this._status.textContent = statusMessage;
+    this._status.hidden = statusMessage === '';
 
     if (focusedValue !== undefined && !this._panel.hidden) {
       this._getRadios()

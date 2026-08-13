@@ -44,7 +44,7 @@ describe('BoxSelectHandler', () => {
     expect(h.handlePointer(ev('down', 0, 0, false))).toBe('passthrough');
   });
 
-  it('uses primary border and selection fill for the default overlay', () => {
+  it('uses dashed primary border and no fill for the default overlay', () => {
     const map = fakeMap();
     const h = new BoxSelectHandler(map as any);
     h.enable();
@@ -52,8 +52,9 @@ describe('BoxSelectHandler', () => {
     h.handlePointer(ev('down', 10, 10));
 
     const overlay = map._c.querySelector('.emap-box-select') as HTMLDivElement;
+    expect(overlay.style.border).toContain('dashed');
     expect(overlay.style.border).toContain('var(--emap-current-primary)');
-    expect(overlay.style.background).toBe('var(--emap-current-selection-bg)');
+    expect(overlay.style.background).toBe('transparent');
   });
 
   it('preserves supplied overlay stroke and fill', () => {

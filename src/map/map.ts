@@ -13,8 +13,8 @@ import { Projection } from '../geo/projection';
 import {
   ScaleCalculator,
   type GetScaleMetricsOptions,
-  type ScaleMetrics,
   type ScaleView,
+  type ScaleViewMetrics,
 } from '../geo/scale-calculator';
 import {
   EpsgProjectionError,
@@ -1829,7 +1829,7 @@ export class Emap extends EventDispatcher {
    */
   public async getScaleMetrics(
     options: GetScaleMetricsOptions = {},
-  ): Promise<(ScaleMetrics & { zoom?: number }) | null> {
+  ): Promise<ScaleViewMetrics | null> {
     const crs = this.getCRS();
     const snapshot = captureScaleView(this._viewport, crs);
     if (!snapshot) return null;

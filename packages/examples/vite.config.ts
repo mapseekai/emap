@@ -26,6 +26,7 @@ const routeIds = [
   'feature-attributes',
   'filter-features',
   'geoparquet-viewer',
+  'flatgeobuf-viewer',
   'export-geoparquet',
   'export-roundtrip',
   'join',

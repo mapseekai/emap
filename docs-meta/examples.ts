@@ -275,6 +275,10 @@ const exampleDescriptions = {
     zh: '集中演示 DuckDB 几何、属性和空间关系函数，并在共享图层选择器中查看结果。',
     en: 'Demonstrates DuckDB geometry, attribute, and spatial-relation functions through a shared layer picker.',
   },
+  'flatgeobuf-viewer': {
+    zh: '通过 registerFormat 注册的 FlatGeobuf 插件加载 .fgb 文件，并从文件头读取坐标系。',
+    en: 'Loads .fgb files through a FlatGeobuf plugin registered via registerFormat, reading the CRS from the file header.',
+  },
 } as const satisfies Record<string, LocalizedText>;
 
 type ExampleId = keyof typeof exampleDescriptions;
@@ -301,6 +305,7 @@ export const examples: readonly ExampleDefinition[] = [
     [],
   ),
   recipe('geoparquet-viewer', 'map-data', 'GeoParquet / GeoArrow 查看器', 'GeoParquet / GeoArrow viewer', [docsFormats, docsFileUpload, docsCompatibility], 'TopologySource.fromBytes', ['formats', 'basemap'], ['fixtures/example-geoparquet.parquet']),
+  recipe('flatgeobuf-viewer', 'map-data', 'FlatGeobuf 查看器', 'FlatGeobuf viewer', [docsFormats, docsFileUpload], 'registerFormat', ['formats'], ['fixtures/example-flatgeobuf.fgb']),
   recipe('join', 'map-data', '属性表连接', 'Join table', [docsAttributes], 'Emap', ['join', 'history'], [task6Fixture, task6CsvFixture]),
   recipe('rename-layer', 'map-data', '图层重命名', 'Rename layer', [docsSourceLayer, docsOperations], 'Emap', ['layer-ops', 'history'], [task6Fixture]),
   recipe('split-layer', 'map-data', '图层拆分', 'Split layer', [docsSourceLayer, docsOperations, docsAttributes], 'Emap', ['expressions', 'layer-ops', 'history'], [task6Fixture]),
