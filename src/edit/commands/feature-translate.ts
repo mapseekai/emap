@@ -1,11 +1,8 @@
 import type { EditCommand } from '../edit-command';
-import {
-  bumpEditVersion,
-  type ArcCollection,
-  type MapshaperLayer,
-} from '../../types/mapshaper-types';
-import { asMutableTopologySource, type TopologySource } from '../../source/source';
+import { type ArcCollection, type MapshaperLayer } from '../../types/mapshaper-types';
+import type { TopologySource } from '../../source/source';
 import { normalizePointShape } from '../../source/layer-utils';
+import { markSourceChanged } from './_shared';
 
 /** Point-feature reference within a single source. */
 export interface TranslatedPointFeature {
@@ -134,7 +131,6 @@ export class FeatureTranslateCommand implements EditCommand {
       }
     }
 
-    asMutableTopologySource(source).markDisplayArcsDirty?.();
-    bumpEditVersion(asMutableTopologySource(source).getDataset?.());
+    markSourceChanged(source);
   }
 }

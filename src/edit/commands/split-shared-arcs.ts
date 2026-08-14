@@ -1,12 +1,12 @@
 import type { EditCommand } from '../edit-command';
 import {
-  bumpEditVersion,
   isPathLayer,
   type ArcCollection,
   type MapshaperLayer,
   type PathShape,
 } from '../../types/mapshaper-types';
 import { asMutableTopologySource, type TopologySource } from '../../source/source';
+import { markSourceChanged } from './_shared';
 
 /**
  * One feature whose shape was rewritten to point at duplicated arc ids.
@@ -72,8 +72,7 @@ export class SplitSharedArcsCommand implements EditCommand {
     for (const r of this.opts.remaps) {
       r.layer.shapes![r.featureId] = cloneShape(r.newShape);
     }
-    source.markDisplayArcsDirty?.();
-    bumpEditVersion(source.getDataset?.());
+    markSourceChanged(source);
   }
 
   undo(): void {
@@ -84,8 +83,7 @@ export class SplitSharedArcsCommand implements EditCommand {
     for (const r of this.opts.remaps) {
       r.layer.shapes![r.featureId] = cloneShape(r.originalShape);
     }
-    source.markDisplayArcsDirty?.();
-    bumpEditVersion(source.getDataset?.());
+    markSourceChanged(source);
   }
 }
 

@@ -1,12 +1,12 @@
 import type { EditCommand } from '../edit-command';
 import {
-  bumpEditVersion,
   type ArcCollection,
   type FeatureShape,
   type MapshaperLayer,
 } from '../../types/mapshaper-types';
-import { asMutableTopologySource, type TopologySource } from '../../source/source';
+import type { TopologySource } from '../../source/source';
 import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
+import { markSourceChanged } from './_shared';
 
 export type FeatureGeometryType = 'point' | 'polyline' | 'polygon';
 
@@ -73,8 +73,7 @@ export class FeatureCreateCommand implements EditCommand {
       const records = o.layer.data?.getRecords?.();
       records?.push(o.appendedRecord);
     }
-    asMutableTopologySource(o.source).markDisplayArcsDirty?.();
-    bumpEditVersion(asMutableTopologySource(o.source).getDataset?.());
+    markSourceChanged(o.source);
   }
 
   undo(): void {
@@ -88,7 +87,6 @@ export class FeatureCreateCommand implements EditCommand {
     if (o.geometryType !== 'point' && o.arcs) {
       adapter.deleteLastArc(o.arcs);
     }
-    asMutableTopologySource(o.source).markDisplayArcsDirty?.();
-    bumpEditVersion(asMutableTopologySource(o.source).getDataset?.());
+    markSourceChanged(o.source);
   }
 }

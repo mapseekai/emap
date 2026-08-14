@@ -1,7 +1,8 @@
 import type { EditCommand } from '../edit-command';
-import { bumpEditVersion, type ArcCollection } from '../../types/mapshaper-types';
-import { asMutableTopologySource, type TopologySource } from '../../source/source';
+import type { ArcCollection } from '../../types/mapshaper-types';
+import type { TopologySource } from '../../source/source';
 import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
+import { markSourceChanged } from './_shared';
 
 export interface VertexInsertCommandOptions {
   /** Global vertex index where the new vertex was inserted. */
@@ -27,14 +28,12 @@ export class VertexInsertCommand implements EditCommand {
   do(): void {
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     adapter.insertVertex(this.opts.arcs, this.opts.insertionId, this.opts.point);
-    asMutableTopologySource(this.opts.source).markDisplayArcsDirty?.();
-    bumpEditVersion(asMutableTopologySource(this.opts.source).getDataset?.());
+    markSourceChanged(this.opts.source);
   }
 
   undo(): void {
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     adapter.deleteVertex(this.opts.arcs, this.opts.insertionId);
-    asMutableTopologySource(this.opts.source).markDisplayArcsDirty?.();
-    bumpEditVersion(asMutableTopologySource(this.opts.source).getDataset?.());
+    markSourceChanged(this.opts.source);
   }
 }

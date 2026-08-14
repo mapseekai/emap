@@ -1,6 +1,5 @@
 import type { EditCommand } from '../edit-command';
 import {
-  bumpEditVersion,
   isPathLayer,
   type ArcCollection,
   type ArcVertexData,
@@ -16,6 +15,7 @@ import {
   type AppendedArc,
   type SplitSharedArcsRemap,
 } from './split-shared-arcs';
+import { findArcIdForVertex, markSourceChanged } from './_shared';
 
 export interface VertexDeleteCommandOptions {
   /** Global vertex index of the deleted vertex (recorded before deletion). */
@@ -41,15 +41,13 @@ export class VertexDeleteCommand implements EditCommand {
   do(): void {
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     adapter.deleteVertex(this.opts.arcs, this.opts.vertexIndex);
-    asMutableTopologySource(this.opts.source).markDisplayArcsDirty?.();
-    bumpEditVersion(asMutableTopologySource(this.opts.source).getDataset?.());
+    markSourceChanged(this.opts.source);
   }
 
   undo(): void {
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     adapter.insertVertex(this.opts.arcs, this.opts.vertexIndex, this.opts.coords);
-    asMutableTopologySource(this.opts.source).markDisplayArcsDirty?.();
-    bumpEditVersion(asMutableTopologySource(this.opts.source).getDataset?.());
+    markSourceChanged(this.opts.source);
   }
 }
 
@@ -347,8 +345,7 @@ class TopologyNodeDeleteCommand implements EditCommand {
   }
 
   private _markChanged(): void {
-    asMutableTopologySource(this._source).markDisplayArcsDirty?.();
-    bumpEditVersion(asMutableTopologySource(this._source).getDataset?.());
+    markSourceChanged(this._source);
   }
 }
 
@@ -362,20 +359,6 @@ function updateVertexData(
   const retainedInterval = arcs.getRetainedInterval?.();
   arcs.updateVertexData?.(nn, xx, yy, zz);
   if (retainedInterval !== undefined) arcs.setRetainedInterval?.(retainedInterval);
-}
-
-function findArcIdForVertex(vertexId: number, data: ArcVertexData): number {
-  let low = 0;
-  let high = data.ii.length - 1;
-  while (low <= high) {
-    const mid = (low + high) >> 1;
-    const start = data.ii[mid];
-    const end = start + data.nn[mid];
-    if (vertexId < start) high = mid - 1;
-    else if (vertexId >= end) low = mid + 1;
-    else return mid;
-  }
-  return -1;
 }
 
 function partUsesAnyArc(part: readonly number[], arcIds: ReadonlySet<number>): boolean {
