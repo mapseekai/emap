@@ -210,7 +210,11 @@ function captureScaleView(viewport: Viewport, crs: string): ScaleViewSnapshot | 
 }
 
 function isScaleViewCurrent(viewport: Viewport, crs: string, snapshot: ScaleViewSnapshot): boolean {
-  if (crs !== snapshot.view.crs || viewport.width !== snapshot.view.width || viewport.height !== snapshot.view.height) {
+  if (
+    crs !== snapshot.view.crs ||
+    viewport.width !== snapshot.view.width ||
+    viewport.height !== snapshot.view.height
+  ) {
     return false;
   }
 
@@ -2056,6 +2060,7 @@ export class Emap extends EventDispatcher {
       this._editState.mode,
       vertexState,
       this._editState.draw,
+      this._editState.measurement,
       vertexArcFilter,
     );
   }

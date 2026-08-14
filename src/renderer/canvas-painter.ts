@@ -2,6 +2,7 @@ import {
   Painter,
   DrawOverlayState,
   type ArrowDotPathOptions,
+  type MeasurementOverlayState,
   type PolygonFillOptions,
 } from './painter';
 import { AffineTransform } from '../geo/transform';
@@ -982,6 +983,84 @@ export class CanvasPainter implements Painter {
         ctx.arc(sp[0], sp[1], snapRadius, 0, Math.PI * 2);
       }
       ctx.stroke();
+    }
+  }
+
+  drawMeasurementOverlay(state: MeasurementOverlayState): void {
+    const ctx = this._ctx;
+    const pr = this._pixelRatio;
+    const mx = this._transform.mx * pr;
+    const my = this._transform.my * pr;
+    const bx = this._transform.bx * pr;
+    const by = this._transform.by * pr;
+    const color = this._resolveColor(state.drawColor, 'primary');
+    const project = (point: readonly [number, number]): [number, number] => [
+      point[0] * mx + bx,
+      point[1] * my + by,
+    ];
+    const drawPath = (path: readonly (readonly [number, number])[]): void => {
+      const first = project(path[0]);
+      ctx.moveTo(first[0], first[1]);
+      for (let index = 1; index < path.length; index++) {
+        const point = project(path[index]);
+        ctx.lineTo(point[0], point[1]);
+      }
+    };
+
+    if (state.mode === 'area' && state.fillPath && state.fillPath.length >= 3) {
+      const previousAlpha = ctx.globalAlpha;
+      ctx.globalAlpha = previousAlpha * 0.18;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      drawPath(state.fillPath);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = previousAlpha;
+    }
+
+    if (state.committedPath.length >= 2) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2 * pr;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      drawPath(state.committedPath);
+      ctx.stroke();
+    }
+
+    if (state.previewPath && state.previewPath.length >= 2) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5 * pr;
+      ctx.setLineDash([6 * pr, 4 * pr]);
+      ctx.beginPath();
+      drawPath(state.previewPath);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    if (state.vertices.length > 0) {
+      const radius = 4 * pr;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      for (const vertex of state.vertices) {
+        const point = project(vertex);
+        ctx.moveTo(point[0] + radius, point[1]);
+        ctx.arc(point[0], point[1], radius, 0, Math.PI * 2);
+      }
+      ctx.fill();
+    }
+
+    if (state.label && state.labelCoord) {
+      const point = project(state.labelCoord);
+      const padding = 4 * pr;
+      const height = 16 * pr;
+      ctx.font = `${12 * pr}px system-ui, sans-serif`;
+      const width = ctx.measureText(state.label).width;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+      ctx.fillRect(point[0], point[1] - height, width + padding * 2, height);
+      ctx.fillStyle = color;
+      ctx.fillText(state.label, point[0] + padding, point[1] - padding);
     }
   }
 

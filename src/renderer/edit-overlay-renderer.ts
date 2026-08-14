@@ -1,6 +1,6 @@
 import type { EditPainter } from './painter';
 import type { ArcCollection } from '../types/mapshaper-types';
-import type { EditVertexState, EditDrawState } from '../map/types';
+import type { EditDrawState, EditMeasurementState, EditVertexState } from '../map/types';
 import type { EditMode } from '../map/edit-state-store';
 import { EMAP_THEME_COLORS } from '../theme/colors';
 
@@ -11,6 +11,7 @@ const EDIT_VERTEX_COLOR = EMAP_THEME_COLORS.primary;
  *   - polygon fill highlight while editing a polygon's vertices
  *   - vertex dots (with hover affordance) while in vertex mode
  *   - the in-progress draw overlay while creating a new feature
+ *   - the temporary measurement overlay while measuring
  *
  * Pulled out of `Emap.render()` so the main render loop deals with layers
  * only and doesn't need to introspect edit-mode flags or downcast the
@@ -27,12 +28,15 @@ export class EditOverlayRenderer {
     editMode: EditMode,
     vertexState: EditVertexState | null,
     drawState: EditDrawState | null,
+    measurementState: EditMeasurementState | null,
     vertexArcFilter?: (arcId: number) => boolean,
   ): void {
     if (editMode === 'vertex' && vertexState) {
       this._renderVertexOverlay(vertexState, vertexArcFilter);
     } else if (editMode === 'draw' && drawState) {
       this._painter.drawDrawingOverlay(drawState);
+    } else if (editMode === 'measure' && measurementState) {
+      this._painter.drawMeasurementOverlay(measurementState);
     }
   }
 

@@ -1,3 +1,5 @@
+import type { MeasurementMode, MeasurementPoint } from '../geo/measurement';
+
 import type { AffineTransform } from '../geo/transform';
 import type {
   ArcCollection,
@@ -25,6 +27,23 @@ export interface DrawOverlayState {
   snapCoord: [number, number] | null;
   snapKind: DrawOverlaySnapKind;
   geometryType: DrawOverlayGeometryType;
+  drawColor: string;
+}
+
+/**
+ * Render-domain state for a temporary length or area measurement.
+ * The coordinates are map coordinates; paths may contain extra sampled
+ * geodesic points while `vertices` contains only user-confirmed points.
+ */
+export interface MeasurementOverlayState {
+  mode: MeasurementMode;
+  vertices: readonly MeasurementPoint[];
+  committedPath: readonly MeasurementPoint[];
+  previewPath: readonly MeasurementPoint[] | null;
+  fillPath: readonly MeasurementPoint[] | null;
+  label: string | null;
+  labelCoord: MeasurementPoint | null;
+  completed: boolean;
   drawColor: string;
 }
 
@@ -84,6 +103,7 @@ export interface EditPainter extends CorePainter {
     style: VertexDotStyle,
   ): void;
   drawDrawingOverlay(state: DrawOverlayState): void;
+  drawMeasurementOverlay(state: MeasurementOverlayState): void;
 }
 
 /**
