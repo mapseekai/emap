@@ -236,29 +236,39 @@ function unresolvedEpsgResult(code: string, opts: CrsStringToProjjsonOptions | u
   return null;
 }
 
+function parseCrsAuthorityCode(crsString: string): { authority: string; code: string } | null {
+  const match = /^(EPSG|OGC):([\w:]+)$/i.exec(crsString.trim());
+  if (!match) return null;
+  return { authority: match[1].toUpperCase(), code: match[2] };
+}
+
+function isDefaultCrs(authority: string, code: string): boolean {
+  return (
+    (authority === 'EPSG' && code === '4326') ||
+    (authority === 'OGC' && code.toUpperCase() === 'CRS84')
+  );
+}
+
 export function crsStringToProjjson(
   crsString: string | undefined,
   lookup?: CrsProjjsonLookup,
   opts?: CrsStringToProjjsonOptions,
 ): unknown {
   if (!crsString) return null;
-  const m = /^(EPSG|OGC):([\w]+)$/i.exec(crsString.trim());
-  if (!m) return unsupportedCrsResult(crsString, opts);
-  const authority = m[1].toUpperCase();
-  const code = m[2];
-  if (
-    (authority === 'EPSG' && code === '4326') ||
-    (authority === 'OGC' && code.toUpperCase() === 'CRS84')
-  ) {
-    return undefined;
+  const parsed = parseCrsAuthorityCode(crsString);
+  if (!parsed) return unsupportedCrsResult(crsString, opts);
+  const { authority, code } = parsed;
+  if (isDefaultCrs(authority, code)) return undefined;
+
+  // Built-in 3857 wins over the lookup: the curated constant avoids a
+  // network fetch for the most common CRS (the async lookup falls back to
+  // CDN resolution).
+  if (authority === 'EPSG' && code === '3857') {
+    return EPSG_3857_PROJJSON;
   }
 
   const resolved = lookup?.(authority, code);
   if (resolved !== undefined) return normalizeProjjsonForExport(resolved);
-
-  if (authority === 'EPSG' && code === '3857') {
-    return EPSG_3857_PROJJSON;
-  }
 
   if (authority === 'EPSG') {
     return unresolvedEpsgResult(code, opts);
@@ -273,17 +283,12 @@ export async function crsStringToProjjsonAsync(
   opts?: CrsStringToProjjsonOptions,
 ): Promise<unknown> {
   if (!crsString) return null;
-  const m = /^(EPSG|OGC):([\w:]+)$/i.exec(crsString.trim());
-  if (!m) return unsupportedCrsResult(crsString, opts);
-  const authority = m[1].toUpperCase();
-  const code = m[2];
-  if (
-    (authority === 'EPSG' && code === '4326') ||
-    (authority === 'OGC' && code.toUpperCase() === 'CRS84')
-  ) {
-    return undefined;
-  }
+  const parsed = parseCrsAuthorityCode(crsString);
+  if (!parsed) return unsupportedCrsResult(crsString, opts);
+  const { authority, code } = parsed;
+  if (isDefaultCrs(authority, code)) return undefined;
 
+  // See crsStringToProjjson: built-in 3857 constant before any lookup.
   if (authority === 'EPSG' && code === '3857') {
     return EPSG_3857_PROJJSON;
   }

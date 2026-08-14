@@ -1,7 +1,6 @@
 import { EPSG_PROJJSON_PATH_TABLE } from '../geo/epsg-projjson-data';
 
-export const DEFAULT_EPSG_PROJJSON_BASE_URL =
-  'https://cdn.jsdelivr.net/npm/@zwishing/epsg-index@3.0.0/';
+const DEFAULT_EPSG_PROJJSON_BASE_URL = 'https://cdn.jsdelivr.net/npm/@zwishing/epsg-index@3.0.0/';
 
 export interface EpsgProjjsonFetchOptions {
   baseUrl?: string;
@@ -11,7 +10,7 @@ export interface EpsgProjjsonFetchOptions {
 const pathCache = new Map<string, string | null>();
 const projjsonCache = new Map<string, unknown>();
 
-export class EpsgProjjsonError extends Error {
+class EpsgProjjsonError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'EpsgProjjsonError';
