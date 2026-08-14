@@ -318,15 +318,13 @@ export class Camera {
         cx = from.center[0] + (target.center[0] - from.center[0]) * k;
         cy = from.center[1] + (target.center[1] - from.center[1]) * k;
       }
-      lastState = { center: [cx, cy], scale };
+      lastState = k >= 1 ? target : { center: [cx, cy], scale };
       this._host.applyCameraState(lastState.center, lastState.scale);
       this._host.requestRender();
       const p = this._payload(lastState);
       this._host.fire('move', p);
       if (zoomChanged) this._host.fire('zoom', p);
       if (k >= 1) {
-        lastState = target;
-        this._host.applyCameraState(target.center, target.scale);
         this._tween = null;
         this._activeEnd = null;
         emitEnd();
