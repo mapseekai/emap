@@ -440,6 +440,7 @@ export interface GeographicCoordinateTransformer {
   readonly semiMajorAxis: number;
   readonly flattening: number;
   inverse(point: readonly [number, number]): [number, number] | null;
+  forward(lngLat: readonly [number, number]): [number, number] | null;
 }
 
 interface MprojProjection {
@@ -479,6 +480,7 @@ export function createGeographicCoordinateTransformer(
     : WGS84_FLATTENING;
   const mprojApi = mproj as unknown as {
     pj_inv(point: { x: number; y: number }, projection: MprojProjection): { lam: number; phi: number };
+    pj_fwd(point: { lam: number; phi: number }, projection: MprojProjection): { x: number; y: number };
   };
 
   return {
@@ -506,6 +508,20 @@ export function createGeographicCoordinateTransformer(
         const longitude = lp.lam * (180 / Math.PI);
         const latitude = lp.phi * (180 / Math.PI);
         return Number.isFinite(longitude) && Number.isFinite(latitude) ? [longitude, latitude] : null;
+      } catch {
+        return null;
+      }
+    },
+    forward(lngLat): [number, number] | null {
+      if (!Number.isFinite(lngLat[0]) || !Number.isFinite(lngLat[1])) return null;
+      if (projection.is_latlong) return [lngLat[0], lngLat[1]];
+
+      try {
+        const point = mprojApi.pj_fwd(
+          { lam: (lngLat[0] * Math.PI) / 180, phi: (lngLat[1] * Math.PI) / 180 },
+          projection,
+        );
+        return Number.isFinite(point.x) && Number.isFinite(point.y) ? [point.x, point.y] : null;
       } catch {
         return null;
       }
