@@ -457,6 +457,55 @@ export class FeatureQuery {
     return a.length ? a : b;
   }
 
+  private _eachQueryableLayer(
+    pixelSize: number,
+    options: QueryFeaturesOptions,
+    visibleLayers: VisibleLayerLookup | undefined,
+    cb: (
+      sourceId: string,
+      layerId: string,
+      layerIndex: number,
+      layer: MapshaperLayer,
+      arcs: ArcCollection | undefined,
+      dataset: { editVersion?: number } | undefined,
+    ) => void,
+  ): void {
+    for (const [sourceId, source] of this._sources) {
+      const layers = source.getLayers();
+      const displayArcs = source.getDisplayArcs();
+      const arcs = displayArcs ? displayArcs.getScaledArcs(pixelSize) : source.getArcs();
+      const dataset = source.getDataset?.();
+
+      for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+        const layer = layers[layerIndex] as MapshaperLayer;
+        if (!layer?.shapes) continue;
+        if (!this._layerMatchesFilter(layer, layerIndex, options.layers)) continue;
+
+        const layerId = getLayerId(layer, layerIndex);
+        if (visibleLayers && !hasLayerKey(visibleLayers, sourceId, layerId)) continue;
+        cb(sourceId, layerId, layerIndex, layer, arcs, dataset);
+      }
+    }
+  }
+
+  private _pushResult(
+    results: QueriedFeature[],
+    sourceId: string,
+    layerId: string,
+    geometryType: MapshaperLayer['geometry_type'],
+    table: MapshaperLayer['data'],
+    id: number,
+  ): void {
+    const record = table?.getRecordAt?.(id) ?? table?.getRecords?.()?.[id] ?? {};
+    results.push({
+      id,
+      source: sourceId,
+      layer: layerId,
+      geometryType: geometryType || 'unknown',
+      properties: { ...record },
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Point query
   // ---------------------------------------------------------------------------
@@ -471,20 +520,11 @@ export class FeatureQuery {
     const [mx, my] = this._unproject(point[0], point[1]);
     const pixelSize = 1 / Math.abs(transform.mx || 1);
 
-    for (const [sourceId, source] of this._sources) {
-      const layers = source.getLayers();
-      const displayArcs = source.getDisplayArcs();
-      const arcs = displayArcs ? displayArcs.getScaledArcs(pixelSize) : source.getArcs();
-      const dataset = source.getDataset?.();
-
-      for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
-        const layer = layers[layerIndex] as MapshaperLayer;
-        if (!layer?.shapes) continue;
-        if (!this._layerMatchesFilter(layer, layerIndex, options.layers)) continue;
-
-        const layerId = getLayerId(layer, layerIndex);
-        if (visibleLayers && !hasLayerKey(visibleLayers, sourceId, layerId)) continue;
-
+    this._eachQueryableLayer(
+      pixelSize,
+      options,
+      visibleLayers,
+      (sourceId, layerId, layerIndex, layer, arcs, dataset) => {
         const geometryType = layer.geometry_type;
         let ids: number[] = [];
         if (geometryType === 'point') {
@@ -494,21 +534,11 @@ export class FeatureQuery {
         } else if (geometryType === 'polygon' && arcs) {
           ids = this._polygonVertexTest(sourceId, layerIndex, layer, arcs, mx, my, dataset);
         }
-        if (ids.length === 0) continue;
-
         for (const id of ids) {
-          const table = layer.data;
-          const record = table?.getRecordAt?.(id) ?? table?.getRecords?.()?.[id] ?? {};
-          results.push({
-            id,
-            source: sourceId,
-            layer: layerId,
-            geometryType: geometryType || 'unknown',
-            properties: { ...record },
-          });
+          this._pushResult(results, sourceId, layerId, geometryType, layer.data, id);
         }
-      }
-    }
+      },
+    );
 
     return results;
   }
@@ -533,20 +563,11 @@ export class FeatureQuery {
     const ymax = Math.max(a[1], b[1]);
     const pixelSize = 1 / Math.abs(transform.mx || 1);
 
-    for (const [sourceId, source] of this._sources) {
-      const layers = source.getLayers();
-      const displayArcs = source.getDisplayArcs();
-      const arcs = displayArcs ? displayArcs.getScaledArcs(pixelSize) : source.getArcs();
-      const dataset = source.getDataset?.();
-
-      for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
-        const layer = layers[layerIndex] as MapshaperLayer;
-        if (!layer?.shapes) continue;
-        if (!this._layerMatchesFilter(layer, layerIndex, options.layers)) continue;
-
-        const layerId = getLayerId(layer, layerIndex);
-        if (visibleLayers && !hasLayerKey(visibleLayers, sourceId, layerId)) continue;
-
+    this._eachQueryableLayer(
+      pixelSize,
+      options,
+      visibleLayers,
+      (sourceId, layerId, layerIndex, layer, arcs, dataset) => {
         const geometryType = layer.geometry_type;
         const table = layer.data;
         const bboxTmp: number[] = [];
@@ -556,11 +577,11 @@ export class FeatureQuery {
         // scan for shape-less / un-indexed layers.
         const indexed = this._getOrBuildIndex(sourceId, layerIndex, layer, arcs, dataset);
         const candidateIds = indexed ? indexed.index.search(xmin, ymin, xmax, ymax) : null;
-        const idCount = candidateIds !== null ? candidateIds.length : layer.shapes.length;
+        const idCount = candidateIds !== null ? candidateIds.length : layer.shapes!.length;
 
         for (let i = 0; i < idCount; i++) {
           const id = candidateIds !== null ? candidateIds[i] : i;
-          const shp = layer.shapes[id];
+          const shp = layer.shapes![id];
           if (!shp) continue;
           let hit = false;
           if (geometryType === 'point') {
@@ -584,17 +605,10 @@ export class FeatureQuery {
             }
           }
           if (!hit) continue;
-          const record = table?.getRecordAt?.(id) ?? table?.getRecords?.()?.[id] ?? {};
-          results.push({
-            id,
-            source: sourceId,
-            layer: layerId,
-            geometryType: geometryType || 'unknown',
-            properties: { ...record },
-          });
+          this._pushResult(results, sourceId, layerId, geometryType, table, id);
         }
-      }
-    }
+      },
+    );
 
     return results;
   }

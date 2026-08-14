@@ -94,18 +94,6 @@ export type LayerType = LayerSpecification['type'];
 export function cloneLayerSpecification(layer: LayerSpecification): LayerSpecification {
   switch (layer.type) {
     case 'fill':
-      return {
-        ...layer,
-        paint: layer.paint
-          ? {
-              ...layer.paint,
-              ...(layer.paint['line-dasharray']
-                ? { 'line-dasharray': [...layer.paint['line-dasharray']] }
-                : {}),
-            }
-          : undefined,
-        layout: layer.layout ? { ...layer.layout } : undefined,
-      };
     case 'line':
       return {
         ...layer,

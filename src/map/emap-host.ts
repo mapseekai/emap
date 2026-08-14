@@ -14,13 +14,6 @@ import type { TransactionInternal } from '../edit/transaction-internal';
 import type { Selection } from './selection';
 import type { LayerRegistry } from './layer-registry';
 
-/**
- * Sentinel returned by `_runDatasetCommand` callers when the host has
- * been removed mid-await. Managers interpret this as "drop the result on
- * the floor, do not mutate state, do not emit events".
- */
-export const HOST_REMOVED = Symbol('emap-host-removed');
-
 export interface EmapHostInternal {
   // ---- mutable lifecycle flags ---------------------------------------
   /** `true` once `Emap.remove()` has been called. Async ops MUST check
