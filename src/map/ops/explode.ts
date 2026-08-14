@@ -3,23 +3,12 @@
 // attributes; useful for unpacking multipolygon islands, multipart
 // polylines, or multipoint clusters into individually-pickable features.
 
-import { resolveLayerInList } from '../layer-registry';
-import { Err, type OpResult } from '../op-result';
 import type { ExplodeOptions } from '../types';
-import type { OpContext } from './_context';
+import { defineLayerOp } from './_define';
 
-export async function explodeLayer(ctx: OpContext, opts: ExplodeOptions): Promise<OpResult> {
-  const source = ctx.host._sources.get(opts.source);
-  if (!source) return Err.notFound('source', opts.source);
-  const dataset = source.getDataset();
-  if (!dataset) return Err.notFound('source', opts.source);
-  if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
-  return ctx.runDatasetCommandParsed(
-    opts.source,
-    [
-      { name: 'target', options: { target: opts.target } },
-      { name: 'explode', options: {} },
-    ],
-    `Explode ${opts.target}`,
-  );
-}
+export const explodeLayer = defineLayerOp<ExplodeOptions>({
+  name: 'explodeLayer',
+  command: 'explode',
+  label: (o) => `Explode ${o.target}`,
+  options: () => ({}),
+});

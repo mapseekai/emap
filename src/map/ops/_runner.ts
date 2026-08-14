@@ -28,6 +28,7 @@ import {
 } from '../../adapter/mapshaper-adapter';
 import { resolveProjectCrs } from '../../geo/crs-resolver';
 import { parseCommandHeads, shouldUseWorkerForHeads } from '../worker-routing';
+import { collectTransferables } from '../../worker/transferables';
 
 /**
  * What a dataset-replace op CHANGES about the dataset. Drives the
@@ -82,10 +83,7 @@ const COMMAND_EFFECTS: Readonly<Record<string, OpEffect>> = {
   lines: 'shape-count',
   polygons: 'shape-count',
   innerlines: 'shape-count',
-  // mapshaper's CLI is `-split` and parseCommands canonicalises to
-  // `split`; the older entry `split-layer` was a dead key.
   split: 'shape-count',
-  'split-layer': 'shape-count',
   uniq: 'shape-count',
   buffer: 'shape-count',
   drop: 'shape-count',
@@ -125,7 +123,7 @@ export function inferEffect(cmd: string): OpEffect {
  * Used by the parsed-command runner so we don't reconstruct then re-parse
  * a CLI string just to classify the effect.
  */
-export function inferEffectForHeads(heads: string[]): OpEffect {
+function inferEffectForHeads(heads: string[]): OpEffect {
   let strongest: OpEffect = 'attribute-only';
   let sawAny = false;
   for (const head of heads) {
@@ -228,101 +226,55 @@ function runDatasetCommand(
   label: string,
   inputFiles?: Record<string, Uint8Array | string>,
 ): Promise<OpResult> {
-  const transaction = host._activeTransaction ?? null;
-  const operation = enqueueSourceOperation(host, sourceId, () =>
-    executeDatasetCommand(host, sourceId, request, label, inputFiles, transaction),
-  );
-  transaction?._trackOperation(operation);
-  return operation;
-}
-
-async function executeDatasetCommand(
-  host: EmapHostInternal,
-  sourceId: string,
-  request: DatasetCommandRequest,
-  label: string,
-  inputFiles: Record<string, Uint8Array | string> | undefined,
-  transaction: TransactionInternal | null,
-): Promise<OpResult> {
-  if (host._removed) return Err.hostRemoved();
-  const source = host._sources.get(sourceId);
-  if (!source) return Err.notFound('source', sourceId);
-  const original = source.getDataset();
-  if (!original) return Err.notFound('source', sourceId);
-
-  const originalEditVersion = original.editVersion ?? 0;
-  let after: MapshaperDataset;
-  try {
-    const adapter = getDefaultMapshaperAdapter();
-    const working = adapter.copyDataset(original);
-    const vertexCount = working.arcs?.getPointCount?.() ?? 0;
-    const defaultDecision = shouldUseWorkerForHeads(
-      request.heads,
-      vertexCount,
-      host._workerMode,
-      host._workerThreshold,
-    );
-    const useWorker =
-      !!host._workerPool &&
-      (host._workerRouting
-        ? host._workerRouting({
-            cmd: request.cmd,
-            heads: request.heads,
-            vertexCount,
-            mode: host._workerMode,
-            threshold: host._workerThreshold,
-            defaultDecision,
-          })
-        : defaultDecision);
-
-    if (useWorker) {
-      after = await _runViaWorker(host, working, request, label, inputFiles);
-    } else if (request.kind === 'string') {
-      after = await adapter.runOnDataset(request.cmd, working, inputFiles);
-    } else {
-      after = await adapter.runOnDatasetParsed(request.commands, working, inputFiles);
-    }
-  } catch (err) {
-    if (host._removed) return Err.hostRemoved();
-    host.fire('error', { error: err });
-    return Err.mapshaper(err, {
-      ...(request.kind === 'string' ? { cmd: request.cmd } : {}),
-      operation: label,
-    });
-  }
-
-  if (host._removed) return Err.hostRemoved();
-  if (
-    host._sources.get(sourceId) !== source ||
-    source.getDataset() !== original ||
-    (original.editVersion ?? 0) !== originalEditVersion ||
-    host._activeTransaction !== transaction ||
-    (transaction !== null && !transaction.isOpen)
-  ) {
-    return Err.staleOperation(sourceId, label);
-  }
-
-  return commitDatasetReplace(
+  return runDatasetMutation(
     host,
     sourceId,
-    source,
-    original,
-    after,
     label,
-    inferEffectForHeads(request.heads),
-    transaction,
+    () => inferEffectForHeads(request.heads),
+    async (working) => {
+      const adapter = getDefaultMapshaperAdapter();
+      const vertexCount = working.arcs?.getPointCount?.() ?? 0;
+      const defaultDecision = shouldUseWorkerForHeads(
+        request.heads,
+        vertexCount,
+        host._workerMode,
+        host._workerThreshold,
+      );
+      const useWorker =
+        !!host._workerPool &&
+        (host._workerRouting
+          ? host._workerRouting({
+              cmd: request.cmd,
+              heads: request.heads,
+              vertexCount,
+              mode: host._workerMode,
+              threshold: host._workerThreshold,
+              defaultDecision,
+            })
+          : defaultDecision);
+
+      if (useWorker) {
+        return _runViaWorker(host, working, request, label, inputFiles);
+      }
+      if (request.kind === 'string') {
+        return adapter.runOnDataset(request.cmd, working, inputFiles);
+      }
+      return adapter.runOnDatasetParsed(request.commands, working, inputFiles);
+    },
+    request.kind === 'string' ? { cmd: request.cmd } : undefined,
   );
 }
 
-export function _runDatasetTransform(
+function runDatasetMutation(
   host: EmapHostInternal,
   sourceId: string,
   label: string,
-  effect: OpEffect,
-  transform: (
+  effect: OpEffect | (() => OpEffect),
+  run: (
     working: MapshaperDataset,
     original: MapshaperDataset,
-  ) => OpResult | void | Promise<OpResult | void>,
+  ) => MapshaperDataset | OpResult | void | Promise<MapshaperDataset | OpResult | void>,
+  mapshaperOptions?: { cmd?: string },
 ): Promise<OpResult> {
   const transaction = host._activeTransaction ?? null;
   const operation = enqueueSourceOperation(host, sourceId, async () => {
@@ -331,16 +283,18 @@ export function _runDatasetTransform(
     if (!source) return Err.notFound('source', sourceId);
     const original = source.getDataset();
     if (!original) return Err.notFound('source', sourceId);
+
     const originalEditVersion = original.editVersion ?? 0;
-    let working: MapshaperDataset;
+    let after: MapshaperDataset;
     try {
-      working = getDefaultMapshaperAdapter().copyDataset(original);
-      const outcome = await transform(working, original);
-      if (outcome) return outcome;
+      const working = getDefaultMapshaperAdapter().copyDataset(original);
+      const outcome = await run(working, original);
+      if (outcome && 'ok' in outcome) return outcome;
+      after = outcome ?? working;
     } catch (err) {
       if (host._removed) return Err.hostRemoved();
       host.fire('error', { error: err });
-      return Err.mapshaper(err, { operation: label });
+      return Err.mapshaper(err, { ...mapshaperOptions, operation: label });
     }
 
     if (host._removed) return Err.hostRemoved();
@@ -353,19 +307,33 @@ export function _runDatasetTransform(
     ) {
       return Err.staleOperation(sourceId, label);
     }
+
     return commitDatasetReplace(
       host,
       sourceId,
       source,
       original,
-      working,
+      after,
       label,
-      effect,
+      typeof effect === 'function' ? effect() : effect,
       transaction,
     );
   });
   transaction?._trackOperation(operation);
   return operation;
+}
+
+export function _runDatasetTransform(
+  host: EmapHostInternal,
+  sourceId: string,
+  label: string,
+  effect: OpEffect,
+  transform: (
+    working: MapshaperDataset,
+    original: MapshaperDataset,
+  ) => OpResult | void | Promise<OpResult | void>,
+): Promise<OpResult> {
+  return runDatasetMutation(host, sourceId, label, effect, transform);
 }
 
 // mapshaper treats a packed dataset's `info.crs_string` as a parsable CRS
@@ -505,47 +473,4 @@ function commitDatasetReplace(
   if (!host._history.isCapturing()) host._fireHistoryChange();
   if (selectionDiff) host._fireSelectionChange(selectionDiff);
   return OK;
-}
-
-/**
- * Walk a `PackedSession` object and gather every `ArrayBuffer` referenced
- * by a `Uint8Array` field for postMessage transfer. Visits arrays and
- * plain-object children recursively; skips primitives and known-cycle
- * types (DataView, ArrayBuffer-on-shared-realm). De-dups by buffer
- * identity so the same backing store isn't transferred twice.
- *
- * Returns a fresh array; callers should NOT continue using the
- * Uint8Arrays after the transfer (their byteLength becomes 0 in the
- * source realm).
- */
-function collectTransferables(root: unknown): Transferable[] {
-  const out: Transferable[] = [];
-  const seen = new Set<ArrayBuffer>();
-  const visit = (val: unknown): void => {
-    if (!val || typeof val !== 'object') return;
-    if (val instanceof Uint8Array) {
-      const buf = val.buffer;
-      if (buf instanceof ArrayBuffer && !seen.has(buf)) {
-        seen.add(buf);
-        out.push(buf);
-      }
-      return;
-    }
-    if (val instanceof ArrayBuffer) {
-      if (!seen.has(val)) {
-        seen.add(val);
-        out.push(val);
-      }
-      return;
-    }
-    if (Array.isArray(val)) {
-      for (const item of val) visit(item);
-      return;
-    }
-    for (const k of Object.keys(val)) {
-      visit((val as Record<string, unknown>)[k]);
-    }
-  };
-  visit(root);
-  return out;
 }

@@ -2,76 +2,77 @@
 // discriminator field then runs `-dissolve` on it). Both produce a
 // merged-feature output via mapshaper's `-dissolve` pipeline.
 
-import { resolveLayerInList } from '../layer-registry';
 import { Err, type OpResult } from '../op-result';
 import type { DissolveOptions } from '../types';
 import type { MapshaperLayer } from '../../types/mapshaper-types';
 import type { OpContext } from './_context';
 import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
+import { defineLayerOp } from './_define';
 import { validateFieldList, validateFieldName } from './_fields';
 
 /** Internal field name used by `mergeSelected`'s discriminator pass. */
 const MERGE_SELECTED_FIELD = '__emap_merge';
 
-export async function dissolveLayer(ctx: OpContext, opts: DissolveOptions): Promise<OpResult> {
-  const source = ctx.host._sources.get(opts.source);
-  if (!source) return Err.notFound('source', opts.source);
-  const dataset = source.getDataset();
-  if (!dataset) return Err.notFound('source', opts.source);
-  if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
+export const dissolveLayer = defineLayerOp<DissolveOptions>({
+  name: 'dissolveLayer',
+  command: 'dissolve',
+  label: (o) => `Dissolve ${o.target}`,
+  preGate: (o) => {
+    // `field` (single) and `fields` (multi) are mutually exclusive — both
+    // set is a configuration error.
+    const hasFields = Array.isArray(o.fields) && o.fields.length > 0;
+    if (o.field !== undefined && hasFields) {
+      return Err.validation('field', '`field` and `fields` are mutually exclusive');
+    }
 
-  // `field` (single) and `fields` (multi) are mutually exclusive — both
-  // set is a configuration error.
-  const hasFields = Array.isArray(opts.fields) && opts.fields.length > 0;
-  if (opts.field !== undefined && hasFields) {
-    return Err.validation('field', '`field` and `fields` are mutually exclusive');
-  }
+    // mapshaper's -dissolve DEFAULT option is `fields` (comma-list, type
+    // strings). A field name containing `,` would silently group by N
+    // imaginary fields; reject up-front instead.
+    if (o.field !== undefined) {
+      const field = validateFieldName('field', o.field);
+      if (!field.ok) return field;
+    }
+  },
+  expressions: (o) => [o.calc, o.where],
+  validate: (o) => {
+    const hasFields = Array.isArray(o.fields) && o.fields.length > 0;
+    if (hasFields) {
+      const fields = validateFieldList('fields', o.fields);
+      if (!fields.ok) return fields;
+    }
 
-  // mapshaper's -dissolve DEFAULT option is `fields` (comma-list, type
-  // strings). A field name containing `,` would silently group by N
-  // imaginary fields; reject up-front instead.
-  if (opts.field !== undefined) {
-    const field = validateFieldName('field', opts.field);
-    if (!field.ok) return field;
-  }
-  if (!ctx.host._allowExpressionEvaluation([opts.calc, opts.where], 'dissolveLayer')) {
-    return Err.expressionDisabled('dissolveLayer');
-  }
+    const sumFields = validateFieldList('sumFields', o.sumFields);
+    if (!sumFields.ok) return sumFields;
 
-  // Group-by fields. When neither is set, dissolve collapses every
-  // feature into one (mapshaper's default for -dissolve with no key).
-  const dissolveOpts: Record<string, unknown> = {};
-  if (opts.field) {
-    dissolveOpts.fields = [opts.field];
-  } else if (hasFields) {
-    const fields = validateFieldList('fields', opts.fields);
-    if (!fields.ok) return fields;
-    dissolveOpts.fields = fields.value;
-  }
+    const copyFields = validateFieldList('copyFields', o.copyFields);
+    if (!copyFields.ok) return copyFields;
+  },
+  options: (o) => {
+    // Group-by fields. When neither is set, dissolve collapses every
+    // feature into one (mapshaper's default for -dissolve with no key).
+    const dissolveOpts: Record<string, unknown> = {};
+    const hasFields = Array.isArray(o.fields) && o.fields.length > 0;
+    if (o.field) {
+      dissolveOpts.fields = [o.field];
+    } else if (hasFields) {
+      const fields = validateFieldList('fields', o.fields);
+      if (fields.ok) dissolveOpts.fields = fields.value;
+    }
 
-  const sumFields = validateFieldList('sumFields', opts.sumFields);
-  if (!sumFields.ok) return sumFields;
-  if (sumFields.value.length > 0) dissolveOpts.sum_fields = sumFields.value;
+    const sumFields = validateFieldList('sumFields', o.sumFields);
+    if (sumFields.ok && sumFields.value.length > 0) dissolveOpts.sum_fields = sumFields.value;
 
-  const copyFields = validateFieldList('copyFields', opts.copyFields);
-  if (!copyFields.ok) return copyFields;
-  if (copyFields.value.length > 0) dissolveOpts.copy_fields = copyFields.value;
+    const copyFields = validateFieldList('copyFields', o.copyFields);
+    if (copyFields.ok && copyFields.value.length > 0) dissolveOpts.copy_fields = copyFields.value;
 
-  if (opts.calc && opts.calc.trim()) dissolveOpts.calc = opts.calc;
-  if (opts.where && opts.where.trim()) dissolveOpts.where = opts.where;
-  if (opts.multipart) dissolveOpts.multipart = true;
-  if (opts.name && opts.name.trim()) dissolveOpts.name = opts.name;
-  if (opts.noReplace) dissolveOpts.no_replace = true;
-
-  return ctx.runDatasetCommandParsed(
-    opts.source,
-    [
-      { name: 'target', options: { target: opts.target } },
-      { name: 'dissolve', options: dissolveOpts },
-    ],
-    `Dissolve ${opts.target}`,
-  );
-}
+    if (o.calc && o.calc.trim()) dissolveOpts.calc = o.calc;
+    if (o.where && o.where.trim()) dissolveOpts.where = o.where;
+    if (o.multipart) dissolveOpts.multipart = true;
+    if (o.name && o.name.trim()) dissolveOpts.name = o.name;
+    if (o.noReplace) dissolveOpts.no_replace = true;
+    return dissolveOpts;
+  },
+});
 
 /**
  * Merge the currently-selected features (when they all share the same

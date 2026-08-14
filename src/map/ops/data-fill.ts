@@ -5,43 +5,33 @@
 // `null` / `''` in their `region` / `name` field. `dataFill({field:'region'})`
 // propagates non-null values to the gaps from adjacent neighbours.
 
-import { resolveLayerInList } from '../layer-registry';
-import { Err, type OpResult } from '../op-result';
+import { Err } from '../op-result';
 import type { DataFillOptions } from '../types';
-import type { OpContext } from './_context';
+import { defineLayerOp } from './_define';
 
-export async function dataFill(ctx: OpContext, opts: DataFillOptions): Promise<OpResult> {
-  const source = ctx.host._sources.get(opts.source);
-  if (!source) return Err.notFound('source', opts.source);
-  const dataset = source.getDataset();
-  if (!dataset) return Err.notFound('source', opts.source);
-  if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
-
-  if (typeof opts.field !== 'string' || opts.field.trim().length === 0) {
-    return Err.validation('field', 'must be a non-empty string');
-  }
-  if (opts.field.includes(',') || opts.field.includes('=')) {
-    return Err.validation('field', 'must not contain `,` or `=`');
-  }
-  if (opts.weightField !== undefined) {
-    if (typeof opts.weightField !== 'string' || opts.weightField.trim().length === 0) {
-      return Err.validation('weightField', 'must be a non-empty string when supplied');
+export const dataFill = defineLayerOp<DataFillOptions>({
+  name: 'dataFill',
+  command: 'data-fill',
+  label: (o) => `Data fill ${o.target}.${o.field}`,
+  validate: (o) => {
+    if (typeof o.field !== 'string' || o.field.trim().length === 0) {
+      return Err.validation('field', 'must be a non-empty string');
     }
-    if (opts.weightField.includes(',') || opts.weightField.includes('=')) {
-      return Err.validation('weightField', 'must not contain `,` or `=`');
+    if (o.field.includes(',') || o.field.includes('=')) {
+      return Err.validation('field', 'must not contain `,` or `=`');
     }
-  }
-
-  const o: Record<string, unknown> = { field: opts.field };
-  if (opts.weightField) o.weight_field = opts.weightField;
-  if (opts.contiguous) o.contiguous = true;
-
-  return ctx.runDatasetCommandParsed(
-    opts.source,
-    [
-      { name: 'target', options: { target: opts.target } },
-      { name: 'data-fill', options: o },
-    ],
-    `Data fill ${opts.target}.${opts.field}`,
-  );
-}
+    if (o.weightField !== undefined) {
+      if (typeof o.weightField !== 'string' || o.weightField.trim().length === 0) {
+        return Err.validation('weightField', 'must be a non-empty string when supplied');
+      }
+      if (o.weightField.includes(',') || o.weightField.includes('=')) {
+        return Err.validation('weightField', 'must not contain `,` or `=`');
+      }
+    }
+  },
+  options: (o) => ({
+    field: o.field,
+    ...(o.weightField ? { weight_field: o.weightField } : {}),
+    ...(o.contiguous ? { contiguous: true } : {}),
+  }),
+});

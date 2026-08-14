@@ -4,47 +4,37 @@
 // attributes (subset by `fields` when supplied).
 
 import { resolveLayerInList } from '../layer-registry';
-import { Err, type OpResult } from '../op-result';
+import { Err } from '../op-result';
 import type { DivideOptions } from '../types';
-import type { OpContext } from './_context';
+import { defineLayerOp } from './_define';
 import { validateFieldList } from './_fields';
 
-export async function divideLayer(ctx: OpContext, opts: DivideOptions): Promise<OpResult> {
-  const source = ctx.host._sources.get(opts.source);
-  if (!source) return Err.notFound('source', opts.source);
-  const dataset = source.getDataset();
-  if (!dataset) return Err.notFound('source', opts.source);
-  const targetLayer = resolveLayerInList(dataset.layers, opts.target);
-  if (!targetLayer) return Err.notFound('layer', opts.target);
-  if (targetLayer.geometry_type !== 'polyline') {
-    return Err.validation(
-      'target',
-      `expected polyline layer, got ${targetLayer.geometry_type ?? 'unknown'}`,
-    );
-  }
-  const dividerLayer = resolveLayerInList(dataset.layers, opts.divider);
-  if (!dividerLayer) return Err.notFound('divider', opts.divider);
-  if (dividerLayer.geometry_type !== 'polygon') {
-    return Err.validation(
-      'divider',
-      `expected polygon layer, got ${dividerLayer.geometry_type ?? 'unknown'}`,
-    );
-  }
-
-  const divideOpts: Record<string, unknown> = { source: opts.divider };
-  if (opts.fields && opts.fields.length > 0) {
-    const fields = validateFieldList('fields', opts.fields);
-    if (!fields.ok) return fields;
-    divideOpts.fields = fields.value;
-  }
-  if (opts.force) divideOpts.force = true;
-
-  return ctx.runDatasetCommandParsed(
-    opts.source,
-    [
-      { name: 'target', options: { target: opts.target } },
-      { name: 'divide', options: divideOpts },
-    ],
-    `Divide ${opts.target}`,
-  );
-}
+export const divideLayer = defineLayerOp<DivideOptions>({
+  name: 'divideLayer',
+  command: 'divide',
+  geometry: 'polyline',
+  label: (o) => `Divide ${o.target}`,
+  validate: (o, _layer, dataset) => {
+    const dividerLayer = resolveLayerInList(dataset.layers, o.divider);
+    if (!dividerLayer) return Err.notFound('divider', o.divider);
+    if (dividerLayer.geometry_type !== 'polygon') {
+      return Err.validation(
+        'divider',
+        `expected polygon layer, got ${dividerLayer.geometry_type ?? 'unknown'}`,
+      );
+    }
+    if (o.fields && o.fields.length > 0) {
+      const fields = validateFieldList('fields', o.fields);
+      if (!fields.ok) return fields;
+    }
+  },
+  options: (o) => {
+    const divideOpts: Record<string, unknown> = { source: o.divider };
+    if (o.fields && o.fields.length > 0) {
+      const fields = validateFieldList('fields', o.fields);
+      if (fields.ok) divideOpts.fields = fields.value;
+    }
+    if (o.force) divideOpts.force = true;
+    return divideOpts;
+  },
+});

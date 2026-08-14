@@ -6,10 +6,10 @@
 // pass `force: true`, returns a validation error rather than letting
 // mapshaper throw an opaque mid-pipeline error.
 
-import { resolveLayerInList } from '../layer-registry';
 import { Err, type OpResult } from '../op-result';
 import type { MergeLayersOptions } from '../types';
 import type { OpContext } from './_context';
+import { resolveCommaTargets } from './_targets';
 
 export async function mergeLayers(ctx: OpContext, opts: MergeLayersOptions): Promise<OpResult> {
   if (!opts.targets || opts.targets.length < 2) {
@@ -20,19 +20,9 @@ export async function mergeLayers(ctx: OpContext, opts: MergeLayersOptions): Pro
   const dataset = source.getDataset();
   if (!dataset) return Err.notFound('source', opts.source);
 
-  // Targets are joined with commas inside the `-target` arg; reject names
-  // that themselves contain `,` so we don't silently split into bogus
-  // targets.
-  for (const t of opts.targets) {
-    if (typeof t !== 'string' || t.includes(',')) {
-      return Err.validation('targets', `target name must not contain ',': ${String(t)}`);
-    }
-  }
-
-  const layers = opts.targets.map((t) => resolveLayerInList(dataset.layers, t));
-  for (let i = 0; i < layers.length; i++) {
-    if (!layers[i]) return Err.notFound('layer', opts.targets[i]);
-  }
+  const resolved = resolveCommaTargets(dataset, opts.targets);
+  if (!resolved.ok) return resolved;
+  const { targetList, layers } = resolved.value;
 
   if (!opts.force) {
     const firstGeom = layers[0]?.geometry_type;
@@ -45,7 +35,6 @@ export async function mergeLayers(ctx: OpContext, opts: MergeLayersOptions): Pro
     }
   }
 
-  const targetList = opts.targets.join(',');
   const mergeOpts: Record<string, unknown> = {};
   if (opts.name && opts.name.trim()) mergeOpts.name = opts.name;
   if (opts.force) mergeOpts.force = true;

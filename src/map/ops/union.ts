@@ -4,11 +4,11 @@
 // input fields. mapshaper's `-target` for `-union` is a comma-separated
 // layer list, so we join `targets` with commas inside one quoted arg.
 
-import { resolveLayerInList } from '../layer-registry';
 import { Err, type OpResult } from '../op-result';
 import type { UnionOptions } from '../types';
 import type { OpContext } from './_context';
 import { validateFieldList } from './_fields';
+import { resolveCommaTargets } from './_targets';
 
 export async function unionLayers(ctx: OpContext, opts: UnionOptions): Promise<OpResult> {
   if (!opts.targets || opts.targets.length < 2) {
@@ -18,17 +18,9 @@ export async function unionLayers(ctx: OpContext, opts: UnionOptions): Promise<O
   if (!source) return Err.notFound('source', opts.source);
   const dataset = source.getDataset();
   if (!dataset) return Err.notFound('source', opts.source);
-  // Every target must resolve and be `,`-free — mapshaper joins the list
-  // with commas and would otherwise silently split a comma-bearing name
-  // into multiple bogus targets.
-  for (const t of opts.targets) {
-    if (typeof t !== 'string' || t.includes(',')) {
-      return Err.validation('targets', `target name must not contain ',': ${String(t)}`);
-    }
-    if (!resolveLayerInList(dataset.layers, t)) return Err.notFound('layer', t);
-  }
-
-  const targetList = opts.targets.join(',');
+  const resolved = resolveCommaTargets(dataset, opts.targets);
+  if (!resolved.ok) return resolved;
+  const { targetList } = resolved.value;
   const unionOpts: Record<string, unknown> = {};
   if (opts.fields && opts.fields.length > 0) {
     const fields = validateFieldList('fields', opts.fields);

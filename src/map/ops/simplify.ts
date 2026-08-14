@@ -9,79 +9,74 @@
 // supplied. `target` is optional; when omitted, the whole source dataset
 // is simplified (mapshaper CLI default).
 
-import { resolveLayerInList } from '../layer-registry';
-import { Err, type OpResult } from '../op-result';
+import { Err } from '../op-result';
 import type { SimplifyOptions } from '../types';
-import type { OpContext } from './_context';
-import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
+import { defineLayerOp } from './_define';
 
-export async function simplifyLayer(ctx: OpContext, opts: SimplifyOptions): Promise<OpResult> {
-  const source = ctx.host._sources.get(opts.source);
-  if (!source) return Err.notFound('source', opts.source);
-  const dataset = source.getDataset();
-  if (!dataset) return Err.notFound('source', opts.source);
-  if (opts.target !== undefined) {
-    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
-  }
-
-  // Exactly one threshold mode.
-  const thresholdsSet = [
-    opts.percentage !== undefined,
-    opts.interval !== undefined,
-    opts.resolution !== undefined,
-  ].filter(Boolean).length;
-  if (thresholdsSet !== 1) {
-    return Err.validation(
-      'threshold',
-      'must supply exactly one of percentage, interval, resolution',
-    );
-  }
-
-  const simplifyOpts: Record<string, unknown> = {};
-  if (opts.percentage !== undefined) {
-    const p = opts.percentage;
-    if (!Number.isFinite(p) || p < 0 || p > 100) {
-      return Err.validation('percentage', 'must be a finite number in [0, 100]');
+export const simplifyLayer = defineLayerOp<SimplifyOptions>({
+  name: 'simplifyLayer',
+  command: 'simplify',
+  target: 'optional',
+  label: (o) => `Simplify ${o.target ?? o.source}`,
+  preGate: (o) => {
+    // Exactly one threshold mode.
+    const thresholdsSet = [
+      o.percentage !== undefined,
+      o.interval !== undefined,
+      o.resolution !== undefined,
+    ].filter(Boolean).length;
+    if (thresholdsSet !== 1) {
+      return Err.validation(
+        'threshold',
+        'must supply exactly one of percentage, interval, resolution',
+      );
     }
-    simplifyOpts.percentage = `${p}%`;
-  } else if (opts.interval !== undefined) {
-    const v = opts.interval;
-    if (!Number.isFinite(v) || v <= 0) {
-      return Err.validation('interval', 'must be a positive finite number');
+
+    if (o.percentage !== undefined) {
+      const p = o.percentage;
+      if (!Number.isFinite(p) || p < 0 || p > 100) {
+        return Err.validation('percentage', 'must be a finite number in [0, 100]');
+      }
+    } else if (o.interval !== undefined) {
+      const v = o.interval;
+      if (!Number.isFinite(v) || v <= 0) {
+        return Err.validation('interval', 'must be a positive finite number');
+      }
+    } else {
+      const r = o.resolution!;
+      if (!/^\d+x\d+$/.test(r)) {
+        return Err.validation('resolution', 'must match `WIDTHxHEIGHT` (digits)');
+      }
     }
-    simplifyOpts.interval = String(v);
-  } else {
-    const r = opts.resolution!;
-    if (!/^\d+x\d+$/.test(r)) {
-      return Err.validation('resolution', 'must match `WIDTHxHEIGHT` (digits)');
+
+    // `weighting` only makes sense for weighted-Visvalingam. mapshaper
+    // silently ignores `weighting` when method is `dp` or `visvalingam`,
+    // which leaves the caller wondering why their tuning had no effect.
+    // Reject up-front. (Method `undefined` is fine — defaults to weighted.)
+    if (o.weighting !== undefined && o.method !== undefined && o.method !== 'weighted') {
+      return Err.validation(
+        'weighting',
+        `weighting only applies to method='weighted', not ${o.method}`,
+      );
     }
-    simplifyOpts.resolution = r;
-  }
-
-  // `weighting` only makes sense for weighted-Visvalingam. mapshaper
-  // silently ignores `weighting` when method is `dp` or `visvalingam`,
-  // which leaves the caller wondering why their tuning had no effect.
-  // Reject up-front. (Method `undefined` is fine — defaults to weighted.)
-  if (opts.weighting !== undefined && opts.method !== undefined && opts.method !== 'weighted') {
-    return Err.validation(
-      'weighting',
-      `weighting only applies to method='weighted', not ${opts.method}`,
-    );
-  }
-
-  if (opts.method) simplifyOpts.method = opts.method;
-  if (typeof opts.weighting === 'number' && Number.isFinite(opts.weighting)) {
-    simplifyOpts.weighting = opts.weighting;
-  }
-  if (opts.planar) simplifyOpts.planar = true;
-  if (opts.keepShapes) simplifyOpts.keep_shapes = true;
-  if (opts.lockBox) simplifyOpts.lock_box = true;
-  if (opts.noRepair) simplifyOpts.no_repair = true;
-
-  const commands: ParsedCommand[] = [];
-  if (opts.target) commands.push({ name: 'target', options: { target: opts.target } });
-  commands.push({ name: 'simplify', options: simplifyOpts });
-
-  const label = `Simplify ${opts.target ?? opts.source}`;
-  return ctx.runDatasetCommandParsed(opts.source, commands, label);
-}
+  },
+  options: (o) => {
+    const simplifyOpts: Record<string, unknown> = {};
+    if (o.percentage !== undefined) {
+      simplifyOpts.percentage = `${o.percentage}%`;
+    } else if (o.interval !== undefined) {
+      simplifyOpts.interval = String(o.interval);
+    } else {
+      simplifyOpts.resolution = o.resolution!;
+    }
+    if (o.method) simplifyOpts.method = o.method;
+    if (typeof o.weighting === 'number' && Number.isFinite(o.weighting)) {
+      simplifyOpts.weighting = o.weighting;
+    }
+    if (o.planar) simplifyOpts.planar = true;
+    if (o.keepShapes) simplifyOpts.keep_shapes = true;
+    if (o.lockBox) simplifyOpts.lock_box = true;
+    if (o.noRepair) simplifyOpts.no_repair = true;
+    return simplifyOpts;
+  },
+});
