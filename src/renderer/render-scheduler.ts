@@ -1,6 +1,6 @@
 import type { AffineDelta, RenderAction, RenderRequest } from '../map/types';
 
-export const SLOW_FRAME_MS = 100;
+const SLOW_FRAME_MS = 100;
 export const FAST_SETTLE_FALLBACK_MS = 2000;
 
 export interface RenderSnapshot {

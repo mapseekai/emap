@@ -302,11 +302,7 @@ export class CanvasPainter implements Painter {
     const ctx = this._ctx;
     const batchSize = 100;
 
-    ctx.strokeStyle = this._resolveColor(style.color, 'foreground');
-    ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.setLineDash((style.dash ?? []).map((length) => length * this._pixelRatio));
+    this._applyStrokeStyle(style, style.dash ?? []);
 
     let count = 0;
     ctx.beginPath();
@@ -347,11 +343,7 @@ export class CanvasPainter implements Painter {
     const n = arcIds?.length ?? arcs.size();
     const vertexCounts = arcs.getVertexData?.().nn ?? null;
 
-    ctx.strokeStyle = this._resolveColor(style.color, 'foreground');
-    ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.setLineDash((style.dash ?? []).map((length) => length * this._pixelRatio));
+    this._applyStrokeStyle(style, style.dash ?? []);
 
     let arcCount = 0;
     let vertexCount = 0;
@@ -389,7 +381,32 @@ export class CanvasPainter implements Painter {
 
   // Equivalent to mapshaper's drawPath2 with optimized rounding
   private drawPathSnapping(iter: ArcIterator, ctx: CanvasRenderingContext2D): void {
-    // Cache transform values in local variables (Chrome 80+ performance workaround)
+    const count = this._traceSnapped(iter, ctx);
+
+    // Draw tiny line if all coords round to same location (Mapshaper behavior)
+    if (count === 0 && Number.isFinite(iter.x) && Number.isFinite(iter.y)) {
+      const x =
+        ((iter.x * this._transform.mx * this._pixelRatio + this._transform.bx * this._pixelRatio) *
+          2) |
+        0;
+      const y =
+        ((iter.y * this._transform.my * this._pixelRatio + this._transform.by * this._pixelRatio) *
+          2) |
+        0;
+      ctx.lineTo(x / 2 + 0.1, y / 2);
+    }
+  }
+
+  private _applyStrokeStyle(style: StrokeStyle, dash: readonly number[]): void {
+    const ctx = this._ctx;
+    ctx.strokeStyle = this._resolveColor(style.color, 'foreground');
+    ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.setLineDash(dash.map((length) => length * this._pixelRatio));
+  }
+
+  private _traceSnapped(iter: ArcIterator, ctx: CanvasRenderingContext2D): number {
     const mx = this._transform.mx * this._pixelRatio;
     const my = this._transform.my * this._pixelRatio;
     const bx = this._transform.bx * this._pixelRatio;
@@ -397,9 +414,8 @@ export class CanvasPainter implements Painter {
 
     let x: number, y: number, xp: number, yp: number;
     let count = 0;
-    if (!iter.hasNext()) return;
+    if (!iter.hasNext()) return count;
 
-    // Use half-pixel snapping for crisper 1px lines (Mapshaper's roundToHalfPix)
     x = ((iter.x * mx + bx) * 2) | 0;
     y = ((iter.y * my + by) * 2) | 0;
     ctx.moveTo(x / 2, y / 2);
@@ -416,10 +432,7 @@ export class CanvasPainter implements Painter {
       }
     }
 
-    // Draw tiny line if all coords round to same location (Mapshaper behavior)
-    if (count === 0) {
-      ctx.lineTo(x / 2 + 0.1, y / 2);
-    }
+    return count;
   }
 
   private drawArrowDotPaths(
@@ -432,11 +445,7 @@ export class CanvasPainter implements Painter {
     const commands = this.getArrowDotCommands(arcs, style, filter, options);
     if (commands.length === 0) return;
 
-    ctx.strokeStyle = this._resolveColor(style.color, 'foreground');
-    ctx.lineWidth = (style.width ?? 1) * this._pixelRatio;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.setLineDash([]);
+    this._applyStrokeStyle(style, []);
 
     let segmentCount = 0;
     ctx.beginPath();
@@ -793,11 +802,6 @@ export class CanvasPainter implements Painter {
     if (!arcs.getShapeIter) return; // guard: need shape-aware iterator
 
     const ctx = this._ctx;
-    const pr = this._pixelRatio;
-    const mx = this._transform.mx * pr;
-    const my = this._transform.my * pr;
-    const bx = this._transform.bx * pr;
-    const by = this._transform.by * pr;
 
     ctx.fillStyle = this._resolveColor(fillColor, 'muted');
     const overrideAlpha = typeof opacity === 'number' && opacity !== 1;
@@ -864,26 +868,9 @@ export class CanvasPainter implements Painter {
             ? partIntersectsView(part, getSimpleShapeBbox, viewBBox, bbox)
             : partPassesArcFilter(part, filter);
         if (!visible) continue;
-        // getShapeIter respects arc direction (reversed arcs traversed backwards)
         const iter = arcs.getShapeIter!(part);
-        if (!iter.hasNext()) continue;
 
-        let xp: number, yp: number;
-        // Use half-pixel snapping for consistency and to avoid floating point math overhead
-        let x = ((iter.x * mx + bx) * 2) | 0;
-        let y = ((iter.y * my + by) * 2) | 0;
-        ctx.moveTo(x / 2, y / 2);
-
-        while (iter.hasNext()) {
-          xp = x;
-          yp = y;
-          x = ((iter.x * mx + bx) * 2) | 0;
-          y = ((iter.y * my + by) * 2) | 0;
-
-          if (x !== xp || y !== yp) {
-            ctx.lineTo(x / 2, y / 2);
-          }
-        }
+        this._traceSnapped(iter, ctx);
       }
 
       shapeCount++;
