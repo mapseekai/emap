@@ -1,15 +1,4 @@
-import zoomInSvg from './assets/controls/zoom-in.svg?raw';
-import zoomOutSvg from './assets/controls/zoom-out.svg?raw';
-import homeSvg from './assets/controls/home.svg?raw';
-import simplifySvg from './assets/controls/simplify.svg?raw';
-import polylineSvg from './assets/controls/polyline.svg?raw';
-import polygonSvg from './assets/controls/polygon.svg?raw';
-import pointSvg from './assets/controls/point.svg?raw';
-import editSvg from './assets/controls/edit.svg?raw';
-import basemapSvg from './assets/controls/basemap.svg?raw';
-import layersSvg from './assets/controls/layers.svg?raw';
-import undoSvg from './assets/controls/help-larrow.svg?raw';
-import redoSvg from './assets/controls/help-rarrow.svg?raw';
+import { CONTROL_ICON_PATHS } from './control-icon-paths';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
@@ -27,40 +16,21 @@ export type ControlIconName =
   | 'undo'
   | 'redo';
 
-const CONTROL_ICON_SVGS: Readonly<Record<ControlIconName, string>> = {
-  'zoom-in': zoomInSvg,
-  'zoom-out': zoomOutSvg,
-  home: homeSvg,
-  simplify: simplifySvg,
-  polyline: polylineSvg,
-  polygon: polygonSvg,
-  point: pointSvg,
-  edit: editSvg,
-  basemap: basemapSvg,
-  layers: layersSvg,
-  undo: undoSvg,
-  redo: redoSvg,
-};
-
 export function createControlIcon(name: ControlIconName): SVGSVGElement {
-  const template = document.createElement('template');
-  template.innerHTML = CONTROL_ICON_SVGS[name].trim();
-  const icon = template.content.firstElementChild;
-  if (!(icon instanceof SVGSVGElement)) {
-    throw new Error(`Invalid SVG control icon: ${name}`);
-  }
-
+  const { viewBox = '0 0 100 100', paths } = CONTROL_ICON_PATHS[name];
+  const icon = document.createElementNS(SVG_NAMESPACE, 'svg');
   icon.setAttribute('xmlns', SVG_NAMESPACE);
-  if (!icon.hasAttribute('viewBox')) {
-    icon.setAttribute('viewBox', '0 0 100 100');
-  }
+  icon.setAttribute('viewBox', viewBox);
   icon.setAttribute('aria-hidden', 'true');
   icon.setAttribute('focusable', 'false');
-  for (const path of icon.querySelectorAll<SVGPathElement>('path')) {
-    path.style.removeProperty('color');
-    path.style.removeProperty('fill');
-    path.style.removeProperty('fill-opacity');
+
+  for (const { d, fillRule } of paths) {
+    const path = document.createElementNS(SVG_NAMESPACE, 'path');
+    path.setAttribute('d', d);
     path.setAttribute('fill', 'currentColor');
+    if (fillRule) path.setAttribute('fill-rule', fillRule);
+    icon.appendChild(path);
   }
+
   return icon;
 }
