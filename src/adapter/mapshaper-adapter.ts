@@ -474,11 +474,12 @@ export function createGeographicCoordinateTransformer(
     Number(eccentricitySquared) >= 0 &&
     Number(eccentricitySquared) < 1;
   const a = hasEllipsoid ? Number(semiMajorAxis) : WGS84_SEMI_MAJOR_AXIS;
-  const f = hasEllipsoid
-    ? 1 - Math.sqrt(1 - Number(eccentricitySquared))
-    : WGS84_FLATTENING;
+  const f = hasEllipsoid ? 1 - Math.sqrt(1 - Number(eccentricitySquared)) : WGS84_FLATTENING;
   const mprojApi = mproj as unknown as {
-    pj_inv(point: { x: number; y: number }, projection: MprojProjection): { lam: number; phi: number };
+    pj_inv(
+      point: { x: number; y: number },
+      projection: MprojProjection,
+    ): { lam: number; phi: number };
   };
 
   return {
@@ -505,7 +506,9 @@ export function createGeographicCoordinateTransformer(
         const lp = mprojApi.pj_inv({ x: point[0], y: point[1] }, projection);
         const longitude = lp.lam * (180 / Math.PI);
         const latitude = lp.phi * (180 / Math.PI);
-        return Number.isFinite(longitude) && Number.isFinite(latitude) ? [longitude, latitude] : null;
+        return Number.isFinite(longitude) && Number.isFinite(latitude)
+          ? [longitude, latitude]
+          : null;
       } catch {
         return null;
       }
@@ -751,19 +754,34 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     dataset: MapshaperDataset,
     inputFiles?: RunnerInputFiles,
   ): Promise<MapshaperDataset> {
+    return this._runParsedCommands(mapshaper.internal.parseCommands(cmd), dataset, inputFiles);
+  }
+
+  runOnDatasetParsed(
+    commands: ParsedCommand[],
+    dataset: MapshaperDataset,
+    inputFiles?: RunnerInputFiles,
+  ): Promise<MapshaperDataset> {
+    return this._runParsedCommands(commands, dataset, inputFiles);
+  }
+
+  private _runParsedCommands(
+    commands: ParsedCommand[],
+    dataset: MapshaperDataset,
+    inputFiles?: RunnerInputFiles,
+  ): Promise<MapshaperDataset> {
     return new Promise((resolve, reject) => {
       const job = new mapshaper.internal.Job();
       job.catalog.addDataset(dataset);
-      const commands = mapshaper.internal.parseCommands(cmd);
       if (inputFiles) {
         // mapshaper resolves filename references in command args via
         // `cli.readFile(name, null, opts.input)`, so the cache must be present
         // on every command's options. Cheap to set on all of them.
-        for (const c of commands) {
-          if (c.options) c.options.input = inputFiles;
+        for (const command of commands) {
+          if (command.options) command.options.input = inputFiles;
         }
       }
-      mapshaper.internal.runParsedCommands(commands, job, (err: any, finished: any) => {
+      mapshaper.internal.runParsedCommands(commands as any[], job, (err: any, finished: any) => {
         if (err) {
           reject(err);
           return;
@@ -776,34 +794,6 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
           // dataset reference, which let no-op commands pollute history
           // with empty `DatasetReplaceCommand`s. Surface as an error so
           // `_runDatasetCommand` records `Err.mapshaper` instead.
-          reject(new Error('mapshaper command completed but produced no default target'));
-          return;
-        }
-        resolve(targets[0].dataset);
-      });
-    });
-  }
-
-  runOnDatasetParsed(
-    commands: ParsedCommand[],
-    dataset: MapshaperDataset,
-    inputFiles?: RunnerInputFiles,
-  ): Promise<MapshaperDataset> {
-    return new Promise((resolve, reject) => {
-      const job = new mapshaper.internal.Job();
-      job.catalog.addDataset(dataset);
-      if (inputFiles) {
-        for (const c of commands) {
-          if (c.options) (c.options as Record<string, unknown>).input = inputFiles;
-        }
-      }
-      mapshaper.internal.runParsedCommands(commands as any[], job, (err: any, finished: any) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        const targets = finished.catalog.getDefaultTargets();
-        if (targets.length === 0) {
           reject(new Error('mapshaper command completed but produced no default target'));
           return;
         }
