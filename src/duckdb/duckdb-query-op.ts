@@ -6,6 +6,7 @@ import type { FeatureShape, MapshaperDataset, MapshaperLayer } from '../types/ma
 import { DuckDbOperationError } from './duckdb-errors';
 import { getDuckDbRuntime, type DuckDbRuntime } from './duckdb-runtime';
 import { validateDuckDbSelectSql } from './duckdb-query-sql';
+import { quoteIdentifier } from './duckdb-pipeline';
 
 export interface DuckDbQueryOptions {
   geometryColumn?: string;
@@ -20,10 +21,6 @@ let duckDbQueryInputTableSequence = 0;
 function nextDuckDbQueryInputTableName(): string {
   duckDbQueryInputTableSequence += 1;
   return `emap_duckdb_query_input_${duckDbQueryInputTableSequence}`;
-}
-
-function quoteIdentifier(id: string): string {
-  return `"${id.replaceAll('"', '""')}"`;
 }
 
 function resolveInputLayer(dataset: MapshaperDataset, selector?: string | number): MapshaperLayer {

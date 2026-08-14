@@ -1,4 +1,5 @@
 import { DuckDbOperationError } from './duckdb-errors';
+import { quoteIdentifier } from './duckdb-pipeline';
 
 export interface ValidateDuckDbSelectSqlOptions {
   allowGeometryProjection?: boolean;
@@ -539,10 +540,6 @@ function unquoteIdentifier(identifier: string): string {
     }
   }
   return value;
-}
-
-function quoteIdentifier(identifier: string): string {
-  return `"${identifier.replaceAll('"', '""')}"`;
 }
 
 function escapeRegex(value: string): string {

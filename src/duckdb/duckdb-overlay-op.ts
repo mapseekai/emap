@@ -1,11 +1,16 @@
 import type { Table } from 'apache-arrow';
-import { toArrowTable } from '../arrow/dataset-to-table';
-import { fromArrowTable } from '../arrow/table-to-dataset';
 import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import { DuckDbOperationError } from './duckdb-errors';
+import {
+  arrowResultToDataset,
+  datasetToArrowInput,
+  duckDbPipelineMessages,
+  requireDuckDbRuntime,
+  runDuckDbPipeline,
+} from './duckdb-pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from './duckdb-runtime';
 import { buildOverlaySql, type OverlayDuckDbFunction } from './duckdb-sql';
-import { alignSecondaryDatasetCrs, inheritPrimaryDatasetCrs } from './dataset-crs';
+import { alignSecondaryDatasetCrs } from './dataset-crs';
 
 export interface DuckDbOverlayOptions {
   inputLayer?: string | number;
@@ -18,23 +23,6 @@ export interface DuckDbOverlayOptions {
 export interface DuckDbOverlayOperationSpec {
   id: string;
   duckDbFunction: OverlayDuckDbFunction;
-}
-
-let duckDbOverlayInputTableSequence = 0;
-let duckDbOverlayMaskTableSequence = 0;
-
-function nextDuckDbOverlayInputTableName(): string {
-  duckDbOverlayInputTableSequence += 1;
-  return `emap_duckdb_overlay_input_${duckDbOverlayInputTableSequence}`;
-}
-
-function nextDuckDbOverlayMaskTableName(): string {
-  duckDbOverlayMaskTableSequence += 1;
-  return `emap_duckdb_overlay_mask_${duckDbOverlayMaskTableSequence}`;
-}
-
-function quoteIdentifier(id: string): string {
-  return `"${id.replaceAll('"', '""')}"`;
 }
 
 function getSelectedLayer(
@@ -76,9 +64,8 @@ export async function processOverlayWithDuckDb(
   spec: DuckDbOverlayOperationSpec,
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  if (!runtime) {
-    throw new DuckDbOperationError('runtime-unavailable', 'DuckDB runtime is not available');
-  }
+  const rt = requireDuckDbRuntime(runtime);
+  const messages = duckDbPipelineMessages(spec.id);
 
   const inputGeometryColumn = opts.inputGeometryColumn ?? 'geometry';
   const maskGeometryColumn = opts.maskGeometryColumn ?? 'geometry';
@@ -87,119 +74,51 @@ export async function processOverlayWithDuckDb(
   let mask: Table;
   try {
     const alignedMaskDataset = await alignSecondaryDatasetCrs(inputDataset, maskDataset);
-    input = toArrowTable(inputDataset, {
-      layer: opts.inputLayer,
-      encoding: 'wkb',
-      geometryColumn: inputGeometryColumn,
-    });
+    input = datasetToArrowInput(
+      inputDataset,
+      { layer: opts.inputLayer, geometryColumn: inputGeometryColumn },
+      spec.id,
+    );
     try {
-      mask = toArrowTable(alignedMaskDataset, {
-        layer: opts.maskLayer,
-        encoding: 'wkb',
-        geometryColumn: maskGeometryColumn,
-      });
+      mask = datasetToArrowInput(
+        alignedMaskDataset,
+        { layer: opts.maskLayer, geometryColumn: maskGeometryColumn },
+        spec.id,
+      );
     } catch (err) {
       const emptyMaskDataset = datasetWithEmptyMaskGeometry(inputDataset, alignedMaskDataset, opts);
       if (!emptyMaskDataset) throw err;
-      mask = toArrowTable(emptyMaskDataset, {
-        layer: opts.maskLayer,
-        encoding: 'wkb',
-        geometryColumn: maskGeometryColumn,
-      });
-    }
-  } catch (err) {
-    throw new DuckDbOperationError(
-      'conversion-failed',
-      `DuckDB ${spec.id} input could not be converted to Arrow`,
-      { cause: err },
-    );
-  }
-
-  try {
-    await runtime.ensureSpatial();
-  } catch (err) {
-    throw new DuckDbOperationError(
-      'spatial-extension-unavailable',
-      'DuckDB spatial extension is unavailable',
-      { cause: err },
-    );
-  }
-
-  let conn: Awaited<ReturnType<DuckDbRuntime['connect']>> | undefined;
-  let inputTableName: string | undefined;
-  let maskTableName: string | undefined;
-  let primaryError: unknown;
-
-  try {
-    conn = await runtime.connect();
-    inputTableName = nextDuckDbOverlayInputTableName();
-    maskTableName = nextDuckDbOverlayMaskTableName();
-
-    await conn.insertArrowTable(input, { name: inputTableName });
-    await conn.insertArrowTable(mask, { name: maskTableName });
-
-    const resultTable = await conn.query(
-      buildOverlaySql({
-        duckDbFunction: spec.duckDbFunction,
-        inputGeometryColumn,
-        inputTableName,
-        maskGeometryColumn,
-        maskTableName,
-      }),
-    );
-
-    try {
-      const result = fromArrowTable(resultTable, {
-        layerName: opts.outputLayer,
-        geometryColumn: inputGeometryColumn,
-      });
-      return inheritPrimaryDatasetCrs(result, inputDataset);
-    } catch (err) {
-      throw new DuckDbOperationError(
-        'conversion-failed',
-        `DuckDB ${spec.id} result could not be converted to a dataset`,
-        { cause: err },
+      mask = datasetToArrowInput(
+        emptyMaskDataset,
+        { layer: opts.maskLayer, geometryColumn: maskGeometryColumn },
+        spec.id,
       );
     }
   } catch (err) {
-    if (err instanceof DuckDbOperationError) {
-      primaryError = err;
-      throw err;
-    }
-
-    const wrapped = new DuckDbOperationError('query-failed', `DuckDB ${spec.id} query failed`, {
-      cause: err,
-    });
-    primaryError = wrapped;
-    throw wrapped;
-  } finally {
-    let cleanupError: unknown;
-    if (conn && inputTableName) {
-      try {
-        await conn.query(`DROP TABLE IF EXISTS ${quoteIdentifier(inputTableName)}`);
-      } catch (err) {
-        cleanupError = err;
-      }
-    }
-
-    if (conn && maskTableName) {
-      try {
-        await conn.query(`DROP TABLE IF EXISTS ${quoteIdentifier(maskTableName)}`);
-      } catch (err) {
-        cleanupError ??= err;
-      }
-    }
-
-    try {
-      await conn?.close?.();
-    } catch (err) {
-      cleanupError ??= err;
-    }
-
-    if (cleanupError && !primaryError) {
-      throw new DuckDbOperationError('query-failed', `DuckDB ${spec.id} cleanup failed`, {
-        cause: cleanupError,
-      });
-    }
+    throw new DuckDbOperationError('conversion-failed', messages.inputConversion, { cause: err });
   }
+
+  return runDuckDbPipeline({
+    label: spec.id,
+    runtime: rt,
+    inputs: [
+      { table: input, prefix: 'emap_duckdb_overlay_input' },
+      { table: mask, prefix: 'emap_duckdb_overlay_mask' },
+    ],
+    buildSql: ([inputTableName, maskTableName]) =>
+      buildOverlaySql({
+        duckDbFunction: spec.duckDbFunction,
+        inputGeometryColumn,
+        inputTableName: inputTableName!,
+        maskGeometryColumn,
+        maskTableName: maskTableName!,
+      }),
+    convertResult: (resultTable) =>
+      arrowResultToDataset(
+        resultTable,
+        { layerName: opts.outputLayer, geometryColumn: inputGeometryColumn },
+        inputDataset,
+        spec.id,
+      ),
+  });
 }

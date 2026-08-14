@@ -1,6 +1,4 @@
-function quoteIdentifier(identifier: string): string {
-  return `"${identifier.replace(/"/g, '""')}"`;
-}
+import { quoteIdentifier } from './duckdb-pipeline';
 
 /** DuckDB spatial function names are interpolated raw into SQL, so they are
  * restricted to the `ST_*` namespace. Identifiers and numeric arguments are
@@ -92,11 +90,11 @@ export interface BuildOverlaySqlOptions {
   duckDbFunction: OverlayDuckDbFunction;
 }
 
-export interface BuildRelationPredicateSqlOptions extends BuildRelationBaseSqlOptions {
+interface BuildRelationPredicateSqlOptions extends BuildRelationBaseSqlOptions {
   duckDbFunction: RelationDuckDbFunction;
 }
 
-export interface BuildRelationDistanceWithinSqlOptions extends BuildRelationBaseSqlOptions {
+interface BuildRelationDistanceWithinSqlOptions extends BuildRelationBaseSqlOptions {
   duckDbFunction: 'ST_Distance';
   distance: number;
 }
@@ -109,19 +107,17 @@ interface BuildRelationAttributeBaseSqlOptions extends BuildRelationBaseSqlOptio
   outputColumn: string;
 }
 
-export interface BuildRelationPredicateAttributeSqlOptions
-  extends BuildRelationAttributeBaseSqlOptions {
+interface BuildRelationPredicateAttributeSqlOptions extends BuildRelationAttributeBaseSqlOptions {
   duckDbFunction: RelationDuckDbFunction;
   output?: 'predicate';
 }
 
-export interface BuildRelationDistanceAttributeSqlOptions
-  extends BuildRelationAttributeBaseSqlOptions {
+interface BuildRelationDistanceAttributeSqlOptions extends BuildRelationAttributeBaseSqlOptions {
   duckDbFunction: 'ST_Distance';
   output: 'distance';
 }
 
-export interface BuildRelationDistanceWithinAttributeSqlOptions
+interface BuildRelationDistanceWithinAttributeSqlOptions
   extends BuildRelationAttributeBaseSqlOptions {
   duckDbFunction: 'ST_Distance';
   distance: number;
@@ -230,19 +226,6 @@ export function buildOverlaySql(opts: BuildOverlaySqlOptions): string {
   ].join('\n');
 }
 
-export function buildBufferSql(opts: {
-  tableName: string;
-  geometryColumn: string;
-  distance: number;
-}): string {
-  return buildUnaryGeometrySql({
-    tableName: opts.tableName,
-    geometryColumn: opts.geometryColumn,
-    duckDbFunction: 'ST_Buffer',
-    args: [opts.distance],
-  });
-}
-
 export type SpatialAggregateJoinDuckDbFunction =
   | 'ST_Intersects'
   | 'ST_Contains'
@@ -255,9 +238,9 @@ export type SpatialAggregateJoinDuckDbFunction =
   | 'ST_CoveredBy'
   | 'ST_ContainsProperly';
 
-export type SpatialAggregateSqlOperation = 'count' | 'sum' | 'avg' | 'min' | 'max';
+type SpatialAggregateSqlOperation = 'count' | 'sum' | 'avg' | 'min' | 'max';
 
-export interface BuildSpatialAggregateJoinAggregation {
+interface BuildSpatialAggregateJoinAggregation {
   operation: SpatialAggregateSqlOperation;
   field?: string;
   outputColumn: string;
@@ -352,5 +335,3 @@ export function buildSpatialAggregateJoinSql(opts: BuildSpatialAggregateJoinSqlO
     `ORDER BY t.${targetRowIdColumn}`,
   ].join('\n');
 }
-
-export default buildBufferSql;

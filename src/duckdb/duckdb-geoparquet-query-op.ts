@@ -5,6 +5,7 @@ import type { MapshaperDataset } from '../types/mapshaper-types';
 import { DuckDbOperationError } from './duckdb-errors';
 import { getDuckDbRuntime, type DuckDbRuntime } from './duckdb-runtime';
 import { validateDuckDbSelectSql } from './duckdb-query-sql';
+import { quoteIdentifier } from './duckdb-pipeline';
 
 export interface DuckDbGeoParquetQueryOptions extends FromArrowTableOptions {
   sql: string;
@@ -27,10 +28,6 @@ function nextDuckDbGeoParquetQueryNames(): { fileName: string; viewName: string 
 
 function normalizeBytes(data: Uint8Array | ArrayBuffer): Uint8Array {
   return data instanceof Uint8Array ? data : new Uint8Array(data);
-}
-
-function quoteIdentifier(id: string): string {
-  return `"${id.replaceAll('"', '""')}"`;
 }
 
 function quoteSqlString(value: string): string {

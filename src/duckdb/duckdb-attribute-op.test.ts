@@ -111,7 +111,7 @@ describe('processAttributeWithDuckDb', () => {
         `FROM "${inputTableName}"`,
         'WHERE "geometry" IS NOT NULL',
       ].join('\n'),
-      `DROP TABLE IF EXISTS ${inputTableName}`,
+      `DROP TABLE IF EXISTS "${inputTableName}"`,
     ]);
     expect(runtime.connection.closed).toBe(true);
     expect(result.layers[0]?.name).toBe('with-area');

@@ -20,7 +20,7 @@ import {
   type DuckDbSpatialAggregateJoinLayerOptions,
   type DuckDbSpatialAggregateJoinLayerResult,
 } from './map-op';
-import { buildBufferSql } from './duckdb-sql';
+import { buildUnaryGeometrySql } from './duckdb-sql';
 
 const POLYGON_FC = {
   type: 'FeatureCollection',
@@ -246,12 +246,13 @@ describe('duckDbBufferLayer', () => {
     expect(runtime.connection.inserted).toHaveLength(1);
     const inputTableName = runtime.connection.inserted[0]!.opts.name;
     expect(runtime.connection.queries).toEqual([
-      buildBufferSql({
+      buildUnaryGeometrySql({
         tableName: inputTableName,
         geometryColumn: 'geometry',
-        distance: 12.5,
+        duckDbFunction: 'ST_Buffer',
+        args: [12.5],
       }),
-      `DROP TABLE IF EXISTS ${inputTableName}`,
+      `DROP TABLE IF EXISTS "${inputTableName}"`,
     ]);
   });
 });

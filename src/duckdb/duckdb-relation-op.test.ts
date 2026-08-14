@@ -132,7 +132,7 @@ class FakeConnection implements DuckDbConnection {
   async query(sql: string): Promise<Table> {
     this.queries.push(sql);
     if (sql.startsWith('DROP TABLE IF EXISTS')) {
-      this.events.push(`drop:${sql.replace('DROP TABLE IF EXISTS ', '')}`);
+      this.events.push(`drop:${sql.replace('DROP TABLE IF EXISTS ', '').replace(/^"|"$/g, '')}`);
       return this.resultTable;
     }
     this.events.push('query');

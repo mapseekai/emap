@@ -6,6 +6,7 @@ import { resolveLayerInList } from '../map/layer-registry';
 import type { FeatureShape, MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import { alignSecondaryDatasetCrs } from './dataset-crs';
 import { DuckDbOperationError } from './duckdb-errors';
+import { quoteIdentifier } from './duckdb-pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from './duckdb-runtime';
 import {
   buildSpatialAggregateJoinSql,
@@ -85,10 +86,6 @@ function nextTargetTableName(): string {
 function nextJoinTableName(): string {
   joinTableSequence += 1;
   return `emap_duckdb_spatial_aggregate_join_${joinTableSequence}`;
-}
-
-function quoteIdentifier(identifier: string): string {
-  return `"${identifier.replaceAll('"', '""')}"`;
 }
 
 function validation(message: string, field?: string): DuckDbOperationError {

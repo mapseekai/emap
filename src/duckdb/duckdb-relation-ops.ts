@@ -216,6 +216,37 @@ function runRelationHelper(
   return processRelationWithDuckDb(inputDataset, maskDataset, opts, spec, runtime);
 }
 
+function runDistanceWithinHelper(
+  mode: 'filter' | 'attribute',
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions,
+  runtime: DuckDbRuntime | null,
+): Promise<MapshaperDataset> {
+  const distance = requireDistanceWithinDistance(opts.distance);
+  assertProjectedCrsForDistance(inputDataset, maskDataset, opts);
+  return runRelationHelper(
+    inputDataset,
+    maskDataset,
+    opts,
+    mode === 'attribute'
+      ? {
+          id: 'distanceWithin',
+          mode,
+          duckDbFunction: 'ST_Distance',
+          outputColumn: opts.outputColumn ?? 'duckdb_distance_within',
+          distance,
+        }
+      : {
+          id: 'distanceWithin',
+          mode,
+          duckDbFunction: 'ST_Distance',
+          distance,
+        },
+    runtime,
+  );
+}
+
 function runTopologicalFilterHelper(
   operation: TopologicalRelationOperationId,
   inputDataset: MapshaperDataset,
@@ -364,20 +395,7 @@ export function distanceWithinDatasetWithDuckDb(
   opts: DuckDbRelationHelperOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  const distance = requireDistanceWithinDistance(opts.distance);
-  assertProjectedCrsForDistance(inputDataset, maskDataset, opts);
-  return runRelationHelper(
-    inputDataset,
-    maskDataset,
-    opts,
-    {
-      id: 'distanceWithin',
-      mode: 'filter',
-      duckDbFunction: 'ST_Distance',
-      distance,
-    },
-    runtime,
-  );
+  return runDistanceWithinHelper('filter', inputDataset, maskDataset, opts, runtime);
 }
 
 export function intersectsAttributeDatasetWithDuckDb(
@@ -513,19 +531,5 @@ export function distanceWithinAttributeDatasetWithDuckDb(
   opts: DuckDbRelationHelperOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  const distance = requireDistanceWithinDistance(opts.distance);
-  assertProjectedCrsForDistance(inputDataset, maskDataset, opts);
-  return runRelationHelper(
-    inputDataset,
-    maskDataset,
-    opts,
-    {
-      id: 'distanceWithin',
-      mode: 'attribute',
-      duckDbFunction: 'ST_Distance',
-      outputColumn: opts.outputColumn ?? 'duckdb_distance_within',
-      distance,
-    },
-    runtime,
-  );
+  return runDistanceWithinHelper('attribute', inputDataset, maskDataset, opts, runtime);
 }

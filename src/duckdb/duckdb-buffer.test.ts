@@ -9,7 +9,6 @@ import { bufferDatasetWithDuckDb, normalizeDuckDbBufferOptions } from './duckdb-
 import type { DuckDbConnection, DuckDbRuntime } from './duckdb-runtime';
 import {
   buildAttributeSql,
-  buildBufferSql,
   buildRelationAttributeSql,
   buildRelationFilterSql,
   buildUnaryGeometrySql,
@@ -220,10 +219,11 @@ describe('DuckDB buffer SQL', () => {
 
   it('builds a buffer query with quoted table and geometry identifiers', () => {
     expect(
-      buildBufferSql({
+      buildUnaryGeometrySql({
         tableName: 'input table',
         geometryColumn: 'geom"col',
-        distance: 3,
+        duckDbFunction: 'ST_Buffer',
+        args: [3],
       }),
     ).toBe(
       [
@@ -524,12 +524,13 @@ describe('bufferDatasetWithDuckDb', () => {
     const geometryField = insertedTable.schema.fields.find((field) => field.name === 'geometry');
     expect(geometryField?.metadata.get(ARROW_EXTENSION_NAME)).toBe('geoarrow.wkb');
     expect(runtime.connection.queries).toEqual([
-      buildBufferSql({
+      buildUnaryGeometrySql({
         tableName: inputTableName,
         geometryColumn: 'geometry',
-        distance: 12.5,
+        duckDbFunction: 'ST_Buffer',
+        args: [12.5],
       }),
-      `DROP TABLE IF EXISTS ${inputTableName}`,
+      `DROP TABLE IF EXISTS "${inputTableName}"`,
     ]);
 
     expect(result.layers).toHaveLength(1);
@@ -550,18 +551,20 @@ describe('bufferDatasetWithDuckDb', () => {
     expect(inputTableNames).toHaveLength(2);
     expect(new Set(inputTableNames).size).toBe(2);
     expect(runtime.connection.queries).toEqual([
-      buildBufferSql({
+      buildUnaryGeometrySql({
         tableName: inputTableNames[0]!,
         geometryColumn: 'geometry',
-        distance: 10,
+        duckDbFunction: 'ST_Buffer',
+        args: [10],
       }),
-      `DROP TABLE IF EXISTS ${inputTableNames[0]}`,
-      buildBufferSql({
+      `DROP TABLE IF EXISTS "${inputTableNames[0]}"`,
+      buildUnaryGeometrySql({
         tableName: inputTableNames[1]!,
         geometryColumn: 'geometry',
-        distance: 20,
+        duckDbFunction: 'ST_Buffer',
+        args: [20],
       }),
-      `DROP TABLE IF EXISTS ${inputTableNames[1]}`,
+      `DROP TABLE IF EXISTS "${inputTableNames[1]}"`,
     ]);
   });
 

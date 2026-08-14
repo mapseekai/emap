@@ -109,7 +109,7 @@ describe('DuckDB unary spatial dataset helpers', () => {
     expect(runtime.ensureSpatialCalls).toBe(1);
     expect(runtime.connection.queries[0]).toContain(`${fn}("geometry")`);
     expect(runtime.connection.queries[1]).toMatch(
-      /^DROP TABLE IF EXISTS emap_duckdb_geometry_input_\d+$/,
+      /^DROP TABLE IF EXISTS "emap_duckdb_geometry_input_\d+"$/,
     );
     expect(runtime.connection.closed).toBe(true);
   });

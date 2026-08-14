@@ -1,18 +1,21 @@
-import type { Field, Table } from 'apache-arrow';
+import type { Table } from 'apache-arrow';
 import type { MapshaperDataset } from '../types/mapshaper-types';
-import { toArrowTable } from '../arrow/dataset-to-table';
-import { fromArrowTable } from '../arrow/table-to-dataset';
 import { DuckDbOperationError } from './duckdb-errors';
+import {
+  arrowResultToDataset,
+  datasetToArrowInput,
+  duckDbPipelineMessages,
+  requireDuckDbRuntime,
+  resolveTableColumnName,
+  runDuckDbPipeline,
+} from './duckdb-pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from './duckdb-runtime';
 import {
   buildRelationAttributeSql,
   buildRelationFilterSql,
   type RelationDuckDbFunction,
 } from './duckdb-sql';
-import { alignSecondaryDatasetCrs, inheritPrimaryDatasetCrs } from './dataset-crs';
-
-let duckDbRelationInputTableSequence = 0;
-let duckDbRelationMaskTableSequence = 0;
+import { alignSecondaryDatasetCrs } from './dataset-crs';
 
 export type DuckDbRelationMode = 'filter' | 'attribute';
 export type DuckDbRelationOutputKind = 'predicate' | 'distance';
@@ -75,31 +78,11 @@ export interface DuckDbRelationOptions {
   outputColumn?: string;
 }
 
-function nextDuckDbRelationInputTableName(): string {
-  duckDbRelationInputTableSequence += 1;
-  return `emap_duckdb_relation_input_${duckDbRelationInputTableSequence}`;
-}
-
-function nextDuckDbRelationMaskTableName(): string {
-  duckDbRelationMaskTableSequence += 1;
-  return `emap_duckdb_relation_mask_${duckDbRelationMaskTableSequence}`;
-}
-
 export function resolveRelationOutputColumn(table: Table, requestedName: string): string {
-  const existing = new Set(table.schema.fields.map((field: Field) => field.name));
-  if (!existing.has(requestedName)) return requestedName;
-
-  let suffix = 1;
-  let candidate = `${requestedName}_${suffix}`;
-  while (existing.has(candidate)) {
-    suffix += 1;
-    candidate = `${requestedName}_${suffix}`;
-  }
-  return candidate;
+  return resolveTableColumnName(table, requestedName);
 }
 
 function relationOutputColumn(
-  input: Table,
   opts: DuckDbRelationOptions,
   spec: DuckDbRelationOperationSpec,
 ): string | undefined {
@@ -113,7 +96,7 @@ function relationOutputColumn(
     });
   }
 
-  return resolveRelationOutputColumn(input, trimmedOutputColumn);
+  return trimmedOutputColumn;
 }
 
 export async function processRelationWithDuckDb(
@@ -123,69 +106,53 @@ export async function processRelationWithDuckDb(
   spec: DuckDbRelationOperationSpec,
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  if (!runtime) {
-    throw new DuckDbOperationError('runtime-unavailable', 'DuckDB runtime is not available');
-  }
-
+  const rt = requireDuckDbRuntime(runtime);
   const inputGeometryColumn = opts.inputGeometryColumn ?? 'geometry';
   const maskGeometryColumn = opts.maskGeometryColumn ?? 'geometry';
 
-  let input: Table;
-  let mask: Table;
+  const requestedOutputColumn = relationOutputColumn(opts, spec);
+  const input = datasetToArrowInput(
+    inputDataset,
+    { layer: opts.inputLayer, geometryColumn: inputGeometryColumn },
+    spec.id,
+  );
+  const outputColumn =
+    requestedOutputColumn === undefined
+      ? undefined
+      : resolveRelationOutputColumn(input, requestedOutputColumn);
+
+  let alignedMaskDataset: MapshaperDataset;
   try {
-    const alignedMaskDataset = await alignSecondaryDatasetCrs(inputDataset, maskDataset);
-    input = toArrowTable(inputDataset, {
-      layer: opts.inputLayer,
-      encoding: 'wkb',
-      geometryColumn: inputGeometryColumn,
-    });
-    mask = toArrowTable(alignedMaskDataset, {
-      layer: opts.maskLayer,
-      encoding: 'wkb',
-      geometryColumn: maskGeometryColumn,
-    });
+    alignedMaskDataset = await alignSecondaryDatasetCrs(inputDataset, maskDataset);
   } catch (err) {
     throw new DuckDbOperationError(
       'conversion-failed',
-      `DuckDB ${spec.id} input could not be converted to Arrow`,
+      duckDbPipelineMessages(spec.id).inputConversion,
       { cause: err },
     );
   }
+  const mask = datasetToArrowInput(
+    alignedMaskDataset,
+    { layer: opts.maskLayer, geometryColumn: maskGeometryColumn },
+    spec.id,
+  );
 
-  const outputColumn = relationOutputColumn(input, opts, spec);
+  return runDuckDbPipeline({
+    label: spec.id,
+    runtime: rt,
+    inputs: [
+      { table: input, prefix: 'emap_duckdb_relation_input' },
+      { table: mask, prefix: 'emap_duckdb_relation_mask' },
+    ],
+    buildSql: ([inputTableName, maskTableName]) => {
+      const baseSqlOptions = {
+        inputTableName: inputTableName!,
+        maskTableName: maskTableName!,
+        inputGeometryColumn,
+        maskGeometryColumn,
+      };
 
-  try {
-    await runtime.ensureSpatial();
-  } catch (err) {
-    throw new DuckDbOperationError(
-      'spatial-extension-unavailable',
-      'DuckDB spatial extension is unavailable',
-      { cause: err },
-    );
-  }
-
-  let conn: Awaited<ReturnType<DuckDbRuntime['connect']>> | undefined;
-  let inputTableName: string | undefined;
-  let maskTableName: string | undefined;
-  let primaryError: unknown;
-
-  try {
-    conn = await runtime.connect();
-    inputTableName = nextDuckDbRelationInputTableName();
-    maskTableName = nextDuckDbRelationMaskTableName();
-
-    await conn.insertArrowTable(input, { name: inputTableName });
-    await conn.insertArrowTable(mask, { name: maskTableName });
-
-    const baseSqlOptions = {
-      inputTableName,
-      maskTableName,
-      inputGeometryColumn,
-      maskGeometryColumn,
-    };
-
-    const resultTable = await conn.query(
-      spec.mode === 'filter'
+      return spec.mode === 'filter'
         ? 'distance' in spec
           ? buildRelationFilterSql({
               ...baseSqlOptions,
@@ -214,58 +181,9 @@ export async function processRelationWithDuckDb(
                 ...baseSqlOptions,
                 duckDbFunction: spec.duckDbFunction,
                 outputColumn: outputColumn!,
-              }),
-    );
-
-    try {
-      const result = fromArrowTable(resultTable, {
-        layerName: opts.outputLayer,
-      });
-      return inheritPrimaryDatasetCrs(result, inputDataset);
-    } catch (err) {
-      throw new DuckDbOperationError(
-        'conversion-failed',
-        `DuckDB ${spec.id} result could not be converted to a dataset`,
-        { cause: err },
-      );
-    }
-  } catch (err) {
-    if (err instanceof DuckDbOperationError) {
-      primaryError = err;
-      throw err;
-    }
-    const wrapped = new DuckDbOperationError('query-failed', `DuckDB ${spec.id} query failed`, {
-      cause: err,
-    });
-    primaryError = wrapped;
-    throw wrapped;
-  } finally {
-    let cleanupError: unknown;
-    if (conn && inputTableName) {
-      try {
-        await conn.query(`DROP TABLE IF EXISTS ${inputTableName}`);
-      } catch (err) {
-        cleanupError = err;
-      }
-    }
-
-    if (conn && maskTableName) {
-      try {
-        await conn.query(`DROP TABLE IF EXISTS ${maskTableName}`);
-      } catch (err) {
-        cleanupError ??= err;
-      }
-    }
-
-    try {
-      await conn?.close?.();
-    } catch (err) {
-      cleanupError ??= err;
-    }
-    if (cleanupError && !primaryError) {
-      throw new DuckDbOperationError('query-failed', `DuckDB ${spec.id} cleanup failed`, {
-        cause: cleanupError,
-      });
-    }
-  }
+              });
+    },
+    convertResult: (resultTable) =>
+      arrowResultToDataset(resultTable, { layerName: opts.outputLayer }, inputDataset, spec.id),
+  });
 }

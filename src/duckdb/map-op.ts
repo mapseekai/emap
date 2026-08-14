@@ -1,7 +1,7 @@
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import { Err, okValue, type OpResult } from '../map/op-result';
 import { DuckDbOperationError } from './duckdb-errors';
-import bufferDatasetWithDuckDb, { type DuckDbBufferOptions } from './duckdb-buffer';
+import { bufferDatasetWithDuckDb, type DuckDbBufferOptions } from './duckdb-buffer';
 import {
   boundaryDatasetWithDuckDb,
   centroidDatasetWithDuckDb,
@@ -187,10 +187,12 @@ function outputSourceId(output: { sourceId: string } | undefined): string | OpRe
   return sourceId;
 }
 
-export async function duckDbBufferLayer(
+async function runDuckDbLayerOp(
   ctx: DuckDbMapOpContext,
-  opts: DuckDbBufferLayerOptions,
-): Promise<DuckDbBufferLayerResult> {
+  opts: { src: string; output?: { sourceId: string } },
+  errorOperation: string,
+  run: (dataset: MapshaperDataset) => Promise<MapshaperDataset>,
+): Promise<OpResult<DuckDbLayerSuccess>> {
   const input = readInputDataset(ctx, opts.src);
   if (!input.ok) return input.result;
 
@@ -198,31 +200,55 @@ export async function duckDbBufferLayer(
   if (typeof sourceId !== 'string') return sourceId;
 
   try {
-    const dataset = await bufferDatasetWithDuckDb(input.dataset, opts, opts.runtime);
+    const dataset = await run(input.dataset);
     await ctx.setSourceDataset(sourceId, dataset);
     return okValue({ sourceId, dataset });
   } catch (err) {
-    return duckDbErrorToOpResult(err, 'duckdb-buffer');
+    return duckDbErrorToOpResult(err, errorOperation);
   }
 }
 
-export async function duckDbQueryLayer(
+async function runDuckDbBinaryLayerOp(
   ctx: DuckDbMapOpContext,
-  opts: DuckDbQueryLayerOptions,
-): Promise<DuckDbQueryLayerResult> {
+  opts: { src: string; output?: { sourceId: string }; mask?: string; join?: string },
+  maskField: 'mask' | 'join',
+  errorOperation: string,
+  run: (inputDataset: MapshaperDataset, maskDataset: MapshaperDataset) => Promise<MapshaperDataset>,
+): Promise<OpResult<DuckDbLayerSuccess>> {
   const input = readInputDataset(ctx, opts.src);
   if (!input.ok) return input.result;
+
+  const mask = readInputDataset(ctx, opts[maskField]!, maskField);
+  if (!mask.ok) return mask.result;
 
   const sourceId = outputSourceId(opts.output);
   if (typeof sourceId !== 'string') return sourceId;
 
   try {
-    const dataset = await queryDatasetWithDuckDb(input.dataset, opts, opts.runtime);
+    const dataset = await run(input.dataset, mask.dataset);
     await ctx.setSourceDataset(sourceId, dataset);
     return okValue({ sourceId, dataset });
   } catch (err) {
-    return duckDbErrorToOpResult(err, 'duckdb-query');
+    return duckDbErrorToOpResult(err, errorOperation);
   }
+}
+
+export function duckDbBufferLayer(
+  ctx: DuckDbMapOpContext,
+  opts: DuckDbBufferLayerOptions,
+): Promise<DuckDbBufferLayerResult> {
+  return runDuckDbLayerOp(ctx, opts, 'duckdb-buffer', (dataset) =>
+    bufferDatasetWithDuckDb(dataset, opts, opts.runtime),
+  );
+}
+
+export function duckDbQueryLayer(
+  ctx: DuckDbMapOpContext,
+  opts: DuckDbQueryLayerOptions,
+): Promise<DuckDbQueryLayerResult> {
+  return runDuckDbLayerOp(ctx, opts, 'duckdb-query', (dataset) =>
+    queryDatasetWithDuckDb(dataset, opts, opts.runtime),
+  );
 }
 
 function geometryOptions(opts: DuckDbGeometryLayerOptions): DuckDbUnaryGeometryOptions {
@@ -500,91 +526,48 @@ export async function runRelationOperation(
   }
 }
 
-export async function duckDbGeometryLayer(
+export function duckDbGeometryLayer(
   ctx: DuckDbMapOpContext,
   opts: DuckDbGeometryLayerOptions,
 ): Promise<DuckDbGeometryLayerResult> {
-  const input = readInputDataset(ctx, opts.src);
-  if (!input.ok) return input.result;
-
-  const sourceId = outputSourceId(opts.output);
-  if (typeof sourceId !== 'string') return sourceId;
-
-  try {
-    const dataset = await runGeometryOperation(input.dataset, opts);
-    await ctx.setSourceDataset(sourceId, dataset);
-    return okValue({ sourceId, dataset });
-  } catch (err) {
-    return duckDbErrorToOpResult(err, `duckdb-${opts.operation}`);
-  }
+  return runDuckDbLayerOp(ctx, opts, `duckdb-${opts.operation}`, (dataset) =>
+    runGeometryOperation(dataset, opts),
+  );
 }
 
-export async function duckDbRelationLayer(
+export function duckDbRelationLayer(
   ctx: DuckDbMapOpContext,
   opts: DuckDbRelationLayerOptions,
 ): Promise<DuckDbRelationLayerResult> {
-  const input = readInputDataset(ctx, opts.src);
-  if (!input.ok) return input.result;
-
-  const mask = readInputDataset(ctx, opts.mask, 'mask');
-  if (!mask.ok) return mask.result;
-
-  const sourceId = outputSourceId(opts.output);
-  if (typeof sourceId !== 'string') return sourceId;
-
-  try {
-    const dataset = await runRelationOperation(input.dataset, mask.dataset, opts);
-    await ctx.setSourceDataset(sourceId, dataset);
-    return okValue({ sourceId, dataset });
-  } catch (err) {
-    return duckDbErrorToOpResult(err, `duckdb-relation-${opts.operation}`);
-  }
+  return runDuckDbBinaryLayerOp(
+    ctx,
+    opts,
+    'mask',
+    `duckdb-relation-${opts.operation}`,
+    (input, mask) => runRelationOperation(input, mask, opts),
+  );
 }
 
-export async function duckDbSpatialAggregateJoinLayer(
+export function duckDbSpatialAggregateJoinLayer(
   ctx: DuckDbMapOpContext,
   opts: DuckDbSpatialAggregateJoinLayerOptions,
 ): Promise<DuckDbSpatialAggregateJoinLayerResult> {
-  const target = readInputDataset(ctx, opts.src);
-  if (!target.ok) return target.result;
-
-  const join = readInputDataset(ctx, opts.join, 'join');
-  if (!join.ok) return join.result;
-
-  const sourceId = outputSourceId(opts.output);
-  if (typeof sourceId !== 'string') return sourceId;
-
-  try {
-    const dataset = await spatialAggregateJoinDatasetWithDuckDb(
-      target.dataset,
-      join.dataset,
-      opts,
-      opts.runtime,
-    );
-    await ctx.setSourceDataset(sourceId, dataset);
-    return okValue({ sourceId, dataset });
-  } catch (err) {
-    return duckDbErrorToOpResult(err, 'duckdb-spatial-aggregate-join');
-  }
+  return runDuckDbBinaryLayerOp(
+    ctx,
+    opts,
+    'join',
+    'duckdb-spatial-aggregate-join',
+    (target, join) => spatialAggregateJoinDatasetWithDuckDb(target, join, opts, opts.runtime),
+  );
 }
 
-export async function duckDbAttributeLayer(
+export function duckDbAttributeLayer(
   ctx: DuckDbMapOpContext,
   opts: DuckDbAttributeLayerOptions,
 ): Promise<DuckDbAttributeLayerResult> {
-  const input = readInputDataset(ctx, opts.src);
-  if (!input.ok) return input.result;
-
-  const sourceId = outputSourceId(opts.output);
-  if (typeof sourceId !== 'string') return sourceId;
-
-  try {
-    const dataset = await runAttributeOperation(input.dataset, opts);
-    await ctx.setSourceDataset(sourceId, dataset);
-    return okValue({ sourceId, dataset });
-  } catch (err) {
-    return duckDbErrorToOpResult(err, `duckdb-${opts.operation}`);
-  }
+  return runDuckDbLayerOp(ctx, opts, `duckdb-${opts.operation}`, (dataset) =>
+    runAttributeOperation(dataset, opts),
+  );
 }
 
 function readInputBytes(
@@ -679,24 +662,15 @@ async function runOverlayOperation(
   }
 }
 
-export async function duckDbOverlayLayer(
+export function duckDbOverlayLayer(
   ctx: DuckDbMapOpContext,
   opts: DuckDbOverlayLayerOptions,
 ): Promise<DuckDbOverlayLayerResult> {
-  const input = readInputDataset(ctx, opts.src);
-  if (!input.ok) return input.result;
-
-  const mask = readInputDataset(ctx, opts.mask, 'mask');
-  if (!mask.ok) return mask.result;
-
-  const sourceId = outputSourceId(opts.output);
-  if (typeof sourceId !== 'string') return sourceId;
-
-  try {
-    const dataset = await runOverlayOperation(input.dataset, mask.dataset, opts);
-    await ctx.setSourceDataset(sourceId, dataset);
-    return okValue({ sourceId, dataset });
-  } catch (err) {
-    return duckDbErrorToOpResult(err, `duckdb-${opts.operation}-overlay`);
-  }
+  return runDuckDbBinaryLayerOp(
+    ctx,
+    opts,
+    'mask',
+    `duckdb-${opts.operation}-overlay`,
+    (input, mask) => runOverlayOperation(input, mask, opts),
+  );
 }

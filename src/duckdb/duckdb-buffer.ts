@@ -61,5 +61,3 @@ export async function bufferDatasetWithDuckDb(
     runtime,
   );
 }
-
-export default bufferDatasetWithDuckDb;
