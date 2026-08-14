@@ -30,6 +30,16 @@ import type {
   FeatureTranslateSession,
 } from './types';
 
+/** Per-source selection grouping shared by the drag sessions and the
+ * immediate translate/rotate/scale paths. `arcIds` are absolute (sign
+ * stripped); `pointFeatures` carries (layer, featureId) pairs. */
+interface SelectionBucket {
+  sourceId: string;
+  source: MutableTopologySource;
+  arcIds: number[];
+  pointFeatures: TranslatedPointFeature[];
+}
+
 /**
  * Selection-editing manager. Owned by Emap and exposed as `emap.editSession`.
  * Provides translate / rotate / scale operations on the current selection
@@ -67,65 +77,25 @@ export class EditSessions {
     const refs = this._emap._selection.getAll();
     if (refs.length === 0) return Err.validation('selection', 'selection is empty');
 
-    // Group selection by source, collecting unique abs-arc-ids (for path
-    // features) and (layer, featureId) pairs (for point features).
-    const bySource = new globalThis.Map<
-      string,
-      {
-        arcIdSet: Set<number>;
-        pointFeatures: TranslatedPointFeature[];
-      }
-    >();
-
-    for (const ref of refs) {
-      const layer = this._emap.layers.resolve(ref.source, ref.layer);
-      if (!layer?.shapes) continue;
-      const shape = layer.shapes[ref.id];
-      if (!shape) continue;
-
-      let bucket = bySource.get(ref.source);
-      if (!bucket) {
-        bucket = { arcIdSet: new Set<number>(), pointFeatures: [] };
-        bySource.set(ref.source, bucket);
-      }
-
-      if (layer.geometry_type === 'point') {
-        bucket.pointFeatures.push({ layer, featureId: ref.id });
-      } else {
-        // Path feature: shape is a list of parts, each part is a list of
-        // signed arc ids. Negative ids encode reversed direction; abs them.
-        const pathShape = shape as import('../types/mapshaper-types').PathShape;
-        for (const part of pathShape) {
-          if (!Array.isArray(part)) continue;
-          for (const rawArcId of part) {
-            if (typeof rawArcId !== 'number') continue;
-            bucket.arcIdSet.add(rawArcId >= 0 ? rawArcId : ~rawArcId);
-          }
-        }
-      }
-    }
-
-    if (bySource.size === 0)
-      return Err.validation('selection', 'no resolvable layers in selection');
+    const built = this._buildSelectionBuckets(false);
+    if (!built) return Err.validation('selection', 'no resolvable layers in selection');
 
     const children: EditCommand[] = [];
     const editedSourceIds: string[] = [];
-    for (const [sourceId, bucket] of bySource) {
-      const source = this._emap._sources.get(sourceId);
-      if (!source) continue;
-      if (bucket.arcIdSet.size === 0 && bucket.pointFeatures.length === 0) continue;
+    for (const bucket of built.buckets) {
+      if (bucket.arcIds.length === 0 && bucket.pointFeatures.length === 0) continue;
 
       const cmd = new FeatureTranslateCommand({
-        source,
-        arcs: source.getArcs(),
+        source: bucket.source,
+        arcs: bucket.source.getArcs(),
         dx,
         dy,
-        arcIds: Array.from(bucket.arcIdSet),
+        arcIds: bucket.arcIds,
         pointFeatures: bucket.pointFeatures,
       });
       cmd.do();
       children.push(cmd);
-      editedSourceIds.push(sourceId);
+      editedSourceIds.push(bucket.sourceId);
     }
 
     if (children.length === 0) return Err.validation('selection', 'every resolved layer was empty');
@@ -167,12 +137,7 @@ export class EditSessions {
    * cancel.
    */
   _buildSelectionBuckets(splitShared: boolean): {
-    buckets: Array<{
-      sourceId: string;
-      source: MutableTopologySource;
-      arcIds: number[];
-      pointFeatures: TranslatedPointFeature[];
-    }>;
+    buckets: SelectionBucket[];
     splitCmds: SplitSharedArcsCommand[];
   } | null {
     type Bucket = {
@@ -268,7 +233,7 @@ export class EditSessions {
       }
     }
 
-    const buckets = Array.from(bySource.values()).map((b) => ({
+    const buckets: SelectionBucket[] = Array.from(bySource.values()).map((b) => ({
       sourceId: b.sourceId,
       source: b.source,
       arcIds: b.arcIds,
@@ -277,17 +242,115 @@ export class EditSessions {
     return { buckets, splitCmds };
   }
 
+  /**
+   * Shared drag-session state machine behind `beginTranslateSession` /
+   * `beginAffineSession`. Owns everything except the per-paradigm step
+   * math: the closed flag, per-frame application, cumulative accumulation,
+   * one-history-entry commit, and rollback.
+   *
+   * Load-bearing invariants (do not reorder):
+   *  - Commit pushes `[...splitCmds, ...transformCmds]` so undo runs the
+   *    transform's undo (on the duplicated arcs) BEFORE split.undo()
+   *    (truncate duplicates + restore original shape refs).
+   *  - Cancel reverses the accumulated transform first, then undoes the
+   *    splits in LIFO order — each undo sees the state its do() left.
+   *  - A commit with no movement undoes the splits and pushes nothing.
+   */
+  _beginDragSession<TStep>(
+    built: { buckets: SelectionBucket[]; splitCmds: SplitSharedArcsCommand[] },
+    config: {
+      /** Accumulated-value zero (fresh instance per session). */
+      initial: TStep;
+      /** No-op test, applied to both steps and the cumulative value. */
+      isNoop: (value: TStep) => boolean;
+      /** Fold a new step into the cumulative value (order matters). */
+      accumulate: (accum: TStep, step: TStep) => TStep;
+      /** Inverse of the cumulative value, applied on cancel. */
+      invert: (accum: TStep) => TStep;
+      /** Build the per-bucket command for a step/accumulated value. */
+      apply: (bucket: SelectionBucket, value: TStep, label?: string) => EditCommand;
+      /** Composite history label; `label` is the caller-supplied override. */
+      compositeLabel: (totalFeatures: number, label?: string) => string;
+    },
+  ): {
+    applyStep: (step: TStep) => void;
+    commit: (label?: string) => boolean;
+    cancel: () => void;
+    getCumulative: () => TStep;
+  } {
+    const { buckets, splitCmds } = built;
+    let accum = config.initial;
+    let closed = false;
+
+    const applyToBuckets = (value: TStep): void => {
+      for (const b of buckets) {
+        if (b.arcIds.length === 0 && b.pointFeatures.length === 0) continue;
+        config.apply(b, value).do();
+      }
+    };
+
+    return {
+      applyStep: (step) => {
+        if (closed) return;
+        if (config.isNoop(step)) return;
+        applyToBuckets(step);
+        accum = config.accumulate(accum, step);
+        this._emap._scheduleRender();
+      },
+      commit: (label) => {
+        if (closed) return false;
+        closed = true;
+        if (config.isNoop(accum)) {
+          // Opened the session, didn't drag, committed: roll any
+          // split-shared-arcs work back — splitting alone with no visible
+          // movement isn't worth a history entry.
+          for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
+          if (splitCmds.length > 0) this._emap._scheduleRender();
+          return false;
+        }
+        // Geometry already moved by applyStep; build one cumulative command
+        // per bucket and push WITHOUT calling `.do()` — the post-do state
+        // is already live. `undo` inverts the cumulative value, `redo`
+        // re-applies it.
+        const transformChildren: EditCommand[] = buckets.map((b) => config.apply(b, accum, label));
+        const total = buckets.reduce((n, b) => n + b.arcIds.length + b.pointFeatures.length, 0);
+        const children: EditCommand[] = [...splitCmds, ...transformChildren];
+        const pushed: EditCommand =
+          children.length === 1
+            ? children[0]
+            : new CompositeCommand(children, config.compositeLabel(total, label));
+        this._emap._history.push(pushed);
+        this._emap._fireHistoryChange();
+        // `_invalidateShapeCachesForSources` covers both the arc-flag cache
+        // (relevant when a split appended new arcs) and the spatial index.
+        this._emap._invalidateShapeCachesForSources(buckets.map((b) => b.sourceId));
+        this._emap._scheduleRender();
+        return true;
+      },
+      cancel: () => {
+        if (closed) return;
+        closed = true;
+        if (!config.isNoop(accum)) applyToBuckets(config.invert(accum));
+        for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
+        accum = config.initial;
+        if (splitCmds.length > 0) {
+          this._emap._invalidateShapeCachesForSources(buckets.map((b) => b.sourceId));
+        }
+        this._emap._scheduleRender();
+      },
+      getCumulative: () => accum,
+    };
+  }
+
   beginTranslateSession(opts?: DragSessionOptions): FeatureTranslateSession | null {
     const built = this._buildSelectionBuckets(opts?.splitSharedArcs !== false);
     if (!built) return null;
-    const { buckets, splitCmds } = built;
-    let accumDx = 0;
-    let accumDy = 0;
-    let closed = false;
-
-    const applyStep = (dx: number, dy: number) => {
-      for (const b of buckets) {
-        if (b.arcIds.length === 0 && b.pointFeatures.length === 0) continue;
+    const session = this._beginDragSession<[number, number]>(built, {
+      initial: [0, 0],
+      isNoop: ([x, y]) => x === 0 && y === 0,
+      accumulate: ([ax, ay], [dx, dy]) => [ax + dx, ay + dy],
+      invert: ([x, y]) => [-x, -y],
+      apply: (b, [dx, dy]) =>
         new FeatureTranslateCommand({
           source: b.source,
           arcs: b.source.getArcs(),
@@ -295,81 +358,17 @@ export class EditSessions {
           dy,
           arcIds: b.arcIds,
           pointFeatures: b.pointFeatures,
-        }).do();
-      }
-    };
-
+        }),
+      compositeLabel: (total) => `Translate ${total} features`,
+    });
     return {
-      move: (dx: number, dy: number) => {
-        if (closed) return;
-        if (dx === 0 && dy === 0) return;
-        applyStep(dx, dy);
-        accumDx += dx;
-        accumDy += dy;
-        this._emap._scheduleRender();
+      move: (dx, dy) => session.applyStep([dx, dy]),
+      commit: () => session.commit(),
+      cancel: () => session.cancel(),
+      getAccumulated: () => {
+        const [x, y] = session.getCumulative();
+        return [x, y];
       },
-      commit: (): boolean => {
-        if (closed) return false;
-        closed = true;
-        const moved = !(accumDx === 0 && accumDy === 0);
-        // If the user opened a session, didn't drag, and committed: roll
-        // any split-shared-arcs work back. Splitting alone with no visible
-        // movement isn't worth a history entry.
-        if (!moved) {
-          for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
-          if (splitCmds.length > 0) this._emap._scheduleRender();
-          return false;
-        }
-        // Geometry already moved by `move()` calls; build one cumulative
-        // command and push it WITHOUT calling `.do()` — the post-do state
-        // is already live. `undo` will subtract the cumulative offset,
-        // `redo` re-applies it.
-        const translateChildren: EditCommand[] = buckets.map(
-          (b: any) =>
-            new FeatureTranslateCommand({
-              source: b.source,
-              arcs: b.source.getArcs(),
-              dx: accumDx,
-              dy: accumDy,
-              arcIds: b.arcIds,
-              pointFeatures: b.pointFeatures,
-            }),
-        );
-        const total = buckets.reduce(
-          (n: number, b: any) => n + b.arcIds.length + b.pointFeatures.length,
-          0,
-        );
-        // Splits go FIRST in the composite so undo runs translate.undo()
-        // (subtract offset on the duplicated arcs) before split.undo()
-        // (truncate duplicates + restore original shape refs).
-        const children: EditCommand[] = [...splitCmds, ...translateChildren];
-        const pushed: EditCommand =
-          children.length === 1
-            ? children[0]
-            : new CompositeCommand(children, `Translate ${total} features`);
-        this._emap._history.push(pushed);
-        this._emap._fireHistoryChange();
-        // `_invalidateShapeCachesForSources` covers both the arc-flag cache
-        // (relevant when a split appended new arcs) and the spatial index.
-        this._emap._invalidateShapeCachesForSources(buckets.map((b: any) => b.sourceId));
-        this._emap._scheduleRender();
-        return true;
-      },
-      cancel: () => {
-        if (closed) return;
-        closed = true;
-        // Reverse the translate first (on duplicated arcs), then reverse
-        // the splits in LIFO order — each undo sees the state its do() left.
-        if (accumDx !== 0 || accumDy !== 0) applyStep(-accumDx, -accumDy);
-        for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
-        accumDx = 0;
-        accumDy = 0;
-        if (splitCmds.length > 0) {
-          this._emap._invalidateShapeCachesForSources(buckets.map((b: any) => b.sourceId));
-        }
-        this._emap._scheduleRender();
-      },
-      getAccumulated: (): [number, number] => [accumDx, accumDy],
     };
   }
 
@@ -386,13 +385,11 @@ export class EditSessions {
    * won't match the visually applied sequence.
    */
   beginAffineSession(
-    this: any,
     origin?: [number, number],
     opts?: DragSessionOptions,
   ): FeatureAffineSession | null {
     const built = this._buildSelectionBuckets(opts?.splitSharedArcs !== false);
     if (!built) return null;
-    const { buckets, splitCmds } = built;
 
     // Pivot. Same default as `_applyAffineToSelection`: bbox centroid of
     // every vertex the transform will touch.
@@ -401,116 +398,45 @@ export class EditSessions {
     if (origin) {
       [ox, oy] = origin;
     } else {
-      const centroidInput = new globalThis.Map<
-        string,
-        { arcIdSet: Set<number>; pointFeatures: TranslatedPointFeature[] }
-      >();
-      for (const b of buckets) {
-        centroidInput.set(b.sourceId, {
-          arcIdSet: new Set(b.arcIds),
-          pointFeatures: b.pointFeatures,
-        });
-      }
-      const centroid = this._computeSelectionCentroid(centroidInput);
+      const centroid = this._computeSelectionCentroid(built.buckets);
       if (!centroid) {
         // Roll back any speculative split before bailing out.
-        for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
+        for (let i = built.splitCmds.length - 1; i >= 0; i--) built.splitCmds[i].undo();
         return null;
       }
       [ox, oy] = centroid;
     }
     if (!Number.isFinite(ox) || !Number.isFinite(oy)) {
-      for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
+      for (let i = built.splitCmds.length - 1; i >= 0; i--) built.splitCmds[i].undo();
       return null;
     }
     const pivot: [number, number] = [ox, oy];
 
-    let cumulative: AffineMatrix = { ...IDENTITY_MATRIX };
-    let closed = false;
-
-    const isIdentity = (m: AffineMatrix): boolean =>
-      m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1 && m.tx === 0 && m.ty === 0;
-
-    const applyMatrix = (matrix: AffineMatrix) => {
-      for (const b of buckets) {
-        if (b.arcIds.length === 0 && b.pointFeatures.length === 0) continue;
+    const session = this._beginDragSession<AffineMatrix>(built, {
+      initial: { ...IDENTITY_MATRIX },
+      isNoop: (m) => m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1 && m.tx === 0 && m.ty === 0,
+      // Cumulative is "delta · cumulative" — newer transforms apply after
+      // older ones, matching the visual sequence.
+      accumulate: (accum, m) => composeMatrix(m, accum),
+      invert: (m) => invertMatrix(m),
+      apply: (b, matrix, label) =>
         new FeatureAffineCommand({
           source: b.source,
           arcs: b.source.getArcs(),
           matrix,
           arcIds: b.arcIds,
           pointFeatures: b.pointFeatures,
-        }).do();
-      }
-    };
-
+          label,
+        }),
+      compositeLabel: (total, label) =>
+        label ?? `Transform ${total} feature${total === 1 ? '' : 's'}`,
+    });
     return {
       origin: pivot,
-      applyDelta: (matrix: AffineMatrix) => {
-        if (closed) return;
-        if (isIdentity(matrix)) return;
-        applyMatrix(matrix);
-        // Cumulative is "delta · cumulative" — newer transforms apply
-        // after older ones, matching the visual sequence above.
-        cumulative = composeMatrix(matrix, cumulative);
-        this._emap._scheduleRender();
-      },
-      commit: (label?: string): boolean => {
-        if (closed) return false;
-        closed = true;
-        if (isIdentity(cumulative)) {
-          // No movement — undo any speculative split so we don't pollute
-          // the dataset with orphan duplicated arcs and a pointless entry.
-          for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
-          if (splitCmds.length > 0) this._emap._scheduleRender();
-          return false;
-        }
-        const totalFeatures = buckets.reduce(
-          (n: number, b: any) => n + b.arcIds.length + b.pointFeatures.length,
-          0,
-        );
-        const affineChildren: EditCommand[] = buckets.map(
-          (b: any) =>
-            new FeatureAffineCommand({
-              source: b.source,
-              arcs: b.source.getArcs(),
-              matrix: cumulative,
-              arcIds: b.arcIds,
-              pointFeatures: b.pointFeatures,
-              label,
-            }),
-        );
-        // Splits FIRST so undo runs affine.undo() (apply matrix^-1 on the
-        // duplicated arcs) before split.undo() (truncate + restore shapes).
-        const children: EditCommand[] = [...splitCmds, ...affineChildren];
-        const pushed: EditCommand =
-          children.length === 1
-            ? children[0]
-            : new CompositeCommand(
-                children,
-                label ?? `Transform ${totalFeatures} feature${totalFeatures === 1 ? '' : 's'}`,
-              );
-        this._emap._history.push(pushed);
-        this._emap._fireHistoryChange();
-        // `_invalidateShapeCachesForSources` covers both the arc-flag cache
-        // (relevant when a split appended new arcs) and the spatial index.
-        this._emap._invalidateShapeCachesForSources(buckets.map((b: any) => b.sourceId));
-        this._emap._scheduleRender();
-        return true;
-      },
-      cancel: () => {
-        if (closed) return;
-        closed = true;
-        // Reverse the affine first, then the splits in LIFO order.
-        if (!isIdentity(cumulative)) applyMatrix(invertMatrix(cumulative));
-        for (let i = splitCmds.length - 1; i >= 0; i--) splitCmds[i].undo();
-        cumulative = { ...IDENTITY_MATRIX };
-        if (splitCmds.length > 0) {
-          this._emap._invalidateShapeCachesForSources(buckets.map((b: any) => b.sourceId));
-        }
-        this._emap._scheduleRender();
-      },
-      getCumulative: (): AffineMatrix => ({ ...cumulative }),
+      applyDelta: (matrix) => session.applyStep(matrix),
+      commit: (label) => session.commit(label),
+      cancel: () => session.cancel(),
+      getCumulative: () => ({ ...session.getCumulative() }),
     };
   }
 
@@ -556,7 +482,6 @@ export class EditSessions {
    * single command or a `CompositeCommand` wrapping all sources.
    */
   _applyAffineToSelection(
-    this: any,
     matrixForOrigin: (ox: number, oy: number) => AffineMatrix,
     origin: [number, number] | undefined,
     labelFor: (totalFeatures: number) => string,
@@ -564,44 +489,11 @@ export class EditSessions {
     const refs = this._emap._selection.getAll();
     if (refs.length === 0) return Err.validation('selection', 'selection is empty');
 
-    const bySource = new globalThis.Map<
-      string,
-      {
-        arcIdSet: Set<number>;
-        pointFeatures: TranslatedPointFeature[];
-      }
-    >();
-
-    for (const ref of refs) {
-      const layer = this._emap.layers.resolve(ref.source, ref.layer);
-      if (!layer?.shapes) continue;
-      const shape = layer.shapes[ref.id];
-      if (!shape) continue;
-
-      let bucket = bySource.get(ref.source);
-      if (!bucket) {
-        bucket = { arcIdSet: new Set<number>(), pointFeatures: [] };
-        bySource.set(ref.source, bucket);
-      }
-
-      if (layer.geometry_type === 'point') {
-        bucket.pointFeatures.push({ layer, featureId: ref.id });
-      } else {
-        // Non-point layers: shape is a PathShape (parts of signed arc ids).
-        const pathShape = shape as import('../types/mapshaper-types').PathShape;
-        for (const part of pathShape) {
-          if (!Array.isArray(part)) continue;
-          for (const rawArcId of part) {
-            if (typeof rawArcId !== 'number') continue;
-            bucket.arcIdSet.add(rawArcId >= 0 ? rawArcId : ~rawArcId);
-          }
-        }
-      }
-    }
-
-    if (bySource.size === 0) {
+    const built = this._buildSelectionBuckets(false);
+    if (!built) {
       return Err.validation('selection', 'no resolvable layers in selection');
     }
+    const buckets = built.buckets;
 
     // Default origin = bbox centroid of every vertex the transform will
     // touch. Picked once and reused across all per-source commands so
@@ -612,7 +504,7 @@ export class EditSessions {
       ox = origin[0];
       oy = origin[1];
     } else {
-      const centroid = this._computeSelectionCentroid(bySource);
+      const centroid = this._computeSelectionCentroid(buckets);
       if (!centroid) {
         return Err.validation('origin', 'no vertices in selection; cannot compute centroid');
       }
@@ -627,21 +519,19 @@ export class EditSessions {
 
     const children: EditCommand[] = [];
     const editedSourceIds: string[] = [];
-    for (const [sourceId, bucket] of bySource) {
-      const source = this._emap._sources.get(sourceId);
-      if (!source) continue;
-      if (bucket.arcIdSet.size === 0 && bucket.pointFeatures.length === 0) continue;
+    for (const bucket of buckets) {
+      if (bucket.arcIds.length === 0 && bucket.pointFeatures.length === 0) continue;
 
       const cmd = new FeatureAffineCommand({
-        source,
-        arcs: source.getArcs(),
+        source: bucket.source,
+        arcs: bucket.source.getArcs(),
         matrix,
-        arcIds: Array.from(bucket.arcIdSet),
+        arcIds: bucket.arcIds,
         pointFeatures: bucket.pointFeatures,
       });
       cmd.do();
       children.push(cmd);
-      editedSourceIds.push(sourceId);
+      editedSourceIds.push(bucket.sourceId);
     }
 
     if (children.length === 0) {
@@ -658,33 +548,26 @@ export class EditSessions {
   }
 
   /**
-   * Compute the bbox centroid of every vertex the bySource buckets reference
-   * (across path-feature arcs and point-feature shapes). Returns `null` when
-   * no vertex was found (e.g., empty arcs).
+   * Compute the bbox centroid of every vertex the buckets reference (across
+   * path-feature arcs and point-feature shapes). Returns `null` when no
+   * vertex was found (e.g., empty arcs).
    */
-  _computeSelectionCentroid(
-    this: any,
-    bySource: globalThis.Map<
-      string,
-      { arcIdSet: Set<number>; pointFeatures: TranslatedPointFeature[] }
-    >,
-  ): [number, number] | null {
+  _computeSelectionCentroid(buckets: SelectionBucket[]): [number, number] | null {
     let xmin = Infinity,
       ymin = Infinity;
     let xmax = -Infinity,
       ymax = -Infinity;
     let any = false;
 
-    for (const [sourceId, bucket] of bySource) {
-      const source = this._emap._sources.get(sourceId);
-      if (!source) continue;
+    for (const bucket of buckets) {
+      const source = bucket.source;
 
       // Path features: walk the affected arcs' xx/yy slices.
       const arcs = source.getArcs();
       const data = arcs?.getVertexData?.();
-      if (data && bucket.arcIdSet.size > 0) {
+      if (data && bucket.arcIds.length > 0) {
         const { xx, yy, ii, nn } = data;
-        for (const arcId of bucket.arcIdSet) {
+        for (const arcId of bucket.arcIds) {
           const start = ii[arcId];
           const len = nn[arcId];
           for (let i = start; i < start + len; i++) {
