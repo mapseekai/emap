@@ -8,14 +8,9 @@ import {
 import { fixtureManifest, fixtureUrl } from './fixture-manifest';
 import type { Control, Emap } from '@mapseekai/emap';
 
-export type {
-  RuntimeAssetIntegrity,
-  RuntimeAssetMode,
-  RuntimeAssetOptions,
-  RuntimeAssetSet,
-} from './runtime-assets';
+export type { RuntimeAssetOptions } from './runtime-assets';
 export { resolveRuntimeAssets } from './runtime-assets';
-export { fixtureManifest, fixtureUrl, type FixtureBinding } from './fixture-manifest';
+export { fixtureManifest, fixtureUrl } from './fixture-manifest';
 
 declare global {
   var emap: typeof import('@mapseekai/emap');

@@ -10,7 +10,7 @@ export function parseRootArg(argv = process.argv.slice(2)) {
   return resolve(root);
 }
 
-export function toPosixPath(path) {
+function toPosixPath(path) {
   return path.replaceAll('\\', '/');
 }
 
@@ -44,7 +44,7 @@ export async function collectFiles(dir, extensions) {
   return nested.flat().sort();
 }
 
-export function parseFrontMatter(markdown) {
+function parseFrontMatter(markdown) {
   const match = /^---\r?\n(?<body>[\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
   if (!match?.groups?.body) return {};
 
