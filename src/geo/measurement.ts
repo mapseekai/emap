@@ -1,10 +1,12 @@
-import { createGeographicCoordinateTransformer } from '../adapter/mapshaper-adapter';
+import { createWgs84CoordinateTransformer } from '../adapter/mapshaper-adapter';
 import type { GeographicCoordinateTransformer } from '../adapter/mapshaper-adapter';
 import { Geodesic } from 'geographiclib-geodesic';
 import { resolveProjectCrsDefinition } from './crs-resolver';
 
 const DEGREES_TO_RADIANS = Math.PI / 180;
 const WGS84_SEMI_MAJOR_AXIS = 6_378_137;
+const WGS84_FLATTENING = 1 / 298.257_223_563;
+const WGS84_GEODESIC = new Geodesic.Geodesic(WGS84_SEMI_MAJOR_AXIS, WGS84_FLATTENING);
 
 export type MeasurementMode = 'length' | 'area';
 export type MeasurementPoint = readonly [number, number];
@@ -34,10 +36,10 @@ export class MeasurementCalculator {
   }
 
   private _createContext(definition: string): MeasurementContext | null {
-    const transformer = createGeographicCoordinateTransformer(definition);
+    const transformer = createWgs84CoordinateTransformer(definition);
     if (!transformer.isEarthCompatible) return null;
 
-    const geodesic = new Geodesic.Geodesic(transformer.semiMajorAxis, transformer.flattening);
+    const geodesic = WGS84_GEODESIC;
     return {
       inverse(point): [number, number] | null {
         return transformer.inverse(point);
@@ -71,13 +73,18 @@ export function calculateSphericalArea(points: readonly MeasurementPoint[]): num
     while (longitude - previousLongitude < -180) longitude += 360;
 
     const latitude = point[1] * DEGREES_TO_RADIANS;
-    sum += (longitude - previousLongitude) * DEGREES_TO_RADIANS *
+    sum +=
+      (longitude - previousLongitude) *
+      DEGREES_TO_RADIANS *
       (2 + Math.sin(previousLatitude) + Math.sin(latitude));
     previousLongitude = longitude;
     previousLatitude = latitude;
   }
 
-  const area = Math.abs((sum * WGS84_SEMI_MAJOR_AXIS * WGS84_SEMI_MAJOR_AXIS) / 2);
+  const rawArea = Math.abs((sum * WGS84_SEMI_MAJOR_AXIS * WGS84_SEMI_MAJOR_AXIS) / 2);
+  const surfaceArea = 4 * Math.PI * WGS84_SEMI_MAJOR_AXIS * WGS84_SEMI_MAJOR_AXIS;
+  const boundedArea = rawArea % surfaceArea;
+  const area = Math.min(boundedArea, surfaceArea - boundedArea);
   return Number.isFinite(area) ? area : null;
 }
 
@@ -85,13 +92,9 @@ export function formatMeasurement(mode: MeasurementMode, value: number | null): 
   if (value === null || !Number.isFinite(value) || value < 0) return null;
 
   if (mode === 'length') {
-    return value < 1_000
-      ? `${formatNumber(value)} m`
-      : `${formatNumber(value / 1_000)} km`;
+    return value < 1_000 ? `${formatNumber(value)} m` : `${formatNumber(value / 1_000)} km`;
   }
-  return value < 1_000_000
-    ? `${formatNumber(value)} m²`
-    : `${formatNumber(value / 1_000_000)} km²`;
+  return value < 1_000_000 ? `${formatNumber(value)} m²` : `${formatNumber(value / 1_000_000)} km²`;
 }
 
 function toGeographicPoints(
@@ -147,10 +150,7 @@ function normalizeRing(points: readonly MeasurementPoint[]): MeasurementPoint[] 
 
 function isGeographicPoint(point: MeasurementPoint): boolean {
   return (
-    Number.isFinite(point[0]) &&
-    Number.isFinite(point[1]) &&
-    point[1] >= -90 &&
-    point[1] <= 90
+    Number.isFinite(point[0]) && Number.isFinite(point[1]) && point[1] >= -90 && point[1] <= 90
   );
 }
 

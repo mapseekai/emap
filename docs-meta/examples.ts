@@ -135,6 +135,10 @@ const exampleDescriptions = {
     zh: '切换点击、拖拽和滚轮等命名交互 Handler，观察启用状态和事件响应。',
     en: 'Toggles named click, drag, and wheel handlers to demonstrate enablement state and event responses.',
   },
+  measurement: {
+    zh: '使用 WGS84 球面距离和面积，交互绘制折线或闭合区域并查看实时测量结果。',
+    en: 'Uses WGS84 spherical distance and area while interactively drawing paths or closed regions.',
+  },
   'feature-selection': {
     zh: '通过地图点击选择要素，展示新增、切换和清空选择时的状态变化。',
     en: 'Selects features by map click and shows state changes when adding, toggling, or clearing selections.',
@@ -347,6 +351,7 @@ export const examples: readonly ExampleDefinition[] = [
     'The polygon layer renders with a translucent fill and visible outline.',
   ),
   recipe('interaction-handlers', 'style-interaction', '交互 Handler', 'Interaction handlers', [docsEvents, docsControls], 'Emap', ['handlers'], [task6Fixture]),
+  recipe('measurement', 'style-interaction', '球面测量', 'Spherical measurement', [docsControls, docsCrs], 'MeasureControl', ['measurement', 'controls', 'geodesic'], [task6Fixture]),
   recipe('feature-attributes', 'style-interaction', '要素属性查询', 'Feature attributes', [docsAttributes, docsEvents], 'Emap', ['query', 'highlight', 'basemap'], [task6Fixture]),
   recipe('feature-selection', 'style-interaction', '要素选择', 'Feature selection', [docsSelection], 'Emap', ['selection', 'history'], [task6Fixture]),
   recipe('box-select', 'style-interaction', '拉框选择', 'Box select', [docsSelection, docsControls], 'Emap', ['selection', 'box-select', 'history'], [task6Fixture]),

@@ -10,6 +10,8 @@ import basemapSvg from './assets/controls/basemap.svg?raw';
 import layersSvg from './assets/controls/layers.svg?raw';
 import undoSvg from './assets/controls/help-larrow.svg?raw';
 import redoSvg from './assets/controls/help-rarrow.svg?raw';
+import measureLengthSvg from './assets/controls/measure-length.svg?raw';
+import measureAreaSvg from './assets/controls/measure-area.svg?raw';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
@@ -25,7 +27,9 @@ export type ControlIconName =
   | 'basemap'
   | 'layers'
   | 'undo'
-  | 'redo';
+  | 'redo'
+  | 'measure-length'
+  | 'measure-area';
 
 const CONTROL_ICON_SVGS: Readonly<Record<ControlIconName, string>> = {
   'zoom-in': zoomInSvg,
@@ -40,6 +44,8 @@ const CONTROL_ICON_SVGS: Readonly<Record<ControlIconName, string>> = {
   layers: layersSvg,
   undo: undoSvg,
   redo: redoSvg,
+  'measure-length': measureLengthSvg,
+  'measure-area': measureAreaSvg,
 };
 
 export function createControlIcon(name: ControlIconName): SVGSVGElement {

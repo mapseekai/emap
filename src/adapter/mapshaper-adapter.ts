@@ -448,6 +448,21 @@ interface MprojProjection {
   a?: number;
   es?: number;
 }
+interface MprojCoordinateApi {
+  pj_inv(
+    point: { x: number; y: number },
+    projection: MprojProjection,
+  ): { lam: number; phi: number };
+  pj_fwd(
+    point: { lam: number; phi: number },
+    projection: MprojProjection,
+  ): { x: number; y: number };
+  pj_transform_point(
+    source: MprojProjection,
+    destination: MprojProjection,
+    point: [number, number],
+  ): void;
+}
 
 type MapshaperRuntimeCrs = NonNullable<NonNullable<MapshaperDataset['info']>['crs']>;
 
@@ -466,6 +481,20 @@ export function parseMapshaperCrs(crs: string): MapshaperRuntimeCrs {
 export function createGeographicCoordinateTransformer(
   definition: string,
 ): GeographicCoordinateTransformer {
+  return createCoordinateTransformer(definition);
+}
+
+/** Transform source-CRS coordinates to and from geographic WGS84. */
+export function createWgs84CoordinateTransformer(
+  definition: string,
+): GeographicCoordinateTransformer {
+  return createCoordinateTransformer(definition, true);
+}
+
+function createCoordinateTransformer(
+  definition: string,
+  useWgs84 = false,
+): GeographicCoordinateTransformer {
   const projection = parseMapshaperCrs(definition) as MprojProjection;
   const semiMajorAxis = projection.a;
   const eccentricitySquared = projection.es;
@@ -475,16 +504,28 @@ export function createGeographicCoordinateTransformer(
     Number(eccentricitySquared) >= 0 &&
     Number(eccentricitySquared) < 1;
   const a = hasEllipsoid ? Number(semiMajorAxis) : WGS84_SEMI_MAJOR_AXIS;
-  const f = hasEllipsoid
-    ? 1 - Math.sqrt(1 - Number(eccentricitySquared))
-    : WGS84_FLATTENING;
-  const mprojApi = mproj as unknown as {
-    pj_inv(point: { x: number; y: number }, projection: MprojProjection): { lam: number; phi: number };
-    pj_fwd(point: { lam: number; phi: number }, projection: MprojProjection): { x: number; y: number };
+  const f = hasEllipsoid ? 1 - Math.sqrt(1 - Number(eccentricitySquared)) : WGS84_FLATTENING;
+  const wgs84Projection = useWgs84 ? (parseMapshaperCrs('EPSG:4326') as MprojProjection) : null;
+  const mprojApi = mproj as unknown as MprojCoordinateApi;
+  const transformPoint = (
+    source: MprojProjection,
+    destination: MprojProjection,
+    point: readonly [number, number],
+  ): [number, number] | null => {
+    if (!Number.isFinite(point[0]) || !Number.isFinite(point[1])) return null;
+    try {
+      const transformed: [number, number] = [point[0], point[1]];
+      mprojApi.pj_transform_point(source, destination, transformed);
+      return Number.isFinite(transformed[0]) && Number.isFinite(transformed[1])
+        ? transformed
+        : null;
+    } catch {
+      return null;
+    }
   };
 
   return {
-    isGeographic: projection.is_latlong === true,
+    isGeographic: useWgs84 || projection.is_latlong === true,
     // Proj.4 does not reliably identify the celestial body. Require usable
     // ellipsoid evidence whose size and flattening are compatible with common
     // terrestrial ellipsoids, including Earth spheres, and reject unknown or
@@ -496,9 +537,10 @@ export function createGeographicCoordinateTransformer(
       Number.isFinite(f) &&
       f >= 0 &&
       f <= EARTH_MAX_FLATTENING,
-    semiMajorAxis: a,
-    flattening: f,
+    semiMajorAxis: useWgs84 ? WGS84_SEMI_MAJOR_AXIS : a,
+    flattening: useWgs84 ? WGS84_FLATTENING : f,
     inverse(point): [number, number] | null {
+      if (wgs84Projection) return transformPoint(projection, wgs84Projection, point);
       if (projection.is_latlong) {
         return Number.isFinite(point[0]) && Number.isFinite(point[1]) ? [point[0], point[1]] : null;
       }
@@ -507,12 +549,15 @@ export function createGeographicCoordinateTransformer(
         const lp = mprojApi.pj_inv({ x: point[0], y: point[1] }, projection);
         const longitude = lp.lam * (180 / Math.PI);
         const latitude = lp.phi * (180 / Math.PI);
-        return Number.isFinite(longitude) && Number.isFinite(latitude) ? [longitude, latitude] : null;
+        return Number.isFinite(longitude) && Number.isFinite(latitude)
+          ? [longitude, latitude]
+          : null;
       } catch {
         return null;
       }
     },
     forward(lngLat): [number, number] | null {
+      if (wgs84Projection) return transformPoint(wgs84Projection, projection, lngLat);
       if (!Number.isFinite(lngLat[0]) || !Number.isFinite(lngLat[1])) return null;
       if (projection.is_latlong) return [lngLat[0], lngLat[1]];
 

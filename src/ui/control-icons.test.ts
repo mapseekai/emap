@@ -15,6 +15,8 @@ const iconNames = [
   'layers',
   'undo',
   'redo',
+  'measure-length',
+  'measure-area',
 ] as const;
 
 describe('control icons', () => {

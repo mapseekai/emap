@@ -312,6 +312,18 @@ describe('Emap handler registry (Phase 1)', () => {
     expect(map.drawFeature.isEnabled()).toBe(false);
   });
 
+  it('exposes a disabled-by-default measure handler and leaves dragPan available', () => {
+    const map = new Emap({ container: container() });
+    expect(map.measure.name).toBe('measure');
+    expect(map.measure.isEnabled()).toBe(false);
+
+    map.measure.enable();
+    expect(map.getEditMode()).toBe('measure');
+    expect(map.dragPan.isEnabled()).toBe(true);
+    map.measure.disable();
+    expect(map.getEditMode()).toBe('none');
+  });
+
   it('drawFeature.enable() without source/type throws; configured enters draw mode', () => {
     const map = new Emap({ container: container() });
     expect(() => map.drawFeature.enable()).toThrow(/source\+type required/i);

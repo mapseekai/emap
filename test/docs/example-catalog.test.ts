@@ -24,6 +24,7 @@ const expectedIds = [
   'getting-started/lines',
   'getting-started/polygon-fill',
   'interaction-handlers',
+  'measurement',
   'feature-attributes',
   'feature-selection',
   'box-select',
@@ -71,7 +72,7 @@ const expectedModules = [
     key: 'style-interaction',
     zh: '样式与交互',
     en: 'Styling & Interaction',
-    count: 8,
+    count: 9,
   },
   { key: 'data-editing', zh: '数据编辑', en: 'Data Editing', count: 14 },
   { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 21 },
@@ -434,7 +435,7 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-brand img')?.getAttribute('src')).toBe(
       '/mapseekai/emap/examples/emap.svg',
     );
-    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('57');
+    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('58');
 
     const firstCard = root.querySelector<HTMLAnchorElement>(
       'a.example-card[href="/mapseekai/emap/examples/getting-started/geojson-viewer/"]',
