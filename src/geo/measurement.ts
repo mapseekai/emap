@@ -155,5 +155,5 @@ function isGeographicPoint(point: MeasurementPoint): boolean {
 }
 
 function formatNumber(value: number): string {
-  return Number(value.toPrecision(3)).toString();
+  return value.toFixed(2);
 }

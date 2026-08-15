@@ -38,6 +38,7 @@ const measurementState: EditMeasurementState = {
     [1, 0],
     [0, 1],
   ],
+  segmentLabels: [],
   label: '12.4 km²',
   labelCoord: [0, 1],
   completed: true,

@@ -1038,16 +1038,29 @@ export class CanvasPainter implements Painter {
       ctx.fill();
     }
 
-    if (state.label && state.labelCoord) {
-      const point = project(state.labelCoord);
+    const drawLabel = (
+      text: string,
+      coord: readonly [number, number],
+      fontSize: number,
+      background: string,
+    ): void => {
+      const point = project(coord);
       const padding = 4 * pr;
-      const height = 16 * pr;
-      ctx.font = `${12 * pr}px system-ui, sans-serif`;
-      const width = ctx.measureText(state.label).width;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+      const height = (fontSize + 4) * pr;
+      ctx.font = `${fontSize * pr}px system-ui, sans-serif`;
+      const width = ctx.measureText(text).width;
+      ctx.fillStyle = background;
       ctx.fillRect(point[0], point[1] - height, width + padding * 2, height);
       ctx.fillStyle = color;
-      ctx.fillText(state.label, point[0] + padding, point[1] - padding);
+      ctx.fillText(text, point[0] + padding, point[1] - padding);
+    };
+
+    for (const segment of state.segmentLabels) {
+      drawLabel(segment.label, segment.coord, 11, 'rgba(255, 255, 255, 0.78)');
+    }
+
+    if (state.label && state.labelCoord) {
+      drawLabel(state.label, state.labelCoord, 12, 'rgba(255, 255, 255, 0.92)');
     }
   }
 

@@ -41,10 +41,19 @@ export interface MeasurementOverlayState {
   committedPath: readonly MeasurementPoint[];
   previewPath: readonly MeasurementPoint[] | null;
   fillPath: readonly MeasurementPoint[] | null;
+  /** Per-segment length labels, each anchored at its segment's geodesic midpoint. */
+  segmentLabels: readonly MeasurementSegmentLabel[];
+  /** Total length at the cursor/final vertex, or total area at the polygon center. */
   label: string | null;
   labelCoord: MeasurementPoint | null;
   completed: boolean;
   drawColor: string;
+}
+
+/** A formatted measurement value anchored at a map coordinate. */
+export interface MeasurementSegmentLabel {
+  label: string;
+  coord: MeasurementPoint;
 }
 
 export interface PolygonFillOptions {

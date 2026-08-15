@@ -127,6 +127,7 @@ const completedArea: MeasurementOverlayState = {
     [0, 10],
     [0, 0],
   ],
+  segmentLabels: [{ label: '5.50 km', coord: [5, 0] }],
   label: '12.4 km²',
   labelCoord: [0, 10],
   completed: true,
@@ -152,5 +153,6 @@ describe('CanvasPainter.drawMeasurementOverlay', () => {
       expect.any(Number),
     ]);
     expect(calls).toContainEqual(['fillText', '12.4 km²', expect.any(Number), expect.any(Number)]);
+    expect(calls).toContainEqual(['fillText', '5.50 km', expect.any(Number), expect.any(Number)]);
   });
 });

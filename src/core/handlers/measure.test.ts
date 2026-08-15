@@ -4,6 +4,7 @@ import type { NormalizedPointerEvent } from '../handler';
 import type { EditHandlerHost } from './edit-handler-host';
 import { MeasureHandler } from './measure';
 import { MeasurementCalculator, type MeasurementContext } from '../../geo/measurement';
+import type { EditMeasurementState } from '../../map/types';
 
 function makeHost(crs = 'EPSG:4326') {
   const listeners = new Map<string, Set<(payload: unknown) => void>>();
@@ -116,7 +117,7 @@ describe('MeasureHandler', () => {
     expect(host.pushCommand).not.toHaveBeenCalled();
     expect(host.getSource).not.toHaveBeenCalled();
     expect(host.setEditMeasurementState).toHaveBeenLastCalledWith(
-      expect.objectContaining({ completed: true, label: '111 km' }),
+      expect.objectContaining({ completed: true, label: '111.32 km' }),
     );
   });
 
@@ -168,7 +169,7 @@ describe('MeasureHandler', () => {
     expect(staleContext.area).not.toHaveBeenCalled();
     expect(currentContext.area).toHaveBeenCalled();
     expect(fixture.host.setEditMeasurementState).toHaveBeenLastCalledWith(
-      expect.objectContaining({ mode: 'area', label: '2 m²' }),
+      expect.objectContaining({ mode: 'area', label: '2.00 m²' }),
     );
   });
 
@@ -180,5 +181,67 @@ describe('MeasureHandler', () => {
 
     expect(handler.isEnabled()).toBe(false);
     expect(host.clearEditMeasurementState).toHaveBeenCalled();
+  });
+
+  it('keeps sampled paths and segment labels in the panned world copy', async () => {
+    const { handler, host, activate } = await makeHandler('length');
+    await activate();
+
+    // Urumqi (87.7E, 43.8N) and Harbin (126.62E, 45.86N) expressed in the
+    // previous world copy, as produced by unproject() after panning west.
+    handler.handlePointer(clickAt(-272.3, 43.8));
+    handler.handlePointer(clickAt(-233.38, 45.86));
+
+    const state = host.setEditMeasurementState.mock.lastCall![0] as EditMeasurementState;
+    expect(state.committedPath.length).toBeGreaterThan(2);
+    expect(state.committedPath[0]).toEqual([-272.3, 43.8]);
+    expect(state.committedPath.at(-1)).toEqual([-233.38, 45.86]);
+    for (const point of state.committedPath) {
+      expect(point[0]).toBeGreaterThan(-274);
+      expect(point[0]).toBeLessThan(-232);
+    }
+    expect(state.segmentLabels).toHaveLength(1);
+    expect(state.segmentLabels[0]!.label).toMatch(/km$/);
+    expect(state.segmentLabels[0]!.coord[0]).toBeGreaterThan(-274);
+    expect(state.segmentLabels[0]!.coord[0]).toBeLessThan(-232);
+    expect(state.label).toBe(state.segmentLabels[0]!.label);
+  });
+
+  it('labels every committed segment at its midpoint', async () => {
+    const { handler, host, activate } = await makeHandler('length');
+    await activate();
+
+    handler.handlePointer(clickAt(0, 0));
+    handler.handlePointer(clickAt(1, 0));
+    handler.handlePointer(clickAt(1, 1));
+
+    const state = host.setEditMeasurementState.mock.lastCall![0] as EditMeasurementState;
+    expect(state.segmentLabels.map((segment) => segment.label)).toEqual([
+      '111.32 km',
+      '110.57 km',
+    ]);
+    expect(state.segmentLabels[0]!.coord[0]).toBeCloseTo(0.5, 5);
+    expect(state.segmentLabels[0]!.coord[1]).toBeCloseTo(0, 5);
+    expect(state.segmentLabels[1]!.coord[0]).toBeCloseTo(1, 5);
+    expect(state.segmentLabels[1]!.coord[1]).toBeCloseTo(0.5, 5);
+    expect(state.label).toBe('221.89 km');
+  });
+
+  it('anchors the area label at the polygon center and labels every ring segment', async () => {
+    const { handler, host, activate } = await makeHandler('area');
+    await activate();
+
+    handler.handlePointer(clickAt(0, 0));
+    handler.handlePointer(clickAt(2, 0));
+    handler.handlePointer(clickAt(2, 2));
+    handler.handlePointer(clickAt(0, 2));
+    handler.handlePointer(clickAt(0, 0)); // close on first vertex
+
+    const state = host.setEditMeasurementState.mock.lastCall![0] as EditMeasurementState;
+    expect(state.completed).toBe(true);
+    expect(state.segmentLabels).toHaveLength(4);
+    expect(state.label).toMatch(/km²$/);
+    expect(state.labelCoord![0]).toBeCloseTo(1, 5);
+    expect(state.labelCoord![1]).toBeCloseTo(1, 5);
   });
 });

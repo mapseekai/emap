@@ -29,6 +29,7 @@ const dummyMeasurement: EditMeasurementState = {
   committedPath: [],
   previewPath: null,
   fillPath: null,
+  segmentLabels: [],
   label: null,
   labelCoord: null,
   completed: false,

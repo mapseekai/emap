@@ -6,7 +6,7 @@ import {
   type MeasurementMode,
   type MeasurementPoint,
 } from '../../geo/measurement';
-import type { MeasurementOverlayState } from '../../renderer/painter';
+import type { MeasurementOverlayState, MeasurementSegmentLabel } from '../../renderer/painter';
 import { EMAP_THEME_COLORS } from '../../theme/colors';
 import type { EditHandlerHost } from './edit-handler-host';
 
@@ -251,6 +251,7 @@ export class MeasureHandler implements Handler<MeasureOptions> {
     }
 
     const context = this._context;
+    const worldWidth = context ? this._worldWidth(context) : 0;
     const resultValue = context ? this._measure(this._vertices, context) : null;
     const displayPoints =
       !this._completed && this._cursorCoord
@@ -262,7 +263,7 @@ export class MeasureHandler implements Handler<MeasureOptions> {
 
     const closed = this._completed && this._opts.mode === 'area';
     const committedPath = context
-      ? this._samplePath(this._vertices, closed, context)
+      ? this._samplePath(this._vertices, closed, context, worldWidth)
       : copyPoints(this._vertices, closed);
     const previewPath =
       !this._completed && this._cursorCoord && this._vertices.length > 0
@@ -272,16 +273,32 @@ export class MeasureHandler implements Handler<MeasureOptions> {
               : [this._vertices.at(-1)!, this._cursorCoord],
             false,
             context,
+            worldWidth,
           )
         : null;
+    const labelRingClosed =
+      closed ||
+      (this._opts.mode === 'area' &&
+        !this._completed &&
+        this._cursorCoord !== null &&
+        this._vertices.length >= 2);
+    const fallbackLabelCoord = this._completed ? this._vertices.at(-1)! : this._cursorCoord;
+    const labelCoord =
+      this._opts.mode === 'area'
+        ? (context ? this._areaCenter(displayPoints, context, worldWidth) : null) ??
+          fallbackLabelCoord
+        : fallbackLabelCoord;
     const state: MeasurementOverlayState = {
       mode: this._opts.mode,
       vertices: copyPoints(this._vertices),
       committedPath,
       previewPath,
       fillPath: closed ? committedPath : null,
+      segmentLabels: context
+        ? this._segmentLabels(displayPoints, labelRingClosed, context, worldWidth)
+        : [],
       label: formatMeasurement(this._opts.mode, displayValue),
-      labelCoord: this._completed ? this._vertices.at(-1)! : this._cursorCoord,
+      labelCoord,
       completed: this._completed,
       drawColor: this._opts.drawColor ?? EMAP_THEME_COLORS.primary,
     };
@@ -296,10 +313,64 @@ export class MeasureHandler implements Handler<MeasureOptions> {
     return this._opts.mode === 'length' ? context.length(points) : context.area(points);
   }
 
+  private _segmentLabels(
+    points: readonly MeasurementPoint[],
+    closed: boolean,
+    context: MeasurementContext,
+    worldWidth: number,
+  ): MeasurementSegmentLabel[] {
+    const labels: MeasurementSegmentLabel[] = [];
+    const edgeCount = closed ? points.length : points.length - 1;
+    for (let index = 0; index < edgeCount; index++) {
+      const start = points[index];
+      const end = points[(index + 1) % points.length];
+      if (samePoint(start, end)) continue;
+      const lengthMeters = context.length([start, end]);
+      if (lengthMeters === null) continue;
+      const label = formatMeasurement('length', lengthMeters);
+      if (!label) continue;
+      const startLngLat = context.inverse(start);
+      const endLngLat = context.inverse(end);
+      const midpointLngLat =
+        startLngLat && endLngLat ? interpolateGreatCircle(startLngLat, endLngLat) : null;
+      const midpointProjected = midpointLngLat ? context.forward(midpointLngLat) : null;
+      const coord: [number, number] = midpointProjected
+        ? shiftTowardWorldCopy(midpointProjected, start, worldWidth)
+        : [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
+      labels.push({ label, coord });
+    }
+    return labels;
+  }
+
+  private _areaCenter(
+    points: readonly MeasurementPoint[],
+    context: MeasurementContext,
+    worldWidth: number,
+  ): [number, number] | null {
+    if (points.length === 0) return null;
+    let anchor: number | null = null;
+    let sumLng = 0;
+    let sumLat = 0;
+    for (const point of points) {
+      const lngLat = context.inverse(point);
+      if (!lngLat) return null;
+      if (anchor === null) anchor = lngLat[0];
+      let lng = lngLat[0];
+      while (lng - anchor > 180) lng -= 360;
+      while (lng - anchor < -180) lng += 360;
+      sumLng += lng;
+      sumLat += lngLat[1];
+    }
+    const centerLngLat: [number, number] = [sumLng / points.length, sumLat / points.length];
+    const center = context.forward(centerLngLat);
+    return center ? shiftTowardWorldCopy(center, points[0], worldWidth) : null;
+  }
+
   private _samplePath(
     points: readonly MeasurementPoint[],
     close: boolean,
     context: MeasurementContext | null,
+    worldWidth = 0,
   ): [number, number][] {
     if (points.length === 0) return [];
     if (points.length === 1 || !context) return copyPoints(points, close);
@@ -309,7 +380,7 @@ export class MeasureHandler implements Handler<MeasureOptions> {
     for (let index = 0; index < segmentCount; index++) {
       const start = points[index];
       const end = points[(index + 1) % points.length];
-      const segment = this._sampleSegment(start, end, context, budget);
+      const segment = this._sampleSegment(start, end, context, budget, worldWidth);
       for (let pointIndex = 1; pointIndex < segment.length; pointIndex++) {
         path.push(segment[pointIndex]);
       }
@@ -322,6 +393,7 @@ export class MeasureHandler implements Handler<MeasureOptions> {
     end: MeasurementPoint,
     context: MeasurementContext,
     budget: { count: number },
+    worldWidth: number,
   ): [number, number][] {
     const fallback: [number, number][] = [
       [start[0], start[1]],
@@ -352,7 +424,14 @@ export class MeasureHandler implements Handler<MeasureOptions> {
           return;
         }
         const midpointLngLat = interpolateGreatCircle(fromLngLat, toLngLat);
-        const midpoint = midpointLngLat ? context.forward(midpointLngLat) : null;
+        const midpointProjected = midpointLngLat ? context.forward(midpointLngLat) : null;
+        // forward() normalizes into the base world copy (±180° for geographic
+        // CRS) while the canvas pans across world copies with unwrapped
+        // coordinates. Shift each sample toward its segment anchor so the
+        // path never jumps 360° across the canvas.
+        const midpoint = midpointProjected
+          ? shiftTowardWorldCopy(midpointProjected, from, worldWidth)
+          : null;
         if (!midpointLngLat || !midpoint) {
           append(to);
           return;
@@ -382,6 +461,18 @@ export class MeasureHandler implements Handler<MeasureOptions> {
       return path;
     } catch {
       return fallback;
+    }
+  }
+
+  private _worldWidth(context: MeasurementContext): number {
+    try {
+      const west = context.forward([-180, 0]);
+      const east = context.forward([180, 0]);
+      if (!west || !east) return 0;
+      const width = east[0] - west[0];
+      return Number.isFinite(width) && width > 0 ? width : 0;
+    } catch {
+      return 0;
     }
   }
 
@@ -421,6 +512,22 @@ function copyPoints(points: readonly MeasurementPoint[], close = false): [number
   const copied = points.map((point) => [point[0], point[1]] as [number, number]);
   if (close && copied.length > 1) copied.push([copied[0][0], copied[0][1]]);
   return copied;
+}
+
+// CRS transforms normalize into the base world copy (±180° for geographic
+// CRS) while the canvas pans across world copies with unwrapped coordinates.
+// Shift a transformed point toward a reference copy so adjacent path points
+// never jump a full world width across the canvas.
+function shiftTowardWorldCopy(
+  point: [number, number],
+  reference: MeasurementPoint,
+  worldWidth: number,
+): [number, number] {
+  if (worldWidth <= 0) return point;
+  let x = point[0];
+  while (x - reference[0] > worldWidth / 2) x -= worldWidth;
+  while (x - reference[0] < -worldWidth / 2) x += worldWidth;
+  return x === point[0] ? point : [x, point[1]];
 }
 
 function isMeasurementMode(mode: unknown): mode is MeasurementMode {

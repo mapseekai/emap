@@ -121,10 +121,10 @@ describe('MeasurementCalculator', () => {
 
 describe('formatMeasurement', () => {
   it('uses metric length and area units at the documented thresholds', () => {
-    expect(formatMeasurement('length', 500)).toBe('500 m');
-    expect(formatMeasurement('length', 2_500)).toBe('2.5 km');
-    expect(formatMeasurement('area', 500_000)).toBe('500000 m²');
-    expect(formatMeasurement('area', 2_500_000)).toBe('2.5 km²');
+    expect(formatMeasurement('length', 500)).toBe('500.00 m');
+    expect(formatMeasurement('length', 2_500)).toBe('2.50 km');
+    expect(formatMeasurement('area', 500_000)).toBe('500000.00 m²');
+    expect(formatMeasurement('area', 2_500_000)).toBe('2.50 km²');
   });
 
   it('does not format unavailable or invalid values', () => {
