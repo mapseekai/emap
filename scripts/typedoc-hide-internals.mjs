@@ -345,9 +345,6 @@ function normalizeSourcePaths(value, seen = new WeakSet()) {
   if (typeof value.fileName === 'string') {
     value.fileName = normalizeSourceFileName(value.fileName);
   }
-  if (typeof value.fullFileName === 'string') {
-    value.fullFileName = normalizeSourceFileName(value.fullFileName);
-  }
 
   for (const nested of Object.values(value)) {
     if (!nested || typeof nested !== 'object') continue;

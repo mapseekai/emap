@@ -374,13 +374,18 @@ describe('Emap rendering', () => {
     });
     setPrivate(map, '_painter', { setTransform: vi.fn(), clear: vi.fn() });
     setPrivate(map, '_editOverlay', { render: renderOverlay });
-    setPrivate(map, '_editState', { mode: 'vertex', vertex: vertexState, draw: null });
+    setPrivate(map, '_editState', {
+      mode: 'vertex',
+      vertex: vertexState,
+      draw: null,
+      measurement: null,
+    });
     setPrivate(map, '_renderLayers', vi.fn());
     setPrivate(map, '_renderHighlight', vi.fn());
 
     (map as any)._renderImpl();
 
-    expect(renderOverlay).toHaveBeenCalledWith('vertex', vertexState, null, vertexArcFilter);
+    expect(renderOverlay).toHaveBeenCalledWith('vertex', vertexState, null, null, vertexArcFilter);
   });
 
   it('records full-frame timing without forcing a Canvas readback', () => {
@@ -403,7 +408,7 @@ describe('Emap rendering', () => {
     });
     setPrivate(map, '_painter', { setTransform: vi.fn(), clear: vi.fn() });
     setPrivate(map, '_editOverlay', { render: vi.fn() });
-    setPrivate(map, '_editState', { mode: null, vertex: null, draw: null });
+    setPrivate(map, '_editState', { mode: null, vertex: null, draw: null, measurement: null });
     setPrivate(map, '_renderLayers', vi.fn());
     setPrivate(map, '_renderHighlight', vi.fn());
 
@@ -6740,11 +6745,9 @@ describe('Emap useWorker routing', () => {
     exportSpy.mockImplementationOnce(async (datasets: { info?: object }[]) => ({
       datasets: datasets.map((d) => ({ info: { ...d.info }, layers: [] })),
     }));
-    restoreSpy.mockImplementationOnce(
-      async (packed: { datasets: { info?: object }[] }) => ({
-        datasets: [{ layers: [], info: packed.datasets[0].info }],
-      }),
-    );
+    restoreSpy.mockImplementationOnce(async (packed: { datasets: { info?: object }[] }) => ({
+      datasets: [{ layers: [], info: packed.datasets[0].info }],
+    }));
 
     const ok = await map.ops.simplifyLayer({ source: 'src1', target: 'states', percentage: 5 });
     expect(ok.ok).toBe(true);

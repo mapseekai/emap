@@ -51,6 +51,7 @@ import { BoxSelectHandler, type BoxSelectHandlerOptions } from '../core/handlers
 import { LassoSelectHandler, type LassoSelectHandlerOptions } from '../core/handlers/lasso-select';
 import { VertexEditHandler, type VertexEditOptions } from '../core/handlers/vertex-edit';
 import { DrawFeatureHandler, type DrawFeatureOptions } from '../core/handlers/draw-feature';
+import { MeasureHandler } from '../core/handlers/measure';
 import {
   TransformFeatureHandler,
   type TransformFeatureOptions,
@@ -127,6 +128,7 @@ import {
   type ExportSnapshotOptions,
   type LoadSnapshotOptions,
   type HighlightStyle,
+  type EditMeasurementState,
   type EditVertexState,
   type EditDrawState,
   type RenderRequest,
@@ -210,7 +212,11 @@ function captureScaleView(viewport: Viewport, crs: string): ScaleViewSnapshot | 
 }
 
 function isScaleViewCurrent(viewport: Viewport, crs: string, snapshot: ScaleViewSnapshot): boolean {
-  if (crs !== snapshot.view.crs || viewport.width !== snapshot.view.width || viewport.height !== snapshot.view.height) {
+  if (
+    crs !== snapshot.view.crs ||
+    viewport.width !== snapshot.view.width ||
+    viewport.height !== snapshot.view.height
+  ) {
     return false;
   }
 
@@ -281,6 +287,7 @@ export class Emap extends EventDispatcher {
   private _lassoSelect: LassoSelectHandler;
   private _vertexEdit!: VertexEditHandler;
   private _drawFeature!: DrawFeatureHandler;
+  private _measure!: MeasureHandler;
   private _transformFeature!: TransformFeatureHandler;
   private _dragPanSuspendedByEdit = false;
   private _dragPanEnabledBeforeEditSuspend = false;
@@ -495,6 +502,8 @@ export class Emap extends EventDispatcher {
     this._handlers.register(this._vertexEdit);
     this._drawFeature = new DrawFeatureHandler(handlerHost);
     this._handlers.register(this._drawFeature);
+    this._measure = new MeasureHandler(handlerHost);
+    this._handlers.register(this._measure);
     this._transformFeature = new TransformFeatureHandler(handlerHost);
     this._handlers.register(this._transformFeature);
     this._handlers.attach(this._canvasContainer);
@@ -776,6 +785,14 @@ export class Emap extends EventDispatcher {
 
   public clearEditDrawState(): void {
     this._editState.clearDraw();
+  }
+
+  public setEditMeasurementState(state: EditMeasurementState): void {
+    this._editState.setMeasurement(state);
+  }
+
+  public clearEditMeasurementState(): void {
+    this._editState.clearMeasurement();
   }
 
   private _attachEventListeners(): void {
@@ -1871,6 +1888,10 @@ export class Emap extends EventDispatcher {
   get drawFeature(): Handler<DrawFeatureOptions> {
     return this._drawFeature;
   }
+  /** The spherical length/area measurement handler (disabled by default). */
+  get measure(): MeasureHandler {
+    return this._measure;
+  }
   /** The transform-feature interaction handler (disabled by default). */
   get transformFeature(): Handler<TransformFeatureOptions> {
     return this._transformFeature;
@@ -2040,11 +2061,11 @@ export class Emap extends EventDispatcher {
   private _renderImpl(): void {
     const transform = this._viewport.transform;
     this._painter.setTransform(transform);
+
     this._painter.clear();
 
     const lineScale = this._viewport.getLineScale();
     const pixelSize = 1 / Math.abs(transform.mx);
-
     this._renderLayers(pixelSize, lineScale);
     this._renderHighlight(transform, lineScale);
     const vertexState = this._editState.vertex;
@@ -2056,6 +2077,7 @@ export class Emap extends EventDispatcher {
       this._editState.mode,
       vertexState,
       this._editState.draw,
+      this._editState.measurement,
       vertexArcFilter,
     );
   }

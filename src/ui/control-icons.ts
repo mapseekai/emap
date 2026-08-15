@@ -14,7 +14,9 @@ export type ControlIconName =
   | 'basemap'
   | 'layers'
   | 'undo'
-  | 'redo';
+  | 'redo'
+  | 'measure-length'
+  | 'measure-area';
 
 export function createControlIcon(name: ControlIconName): SVGSVGElement {
   const { viewBox = '0 0 100 100', paths } = CONTROL_ICON_PATHS[name];

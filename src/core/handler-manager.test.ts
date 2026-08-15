@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { HandlerManager } from './handler-manager';
-import type { Handler } from './handler';
+import type { Handler, NormalizedPointerEvent } from './handler';
 
 function fake(name: string): Handler & { _on: boolean } {
   let on = true;
@@ -60,7 +60,7 @@ describe('HandlerManager', () => {
 
 describe('HandlerManager pointer arbitration', () => {
   function recordingHandler(name: string, result: 'passthrough' | 'consumed' | 'exclusive') {
-    const calls: any[] = [];
+    const calls: NormalizedPointerEvent[] = [];
     return {
       h: {
         name,
@@ -69,7 +69,7 @@ describe('HandlerManager pointer arbitration', () => {
         isEnabled: () => true,
         setOptions() {},
         getOptions: () => ({}),
-        handlePointer: (ev: any) => {
+        handlePointer: (ev: NormalizedPointerEvent) => {
           calls.push(ev);
           return result;
         },
@@ -153,7 +153,7 @@ describe('HandlerManager pointer arbitration', () => {
       isEnabled: () => true,
       setOptions() {},
       getOptions: () => ({}),
-      handlePointer: (ev: any) => {
+      handlePointer: (ev: NormalizedPointerEvent) => {
         calls.push(ev.kind);
         return ev.kind === 'up' ? 'passthrough' : phase;
       },
@@ -168,7 +168,84 @@ describe('HandlerManager pointer arbitration', () => {
     window.dispatchEvent(new PointerEvent('pointerup', { clientX: 5, clientY: 0 }));
     expect(calls).toEqual(['down', 'move', 'up']);
     // lower priority must NOT have seen move/up (owner had the exclusive lock)
-    expect(lower.calls.map((c: any) => c.kind)).not.toContain('move');
+    expect(lower.calls.map((call) => call.kind)).not.toContain('move');
+    m.detach();
+  });
+  it('suppresses the click emitted after an exclusive drag moves', () => {
+    const el = document.createElement('div');
+    el.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 0,
+      height: 0,
+      right: 0,
+      bottom: 0,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    });
+    const m = new HandlerManager();
+    const lower = recordingHandler('clickSelect', 'passthrough');
+    const owner = {
+      name: 'dragPan',
+      enable() {},
+      disable() {},
+      isEnabled: () => true,
+      setOptions() {},
+      getOptions: () => ({}),
+      handlePointer: (ev: NormalizedPointerEvent) =>
+        ev.kind === 'up' ? 'passthrough' : 'exclusive',
+    } as Handler;
+    m.register(lower.h);
+    m.register(owner);
+    m.attach(el);
+
+    el.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, button: 0 }));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 5, clientY: 0 }));
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 5, clientY: 0 }));
+    el.dispatchEvent(new MouseEvent('click', { clientX: 5, clientY: 0, button: 0 }));
+
+    expect(lower.calls.map((call) => call.kind)).not.toContain('click');
+    m.detach();
+  });
+  it('suppresses the click after a moved exclusive gesture releases on move', () => {
+    const el = document.createElement('div');
+    el.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 0,
+      height: 0,
+      right: 0,
+      bottom: 0,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    });
+    const m = new HandlerManager();
+    let releaseOnMove = false;
+    const lower = recordingHandler('clickSelect', 'passthrough');
+    const owner = {
+      name: 'dragPan',
+      enable() {},
+      disable() {},
+      isEnabled: () => true,
+      setOptions() {},
+      getOptions: () => ({}),
+      handlePointer: (ev: NormalizedPointerEvent) =>
+        ev.kind === 'move' && releaseOnMove ? 'passthrough' : 'exclusive',
+    } as Handler;
+    m.register(lower.h);
+    m.register(owner);
+    m.attach(el);
+
+    el.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, button: 0 }));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 5, clientY: 0 }));
+    releaseOnMove = true;
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 6, clientY: 0 }));
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 6, clientY: 0 }));
+    el.dispatchEvent(new MouseEvent('click', { clientX: 6, clientY: 0, button: 0 }));
+
+    expect(lower.calls.map((call) => call.kind)).not.toContain('click');
     m.detach();
   });
 });

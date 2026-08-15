@@ -4,7 +4,11 @@
 
 import type { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import type { AffineMatrix } from '../edit/commands/feature-affine';
-import type { DrawOverlayState, DrawOverlaySnapKind } from '../renderer/painter';
+import type {
+  DrawOverlayState,
+  DrawOverlaySnapKind,
+  MeasurementOverlayState,
+} from '../renderer/painter';
 import type { ExportFormat } from '../source/source';
 import type { MapLibreIntegrationOptions } from './maplibre-service';
 
@@ -13,6 +17,7 @@ import type { MapLibreIntegrationOptions } from './maplibre-service';
 // Re-export under the legacy names so existing imports keep resolving.
 export type EditDrawState = DrawOverlayState;
 export type SnapKind = DrawOverlaySnapKind;
+export type EditMeasurementState = MeasurementOverlayState;
 
 export type ExpressionEvaluationPolicy = 'trusted' | 'disabled';
 

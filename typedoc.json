@@ -27,6 +27,8 @@
     "LayerRegistry",
     "LineLayerSpecification",
     "MapshaperOps",
+    "MeasurementContextResolver",
+    "MeasurementOverlayState",
     "MutableTopologySource",
     "NormalizedDuckDbBufferOptions",
     "OverlayDuckDbFunction",
@@ -56,5 +58,7 @@
   ],
   "plugin": ["./scripts/typedoc-hide-internals.mjs"],
   "excludeInternal": true,
-  "readme": "none"
+  "readme": "none",
+  "disableGit": true,
+  "sourceLinkTemplate": "https://github.com/mapseekai/emap/blob/master/src/{path}#L{line}"
 }

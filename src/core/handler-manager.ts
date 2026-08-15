@@ -9,6 +9,7 @@ const PRIORITY = [
   'clickSelect',
   'transformFeature',
   'drawFeature',
+  'measure',
   'vertexEdit',
   'dragPan',
 ] as const;
@@ -24,7 +25,13 @@ export class HandlerManager {
   private _element: HTMLElement | null = null;
   private _exclusive: Handler | null = null;
   private _pointerSink: ((ev: NormalizedPointerEvent) => void) | null = null;
-  private _onDown = (e: PointerEvent) => this._dispatch(this._norm(e, 'down'));
+  private _suppressNextClick = false;
+  private _exclusiveGestureMoved = false;
+  private _onDown = (e: PointerEvent) => {
+    this._suppressNextClick = false;
+    this._exclusiveGestureMoved = false;
+    this._dispatch(this._norm(e, 'down'));
+  };
   private _onMove = (e: PointerEvent) => this._dispatch(this._norm(e, 'move'));
   private _onUp = (e: PointerEvent) => this._dispatch(this._norm(e, 'up'));
   private _onClick = (e: MouseEvent) => this._dispatch(this._norm(e, 'click'));
@@ -85,6 +92,8 @@ export class HandlerManager {
     this._element = null;
     this._exclusive = null;
     this._pointerSink = null;
+    this._suppressNextClick = false;
+    this._exclusiveGestureMoved = false;
   }
 
   /** Install (or clear with `null`) a passive observer fed click + non-gesture move. */
@@ -116,18 +125,30 @@ export class HandlerManager {
   }
 
   private _dispatch(ev: NormalizedPointerEvent): void {
+    const hadExclusive = this._exclusive !== null;
+    if (ev.kind === 'move' && !hadExclusive) this._suppressNextClick = false;
     this._dispatchInner(ev);
     this._applyCursor();
   }
 
   private _dispatchInner(ev: NormalizedPointerEvent): void {
+    if (ev.kind === 'click' && this._suppressNextClick) {
+      this._suppressNextClick = false;
+      return;
+    }
+
     if (this._pointerSink) {
       if (ev.kind === 'click' || (ev.kind === 'move' && !this._exclusive)) {
         this._pointerSink(ev);
       }
     }
     if (this._exclusive && (ev.kind === 'move' || ev.kind === 'up')) {
+      if (ev.kind === 'move') this._exclusiveGestureMoved = true;
       const r = this._exclusive.handlePointer(ev);
+      if (this._exclusiveGestureMoved && (ev.kind === 'up' || r !== 'exclusive')) {
+        this._suppressNextClick = true;
+        this._exclusiveGestureMoved = false;
+      }
       if (r !== 'exclusive') this._exclusive = null;
       return;
     }

@@ -100,4 +100,22 @@ export const CONTROL_ICON_PATHS: Readonly<
       },
     ],
   },
+  'measure-length': {
+    viewBox: '0 0 24 24',
+    paths: [
+      {
+        d: 'M4.1 16.4 16.4 4.1 20 7.7 7.7 20H4.1v-3.6Zm2 1.6h.8L18 6.9l-1.6-1.6L5.3 16.4v.8H6.1Zm4-3 1.3 1.3-1.1 1.1L9 16.1l1.1-1.1Zm2.7-2.7 1.3 1.3-1.1 1.1-1.3-1.3 1.1-1.1Zm2.7-2.7 1.3 1.3-1.1 1.1-1.3-1.3 1.1-1.1Z',
+        fillRule: 'evenodd',
+      },
+    ],
+  },
+  'measure-area': {
+    viewBox: '0 0 24 24',
+    paths: [
+      {
+        d: 'M5 4h11l3 5-5.3 10H5L2 13.5 5 4Zm1.3 2L4.2 13.2 6.4 17h6.1l4.2-8.1L14.8 6H6.3Zm2.2 2h4.9l1.1 1.8-2.7 5.2H7.4l-1.1-1.9L8.5 8Z',
+        fillRule: 'evenodd',
+      },
+    ],
+  },
 };

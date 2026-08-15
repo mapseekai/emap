@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EditOverlayRenderer } from './edit-overlay-renderer';
 import type { EditPainter } from './painter';
-import type { EditVertexState } from '../map/types';
+import type { EditMeasurementState, EditVertexState } from '../map/types';
 import { EMAP_THEME_COLORS } from '../theme/colors';
 
 function makePainter(): EditPainter {
@@ -16,8 +16,33 @@ function makePainter(): EditPainter {
     setPixelRatio: vi.fn(),
     drawVertexDots: vi.fn(),
     drawDrawingOverlay: vi.fn(),
+    drawMeasurementOverlay: vi.fn(),
   } as unknown as EditPainter;
 }
+
+const measurementState: EditMeasurementState = {
+  mode: 'area',
+  vertices: [
+    [0, 0],
+    [1, 0],
+    [0, 1],
+  ],
+  committedPath: [
+    [0, 0],
+    [1, 0],
+    [0, 1],
+  ],
+  previewPath: null,
+  fillPath: [
+    [0, 0],
+    [1, 0],
+    [0, 1],
+  ],
+  label: '12.4 km²',
+  labelCoord: [0, 1],
+  completed: true,
+  drawColor: '#000',
+};
 
 describe('EditOverlayRenderer', () => {
   it('renders vertex edit dots and hover affordances with the primary theme color', () => {
@@ -31,7 +56,7 @@ describe('EditOverlayRenderer', () => {
       hoverType: 'interpolated',
     };
 
-    renderer.render('vertex', state, null, arcFilter);
+    renderer.render('vertex', state, null, null, arcFilter);
 
     expect(painter.drawVertexDots).toHaveBeenCalledWith(
       state.shapes,
@@ -57,7 +82,7 @@ describe('EditOverlayRenderer', () => {
       polygonFill: 'rgba(76,175,80,0.2)',
     };
 
-    renderer.render('vertex', state, null, arcFilter);
+    renderer.render('vertex', state, null, null, arcFilter);
 
     expect(painter.drawPolygonFill).toHaveBeenCalledWith(
       state.shapes,
@@ -65,5 +90,16 @@ describe('EditOverlayRenderer', () => {
       state.polygonFill,
       arcFilter,
     );
+  });
+
+  it('routes measurement state only while measure mode is active', () => {
+    const painter = makePainter();
+    const renderer = new EditOverlayRenderer(painter);
+
+    renderer.render('measure', null, null, measurementState);
+    renderer.render('draw', null, null, measurementState);
+
+    expect(painter.drawMeasurementOverlay).toHaveBeenCalledTimes(1);
+    expect(painter.drawMeasurementOverlay).toHaveBeenCalledWith(measurementState);
   });
 });

@@ -35,6 +35,7 @@ const routeIds = [
   'rename-layer',
   'split-layer',
   'interaction-handlers',
+  'measurement',
   'feature-selection',
   'box-select',
   'lasso-select',

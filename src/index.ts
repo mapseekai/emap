@@ -222,6 +222,7 @@ export type {
   ScaleMetrics,
   ScaleViewMetrics,
 } from './geo/scale-calculator';
+export type { MeasurementMode } from './geo/measurement';
 export {
   DEFAULT_CRS,
   inferFromPrj,
@@ -274,6 +275,8 @@ export { VertexEditHandler } from './core/handlers/vertex-edit';
 export type { VertexEditOptions } from './core/handlers/vertex-edit';
 export { DrawFeatureHandler } from './core/handlers/draw-feature';
 export type { DrawFeatureOptions } from './core/handlers/draw-feature';
+export { MeasureHandler } from './core/handlers/measure';
+export type { MeasureOptions, MeasureResult } from './core/handlers/measure';
 export { TransformFeatureHandler } from './core/handlers/transform-feature';
 export type { TransformFeatureOptions } from './core/handlers/transform-feature';
 
@@ -374,6 +377,8 @@ export { EditToolbar } from './ui/edit-toolbar';
 export type { EditToolbarOptions } from './ui/edit-toolbar';
 export { DrawFeatureControl } from './ui/draw-feature-control';
 export type { DrawFeatureControlOptions, DrawGeometryType } from './ui/draw-feature-control';
+export { MeasureControl } from './ui/measure-control';
+export type { MeasureControlOptions } from './ui/measure-control';
 export { HistoryControl } from './ui/history-control';
 export type { HistoryControlOptions } from './ui/history-control';
 export { BoxSelectControl } from './ui/box-select-control';

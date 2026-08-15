@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EditStateStore, type EditStateChange } from './edit-state-store';
-import type { EditDrawState, EditVertexState } from './types';
+import type { EditDrawState, EditMeasurementState, EditVertexState } from './types';
 
 function makeStore() {
   const onChange = vi.fn<[EditStateChange], void>();
@@ -23,12 +23,25 @@ const dummyDraw: EditDrawState = {
   drawColor: '#000',
 };
 
+const dummyMeasurement: EditMeasurementState = {
+  mode: 'area',
+  vertices: [],
+  committedPath: [],
+  previewPath: null,
+  fillPath: null,
+  label: null,
+  labelCoord: null,
+  completed: false,
+  drawColor: '#000',
+};
+
 describe('EditStateStore', () => {
   it('starts in mode=none with null overlays', () => {
     const { store } = makeStore();
     expect(store.mode).toBe('none');
     expect(store.vertex).toBeNull();
     expect(store.draw).toBeNull();
+    expect(store.measurement).toBeNull();
   });
 
   it('fires onChange exactly once per effective mutation', () => {
@@ -71,6 +84,23 @@ describe('EditStateStore', () => {
     expect(store.mode).toBe('vertex');
   });
 
+  it('auto-clears measurement state when leaving measure mode', () => {
+    const { store, onChange } = makeStore();
+    store.setMode('measure');
+    store.setMeasurement(dummyMeasurement);
+    onChange.mockClear();
+
+    store.setMode('none');
+
+    expect(store.measurement).toBeNull();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toMatchObject({
+      modeChanged: true,
+      previousMode: 'measure',
+      current: { measurement: null },
+    });
+  });
+
   it('reports modeChanged=false on overlay-only mutations', () => {
     const { store, onChange } = makeStore();
     store.setMode('vertex');
@@ -82,10 +112,11 @@ describe('EditStateStore', () => {
     expect(change.previousMode).toBe('vertex');
   });
 
-  it('clearVertex / clearDraw are no-ops when already null', () => {
+  it('clearVertex / clearDraw / clearMeasurement are no-ops when already null', () => {
     const { store, onChange } = makeStore();
     store.clearVertex();
     store.clearDraw();
+    store.clearMeasurement();
     expect(onChange).not.toHaveBeenCalled();
   });
 });

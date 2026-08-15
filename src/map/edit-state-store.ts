@@ -1,16 +1,17 @@
-// Centralised edit-mode state. Bundles the three pieces of state that
-// must move together (`mode`, `vertex`, `draw`) so callers can no longer
-// leave one stale when another changes — the store enforces the
-// invariant "vertex/draw state belongs to its mode" automatically.
+// Centralised edit-mode state. Bundles the four pieces of state that
+// must move together (`mode`, `vertex`, `draw`, `measurement`) so callers
+// can no longer leave one stale when another changes — the store enforces
+// the invariant that each overlay belongs to its active mode automatically.
 
-import type { EditVertexState, EditDrawState } from './types';
+import type { EditMeasurementState, EditVertexState, EditDrawState } from './types';
 
-export type EditMode = 'none' | 'vertex' | 'draw' | 'transform';
+export type EditMode = 'none' | 'vertex' | 'draw' | 'measure' | 'transform';
 
 export interface EditStateSnapshot {
   mode: EditMode;
   vertex: EditVertexState | null;
   draw: EditDrawState | null;
+  measurement: EditMeasurementState | null;
 }
 
 export interface EditStateChange {
@@ -28,14 +29,15 @@ export interface EditStateChange {
  * effective mutation so the owner can re-render, toggle the drag-pan
  * gesture, and emit `editmodechange` exactly once.
  *
- * Invariant: vertex/draw state is auto-cleared whenever the mode leaves
- * the corresponding edit mode, so a stale `setEditMode('none')` no
+ * Invariant: vertex/draw/measurement state is auto-cleared whenever the mode
+ * leaves the corresponding edit mode, so a stale `setEditMode('none')` no
  * longer leaks the previous overlay into the next frame.
  */
 export class EditStateStore {
   private _mode: EditMode = 'none';
   private _vertex: EditVertexState | null = null;
   private _draw: EditDrawState | null = null;
+  private _measurement: EditMeasurementState | null = null;
 
   constructor(private _onChange: (change: EditStateChange) => void) {}
 
@@ -48,6 +50,9 @@ export class EditStateStore {
   get draw(): EditDrawState | null {
     return this._draw;
   }
+  get measurement(): EditMeasurementState | null {
+    return this._measurement;
+  }
 
   setMode(mode: EditMode): void {
     if (mode === this._mode) return;
@@ -57,6 +62,7 @@ export class EditStateStore {
     // to `null` directly (not via the setters) so we only emit one change.
     if (mode !== 'vertex') this._vertex = null;
     if (mode !== 'draw') this._draw = null;
+    if (mode !== 'measure') this._measurement = null;
     this._fire(previousMode);
   }
 
@@ -84,9 +90,26 @@ export class EditStateStore {
     this._fire(this._mode);
   }
 
+  setMeasurement(state: EditMeasurementState | null): void {
+    if (this._measurement === state) return;
+    this._measurement = state;
+    this._fire(this._mode);
+  }
+
+  clearMeasurement(): void {
+    if (this._measurement === null) return;
+    this._measurement = null;
+    this._fire(this._mode);
+  }
+
   private _fire(previousMode: EditMode): void {
     this._onChange({
-      current: { mode: this._mode, vertex: this._vertex, draw: this._draw },
+      current: {
+        mode: this._mode,
+        vertex: this._vertex,
+        draw: this._draw,
+        measurement: this._measurement,
+      },
       previousMode,
       modeChanged: previousMode !== this._mode,
     });
