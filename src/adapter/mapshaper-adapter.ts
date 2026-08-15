@@ -468,6 +468,9 @@ type MapshaperRuntimeCrs = NonNullable<NonNullable<MapshaperDataset['info']>['cr
 
 const WGS84_SEMI_MAJOR_AXIS = 6378137;
 const WGS84_FLATTENING = 1 / 298.257223563;
+// Browser-safe WGS84 definition: the mapshaper browser bundle cannot resolve
+// 'EPSG:4326' (no EPSG init files), so always hand mproj a proj4 literal.
+const WGS84_PROJ4 = '+proj=longlat +datum=WGS84 +no_defs';
 const EARTH_SEMI_MAJOR_AXIS_TOLERANCE = 0.01;
 const EARTH_MAX_FLATTENING = 0.01;
 const PROJECTION_NUMBER_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
@@ -505,7 +508,7 @@ function createCoordinateTransformer(
     Number(eccentricitySquared) < 1;
   const a = hasEllipsoid ? Number(semiMajorAxis) : WGS84_SEMI_MAJOR_AXIS;
   const f = hasEllipsoid ? 1 - Math.sqrt(1 - Number(eccentricitySquared)) : WGS84_FLATTENING;
-  const wgs84Projection = useWgs84 ? (parseMapshaperCrs('EPSG:4326') as MprojProjection) : null;
+  const wgs84Projection = useWgs84 ? (parseMapshaperCrs(WGS84_PROJ4) as MprojProjection) : null;
   const mprojApi = mproj as unknown as MprojCoordinateApi;
   const transformPoint = (
     source: MprojProjection,
