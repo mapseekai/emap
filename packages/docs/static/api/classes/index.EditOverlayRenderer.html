@@ -17,6 +17,7 @@
 <li>polygon fill highlight while editing a polygon's vertices</li>
 <li>vertex dots (with hover affordance) while in vertex mode</li>
 <li>the in-progress draw overlay while creating a new feature</li>
+<li>the temporary measurement overlay while measuring</li>
 </ul>
 <p>Pulled out of <code>Emap.render()</code> so the main render loop deals with layers
 only and doesn't need to introspect edit-mode flags or downcast the
@@ -27,7 +28,7 @@ Painter to a concrete implementation.</p>
 <h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: geoparquet-viewer.</p>
 </div></div></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/db8c3ebe80ad9fa476a95391f5c4ab7709d77fa1/src/renderer/edit-overlay-renderer.ts#L19">src/renderer/edit-overlay-renderer.ts:19</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/renderer/edit-overlay-renderer.ts#L20">src/renderer/edit-overlay-renderer.ts:20</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -58,7 +59,7 @@ Painter to a concrete implementation.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">EditOverlayRenderer</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/db8c3ebe80ad9fa476a95391f5c4ab7709d77fa1/src/renderer/edit-overlay-renderer.ts#L20">src/renderer/edit-overlay-renderer.ts:20</a></li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/renderer/edit-overlay-renderer.ts#L21">src/renderer/edit-overlay-renderer.ts:21</a></li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -66,7 +67,7 @@ Painter to a concrete implementation.</p>
 <h3 class="tsd-anchor-link" id="render"><span>render</span><a href="#render" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
 <li class="">
-<div class="tsd-signature tsd-anchor-link" id="render-1"><span class="tsd-kind-call-signature">render</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">editMode</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">EditMode</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">vertexState</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">EditVertexState</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">drawState</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">DrawOverlayState</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">vertexArcFilter</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">arcId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#render-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-signature tsd-anchor-link" id="render-1"><span class="tsd-kind-call-signature">render</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">editMode</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">EditMode</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">vertexState</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">EditVertexState</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">drawState</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">DrawOverlayState</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">measurementState</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">MeasurementOverlayState</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">vertexArcFilter</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">arcId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#render-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Render the edit-mode overlay for the current frame. No-op when
 <code>editMode === 'none'</code> or the relevant state object is <code>null</code>.</p>
@@ -83,12 +84,15 @@ Painter to a concrete implementation.</p>
 <li><span><span class="tsd-kind-parameter">drawState</span>: <span class="tsd-signature-type">DrawOverlayState</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span>
 <div class="tsd-comment tsd-typography"><p>drawState accepts <code>DrawOverlayState | null</code> for render. Required; omission is not allowed. Must be assignable to <code>DrawOverlayState | null</code>.</p>
 </div></li>
+<li><span><span class="tsd-kind-parameter">measurementState</span>: <span class="tsd-signature-type">MeasurementOverlayState</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span>
+<div class="tsd-comment tsd-typography"><p>measurementState accepts <code>MeasurementOverlayState | null</code> for render. Required; omission is not allowed. Must be assignable to <code>MeasurementOverlayState | null</code>.</p>
+</div></li>
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">vertexArcFilter</span>: <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">arcId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span></span>
 <div class="tsd-comment tsd-typography"><p>vertexArcFilter accepts <code>object</code> for render. Optional; omit to leave unset. Must be assignable to <code>object</code>.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/db8c3ebe80ad9fa476a95391f5c4ab7709d77fa1/src/renderer/edit-overlay-renderer.ts#L26">src/renderer/edit-overlay-renderer.ts:26</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/renderer/edit-overlay-renderer.ts#L27">src/renderer/edit-overlay-renderer.ts:27</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
