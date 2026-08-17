@@ -65,6 +65,7 @@ const EXPORT_MIME: Record<ExportFormat, string> = {
   msx: 'application/octet-stream',
   geoparquet: 'application/vnd.apache.parquet',
   geoarrow: 'application/vnd.apache.arrow.file',
+  flatgeobuf: 'application/x-flatgeobuf',
 };
 
 /** Coerce mapshaper export content (string | Uint8Array | ArrayBuffer) to Uint8Array for zip packing. */
@@ -737,6 +738,12 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         throw new Error(
           `'${options.format}' export requires the emap Arrow module — ` +
             `import '@mapseekai/emap/arrow' (or call registerFormat) before export`,
+        );
+      }
+      if (options.format === 'flatgeobuf') {
+        throw new Error(
+          "'flatgeobuf' export requires a registered FlatGeobuf format plugin — " +
+            'call registerFormat before export',
         );
       }
       // mapshaper's `.msx` snapshot format is special-cased: exportFileContent

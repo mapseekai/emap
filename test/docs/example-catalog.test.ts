@@ -8,18 +8,16 @@ import { examplePublicHref, renderCatalog } from '../../packages/examples/src/ca
 const expectedIds = [
   'getting-started/geojson-viewer',
   'getting-started/shapefile-viewer',
-  'geoparquet-viewer',
+  'getting-started/topojson-viewer',
   'flatgeobuf-viewer',
-  'join',
+  'geoparquet-viewer',
+  'export-formats',
+  'online-map-services',
+  'crs-switch',
+  'project',
   'rename-layer',
   'split-layer',
   'merge-layers',
-  'export-geoparquet',
-  'export-roundtrip',
-  'crs-switch',
-  'online-map-services',
-  'project',
-  'web-worker',
   'getting-started/point-style',
   'getting-started/lines',
   'getting-started/polygon-fill',
@@ -45,6 +43,8 @@ const expectedIds = [
   'snapshot',
   'getting-started/points',
   'getting-started/polygons',
+  'join',
+  'web-worker',
   'explode',
   'buffer',
   'simplify',
@@ -67,7 +67,7 @@ const expectedIds = [
 ] as const;
 
 const expectedModules = [
-  { key: 'map-data', zh: '地图与数据', en: 'Map & Data', count: 14 },
+  { key: 'map-data', zh: '地图与数据', en: 'Map & Data', count: 12 },
   {
     key: 'style-interaction',
     zh: '样式与交互',
@@ -75,10 +75,26 @@ const expectedModules = [
     count: 9,
   },
   { key: 'data-editing', zh: '数据编辑', en: 'Data Editing', count: 14 },
-  { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 21 },
+  { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 23 },
 ] as const;
 
-async function executeOnlineMapServicesExample(html: string) {
+interface CustomServiceSubmission {
+  type: 'wms' | 'wmts' | 'xyz' | 'tms' | 'vector' | 'style';
+  name?: string;
+  endpoint?: string;
+  layers?: string;
+  tileTemplate?: string;
+  sourceLayer?: string;
+  renderType?: 'fill' | 'line' | 'circle';
+  styleMode?: 'url' | 'json';
+  styleInput?: string;
+  invalid?: boolean;
+}
+
+async function executeOnlineMapServicesExample(
+  html: string,
+  customService?: CustomServiceSubmission | readonly CustomServiceSubmission[],
+) {
   const parsed = new DOMParser().parseFromString(html, 'text/html');
   const moduleScript = parsed.querySelector<HTMLScriptElement>('script[type="module"]');
   if (!moduleScript?.textContent) throw new Error('online-map-services module script is missing');
@@ -98,7 +114,12 @@ async function executeOnlineMapServicesExample(html: string) {
   const layers: Array<Record<string, unknown>> = [];
   const sharedUiCalls: Array<{ map: unknown; runtime: unknown }> = [];
   const fixtureRequests: string[] = [];
-
+  const customServices: Array<Record<string, unknown>> = [];
+  const customServiceAdds: Array<Record<string, unknown>> = [];
+  const customServiceUpdates: Array<{ id: string; service: Record<string, unknown> }> = [];
+  const customBasemaps: string[] = [];
+  let pendingCustomServiceType: CustomServiceSubmission['type'] | undefined;
+  let resolveCustomService: (() => void) | undefined;
   class FakeLayerControl {}
   class FakeNavigationControl {}
   class FakeTopologySource {
@@ -115,6 +136,25 @@ async function executeOnlineMapServicesExample(html: string) {
     }
   }
   class FakeEmap {
+    public readonly mapLibreServices = {
+      addService: async (service: Record<string, unknown>): Promise<void> => {
+        customServiceAdds.push(service);
+        customServices.push(service);
+        if (pendingCustomServiceType !== 'style') resolveCustomService?.();
+      },
+      updateService: async (id: string, service: Record<string, unknown>): Promise<void> => {
+        customServiceUpdates.push({ id, service });
+        const index = customServices.findIndex((candidate) => candidate.id === id);
+        if (index === -1) customServices.push(service);
+        else customServices[index] = service;
+        if (pendingCustomServiceType !== 'style') resolveCustomService?.();
+      },
+      setBasemap: async (id: string): Promise<void> => {
+        customBasemaps.push(id);
+        resolveCustomService?.();
+      },
+    };
+
     public constructor(options: unknown) {
       constructorOptions.push(options);
       maps.push(this);
@@ -171,6 +211,67 @@ async function executeOnlineMapServicesExample(html: string) {
       'window',
       script,
     )(installExampleMapUi, autoLoadExampleFixtures, loadExampleRuntime, document, fakeWindow);
+    const customServiceSubmissions = customService
+      ? Array.isArray(customService)
+        ? customService
+        : [customService]
+      : [];
+    if (customServiceSubmissions.length > 0) {
+      const type = document.querySelector<HTMLSelectElement>('#custom-service-type');
+      const name = document.querySelector<HTMLInputElement>('#custom-service-name');
+      const endpoint = document.querySelector<HTMLInputElement>('#custom-wms-url');
+      const layers = document.querySelector<HTMLInputElement>('#custom-wms-layers');
+      const tileTemplate = document.querySelector<HTMLInputElement>('#custom-tile-template');
+      const sourceLayer = document.querySelector<HTMLInputElement>('#custom-vector-source-layer');
+      const renderType = document.querySelector<HTMLSelectElement>('#custom-vector-render-type');
+      const styleMode = document.querySelector<HTMLSelectElement>('#custom-style-mode');
+      const styleInput = document.querySelector<HTMLTextAreaElement>('#custom-style-input');
+      const form = document.querySelector<HTMLFormElement>('#custom-service-form');
+      if (
+        !type ||
+        !name ||
+        !endpoint ||
+        !layers ||
+        !tileTemplate ||
+        !sourceLayer ||
+        !renderType ||
+        !styleMode ||
+        !styleInput ||
+        !form
+      ) {
+        throw new Error('online-map-services unified custom-service form is missing');
+      }
+      for (const submission of customServiceSubmissions) {
+        type.value = submission.type;
+        type.dispatchEvent(new Event('change'));
+        expect(type.value).toBe(submission.type);
+        if (
+          submission.type === 'wmts' ||
+          submission.type === 'xyz' ||
+          submission.type === 'tms' ||
+          submission.type === 'vector'
+        ) {
+          expect(tileTemplate.disabled).toBe(false);
+        }
+        name.value = submission.name ?? '';
+        endpoint.value = submission.endpoint ?? '';
+        layers.value = submission.layers ?? '';
+        tileTemplate.value = submission.tileTemplate ?? '';
+        sourceLayer.value = submission.sourceLayer ?? '';
+        renderType.value = submission.renderType ?? 'fill';
+        styleMode.value = submission.styleMode ?? 'url';
+        styleInput.value = submission.styleInput ?? '';
+        pendingCustomServiceType = submission.type;
+        const customServiceApplied = new Promise<void>((resolve) => {
+          resolveCustomService = resolve;
+        });
+        form.requestSubmit();
+        if (submission.invalid) await Promise.resolve();
+        else await customServiceApplied;
+        pendingCustomServiceType = undefined;
+        resolveCustomService = undefined;
+      }
+    }
 
     return {
       constructorOptions,
@@ -179,6 +280,11 @@ async function executeOnlineMapServicesExample(html: string) {
       layers,
       sharedUiCalls,
       fixtureRequests,
+      customServices,
+      customServiceAdds,
+      customServiceUpdates,
+      customBasemaps,
+      statusText: document.querySelector('#status')?.textContent,
       fetchCalls: fetchSpy.mock.calls,
       runtime,
       FakeLayerControl,
@@ -282,6 +388,10 @@ describe('example catalog metadata', () => {
     expect(byId.get('geoparquet-viewer')?.fixtures).toEqual([
       'fixtures/example-geoparquet.parquet',
     ]);
+    expect(byId.get('getting-started/topojson-viewer')?.fixtures).toEqual([]);
+    expect(byId.get('export-formats')?.fixtures).toEqual(['fixtures/task-6-polygons.geojson']);
+    expect(byId.get('join')?.category).toBe('data-analysis');
+    expect(byId.get('web-worker')?.category).toBe('data-analysis');
     expect(byId.get('duckdb-geoparquet-query')?.fixtures).toEqual([
       'fixtures/example-geoparquet.parquet',
     ]);
@@ -326,11 +436,11 @@ describe('example catalog metadata', () => {
     root.querySelector<HTMLButtonElement>('[data-category="map-data"]')?.click();
 
     expect(root.querySelector('.catalog-group-title')?.textContent).toBe('地图与数据');
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(14);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(12);
     expect(root.querySelector('[data-category="map-data"]')?.getAttribute('aria-pressed')).toBe(
       'true',
     );
-    expect(root.querySelector('.catalog-results-summary')?.textContent).toContain('14');
+    expect(root.querySelector('.catalog-results-summary')?.textContent).toContain('12');
   });
 
   it('searches localized text, ids, tags, and API identifiers', () => {
@@ -349,7 +459,7 @@ describe('example catalog metadata', () => {
     search.dispatchEvent(new Event('input', { bubbles: true }));
     expect(
       Array.from(root.querySelectorAll('.example-card-title'), ({ textContent }) => textContent),
-    ).toEqual(['GeoParquet / GeoArrow 查看器', '导出 GeoParquet / GeoArrow', '导出往返']);
+    ).toEqual(['GeoParquet / GeoArrow 查看器']);
 
     search.value = 'getting-started/lines';
     search.dispatchEvent(new Event('input', { bubbles: true }));
@@ -365,11 +475,11 @@ describe('example catalog metadata', () => {
     language.dispatchEvent(new Event('change'));
     const englishSearch = root.querySelector<HTMLInputElement>('.catalog-search-input');
     if (!englishSearch) throw new Error('English catalog search was not rendered');
-    englishSearch.value = 'immediately reimports a dataset';
+    englishSearch.value = 'downloads GeoJSON, Shapefile, TopoJSON';
     englishSearch.dispatchEvent(new Event('input', { bubbles: true }));
     expect(
       Array.from(root.querySelectorAll('.example-card-title'), ({ textContent }) => textContent),
-    ).toEqual(['Export roundtrip']);
+    ).toEqual(['Export formats']);
   });
 
   it('combines filters, clears search, and renders an empty result', () => {
@@ -381,14 +491,14 @@ describe('example catalog metadata', () => {
 
     search.value = 'TopologySource.fromBytes';
     search.dispatchEvent(new Event('input', { bubbles: true }));
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(3);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(1);
 
     search.value = 'no-such-example';
     search.dispatchEvent(new Event('input', { bubbles: true }));
     expect(root.querySelector('.catalog-empty')).not.toBeNull();
 
     root.querySelector<HTMLButtonElement>('.catalog-empty-clear')?.click();
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(14);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(12);
     expect(root.querySelector<HTMLInputElement>('.catalog-search-input')?.value).toBe('');
   });
 
@@ -450,7 +560,7 @@ describe('example catalog metadata', () => {
     if (!mobileCategory) throw new Error('Mobile category selector was not rendered');
     mobileCategory.value = 'data-analysis';
     mobileCategory.dispatchEvent(new Event('change'));
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(21);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(23);
   });
 
   it('defaults to Chinese and switches the complete catalog to English', () => {
@@ -509,7 +619,7 @@ describe('example catalog metadata', () => {
     );
     expect(
       Array.from(root.querySelectorAll('.example-card-title'), ({ textContent }) => textContent),
-    ).toEqual(['Export GeoParquet / GeoArrow', 'Export roundtrip']);
+    ).toEqual(['Export formats']);
   });
 
   it('ships one canonical runnable HTML page for every metadata entry', async () => {
@@ -540,12 +650,39 @@ describe('example catalog metadata', () => {
     }
   });
 
+  it('exposes TopoJSON import and the requested six export formats', async () => {
+    const topojsonHtml = await readFile(
+      resolve('packages/examples/examples/getting-started/topojson-viewer/index.html'),
+      'utf8',
+    );
+    const topojson = new DOMParser().parseFromString(topojsonHtml, 'text/html');
+    expect(topojson.querySelector<HTMLInputElement>('#file-input')?.accept).toContain('.topojson');
+
+    const exporterHtml = await readFile(
+      resolve('packages/examples/examples/export-formats/index.html'),
+      'utf8',
+    );
+    const exporter = new DOMParser().parseFromString(exporterHtml, 'text/html');
+    expect(exporter.querySelector<HTMLInputElement>('#file-input')?.accept).toContain('.fgb');
+    expect(
+      Array.from(
+        exporter.querySelectorAll<HTMLOptionElement>('#format option'),
+        ({ value }) => value,
+      ),
+    ).toEqual(['geojson', 'shapefile', 'topojson', 'flatgeobuf', 'geoparquet', 'geoarrow']);
+  });
+
   it('constructs the online services registry and installs map UI and business layers', async () => {
     const html = await readFile(
       resolve('packages/examples/examples/online-map-services/index.html'),
       'utf8',
     );
-    const result = await executeOnlineMapServicesExample(html);
+    const result = await executeOnlineMapServicesExample(html, {
+      type: 'wms',
+      endpoint: 'https://example.test/geoserver/wms?token=demo',
+      layers: 'demo:parcels',
+      name: 'Parcel WMS',
+    });
     const options = result.constructorOptions[0] as {
       container: string;
       mapLibre: {
@@ -590,7 +727,264 @@ describe('example catalog metadata', () => {
       expect.objectContaining({ id: 'business-polygons', source: 'business-data', type: 'fill' }),
     ]);
     expect(result.fixtureRequests).toEqual(['online-map-services']);
+    expect(result.customServices).toEqual([
+      expect.objectContaining({
+        id: 'custom-wms',
+        name: 'Parcel WMS',
+        role: 'overlay',
+        visible: true,
+      }),
+    ]);
+    expect(
+      (result.customServices[0].sources as Record<string, { tiles: string[] }>)['custom-wms'].tiles,
+    ).toEqual([
+      'https://example.test/geoserver/wms?token=demo&service=WMS&request=GetMap&layers=demo%3Aparcels&styles=&format=image%2Fpng&transparent=true&version=1.1.1&srs=EPSG%3A3857&bbox={bbox-epsg-3857}&width=256&height=256',
+    ]);
     expect(result.fetchCalls).toHaveLength(0);
+  });
+
+  it('registers a WMTS tile template as a visible raster overlay', async () => {
+    const html = await readFile(
+      resolve('packages/examples/examples/online-map-services/index.html'),
+      'utf8',
+    );
+    const result = await executeOnlineMapServicesExample(html, {
+      type: 'wmts',
+      name: 'National WMTS',
+      tileTemplate: 'https://tiles.example.test/wmts/{z}/{y}/{x}.png',
+    });
+
+    const service = result.customServices[0] as {
+      id: string;
+      name: string;
+      role: string;
+      visible: boolean;
+      sources: Record<string, { type: string; tiles: string[]; tileSize: number }>;
+    };
+    expect(service).toMatchObject({
+      id: 'custom-wmts',
+      name: 'National WMTS',
+      role: 'overlay',
+      visible: true,
+    });
+    expect(service.sources['custom-wmts']).toEqual({
+      type: 'raster',
+      tiles: ['https://tiles.example.test/wmts/{z}/{y}/{x}.png'],
+      tileSize: 256,
+    });
+  });
+
+  it('registers a TMS tile template with its inverted row scheme', async () => {
+    const html = await readFile(
+      resolve('packages/examples/examples/online-map-services/index.html'),
+      'utf8',
+    );
+    const result = await executeOnlineMapServicesExample(html, {
+      type: 'tms',
+      name: 'Local TMS',
+      tileTemplate: 'https://tiles.example.test/tms/{z}/{x}/{y}.png',
+    });
+
+    const service = result.customServices[0] as {
+      id: string;
+      name: string;
+      role: string;
+      visible: boolean;
+      sources: Record<string, { type: string; tiles: string[]; tileSize: number; scheme?: string }>;
+    };
+    expect(service).toMatchObject({
+      id: 'custom-tms',
+      name: 'Local TMS',
+      role: 'overlay',
+      visible: true,
+    });
+    expect(service.sources['custom-tms']).toEqual({
+      type: 'raster',
+      tiles: ['https://tiles.example.test/tms/{z}/{x}/{y}.png'],
+      tileSize: 256,
+      scheme: 'tms',
+    });
+  });
+
+  it('registers an XYZ tile template with its standard row scheme', async () => {
+    const html = await readFile(
+      resolve('packages/examples/examples/online-map-services/index.html'),
+      'utf8',
+    );
+    const result = await executeOnlineMapServicesExample(html, {
+      type: 'xyz',
+      name: 'Standard XYZ',
+      tileTemplate: 'https://tiles.example.test/xyz/{z}/{x}/{y}.png',
+    });
+
+    const service = result.customServices[0] as {
+      id: string;
+      name: string;
+      role: string;
+      visible: boolean;
+      sources: Record<string, { type: string; tiles: string[]; tileSize: number; scheme?: string }>;
+    };
+    expect(service).toMatchObject({
+      id: 'custom-xyz',
+      name: 'Standard XYZ',
+      role: 'overlay',
+      visible: true,
+    });
+    expect(service.sources['custom-xyz']).toEqual({
+      type: 'raster',
+      tiles: ['https://tiles.example.test/xyz/{z}/{x}/{y}.png'],
+      tileSize: 256,
+      scheme: 'xyz',
+    });
+  });
+
+  it('registers vector tiles with the selected source layer and render mode', async () => {
+    const html = await readFile(
+      resolve('packages/examples/examples/online-map-services/index.html'),
+      'utf8',
+    );
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    expect(parsed.querySelectorAll('#custom-tile-template')).toHaveLength(1);
+    const result = await executeOnlineMapServicesExample(html, {
+      type: 'vector',
+      name: 'Road network',
+      tileTemplate: 'https://tiles.example.test/vector/{z}/{x}/{y}.pbf',
+      sourceLayer: 'roads',
+      renderType: 'line',
+    });
+
+    const service = result.customServices[0] as {
+      id: string;
+      role: string;
+      sources: Record<string, { type: string; tiles: string[] }>;
+      layers: Array<Record<string, unknown>>;
+    };
+    expect(service).toMatchObject({ id: 'custom-vector', role: 'overlay' });
+    expect(service.sources['custom-vector']).toEqual({
+      type: 'vector',
+      tiles: ['https://tiles.example.test/vector/{z}/{x}/{y}.pbf'],
+    });
+    expect(service.layers).toEqual([
+      expect.objectContaining({
+        id: 'custom-vector-layer',
+        type: 'line',
+        source: 'custom-vector',
+        'source-layer': 'roads',
+      }),
+    ]);
+  });
+
+  it('registers MapLibre Style URLs and inline JSON as an active basemap', async () => {
+    const html = await readFile(
+      resolve('packages/examples/examples/online-map-services/index.html'),
+      'utf8',
+    );
+    const urlResult = await executeOnlineMapServicesExample(html, {
+      type: 'style',
+      name: 'Hosted style',
+      styleMode: 'url',
+      styleInput: 'https://styles.example.test/basic/style.json',
+    });
+    const jsonResult = await executeOnlineMapServicesExample(html, {
+      type: 'style',
+      name: 'Inline style',
+      styleMode: 'json',
+      styleInput: '{"version":8,"sources":{},"layers":[]}',
+    });
+
+    expect(urlResult.customServices).toEqual([
+      expect.objectContaining({
+        id: 'custom-style',
+        name: 'Hosted style',
+        role: 'basemap',
+        style: 'https://styles.example.test/basic/style.json',
+      }),
+    ]);
+    expect(urlResult.customBasemaps).toEqual(['custom-style']);
+    expect(jsonResult.customServices).toEqual([
+      expect.objectContaining({
+        id: 'custom-style',
+        name: 'Inline style',
+        role: 'basemap',
+        style: { version: 8, sources: {}, layers: [] },
+      }),
+    ]);
+    expect(jsonResult.customBasemaps).toEqual(['custom-style']);
+  });
+
+  it('updates a re-submitted custom service instead of registering a duplicate id', async () => {
+    const html = await readFile(
+      resolve('packages/examples/examples/online-map-services/index.html'),
+      'utf8',
+    );
+    const result = await executeOnlineMapServicesExample(html, [
+      {
+        type: 'wms',
+        name: 'Initial overlay',
+        endpoint: 'https://example.test/geoserver/wms',
+        layers: 'demo:parcels',
+      },
+      {
+        type: 'wms',
+        name: 'Updated overlay',
+        endpoint: 'https://example.test/geoserver/wms',
+        layers: 'demo:buildings',
+      },
+    ]);
+
+    expect(result.customServiceAdds).toHaveLength(1);
+    expect(result.customServiceUpdates).toEqual([
+      expect.objectContaining({
+        id: 'custom-wms',
+        service: expect.objectContaining({ name: 'Updated overlay' }),
+      }),
+    ]);
+    expect(result.customServices).toEqual([
+      expect.objectContaining({
+        id: 'custom-wms',
+        name: 'Updated overlay',
+      }),
+    ]);
+  });
+
+  it('rejects malformed or structurally incomplete MapLibre Style JSON', async () => {
+    const html = await readFile(
+      resolve('packages/examples/examples/online-map-services/index.html'),
+      'utf8',
+    );
+
+    for (const styleInput of [
+      '{"version":"8"}',
+      '{"version":8}',
+      '{"version":7,"sources":{},"layers":[]}',
+    ]) {
+      const result = await executeOnlineMapServicesExample(html, {
+        type: 'style',
+        styleMode: 'json',
+        styleInput,
+        invalid: true,
+      });
+
+      expect(result.customServices).toEqual([]);
+      expect(result.customBasemaps).toEqual([]);
+      expect(result.statusText).toContain('Style JSON');
+    }
+  });
+
+  it('reports invalid WMS URLs through status without registering a service', async () => {
+    const html = await readFile(
+      resolve('packages/examples/examples/online-map-services/index.html'),
+      'utf8',
+    );
+    const result = await executeOnlineMapServicesExample(html, {
+      type: 'wms',
+      endpoint: 'not-a-url',
+      layers: 'demo:parcels',
+      invalid: true,
+    });
+
+    expect(result.customServices).toEqual([]);
+    expect(result.statusText).toContain('WMS 地址');
   });
 
   it('keeps the Shapefile viewer map-first with one banner and one floating workbench', async () => {

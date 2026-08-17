@@ -39,6 +39,29 @@ describe('flatgeobuf example format plugin', () => {
     expect(source.getCRS()).toBe('EPSG:4326');
   });
 
+  it('exports FlatGeobuf with its features and EPSG header', async () => {
+    installFlatGeobufFormat({ registerFormat, getDefaultMapshaperAdapter });
+
+    const source = new TopologySource('fgb-export');
+    await source.setData({
+      filename: 'example-flatgeobuf.fgb',
+      content: new Uint8Array(readFileSync(FIXTURE)),
+    });
+
+    const blob = await source.export({ format: 'flatgeobuf' as never });
+    const output = new Uint8Array(await blob.arrayBuffer());
+    const roundTripped = new TopologySource('fgb-roundtrip');
+    await roundTripped.setData({ filename: 'export.fgb', content: output });
+
+    const outputFeatureCount = roundTripped
+      .getDataset()
+      ?.layers.reduce((count, layer) => count + (layer.shapes?.length ?? 0), 0);
+
+    expect(blob.type).toBe('application/x-flatgeobuf');
+    expect(outputFeatureCount).toBe(3);
+    expect(roundTripped.getCRS()).toBe('EPSG:4326');
+  });
+
   it('rejects .fgb with a plugin-hinting error when nothing is registered', async () => {
     const source = new TopologySource('fgb-missing');
     await expect(

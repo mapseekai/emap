@@ -19,9 +19,17 @@ export interface Source extends EventDispatcher {
 /**
  * File formats emap can serialize a dataset to. Mirrors the import format
  * set. `geoparquet` / `geoarrow` require the optional Arrow module
- * (`@mapseekai/emap/arrow`) to be imported first.
+ * (`@mapseekai/emap/arrow`) to be imported first; `flatgeobuf` requires a
+ * registered format plugin.
  */
-export type ExportFormat = 'geojson' | 'topojson' | 'shapefile' | 'msx' | 'geoparquet' | 'geoarrow';
+export type ExportFormat =
+  | 'geojson'
+  | 'topojson'
+  | 'shapefile'
+  | 'msx'
+  | 'geoparquet'
+  | 'geoarrow'
+  | 'flatgeobuf';
 
 /** Options for {@link TopologySource.export}. */
 export interface ExportOptions {

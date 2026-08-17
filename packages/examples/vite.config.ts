@@ -15,6 +15,7 @@ const assetIntegrity = JSON.parse(process.env.EMAP_EXAMPLES_ASSET_INTEGRITY ?? '
 const routeIds = [
   'getting-started/geojson-viewer',
   'getting-started/shapefile-viewer',
+  'getting-started/topojson-viewer',
   'getting-started/points',
   'getting-started/point-style',
   'getting-started/lines',
@@ -27,8 +28,7 @@ const routeIds = [
   'filter-features',
   'geoparquet-viewer',
   'flatgeobuf-viewer',
-  'export-geoparquet',
-  'export-roundtrip',
+  'export-formats',
   'join',
   'merge-layers',
   'merge-selected',

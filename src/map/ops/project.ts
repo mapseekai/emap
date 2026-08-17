@@ -26,6 +26,7 @@ const PROJECT_EXPORT_EXTENSIONS: Record<ExportFormat, string> = {
   msx: 'msx',
   geoparquet: 'parquet',
   geoarrow: 'arrow',
+  flatgeobuf: 'fgb',
 };
 
 export async function projectLayer(

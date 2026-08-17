@@ -19,6 +19,11 @@ interface FlatGeobufExampleRuntime {
   getDefaultMapshaperAdapter: typeof getDefaultMapshaperAdapter;
 }
 
+function epsgCode(crs: string | undefined): number | undefined {
+  const code = /^EPSG:(\d+)$/i.exec(crs ?? '')?.[1];
+  return code ? Number(code) : undefined;
+}
+
 export function installFlatGeobufFormat(emap: FlatGeobufExampleRuntime): void {
   emap.registerFormat({
     name: 'flatgeobuf',
@@ -41,6 +46,23 @@ export function installFlatGeobufFormat(emap: FlatGeobufExampleRuntime): void {
       }
       return dataset;
     },
-    exportFormats: {},
+    exportFormats: {
+      flatgeobuf: async (dataset) => {
+        const file = emap
+          .getDefaultMapshaperAdapter()
+          .exportFileContent(dataset, { format: 'geojson' })[0];
+        if (!file) throw new Error('FlatGeobuf export produced no GeoJSON');
+        const json =
+          typeof file.content === 'string'
+            ? file.content
+            : new TextDecoder().decode(file.content);
+        return [
+          {
+            filename: 'export.fgb',
+            content: geojson.serialize(JSON.parse(json), epsgCode(dataset.info?.crs_string)),
+          },
+        ];
+      },
+    },
   });
 }

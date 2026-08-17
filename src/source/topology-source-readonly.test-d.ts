@@ -34,3 +34,5 @@ layers.push({ shapes: null });
 const arcs = source.getArcs();
 // @ts-expect-error direct coordinate mutation is not exposed
 arcs?.transformPoints?.(() => [0, 0]);
+
+void source.export({ format: 'flatgeobuf' });

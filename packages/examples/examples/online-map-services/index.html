@@ -24,6 +24,99 @@
         </div>
         <p id="status" class="emap-example-status">正在加载本地示例数据…</p>
       </section>
+      <section class="emap-example-section" aria-labelledby="custom-service-title">
+        <h2 id="custom-service-title">自定义在线服务</h2>
+        <p id="custom-service-hint" class="emap-example-hint">
+          输入 WMS 服务地址和图层名；页面会创建 EPSG:3857 的透明 PNG 叠加层。
+        </p>
+        <form id="custom-service-form" novalidate>
+          <div class="emap-example-field">
+            <label for="custom-service-type">服务类型</label>
+            <select id="custom-service-type">
+              <option value="wms">WMS</option>
+              <option value="wmts">WMTS</option>
+              <option value="xyz">XYZ</option>
+              <option value="tms">TMS</option>
+              <option value="vector">矢量切片</option>
+              <option value="style">MapLibre Style</option>
+            </select>
+          </div>
+          <div class="emap-example-field">
+            <label for="custom-service-name">显示名称</label>
+            <input id="custom-service-name" type="text" placeholder="我的在线服务" />
+          </div>
+          <div data-service-type="wms">
+            <div class="emap-example-field">
+              <label for="custom-wms-url">WMS 地址</label>
+              <input
+                id="custom-wms-url"
+                type="url"
+                placeholder="https://example.com/geoserver/wms"
+                required
+              />
+            </div>
+            <div class="emap-example-field">
+              <label for="custom-wms-layers">图层名</label>
+              <input id="custom-wms-layers" type="text" placeholder="workspace:layer" required />
+            </div>
+          </div>
+          <div data-service-types="wmts xyz tms vector" hidden>
+            <div class="emap-example-field">
+              <label for="custom-tile-template">瓦片模板</label>
+              <input
+                id="custom-tile-template"
+                type="text"
+                inputmode="url"
+                placeholder="https://example.com/tiles/{z}/{x}/{y}"
+                required
+                disabled
+              />
+            </div>
+          </div>
+          <div data-service-type="vector" hidden>
+            <div class="emap-example-field">
+              <label for="custom-vector-source-layer">Source layer</label>
+              <input
+                id="custom-vector-source-layer"
+                type="text"
+                placeholder="roads"
+                required
+                disabled
+              />
+            </div>
+            <div class="emap-example-field">
+              <label for="custom-vector-render-type">渲染类型</label>
+              <select id="custom-vector-render-type" disabled>
+                <option value="fill">面</option>
+                <option value="line">线</option>
+                <option value="circle">点</option>
+              </select>
+            </div>
+          </div>
+          <div data-service-type="style" hidden>
+            <div class="emap-example-field">
+              <label for="custom-style-mode">Style 输入</label>
+              <select id="custom-style-mode" disabled>
+                <option value="url">Style URL</option>
+                <option value="json">Style JSON</option>
+              </select>
+            </div>
+            <div class="emap-example-field">
+              <label for="custom-style-input">Style 数据</label>
+              <textarea
+                id="custom-style-input"
+                rows="5"
+                placeholder="https://example.com/style.json 或 {&quot;version&quot;:8,&quot;sources&quot;:{},&quot;layers&quot;:[]}"
+                required
+                disabled
+              ></textarea>
+            </div>
+          </div>
+          <button id="custom-service-submit" type="submit" class="emap-example-primary-button">
+            添加 / 更新 WMS
+          </button>
+        </form>
+      </section>
     </div>
   </details>
 
@@ -127,6 +220,207 @@
     const LAYER_ID = 'business-polygons';
     const fileInput = document.getElementById('file-input');
     const status = document.getElementById('status');
+    const CUSTOM_SERVICE_IDS = {
+      wms: 'custom-wms',
+      wmts: 'custom-wmts',
+      xyz: 'custom-xyz',
+      tms: 'custom-tms',
+      vector: 'custom-vector',
+      style: 'custom-style',
+    };
+    const customServiceForm = document.getElementById('custom-service-form');
+    const customServiceType = document.getElementById('custom-service-type');
+    const customServiceName = document.getElementById('custom-service-name');
+    const customServiceHint = document.getElementById('custom-service-hint');
+    const customWmsUrl = document.getElementById('custom-wms-url');
+    const customWmsLayers = document.getElementById('custom-wms-layers');
+    const customTileTemplate = document.getElementById('custom-tile-template');
+    const customVectorSourceLayer = document.getElementById('custom-vector-source-layer');
+    const customVectorRenderType = document.getElementById('custom-vector-render-type');
+    const customStyleMode = document.getElementById('custom-style-mode');
+    const customStyleInput = document.getElementById('custom-style-input');
+    const customServiceSubmit = document.getElementById('custom-service-submit');
+    const customServiceGroups = document.querySelectorAll(
+      '[data-service-type], [data-service-types]',
+    );
+    const registeredCustomServiceIds = new Set();
+    const customServiceHints = {
+      wms: '输入 WMS 服务地址和图层名；页面会创建 EPSG:3857 的透明 PNG 叠加层。',
+      wmts: '输入完整的 WMTS {z}/{x}/{y} 瓦片模板；页面不会请求 Capabilities。',
+      xyz: '输入完整的 XYZ {z}/{x}/{y} 瓦片模板；行坐标从顶部开始。',
+      tms: '输入完整的 TMS {z}/{x}/{y} 瓦片模板；MapLibre 会反转行坐标。',
+      vector: '输入矢量瓦片模板、source-layer 和渲染类型。',
+      style: '输入 MapLibre Style URL 或粘贴完整的 Style JSON；Style 将作为底图启用。',
+    };
+
+    function updateCustomServiceFields() {
+      const type = customServiceType.value;
+      for (const group of customServiceGroups) {
+        const types = group.dataset.serviceTypes ?? group.dataset.serviceType ?? '';
+        const active = types.split(' ').includes(type);
+        group.hidden = !active;
+        for (const field of group.querySelectorAll('input, select, textarea')) {
+          field.disabled = !active;
+        }
+      }
+      customServiceHint.textContent = customServiceHints[type];
+      customServiceSubmit.textContent =
+        type === 'style' ? '添加 / 更新 Style 底图' : `添加 / 更新 ${type.toUpperCase()}`;
+    }
+
+    function requireHttpUrl(value, label) {
+      let url;
+      try {
+        url = new URL(value);
+      } catch {
+        throw new Error(`${label}必须是有效 URL`);
+      }
+      if (url.protocol !== 'http:' && url.protocol !== 'https:')
+        throw new Error(`${label}必须使用 http 或 https`);
+      return url;
+    }
+
+    function requireTileTemplate(value, label) {
+      requireHttpUrl(value, label);
+      if (!['{z}', '{x}', '{y}'].every((token) => value.includes(token)))
+        throw new Error(`${label}必须包含 {z}、{x} 和 {y}`);
+      return value;
+    }
+
+    function createRasterOverlay(id, name, tileTemplate, scheme) {
+      const source = { type: 'raster', tiles: [tileTemplate], tileSize: 256 };
+      if (scheme) source.scheme = scheme;
+      return {
+        id,
+        name,
+        role: 'overlay',
+        visible: true,
+        sources: {
+          [id]: source,
+        },
+        layers: [
+          {
+            id: `${id}-layer`,
+            type: 'raster',
+            source: id,
+            paint: { 'raster-opacity': 0.55 },
+          },
+        ],
+      };
+    }
+
+    function createWmsTileTemplate(endpoint, layerName) {
+      const url = requireHttpUrl(endpoint, 'WMS 地址');
+      url.hash = '';
+      url.searchParams.set('service', 'WMS');
+      url.searchParams.set('request', 'GetMap');
+      url.searchParams.set('layers', layerName);
+      url.searchParams.set('styles', '');
+      url.searchParams.set('format', 'image/png');
+      url.searchParams.set('transparent', 'true');
+      url.searchParams.set('version', '1.1.1');
+      url.searchParams.set('srs', 'EPSG:3857');
+      return `${url.toString()}&bbox={bbox-epsg-3857}&width=256&height=256`;
+    }
+
+    function createVectorOverlay(name, tileTemplate, sourceLayer, renderType) {
+      const paint = {
+        fill: { 'fill-color': '#0f766e', 'fill-opacity': 0.5 },
+        line: { 'line-color': '#0f766e', 'line-width': 2 },
+        circle: { 'circle-color': '#0f766e', 'circle-radius': 4 },
+      };
+      const id = CUSTOM_SERVICE_IDS.vector;
+      return {
+        id,
+        name,
+        role: 'overlay',
+        visible: true,
+        sources: {
+          [id]: { type: 'vector', tiles: [tileTemplate] },
+        },
+        layers: [
+          {
+            id: `${id}-layer`,
+            type: renderType,
+            source: id,
+            'source-layer': sourceLayer,
+            paint: paint[renderType],
+          },
+        ],
+      };
+    }
+
+    function parseStyle() {
+      const value = customStyleInput.value.trim();
+      if (!value) throw new Error('Style 数据不能为空');
+      if (customStyleMode.value === 'url') {
+        requireHttpUrl(value, 'Style URL');
+        return value;
+      }
+      let style;
+      try {
+        style = JSON.parse(value);
+      } catch {
+        throw new Error('Style JSON 必须是有效 JSON');
+      }
+      if (
+        !style ||
+        Array.isArray(style) ||
+        style.version !== 8 ||
+        !style.sources ||
+        Array.isArray(style.sources) ||
+        typeof style.sources !== 'object' ||
+        !Array.isArray(style.layers)
+      ) {
+        throw new Error('Style JSON 必须包含 version: 8、对象 sources 和数组 layers');
+      }
+      return style;
+    }
+
+    function createCustomService() {
+      const type = customServiceType.value;
+      const name = customServiceName.value.trim();
+      if (type === 'wms') {
+        const endpoint = customWmsUrl.value.trim();
+        const layerName = customWmsLayers.value.trim();
+        if (!endpoint || !layerName) throw new Error('WMS 地址和图层名不能为空');
+        return createRasterOverlay(
+          CUSTOM_SERVICE_IDS.wms,
+          name || `WMS: ${layerName}`,
+          createWmsTileTemplate(endpoint, layerName),
+        );
+      }
+      if (type === 'wmts') {
+        const tileTemplate = requireTileTemplate(customTileTemplate.value.trim(), 'WMTS 瓦片模板');
+        return createRasterOverlay(CUSTOM_SERVICE_IDS.wmts, name || 'WMTS', tileTemplate);
+      }
+      if (type === 'xyz') {
+        const tileTemplate = requireTileTemplate(customTileTemplate.value.trim(), 'XYZ 瓦片模板');
+        return createRasterOverlay(CUSTOM_SERVICE_IDS.xyz, name || 'XYZ', tileTemplate, 'xyz');
+      }
+      if (type === 'tms') {
+        const tileTemplate = requireTileTemplate(customTileTemplate.value.trim(), 'TMS 瓦片模板');
+        return createRasterOverlay(CUSTOM_SERVICE_IDS.tms, name || 'TMS', tileTemplate, 'tms');
+      }
+      if (type === 'vector') {
+        const tileTemplate = requireTileTemplate(customTileTemplate.value.trim(), '矢量瓦片模板');
+        const sourceLayer = customVectorSourceLayer.value.trim();
+        if (!sourceLayer) throw new Error('矢量切片 source-layer 不能为空');
+        return createVectorOverlay(
+          name || 'Vector tiles',
+          tileTemplate,
+          sourceLayer,
+          customVectorRenderType.value,
+        );
+      }
+      return {
+        id: CUSTOM_SERVICE_IDS.style,
+        name: name || 'MapLibre Style',
+        role: 'basemap',
+        style: parseStyle(),
+      };
+    }
+
     let hasBusinessLayer = false;
 
     async function loadBusinessLayer(file) {
@@ -166,6 +460,29 @@
       const file = fileInput.files?.[0];
       if (file) void loadBusinessLayer(file);
     });
+    customServiceType.addEventListener('change', updateCustomServiceFields);
+    updateCustomServiceFields();
+    customServiceForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      customServiceSubmit.disabled = true;
+      try {
+        const service = createCustomService();
+        if (registeredCustomServiceIds.has(service.id)) {
+          await map.mapLibreServices.updateService(service.id, service);
+        } else {
+          await map.mapLibreServices.addService(service);
+          registeredCustomServiceIds.add(service.id);
+        }
+        if (service.role === 'basemap') await map.mapLibreServices.setBasemap(service.id);
+        status.textContent = `${service.name} 已添加；右上角可控制显示。`;
+      } catch (error) {
+        console.error(error);
+        status.textContent = `添加服务失败: ${error?.message ?? error}`;
+      } finally {
+        customServiceSubmit.disabled = false;
+      }
+    });
+
     window.addEventListener('resize', () => map.resize());
 
     await autoLoadExampleFixtures('online-map-services');

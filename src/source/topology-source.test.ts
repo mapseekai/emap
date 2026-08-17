@@ -1050,7 +1050,11 @@ describe('TopologySource format plugin routing', () => {
       name: 'test-plugin',
       extensions: ['parquet', 'geoparquet', 'arrow', 'arrows', 'feather'],
       importBinary,
-      exportFormats: { geoparquet: exportHandler, geoarrow: exportHandler },
+      exportFormats: {
+        geoparquet: exportHandler,
+        geoarrow: exportHandler,
+        flatgeobuf: exportHandler,
+      },
     });
     return { importBinary, exportHandler };
   }
@@ -1095,11 +1099,32 @@ describe('TopologySource format plugin routing', () => {
     expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
   });
 
+  it('exports FlatGeobuf through the registered handler with its MIME type', async () => {
+    const { exportHandler } = registerTestPlugin();
+    const source = new TopologySource('p');
+    setPrivate(source, '_dataset', FAKE_DATASET);
+    const blob = await source.export({ format: 'flatgeobuf' as never });
+    expect(exportHandler).toHaveBeenCalledWith(
+      FAKE_DATASET,
+      expect.objectContaining({ format: 'flatgeobuf' }),
+    );
+    expect(blob.type).toBe('application/x-flatgeobuf');
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
   it('throws a registration hint for geoparquet export when unregistered', async () => {
     const source = new TopologySource('p');
     setPrivate(source, '_dataset', FAKE_DATASET);
     await expect(source.export({ format: 'geoparquet' })).rejects.toThrow(
       /@mapseekai\/emap\/arrow/,
+    );
+  });
+
+  it('throws a FlatGeobuf plugin hint when export is unregistered', async () => {
+    const source = new TopologySource('p');
+    setPrivate(source, '_dataset', FAKE_DATASET);
+    await expect(source.export({ format: 'flatgeobuf' as never })).rejects.toThrow(
+      /FlatGeobuf format plugin/,
     );
   });
 });

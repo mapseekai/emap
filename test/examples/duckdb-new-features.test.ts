@@ -11,7 +11,7 @@ const duckDbExamples = [
   readExample('duckdb-spatial-aggregate-join'),
   readExample('duckdb-spatial-ops'),
 ];
-const geoParquetExamples = [readExample('export-geoparquet'), readExample('geoparquet-viewer')];
+const geoParquetExamples = [readExample('export-formats'), readExample('geoparquet-viewer')];
 
 function readExample(id: string): string {
   return readFileSync(
