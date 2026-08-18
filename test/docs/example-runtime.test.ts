@@ -352,25 +352,25 @@ describe('example starter fixtures', () => {
   });
 
   it.each([
-    'duckdb/geometry/centroid',
-    'duckdb/geometry/envelope',
-    'duckdb/geometry/convex-hull',
-    'duckdb/geometry/boundary',
-    'duckdb/geometry/simplify',
-    'duckdb/geometry/simplify-preserve-topology',
-    'duckdb/geometry/make-valid',
-    'duckdb/attribute/area',
-    'duckdb/attribute/length',
-    'duckdb/attribute/perimeter',
-    'duckdb/attribute/geometry-type',
-    'duckdb/attribute/is-valid',
-    'duckdb/attribute/is-empty',
-    'duckdb/attribute/is-simple',
-    'duckdb/attribute/x',
-    'duckdb/attribute/y',
-    'duckdb/attribute/centroid-x',
-    'duckdb/attribute/centroid-y',
-  ])('loads %s starter data into its actual #file input', async (id) => {
+    ['duckdb/geometry/centroid', 'task-7-polygons.geojson'],
+    ['duckdb/geometry/envelope', 'task-7-polygons.geojson'],
+    ['duckdb/geometry/convex-hull', 'task-7-polygons.geojson'],
+    ['duckdb/geometry/boundary', 'task-7-polygons.geojson'],
+    ['duckdb/geometry/simplify', 'task-7-polygons.geojson'],
+    ['duckdb/geometry/simplify-preserve-topology', 'task-7-polygons.geojson'],
+    ['duckdb/geometry/make-valid', 'task-7-polygons.geojson'],
+    ['duckdb/attribute/area', 'task-7-polygons.geojson'],
+    ['duckdb/attribute/length', 'task-7-polygons.geojson'],
+    ['duckdb/attribute/perimeter', 'task-7-polygons.geojson'],
+    ['duckdb/attribute/geometry-type', 'task-7-polygons.geojson'],
+    ['duckdb/attribute/is-valid', 'task-7-polygons.geojson'],
+    ['duckdb/attribute/is-empty', 'task-7-polygons.geojson'],
+    ['duckdb/attribute/is-simple', 'task-7-polygons.geojson'],
+    ['duckdb/attribute/x', 'getting-started-points.geojson'],
+    ['duckdb/attribute/y', 'getting-started-points.geojson'],
+    ['duckdb/attribute/centroid-x', 'task-7-polygons.geojson'],
+    ['duckdb/attribute/centroid-y', 'task-7-polygons.geojson'],
+  ])('loads %s starter data into its actual #file input', async (id, expectedFile) => {
     document.body.innerHTML = '<input id="file" type="file"><div id="status"></div>';
     vi.stubGlobal('DataTransfer', TestDataTransfer);
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')));
@@ -382,7 +382,7 @@ describe('example starter fixtures', () => {
     await autoLoadExampleFixtures(id, document);
 
     expect(changed).toBe(1);
-    expect(input.files?.[0]?.name).toBe('task-7-polygons.geojson');
+    expect(input.files?.[0]?.name).toBe(expectedFile);
   });
 
   it('assigns all files to one multiple input before dispatching change', async () => {

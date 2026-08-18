@@ -435,6 +435,12 @@ describe('example catalog metadata', () => {
     expect(byId.get('duckdb-geoparquet-query')?.fixtures).toEqual([
       'fixtures/example-geoparquet.parquet',
     ]);
+    expect(byId.get('duckdb/attribute/x')?.fixtures).toEqual([
+      'fixtures/getting-started-points.geojson',
+    ]);
+    expect(byId.get('duckdb/attribute/y')?.fixtures).toEqual([
+      'fixtures/getting-started-points.geojson',
+    ]);
     expect(byId.get('web-worker')?.featureFlags).toContain('worker');
     expect(byId.get('geoparquet-viewer')?.featureFlags).toContain('formats');
     expect(byId.get('online-map-services')).toMatchObject({

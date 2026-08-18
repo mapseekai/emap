@@ -13,6 +13,11 @@ const fileSelectorIds = new Set([
   'duckdb-spatial-ops',
 ]);
 
+const duckDbPointAttributeIds: Record<string, true> = {
+  'duckdb/attribute/x': true,
+  'duckdb/attribute/y': true,
+};
+
 function bindingsFor(id: string, fixtures: readonly string[]): readonly FixtureBinding[] {
   const filePaths = fixtures.filter((path) => !path.endsWith('.csv'));
   if (id === 'duckdb-overlay') {
@@ -26,6 +31,9 @@ function bindingsFor(id: string, fixtures: readonly string[]): readonly FixtureB
       { selector: '#target-file', paths: filePaths.slice(0, 1) },
       { selector: '#join-file', paths: filePaths.slice(1, 2) },
     ];
+  }
+  if (id in duckDbPointAttributeIds) {
+    return [{ selector: '#file', paths: filePaths }];
   }
   if (filePaths.length === 0) return [];
   return [

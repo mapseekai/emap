@@ -9,6 +9,8 @@ const duckDb = vi.hoisted(() => ({
   setDuckDbRuntime: vi.fn(),
   centroidDatasetWithDuckDb: vi.fn(async (dataset) => dataset),
   areaDatasetWithDuckDb: vi.fn(async (dataset) => dataset),
+  xDatasetWithDuckDb: vi.fn(async (dataset) => dataset),
+  yDatasetWithDuckDb: vi.fn(async (dataset) => dataset),
   runRelationOperation: vi.fn(async (input) => input),
 }));
 
@@ -284,6 +286,26 @@ describe('DuckDB spatial example runner', () => {
     expect(duckDb.areaDatasetWithDuckDb).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ['duckdb/attribute/x', 'x', 'xDatasetWithDuckDb'],
+    ['duckdb/attribute/y', 'y', 'yDatasetWithDuckDb'],
+  ] as const)('runs %s with point-compatible starter input', async (_id, operation, helper) => {
+    const { sources } = fixture();
+    await mountDuckDbSpatialExample({ id: 'test', operation });
+    const input = document.getElementById('file') as HTMLInputElement;
+    Object.defineProperty(input, 'files', {
+      value: [new File(['{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[1,2]},"properties":{}}]}'], 'getting-started-points.geojson')],
+    });
+    input.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
+    document.getElementById('run')!.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(duckDb[helper]).toHaveBeenCalledTimes(1));
+    expect(duckDb[helper]).toHaveBeenCalledWith(
+      expect.objectContaining({ layers: [expect.objectContaining({ geometry_type: 'point' })] }),
+      expect.any(Object),
+      { runtime: true },
+    );
+  });
   it('uses the selected mask for distance and selected target source for later runs', async () => {
     const { sources } = fixture();
     await mountDuckDbSpatialExample({ id: 'test', operation: 'distance' });
