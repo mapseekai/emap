@@ -1,1 +1,22 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Emap 示例 - DuckDB 中心 X 属性</title></head><body class="emap-example-with-floating-header"><div id="header"><a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt=""><span>Emap / Examples</span></a><strong>DuckDB 中心 X 属性</strong></div><div id="map"></div><details class="emap-example-workbench panel" open><summary><h1>DuckDB 中心 X 属性</h1></summary><div class="emap-example-workbench-body"><input id="file" type="file"><select id="target"></select><input id="crs" value="EPSG:4326"><button id="run">运行</button><p id="status"></p><pre id="picked-attributes"></pre></div></details><script type="module">import { mountDuckDbSpatialExample } from '/src/duckdb-spatial-example.ts'; await mountDuckDbSpatialExample({ id: 'duckdb/attribute/centroid-x', operation: 'centroidX' });</script></body></html>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Emap 示例 - DuckDB 中心 X 属性</title></head><body class="emap-example-with-floating-header"><div id="header"><a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt=""><span>Emap / Examples</span></a><strong>DuckDB 中心 X 属性</strong></div><div id="map"></div><details class="emap-example-workbench panel" open><summary><h1>DuckDB 中心 X 属性</h1></summary><div class="emap-example-workbench-body">
+  <section class="emap-example-section">
+    <div class="emap-example-field">
+      <label for="file">数据文件</label>
+      <input id="file" type="file">
+    </div>
+    <div class="emap-example-field">
+      <label for="target">目标图层</label>
+      <select id="target"></select>
+    </div>
+    <div class="emap-example-field">
+      <label for="crs">数据 CRS</label>
+      <input id="crs" value="EPSG:4326">
+    </div>
+  </section>
+
+  <section class="emap-example-section">
+    <button id="run" class="emap-example-primary-button">运行</button>
+    <p id="status" class="emap-example-status"></p>
+    <pre id="picked-attributes"></pre>
+  </section>
+</div></details><script type="module">import { mountDuckDbSpatialExample } from '/src/duckdb-spatial-example.ts'; await mountDuckDbSpatialExample({ id: 'duckdb/attribute/centroid-x', operation: 'centroidX' });</script></body></html>

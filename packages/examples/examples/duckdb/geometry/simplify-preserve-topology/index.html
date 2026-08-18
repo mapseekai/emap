@@ -1,1 +1,35 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Emap 示例 - DuckDB 保拓扑简化</title></head><body class="emap-example-with-floating-header"><div id="header"><a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt=""><span>Emap / Examples</span></a><strong>DuckDB 保拓扑简化</strong></div><div id="map"></div><details class="emap-example-workbench panel" open><summary><h1>DuckDB 保拓扑简化</h1></summary><div class="emap-example-workbench-body"><input id="file" type="file"><select id="target"></select><input id="crs" value="EPSG:4326"><input id="tolerance" type="number" min="0" step="any" value="1"><input id="allow-geographic" type="checkbox"><button id="run">运行</button><p id="status"></p><pre id="picked-attributes"></pre></div></details><script type="module">import { mountDuckDbSpatialExample } from '/src/duckdb-spatial-example.ts';await mountDuckDbSpatialExample({ id: 'duckdb/geometry/simplify-preserve-topology', operation: 'simplifyPreserveTopology' });</script></body></html>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Emap 示例 - DuckDB 保拓扑简化</title></head><body class="emap-example-with-floating-header"><div id="header"><a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt=""><span>Emap / Examples</span></a><strong>DuckDB 保拓扑简化</strong></div><div id="map"></div><details class="emap-example-workbench panel" open><summary><h1>DuckDB 保拓扑简化</h1></summary><div class="emap-example-workbench-body">
+  <section class="emap-example-section">
+    <div class="emap-example-field">
+      <label for="file">数据文件</label>
+      <input id="file" type="file">
+    </div>
+    <div class="emap-example-field">
+      <label for="target">目标图层</label>
+      <select id="target"></select>
+    </div>
+    <div class="emap-example-field">
+      <label for="crs">数据 CRS</label>
+      <input id="crs" value="EPSG:4326">
+    </div>
+  </section>
+
+  <section class="emap-example-section">
+    <div class="emap-example-field">
+      <label id="tolerance-label" for="tolerance">容差</label>
+      <input id="tolerance" type="number" min="0" step="any" value="1">
+    </div>
+    <div class="emap-example-field">
+      <label class="emap-example-check">
+        <input id="allow-geographic" type="checkbox">
+        <span>允许经纬度坐标直接处理</span>
+      </label>
+    </div>
+  </section>
+
+  <section class="emap-example-section">
+    <button id="run" class="emap-example-primary-button">运行</button>
+    <p id="status" class="emap-example-status"></p>
+    <pre id="picked-attributes"></pre>
+  </section>
+</div></details><script type="module">import { mountDuckDbSpatialExample } from '/src/duckdb-spatial-example.ts';await mountDuckDbSpatialExample({ id: 'duckdb/geometry/simplify-preserve-topology', operation: 'simplifyPreserveTopology' });</script></body></html>
