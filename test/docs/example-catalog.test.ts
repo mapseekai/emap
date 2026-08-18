@@ -772,9 +772,35 @@ describe('example catalog metadata', () => {
       ).toBe(true);
       expect(html, `${example.id} keeps a user upload`).toMatch(/type=["']file["']/);
       expect(html, `${example.id} avoids source-tree assets`).not.toMatch(
+
         /\.\.\/\.\.\/(?:dist|src)\//,
       );
       expect(html, `${example.id} uses local starter data`).not.toContain('https://geojson.cn/');
+    }
+  });
+  it('keeps DuckDB geometry maps in the floating-header workbench and validates simplify tolerance', async () => {
+    const geometryIds = [
+      'duckdb/geometry/centroid',
+      'duckdb/geometry/envelope',
+      'duckdb/geometry/convex-hull',
+      'duckdb/geometry/boundary',
+      'duckdb/geometry/simplify',
+      'duckdb/geometry/simplify-preserve-topology',
+      'duckdb/geometry/make-valid',
+    ];
+    for (const id of geometryIds) {
+      const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
+      const page = new DOMParser().parseFromString(html, 'text/html');
+      expect(page.body.classList.contains('emap-example-with-floating-header')).toBe(true);
+      expect(page.querySelector('details.emap-example-workbench.panel')).not.toBeNull();
+    }
+    for (const id of geometryIds.slice(4, 6)) {
+      const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
+      const tolerance = new DOMParser().parseFromString(html, 'text/html')
+        .querySelector<HTMLInputElement>('#tolerance');
+      expect(tolerance?.type).toBe('number');
+      expect(tolerance?.min).toBe('0');
+      expect(tolerance?.step).toBe('any');
     }
   });
 
