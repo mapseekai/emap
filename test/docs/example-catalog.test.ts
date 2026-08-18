@@ -490,6 +490,12 @@ describe('example catalog metadata', () => {
     expect(
       Array.from(root.querySelectorAll('.catalog-topic-section .example-card-title'), ({ textContent }) => textContent),
     ).toEqual(['duckdb-query-one', 'duckdb-query-two', 'duckdb-geometry']);
+    const directGrid = root.querySelector('.catalog-direct-examples');
+    const topic = root.querySelector('.catalog-topic');
+    if (!directGrid || !topic) throw new Error('Expected direct cards and a DuckDB topic');
+    expect(directGrid.compareDocumentPosition(topic) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
     expect(root.querySelectorAll('.catalog-topic a.example-card')).toHaveLength(3);
     expect(root.querySelectorAll('.catalog-direct-examples a.example-card')).toHaveLength(2);
   });
