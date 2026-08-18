@@ -149,14 +149,33 @@ describe('DuckDB spatial example runner', () => {
     expect(document.getElementById('picked-attributes')!.textContent).toContain('picked');
   });
 
-  it('shows relation controls and delegates distanceWithin to the relation runner', async () => {
+  it('runs geometry and attribute helpers, replaces output, and fits its extent', async () => {
+    const { map, sources } = fixture();
+    await mountDuckDbSpatialExample({ id: 'test', operation: 'centroid' });
+    const input = document.getElementById('file') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['point'], 'point.geojson')] });
+    input.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
+    document.getElementById('run')!.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-output')).toBe(true));
+    expect(map.setExtent).toHaveBeenCalledTimes(2);
+    expect(document.getElementById('target')!.value).toBe('duckdb-spatial-output:0');
+    const firstOutputDataset = sources.get('duckdb-spatial-output')?.getDataset();
+    document.getElementById('run')!.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(duckDb.centroidDatasetWithDuckDb).toHaveBeenCalledTimes(2));
+    expect(duckDb.centroidDatasetWithDuckDb.mock.calls[1]?.[0]).toBe(firstOutputDataset);
+
     fixture();
-    await mountDuckDbSpatialExample({ id: 'test', operation: 'distanceWithin' });
-    expect((document.getElementById('relation-mode-label') as HTMLElement).style.display).not.toBe('none');
-    expect((document.getElementById('distance-label') as HTMLElement).style.display).not.toBe('none');
+    await mountDuckDbSpatialExample({ id: 'test', operation: 'area' });
+    const areaInput = document.getElementById('file') as HTMLInputElement;
+    Object.defineProperty(areaInput, 'files', { value: [new File(['point'], 'point.geojson')] });
+    areaInput.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(document.getElementById('run')!).not.toHaveProperty('disabled', true));
+    document.getElementById('run')!.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(duckDb.areaDatasetWithDuckDb).toHaveBeenCalledTimes(1));
   });
 
-  it('runs distance as an attribute relation without exposing a mode selector', async () => {
+  it('uses the selected mask for distance and selected target source for later runs', async () => {
     const { sources } = fixture();
     await mountDuckDbSpatialExample({ id: 'test', operation: 'distance' });
     const input = document.getElementById('file') as HTMLInputElement;
@@ -164,19 +183,57 @@ describe('DuckDB spatial example runner', () => {
     input.dispatchEvent(new Event('change'));
     await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
     document.getElementById('run')!.dispatchEvent(new Event('click'));
-    await vi.waitFor(() => expect(duckDb.runRelationOperation).toHaveBeenCalledTimes(1));
-    expect(duckDb.runRelationOperation.mock.calls[0]?.[2]).toMatchObject({
-      mode: 'attribute',
-      operation: 'distance',
-    });
-    expect((document.getElementById('relation-mode-label') as HTMLElement).style.display).toBe('none');
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-output')).toBe(true));
+    const mask = sources.get('duckdb-spatial-output')!;
+    mask.dataset.layers[0]!.name = 'mask-layer';
+    const maskSelect = document.getElementById('mask-layer') as HTMLSelectElement;
+    maskSelect.value = 'duckdb-spatial-output:0';
+    document.getElementById('run')!.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(duckDb.runRelationOperation).toHaveBeenCalledTimes(2));
+    expect(duckDb.runRelationOperation.mock.calls[1]?.[1]).toMatchObject({ layers: [mask.dataset.layers[0]] });
+    expect((document.getElementById('mask-layer-label') as HTMLElement).style.display).not.toBe('none');
   });
 
-  it('closes the lazily created runtime on pagehide', async () => {
-    fixture();
+  it('discards a result when the input changes during output registration', async () => {
+    const { map, sources } = fixture();
+    const originalAddSource = map.addSource.getMockImplementation()!;
+    map.addSource.mockImplementation(async (id: string, source: Source) => {
+      await originalAddSource(id, source);
+      if (id === 'duckdb-spatial-output') sources.set('duckdb-spatial-input', createSource('changed-input'));
+    });
     await mountDuckDbSpatialExample({ id: 'test', operation: 'centroid' });
+    const input = document.getElementById('file') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['point'], 'point.geojson')] });
+    input.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
     document.getElementById('run')!.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(document.getElementById('status')!.textContent).toContain('结果已丢弃'));
+    expect(sources.has('duckdb-spatial-output')).toBe(false);
+  });
+
+  it('runs distanceWithin through the selected relation mode', async () => {
+    const { sources } = fixture();
+    await mountDuckDbSpatialExample({ id: 'test', operation: 'distanceWithin' });
+    const input = document.getElementById('file') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['point'], 'point.geojson')] });
+    input.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
+    (document.getElementById('relation-mode') as HTMLSelectElement).value = 'attribute';
+    document.getElementById('run')!.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(duckDb.runRelationOperation).toHaveBeenCalledTimes(1));
+    expect(duckDb.runRelationOperation.mock.calls[0]?.[2]).toMatchObject({ operation: 'distanceWithin', mode: 'attribute' });
+  });
+
+  it('closes the created runtime on pagehide', async () => {
+    const { sources } = fixture();
+    await mountDuckDbSpatialExample({ id: 'test', operation: 'centroid' });
+    const input = document.getElementById('file') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['point'], 'point.geojson')] });
+    input.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
+    document.getElementById('run')!.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(duckDb.createDuckDbRuntimeFromJsDelivr).toHaveBeenCalledTimes(1));
     window.dispatchEvent(new Event('pagehide'));
-    await vi.waitFor(() => expect(duckDb.closeDuckDbRuntime).toHaveBeenCalled());
+    await vi.waitFor(() => expect(duckDb.closeDuckDbRuntime).toHaveBeenCalledWith({ runtime: true }));
   });
 });

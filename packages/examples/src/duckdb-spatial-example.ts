@@ -180,10 +180,10 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     toleranceInput.disabled = !operation.controls.tolerance;
     allowGeographicInput.disabled = !operation.controls.tolerance;
     relationModeLabel.style.display = operation.controls.relationMode ? 'inline-flex' : 'none';
-    maskLayerLabel.style.display = operation.kind === 'relation' ? 'inline-flex' : 'none';
+    maskLayerLabel.style.display = operation.kind === 'relation' || operation.operation === 'distance' ? 'inline-flex' : 'none';
     distanceLabel.style.display = operation.controls.distance ? 'inline-flex' : 'none';
     relationMode.disabled = !operation.controls.relationMode;
-    maskLayerSelect.disabled = operation.kind !== 'relation' || layerPickerEntries.length === 0;
+    maskLayerSelect.disabled = !(operation.kind === 'relation' || operation.operation === 'distance') || layerPickerEntries.length === 0;
     distanceInput.disabled = !operation.controls.distance;
   }
 
@@ -290,11 +290,12 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
   runButton.addEventListener('click', async () => {
     const inputSource = map.getSource(INPUT_SOURCE_ID);
     const selected = layerPickerEntries.find((entry) => entry.value === targetSelect.value);
-    if (!inputSource?.getDataset() || !selected) { status.textContent = '请先上传数据文件。'; return; }
+    const selectedSource = selected ? map.getSource(selected.sourceId) : null;
+    if (!inputSource?.getDataset() || !selectedSource?.getDataset() || !selected) { status.textContent = '请先上传数据文件。'; return; }
     runButton.disabled = true;
     try {
       const runtime = await ensureRuntime();
-      const dataset = inputSource.getDataset();
+      const dataset = selectedSource.getDataset();
       const options = {
         layer: selected.layerIndex,
         outputLayer: `${getLayerId(dataset.layers[selected.layerIndex], selected.layerIndex)}_${operation.operation}`,
@@ -304,9 +305,7 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
       };
       let result;
       if (operation.kind === 'relation' || operation.operation === 'distance') {
-        const mask = operation.operation === 'distance'
-          ? selected
-          : (layerPickerEntries.find((entry) => entry.value === maskLayerSelect.value) ?? selected);
+        const mask = layerPickerEntries.find((entry) => entry.value === maskLayerSelect.value) ?? selected;
         const maskSource = map.getSource(mask.sourceId);
         const maskInput = maskSource?.getDataset();
         if (!maskInput) throw new Error('请选择 Mask 图层。');
