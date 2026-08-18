@@ -756,18 +756,16 @@ describe('example catalog metadata', () => {
 
       expect(html, `${example.id} has a map surface`).toContain('id="map"');
       expect(parsed.querySelector('#header'), `${example.id} has a top banner`).not.toBeNull();
-      if (!html.includes('mountDuckDbSpatialExample')) {
-        expect(
-          parsed.querySelector('#header > .emap-example-banner-brand'),
-          `${example.id} places its emap brand first in the banner`,
-        ).toBe(parsed.querySelector('#header')?.firstElementChild);
-        expect(
-          parsed
-            .querySelector<HTMLImageElement>('.emap-example-banner-brand img')
-            ?.getAttribute('src'),
-          `${example.id} uses the canonical emap brand asset`,
-        ).toBe('/mapseekai/emap/examples/emap.svg');
-      }
+      expect(
+        parsed.querySelector('#header > .emap-example-banner-brand'),
+        `${example.id} places its emap brand first in the banner`,
+      ).toBe(parsed.querySelector('#header')?.firstElementChild);
+      expect(
+        parsed
+          .querySelector<HTMLImageElement>('.emap-example-banner-brand img')
+          ?.getAttribute('src'),
+        `${example.id} uses the canonical emap brand asset`,
+      ).toBe('/mapseekai/emap/examples/emap.svg');
       expect(
         html.includes('installExampleMapUi(map') || html.includes('mountDuckDbSpatialExample'),
         `${example.id} installs shared map UI directly or through its DuckDB spatial runner`,

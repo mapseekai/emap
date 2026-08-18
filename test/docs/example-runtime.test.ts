@@ -351,6 +351,29 @@ describe('example starter fixtures', () => {
     );
   });
 
+  it.each([
+    'duckdb/geometry/centroid',
+    'duckdb/geometry/envelope',
+    'duckdb/geometry/convex-hull',
+    'duckdb/geometry/boundary',
+    'duckdb/geometry/simplify',
+    'duckdb/geometry/simplify-preserve-topology',
+    'duckdb/geometry/make-valid',
+  ])('loads %s starter data into its actual #file input', async (id) => {
+    document.body.innerHTML = '<input id="file" type="file"><div id="status"></div>';
+    vi.stubGlobal('DataTransfer', TestDataTransfer);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')));
+    const input = document.querySelector<HTMLInputElement>('#file')!;
+    allowSyntheticFiles(input);
+    let changed = 0;
+    input.addEventListener('change', () => changed += 1);
+
+    await autoLoadExampleFixtures(id, document);
+
+    expect(changed).toBe(1);
+    expect(input.files?.[0]?.name).toBe('task-7-polygons.geojson');
+  });
+
   it('assigns all files to one multiple input before dispatching change', async () => {
     document.body.innerHTML = '<input id="file-input" type="file" multiple>';
     vi.stubGlobal('DataTransfer', TestDataTransfer);
