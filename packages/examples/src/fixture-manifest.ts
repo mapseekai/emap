@@ -30,7 +30,7 @@ function bindingsFor(id: string, fixtures: readonly string[]): readonly FixtureB
   if (filePaths.length === 0) return [];
   return [
     {
-      selector: fileSelectorIds.has(id) || id.startsWith('duckdb/geometry/') ? '#file' : defaultSelector,
+      selector: fileSelectorIds.has(id) || id.startsWith('duckdb/geometry/') || id.startsWith('duckdb/attribute/') ? '#file' : defaultSelector,
       paths: filePaths,
     },
   ];

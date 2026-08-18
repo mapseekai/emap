@@ -359,6 +359,10 @@ describe('example starter fixtures', () => {
     'duckdb/geometry/simplify',
     'duckdb/geometry/simplify-preserve-topology',
     'duckdb/geometry/make-valid',
+    'duckdb/attribute/area',
+    'duckdb/attribute/length',
+    'duckdb/attribute/perimeter',
+    'duckdb/attribute/geometry-type',
   ])('loads %s starter data into its actual #file input', async (id) => {
     document.body.innerHTML = '<input id="file" type="file"><div id="status"></div>';
     vi.stubGlobal('DataTransfer', TestDataTransfer);

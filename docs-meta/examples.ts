@@ -326,6 +326,22 @@ const exampleDescriptions = {
     zh: '使用 DuckDB 的 ST_MakeValid 修复目标图层中的无效几何。',
     en: 'Uses DuckDB ST_MakeValid to repair invalid geometry in the target layer.',
   },
+  'duckdb/attribute/area': {
+    zh: '使用 DuckDB 的 ST_Area 计算目标图层中每个几何的面积属性。',
+    en: 'Uses DuckDB ST_Area to calculate an area attribute for each target-layer geometry.',
+  },
+  'duckdb/attribute/length': {
+    zh: '使用 DuckDB 的 ST_Length 计算目标图层中每个几何的长度属性。',
+    en: 'Uses DuckDB ST_Length to calculate a length attribute for each target-layer geometry.',
+  },
+  'duckdb/attribute/perimeter': {
+    zh: '使用 DuckDB 的 ST_Perimeter 计算目标图层中每个几何的周长属性。',
+    en: 'Uses DuckDB ST_Perimeter to calculate a perimeter attribute for each target-layer geometry.',
+  },
+  'duckdb/attribute/geometry-type': {
+    zh: '使用 DuckDB 的 ST_GeometryType 计算目标图层中每个几何的类型属性。',
+    en: 'Uses DuckDB ST_GeometryType to calculate a geometry-type attribute for each target-layer geometry.',
+  },
   'duckdb-spatial-ops': {
     zh: '集中演示 DuckDB 几何、属性和空间关系函数，并在共享图层选择器中查看结果。',
     en: 'Demonstrates DuckDB geometry, attribute, and spatial-relation functions through a shared layer picker.',
@@ -574,6 +590,10 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('duckdb/geometry/simplify', 'data-analysis', 'DuckDB 几何简化', 'DuckDB simplify', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap', 'simplify'], [task7Fixture], { id: 'duckdb', section: 'geometry' }),
   recipe('duckdb/geometry/simplify-preserve-topology', 'data-analysis', 'DuckDB 保拓扑简化', 'DuckDB simplify preserve topology', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap', 'simplify-preserve-topology'], [task7Fixture], { id: 'duckdb', section: 'geometry' }),
   recipe('duckdb/geometry/make-valid', 'data-analysis', 'DuckDB 修复无效几何', 'DuckDB make valid', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap', 'make-valid'], [task7Fixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/attribute/area', 'data-analysis', 'DuckDB 面积属性', 'DuckDB area attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'area'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
+  recipe('duckdb/attribute/length', 'data-analysis', 'DuckDB 长度属性', 'DuckDB length attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'length'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
+  recipe('duckdb/attribute/perimeter', 'data-analysis', 'DuckDB 周长属性', 'DuckDB perimeter attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'perimeter'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
+  recipe('duckdb/attribute/geometry-type', 'data-analysis', 'DuckDB 几何类型属性', 'DuckDB geometry type attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'geometry-type'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
   recipe('duckdb-spatial-ops', 'data-analysis', 'DuckDB 空间函数', 'DuckDB spatial functions', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap'], [task7Fixture]),
 ];
 

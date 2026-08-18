@@ -114,7 +114,14 @@ const geometryPages = [
   ['duckdb/geometry/make-valid', 'makeValid'],
 ] as const;
 
-async function executeGeometryPage(
+const attributePages = [
+  ['duckdb/attribute/area', 'area'],
+  ['duckdb/attribute/length', 'length'],
+  ['duckdb/attribute/perimeter', 'perimeter'],
+  ['duckdb/attribute/geometry-type', 'geometryType'],
+] as const;
+
+async function executePage(
   id: string,
   mount: (config: { id: string; operation: string }) => Promise<void>,
 ) {
@@ -137,12 +144,33 @@ describe('DuckDB spatial example runner', () => {
     expect(duckDbSpatialOperationDefinitions.map(({ operation }) => operation)).toEqual(operationNames);
   });
 
-  it.each(geometryPages)('mounts %s with its fixed %s operation', async (id, operation) => {
-    const mount = vi.fn(async () => {});
+  it.each([...geometryPages, ...attributePages])(
+    'mounts %s with its fixed %s operation',
+    async (id, operation) => {
+      const mount = vi.fn(async () => {});
 
-    await executeGeometryPage(id, mount);
+      await executePage(id, mount);
 
-    expect(mount).toHaveBeenCalledExactlyOnceWith({ id, operation });
+      expect(mount).toHaveBeenCalledExactlyOnceWith({ id, operation });
+    },
+  );
+
+  it.each(attributePages)('%s exposes only universal runner controls', async (id) => {
+    const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
+    const page = new DOMParser().parseFromString(html, 'text/html');
+
+    expect(page.body.classList.contains('emap-example-with-floating-header')).toBe(true);
+    expect(page.querySelector('details.emap-example-workbench.panel')).not.toBeNull();
+    expect(page.querySelector<HTMLInputElement>('#file')?.type).toBe('file');
+    for (const selector of [
+      '#relation-mode',
+      '#mask-layer',
+      '#distance',
+      '#tolerance',
+      '#allow-geographic',
+    ]) {
+      expect(page.querySelector(selector)).toBeNull();
+    }
   });
 
   it('declares only required controls for simplify and distance relations', () => {
