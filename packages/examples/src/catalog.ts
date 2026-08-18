@@ -338,7 +338,9 @@ function renderCatalogResults(
     groupHeader.append(groupTitle, groupCount);
     group.append(groupHeader);
 
-    const directExamples = groupExamples.filter((example) => example.topic === undefined);
+    const directExamples = groupExamples.filter(
+      (example) => example.topic === undefined || exampleTopics[example.topic.id].category !== category,
+    );
     if (directExamples.length > 0) {
       group.append(renderExampleGrid(directExamples, state.locale, 'catalog-direct-examples'));
     }

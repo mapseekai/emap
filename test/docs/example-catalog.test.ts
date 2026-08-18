@@ -481,8 +481,35 @@ describe('example catalog metadata', () => {
     expect(
       Array.from(root.querySelectorAll('.catalog-topic-section-title'), ({ textContent }) => textContent),
     ).toEqual(['查询与数据接入', '几何处理']);
+    expect(
+      Array.from(
+        root.querySelectorAll('.catalog-direct-examples .example-card-title'),
+        ({ textContent }) => textContent,
+      ),
+    ).toEqual(['ordinary-analysis-one', 'ordinary-analysis-two']);
+    expect(
+      Array.from(root.querySelectorAll('.catalog-topic-section .example-card-title'), ({ textContent }) => textContent),
+    ).toEqual(['duckdb-query-one', 'duckdb-query-two', 'duckdb-geometry']);
     expect(root.querySelectorAll('.catalog-topic a.example-card')).toHaveLength(3);
     expect(root.querySelectorAll('.catalog-direct-examples a.example-card')).toHaveLength(2);
+  });
+
+
+  it('renders category-mismatched topic cards as direct cards', () => {
+    const topicFixture: ExampleDefinition[] = [
+      {
+        ...createTopicFixture('duckdb-in-map-data', { id: 'duckdb', section: 'query' }),
+        category: 'map-data',
+      },
+    ];
+    const root = document.createElement('div');
+    renderCatalog(root, topicFixture);
+
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(1);
+    expect(root.querySelectorAll('.catalog-topic')).toHaveLength(0);
+    expect(root.querySelector('.catalog-direct-examples .example-card-title')?.textContent).toBe(
+      'duckdb-in-map-data',
+    );
   });
 
   it('omits empty DuckDB topic sections after filtering to one card', () => {
