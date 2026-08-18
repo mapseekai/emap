@@ -438,6 +438,9 @@ describe('DuckDB spatial example runner', () => {
     await vi.waitFor(() => expect(sources.has('duckdb-spatial-mask')).toBe(true));
     uploadResolvers.get('duckdb-spatial-input')!();
     await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
+    const initialInputSource = sources.get('duckdb-spatial-input');
+    const initialMaskSource = sources.get('duckdb-spatial-mask');
+
 
     expect(layers.map(({ id }) => id).sort()).toEqual([
       'duckdb-spatial-input-0-point',
@@ -455,7 +458,11 @@ describe('DuckDB spatial example runner', () => {
     const crs = document.getElementById('crs') as HTMLInputElement;
     crs.value = 'EPSG:3857';
     crs.dispatchEvent(new Event('change'));
-    await vi.waitFor(() => expect(sources.has('duckdb-spatial-output')).toBe(false));
+    await vi.waitFor(() => {
+      expect(sources.get('duckdb-spatial-input')).not.toBe(initialInputSource);
+      expect(sources.get('duckdb-spatial-mask')).not.toBe(initialMaskSource);
+      expect(document.getElementById('status')!.textContent).toBe('已按 EPSG:3857 CRS 重新注册数据。');
+    });
     expect(layers.map(({ id }) => id).sort()).toEqual([
       'duckdb-spatial-input-0-point',
       'duckdb-spatial-mask-0-point',
