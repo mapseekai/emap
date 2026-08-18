@@ -9,8 +9,11 @@ const duckDbExamples = [
   readExample('duckdb-overlay'),
   readExample('duckdb-query'),
   readExample('duckdb-spatial-aggregate-join'),
-  readExample('duckdb-spatial-ops'),
 ];
+const duckDbSpatialRunner = readFileSync(
+  resolve(__dirname, '../../packages/examples/src/duckdb-spatial-example.ts'),
+  'utf8',
+);
 const geoParquetExamples = [readExample('export-formats'), readExample('geoparquet-viewer')];
 
 function readExample(id: string): string {
@@ -20,8 +23,8 @@ function readExample(id: string): string {
   );
 }
 
-function importedDuckDbNames(html: string): string[] {
-  const importMatch = html.match(/import\s+\{([^}]+)\}\s+from\s+["']@mapseekai\/emap\/duckdb["']/);
+function importedDuckDbNames(source: string): string[] {
+  const importMatch = source.match(/import\s+\{([^}]+)\}\s+from\s+["']@mapseekai\/emap\/duckdb["']/);
   if (!importMatch) throw new Error('DuckDB module import not found');
   return importMatch[1]
     .split(',')
@@ -138,6 +141,9 @@ describe('DuckDB new feature examples', () => {
       for (const importedName of importedDuckDbNames(html)) {
         expect(exported.has(importedName), `${name}: ${importedName} is not exported`).toBe(true);
       }
+    }
+    for (const importedName of importedDuckDbNames(duckDbSpatialRunner)) {
+      expect(exported.has(importedName), `duckdb spatial runner: ${importedName} is not exported`).toBe(true);
     }
   });
 
