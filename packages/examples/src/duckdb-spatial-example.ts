@@ -306,6 +306,13 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
       let result;
       if (operation.kind === 'relation' || operation.operation === 'distance') {
         const mask = layerPickerEntries.find((entry) => entry.value === maskLayerSelect.value) ?? selected;
+        if (
+          operation.operation === 'distance' &&
+          mask.sourceId === selected.sourceId &&
+          mask.layerIndex === selected.layerIndex
+        ) {
+          throw new Error('Distance requires a different Mask layer.');
+        }
         const maskSource = map.getSource(mask.sourceId);
         const maskInput = maskSource?.getDataset();
         if (!maskInput) throw new Error('请选择 Mask 图层。');
