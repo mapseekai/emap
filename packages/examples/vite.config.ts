@@ -70,6 +70,13 @@ const routeIds = [
   'duckdb-overlay',
   'duckdb-query',
   'duckdb-spatial-aggregate-join',
+  'duckdb/geometry/centroid',
+  'duckdb/geometry/envelope',
+  'duckdb/geometry/convex-hull',
+  'duckdb/geometry/boundary',
+  'duckdb/geometry/simplify',
+  'duckdb/geometry/simplify-preserve-topology',
+  'duckdb/geometry/make-valid',
   'duckdb-spatial-ops',
 ] as const;
 

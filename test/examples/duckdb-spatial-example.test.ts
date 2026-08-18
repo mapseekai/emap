@@ -126,9 +126,10 @@ async function executeGeometryPage(
     '',
   );
   const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
-    mount: typeof mount,
-  ) => () => Promise<void>;
-  await new AsyncFunction(mount)();
+    name: string,
+    body: string,
+  ) => (mount: typeof mount) => Promise<void>;
+  await new AsyncFunction('mountDuckDbSpatialExample', body)(mount);
 }
 
 describe('DuckDB spatial example runner', () => {

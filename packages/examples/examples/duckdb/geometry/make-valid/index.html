@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8" /><title>Emap 示例 - DuckDB 修复无效几何</title></head><body class="emap-example-with-floating-header"><div id="header"><strong>DuckDB 修复无效几何</strong></div><div id="map" tabindex="0"></div><details class="emap-example-workbench panel" open><summary><h1>DuckDB 修复无效几何</h1></summary><section><label>数据文件 <input id="file" type="file" accept=".geojson,.json,.topojson,.zip,.kml,.msx" /></label><label>目标图层 <select id="target" disabled></select></label><label>数据 CRS <input id="crs" value="EPSG:4326" /></label><button id="run" disabled>修复无效几何</button><p id="status">上传数据后修复无效几何。</p><pre id="picked-attributes">(点击地图上的要素)</pre></section></details><script type="module">
+import { mountDuckDbSpatialExample } from '/src/duckdb-spatial-example.ts';
+await mountDuckDbSpatialExample({ id: 'duckdb/geometry/make-valid', operation: 'makeValid' });
+</script></body></html>

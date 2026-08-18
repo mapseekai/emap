@@ -298,6 +298,34 @@ const exampleDescriptions = {
     zh: '用 DuckDB-Wasm 把点位销售统计聚合到行政区域，并比较左连接和内连接结果。',
     en: 'Uses DuckDB-Wasm to aggregate point-sales statistics into administrative areas and compares left and inner results.',
   },
+  'duckdb/geometry/centroid': {
+    zh: '使用 DuckDB 的 ST_Centroid 计算目标图层每个几何的中心点。',
+    en: 'Uses DuckDB ST_Centroid to calculate a center point for each geometry in the target layer.',
+  },
+  'duckdb/geometry/envelope': {
+    zh: '使用 DuckDB 的 ST_Envelope 为目标图层中的每个几何生成外包矩形。',
+    en: 'Uses DuckDB ST_Envelope to generate an enclosing rectangle for each target-layer geometry.',
+  },
+  'duckdb/geometry/convex-hull': {
+    zh: '使用 DuckDB 的 ST_ConvexHull 计算目标图层中每个几何的凸包。',
+    en: 'Uses DuckDB ST_ConvexHull to calculate the convex hull of each target-layer geometry.',
+  },
+  'duckdb/geometry/boundary': {
+    zh: '使用 DuckDB 的 ST_Boundary 提取目标图层中每个几何的边界。',
+    en: 'Uses DuckDB ST_Boundary to extract the boundary of each target-layer geometry.',
+  },
+  'duckdb/geometry/simplify': {
+    zh: '使用 DuckDB 的 ST_Simplify 按给定容差简化目标图层中的几何。',
+    en: 'Uses DuckDB ST_Simplify to simplify target-layer geometry with a selected tolerance.',
+  },
+  'duckdb/geometry/simplify-preserve-topology': {
+    zh: '使用 DuckDB 的 ST_SimplifyPreserveTopology 按容差简化几何并保留拓扑。',
+    en: 'Uses DuckDB ST_SimplifyPreserveTopology to simplify geometry with a tolerance while preserving topology.',
+  },
+  'duckdb/geometry/make-valid': {
+    zh: '使用 DuckDB 的 ST_MakeValid 修复目标图层中的无效几何。',
+    en: 'Uses DuckDB ST_MakeValid to repair invalid geometry in the target layer.',
+  },
   'duckdb-spatial-ops': {
     zh: '集中演示 DuckDB 几何、属性和空间关系函数，并在共享图层选择器中查看结果。',
     en: 'Demonstrates DuckDB geometry, attribute, and spatial-relation functions through a shared layer picker.',
@@ -534,11 +562,18 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('mosaic', 'data-analysis', '平展重叠面', 'Mosaic', [docsOperations], 'Emap', ['spatial', 'history'], [task7Fixture]),
   recipe('check-geometry', 'data-analysis', '几何检查', 'Check geometry', [docsOperations, docsErrors], 'Emap', ['validation', 'history'], [task7Fixture]),
   recipe('rebuild-topology', 'data-analysis', '重建拓扑', 'Rebuild topology', [docsOperations, docsEditing], 'Emap', ['validation', 'editing', 'history'], [task7Fixture]),
-  recipe('duckdb-query', 'data-analysis', 'DuckDB 受限 SELECT', 'DuckDB restricted SELECT', [docsDuckDb, docsStatusControl, docsErrorHandling], 'Emap', ['duckdb', 'query', 'basemap'], [task7Fixture]),
-  recipe('duckdb-geoparquet-query', 'data-analysis', 'DuckDB GeoParquet 查询', 'DuckDB GeoParquet query', [docsDuckDb, docsFormats, docsStatusControl], 'Emap', ['duckdb', 'geoparquet', 'basemap'], ['fixtures/example-geoparquet.parquet']),
-  recipe('duckdb-buffer', 'data-analysis', 'DuckDB 缓冲区', 'DuckDB buffer', [docsDuckDb, docsErrorHandling], 'Emap', ['duckdb', 'basemap'], [task7Fixture]),
-  recipe('duckdb-overlay', 'data-analysis', 'DuckDB Overlay', 'DuckDB overlay', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'overlay', 'basemap'], [task7Fixture, task7MaskFixture]),
-  recipe('duckdb-spatial-aggregate-join', 'data-analysis', 'DuckDB 空间聚合连接', 'DuckDB spatial aggregate join', [docsDuckDb, docsOperations], 'spatialAggregateJoinDatasetWithDuckDb', ['duckdb', 'spatial', 'join', 'aggregate', 'basemap'], [task7MaskFixture, duckDbSpatialAggregatePointsFixture], 'Each target polygon displays count and sales statistics.'),
+  recipe('duckdb-query', 'data-analysis', 'DuckDB 受限 SELECT', 'DuckDB restricted SELECT', [docsDuckDb, docsStatusControl, docsErrorHandling], 'Emap', ['duckdb', 'query', 'basemap'], [task7Fixture], { id: 'duckdb', section: 'query' }),
+  recipe('duckdb-geoparquet-query', 'data-analysis', 'DuckDB GeoParquet 查询', 'DuckDB GeoParquet query', [docsDuckDb, docsFormats, docsStatusControl], 'Emap', ['duckdb', 'geoparquet', 'basemap'], ['fixtures/example-geoparquet.parquet'], { id: 'duckdb', section: 'query' }),
+  recipe('duckdb-buffer', 'data-analysis', 'DuckDB 缓冲区', 'DuckDB buffer', [docsDuckDb, docsErrorHandling], 'Emap', ['duckdb', 'basemap'], [task7Fixture], { id: 'duckdb', section: 'workflow' }),
+  recipe('duckdb-overlay', 'data-analysis', 'DuckDB Overlay', 'DuckDB overlay', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'overlay', 'basemap'], [task7Fixture, task7MaskFixture], { id: 'duckdb', section: 'workflow' }),
+  recipe('duckdb-spatial-aggregate-join', 'data-analysis', 'DuckDB 空间聚合连接', 'DuckDB spatial aggregate join', [docsDuckDb, docsOperations], 'spatialAggregateJoinDatasetWithDuckDb', ['duckdb', 'spatial', 'join', 'aggregate', 'basemap'], [task7MaskFixture, duckDbSpatialAggregatePointsFixture], 'Each target polygon displays count and sales statistics.', { id: 'duckdb', section: 'workflow' }),
+  recipe('duckdb/geometry/centroid', 'data-analysis', 'DuckDB 几何中心', 'DuckDB centroid', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap', 'centroid'], [task7Fixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/geometry/envelope', 'data-analysis', 'DuckDB 外包矩形', 'DuckDB envelope', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap', 'envelope'], [task7Fixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/geometry/convex-hull', 'data-analysis', 'DuckDB 凸包', 'DuckDB convex hull', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap', 'convex-hull'], [task7Fixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/geometry/boundary', 'data-analysis', 'DuckDB 边界', 'DuckDB boundary', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap', 'boundary'], [task7Fixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/geometry/simplify', 'data-analysis', 'DuckDB 几何简化', 'DuckDB simplify', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap', 'simplify'], [task7Fixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/geometry/simplify-preserve-topology', 'data-analysis', 'DuckDB 保拓扑简化', 'DuckDB simplify preserve topology', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap', 'simplify-preserve-topology'], [task7Fixture], { id: 'duckdb', section: 'geometry' }),
+  recipe('duckdb/geometry/make-valid', 'data-analysis', 'DuckDB 修复无效几何', 'DuckDB make valid', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap', 'make-valid'], [task7Fixture], { id: 'duckdb', section: 'geometry' }),
   recipe('duckdb-spatial-ops', 'data-analysis', 'DuckDB 空间函数', 'DuckDB spatial functions', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap'], [task7Fixture]),
 ];
 

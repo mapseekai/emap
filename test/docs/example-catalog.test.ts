@@ -63,9 +63,16 @@ const expectedIds = [
   'duckdb-buffer',
   'duckdb-overlay',
   'duckdb-spatial-aggregate-join',
+  'duckdb/geometry/centroid',
+  'duckdb/geometry/envelope',
+  'duckdb/geometry/convex-hull',
+  'duckdb/geometry/boundary',
+  'duckdb/geometry/simplify',
+  'duckdb/geometry/simplify-preserve-topology',
+  'duckdb/geometry/make-valid',
   'duckdb-spatial-ops',
-] as const;
 
+] as const;
 const expectedModules = [
   { key: 'map-data', zh: '地图与数据', en: 'Map & Data', count: 12 },
   {
@@ -75,12 +82,12 @@ const expectedModules = [
     count: 9,
   },
   { key: 'data-editing', zh: '数据编辑', en: 'Data Editing', count: 14 },
-  { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 23 },
+  { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 30 },
 ] as const;
 
 function createTopicFixture(
   id: string,
-  topic?: { id: 'duckdb'; section: 'query' | 'geometry' },
+  topic?: { id: 'duckdb'; section: 'query' | 'workflow' | 'geometry' },
 ): ExampleDefinition {
   return {
     id,
@@ -465,6 +472,29 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-results-summary')?.textContent).toContain('12');
   });
 
+  it('groups the twelve DuckDB examples by section after ordinary data-analysis cards', () => {
+    const root = document.createElement('div');
+    renderCatalog(root, examples);
+
+    const topic = root.querySelector('.catalog-topic');
+    if (!topic) throw new Error('DuckDB topic was not rendered');
+    expect(topic.querySelectorAll('a.example-card')).toHaveLength(12);
+    expect(
+      Array.from(topic.querySelectorAll('.catalog-topic-section'), (section) => ({
+        title: section.querySelector('.catalog-topic-section-title')?.textContent,
+        count: section.querySelectorAll('a.example-card').length,
+      })),
+    ).toEqual([
+      { title: '查询与数据接入', count: 2 },
+      { title: '专项分析流程', count: 3 },
+      { title: '几何处理', count: 7 },
+    ]);
+    expect(root.querySelectorAll('.catalog-direct-examples a.example-card')).toHaveLength(
+      examples.length - 12,
+    );
+    expect(root.querySelectorAll('.catalog-direct-examples .catalog-topic')).toHaveLength(0);
+  });
+
   it('nests ordered DuckDB topic sections after ordinary data-analysis cards', () => {
     const topicFixture: ExampleDefinition[] = [
       createTopicFixture('ordinary-analysis-one'),
@@ -640,7 +670,7 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-brand img')?.getAttribute('src')).toBe(
       '/mapseekai/emap/examples/emap.svg',
     );
-    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('58');
+    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('65');
 
     const firstCard = root.querySelector<HTMLAnchorElement>(
       'a.example-card[href="/mapseekai/emap/examples/getting-started/geojson-viewer/"]',
@@ -655,7 +685,7 @@ describe('example catalog metadata', () => {
     if (!mobileCategory) throw new Error('Mobile category selector was not rendered');
     mobileCategory.value = 'data-analysis';
     mobileCategory.dispatchEvent(new Event('change'));
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(23);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(30);
   });
 
   it('defaults to Chinese and switches the complete catalog to English', () => {
@@ -726,17 +756,22 @@ describe('example catalog metadata', () => {
 
       expect(html, `${example.id} has a map surface`).toContain('id="map"');
       expect(parsed.querySelector('#header'), `${example.id} has a top banner`).not.toBeNull();
+      if (!html.includes('mountDuckDbSpatialExample')) {
+        expect(
+          parsed.querySelector('#header > .emap-example-banner-brand'),
+          `${example.id} places its emap brand first in the banner`,
+        ).toBe(parsed.querySelector('#header')?.firstElementChild);
+        expect(
+          parsed
+            .querySelector<HTMLImageElement>('.emap-example-banner-brand img')
+            ?.getAttribute('src'),
+          `${example.id} uses the canonical emap brand asset`,
+        ).toBe('/mapseekai/emap/examples/emap.svg');
+      }
       expect(
-        parsed.querySelector('#header > .emap-example-banner-brand'),
-        `${example.id} places its emap brand first in the banner`,
-      ).toBe(parsed.querySelector('#header')?.firstElementChild);
-      expect(
-        parsed
-          .querySelector<HTMLImageElement>('.emap-example-banner-brand img')
-          ?.getAttribute('src'),
-        `${example.id} uses the canonical emap brand asset`,
-      ).toBe('/mapseekai/emap/examples/emap.svg');
-      expect(html, `${example.id} installs the shared map UI`).toContain('installExampleMapUi(map');
+        html.includes('installExampleMapUi(map') || html.includes('mountDuckDbSpatialExample'),
+        `${example.id} installs shared map UI directly or through its DuckDB spatial runner`,
+      ).toBe(true);
       expect(html, `${example.id} keeps a user upload`).toMatch(/type=["']file["']/);
       expect(html, `${example.id} avoids source-tree assets`).not.toMatch(
         /\.\.\/\.\.\/(?:dist|src)\//,
