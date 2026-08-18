@@ -101,6 +101,7 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
   const operation = getDuckDbSpatialOperationDefinition(config.operation);
   const fileInput = requireElement<HTMLInputElement>('file');
   const targetSelect = requireElement<HTMLSelectElement>('target');
+  const maskFileInput = document.getElementById('mask-file') as HTMLInputElement | null;
   const crsInput = requireElement<HTMLInputElement>('crs');
   const allowGeographicInput = operation.controls.tolerance
     ? requireElement<HTMLInputElement>('allow-geographic')
@@ -131,6 +132,7 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
   installExampleMapUi(map, emap);
   const mapContainer = map.getCanvasContainer();
   let uploadedInput: { filename: string; content: Uint8Array } | null = null;
+  let uploadedMask: { filename: string; content: Uint8Array } | null = null;
   let runtimePromise: ReturnType<typeof createDuckDbRuntimeFromJsDelivr> | null = null;
   let layerPickerEntries: Array<{ value: string; sourceId: string; layerIndex: number; layerIds: string[] }> = [];
 
@@ -198,18 +200,29 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     if (distanceInput) distanceInput.disabled = !operation.controls.distance;
   }
 
-  function registerInputSource(source: InstanceType<typeof TopologySource>) {
+  function registerSources() {
     targetSelect.replaceChildren();
     layerPickerEntries = [];
-    addDisplayLayers(INPUT_SOURCE_ID, source, 'duckdb-spatial-input', { fill: '#dbeafe', fillOpacity: 0.45, line: '#1d4ed8', lineWidth: 1.5, pointRadius: 4 });
-    appendLayerPickerOptions(source, INPUT_SOURCE_ID, 'duckdb-spatial-input');
-    if (layerPickerEntries[0]) {
-      targetSelect.value = layerPickerEntries[0].value;
+    const inputSource = map.getSource(INPUT_SOURCE_ID);
+    const maskSource = map.getSource(MASK_SOURCE_ID);
+    if (inputSource) {
+      addDisplayLayers(INPUT_SOURCE_ID, inputSource, 'duckdb-spatial-input', { fill: '#dbeafe', fillOpacity: 0.45, line: '#1d4ed8', lineWidth: 1.5, pointRadius: 4 });
+      appendLayerPickerOptions(inputSource, INPUT_SOURCE_ID, 'duckdb-spatial-input');
+    }
+    if (maskSource) {
+      addDisplayLayers(MASK_SOURCE_ID, maskSource, 'duckdb-spatial-mask', { fill: '#dcfce7', fillOpacity: 0.45, line: '#15803d', lineWidth: 1.5, pointRadius: 4 });
+      appendLayerPickerOptions(maskSource, MASK_SOURCE_ID, 'duckdb-spatial-mask', 'Mask / ');
+    }
+    const inputEntry = layerPickerEntries.find((entry) => entry.sourceId === INPUT_SOURCE_ID);
+    if (inputEntry) {
+      targetSelect.value = inputEntry.value;
       setCurrentLayerVisibility(targetSelect.value);
     }
     populateMaskLayerPicker();
+    const maskEntry = layerPickerEntries.find((entry) => entry.sourceId === MASK_SOURCE_ID);
+    if (maskLayerSelect && maskEntry) maskLayerSelect.value = maskEntry.value;
     updateControls();
-    map.setExtent(source.getExtent());
+    if (inputSource) map.setExtent(inputSource.getExtent());
   }
 
   async function loadInput(upload: { filename: string; content: Uint8Array }) {
@@ -221,7 +234,18 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     removeSourceWithLayers(OUTPUT_SOURCE_ID);
     removeSourceWithLayers(INPUT_SOURCE_ID);
     await map.addSource(INPUT_SOURCE_ID, source);
-    registerInputSource(source);
+    registerSources();
+  }
+
+  async function loadMask(upload: { filename: string; content: Uint8Array }) {
+    const source = new TopologySource(MASK_SOURCE_ID);
+    await source.setData(upload);
+    const dataset = source.getDataset();
+    if (!dataset) throw new Error('遮罩文件未生成可用 dataset');
+    dataset.info = { ...dataset.info, crs_string: crsInput.value.trim() || undefined };
+    removeSourceWithLayers(MASK_SOURCE_ID);
+    await map.addSource(MASK_SOURCE_ID, source);
+    registerSources();
   }
 
   async function reapplyInputCrs() {
@@ -232,6 +256,7 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     targetSelect.disabled = true;
     try {
       await loadInput(uploadedInput);
+      if (uploadedMask) await loadMask(uploadedMask);
       status.textContent = `已按 ${crsInput.value.trim() || '默认'} CRS 重新注册数据。`;
     } catch (error) {
       console.error(error);
@@ -295,6 +320,25 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
       fileInput.disabled = false;
       runButton.disabled = !map.getSource(INPUT_SOURCE_ID)?.getDataset() || targetSelect.options.length === 0;
       targetSelect.disabled = runButton.disabled;
+    }
+  });
+
+  maskFileInput?.addEventListener('change', async () => {
+    const file = maskFileInput.files?.[0];
+    if (!file) return;
+    maskFileInput.disabled = true;
+    runButton.disabled = true;
+    try {
+      uploadedMask = { filename: file.name, content: new Uint8Array(await file.arrayBuffer()) };
+      await loadMask(uploadedMask);
+      status.textContent = `已加载遮罩 ${file.name}。`;
+    } catch (error) {
+      console.error(error);
+      removeSourceWithLayers(MASK_SOURCE_ID);
+      status.textContent = `遮罩加载失败: ${error instanceof Error ? error.message : String(error)}`;
+    } finally {
+      maskFileInput.disabled = false;
+      runButton.disabled = !map.getSource(INPUT_SOURCE_ID)?.getDataset() || targetSelect.options.length === 0;
     }
   });
 

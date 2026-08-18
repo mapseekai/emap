@@ -460,8 +460,6 @@ describe('example catalog metadata', () => {
       'duckdb/relation/covers',
       'duckdb/relation/covered-by',
       'duckdb/relation/contains-properly',
-      'duckdb/relation/distance',
-      'duckdb/relation/distance-within',
     ]) {
       expect(byId.get(id)).toMatchObject({
         docs: ['/docs/data/duckdb', '/docs/data/operations'],
@@ -475,6 +473,17 @@ describe('example catalog metadata', () => {
         'relation',
         id.slice(id.lastIndexOf('/') + 1),
       ]);
+    }
+    for (const id of ['duckdb/relation/distance', 'duckdb/relation/distance-within']) {
+      expect(byId.get(id)).toMatchObject({
+        docs: ['/docs/data/duckdb', '/docs/data/operations'],
+        fixtures: [
+          'fixtures/duckdb-distance-target.geojson',
+          'fixtures/duckdb-distance-mask.geojson',
+        ],
+        topic: { id: 'duckdb', section: 'relation' },
+        featureFlags: ['duckdb', 'spatial', 'relation', 'distance'],
+      });
     }
     expect(byId.get('web-worker')?.featureFlags).toContain('worker');
     expect(byId.get('geoparquet-viewer')?.featureFlags).toContain('formats');

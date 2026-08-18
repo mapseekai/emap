@@ -688,8 +688,8 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('duckdb/relation/covers', 'data-analysis', 'DuckDB 覆盖关系', 'DuckDB covers relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'covers'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
   recipe('duckdb/relation/covered-by', 'data-analysis', 'DuckDB 被覆盖关系', 'DuckDB covered by relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'covered-by'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
   recipe('duckdb/relation/contains-properly', 'data-analysis', 'DuckDB 严格包含关系', 'DuckDB contains properly relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'contains-properly'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
-  recipe('duckdb/relation/distance', 'data-analysis', 'DuckDB 距离属性', 'DuckDB distance attribute', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'distance'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
-  recipe('duckdb/relation/distance-within', 'data-analysis', 'DuckDB 距离范围关系', 'DuckDB distance-within relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'distance-within'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/relation/distance', 'data-analysis', 'DuckDB 距离属性', 'DuckDB distance attribute', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'distance'], ['fixtures/duckdb-distance-target.geojson', 'fixtures/duckdb-distance-mask.geojson'], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/relation/distance-within', 'data-analysis', 'DuckDB 距离范围关系', 'DuckDB distance-within relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'distance'], ['fixtures/duckdb-distance-target.geojson', 'fixtures/duckdb-distance-mask.geojson'], { id: 'duckdb', section: 'relation' }),
 ];
 
 function seed(

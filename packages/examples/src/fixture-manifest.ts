@@ -10,7 +10,6 @@ const fileSelectorIds = new Set([
   'duckdb-buffer',
   'duckdb-geoparquet-query',
   'duckdb-query',
-  'duckdb-spatial-ops',
 ]);
 
 const duckDbPointAttributeIds: Record<string, true> = {
@@ -30,6 +29,12 @@ function bindingsFor(id: string, fixtures: readonly string[]): readonly FixtureB
     return [
       { selector: '#target-file', paths: filePaths.slice(0, 1) },
       { selector: '#join-file', paths: filePaths.slice(1, 2) },
+    ];
+  }
+  if (id === 'duckdb/relation/distance' || id === 'duckdb/relation/distance-within') {
+    return [
+      { selector: '#file', paths: filePaths.slice(0, 1) },
+      { selector: '#mask-file', paths: filePaths.slice(1, 2) },
     ];
   }
   if (id in duckDbPointAttributeIds) {

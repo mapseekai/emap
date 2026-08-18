@@ -60,6 +60,7 @@ function fixture() {
   document.body.innerHTML = `
     <div id="map"></div>
     <input id="file" type="file">
+    <input id="mask-file" type="file">
     <select id="target"></select>
     <input id="crs" value="EPSG:4326">
     <input id="allow-geographic" type="checkbox">
@@ -373,17 +374,29 @@ describe('DuckDB spatial example runner', () => {
       { runtime: true },
     );
   });
-  it('uses the selected mask for distance and selected target source for later runs', async () => {
-    const { sources } = fixture();
-    await mountDuckDbSpatialExample({ id: 'test', operation: 'distance' });
-    const input = document.getElementById('file') as HTMLInputElement;
-    Object.defineProperty(input, 'files', { value: [new File(['point'], 'point.geojson')] });
-    input.dispatchEvent(new Event('change'));
-    await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
-    document.getElementById('run')!.dispatchEvent(new Event('click'));
-    await vi.waitFor(() => expect(document.getElementById('status')!.textContent).toContain('different Mask'));
-    expect(duckDb.runRelationOperation).not.toHaveBeenCalled();
-  });
+  it.each(['distance', 'distanceWithin'] as const)(
+    'runs %s against an independently loaded projected Mask source',
+    async (operation) => {
+      const { sources } = fixture();
+      await mountDuckDbSpatialExample({ id: 'test', operation });
+      const input = document.getElementById('file') as HTMLInputElement;
+      const maskInput = document.getElementById('mask-file') as HTMLInputElement;
+      Object.defineProperty(input, 'files', { value: [new File(['target'], 'target.geojson')] });
+      Object.defineProperty(maskInput, 'files', { value: [new File(['mask'], 'mask.geojson')] });
+      input.dispatchEvent(new Event('change'));
+      maskInput.dispatchEvent(new Event('change'));
+      await vi.waitFor(() => expect(sources.has('duckdb-spatial-mask')).toBe(true));
+      expect((document.getElementById('mask-layer') as HTMLSelectElement).value).toBe(
+        'duckdb-spatial-mask:0',
+      );
+      document.getElementById('run')!.dispatchEvent(new Event('click'));
+      await vi.waitFor(() => expect(duckDb.runRelationOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ layers: expect.any(Array) }),
+        expect.objectContaining({ operation, mode: operation === 'distance' ? 'attribute' : 'filter' }),
+      ));
+    },
+  );
 
   it('discards a result when the input changes during output registration', async () => {
     const { map, sources } = fixture();
