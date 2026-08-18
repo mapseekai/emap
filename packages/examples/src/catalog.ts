@@ -1,4 +1,4 @@
-import type { ExampleDefinition } from '../../../docs-meta/examples';
+import { exampleTopics, type ExampleDefinition } from '../../../docs-meta/examples';
 
 type ExampleLocale = 'zh' | 'en';
 
@@ -336,18 +336,89 @@ function renderCatalogResults(
     groupCount.className = 'catalog-group-count';
     groupCount.textContent = String(groupExamples.length);
     groupHeader.append(groupTitle, groupCount);
+    group.append(groupHeader);
 
-    const list = document.createElement('div');
-    list.className = 'example-grid';
-    for (const example of groupExamples) {
-      list.append(renderExampleCard(example, state.locale));
+    const directExamples = groupExamples.filter((example) => example.topic === undefined);
+    if (directExamples.length > 0) {
+      group.append(renderExampleGrid(directExamples, state.locale, 'catalog-direct-examples'));
     }
-    group.append(groupHeader, list);
+
+    for (const [topicId, topic] of Object.entries(exampleTopics)) {
+      if (topic.category !== category) continue;
+
+      const topicElement = renderCatalogTopic(
+        topicId,
+        topic,
+        groupExamples,
+        state.locale,
+      );
+      if (topicElement) group.append(topicElement);
+    }
+
     resultGroups.append(group);
   }
 
   return visibleExamples.length;
 }
+
+function renderExampleGrid(
+  examples: readonly ExampleDefinition[],
+  locale: ExampleLocale,
+  className = '',
+): HTMLDivElement {
+  const list = document.createElement('div');
+  list.className = ['example-grid', className].filter(Boolean).join(' ');
+  for (const example of examples) {
+    list.append(renderExampleCard(example, locale));
+  }
+  return list;
+}
+
+function renderCatalogTopic(
+  topicId: string,
+  topic: (typeof exampleTopics)[keyof typeof exampleTopics],
+  examples: readonly ExampleDefinition[],
+  locale: ExampleLocale,
+): HTMLElement | undefined {
+  const topicExamples = examples.filter((example) => example.topic?.id === topicId);
+  if (topicExamples.length === 0) return undefined;
+
+  const element = document.createElement('section');
+  element.className = 'catalog-topic';
+
+  const header = document.createElement('header');
+  header.className = 'catalog-topic-header';
+  const title = document.createElement('h3');
+  title.className = 'catalog-topic-title';
+  title.textContent = topic.title[locale];
+  const count = document.createElement('span');
+  count.className = 'catalog-topic-count';
+  count.textContent = String(topicExamples.length);
+  header.append(title, count);
+  element.append(header);
+
+  for (const section of topic.sections) {
+    const sectionExamples = topicExamples.filter((example) => example.topic?.section === section.id);
+    if (sectionExamples.length === 0) continue;
+
+    const sectionElement = document.createElement('section');
+    sectionElement.className = 'catalog-topic-section';
+    const sectionHeader = document.createElement('header');
+    sectionHeader.className = 'catalog-topic-section-header';
+    const sectionTitle = document.createElement('h4');
+    sectionTitle.className = 'catalog-topic-section-title';
+    sectionTitle.textContent = section.title[locale];
+    const sectionCount = document.createElement('span');
+    sectionCount.className = 'catalog-topic-section-count';
+    sectionCount.textContent = String(sectionExamples.length);
+    sectionHeader.append(sectionTitle, sectionCount);
+    sectionElement.append(sectionHeader, renderExampleGrid(sectionExamples, locale));
+    element.append(sectionElement);
+  }
+
+  return element;
+}
+
 
 function matchesCatalogQuery(example: ExampleDefinition, state: CatalogState): boolean {
   const query = state.query.trim().toLocaleLowerCase();

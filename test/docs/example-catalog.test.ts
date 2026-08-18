@@ -2,7 +2,7 @@
 import { access, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { examples } from '../../docs-meta/examples';
+import { examples, type ExampleDefinition } from '../../docs-meta/examples';
 import { examplePublicHref, renderCatalog } from '../../packages/examples/src/catalog';
 
 const expectedIds = [
@@ -77,6 +77,28 @@ const expectedModules = [
   { key: 'data-editing', zh: '数据编辑', en: 'Data Editing', count: 14 },
   { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 23 },
 ] as const;
+
+function createTopicFixture(
+  id: string,
+  topic?: { id: 'duckdb'; section: 'query' | 'geometry' },
+): ExampleDefinition {
+  return {
+    id,
+    category: 'data-analysis',
+    title: { zh: id, en: id },
+    description: { zh: id, en: id },
+    learningGoals: { zh: ['目标'], en: ['Goal'] },
+    docs: ['/docs/data/duckdb'],
+    api: ['Emap'],
+    tags: [id],
+    featureFlags: [],
+    fixtures: [],
+    source: { html: `packages/examples/examples/${id}/index.html` },
+    route: `/examples/${id}/`,
+    success: id,
+    ...(topic === undefined ? {} : { topic }),
+  };
+}
 
 interface CustomServiceSubmission {
   type: 'wms' | 'wmts' | 'xyz' | 'tms' | 'vector' | 'style';
@@ -441,6 +463,46 @@ describe('example catalog metadata', () => {
       'true',
     );
     expect(root.querySelector('.catalog-results-summary')?.textContent).toContain('12');
+  });
+
+  it('nests ordered DuckDB topic sections after ordinary data-analysis cards', () => {
+    const topicFixture: ExampleDefinition[] = [
+      createTopicFixture('ordinary-analysis-one'),
+      createTopicFixture('ordinary-analysis-two'),
+      createTopicFixture('duckdb-query-one', { id: 'duckdb', section: 'query' }),
+      createTopicFixture('duckdb-geometry', { id: 'duckdb', section: 'geometry' }),
+      createTopicFixture('duckdb-query-two', { id: 'duckdb', section: 'query' }),
+    ];
+    const root = document.createElement('div');
+    renderCatalog(root, topicFixture);
+
+    expect(root.querySelectorAll('.catalog-topic')).toHaveLength(1);
+    expect(root.querySelector('.catalog-topic-title')?.textContent).toBe('DuckDB 空间数据分析');
+    expect(
+      Array.from(root.querySelectorAll('.catalog-topic-section-title'), ({ textContent }) => textContent),
+    ).toEqual(['查询与数据接入', '几何处理']);
+    expect(root.querySelectorAll('.catalog-topic a.example-card')).toHaveLength(3);
+    expect(root.querySelectorAll('.catalog-direct-examples a.example-card')).toHaveLength(2);
+  });
+
+  it('omits empty DuckDB topic sections after filtering to one card', () => {
+    const topicFixture: ExampleDefinition[] = [
+      createTopicFixture('ordinary-analysis'),
+      createTopicFixture('duckdb-query', { id: 'duckdb', section: 'query' }),
+      createTopicFixture('duckdb-geometry', { id: 'duckdb', section: 'geometry' }),
+    ];
+    const root = document.createElement('div');
+    renderCatalog(root, topicFixture);
+    const search = root.querySelector<HTMLInputElement>('.catalog-search-input');
+    if (!search) throw new Error('Catalog search was not rendered');
+
+    search.value = 'duckdb-geometry';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(root.querySelectorAll('.catalog-topic a.example-card')).toHaveLength(1);
+    expect(
+      Array.from(root.querySelectorAll('.catalog-topic-section-title'), ({ textContent }) => textContent),
+    ).toEqual(['几何处理']);
   });
 
   it('searches localized text, ids, tags, and API identifiers', () => {

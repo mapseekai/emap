@@ -1,5 +1,27 @@
 type LocalizedText = { zh: string; en: string };
 
+export const exampleTopics = {
+  duckdb: {
+    category: 'data-analysis',
+    title: { zh: 'DuckDB 空间数据分析', en: 'DuckDB spatial data analysis' },
+    sections: [
+      { id: 'query', title: { zh: '查询与数据接入', en: 'Query and data access' } },
+      { id: 'workflow', title: { zh: '专项分析流程', en: 'Specialized workflows' } },
+      { id: 'geometry', title: { zh: '几何处理', en: 'Geometry processing' } },
+      { id: 'attribute', title: { zh: '属性派生', en: 'Derived attributes' } },
+      { id: 'relation', title: { zh: '空间关系', en: 'Spatial relations' } },
+    ],
+  },
+} as const;
+
+export type ExampleTopicId = keyof typeof exampleTopics;
+export type DuckDbTopicSectionId = (typeof exampleTopics)['duckdb']['sections'][number]['id'];
+
+export interface ExampleTopicPlacement {
+  id: ExampleTopicId;
+  section: DuckDbTopicSectionId;
+}
+
 export interface ExampleDefinition {
   id: string;
   category: string;
@@ -14,6 +36,7 @@ export interface ExampleDefinition {
   source: { html: string };
   route: string;
   success: string;
+  topic?: ExampleTopicPlacement;
 }
 
 const docsEmap = '/docs/concepts/emap';
@@ -562,7 +585,34 @@ function recipe(
   api: string,
   featureFlags: readonly string[],
   fixtures: readonly string[],
+  topic?: ExampleTopicPlacement,
+): ExampleDefinition;
+function recipe(
+  id: ExampleId,
+  category: string,
+  zh: string,
+  en: string,
+  docs: readonly string[],
+  api: string,
+  featureFlags: readonly string[],
+  fixtures: readonly string[],
+  legacySuccess: string,
+  topic?: ExampleTopicPlacement,
+): ExampleDefinition;
+function recipe(
+  id: ExampleId,
+  category: string,
+  zh: string,
+  en: string,
+  docs: readonly string[],
+  api: string,
+  featureFlags: readonly string[],
+  fixtures: readonly string[],
+  topicOrLegacySuccess?: ExampleTopicPlacement | string,
+  topic?: ExampleTopicPlacement,
 ): ExampleDefinition {
+  const placement =
+    typeof topicOrLegacySuccess === 'string' ? topic : topicOrLegacySuccess;
   const html = sourceHtml(id);
   return {
     id,
@@ -585,5 +635,6 @@ function recipe(
     source: { html },
     route: route(id),
     success: `The ${en} example loads its fixtures and exposes its interaction controls.`,
+    ...(placement === undefined ? {} : { topic: placement }),
   };
 }
