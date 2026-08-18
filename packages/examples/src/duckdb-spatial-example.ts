@@ -158,10 +158,13 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
       const sourceLayer = getLayerId(layer, index);
       const baseId = `${prefix}-${index}`;
       if (layer.geometry_type === 'polygon') {
-        map.addLayer({ id: `${baseId}-fill`, source: sourceId, 'source-layer': sourceLayer, type: 'fill', paint: { 'fill-color': colors.fill, 'fill-opacity': colors.fillOpacity } });
-        map.addLayer({ id: `${baseId}-line`, source: sourceId, 'source-layer': sourceLayer, type: 'line', paint: { 'line-color': colors.line, 'line-width': colors.lineWidth } });
-      } else if (layer.geometry_type === 'polyline') map.addLayer({ id: `${baseId}-line`, source: sourceId, 'source-layer': sourceLayer, type: 'line', paint: { 'line-color': colors.line, 'line-width': colors.lineWidth } });
-      else if (layer.geometry_type === 'point') map.addLayer({ id: `${baseId}-point`, source: sourceId, 'source-layer': sourceLayer, type: 'circle', paint: { 'circle-radius': colors.pointRadius, 'circle-color': colors.line, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1 } });
+        if (!map.getLayer(`${baseId}-fill`)) map.addLayer({ id: `${baseId}-fill`, source: sourceId, 'source-layer': sourceLayer, type: 'fill', paint: { 'fill-color': colors.fill, 'fill-opacity': colors.fillOpacity } });
+        if (!map.getLayer(`${baseId}-line`)) map.addLayer({ id: `${baseId}-line`, source: sourceId, 'source-layer': sourceLayer, type: 'line', paint: { 'line-color': colors.line, 'line-width': colors.lineWidth } });
+      } else if (layer.geometry_type === 'polyline') {
+        if (!map.getLayer(`${baseId}-line`)) map.addLayer({ id: `${baseId}-line`, source: sourceId, 'source-layer': sourceLayer, type: 'line', paint: { 'line-color': colors.line, 'line-width': colors.lineWidth } });
+      } else if (layer.geometry_type === 'point' && !map.getLayer(`${baseId}-point`)) {
+        map.addLayer({ id: `${baseId}-point`, source: sourceId, 'source-layer': sourceLayer, type: 'circle', paint: { 'circle-radius': colors.pointRadius, 'circle-color': colors.line, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1 } });
+      }
     });
   }
 

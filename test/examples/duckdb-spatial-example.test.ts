@@ -40,12 +40,15 @@ const operationNames = [
 
 type Source = ReturnType<typeof createSource>;
 
-function createSource(id: string) {
+function createSource(
+  id: string,
+  setData: (id: string) => Promise<void> = async () => {},
+) {
   const dataset = {
     info: {},
     layers: [{ name: 'layer', geometry_type: 'point', shapes: [{}] }],
   };
-  return {
+  const source = {
     id,
     dataset,
     setData: vi.fn(async () => {}),
@@ -54,9 +57,15 @@ function createSource(id: string) {
     getLayers: vi.fn(() => dataset.layers),
     getExtent: vi.fn(() => [0, 0, 1, 1]),
   };
+  source.setData.mockImplementation(() => setData(source.id));
+  return source;
 }
 
-function fixture() {
+function fixture(options: {
+  rejectDuplicateLayers?: boolean;
+  setData?: (id: string) => Promise<void>;
+} = {}) {
+  const { rejectDuplicateLayers = false, setData } = options;
   document.body.innerHTML = `
     <div id="map"></div>
     <input id="file" type="file">
@@ -82,7 +91,12 @@ function fixture() {
     removeSource: vi.fn((id: string) => sources.delete(id)),
     getLayers: () => layers,
     getLayer: (id: string) => layers.find((layer) => layer.id === id),
-    addLayer: vi.fn((layer) => layers.push(layer)),
+    addLayer: vi.fn((layer) => {
+      if (rejectDuplicateLayers && layers.some((existing) => existing.id === layer.id)) {
+        throw new Error(`Layer ID already exists: ${layer.id}`);
+      }
+      layers.push(layer);
+    }),
     removeLayer: vi.fn((id: string) => layers.splice(layers.findIndex((layer) => layer.id === id), 1)),
     setLayerVisibility: vi.fn(),
     setExtent: vi.fn(),
@@ -91,7 +105,7 @@ function fixture() {
     setHighlightedFeatures: vi.fn(),
   };
   class TopologySource {
-    readonly impl = createSource('source');
+    readonly impl = createSource('source', setData);
     constructor(id: string) { this.impl.id = id; return this.impl; }
   }
   exampleRuntime.loadExampleRuntime.mockResolvedValue({
@@ -99,8 +113,9 @@ function fixture() {
     TopologySource,
     NavigationControl: class {},
   });
-  return { map, sources };
+  return { map, sources, layers };
 }
+
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -397,6 +412,60 @@ describe('DuckDB spatial example runner', () => {
       ));
     },
   );
+  it('autoloads the distance route through both controls when Mask completes first without duplicate layers', async () => {
+    const uploadResolvers = new Map<string, () => void>();
+    let delayInitialUploads = true;
+    const { layers, sources } = fixture({
+      rejectDuplicateLayers: true,
+      setData: (id) => delayInitialUploads
+        ? new Promise<void>((resolve) => uploadResolvers.set(id, resolve))
+        : Promise.resolve(),
+    });
+    exampleRuntime.autoLoadExampleFixtures.mockImplementationOnce(async (id: string) => {
+      expect(id).toBe('duckdb/relation/distance');
+      const input = document.getElementById('file') as HTMLInputElement;
+      const mask = document.getElementById('mask-file') as HTMLInputElement;
+      Object.defineProperty(input, 'files', { value: [new File(['target'], 'target.geojson')] });
+      Object.defineProperty(mask, 'files', { value: [new File(['mask'], 'mask.geojson')] });
+      input.dispatchEvent(new Event('change'));
+      mask.dispatchEvent(new Event('change'));
+    });
+
+    await executePage('duckdb/relation/distance', mountDuckDbSpatialExample);
+    await vi.waitFor(() => expect(uploadResolvers.size).toBe(2));
+    delayInitialUploads = false;
+    uploadResolvers.get('duckdb-spatial-mask')!();
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-mask')).toBe(true));
+    uploadResolvers.get('duckdb-spatial-input')!();
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
+
+    expect(layers.map(({ id }) => id).sort()).toEqual([
+      'duckdb-spatial-input-0-point',
+      'duckdb-spatial-mask-0-point',
+    ]);
+    expect(Array.from((document.getElementById('target') as HTMLSelectElement).options, ({ value }) => value)).toEqual([
+      'duckdb-spatial-input:0',
+      'duckdb-spatial-mask:0',
+    ]);
+    expect((document.getElementById('mask-layer') as HTMLSelectElement).value).toBe('duckdb-spatial-mask:0');
+
+    document.getElementById('run')!.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(duckDb.runRelationOperation).toHaveBeenCalledTimes(1));
+
+    const crs = document.getElementById('crs') as HTMLInputElement;
+    crs.value = 'EPSG:3857';
+    crs.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-output')).toBe(false));
+    expect(layers.map(({ id }) => id).sort()).toEqual([
+      'duckdb-spatial-input-0-point',
+      'duckdb-spatial-mask-0-point',
+    ]);
+    expect(Array.from((document.getElementById('target') as HTMLSelectElement).options, ({ value }) => value)).toEqual([
+      'duckdb-spatial-input:0',
+      'duckdb-spatial-mask:0',
+    ]);
+  });
+
 
   it('discards a result when the input changes during output registration', async () => {
     const { map, sources } = fixture();
