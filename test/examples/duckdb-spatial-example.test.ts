@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const duckDb = vi.hoisted(() => ({
@@ -102,15 +104,81 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+const geometryPages = [
+  ['duckdb/geometry/centroid', 'centroid'],
+  ['duckdb/geometry/envelope', 'envelope'],
+  ['duckdb/geometry/convex-hull', 'convexHull'],
+  ['duckdb/geometry/boundary', 'boundary'],
+  ['duckdb/geometry/simplify', 'simplify'],
+  ['duckdb/geometry/simplify-preserve-topology', 'simplifyPreserveTopology'],
+  ['duckdb/geometry/make-valid', 'makeValid'],
+] as const;
+
+async function executeGeometryPage(
+  id: string,
+  mount: (config: { id: string; operation: string }) => Promise<void>,
+) {
+  const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
+  const script = html.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
+  if (!script) throw new Error(`Missing module script for ${id}`);
+  const body = script.replace(
+    /import\s*\{\s*mountDuckDbSpatialExample\s*\}\s*from\s*'\/src\/duckdb-spatial-example\.ts';/,
+    '',
+  );
+  const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
+    mount: typeof mount,
+  ) => () => Promise<void>;
+  await new AsyncFunction(mount)();
+}
+
 describe('DuckDB spatial example runner', () => {
   it('defines every one-operation-per-page route exactly once', () => {
     expect(duckDbSpatialOperationDefinitions.map(({ operation }) => operation)).toEqual(operationNames);
+  });
+
+  it.each(geometryPages)('mounts %s with its fixed %s operation', async (id, operation) => {
+    const mount = vi.fn(async () => {});
+
+    await executeGeometryPage(id, mount);
+
+    expect(mount).toHaveBeenCalledExactlyOnceWith({ id, operation });
   });
 
   it('declares only required controls for simplify and distance relations', () => {
     expect(getDuckDbSpatialOperationDefinition('simplify').controls).toEqual({ tolerance: true, relationMode: false, distance: false });
     expect(getDuckDbSpatialOperationDefinition('distance').controls).toEqual({ tolerance: false, relationMode: false, distance: true });
     expect(getDuckDbSpatialOperationDefinition('distanceWithin').controls).toEqual({ tolerance: false, relationMode: true, distance: true });
+  });
+
+  it('requires only controls used by the selected operation', async () => {
+    fixture();
+    for (const id of ['tolerance', 'tolerance-label', 'allow-geographic', 'distance', 'distance-label', 'relation-mode', 'relation-mode-label', 'mask-layer', 'mask-layer-label']) document.getElementById(id)?.remove();
+    await mountDuckDbSpatialExample({ id: 'test', operation: 'centroid' });
+
+    fixture();
+    document.getElementById('tolerance')?.remove();
+    await expect(mountDuckDbSpatialExample({ id: 'test', operation: 'simplify' })).rejects.toThrow('#tolerance');
+
+    fixture();
+    document.getElementById('relation-mode')?.remove();
+    document.getElementById('relation-mode-label')?.remove();
+    await mountDuckDbSpatialExample({ id: 'test', operation: 'distance' });
+
+    fixture();
+    document.getElementById('mask-layer')?.remove();
+    await expect(mountDuckDbSpatialExample({ id: 'test', operation: 'distance' })).rejects.toThrow('#mask-layer');
+
+    fixture();
+    for (const id of ['tolerance', 'tolerance-label', 'allow-geographic', 'distance', 'distance-label']) document.getElementById(id)?.remove();
+    await mountDuckDbSpatialExample({ id: 'test', operation: 'intersects' });
+
+    fixture();
+    document.getElementById('relation-mode')?.remove();
+    await expect(mountDuckDbSpatialExample({ id: 'test', operation: 'intersects' })).rejects.toThrow('#relation-mode');
+
+    fixture();
+    document.getElementById('distance')?.remove();
+    await expect(mountDuckDbSpatialExample({ id: 'test', operation: 'distanceWithin' })).rejects.toThrow('#distance');
   });
 
   it('defaults uploaded source CRS to EPSG:4326, reloads bytes for a CRS change, and disables controls', async () => {

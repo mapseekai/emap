@@ -102,18 +102,28 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
   const fileInput = requireElement<HTMLInputElement>('file');
   const targetSelect = requireElement<HTMLSelectElement>('target');
   const crsInput = requireElement<HTMLInputElement>('crs');
-  const allowGeographicInput = requireElement<HTMLInputElement>('allow-geographic');
+  const allowGeographicInput = operation.controls.tolerance
+    ? requireElement<HTMLInputElement>('allow-geographic')
+    : null;
   const runButton = requireElement<HTMLButtonElement>('run');
   const status = requireElement<HTMLElement>('status');
   const pickedAttributes = requireElement<HTMLElement>('picked-attributes');
-  const toleranceInput = requireElement<HTMLInputElement>('tolerance');
-  const toleranceLabel = requireElement<HTMLElement>('tolerance-label');
-  const distanceInput = requireElement<HTMLInputElement>('distance');
-  const distanceLabel = requireElement<HTMLElement>('distance-label');
-  const relationMode = requireElement<HTMLSelectElement>('relation-mode');
-  const relationModeLabel = requireElement<HTMLElement>('relation-mode-label');
-  const maskLayerSelect = requireElement<HTMLSelectElement>('mask-layer');
-  const maskLayerLabel = requireElement<HTMLElement>('mask-layer-label');
+  const toleranceInput = operation.controls.tolerance
+    ? requireElement<HTMLInputElement>('tolerance')
+    : null;
+  const toleranceLabel = document.getElementById('tolerance-label');
+  const distanceInput = operation.controls.distance
+    ? requireElement<HTMLInputElement>('distance')
+    : null;
+  const distanceLabel = document.getElementById('distance-label');
+  const relationMode = operation.controls.relationMode
+    ? requireElement<HTMLSelectElement>('relation-mode')
+    : null;
+  const relationModeLabel = document.getElementById('relation-mode-label');
+  const maskLayerSelect = operation.kind === 'relation' || operation.operation === 'distance'
+    ? requireElement<HTMLSelectElement>('mask-layer')
+    : null;
+  const maskLayerLabel = document.getElementById('mask-layer-label');
   const emap = await loadExampleRuntime();
   const { Emap, TopologySource, NavigationControl } = emap;
   const map = new Emap({ container: 'map' });
@@ -171,20 +181,21 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
   }
 
   function populateMaskLayerPicker() {
+    if (!maskLayerSelect) return;
     maskLayerSelect.replaceChildren(...layerPickerEntries.map((entry) => new Option(entry.value, entry.value)));
     maskLayerSelect.disabled = layerPickerEntries.length === 0;
   }
 
   function updateControls() {
-    toleranceLabel.style.display = operation.controls.tolerance ? 'inline-flex' : 'none';
-    toleranceInput.disabled = !operation.controls.tolerance;
-    allowGeographicInput.disabled = !operation.controls.tolerance;
-    relationModeLabel.style.display = operation.controls.relationMode ? 'inline-flex' : 'none';
-    maskLayerLabel.style.display = operation.kind === 'relation' || operation.operation === 'distance' ? 'inline-flex' : 'none';
-    distanceLabel.style.display = operation.controls.distance ? 'inline-flex' : 'none';
-    relationMode.disabled = !operation.controls.relationMode;
-    maskLayerSelect.disabled = !(operation.kind === 'relation' || operation.operation === 'distance') || layerPickerEntries.length === 0;
-    distanceInput.disabled = !operation.controls.distance;
+    if (toleranceLabel) toleranceLabel.style.display = operation.controls.tolerance ? 'inline-flex' : 'none';
+    if (toleranceInput) toleranceInput.disabled = !operation.controls.tolerance;
+    if (allowGeographicInput) allowGeographicInput.disabled = !operation.controls.tolerance;
+    if (relationModeLabel) relationModeLabel.style.display = operation.controls.relationMode ? 'inline-flex' : 'none';
+    if (maskLayerLabel) maskLayerLabel.style.display = operation.kind === 'relation' || operation.operation === 'distance' ? 'inline-flex' : 'none';
+    if (distanceLabel) distanceLabel.style.display = operation.controls.distance ? 'inline-flex' : 'none';
+    if (relationMode) relationMode.disabled = !operation.controls.relationMode;
+    if (maskLayerSelect) maskLayerSelect.disabled = layerPickerEntries.length === 0;
+    if (distanceInput) distanceInput.disabled = !operation.controls.distance;
   }
 
   function registerInputSource(source: InstanceType<typeof TopologySource>) {
@@ -300,12 +311,12 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
         layer: selected.layerIndex,
         outputLayer: `${getLayerId(dataset.layers[selected.layerIndex], selected.layerIndex)}_${operation.operation}`,
         ...(operation.controls.tolerance
-          ? { tolerance: Number(toleranceInput.value), failOnGeographicCrs: !allowGeographicInput.checked }
+          ? { tolerance: Number(toleranceInput!.value), failOnGeographicCrs: !allowGeographicInput!.checked }
           : {}),
       };
       let result;
       if (operation.kind === 'relation' || operation.operation === 'distance') {
-        const mask = layerPickerEntries.find((entry) => entry.value === maskLayerSelect.value) ?? selected;
+        const mask = layerPickerEntries.find((entry) => entry.value === maskLayerSelect!.value) ?? selected;
         if (
           operation.operation === 'distance' &&
           mask.sourceId === selected.sourceId &&
@@ -324,9 +335,9 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
           ...options,
           maskLayer: 0,
           operation: operation.operation,
-          mode: operation.operation === 'distance' ? 'attribute' : relationMode.value,
+          mode: operation.operation === 'distance' ? 'attribute' : relationMode!.value,
           runtime,
-          ...(operation.controls.distance ? { distance: Number(distanceInput.value) } : {}),
+          ...(operation.controls.distance ? { distance: Number(distanceInput!.value) } : {}),
         });
       } else result = await runGeometryOrAttribute(dataset, options, runtime);
       if (map.getSource(INPUT_SOURCE_ID) !== inputSource) { status.textContent = '输入 CRS 已变更，结果已丢弃，请重新运行。'; return; }
