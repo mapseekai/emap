@@ -99,7 +99,8 @@ const routeIds = [
   'duckdb/relation/covers',
   'duckdb/relation/covered-by',
   'duckdb/relation/contains-properly',
-  'duckdb-spatial-ops',
+  'duckdb/relation/distance',
+  'duckdb/relation/distance-within',
 ] as const;
 
 const htmlInput = (path: string): string => fileURLToPath(new URL(path, import.meta.url));

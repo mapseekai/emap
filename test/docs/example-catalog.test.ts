@@ -92,7 +92,8 @@ const expectedIds = [
   'duckdb/relation/covers',
   'duckdb/relation/covered-by',
   'duckdb/relation/contains-properly',
-  'duckdb-spatial-ops',
+  'duckdb/relation/distance',
+  'duckdb/relation/distance-within',
 
 ] as const;
 const expectedModules = [
@@ -104,7 +105,7 @@ const expectedModules = [
     count: 9,
   },
   { key: 'data-editing', zh: '数据编辑', en: 'Data Editing', count: 14 },
-  { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 52 },
+  { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 53 },
 ] as const;
 
 function createTopicFixture(
@@ -366,6 +367,7 @@ describe('example catalog metadata', () => {
   });
 
   it('defines the complete metadata-only catalog', () => {
+    expect(examples).toHaveLength(88);
     expect(examples.map(({ id }) => id)).toEqual(expectedIds);
     expect(Array.from(new Set(examples.map(({ category }) => category)))).toEqual(
       expectedModules.map(({ key }) => key),
@@ -458,6 +460,8 @@ describe('example catalog metadata', () => {
       'duckdb/relation/covers',
       'duckdb/relation/covered-by',
       'duckdb/relation/contains-properly',
+      'duckdb/relation/distance',
+      'duckdb/relation/distance-within',
     ]) {
       expect(byId.get(id)).toMatchObject({
         docs: ['/docs/data/duckdb', '/docs/data/operations'],
@@ -520,13 +524,13 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-results-summary')?.textContent).toContain('12');
   });
 
-  it('groups the thirty-four DuckDB examples by section after ordinary data-analysis cards', () => {
+  it('groups the final thirty-six DuckDB examples by section after ordinary data-analysis cards', () => {
     const root = document.createElement('div');
     renderCatalog(root, examples);
 
     const topic = root.querySelector('.catalog-topic');
     if (!topic) throw new Error('DuckDB topic was not rendered');
-    expect(topic.querySelectorAll('a.example-card')).toHaveLength(34);
+    expect(topic.querySelectorAll('a.example-card')).toHaveLength(36);
     expect(
       Array.from(topic.querySelectorAll('.catalog-topic-section'), (section) => ({
         title: section.querySelector('.catalog-topic-section-title')?.textContent,
@@ -537,10 +541,10 @@ describe('example catalog metadata', () => {
       { title: '专项分析流程', count: 3 },
       { title: '几何处理', count: 7 },
       { title: '属性派生', count: 11 },
-      { title: '空间关系', count: 11 },
+      { title: '空间关系', count: 13 },
     ]);
     expect(root.querySelectorAll('.catalog-direct-examples a.example-card')).toHaveLength(
-      examples.length - 34,
+      examples.length - 36,
     );
     expect(root.querySelectorAll('.catalog-direct-examples .catalog-topic')).toHaveLength(0);
   });
@@ -720,7 +724,7 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-brand img')?.getAttribute('src')).toBe(
       '/mapseekai/emap/examples/emap.svg',
     );
-    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('87');
+    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('88');
 
     const firstCard = root.querySelector<HTMLAnchorElement>(
       'a.example-card[href="/mapseekai/emap/examples/getting-started/geojson-viewer/"]',
@@ -735,7 +739,7 @@ describe('example catalog metadata', () => {
     if (!mobileCategory) throw new Error('Mobile category selector was not rendered');
     mobileCategory.value = 'data-analysis';
     mobileCategory.dispatchEvent(new Event('change'));
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(52);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(53);
   });
 
   it('defaults to Chinese and switches the complete catalog to English', () => {
@@ -827,6 +831,13 @@ describe('example catalog metadata', () => {
       );
       expect(html, `${example.id} uses local starter data`).not.toContain('https://geojson.cn/');
     }
+  });
+
+  it('removes the former combined DuckDB spatial page', async () => {
+    expect(examples.map(({ id }) => id)).not.toContain('duckdb-spatial-ops');
+    await expect(
+      access(resolve('packages/examples/examples/duckdb-spatial-ops/index.html')),
+    ).rejects.toThrow();
   });
   it('keeps DuckDB geometry maps in the floating-header workbench and validates simplify tolerance', async () => {
     const geometryIds = [

@@ -142,6 +142,8 @@ const relationPages = [
   ['duckdb/relation/covers', 'covers'],
   ['duckdb/relation/covered-by', 'coveredBy'],
   ['duckdb/relation/contains-properly', 'containsProperly'],
+  ['duckdb/relation/distance', 'distance'],
+  ['duckdb/relation/distance-within', 'distanceWithin'],
 ] as const;
 
 async function executePage(
@@ -196,7 +198,7 @@ describe('DuckDB spatial example runner', () => {
     }
   });
 
-  it.each(relationPages)('%s exposes fixed relation controls', async (id) => {
+  it.each(relationPages.slice(0, -2))('%s exposes fixed relation controls', async (id) => {
     const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
     const page = new DOMParser().parseFromString(html, 'text/html');
 
@@ -210,6 +212,39 @@ describe('DuckDB spatial example runner', () => {
       Array.from(page.querySelectorAll<HTMLOptionElement>('#relation-mode option'), ({ value }) => value),
     ).toEqual(['filter', 'attribute']);
     for (const selector of ['#distance', '#tolerance', '#allow-geographic']) {
+      expect(page.querySelector(selector)).toBeNull();
+    }
+  });
+
+  it('gives distance only its fixed target, mask, and distance controls', async () => {
+    const html = await readFile(resolve('packages/examples/examples/duckdb/relation/distance/index.html'), 'utf8');
+    const page = new DOMParser().parseFromString(html, 'text/html');
+
+    expect(page.body.classList.contains('emap-example-with-floating-header')).toBe(true);
+    expect(page.querySelector('details.emap-example-workbench.panel')).not.toBeNull();
+    expect(page.querySelector<HTMLInputElement>('#file')?.type).toBe('file');
+    for (const selector of ['#target', '#mask-layer', '#distance']) {
+      expect(page.querySelector(selector)).not.toBeNull();
+    }
+    for (const selector of ['#relation-mode', '#tolerance', '#allow-geographic']) {
+      expect(page.querySelector(selector)).toBeNull();
+    }
+  });
+
+  it('gives distance-within its filter-or-attribute relation controls', async () => {
+    const html = await readFile(resolve('packages/examples/examples/duckdb/relation/distance-within/index.html'), 'utf8');
+    const page = new DOMParser().parseFromString(html, 'text/html');
+
+    expect(page.body.classList.contains('emap-example-with-floating-header')).toBe(true);
+    expect(page.querySelector('details.emap-example-workbench.panel')).not.toBeNull();
+    expect(page.querySelector<HTMLInputElement>('#file')?.type).toBe('file');
+    for (const selector of ['#target', '#mask-layer', '#distance', '#relation-mode']) {
+      expect(page.querySelector(selector)).not.toBeNull();
+    }
+    expect(
+      Array.from(page.querySelectorAll<HTMLOptionElement>('#relation-mode option'), ({ value }) => value),
+    ).toEqual(['filter', 'attribute']);
+    for (const selector of ['#tolerance', '#allow-geographic']) {
       expect(page.querySelector(selector)).toBeNull();
     }
   });

@@ -414,9 +414,13 @@ const exampleDescriptions = {
     zh: '使用 DuckDB 的 ST_ContainsProperly 判断目标图层是否严格包含遮罩图层要素。',
     en: 'Uses DuckDB ST_ContainsProperly to determine whether target features properly contain mask features.',
   },
-  'duckdb-spatial-ops': {
-    zh: '集中演示 DuckDB 几何、属性和空间关系函数，并在共享图层选择器中查看结果。',
-    en: 'Demonstrates DuckDB geometry, attribute, and spatial-relation functions through a shared layer picker.',
+  'duckdb/relation/distance': {
+    zh: '使用 DuckDB 的 ST_Distance 计算目标图层与遮罩图层之间的距离属性。',
+    en: 'Uses DuckDB ST_Distance to calculate a distance attribute between target and mask layers.',
+  },
+  'duckdb/relation/distance-within': {
+    zh: '使用 DuckDB 的 ST_Distance 按距离范围筛选或标注目标图层与遮罩图层的关系。',
+    en: 'Uses DuckDB ST_Distance to filter or annotate target features within a distance of the mask layer.',
   },
   'flatgeobuf-viewer': {
     zh: '通过 registerFormat 注册的 FlatGeobuf 插件加载 .fgb 文件，并从文件头读取坐标系。',
@@ -684,7 +688,8 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('duckdb/relation/covers', 'data-analysis', 'DuckDB 覆盖关系', 'DuckDB covers relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'covers'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
   recipe('duckdb/relation/covered-by', 'data-analysis', 'DuckDB 被覆盖关系', 'DuckDB covered by relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'covered-by'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
   recipe('duckdb/relation/contains-properly', 'data-analysis', 'DuckDB 严格包含关系', 'DuckDB contains properly relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'contains-properly'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
-  recipe('duckdb-spatial-ops', 'data-analysis', 'DuckDB 空间函数', 'DuckDB spatial functions', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap'], [task7Fixture]),
+  recipe('duckdb/relation/distance', 'data-analysis', 'DuckDB 距离属性', 'DuckDB distance attribute', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'distance'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/relation/distance-within', 'data-analysis', 'DuckDB 距离范围关系', 'DuckDB distance-within relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'distance-within'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
 ];
 
 function seed(

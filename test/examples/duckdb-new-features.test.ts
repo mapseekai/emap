@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import viteConfig from '../../packages/examples/vite.config';
 
 const duckDbBundle = readFileSync(resolve(__dirname, '../../dist/emap-duckdb.mjs'), 'utf8');
 const duckDbExamples = [
@@ -110,6 +111,21 @@ function usesAggregateQueryCoordinator(runHandler: string): boolean {
   );
 }
 
+
+  it('registers only the two split distance routes in the Vite build inputs', () => {
+    const input = viteConfig.build?.rollupOptions?.input;
+    if (!input || Array.isArray(input) || typeof input === 'string') {
+      throw new Error('Expected keyed example build inputs');
+    }
+
+    expect(Object.keys(input)).toEqual(
+      expect.arrayContaining([
+        'examples/duckdb/relation/distance/index',
+        'examples/duckdb/relation/distance-within/index',
+      ]),
+    );
+    expect(Object.keys(input)).not.toContain('examples/duckdb-spatial-ops/index');
+  });
 describe('DuckDB new feature examples', () => {
   const examples = {
     geoparquetQuery: readExample('duckdb-geoparquet-query'),
