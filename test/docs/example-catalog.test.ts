@@ -74,6 +74,13 @@ const expectedIds = [
   'duckdb/attribute/length',
   'duckdb/attribute/perimeter',
   'duckdb/attribute/geometry-type',
+  'duckdb/attribute/is-valid',
+  'duckdb/attribute/is-empty',
+  'duckdb/attribute/is-simple',
+  'duckdb/attribute/x',
+  'duckdb/attribute/y',
+  'duckdb/attribute/centroid-x',
+  'duckdb/attribute/centroid-y',
   'duckdb-spatial-ops',
 
 ] as const;
@@ -86,7 +93,7 @@ const expectedModules = [
     count: 9,
   },
   { key: 'data-editing', zh: '数据编辑', en: 'Data Editing', count: 14 },
-  { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 34 },
+  { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 41 },
 ] as const;
 
 function createTopicFixture(
@@ -476,13 +483,13 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-results-summary')?.textContent).toContain('12');
   });
 
-  it('groups the sixteen DuckDB examples by section after ordinary data-analysis cards', () => {
+  it('groups the twenty-three DuckDB examples by section after ordinary data-analysis cards', () => {
     const root = document.createElement('div');
     renderCatalog(root, examples);
 
     const topic = root.querySelector('.catalog-topic');
     if (!topic) throw new Error('DuckDB topic was not rendered');
-    expect(topic.querySelectorAll('a.example-card')).toHaveLength(16);
+    expect(topic.querySelectorAll('a.example-card')).toHaveLength(23);
     expect(
       Array.from(topic.querySelectorAll('.catalog-topic-section'), (section) => ({
         title: section.querySelector('.catalog-topic-section-title')?.textContent,
@@ -492,10 +499,10 @@ describe('example catalog metadata', () => {
       { title: '查询与数据接入', count: 2 },
       { title: '专项分析流程', count: 3 },
       { title: '几何处理', count: 7 },
-      { title: '属性派生', count: 4 },
+      { title: '属性派生', count: 11 },
     ]);
     expect(root.querySelectorAll('.catalog-direct-examples a.example-card')).toHaveLength(
-      examples.length - 16,
+      examples.length - 23,
     );
     expect(root.querySelectorAll('.catalog-direct-examples .catalog-topic')).toHaveLength(0);
   });
@@ -675,7 +682,7 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-brand img')?.getAttribute('src')).toBe(
       '/mapseekai/emap/examples/emap.svg',
     );
-    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('69');
+    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('76');
 
     const firstCard = root.querySelector<HTMLAnchorElement>(
       'a.example-card[href="/mapseekai/emap/examples/getting-started/geojson-viewer/"]',
@@ -690,7 +697,7 @@ describe('example catalog metadata', () => {
     if (!mobileCategory) throw new Error('Mobile category selector was not rendered');
     mobileCategory.value = 'data-analysis';
     mobileCategory.dispatchEvent(new Event('change'));
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(34);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(41);
   });
 
   it('defaults to Chinese and switches the complete catalog to English', () => {

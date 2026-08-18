@@ -81,6 +81,13 @@ const routeIds = [
   'duckdb/attribute/length',
   'duckdb/attribute/perimeter',
   'duckdb/attribute/geometry-type',
+  'duckdb/attribute/is-valid',
+  'duckdb/attribute/is-empty',
+  'duckdb/attribute/is-simple',
+  'duckdb/attribute/x',
+  'duckdb/attribute/y',
+  'duckdb/attribute/centroid-x',
+  'duckdb/attribute/centroid-y',
   'duckdb-spatial-ops',
 ] as const;
 

@@ -119,6 +119,13 @@ const attributePages = [
   ['duckdb/attribute/length', 'length'],
   ['duckdb/attribute/perimeter', 'perimeter'],
   ['duckdb/attribute/geometry-type', 'geometryType'],
+  ['duckdb/attribute/is-valid', 'isValid'],
+  ['duckdb/attribute/is-empty', 'isEmpty'],
+  ['duckdb/attribute/is-simple', 'isSimple'],
+  ['duckdb/attribute/x', 'x'],
+  ['duckdb/attribute/y', 'y'],
+  ['duckdb/attribute/centroid-x', 'centroidX'],
+  ['duckdb/attribute/centroid-y', 'centroidY'],
 ] as const;
 
 async function executePage(

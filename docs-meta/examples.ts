@@ -342,6 +342,34 @@ const exampleDescriptions = {
     zh: '使用 DuckDB 的 ST_GeometryType 计算目标图层中每个几何的类型属性。',
     en: 'Uses DuckDB ST_GeometryType to calculate a geometry-type attribute for each target-layer geometry.',
   },
+  'duckdb/attribute/is-valid': {
+    zh: '使用 DuckDB 的 ST_IsValid 检查目标图层中每个几何的有效性。',
+    en: 'Uses DuckDB ST_IsValid to check the validity of every target-layer geometry.',
+  },
+  'duckdb/attribute/is-empty': {
+    zh: '使用 DuckDB 的 ST_IsEmpty 检查目标图层中每个几何是否为空。',
+    en: 'Uses DuckDB ST_IsEmpty to check whether every target-layer geometry is empty.',
+  },
+  'duckdb/attribute/is-simple': {
+    zh: '使用 DuckDB 的 ST_IsSimple 检查目标图层中每个几何的简单性。',
+    en: 'Uses DuckDB ST_IsSimple to check the simplicity of every target-layer geometry.',
+  },
+  'duckdb/attribute/x': {
+    zh: '使用 DuckDB 的 ST_X 提取目标图层中每个点几何的 X 坐标。',
+    en: 'Uses DuckDB ST_X to extract the X coordinate of every target-layer point geometry.',
+  },
+  'duckdb/attribute/y': {
+    zh: '使用 DuckDB 的 ST_Y 提取目标图层中每个点几何的 Y 坐标。',
+    en: 'Uses DuckDB ST_Y to extract the Y coordinate of every target-layer point geometry.',
+  },
+  'duckdb/attribute/centroid-x': {
+    zh: '使用 DuckDB 的 ST_X 和 ST_Centroid 提取目标图层中每个几何中心的 X 坐标。',
+    en: 'Uses DuckDB ST_X and ST_Centroid to extract each target-layer geometry centroid X coordinate.',
+  },
+  'duckdb/attribute/centroid-y': {
+    zh: '使用 DuckDB 的 ST_Y 和 ST_Centroid 提取目标图层中每个几何中心的 Y 坐标。',
+    en: 'Uses DuckDB ST_Y and ST_Centroid to extract each target-layer geometry centroid Y coordinate.',
+  },
   'duckdb-spatial-ops': {
     zh: '集中演示 DuckDB 几何、属性和空间关系函数，并在共享图层选择器中查看结果。',
     en: 'Demonstrates DuckDB geometry, attribute, and spatial-relation functions through a shared layer picker.',
@@ -594,6 +622,13 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('duckdb/attribute/length', 'data-analysis', 'DuckDB 长度属性', 'DuckDB length attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'length'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
   recipe('duckdb/attribute/perimeter', 'data-analysis', 'DuckDB 周长属性', 'DuckDB perimeter attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'perimeter'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
   recipe('duckdb/attribute/geometry-type', 'data-analysis', 'DuckDB 几何类型属性', 'DuckDB geometry type attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'geometry-type'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
+  recipe('duckdb/attribute/is-valid', 'data-analysis', 'DuckDB 有效性属性', 'DuckDB validity attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'is-valid'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
+  recipe('duckdb/attribute/is-empty', 'data-analysis', 'DuckDB 空几何属性', 'DuckDB empty geometry attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'is-empty'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
+  recipe('duckdb/attribute/is-simple', 'data-analysis', 'DuckDB 简单几何属性', 'DuckDB simple geometry attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'is-simple'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
+  recipe('duckdb/attribute/x', 'data-analysis', 'DuckDB X 坐标属性', 'DuckDB X coordinate attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'x'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
+  recipe('duckdb/attribute/y', 'data-analysis', 'DuckDB Y 坐标属性', 'DuckDB Y coordinate attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'y'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
+  recipe('duckdb/attribute/centroid-x', 'data-analysis', 'DuckDB 中心 X 属性', 'DuckDB centroid X attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'centroid-x'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
+  recipe('duckdb/attribute/centroid-y', 'data-analysis', 'DuckDB 中心 Y 属性', 'DuckDB centroid Y attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'centroid-y'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
   recipe('duckdb-spatial-ops', 'data-analysis', 'DuckDB 空间函数', 'DuckDB spatial functions', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap'], [task7Fixture]),
 ];
 
