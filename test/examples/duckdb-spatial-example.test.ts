@@ -264,6 +264,45 @@ describe('DuckDB spatial example runner', () => {
       expect(page.querySelector(selector)).toBeNull();
     }
   });
+  it.each([...geometryPages, ...attributePages, ...relationPages])(
+    '%s uses standard workbench sections and field spacing',
+    async (id) => {
+      const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
+      const page = new DOMParser().parseFromString(html, 'text/html');
+      const workbench = page.querySelector<HTMLElement>('.emap-example-workbench-body');
+      if (!workbench) throw new Error(`Missing workbench body for ${id}`);
+
+      const sections = Array.from(workbench.children).filter((child) =>
+        child.classList.contains('emap-example-section'),
+      );
+      expect(sections.length).toBeGreaterThanOrEqual(2);
+
+      for (const controlId of [
+        'file',
+        'target',
+        'crs',
+        'mask-file',
+        'mask-layer',
+        'relation-mode',
+        'distance',
+        'tolerance',
+        'allow-geographic',
+      ]) {
+        const control = page.getElementById(controlId);
+        if (!control) continue;
+        expect(control.closest('.emap-example-field')).not.toBeNull();
+        if (controlId === 'allow-geographic') {
+          expect(control.closest('label.emap-example-check')).not.toBeNull();
+        } else {
+          expect(page.querySelector(`label[for="${controlId}"]`)).not.toBeNull();
+        }
+      }
+
+      expect(page.querySelector('#run')?.classList.contains('emap-example-primary-button')).toBe(true);
+      expect(page.querySelector('#status')?.classList.contains('emap-example-status')).toBe(true);
+      expect(page.querySelector('#picked-attributes')?.closest('.emap-example-section')).not.toBeNull();
+    },
+  );
 
   it('declares only required controls for simplify and distance relations', () => {
     expect(getDuckDbSpatialOperationDefinition('simplify').controls).toEqual({ tolerance: true, relationMode: false, distance: false });
