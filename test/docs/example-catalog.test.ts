@@ -81,6 +81,17 @@ const expectedIds = [
   'duckdb/attribute/y',
   'duckdb/attribute/centroid-x',
   'duckdb/attribute/centroid-y',
+  'duckdb/relation/intersects',
+  'duckdb/relation/contains',
+  'duckdb/relation/within',
+  'duckdb/relation/touches',
+  'duckdb/relation/disjoint',
+  'duckdb/relation/overlaps',
+  'duckdb/relation/equals',
+  'duckdb/relation/crosses',
+  'duckdb/relation/covers',
+  'duckdb/relation/covered-by',
+  'duckdb/relation/contains-properly',
   'duckdb-spatial-ops',
 
 ] as const;
@@ -93,12 +104,12 @@ const expectedModules = [
     count: 9,
   },
   { key: 'data-editing', zh: '数据编辑', en: 'Data Editing', count: 14 },
-  { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 41 },
+  { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 52 },
 ] as const;
 
 function createTopicFixture(
   id: string,
-  topic?: { id: 'duckdb'; section: 'query' | 'workflow' | 'geometry' },
+  topic?: { id: 'duckdb'; section: 'query' | 'workflow' | 'geometry' | 'relation' },
 ): ExampleDefinition {
   return {
     id,
@@ -435,12 +446,32 @@ describe('example catalog metadata', () => {
     expect(byId.get('duckdb-geoparquet-query')?.fixtures).toEqual([
       'fixtures/example-geoparquet.parquet',
     ]);
-    expect(byId.get('duckdb/attribute/x')?.fixtures).toEqual([
-      'fixtures/getting-started-points.geojson',
-    ]);
-    expect(byId.get('duckdb/attribute/y')?.fixtures).toEqual([
-      'fixtures/getting-started-points.geojson',
-    ]);
+    for (const id of [
+      'duckdb/relation/intersects',
+      'duckdb/relation/contains',
+      'duckdb/relation/within',
+      'duckdb/relation/touches',
+      'duckdb/relation/disjoint',
+      'duckdb/relation/overlaps',
+      'duckdb/relation/equals',
+      'duckdb/relation/crosses',
+      'duckdb/relation/covers',
+      'duckdb/relation/covered-by',
+      'duckdb/relation/contains-properly',
+    ]) {
+      expect(byId.get(id)).toMatchObject({
+        docs: ['/docs/data/duckdb', '/docs/data/operations'],
+        fixtures: ['fixtures/task-7-polygons.geojson'],
+        topic: { id: 'duckdb', section: 'relation' },
+      });
+      expect(byId.get(id)?.tags).toEqual(expect.arrayContaining(['duckdb', 'spatial', 'relation']));
+      expect(byId.get(id)?.featureFlags).toEqual([
+        'duckdb',
+        'spatial',
+        'relation',
+        id.slice(id.lastIndexOf('/') + 1),
+      ]);
+    }
     expect(byId.get('web-worker')?.featureFlags).toContain('worker');
     expect(byId.get('geoparquet-viewer')?.featureFlags).toContain('formats');
     expect(byId.get('online-map-services')).toMatchObject({
@@ -489,13 +520,13 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-results-summary')?.textContent).toContain('12');
   });
 
-  it('groups the twenty-three DuckDB examples by section after ordinary data-analysis cards', () => {
+  it('groups the thirty-four DuckDB examples by section after ordinary data-analysis cards', () => {
     const root = document.createElement('div');
     renderCatalog(root, examples);
 
     const topic = root.querySelector('.catalog-topic');
     if (!topic) throw new Error('DuckDB topic was not rendered');
-    expect(topic.querySelectorAll('a.example-card')).toHaveLength(23);
+    expect(topic.querySelectorAll('a.example-card')).toHaveLength(34);
     expect(
       Array.from(topic.querySelectorAll('.catalog-topic-section'), (section) => ({
         title: section.querySelector('.catalog-topic-section-title')?.textContent,
@@ -506,9 +537,10 @@ describe('example catalog metadata', () => {
       { title: '专项分析流程', count: 3 },
       { title: '几何处理', count: 7 },
       { title: '属性派生', count: 11 },
+      { title: '空间关系', count: 11 },
     ]);
     expect(root.querySelectorAll('.catalog-direct-examples a.example-card')).toHaveLength(
-      examples.length - 23,
+      examples.length - 34,
     );
     expect(root.querySelectorAll('.catalog-direct-examples .catalog-topic')).toHaveLength(0);
   });
@@ -688,7 +720,7 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-brand img')?.getAttribute('src')).toBe(
       '/mapseekai/emap/examples/emap.svg',
     );
-    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('76');
+    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('87');
 
     const firstCard = root.querySelector<HTMLAnchorElement>(
       'a.example-card[href="/mapseekai/emap/examples/getting-started/geojson-viewer/"]',
@@ -703,7 +735,7 @@ describe('example catalog metadata', () => {
     if (!mobileCategory) throw new Error('Mobile category selector was not rendered');
     mobileCategory.value = 'data-analysis';
     mobileCategory.dispatchEvent(new Event('change'));
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(41);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(52);
   });
 
   it('defaults to Chinese and switches the complete catalog to English', () => {

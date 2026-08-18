@@ -370,6 +370,50 @@ const exampleDescriptions = {
     zh: '使用 DuckDB 的 ST_Y 和 ST_Centroid 提取目标图层中每个几何中心的 Y 坐标。',
     en: 'Uses DuckDB ST_Y and ST_Centroid to extract each target-layer geometry centroid Y coordinate.',
   },
+  'duckdb/relation/intersects': {
+    zh: '使用 DuckDB 的 ST_Intersects 判断目标图层是否与遮罩图层相交。',
+    en: 'Uses DuckDB ST_Intersects to determine whether target features intersect the mask layer.',
+  },
+  'duckdb/relation/contains': {
+    zh: '使用 DuckDB 的 ST_Contains 判断目标图层是否包含遮罩图层要素。',
+    en: 'Uses DuckDB ST_Contains to determine whether target features contain mask features.',
+  },
+  'duckdb/relation/within': {
+    zh: '使用 DuckDB 的 ST_Within 判断目标图层是否被遮罩图层包含。',
+    en: 'Uses DuckDB ST_Within to determine whether target features are within the mask layer.',
+  },
+  'duckdb/relation/touches': {
+    zh: '使用 DuckDB 的 ST_Touches 判断目标图层是否与遮罩图层相接。',
+    en: 'Uses DuckDB ST_Touches to determine whether target features touch the mask layer.',
+  },
+  'duckdb/relation/disjoint': {
+    zh: '使用 DuckDB 的 ST_Disjoint 判断目标图层是否与遮罩图层相离。',
+    en: 'Uses DuckDB ST_Disjoint to determine whether target features are disjoint from the mask layer.',
+  },
+  'duckdb/relation/overlaps': {
+    zh: '使用 DuckDB 的 ST_Overlaps 判断目标图层是否与遮罩图层重叠。',
+    en: 'Uses DuckDB ST_Overlaps to determine whether target features overlap the mask layer.',
+  },
+  'duckdb/relation/equals': {
+    zh: '使用 DuckDB 的 ST_Equals 判断目标图层是否与遮罩图层相等。',
+    en: 'Uses DuckDB ST_Equals to determine whether target features equal mask features.',
+  },
+  'duckdb/relation/crosses': {
+    zh: '使用 DuckDB 的 ST_Crosses 判断目标图层是否穿越遮罩图层。',
+    en: 'Uses DuckDB ST_Crosses to determine whether target features cross the mask layer.',
+  },
+  'duckdb/relation/covers': {
+    zh: '使用 DuckDB 的 ST_Covers 判断目标图层是否覆盖遮罩图层要素。',
+    en: 'Uses DuckDB ST_Covers to determine whether target features cover mask features.',
+  },
+  'duckdb/relation/covered-by': {
+    zh: '使用 DuckDB 的 ST_CoveredBy 判断目标图层是否被遮罩图层覆盖。',
+    en: 'Uses DuckDB ST_CoveredBy to determine whether target features are covered by the mask layer.',
+  },
+  'duckdb/relation/contains-properly': {
+    zh: '使用 DuckDB 的 ST_ContainsProperly 判断目标图层是否严格包含遮罩图层要素。',
+    en: 'Uses DuckDB ST_ContainsProperly to determine whether target features properly contain mask features.',
+  },
   'duckdb-spatial-ops': {
     zh: '集中演示 DuckDB 几何、属性和空间关系函数，并在共享图层选择器中查看结果。',
     en: 'Demonstrates DuckDB geometry, attribute, and spatial-relation functions through a shared layer picker.',
@@ -629,6 +673,17 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('duckdb/attribute/y', 'data-analysis', 'DuckDB Y 坐标属性', 'DuckDB Y coordinate attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'y'], ['fixtures/getting-started-points.geojson'], { id: 'duckdb', section: 'attribute' }),
   recipe('duckdb/attribute/centroid-x', 'data-analysis', 'DuckDB 中心 X 属性', 'DuckDB centroid X attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'centroid-x'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
   recipe('duckdb/attribute/centroid-y', 'data-analysis', 'DuckDB 中心 Y 属性', 'DuckDB centroid Y attribute', [docsDuckDb, docsAttributes], 'Emap', ['duckdb', 'attribute', 'centroid-y'], [task7Fixture], { id: 'duckdb', section: 'attribute' }),
+  recipe('duckdb/relation/intersects', 'data-analysis', 'DuckDB 相交关系', 'DuckDB intersects relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'intersects'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/relation/contains', 'data-analysis', 'DuckDB 包含关系', 'DuckDB contains relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'contains'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/relation/within', 'data-analysis', 'DuckDB 被包含关系', 'DuckDB within relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'within'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/relation/touches', 'data-analysis', 'DuckDB 相接关系', 'DuckDB touches relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'touches'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/relation/disjoint', 'data-analysis', 'DuckDB 相离关系', 'DuckDB disjoint relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'disjoint'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/relation/overlaps', 'data-analysis', 'DuckDB 重叠关系', 'DuckDB overlaps relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'overlaps'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/relation/equals', 'data-analysis', 'DuckDB 相等关系', 'DuckDB equals relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'equals'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/relation/crosses', 'data-analysis', 'DuckDB 穿越关系', 'DuckDB crosses relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'crosses'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/relation/covers', 'data-analysis', 'DuckDB 覆盖关系', 'DuckDB covers relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'covers'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/relation/covered-by', 'data-analysis', 'DuckDB 被覆盖关系', 'DuckDB covered by relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'covered-by'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
+  recipe('duckdb/relation/contains-properly', 'data-analysis', 'DuckDB 严格包含关系', 'DuckDB contains properly relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'contains-properly'], [task7Fixture], { id: 'duckdb', section: 'relation' }),
   recipe('duckdb-spatial-ops', 'data-analysis', 'DuckDB 空间函数', 'DuckDB spatial functions', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'basemap'], [task7Fixture]),
 ];
 

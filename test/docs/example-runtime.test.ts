@@ -370,6 +370,17 @@ describe('example starter fixtures', () => {
     ['duckdb/attribute/y', 'getting-started-points.geojson'],
     ['duckdb/attribute/centroid-x', 'task-7-polygons.geojson'],
     ['duckdb/attribute/centroid-y', 'task-7-polygons.geojson'],
+    ['duckdb/relation/intersects', 'task-7-polygons.geojson'],
+    ['duckdb/relation/contains', 'task-7-polygons.geojson'],
+    ['duckdb/relation/within', 'task-7-polygons.geojson'],
+    ['duckdb/relation/touches', 'task-7-polygons.geojson'],
+    ['duckdb/relation/disjoint', 'task-7-polygons.geojson'],
+    ['duckdb/relation/overlaps', 'task-7-polygons.geojson'],
+    ['duckdb/relation/equals', 'task-7-polygons.geojson'],
+    ['duckdb/relation/crosses', 'task-7-polygons.geojson'],
+    ['duckdb/relation/covers', 'task-7-polygons.geojson'],
+    ['duckdb/relation/covered-by', 'task-7-polygons.geojson'],
+    ['duckdb/relation/contains-properly', 'task-7-polygons.geojson'],
   ])('loads %s starter data into its actual #file input', async (id, expectedFile) => {
     document.body.innerHTML = '<input id="file" type="file"><div id="status"></div>';
     vi.stubGlobal('DataTransfer', TestDataTransfer);

@@ -88,6 +88,17 @@ const routeIds = [
   'duckdb/attribute/y',
   'duckdb/attribute/centroid-x',
   'duckdb/attribute/centroid-y',
+  'duckdb/relation/intersects',
+  'duckdb/relation/contains',
+  'duckdb/relation/within',
+  'duckdb/relation/touches',
+  'duckdb/relation/disjoint',
+  'duckdb/relation/overlaps',
+  'duckdb/relation/equals',
+  'duckdb/relation/crosses',
+  'duckdb/relation/covers',
+  'duckdb/relation/covered-by',
+  'duckdb/relation/contains-properly',
   'duckdb-spatial-ops',
 ] as const;
 

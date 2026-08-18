@@ -130,6 +130,20 @@ const attributePages = [
   ['duckdb/attribute/centroid-y', 'centroidY'],
 ] as const;
 
+const relationPages = [
+  ['duckdb/relation/intersects', 'intersects'],
+  ['duckdb/relation/contains', 'contains'],
+  ['duckdb/relation/within', 'within'],
+  ['duckdb/relation/touches', 'touches'],
+  ['duckdb/relation/disjoint', 'disjoint'],
+  ['duckdb/relation/overlaps', 'overlaps'],
+  ['duckdb/relation/equals', 'equals'],
+  ['duckdb/relation/crosses', 'crosses'],
+  ['duckdb/relation/covers', 'covers'],
+  ['duckdb/relation/covered-by', 'coveredBy'],
+  ['duckdb/relation/contains-properly', 'containsProperly'],
+] as const;
+
 async function executePage(
   id: string,
   mount: (config: { id: string; operation: string }) => Promise<void>,
@@ -153,7 +167,7 @@ describe('DuckDB spatial example runner', () => {
     expect(duckDbSpatialOperationDefinitions.map(({ operation }) => operation)).toEqual(operationNames);
   });
 
-  it.each([...geometryPages, ...attributePages])(
+  it.each([...geometryPages, ...attributePages, ...relationPages])(
     'mounts %s with its fixed %s operation',
     async (id, operation) => {
       const mount = vi.fn(async () => {});
@@ -178,6 +192,24 @@ describe('DuckDB spatial example runner', () => {
       '#tolerance',
       '#allow-geographic',
     ]) {
+      expect(page.querySelector(selector)).toBeNull();
+    }
+  });
+
+  it.each(relationPages)('%s exposes fixed relation controls', async (id) => {
+    const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
+    const page = new DOMParser().parseFromString(html, 'text/html');
+
+    expect(page.body.classList.contains('emap-example-with-floating-header')).toBe(true);
+    expect(page.querySelector('details.emap-example-workbench.panel')).not.toBeNull();
+    expect(page.querySelector<HTMLInputElement>('#file')?.type).toBe('file');
+    expect(page.querySelector('#target')).not.toBeNull();
+    expect(page.querySelector('#mask-layer')).not.toBeNull();
+    expect(page.querySelector('#relation-mode')).not.toBeNull();
+    expect(
+      Array.from(page.querySelectorAll<HTMLOptionElement>('#relation-mode option'), ({ value }) => value),
+    ).toEqual(['filter', 'attribute']);
+    for (const selector of ['#distance', '#tolerance', '#allow-geographic']) {
       expect(page.querySelector(selector)).toBeNull();
     }
   });
