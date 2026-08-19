@@ -22,6 +22,7 @@ import {
   xDatasetWithDuckDb,
   yDatasetWithDuckDb,
 } from '@mapseekai/emap/duckdb';
+import type { SourceLoadDraft } from '@mapseekai/emap';
 import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from './example-runtime';
 
 export type DuckDbSpatialOperation =
@@ -55,6 +56,12 @@ export interface DuckDbSpatialExampleConfig {
 const INPUT_SOURCE_ID = 'duckdb-spatial-input';
 const OUTPUT_SOURCE_ID = 'duckdb-spatial-output';
 const MASK_SOURCE_ID = 'duckdb-spatial-mask';
+
+type PendingCrsLoad = {
+  readonly sourceId: typeof INPUT_SOURCE_ID | typeof MASK_SOURCE_ID;
+  readonly sourceName: '输入数据' | 'Mask 数据';
+  readonly draft: SourceLoadDraft;
+};
 
 const noControls: DuckDbSpatialControls = { tolerance: false, relationMode: false, distance: false };
 const toleranceControls: DuckDbSpatialControls = { tolerance: true, relationMode: false, distance: false };
@@ -102,7 +109,10 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
   const fileInput = requireElement<HTMLInputElement>('file');
   const targetSelect = requireElement<HTMLSelectElement>('target');
   const maskFileInput = document.getElementById('mask-file') as HTMLInputElement | null;
-  const crsInput = requireElement<HTMLInputElement>('crs');
+  const crsRecovery = requireElement<HTMLElement>('crs-recovery');
+  const crsRecoveryLabel = requireElement<HTMLLabelElement>('crs-recovery-label');
+  const crsRecoveryInput = requireElement<HTMLInputElement>('crs-recovery-input');
+  const crsRecoveryApply = requireElement<HTMLButtonElement>('crs-recovery-apply');
   const allowGeographicInput = operation.controls.tolerance
     ? requireElement<HTMLInputElement>('allow-geographic')
     : null;
@@ -131,10 +141,13 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
   map.addControl(new NavigationControl(), 'top-left');
   installExampleMapUi(map, emap);
   const mapContainer = map.getCanvasContainer();
-  let uploadedInput: { filename: string; content: Uint8Array } | null = null;
-  let uploadedMask: { filename: string; content: Uint8Array } | null = null;
   let runtimePromise: ReturnType<typeof createDuckDbRuntimeFromJsDelivr> | null = null;
   let layerPickerEntries: Array<{ value: string; sourceId: string; layerIndex: number; layerIds: string[] }> = [];
+  const pendingCrsLoads = new Map<
+    typeof INPUT_SOURCE_ID | typeof MASK_SOURCE_ID,
+    PendingCrsLoad
+  >();
+  let applyingCrsRecovery = false;
 
   function removeSourceWithLayers(id: string) {
     for (const layer of map.getLayers().filter((layer) => layer.source === id)) map.removeLayer(layer.id);
@@ -203,6 +216,30 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     if (distanceInput) distanceInput.disabled = !operation.controls.distance;
   }
 
+  function syncControls() {
+    const pending = pendingCrsLoads.size > 0;
+    fileInput.disabled = pending;
+    if (maskFileInput) maskFileInput.disabled = pending;
+    const noInput = !map.getSource(INPUT_SOURCE_ID)?.getDataset() || targetSelect.options.length === 0;
+    targetSelect.disabled = pending || noInput;
+    runButton.disabled = pending || noInput;
+    crsRecoveryInput.disabled = applyingCrsRecovery;
+    crsRecoveryApply.disabled = !pending || applyingCrsRecovery;
+  }
+
+  function getPendingCrsLoad(): PendingCrsLoad | undefined {
+    return pendingCrsLoads.values().next().value;
+  }
+
+  function showCrsRecovery(
+    pendingLoad: PendingCrsLoad,
+    statusMessage = `无法识别${pendingLoad.sourceName}的 CRS，请填写数据 CRS 后重试。`,
+  ) {
+    crsRecoveryLabel.textContent = `${pendingLoad.sourceName} CRS`;
+    crsRecovery.hidden = false;
+    status.textContent = statusMessage;
+  }
+
   function registerSources() {
     targetSelect.replaceChildren();
     layerPickerEntries = [];
@@ -228,49 +265,42 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     if (inputSource) map.setExtent(inputSource.getExtent());
   }
 
-  async function loadInput(upload: { filename: string; content: Uint8Array }) {
-    const source = new TopologySource(INPUT_SOURCE_ID);
+  async function loadSource(
+    sourceId: typeof INPUT_SOURCE_ID | typeof MASK_SOURCE_ID,
+    sourceName: PendingCrsLoad['sourceName'],
+    upload: { filename: string; content: Uint8Array },
+  ) {
+    const source = new TopologySource(sourceId);
     await source.setData(upload);
-    const dataset = source.getDataset();
-    if (!dataset) throw new Error('文件未生成可用 dataset');
-    dataset.info = { ...dataset.info, crs_string: crsInput.value.trim() || undefined };
-    removeSourceWithLayers(OUTPUT_SOURCE_ID);
-    removeSourceWithLayers(INPUT_SOURCE_ID);
-    await map.addSource(INPUT_SOURCE_ID, source);
+    if (!source.getDataset()) throw new Error(sourceId === INPUT_SOURCE_ID ? '文件未生成可用 dataset' : '遮罩文件未生成可用 dataset');
+    if (sourceId === INPUT_SOURCE_ID) removeSourceWithLayers(OUTPUT_SOURCE_ID);
+    removeSourceWithLayers(sourceId);
     registerSources();
+    const result = await map.preflightSource({ id: sourceId, source });
+    if (result.status === 'ready') {
+      await map.confirmSource(result.plan);
+      registerSources();
+      return;
+    }
+    if (result.status === 'needs-input' && result.requirements.some((requirement) => requirement.code === 'source-crs')) {
+      const pendingLoad = { sourceId, sourceName, draft: result.draft };
+      const activePendingLoad = getPendingCrsLoad();
+      pendingCrsLoads.set(sourceId, pendingLoad);
+      if (!activePendingLoad || activePendingLoad.sourceId === sourceId) {
+        showCrsRecovery(pendingLoad);
+      }
+      syncControls();
+      return;
+    }
+    throw new Error(result.diagnostics[0]?.message ?? '加载需要额外输入。');
+  }
+
+  async function loadInput(upload: { filename: string; content: Uint8Array }) {
+    await loadSource(INPUT_SOURCE_ID, '输入数据', upload);
   }
 
   async function loadMask(upload: { filename: string; content: Uint8Array }) {
-    const source = new TopologySource(MASK_SOURCE_ID);
-    await source.setData(upload);
-    const dataset = source.getDataset();
-    if (!dataset) throw new Error('遮罩文件未生成可用 dataset');
-    dataset.info = { ...dataset.info, crs_string: crsInput.value.trim() || undefined };
-    removeSourceWithLayers(MASK_SOURCE_ID);
-    await map.addSource(MASK_SOURCE_ID, source);
-    registerSources();
-  }
-
-  async function reapplyInputCrs() {
-    if (!uploadedInput) return;
-    fileInput.disabled = true;
-    crsInput.disabled = true;
-    runButton.disabled = true;
-    targetSelect.disabled = true;
-    try {
-      await loadInput(uploadedInput);
-      if (uploadedMask) await loadMask(uploadedMask);
-      status.textContent = `已按 ${crsInput.value.trim() || '默认'} CRS 重新注册数据。`;
-    } catch (error) {
-      console.error(error);
-      removeSourceWithLayers(INPUT_SOURCE_ID);
-      status.textContent = `CRS 应用失败: ${error instanceof Error ? error.message : String(error)}`;
-    } finally {
-      fileInput.disabled = false;
-      crsInput.disabled = false;
-      runButton.disabled = !map.getSource(INPUT_SOURCE_ID)?.getDataset() || targetSelect.options.length === 0;
-      targetSelect.disabled = runButton.disabled;
-    }
+    await loadSource(MASK_SOURCE_ID, 'Mask 数据', upload);
   }
 
   async function ensureRuntime() {
@@ -312,17 +342,15 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     runButton.disabled = true;
     targetSelect.disabled = true;
     try {
-      uploadedInput = { filename: file.name, content: new Uint8Array(await file.arrayBuffer()) };
-      await loadInput(uploadedInput);
-      status.textContent = `已加载 ${file.name}。`;
+      const upload = { filename: file.name, content: new Uint8Array(await file.arrayBuffer()) };
+      await loadInput(upload);
+      if (pendingCrsLoads.size === 0) status.textContent = `已加载 ${file.name}。`;
     } catch (error) {
       console.error(error);
       removeSourceWithLayers(INPUT_SOURCE_ID);
       status.textContent = `加载失败: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
-      fileInput.disabled = false;
-      runButton.disabled = !map.getSource(INPUT_SOURCE_ID)?.getDataset() || targetSelect.options.length === 0;
-      targetSelect.disabled = runButton.disabled;
+      syncControls();
     }
   });
 
@@ -332,16 +360,15 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
     maskFileInput.disabled = true;
     runButton.disabled = true;
     try {
-      uploadedMask = { filename: file.name, content: new Uint8Array(await file.arrayBuffer()) };
-      await loadMask(uploadedMask);
-      status.textContent = `已加载遮罩 ${file.name}。`;
+      const upload = { filename: file.name, content: new Uint8Array(await file.arrayBuffer()) };
+      await loadMask(upload);
+      if (pendingCrsLoads.size === 0) status.textContent = `已加载遮罩 ${file.name}。`;
     } catch (error) {
       console.error(error);
       removeSourceWithLayers(MASK_SOURCE_ID);
       status.textContent = `遮罩加载失败: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
-      maskFileInput.disabled = false;
-      runButton.disabled = !map.getSource(INPUT_SOURCE_ID)?.getDataset() || targetSelect.options.length === 0;
+      syncControls();
     }
   });
 
@@ -410,12 +437,54 @@ export async function mountDuckDbSpatialExample(config: DuckDbSpatialExampleConf
       console.error(error);
       status.textContent = `DuckDB 空间处理失败: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
-      runButton.disabled = !map.getSource(INPUT_SOURCE_ID)?.getDataset() || targetSelect.options.length === 0;
+      syncControls();
     }
   });
 
   targetSelect.addEventListener('change', () => setCurrentLayerVisibility(targetSelect.value));
-  crsInput.addEventListener('change', reapplyInputCrs);
+  crsRecoveryApply.addEventListener('click', async () => {
+    const pendingLoad = getPendingCrsLoad();
+    if (!pendingLoad || applyingCrsRecovery) return;
+    applyingCrsRecovery = true;
+    syncControls();
+    const sourceCrs = crsRecoveryInput.value.trim();
+    try {
+      const result = await map.preflightSource(pendingLoad.draft, { sourceCrs });
+      if (result.status === 'ready') {
+        await map.confirmSource(result.plan);
+        pendingCrsLoads.delete(pendingLoad.sourceId);
+        crsRecoveryInput.value = '';
+        registerSources();
+        const nextPendingLoad = getPendingCrsLoad();
+        if (nextPendingLoad) {
+          showCrsRecovery(nextPendingLoad);
+        } else {
+          crsRecovery.hidden = true;
+        }
+        status.textContent = `已按 ${sourceCrs} 加载${pendingLoad.sourceName}。`;
+        return;
+      }
+      if (result.status === 'needs-input' && result.requirements.some((requirement) => requirement.code === 'source-crs')) return;
+      throw new Error(result.diagnostics[0]?.message ?? '加载需要额外输入。');
+    } catch (error) {
+      console.error(error);
+      pendingCrsLoads.delete(pendingLoad.sourceId);
+      crsRecoveryInput.value = '';
+      const nextPendingLoad = getPendingCrsLoad();
+      if (nextPendingLoad) {
+        showCrsRecovery(
+          nextPendingLoad,
+          `加载失败: ${error instanceof Error ? error.message : String(error)} 请填写${nextPendingLoad.sourceName}的 CRS 后重试。`,
+        );
+      } else {
+        crsRecovery.hidden = true;
+        status.textContent = `加载失败: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    } finally {
+      applyingCrsRecovery = false;
+      syncControls();
+    }
+  });
   mapContainer.addEventListener('click', (event) => {
     const rect = mapContainer.getBoundingClientRect();
     const features = map.queryFeatures([event.clientX - rect.left, event.clientY - rect.top]);

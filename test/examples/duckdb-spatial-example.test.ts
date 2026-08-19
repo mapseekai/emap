@@ -64,14 +64,19 @@ function createSource(
 function fixture(options: {
   rejectDuplicateLayers?: boolean;
   setData?: (id: string) => Promise<void>;
+  sourceInfo?: { crs_string?: string };
 } = {}) {
-  const { rejectDuplicateLayers = false, setData } = options;
+  const { rejectDuplicateLayers = false, setData, sourceInfo } = options;
   document.body.innerHTML = `
     <div id="map"></div>
     <input id="file" type="file">
     <input id="mask-file" type="file">
     <select id="target"></select>
-    <input id="crs" value="EPSG:4326">
+    <div id="crs-recovery" class="emap-example-field" hidden>
+      <label id="crs-recovery-label" for="crs-recovery-input">数据 CRS</label>
+      <input id="crs-recovery-input" placeholder="例如 EPSG:3857">
+      <button id="crs-recovery-apply" type="button">应用 CRS</button>
+    </div>
     <input id="allow-geographic" type="checkbox">
     <button id="run"></button>
     <p id="status"></p>
@@ -88,6 +93,11 @@ function fixture(options: {
     getCanvasContainer: () => document.getElementById('map')!,
     getSource: (id: string) => sources.get(id),
     addSource: vi.fn(async (id: string, source: Source) => sources.set(id, source)),
+    preflightSource: vi.fn(async (request: { id: string; source: Source }) => ({
+      status: 'ready' as const,
+      plan: { sourceId: request.id, source: request.source },
+    })),
+    confirmSource: vi.fn(async (plan: { sourceId: string; source: Source }) => sources.set(plan.sourceId, plan.source)),
     removeSource: vi.fn((id: string) => sources.delete(id)),
     getLayers: () => layers,
     getLayer: (id: string) => layers.find((layer) => layer.id === id),
@@ -106,7 +116,11 @@ function fixture(options: {
   };
   class TopologySource {
     readonly impl = createSource('source', setData);
-    constructor(id: string) { this.impl.id = id; return this.impl; }
+    constructor(id: string) {
+      this.impl.id = id;
+      if (sourceInfo) this.impl.dataset.info = { ...sourceInfo };
+      return this.impl;
+    }
   }
   exampleRuntime.loadExampleRuntime.mockResolvedValue({
     Emap: class { constructor() { return map; } },
@@ -280,7 +294,6 @@ describe('DuckDB spatial example runner', () => {
       for (const controlId of [
         'file',
         'target',
-        'crs',
         'mask-file',
         'mask-layer',
         'relation-mode',
@@ -297,6 +310,13 @@ describe('DuckDB spatial example runner', () => {
           expect(page.querySelector(`label[for="${controlId}"]`)).not.toBeNull();
         }
       }
+      expect(page.getElementById('crs')).toBeNull();
+      const recovery = page.getElementById('crs-recovery');
+      expect(recovery?.classList.contains('emap-example-field')).toBe(true);
+      expect(recovery?.hasAttribute('hidden')).toBe(true);
+      expect(page.querySelector('label[for="crs-recovery-input"]')?.id).toBe('crs-recovery-label');
+      expect(page.getElementById('crs-recovery-input')?.closest('.emap-example-field')).toBe(recovery);
+      expect(page.getElementById('crs-recovery-apply')?.closest('.emap-example-field')).toBe(recovery);
 
       expect(page.querySelector('#run')?.classList.contains('emap-example-primary-button')).toBe(true);
       expect(page.querySelector('#status')?.classList.contains('emap-example-status')).toBe(true);
@@ -341,21 +361,182 @@ describe('DuckDB spatial example runner', () => {
     await expect(mountDuckDbSpatialExample({ id: 'test', operation: 'distanceWithin' })).rejects.toThrow('#distance');
   });
 
-  it('defaults uploaded source CRS to EPSG:4326, reloads bytes for a CRS change, and disables controls', async () => {
-    const { map } = fixture();
+  it('confirms detected input metadata without an explicit CRS override', async () => {
+    const { map, sources } = fixture({ sourceInfo: { crs_string: 'EPSG:3857' } });
+    await expect(mountDuckDbSpatialExample({ id: 'test', operation: 'centroid' })).resolves.toBeUndefined();
+    const input = document.getElementById('file') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['point'], 'point.geojson')] });
+    input.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(map.confirmSource).toHaveBeenCalledTimes(1));
+    expect(map.preflightSource.mock.calls[0]?.[0]).toEqual({ id: 'duckdb-spatial-input', source: expect.anything() });
+    expect(sources.get('duckdb-spatial-input')?.getDataset().info.crs_string).toBe('EPSG:3857');
+    expect(document.getElementById('crs-recovery')?.hidden).toBe(true);
+  });
+
+  it('requests an explicit Input CRS after source preflight', async () => {
+    const { map, sources } = fixture();
+    const draft = { input: 'draft' };
+    map.preflightSource.mockImplementationOnce(async () => ({ status: 'needs-input', requirements: [{ code: 'source-crs', field: 'sourceCrs', reason: 'missing' }], draft }));
+    map.preflightSource.mockImplementationOnce(async (_draft, answers) => ({ status: 'ready', plan: { sourceId: 'duckdb-spatial-input', source: map.preflightSource.mock.calls[0]![0].source, answers } }));
     await mountDuckDbSpatialExample({ id: 'test', operation: 'centroid' });
     const input = document.getElementById('file') as HTMLInputElement;
-    const file = new File(['point'], 'point.geojson');
-    Object.defineProperty(input, 'files', { value: [file] });
+    Object.defineProperty(input, 'files', { value: [new File(['point'], 'point.geojson')] });
     input.dispatchEvent(new Event('change'));
-    await vi.waitFor(() => expect(map.addSource).toHaveBeenCalledTimes(1));
-    expect(map.getSource('duckdb-spatial-input')?.getDataset().info.crs_string).toBe('EPSG:4326');
-    const crs = document.getElementById('crs') as HTMLInputElement;
-    crs.value = 'EPSG:3857';
-    crs.dispatchEvent(new Event('change'));
-    await vi.waitFor(() => expect(map.addSource).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(document.getElementById('crs-recovery')?.hidden).toBe(false));
+    expect(input.disabled).toBe(true);
+    expect((document.getElementById('mask-file') as HTMLInputElement).disabled).toBe(true);
+    expect((document.getElementById('target') as HTMLSelectElement).disabled).toBe(true);
+    expect((document.getElementById('run') as HTMLButtonElement).disabled).toBe(true);
+    (document.getElementById('crs-recovery-input') as HTMLInputElement).value = 'EPSG:3857';
+    document.getElementById('crs-recovery-apply')!.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(map.confirmSource).toHaveBeenCalledTimes(1));
+    expect(map.preflightSource).toHaveBeenLastCalledWith(draft, { sourceCrs: 'EPSG:3857' });
+    expect(sources.has('duckdb-spatial-input')).toBe(true);
+    expect(document.getElementById('crs-recovery')?.hidden).toBe(true);
     expect(input.disabled).toBe(false);
-    expect(document.getElementById('run')).not.toHaveProperty('disabled', true);
+    expect(document.getElementById('status')?.textContent).toBe(
+      '已按 EPSG:3857 加载输入数据。',
+    );
+  });
+
+  it('requests an explicit Mask CRS after source preflight', async () => {
+    const { map, sources } = fixture();
+    const maskDraft = { mask: 'draft' };
+    await mountDuckDbSpatialExample({ id: 'test', operation: 'distance' });
+    const input = document.getElementById('file') as HTMLInputElement;
+    const mask = document.getElementById('mask-file') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['input'], 'input.geojson')] });
+    input.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(map.confirmSource).toHaveBeenCalledTimes(1));
+    const initialInput = sources.get('duckdb-spatial-input');
+    map.preflightSource.mockImplementationOnce(async () => ({ status: 'needs-input', requirements: [{ code: 'source-crs', field: 'sourceCrs', reason: 'missing' }], draft: maskDraft }));
+    map.preflightSource.mockImplementationOnce(async (_draft, answers) => ({ status: 'ready', plan: { sourceId: 'duckdb-spatial-mask', source: map.preflightSource.mock.calls[1]![0].source, answers } }));
+    Object.defineProperty(mask, 'files', { value: [new File(['mask'], 'mask.geojson')] });
+    mask.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(document.getElementById('crs-recovery-label')?.textContent).toBe('Mask 数据 CRS'));
+    expect(sources.get('duckdb-spatial-input')).toBe(initialInput);
+    (document.getElementById('crs-recovery-input') as HTMLInputElement).value = 'EPSG:3857';
+    document.getElementById('crs-recovery-apply')!.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(map.confirmSource).toHaveBeenCalledTimes(2));
+    expect(map.preflightSource).toHaveBeenLastCalledWith(maskDraft, { sourceCrs: 'EPSG:3857' });
+    expect(sources.get('duckdb-spatial-input')).toBe(initialInput);
+    expect(document.getElementById('status')?.textContent).toBe(
+      '已按 EPSG:3857 加载Mask 数据。',
+    );
+  });
+
+  it('retains concurrent Input and Mask CRS drafts until both are recovered', async () => {
+    const parseResolvers = new Map<string, () => void>();
+    const parsedSources = new Map<string, Source>();
+    const { map, sources } = fixture({
+      setData: (id) => new Promise<void>((resolve) => {
+        parseResolvers.set(id, resolve);
+      }),
+    });
+    map.preflightSource.mockImplementation(async (request, answers) => {
+      if ('source' in request) {
+        parsedSources.set(request.id, request.source);
+        return {
+          status: 'needs-input',
+          requirements: [{ code: 'source-crs', field: 'sourceCrs', reason: 'missing' }],
+          draft: { sourceId: request.id },
+        };
+      }
+      if (!('sourceId' in request) || typeof request.sourceId !== 'string') {
+        throw new Error('Expected a source load draft');
+      }
+      const sourceId = request.sourceId;
+      return {
+        status: 'ready',
+        plan: { sourceId, source: parsedSources.get(sourceId)!, answers },
+      };
+    });
+    await mountDuckDbSpatialExample({ id: 'test', operation: 'distance' });
+    const input = document.getElementById('file') as HTMLInputElement;
+    const mask = document.getElementById('mask-file') as HTMLInputElement;
+    const recoveryInput = document.getElementById('crs-recovery-input') as HTMLInputElement;
+    const recoveryApply = document.getElementById('crs-recovery-apply') as HTMLButtonElement;
+    Object.defineProperty(input, 'files', { value: [new File(['input'], 'input.geojson')] });
+    Object.defineProperty(mask, 'files', { value: [new File(['mask'], 'mask.geojson')] });
+    input.dispatchEvent(new Event('change'));
+    mask.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(parseResolvers.size).toBe(2));
+    parseResolvers.get('duckdb-spatial-input')!();
+    await vi.waitFor(() => expect(document.getElementById('crs-recovery-label')?.textContent).toBe('输入数据 CRS'));
+    parseResolvers.get('duckdb-spatial-mask')!();
+    await vi.waitFor(() => expect(map.preflightSource).toHaveBeenCalledTimes(2));
+    expect(document.getElementById('crs-recovery-label')?.textContent).toBe('输入数据 CRS');
+
+    recoveryInput.value = 'EPSG:3857';
+    recoveryApply.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
+    expect(document.getElementById('status')?.textContent).toBe(
+      '已按 EPSG:3857 加载输入数据。',
+    );
+    await vi.waitFor(() => expect(document.getElementById('crs-recovery-label')?.textContent).toBe('Mask 数据 CRS'));
+
+    recoveryInput.value = 'EPSG:3857';
+    recoveryApply.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-mask')).toBe(true));
+    expect(document.getElementById('crs-recovery')?.hidden).toBe(true);
+  });
+
+  it('submits a pending CRS draft only once while confirmation is in flight', async () => {
+    const { map, sources } = fixture();
+    const draft = { input: 'draft' };
+    type ReadyResult = {
+      status: 'ready';
+      plan: { sourceId: string; source: Source };
+    };
+    const retryResolvers: Array<(result: ReadyResult) => void> = [];
+    map.preflightSource.mockImplementation(async (request) => {
+      if ('source' in request) {
+        return {
+          status: 'needs-input',
+          requirements: [{ code: 'source-crs', field: 'sourceCrs', reason: 'missing' }],
+          draft,
+        };
+      }
+      return new Promise<ReadyResult>((resolve) => retryResolvers.push(resolve));
+    });
+    await mountDuckDbSpatialExample({ id: 'test', operation: 'centroid' });
+    const input = document.getElementById('file') as HTMLInputElement;
+    const recoveryInput = document.getElementById('crs-recovery-input') as HTMLInputElement;
+    const recoveryApply = document.getElementById('crs-recovery-apply') as HTMLButtonElement;
+    Object.defineProperty(input, 'files', { value: [new File(['point'], 'point.geojson')] });
+    input.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(document.getElementById('crs-recovery')?.hidden).toBe(false));
+
+    recoveryInput.value = 'EPSG:3857';
+    recoveryApply.dispatchEvent(new Event('click'));
+    recoveryApply.dispatchEvent(new Event('click'));
+    await vi.waitFor(() => expect(retryResolvers).toHaveLength(1));
+    expect(recoveryApply.disabled).toBe(true);
+
+    retryResolvers[0]!({
+      status: 'ready',
+      plan: {
+        sourceId: 'duckdb-spatial-input',
+        source: map.preflightSource.mock.calls[0]![0].source,
+      },
+    });
+    await vi.waitFor(() => expect(sources.has('duckdb-spatial-input')).toBe(true));
+    expect(map.confirmSource).toHaveBeenCalledTimes(1);
+    expect(document.getElementById('status')?.textContent).toBe(
+      '已按 EPSG:3857 加载输入数据。',
+    );
+  });
+
+  it('does not offer CRS recovery for a rejected source', async () => {
+    const { map } = fixture();
+    map.preflightSource.mockResolvedValueOnce({ status: 'rejected', diagnostics: [{ code: 'source-load-rejected', severity: 'error', message: 'broken input' }] });
+    await mountDuckDbSpatialExample({ id: 'test', operation: 'centroid' });
+    const input = document.getElementById('file') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['point'], 'point.geojson')] });
+    input.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(document.getElementById('status')?.textContent).toContain('加载失败: broken input'));
+    expect(document.getElementById('crs-recovery')?.hidden).toBe(true);
+    expect(map.confirmSource).not.toHaveBeenCalled();
   });
 
   it('replaces output, renders clicked attributes, and discards stale results before publication', async () => {
@@ -372,7 +553,7 @@ describe('DuckDB spatial example runner', () => {
     sources.set('duckdb-spatial-input', createSource('new-input'));
     resolveOperation({ layers: [{ name: 'out', geometry_type: 'point', shapes: [{}] }] });
     await vi.waitFor(() => expect(document.getElementById('status')!.textContent).toContain('结果已丢弃'));
-    expect(map.addSource).toHaveBeenCalledTimes(1);
+    expect(map.addSource).not.toHaveBeenCalled();
     document.getElementById('map')!.dispatchEvent(new MouseEvent('click'));
     expect(document.getElementById('picked-attributes')!.textContent).toContain('picked');
   });
@@ -494,22 +675,6 @@ describe('DuckDB spatial example runner', () => {
     document.getElementById('run')!.dispatchEvent(new Event('click'));
     await vi.waitFor(() => expect(duckDb.runRelationOperation).toHaveBeenCalledTimes(1));
 
-    const crs = document.getElementById('crs') as HTMLInputElement;
-    crs.value = 'EPSG:3857';
-    crs.dispatchEvent(new Event('change'));
-    await vi.waitFor(() => {
-      expect(sources.get('duckdb-spatial-input')).not.toBe(initialInputSource);
-      expect(sources.get('duckdb-spatial-mask')).not.toBe(initialMaskSource);
-      expect(document.getElementById('status')!.textContent).toBe('已按 EPSG:3857 CRS 重新注册数据。');
-    });
-    expect(layers.map(({ id }) => id).sort()).toEqual([
-      'duckdb-spatial-input-0-point',
-      'duckdb-spatial-mask-0-point',
-    ]);
-    expect(Array.from((document.getElementById('target') as HTMLSelectElement).options, ({ value }) => value)).toEqual([
-      'duckdb-spatial-input:0',
-      'duckdb-spatial-mask:0',
-    ]);
   });
 
 

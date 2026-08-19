@@ -12,9 +12,10 @@
       <label for="target">目标图层</label>
       <select id="target"></select>
     </div>
-    <div class="emap-example-field">
-      <label for="crs">数据 CRS</label>
-      <input id="crs" value="EPSG:3857">
+    <div id="crs-recovery" class="emap-example-field" hidden>
+      <label id="crs-recovery-label" for="crs-recovery-input">数据 CRS</label>
+      <input id="crs-recovery-input" placeholder="例如 EPSG:3857">
+      <button id="crs-recovery-apply" type="button">应用 CRS</button>
     </div>
     <div class="emap-example-field">
       <label id="mask-layer-label" for="mask-layer">遮罩图层</label>
