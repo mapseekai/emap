@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vitest/config';
+import { defaultExclude, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   resolve: {
@@ -24,5 +24,8 @@ export default defineConfig({
   },
   test: {
     maxWorkers: 2,
+    // Linked worktrees under .worktrees/ carry their own test suites and
+    // config; keep root discovery on the canonical checkout only.
+    exclude: [...defaultExclude, '.worktrees/**'],
   },
 });
