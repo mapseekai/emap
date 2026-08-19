@@ -33,9 +33,9 @@ export async function alignSecondaryDatasetCrs(
     };
   }
   working.arcs?.setRetainedInterval?.(0);
-  const result = await adapter.runOnDataset(`-proj ${resolvedPrimary}`, working);
-  setDatasetCrsMetadata(result, normalizeProjectCrsMetadata(primaryCrs) ?? primaryCrs);
-  return result;
+  const projectedDataset = await adapter.runOnDataset(`-proj ${resolvedPrimary}`, working);
+  setDatasetCrsMetadata(projectedDataset, normalizeProjectCrsMetadata(primaryCrs) ?? primaryCrs);
+  return projectedDataset;
 }
 
 /** Write the primary input's explicit CRS onto a DuckDB result without changing coordinates. */
