@@ -12,7 +12,9 @@ docs/superpowers/
 .claude/
 .opencode/
 .omx/
-.github/
+.github/*
+!.github/workflows/
+!.github/workflows/*.yml
 .superpowers/
 .worktrees/
 .codegraph/
