@@ -3,6 +3,7 @@ import mapshaper from 'mapshaper';
 import { Emap } from './map';
 import type { FeatureRef } from './map';
 import type { LayerSpecification } from './layer';
+import type { MapshaperDataset } from '../types/mapshaper-types';
 import { Selection } from './selection';
 import { Projection } from '../geo/projection';
 import { Viewport } from '../geo/viewport';
@@ -4619,6 +4620,73 @@ describe('Emap projectLayer', () => {
     expect(exportFileContentSpy).toHaveBeenCalledTimes(1);
     expect(exportFileContentSpy.mock.calls[0][0]).toBe(afterDs);
     expect(afterDs.info.crs_string).toBe('EPSG:3857');
+  });
+
+  it('keeps live source CRS metadata isolated when mapshaper shares info during detached export', async () => {
+    const projection = new Projection();
+    projection.setCRS('EPSG:4326');
+    const viewport = new Viewport();
+    viewport.setCRS('EPSG:4326');
+    setPrivate(map, '_projection', projection);
+    setPrivate(map, '_viewport', viewport);
+    setPrivate(map, '_layers', [{ id: 'display', type: 'line', source: 'src1' }]);
+    const originalDataset = source.getDataset();
+    const originalInfo = originalDataset.info;
+    const originalInfoValue = structuredClone(originalInfo);
+    const originalLayers = getPrivate(map, '_layers');
+    const historyChange = vi.fn();
+    map.on('historychange', historyChange);
+
+    Reflect.set(
+      mapshaper.internal as object,
+      'copyDataset',
+      vi.fn((dataset) => ({
+        ...dataset,
+        layers: dataset.layers.map((layer: object) => ({ ...layer })),
+        info: dataset.info,
+      })),
+    );
+    runParsedCommandsSpy.mockImplementation(
+      (
+        _commands: unknown,
+        job: { catalog: { getDefaultTargets: () => Array<{ dataset: MapshaperDataset }> } },
+        cb: (
+          error: unknown,
+          finished: { catalog: { getDefaultTargets: () => Array<{ dataset: MapshaperDataset }> } },
+        ) => void,
+      ) => {
+        const [{ dataset: working }] = job.catalog.getDefaultTargets();
+        if (!working.info) throw new Error('expected working dataset metadata');
+        working.info.crs_string = 'EPSG:3857';
+        working.info.crs = { projName: 'merc', is_latlong: false };
+        cb(null, { catalog: { getDefaultTargets: () => [{ dataset: working }] } });
+      },
+    );
+
+    const result = await map.ops.projectLayer({
+      source: 'src1',
+      target: 'states',
+      crs: 'EPSG:3857',
+      output: { format: 'geojson' },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected projection export to succeed');
+    expect(result.value.blob).toBeInstanceOf(Blob);
+    expect(exportFileContentSpy.mock.calls[0][0].info).toMatchObject({
+      crs_string: 'EPSG:3857',
+      crs: { projName: 'merc', is_latlong: false },
+    });
+    expect(source.getDataset()).toBe(originalDataset);
+    expect(source.getDataset().info).toBe(originalInfo);
+    expect(source.getDataset().info).toEqual(originalInfoValue);
+    expect(source.setDataset).not.toHaveBeenCalled();
+    expect(source.refreshDisplayArcs).not.toHaveBeenCalled();
+    expect(getPrivate(map, '_layers')).toBe(originalLayers);
+    expect(map.getCRS()).toBe('EPSG:4326');
+    expect(getPrivate(map, '_viewport')).toBe(viewport);
+    expect(historyChange).not.toHaveBeenCalled();
+    expect(getPrivate(map, '_scheduleRender')).not.toHaveBeenCalled();
   });
 
   it('quotes Proj.4 strings with spaces', async () => {
