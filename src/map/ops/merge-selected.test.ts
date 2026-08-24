@@ -8,7 +8,6 @@ import type { MapshaperDataset, MapshaperLayer } from '../../types/mapshaper-typ
 import type { OpContext, PrepareDatasetCommand } from './_context';
 import { mergeSelected } from './merge-selected';
 
-
 interface PreparedCall {
   sourceId: string;
   commands: ParsedCommand[];
@@ -94,7 +93,6 @@ function copyFixtureDataset(dataset: MapshaperDataset): MapshaperDataset {
   };
 }
 
-
 describe('mergeSelected contract', () => {
   it('requires at least two selected features', async () => {
     for (const refs of [[], [selected(0)]]) {
@@ -157,20 +155,20 @@ describe('mergeSelected contract', () => {
     ]);
   });
 
-  it.each(['polyline', 'point'] as const)(
-    'keeps %s merging on ordinary dissolve',
-    async (geometryType) => {
-      const fixture = createFixture([selected(0), selected(2)], geometryType);
-      await mergeSelected(fixture.ctx);
+  it.each([
+    'polyline',
+    'point',
+  ] as const)('keeps %s merging on ordinary dissolve', async (geometryType) => {
+    const fixture = createFixture([selected(0), selected(2)], geometryType);
+    await mergeSelected(fixture.ctx);
 
-      expect(fixture.getPreparedCall()?.commands.map((command) => command.name)).toEqual([
-        'target',
-        'dissolve',
-        'target',
-        'merge-layers',
-      ]);
-    },
-  );
+    expect(fixture.getPreparedCall()?.commands.map((command) => command.name)).toEqual([
+      'target',
+      'dissolve',
+      'target',
+      'merge-layers',
+    ]);
+  });
 });
 
 type Position = [number, number];
@@ -235,7 +233,9 @@ function exportFeatures(dataset: MapshaperDataset): ExportedFeature[] {
   const text =
     typeof content === 'string'
       ? content
-      : new TextDecoder().decode(content instanceof ArrayBuffer ? new Uint8Array(content) : content);
+      : new TextDecoder().decode(
+          content instanceof ArrayBuffer ? new Uint8Array(content) : content,
+        );
   const parsed = JSON.parse(text) as unknown;
   if (
     typeof parsed !== 'object' ||
@@ -319,9 +319,7 @@ describe('mergeSelected real polygon geometry', () => {
 
     expect(result.ok).toBe(true);
     const merged = after.find((feature) => feature.properties.name === 'B');
-    const unselectedBefore = before.find(
-      (feature) => feature.properties.name === 'unselected',
-    );
+    const unselectedBefore = before.find((feature) => feature.properties.name === 'unselected');
     const unselectedAfter = after.find((feature) => feature.properties.name === 'unselected');
     expect(merged).toBeDefined();
     expect(merged?.properties['has,comma']).toBe('kept');

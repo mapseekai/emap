@@ -5,7 +5,6 @@ import type { DissolveOptions } from '../types';
 import { defineLayerOp } from './_define';
 import { validateFieldList, validateFieldName } from './_fields';
 
-
 export const dissolveLayer = defineLayerOp<DissolveOptions>({
   name: 'dissolveLayer',
   command: 'dissolve',
@@ -66,4 +65,3 @@ export const dissolveLayer = defineLayerOp<DissolveOptions>({
     return dissolveOpts;
   },
 });
-

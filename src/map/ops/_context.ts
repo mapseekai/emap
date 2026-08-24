@@ -39,10 +39,7 @@ export type RunDatasetCommandParsed = (
 ) => Promise<OpResult>;
 
 /** Prepare the runner-owned dataset copy before parsed-command dispatch. */
-export type PrepareDatasetCommand = (
-  working: MapshaperDataset,
-  original: MapshaperDataset,
-) => void;
+export type PrepareDatasetCommand = (working: MapshaperDataset, original: MapshaperDataset) => void;
 
 /** Parsed-command runner with an isolated working-copy preparation step. */
 export type RunPreparedDatasetCommandParsed = (
