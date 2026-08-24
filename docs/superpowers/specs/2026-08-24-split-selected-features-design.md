@@ -200,10 +200,10 @@ For every split target:
 
 1. rank results by planar length for polylines or planar area for polygons;
 2. write the largest result at the original feature index, preserving its feature ID;
-3. insert the remaining results immediately after it in deterministic geometry order;
+3. append the remaining results to the end of the layer in deterministic target and geometry order;
 4. assign each result a separate shallow copy of the original record.
 
-For every unsplit feature, preserve the existing shape and record values. Unselected features must remain geometrically unchanged. Index shifts caused by inserted results are reflected in the returned and post-commit `FeatureRef` values.
+For every unsplit feature, preserve the existing array index, shape, and record values. Unselected features must remain geometrically unchanged. Appending additional results, rather than inserting them beside their parent, preserves every pre-existing feature ID when multiple targets are split together.
 
 Layers without a data table remain without a data table. Layers with a data table retain the exact field schema and one record per output shape.
 
@@ -212,7 +212,7 @@ Layers without a data table remain without a data table. Layers with a data tabl
 The commit replaces the old selection with:
 
 - every result of each split selected target;
-- each selected target which was not split, using its shifted feature ID.
+- each selected target which was not split, retaining its original feature ID.
 
 The dataset replacement and selection replacement produce:
 
@@ -317,9 +317,9 @@ Mapshaper failures continue through `Err.mapshaper`; stale operations use `Err.s
 ### Attributes, IDs, and selection tests
 
 - largest line/polygon result retains the original feature ID;
-- every additional result follows the original deterministically;
+- every additional result is appended deterministically after all pre-existing features;
 - every result has equal attribute values but a distinct record object;
-- selected unsplit targets remain selected with shifted IDs;
+- selected unsplit targets remain selected with their original IDs;
 - all split results are selected;
 - a layer without a data table remains valid.
 
