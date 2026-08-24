@@ -4633,6 +4633,14 @@ describe('Emap projectLayer', () => {
     const originalDataset = source.getDataset();
     const originalInfo = originalDataset.info;
     const originalInfoValue = structuredClone(originalInfo);
+    const originalDatasetValue = structuredClone({ layers: originalDataset.layers });
+    const selected: FeatureRef[] = [{ source: 'src1', layer: 'states', id: 0 }];
+    map.select(selected);
+    const originalSelection = map.getSelection();
+    const canUndo = map.canUndo();
+    const canRedo = map.canRedo();
+    const selectionChange = vi.fn();
+    map.on('selectionchange', selectionChange);
     const originalLayers = getPrivate(map, '_layers');
     const historyChange = vi.fn();
     map.on('historychange', historyChange);
@@ -4678,6 +4686,7 @@ describe('Emap projectLayer', () => {
       crs: { projName: 'merc', is_latlong: false },
     });
     expect(source.getDataset()).toBe(originalDataset);
+    expect({ layers: source.getDataset().layers }).toEqual(originalDatasetValue);
     expect(source.getDataset().info).toBe(originalInfo);
     expect(source.getDataset().info).toEqual(originalInfoValue);
     expect(source.setDataset).not.toHaveBeenCalled();
@@ -4686,6 +4695,10 @@ describe('Emap projectLayer', () => {
     expect(map.getCRS()).toBe('EPSG:4326');
     expect(getPrivate(map, '_viewport')).toBe(viewport);
     expect(historyChange).not.toHaveBeenCalled();
+    expect(map.getSelection()).toEqual(originalSelection);
+    expect(selectionChange).not.toHaveBeenCalled();
+    expect(map.canUndo()).toBe(canUndo);
+    expect(map.canRedo()).toBe(canRedo);
     expect(getPrivate(map, '_scheduleRender')).not.toHaveBeenCalled();
   });
 
