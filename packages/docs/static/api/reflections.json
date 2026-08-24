@@ -48476,9 +48476,9 @@
 							"sources": [
 								{
 									"fileName": "src/renderer/edit-overlay-renderer.ts",
-									"line": 21,
+									"line": 22,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/renderer/edit-overlay-renderer.ts#L21"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/renderer/edit-overlay-renderer.ts#L22"
 								}
 							],
 							"signatures": [
@@ -48491,9 +48491,9 @@
 									"sources": [
 										{
 											"fileName": "src/renderer/edit-overlay-renderer.ts",
-											"line": 21,
+											"line": 22,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/renderer/edit-overlay-renderer.ts#L21"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/renderer/edit-overlay-renderer.ts#L22"
 										}
 									],
 									"parameters": [
@@ -48541,9 +48541,9 @@
 							"sources": [
 								{
 									"fileName": "src/renderer/edit-overlay-renderer.ts",
-									"line": 27,
+									"line": 28,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/renderer/edit-overlay-renderer.ts#L27"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/renderer/edit-overlay-renderer.ts#L28"
 								}
 							],
 							"signatures": [
@@ -48580,9 +48580,9 @@
 									"sources": [
 										{
 											"fileName": "src/renderer/edit-overlay-renderer.ts",
-											"line": 27,
+											"line": 28,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/renderer/edit-overlay-renderer.ts#L27"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/renderer/edit-overlay-renderer.ts#L28"
 										}
 									],
 									"parameters": [
@@ -48792,9 +48792,9 @@
 					"sources": [
 						{
 							"fileName": "src/renderer/edit-overlay-renderer.ts",
-							"line": 20,
+							"line": 21,
 							"character": 13,
-							"url": "https://github.com/mapseekai/emap/blob/master/src/renderer/edit-overlay-renderer.ts#L20"
+							"url": "https://github.com/mapseekai/emap/blob/master/src/renderer/edit-overlay-renderer.ts#L21"
 						}
 					]
 				},
