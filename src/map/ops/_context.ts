@@ -10,6 +10,7 @@
 import type { EmapHostInternal } from '../emap-host';
 import type { OpResult } from '../op-result';
 import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
+import type { MapshaperDataset } from '../../types/mapshaper-types';
 
 /**
  * Run a CLI-style mapshaper command against a source's dataset, snapshotting
@@ -37,6 +38,21 @@ export type RunDatasetCommandParsed = (
   inputFiles?: Record<string, Uint8Array | string>,
 ) => Promise<OpResult>;
 
+/** Prepare the runner-owned dataset copy before parsed-command dispatch. */
+export type PrepareDatasetCommand = (
+  working: MapshaperDataset,
+  original: MapshaperDataset,
+) => void;
+
+/** Parsed-command runner with an isolated working-copy preparation step. */
+export type RunPreparedDatasetCommandParsed = (
+  sourceId: string,
+  commands: ParsedCommand[],
+  label: string,
+  prepare: PrepareDatasetCommand,
+  inputFiles?: Record<string, Uint8Array | string>,
+) => Promise<OpResult>;
+
 /**
  * Everything an op function needs from the host. Intentionally narrow —
  * adding new fields here is a deliberate signal that the op surface is
@@ -49,4 +65,6 @@ export interface OpContext {
   runDatasetCommand: RunDatasetCommand;
   /** Parsed-command runner (PR-4b); see {@link RunDatasetCommandParsed}. */
   runDatasetCommandParsed: RunDatasetCommandParsed;
+  /** Prepared parsed-command runner; see {@link RunPreparedDatasetCommandParsed}. */
+  runPreparedDatasetCommandParsed: RunPreparedDatasetCommandParsed;
 }

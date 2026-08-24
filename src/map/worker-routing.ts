@@ -44,6 +44,7 @@ const EXPENSIVE_COMMANDS: ReadonlySet<string> = new Set([
   'buffer',
   'clean',
   'dissolve',
+  'dissolve2',
   'mosaic',
   'union',
   'snap',
@@ -67,7 +68,7 @@ export function parseCommandHeads(cmd: string): string[] {
   // Match `-NAME` where NAME is hyphenated identifier (`-rename-fields`).
   // Quoted arguments containing `-` won't match because the regex is
   // anchored on whitespace + `-`.
-  const re = /(?:^|\s)-([a-z][a-z-]*)/gi;
+  const re = /(?:^|\s)-([a-z][a-z0-9-]*)/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(cmd)) !== null) heads.push(m[1].toLowerCase());
   return heads;

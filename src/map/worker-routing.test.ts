@@ -4,6 +4,7 @@ import { parseCommandHeads, shouldUseWorker } from './worker-routing';
 describe('parseCommandHeads', () => {
   it.each([
     ['-target X -dissolve foo', ['target', 'dissolve']],
+    ['-target X -dissolve2', ['target', 'dissolve2']],
     ['-rename-fields A=B', ['rename-fields']],
     ['-target X', ['target']],
     ['', []],

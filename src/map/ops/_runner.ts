@@ -29,6 +29,7 @@ import {
 import { resolveProjectCrs } from '../../geo/crs-resolver';
 import { parseCommandHeads, shouldUseWorkerForHeads } from '../worker-routing';
 import { collectTransferables } from '../../worker/transferables';
+import type { PrepareDatasetCommand } from './_context';
 
 /**
  * What a dataset-replace op CHANGES about the dataset. Drives the
@@ -70,6 +71,7 @@ const COMMAND_EFFECTS: Readonly<Record<string, OpEffect>> = {
   clip: 'shape-count',
   erase: 'shape-count',
   dissolve: 'shape-count',
+  dissolve2: 'shape-count',
   explode: 'shape-count',
   filter: 'shape-count',
   'filter-geom': 'shape-count',
@@ -219,19 +221,40 @@ export function _runDatasetCommandParsed(
   );
 }
 
+export function _runPreparedDatasetCommandParsed(
+  host: EmapHostInternal,
+  sourceId: string,
+  commands: ParsedCommand[],
+  label: string,
+  prepare: PrepareDatasetCommand,
+  inputFiles?: Record<string, Uint8Array | string>,
+): Promise<OpResult> {
+  const heads = commands.map((command) => command.name);
+  return runDatasetCommand(
+    host,
+    sourceId,
+    { kind: 'parsed', commands, heads, cmd: heads.map((head) => `-${head}`).join(' ') },
+    label,
+    inputFiles,
+    prepare,
+  );
+}
+
 function runDatasetCommand(
   host: EmapHostInternal,
   sourceId: string,
   request: DatasetCommandRequest,
   label: string,
   inputFiles?: Record<string, Uint8Array | string>,
+  prepare?: PrepareDatasetCommand,
 ): Promise<OpResult> {
   return runDatasetMutation(
     host,
     sourceId,
     label,
     () => inferEffectForHeads(request.heads),
-    async (working) => {
+    async (working, original) => {
+      prepare?.(working, original);
       const adapter = getDefaultMapshaperAdapter();
       const vertexCount = working.arcs?.getPointCount?.() ?? 0;
       const defaultDecision = shouldUseWorkerForHeads(
