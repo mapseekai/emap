@@ -26,6 +26,7 @@ export type {
   // mapshaper-op option records
   ClipEraseOptions,
   DissolveOptions,
+  MergeSelectedOptions,
   CleanOptions,
   BufferOptions,
   ApplyExpressionOptions,

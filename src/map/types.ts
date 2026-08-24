@@ -205,6 +205,16 @@ export interface FeatureRef {
   layer: string;
 }
 
+/** Options controlling a same-layer selected-feature merge. */
+export interface MergeSelectedOptions {
+  /**
+   * Selected feature whose complete record supplies every output attribute.
+   * Must belong to the current same-source, same-layer selection.
+   * When omitted, the first selected feature supplies the attributes.
+   */
+  attributeSource?: FeatureRef;
+}
+
 /** @deprecated Use {@link FeatureRef}. Kept as an alias for back-compat. */
 export type HighlightFeatureRef = FeatureRef;
 

@@ -47,6 +47,7 @@ import type {
   IntersectionPointsLayerOptions,
   JoinTableOptions,
   LinesOptions,
+  MergeSelectedOptions,
   MergeLayersOptions,
   MosaicOptions,
   PointsOptions,
@@ -64,7 +65,8 @@ import type {
   UnionOptions,
 } from './types';
 import { clipLayer, eraseLayer } from './ops/clip-erase';
-import { dissolveLayer, mergeSelected } from './ops/dissolve';
+import { dissolveLayer } from './ops/dissolve';
+import { mergeSelected } from './ops/merge-selected';
 import { bufferLayer } from './ops/buffer';
 import { applyExpression, filterFeatures } from './ops/each-filter';
 import { explodeLayer } from './ops/explode';
@@ -250,7 +252,7 @@ export class MapshaperOps {
 
   // -- Selection-driven ops ---------------------------------------------
 
-  mergeSelected(): Promise<OpResult> {
-    return mergeSelected(this._ctx);
+  mergeSelected(options?: MergeSelectedOptions): Promise<OpResult> {
+    return mergeSelected(this._ctx, options);
   }
 }
