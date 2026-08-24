@@ -23,6 +23,12 @@
           <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
         </div>
         <p class="emap-example-hint">单击 + Shift+单击 选中多个多边形,然后合并。</p>
+        <div class="emap-example-field">
+          <label for="attribute-source">属性来源</label>
+          <select id="attribute-source" disabled>
+            <option value="">请选择至少两个同图层要素</option>
+          </select>
+        </div>
         <button id="merge-btn" class="emap-example-primary-button" disabled>合并选中</button>
         <div class="emap-example-row">
           <button id="clear-btn" disabled>清空选择</button>
@@ -49,17 +55,56 @@
     const fileInput = document.getElementById('file-input');
     const mergeBtn = document.getElementById('merge-btn');
     const clearBtn = document.getElementById('clear-btn');
+    const attributeSourceSelect = document.getElementById('attribute-source');
     const status = document.getElementById('status');
     const mapContainer = map.getCanvasContainer();
 
-    map.on('selectionchange', (e) => {
-      const n = e.selected.length;
-      mergeBtn.disabled = n < 2; // 合并单个要素无意义
-      clearBtn.disabled = n === 0;
-      // 同步高亮
-      if (n === 0) map.clearHighlightedFeatures();
-      else map.setHighlightedFeatures(e.selected, { color: '#1e88e5', width: 3 });
-    });
+    const selectedByKey = new Map();
+
+    function selectionIsMergeable(selected) {
+      if (selected.length < 2) return false;
+      const { source, layer } = selected[0];
+      return selected.every((ref) => ref.source === source && ref.layer === layer);
+    }
+
+    function syncSelection(selected) {
+      const previousAttributeSource = attributeSourceSelect.value;
+      const mergeable = selectionIsMergeable(selected);
+      selectedByKey.clear();
+      attributeSourceSelect.replaceChildren();
+
+      for (const ref of selected) {
+        const key = JSON.stringify([ref.source, ref.layer, ref.id]);
+        selectedByKey.set(key, ref);
+        const properties = map.features.get(ref)?.properties ?? {};
+        const readableName = [properties.name, properties.fullname].find(
+          (value) => typeof value === 'string' && value.trim(),
+        );
+        const label = readableName ? `要素 ${ref.id} — ${readableName}` : `要素 ${ref.id}`;
+        attributeSourceSelect.add(new Option(label, key));
+      }
+
+      if (selected.length === 0) {
+        attributeSourceSelect.add(new Option('请选择至少两个同图层要素', ''));
+      } else if (!mergeable) {
+        attributeSourceSelect.add(new Option('所选要素必须属于同一图层', ''));
+        status.textContent =
+          selected.length < 2 ? '请至少选择两个要素。' : '只能合并同一数据源、同一图层的要素。';
+      }
+      if (mergeable) {
+        attributeSourceSelect.value = selectedByKey.has(previousAttributeSource)
+          ? previousAttributeSource
+          : attributeSourceSelect.options[0].value;
+      }
+
+      mergeBtn.disabled = !mergeable;
+      attributeSourceSelect.disabled = !mergeable;
+      clearBtn.disabled = selected.length === 0;
+      if (selected.length === 0) map.clearHighlightedFeatures();
+      else map.setHighlightedFeatures(selected, { color: '#1e88e5', width: 3 });
+    }
+
+    map.on('selectionchange', (event) => syncSelection(event.selected));
 
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
@@ -98,19 +143,27 @@
     });
 
     mergeBtn.addEventListener('click', async () => {
-      const n = map.getSelection().length;
-      status.textContent = `正在合并 ${n} 个要素...`;
+      const selected = map.getSelection();
+      const attributeSource = selectedByKey.get(attributeSourceSelect.value);
+      const attributeSourceLabel = attributeSourceSelect.selectedOptions[0]?.textContent;
+      if (!selectionIsMergeable(selected) || !attributeSource) {
+        status.textContent = '请选择同一图层中的至少两个要素，并指定属性来源。';
+        return;
+      }
+
+      status.textContent = `正在合并 ${selected.length} 个要素...`;
       mergeBtn.disabled = true;
+      attributeSourceSelect.disabled = true;
       try {
-        const ok = await map.ops.mergeSelected();
-        status.textContent = ok
-          ? `已合并 ${n} 个要素,Ctrl+Z 撤销。`
-          : '合并失败 (跨图层或跨数据源?)。';
-      } catch (err) {
-        status.textContent = `错误: ${err?.message ?? err}`;
-        console.error(err);
+        const result = await map.ops.mergeSelected({ attributeSource });
+        status.textContent = result.ok
+          ? `已合并 ${selected.length} 个要素，属性来自 ${attributeSourceLabel}，Ctrl+Z 撤销。`
+          : `合并失败: ${result.error.message}`;
+      } catch (error) {
+        status.textContent = `错误: ${error instanceof Error ? error.message : String(error)}`;
+        console.error(error);
       } finally {
-        mergeBtn.disabled = false;
+        syncSelection(map.getSelection());
       }
     });
 

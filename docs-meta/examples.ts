@@ -143,8 +143,8 @@ const exampleDescriptions = {
     en: 'Combines compatible layers into one layer while preserving their geometry and attribute records.',
   },
   'merge-selected': {
-    zh: '选择多个要素后将其合并，并通过选择状态和历史记录展示结果。',
-    en: 'Merges multiple selected features and exposes the result through selection state and edit history.',
+    zh: '对同图层所选多边形执行几何并集，并由用户指定合并结果使用哪个要素的属性。',
+    en: 'Geometrically unions selected polygons from one layer and lets the user choose the output attribute source.',
   },
   'rename-layer': {
     zh: '修改数据源中的图层名称，并同步刷新图层选择器和地图状态。',
