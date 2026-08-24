@@ -8,10 +8,7 @@ import { alignSecondaryDatasetCrs } from './dataset-crs';
 import { DuckDbOperationError } from './errors';
 import { quoteIdentifier } from './pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from './runtime';
-import {
-  buildSpatialAggregateJoinSql,
-  type SpatialAggregateJoinDuckDbFunction,
-} from './sql';
+import { buildSpatialAggregateJoinSql, type SpatialAggregateJoinDuckDbFunction } from './sql';
 
 export type DuckDbSpatialAggregateJoinPredicate =
   | 'intersects'

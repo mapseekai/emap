@@ -12,10 +12,7 @@ import {
 } from 'apache-arrow';
 import { describe, expect, it } from 'vitest';
 import { DuckDbOperationError } from './errors';
-import {
-  createDuckDbGeoParquetQuerySource,
-  queryGeoParquetWithDuckDb,
-} from './geoparquet-query';
+import { createDuckDbGeoParquetQuerySource, queryGeoParquetWithDuckDb } from './geoparquet-query';
 import type { DuckDbConnection, DuckDbRuntime } from './runtime';
 
 interface FakeRuntimeOptions {

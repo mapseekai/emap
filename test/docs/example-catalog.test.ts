@@ -94,7 +94,6 @@ const expectedIds = [
   'duckdb/relation/contains-properly',
   'duckdb/relation/distance',
   'duckdb/relation/distance-within',
-
 ] as const;
 const expectedModules = [
   { key: 'map-data', zh: '地图与数据', en: 'Map & Data', count: 12 },
@@ -572,7 +571,10 @@ describe('example catalog metadata', () => {
     expect(root.querySelectorAll('.catalog-topic')).toHaveLength(1);
     expect(root.querySelector('.catalog-topic-title')?.textContent).toBe('DuckDB 空间数据分析');
     expect(
-      Array.from(root.querySelectorAll('.catalog-topic-section-title'), ({ textContent }) => textContent),
+      Array.from(
+        root.querySelectorAll('.catalog-topic-section-title'),
+        ({ textContent }) => textContent,
+      ),
     ).toEqual(['查询与数据接入', '几何处理']);
     expect(
       Array.from(
@@ -581,7 +583,10 @@ describe('example catalog metadata', () => {
       ),
     ).toEqual(['ordinary-analysis-one', 'ordinary-analysis-two']);
     expect(
-      Array.from(root.querySelectorAll('.catalog-topic-section .example-card-title'), ({ textContent }) => textContent),
+      Array.from(
+        root.querySelectorAll('.catalog-topic-section .example-card-title'),
+        ({ textContent }) => textContent,
+      ),
     ).toEqual(['duckdb-query-one', 'duckdb-query-two', 'duckdb-geometry']);
     const directGrid = root.querySelector('.catalog-direct-examples');
     const topic = root.querySelector('.catalog-topic');
@@ -592,7 +597,6 @@ describe('example catalog metadata', () => {
     expect(root.querySelectorAll('.catalog-topic a.example-card')).toHaveLength(3);
     expect(root.querySelectorAll('.catalog-direct-examples a.example-card')).toHaveLength(2);
   });
-
 
   it('renders category-mismatched topic cards as direct cards', () => {
     const topicFixture: ExampleDefinition[] = [
@@ -627,7 +631,10 @@ describe('example catalog metadata', () => {
 
     expect(root.querySelectorAll('.catalog-topic a.example-card')).toHaveLength(1);
     expect(
-      Array.from(root.querySelectorAll('.catalog-topic-section-title'), ({ textContent }) => textContent),
+      Array.from(
+        root.querySelectorAll('.catalog-topic-section-title'),
+        ({ textContent }) => textContent,
+      ),
     ).toEqual(['几何处理']);
   });
 
@@ -835,7 +842,6 @@ describe('example catalog metadata', () => {
       ).toBe(true);
       expect(html, `${example.id} keeps a user upload`).toMatch(/type=["']file["']/);
       expect(html, `${example.id} avoids source-tree assets`).not.toMatch(
-
         /\.\.\/\.\.\/(?:dist|src)\//,
       );
       expect(html, `${example.id} uses local starter data`).not.toContain('https://geojson.cn/');
@@ -866,7 +872,8 @@ describe('example catalog metadata', () => {
     }
     for (const id of geometryIds.slice(4, 6)) {
       const html = await readFile(resolve(`packages/examples/examples/${id}/index.html`), 'utf8');
-      const tolerance = new DOMParser().parseFromString(html, 'text/html')
+      const tolerance = new DOMParser()
+        .parseFromString(html, 'text/html')
         .querySelector<HTMLInputElement>('#tolerance');
       expect(tolerance?.type).toBe('number');
       expect(tolerance?.min).toBe('0');

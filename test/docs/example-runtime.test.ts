@@ -384,11 +384,14 @@ describe('example starter fixtures', () => {
   ])('loads %s starter data into its actual #file input', async (id, expectedFile) => {
     document.body.innerHTML = '<input id="file" type="file"><div id="status"></div>';
     vi.stubGlobal('DataTransfer', TestDataTransfer);
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}')),
+    );
     const input = document.querySelector<HTMLInputElement>('#file')!;
     allowSyntheticFiles(input);
     let changed = 0;
-    input.addEventListener('change', () => changed += 1);
+    input.addEventListener('change', () => (changed += 1));
 
     await autoLoadExampleFixtures(id, document);
 

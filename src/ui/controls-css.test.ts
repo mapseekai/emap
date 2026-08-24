@@ -216,9 +216,21 @@ describe('controls.css Mapseek behavior', () => {
     probeScale.className = 'emap-ctrl emap-scale-ctrl';
     probe.host.append(probeScale);
     const readVariable = (name: string) => getComputedStyle(probeScale).getPropertyValue(name);
-    const foreground = resolveThemeColor(readVariable('--emap-current-card-foreground'), 'transparent', readVariable);
-    const card = resolveThemeColor(readVariable('--emap-current-card'), 'transparent', readVariable);
-    const border = resolveThemeColor(readVariable('--emap-current-border'), 'transparent', readVariable);
+    const foreground = resolveThemeColor(
+      readVariable('--emap-current-card-foreground'),
+      'transparent',
+      readVariable,
+    );
+    const card = resolveThemeColor(
+      readVariable('--emap-current-card'),
+      'transparent',
+      readVariable,
+    );
+    const border = resolveThemeColor(
+      readVariable('--emap-current-border'),
+      'transparent',
+      readVariable,
+    );
 
     const stylesheetText = css
       .replaceAll('var(--emap-current-card-foreground)', foreground)

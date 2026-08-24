@@ -100,7 +100,10 @@ describe('Emap scale metrics', () => {
     map.remove();
   });
 
-  it.each(['EPSG:900913', 'EPSG:102100'] as const)('adds zoom for the %s Web Mercator alias', async (crs) => {
+  it.each([
+    'EPSG:900913',
+    'EPSG:102100',
+  ] as const)('adds zoom for the %s Web Mercator alias', async (crs) => {
     const map = new Emap({ container: container() });
     map.setCRS(crs);
     map.setExtent(new Bounds(-1000, -1000, 1000, 1000));

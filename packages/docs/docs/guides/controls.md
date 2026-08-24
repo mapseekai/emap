@@ -2,10 +2,10 @@
 id: controls
 slug: /guides/controls
 title: 控件
-api: ["BasemapControl","BasemapOptions","BasemapStyle","BoxSelectControl","BoxSelectControlOptions","Control","ControlPosition","DrawFeatureControl","DrawFeatureControlOptions","EditToolbar","EditToolbarOptions","Emap","HistoryControl","HistoryControlOptions","LassoSelectControl","LassoSelectControlOptions","LayerChangeEvent","LayerChangeReason","LayerControl","MapLibreBasemapService","MapLibreIntegrationOptions","MapLibreOverlayService","MapLibreService","MapLibreServiceChangeEvent","MapLibreServiceChangeReason","MapLibreServiceErrorEvent","MapLibreServiceEventMap","MapLibreServiceManager","MapLibreServiceState","MapOptions","NavigationControl","NavigationOptions","SimplifyControl","SimplifyControlOptions","StatusControl","StatusOptions","VertexEditControl","VertexEditControlOptions"]
-examples: ["box-select","china-editing","draw-snap-edge","interaction-handlers","lasso-select","online-map-services","simplify-control","vertex-editing"]
+api: ["BasemapControl","BasemapOptions","BasemapStyle","BoxSelectControl","BoxSelectControlOptions","Control","ControlPosition","DrawFeatureControl","DrawFeatureControlOptions","EditToolbar","EditToolbarOptions","Emap","GetScaleMetricsOptions","HistoryControl","HistoryControlOptions","LassoSelectControl","LassoSelectControlOptions","LayerChangeEvent","LayerChangeReason","LayerControl","MapLibreBasemapService","MapLibreIntegrationOptions","MapLibreOverlayService","MapLibreService","MapLibreServiceChangeEvent","MapLibreServiceChangeReason","MapLibreServiceErrorEvent","MapLibreServiceEventMap","MapLibreServiceManager","MapLibreServiceState","MapOptions","MeasureControl","MeasureControlOptions","MeasureHandler","MeasurementMode","MeasureOptions","MeasureResult","NavigationControl","NavigationOptions","ScaleCalculationMethod","ScaleControl","ScaleControlOptions","ScaleControlStyle","ScaleMetrics","ScaleViewMetrics","SimplifyControl","SimplifyControlOptions","StatusControl","StatusOptions","VertexEditControl","VertexEditControlOptions"]
+examples: ["box-select","china-editing","draw-snap-edge","interaction-handlers","lasso-select","measurement","online-map-services","simplify-control","vertex-editing"]
 stability: stable
-verifiedVersion: 0.6.0
+verifiedVersion: 0.7.0
 ---
 
 # 控件
@@ -49,6 +49,8 @@ import '@mapseekai/emap/style.css';
 | `NavigationControl` | 放大、缩小和视图导航 |
 | `HistoryControl` | 撤销与重做 |
 | `StatusControl` | 显示指针坐标与 EPSG |
+| `ScaleControl` | 显示当前视图的比例尺与缩放等级 |
+| `MeasureControl` | 测量球面长度或面积 |
 | `BasemapControl` | 在已注册的 MapLibre 底图中单选 |
 | `LayerControl` | 切换 Emap 业务图层与 MapLibre 在线叠加层 |
 | `BoxSelectControl` | 拉框选择 |
@@ -291,6 +293,19 @@ map.addControl(
 `StatusControl` 的更新会延迟到 `requestAnimationFrame`，避免每次 pointermove
 都立即改写 DOM。
 
+## 比例尺与测量
+
+`ScaleControl` 会依据当前 CRS 和视图范围更新比例尺；无法得到可靠地表距离时会自动隐藏。
+`map.getScaleMetrics()` 可供自定义界面读取同一份计算结果。两个 `MeasureControl` 实例分别启用长度和面积模式：
+
+```ts
+map.addControl(new ScaleControl({ units: 'metric', style: 'checker' }), 'bottom-left');
+map.addControl(new MeasureControl({ mode: 'length' }), 'top-left');
+map.addControl(new MeasureControl({ mode: 'area' }), 'top-left');
+```
+
+测量以球面距离和面积计算；点击依次添加顶点，结束当前测量后可重新开始。
+
 ## 模式控件
 
 选择和编辑控件负责启用对应 Handler：
@@ -382,10 +397,20 @@ boxButton.addEventListener('click', () => {
 - [NavigationControl](/mapseekai/emap/api/classes/index.NavigationControl.html)
 - [HistoryControl](/mapseekai/emap/api/classes/index.HistoryControl.html)
 - [StatusControl](/mapseekai/emap/api/classes/index.StatusControl.html)
+- [ScaleControl](/mapseekai/emap/api/classes/index.ScaleControl.html)
+- [ScaleControlOptions](/mapseekai/emap/api/interfaces/index.ScaleControlOptions.html)
+- [ScaleMetrics](/mapseekai/emap/api/interfaces/index.ScaleMetrics.html)
+- [ScaleViewMetrics](/mapseekai/emap/api/interfaces/index.ScaleViewMetrics.html)
+- [MeasureControl](/mapseekai/emap/api/classes/index.MeasureControl.html)
+- [MeasureControlOptions](/mapseekai/emap/api/interfaces/index.MeasureControlOptions.html)
+- [MeasureHandler](/mapseekai/emap/api/classes/index.MeasureHandler.html)
+- [MeasureOptions](/mapseekai/emap/api/interfaces/index.MeasureOptions.html)
+- [MeasureResult](/mapseekai/emap/api/interfaces/index.MeasureResult.html)
 
 ## 可运行示例
 
 - [简化控件](/mapseekai/emap/examples/simplify-control/)
 - [撤销与重做](/mapseekai/emap/examples/undo-redo/)
 - [交互处理器](/mapseekai/emap/examples/interaction-handlers/)
+- [球面测量](/mapseekai/emap/examples/measurement/)
 - [顶点编辑](/mapseekai/emap/examples/vertex-editing/)

@@ -41,7 +41,9 @@ describe('ScaleCalculator', () => {
     const webMercatorView = projectedView('EPSG:3857', [0, 0]);
     const utmView = projectedView('EPSG:32633', [500000, 0]);
 
-    expect(await calculator.getMetrics(webMercatorView)).toMatchObject({ calculationMethod: 'center' });
+    expect(await calculator.getMetrics(webMercatorView)).toMatchObject({
+      calculationMethod: 'center',
+    });
     expect(await calculator.getMetrics(utmView)).toMatchObject({ calculationMethod: 'center' });
   });
 
@@ -51,10 +53,7 @@ describe('ScaleCalculator', () => {
       crs: 'EPSG:4326',
       width: 200,
       height: 100,
-      unproject: (px: number, py: number): [number, number] => [
-        -1 + px / 100,
-        60 - py * 0.6,
-      ],
+      unproject: (px: number, py: number): [number, number] => [-1 + px / 100, 60 - py * 0.6],
     };
 
     const top = await calculator.getMetrics(view, { calculationMethod: 'top' });
@@ -76,8 +75,12 @@ describe('ScaleCalculator', () => {
   it('measures geographic equator scale independently of the sampled latitude', async () => {
     const calculator = new ScaleCalculator();
     const local = await calculator.getMetrics(geographicView(60), { calculationMethod: 'center' });
-    const equator = await calculator.getMetrics(geographicView(60), { calculationMethod: 'equator' });
-    const equatorControl = await calculator.getMetrics(geographicView(0), { calculationMethod: 'center' });
+    const equator = await calculator.getMetrics(geographicView(60), {
+      calculationMethod: 'equator',
+    });
+    const equatorControl = await calculator.getMetrics(geographicView(0), {
+      calculationMethod: 'center',
+    });
 
     expect(equator?.calculationMethod).toBe('equator');
     expect(equator!.metersPerPixel).toBeGreaterThan(local!.metersPerPixel);
@@ -109,7 +112,9 @@ describe('ScaleCalculator', () => {
 
     await expect(calculator.getMetrics(mars)).resolves.toBeNull();
     await expect(calculator.getMetrics(pathologicallyFlattened)).resolves.toBeNull();
-    await expect(calculator.getMetrics(wgs84)).resolves.toMatchObject({ calculationMethod: 'center' });
+    await expect(calculator.getMetrics(wgs84)).resolves.toMatchObject({
+      calculationMethod: 'center',
+    });
     await expect(calculator.getMetrics(clarke1866)).resolves.toMatchObject({
       calculationMethod: 'center',
     });
@@ -136,7 +141,12 @@ describe('ScaleCalculator', () => {
   });
 
   it.each([
-    ['throwing', () => { throw new Error('unproject failed'); }],
+    [
+      'throwing',
+      () => {
+        throw new Error('unproject failed');
+      },
+    ],
     ['non-finite', () => [Number.NaN, 0] as [number, number]],
   ])('returns null when a valid CRS has no %s sample', async (_case, unproject) => {
     const calculator = new ScaleCalculator();
@@ -149,9 +159,9 @@ describe('ScaleCalculator', () => {
     const calculator = new ScaleCalculator();
     const projected = projectedView('EPSG:3857', [0, 0]);
 
-    expect((await calculator.getMetrics(projected, { calculationMethod: 'equator' }))?.calculationMethod).toBe(
-      'center',
-    );
+    expect(
+      (await calculator.getMetrics(projected, { calculationMethod: 'equator' }))?.calculationMethod,
+    ).toBe('center');
   });
 
   it('uses the requested DPI without snapping the denominator', async () => {

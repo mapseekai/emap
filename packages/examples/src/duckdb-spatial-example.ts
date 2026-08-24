@@ -8,6 +8,7 @@ import {
   containsProperlyDatasetWithDuckDb,
   convexHullDatasetWithDuckDb,
   createDuckDbRuntimeFromJsDelivr,
+  envelopeDatasetWithDuckDb,
   geometryTypeDatasetWithDuckDb,
   isEmptyDatasetWithDuckDb,
   isSimpleDatasetWithDuckDb,

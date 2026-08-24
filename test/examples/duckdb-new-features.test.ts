@@ -25,7 +25,9 @@ function readExample(id: string): string {
 }
 
 function importedDuckDbNames(source: string): string[] {
-  const importMatch = source.match(/import\s+\{([^}]+)\}\s+from\s+["']@mapseekai\/emap\/duckdb["']/);
+  const importMatch = source.match(
+    /import\s+\{([^}]+)\}\s+from\s+["']@mapseekai\/emap\/duckdb["']/,
+  );
   if (!importMatch) throw new Error('DuckDB module import not found');
   return importMatch[1]
     .split(',')
@@ -111,21 +113,20 @@ function usesAggregateQueryCoordinator(runHandler: string): boolean {
   );
 }
 
+it('registers only the two split distance routes in the Vite build inputs', () => {
+  const input = viteConfig.build?.rollupOptions?.input;
+  if (!input || Array.isArray(input) || typeof input === 'string') {
+    throw new Error('Expected keyed example build inputs');
+  }
 
-  it('registers only the two split distance routes in the Vite build inputs', () => {
-    const input = viteConfig.build?.rollupOptions?.input;
-    if (!input || Array.isArray(input) || typeof input === 'string') {
-      throw new Error('Expected keyed example build inputs');
-    }
-
-    expect(Object.keys(input)).toEqual(
-      expect.arrayContaining([
-        'examples/duckdb/relation/distance/index',
-        'examples/duckdb/relation/distance-within/index',
-      ]),
-    );
-    expect(Object.keys(input)).not.toContain('examples/duckdb-spatial-ops/index');
-  });
+  expect(Object.keys(input)).toEqual(
+    expect.arrayContaining([
+      'examples/duckdb/relation/distance/index',
+      'examples/duckdb/relation/distance-within/index',
+    ]),
+  );
+  expect(Object.keys(input)).not.toContain('examples/duckdb-spatial-ops/index');
+});
 describe('DuckDB new feature examples', () => {
   const examples = {
     geoparquetQuery: readExample('duckdb-geoparquet-query'),
@@ -159,7 +160,10 @@ describe('DuckDB new feature examples', () => {
       }
     }
     for (const importedName of importedDuckDbNames(duckDbSpatialRunner)) {
-      expect(exported.has(importedName), `duckdb spatial runner: ${importedName} is not exported`).toBe(true);
+      expect(
+        exported.has(importedName),
+        `duckdb spatial runner: ${importedName} is not exported`,
+      ).toBe(true);
     }
   });
 

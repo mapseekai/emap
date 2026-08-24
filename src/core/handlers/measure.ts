@@ -285,8 +285,8 @@ export class MeasureHandler implements Handler<MeasureOptions> {
     const fallbackLabelCoord = this._completed ? this._vertices.at(-1)! : this._cursorCoord;
     const labelCoord =
       this._opts.mode === 'area'
-        ? (context ? this._areaCenter(displayPoints, context, worldWidth) : null) ??
-          fallbackLabelCoord
+        ? ((context ? this._areaCenter(displayPoints, context, worldWidth) : null) ??
+          fallbackLabelCoord)
         : fallbackLabelCoord;
     const state: MeasurementOverlayState = {
       mode: this._opts.mode,

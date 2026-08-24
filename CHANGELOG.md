@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-24
+
 ### Added
 
 - Source loading now provides a two-phase `preflightSource()` and
@@ -39,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ZIP Shapefile imports can now load every `.shp` dataset in an archive as a
   separate layer. A new runnable Shapefile viewer supports archive-detected,
   preset, or custom input CRS selection before registration.
+- Spherical measurement tools now report per-segment lengths and centroid-based
+  polygon area totals, with runnable measurement examples and public APIs.
+- DuckDB geometry, attribute, and spatial-relation operations now have
+  dedicated runnable example routes with shared source, layer, CRS-recovery,
+  and result-display behavior.
 
 ### Changed
 
@@ -82,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The DuckDB spatial-operations example now processes the live registered
   datasets instead of retaining original/display copies, and multi-input DuckDB
   operations align secondary datasets to the active input CRS.
+- The DuckDB envelope example now imports and invokes its public helper
+  correctly, instead of failing before the DuckDB runtime is initialized.
 - DuckDB overlay functions now serialize their internal geometry results to
   standard WKB before crossing the Arrow boundary, so overlay outputs import as
   valid emap geometry.
@@ -673,7 +682,8 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@mapseekai/emap/style.css`).
 
-[Unreleased]: https://github.com/mapseekai/emap/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/mapseekai/emap/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/mapseekai/emap/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mapseekai/emap/compare/0c7ef115bbbb6d59829cd244c683f65ef38f39cd...v0.6.0
 [0.5.0]: https://github.com/mapseekai/emap/compare/v0.4.0...0c7ef115bbbb6d59829cd244c683f65ef38f39cd
 [0.4.0]: https://github.com/mapseekai/emap/compare/v0.3.6...v0.4.0

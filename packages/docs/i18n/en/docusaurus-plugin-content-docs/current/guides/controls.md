@@ -2,10 +2,10 @@
 id: controls
 slug: /guides/controls
 title: Controls
-api: ["BasemapControl","BasemapOptions","BasemapStyle","BoxSelectControl","BoxSelectControlOptions","Control","ControlPosition","DrawFeatureControl","DrawFeatureControlOptions","EditToolbar","EditToolbarOptions","Emap","HistoryControl","HistoryControlOptions","LassoSelectControl","LassoSelectControlOptions","LayerChangeEvent","LayerChangeReason","LayerControl","MapLibreBasemapService","MapLibreIntegrationOptions","MapLibreOverlayService","MapLibreService","MapLibreServiceChangeEvent","MapLibreServiceChangeReason","MapLibreServiceErrorEvent","MapLibreServiceEventMap","MapLibreServiceManager","MapLibreServiceState","MapOptions","NavigationControl","NavigationOptions","SimplifyControl","SimplifyControlOptions","StatusControl","StatusOptions","VertexEditControl","VertexEditControlOptions"]
-examples: ["box-select","china-editing","draw-snap-edge","interaction-handlers","lasso-select","online-map-services","simplify-control","vertex-editing"]
+api: ["BasemapControl","BasemapOptions","BasemapStyle","BoxSelectControl","BoxSelectControlOptions","Control","ControlPosition","DrawFeatureControl","DrawFeatureControlOptions","EditToolbar","EditToolbarOptions","Emap","GetScaleMetricsOptions","HistoryControl","HistoryControlOptions","LassoSelectControl","LassoSelectControlOptions","LayerChangeEvent","LayerChangeReason","LayerControl","MapLibreBasemapService","MapLibreIntegrationOptions","MapLibreOverlayService","MapLibreService","MapLibreServiceChangeEvent","MapLibreServiceChangeReason","MapLibreServiceErrorEvent","MapLibreServiceEventMap","MapLibreServiceManager","MapLibreServiceState","MapOptions","MeasureControl","MeasureControlOptions","MeasureHandler","MeasurementMode","MeasureOptions","MeasureResult","NavigationControl","NavigationOptions","ScaleCalculationMethod","ScaleControl","ScaleControlOptions","ScaleControlStyle","ScaleMetrics","ScaleViewMetrics","SimplifyControl","SimplifyControlOptions","StatusControl","StatusOptions","VertexEditControl","VertexEditControlOptions"]
+examples: ["box-select","china-editing","draw-snap-edge","interaction-handlers","lasso-select","measurement","online-map-services","simplify-control","vertex-editing"]
 stability: stable
-verifiedVersion: 0.6.0
+verifiedVersion: 0.7.0
 ---
 
 # Controls
@@ -45,6 +45,8 @@ class.
 | `NavigationControl` | Zoom and view navigation |
 | `HistoryControl` | Undo and redo |
 | `StatusControl` | Pointer coordinates and EPSG display |
+| `ScaleControl` | Current-view scale and zoom display |
+| `MeasureControl` | Spherical length or area measurement |
 | `BasemapControl` | Select one registered MapLibre basemap |
 | `LayerControl` | Toggle Emap business layers and MapLibre online overlays |
 | `BoxSelectControl` | Box selection |
@@ -297,6 +299,18 @@ map.addControl(
 `StatusControl` defers updates through `requestAnimationFrame` instead of
 rewriting the DOM on every pointermove.
 
+## Scale and measurement
+
+`ScaleControl` updates its scale from the current CRS and view extent, and hides itself when no truthful Earth-distance calculation is available. `map.getScaleMetrics()` exposes the same calculation for custom UI. Use two `MeasureControl` instances for length and area modes:
+
+```ts
+map.addControl(new ScaleControl({ units: 'metric', style: 'checker' }), 'bottom-left');
+map.addControl(new MeasureControl({ mode: 'length' }), 'top-left');
+map.addControl(new MeasureControl({ mode: 'area' }), 'top-left');
+```
+
+Measurements use spherical distance and area. Each click adds a vertex; finishing one measurement leaves the control ready to start the next.
+
 ## Mode controls
 
 Selection and editing controls enable map handlers:
@@ -382,10 +396,20 @@ state instead of assuming every click changed the map.
 - [NavigationControl](/mapseekai/emap/api/classes/index.NavigationControl.html)
 - [HistoryControl](/mapseekai/emap/api/classes/index.HistoryControl.html)
 - [StatusControl](/mapseekai/emap/api/classes/index.StatusControl.html)
+- [ScaleControl](/mapseekai/emap/api/classes/index.ScaleControl.html)
+- [ScaleControlOptions](/mapseekai/emap/api/interfaces/index.ScaleControlOptions.html)
+- [ScaleMetrics](/mapseekai/emap/api/interfaces/index.ScaleMetrics.html)
+- [ScaleViewMetrics](/mapseekai/emap/api/interfaces/index.ScaleViewMetrics.html)
+- [MeasureControl](/mapseekai/emap/api/classes/index.MeasureControl.html)
+- [MeasureControlOptions](/mapseekai/emap/api/interfaces/index.MeasureControlOptions.html)
+- [MeasureHandler](/mapseekai/emap/api/classes/index.MeasureHandler.html)
+- [MeasureOptions](/mapseekai/emap/api/interfaces/index.MeasureOptions.html)
+- [MeasureResult](/mapseekai/emap/api/interfaces/index.MeasureResult.html)
 
 ## Runnable examples
 
 - [Simplify control](/mapseekai/emap/examples/simplify-control/)
 - [Undo and redo](/mapseekai/emap/examples/undo-redo/)
 - [Interaction handlers](/mapseekai/emap/examples/interaction-handlers/)
+- [Spherical measurement](/mapseekai/emap/examples/measurement/)
 - [Vertex editing](/mapseekai/emap/examples/vertex-editing/)

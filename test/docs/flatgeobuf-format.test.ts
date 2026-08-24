@@ -10,10 +10,7 @@ import { unregisterFormat } from '../../src/source/format-registry';
 import { getDefaultMapshaperAdapter, registerFormat } from '../../src/index';
 import { installFlatGeobufFormat } from '../../packages/examples/src/flatgeobuf-format';
 
-const FIXTURE = resolve(
-  process.cwd(),
-  'packages/examples/public/fixtures/example-flatgeobuf.fgb',
-);
+const FIXTURE = resolve(process.cwd(), 'packages/examples/public/fixtures/example-flatgeobuf.fgb');
 
 describe('flatgeobuf example format plugin', () => {
   afterEach(() => {
@@ -31,10 +28,7 @@ describe('flatgeobuf example format plugin', () => {
 
     const dataset = source.getDataset();
     expect(dataset?.layers.length).toBeGreaterThan(0);
-    const featureCount = dataset?.layers.reduce(
-      (n, l) => n + (l.shapes?.length ?? 0),
-      0,
-    );
+    const featureCount = dataset?.layers.reduce((n, l) => n + (l.shapes?.length ?? 0), 0);
     expect(featureCount).toBe(3);
     expect(source.getCRS()).toBe('EPSG:4326');
   });

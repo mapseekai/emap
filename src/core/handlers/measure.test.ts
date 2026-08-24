@@ -216,10 +216,7 @@ describe('MeasureHandler', () => {
     handler.handlePointer(clickAt(1, 1));
 
     const state = host.setEditMeasurementState.mock.lastCall![0] as EditMeasurementState;
-    expect(state.segmentLabels.map((segment) => segment.label)).toEqual([
-      '111.32 km',
-      '110.57 km',
-    ]);
+    expect(state.segmentLabels.map((segment) => segment.label)).toEqual(['111.32 km', '110.57 km']);
     expect(state.segmentLabels[0]!.coord[0]).toBeCloseTo(0.5, 5);
     expect(state.segmentLabels[0]!.coord[1]).toBeCloseTo(0, 5);
     expect(state.segmentLabels[1]!.coord[0]).toBeCloseTo(1, 5);

@@ -68,7 +68,10 @@ export function formatScaleDistance(distance: number, unit: ScaleDistanceUnit): 
   return `${metricLabel} / ${imperialLabel}`;
 }
 
-export function selectScaleDistance(metersPerPixel: number, maxWidth: number): ScaleDistance | null {
+export function selectScaleDistance(
+  metersPerPixel: number,
+  maxWidth: number,
+): ScaleDistance | null {
   const maximumDistance = metersPerPixel * maxWidth;
   if (!Number.isFinite(maximumDistance) || maximumDistance <= 0) return null;
 
@@ -94,8 +97,16 @@ export function selectScaleDistance(metersPerPixel: number, maxWidth: number): S
 export class ScaleCalculator {
   private readonly _transformers = new Map<string, Promise<GeographicCoordinateTransformer>>();
 
-  async getMetrics(view: ScaleView, options: GetScaleMetricsOptions = {}): Promise<ScaleMetrics | null> {
-    if (!Number.isFinite(view.width) || !Number.isFinite(view.height) || view.width <= 0 || view.height <= 0) {
+  async getMetrics(
+    view: ScaleView,
+    options: GetScaleMetricsOptions = {},
+  ): Promise<ScaleMetrics | null> {
+    if (
+      !Number.isFinite(view.width) ||
+      !Number.isFinite(view.height) ||
+      view.width <= 0 ||
+      view.height <= 0
+    ) {
       return null;
     }
 
@@ -122,7 +133,10 @@ export class ScaleCalculator {
     }
   }
 
-  private _getTransformer(signature: string, definition: string): Promise<GeographicCoordinateTransformer> {
+  private _getTransformer(
+    signature: string,
+    definition: string,
+  ): Promise<GeographicCoordinateTransformer> {
     let transformer = this._transformers.get(signature);
     if (!transformer) {
       transformer = Promise.resolve().then(() => createGeographicCoordinateTransformer(definition));
@@ -149,7 +163,8 @@ export class ScaleCalculator {
     const sample = this._coordinatesAt(view, transformer, row);
     if (!sample) return null;
     const [first, second] = sample;
-    if (method === 'equator') return this._geodesicDistance(geodesic, [first[0], 0], [second[0], 0]);
+    if (method === 'equator')
+      return this._geodesicDistance(geodesic, [first[0], 0], [second[0], 0]);
     return this._geodesicDistance(geodesic, first, second);
   }
 

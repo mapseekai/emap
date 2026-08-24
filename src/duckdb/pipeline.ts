@@ -43,10 +43,7 @@ export function quoteIdentifier(identifier: string): string {
 
 // -- Unique output-column names ---------------------------------------------
 
-export function resolveUniqueColumnName(
-  requested: string,
-  existing: ReadonlySet<string>,
-): string {
+export function resolveUniqueColumnName(requested: string, existing: ReadonlySet<string>): string {
   if (!existing.has(requested)) return requested;
   let suffix = 1;
   let candidate = `${requested}_${suffix}`;

@@ -42,11 +42,14 @@ describe('ScaleControl', () => {
     cancelAnimationFrame = vi.fn((id: number) => {
       frames[id - 1] = undefined as unknown as FrameRequestCallback;
     });
-    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
-      frames.push(callback);
-      frameId += 1;
-      return frameId;
-    }));
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        frames.push(callback);
+        frameId += 1;
+        return frameId;
+      }),
+    );
     vi.stubGlobal('cancelAnimationFrame', cancelAnimationFrame);
   });
 
@@ -89,7 +92,9 @@ describe('ScaleControl', () => {
     const labels = root.querySelectorAll('.emap-scale-labels > span');
     expect(labels).toHaveLength(3);
     expect([...labels].map((label) => label.textContent)).toEqual(['0', '100 m', '200 m']);
-    expect(Number.parseFloat(root.style.getPropertyValue('--emap-scale-width'))).toBeLessThanOrEqual(140);
+    expect(
+      Number.parseFloat(root.style.getPropertyValue('--emap-scale-width')),
+    ).toBeLessThanOrEqual(140);
     expect(root.querySelectorAll('.emap-scale-segment')).toHaveLength(4);
   });
 
@@ -124,7 +129,9 @@ describe('ScaleControl', () => {
     expect(root.classList.contains(`emap-scale-ctrl-${style}`)).toBe(true);
     const labels = root.querySelectorAll('.emap-scale-labels > span');
     expect([...labels].map((label) => label.textContent)).toEqual(expectedLabels);
-    expect(root.querySelector('.emap-scale-labels')?.classList.contains('emap-scale-labels-dual')).toBe(dualLayout);
+    expect(
+      root.querySelector('.emap-scale-labels')?.classList.contains('emap-scale-labels-dual'),
+    ).toBe(dualLayout);
     expect(root.querySelector('.emap-scale-bar-text')?.textContent).toBe(barText);
   });
 
@@ -150,7 +157,9 @@ describe('ScaleControl', () => {
 
   it('hides a previous reading when a non-Earth CRS has no metrics', async () => {
     const map = stubMap(Promise.resolve(metrics));
-    map.getScaleMetrics.mockReturnValueOnce(Promise.resolve(metrics)).mockReturnValueOnce(Promise.resolve(null));
+    map.getScaleMetrics
+      .mockReturnValueOnce(Promise.resolve(metrics))
+      .mockReturnValueOnce(Promise.resolve(null));
     const root = new ScaleControl().onAdd(map as any);
     await flushFrame();
 

@@ -19,7 +19,7 @@
 <h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: duckdb-buffer, duckdb-geoparquet-query, duckdb-overlay.</p>
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">DuckDbSpatialAggregateJoinLayerOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#aggregations">aggregations</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-keyword">readonly</span> <a href="../types/duckdb.DuckDbSpatialAggregation.html" class="tsd-signature-type tsd-kind-type-alias">DuckDbSpatialAggregation</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#join">join</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#joingeometrycolumn">joinGeometryColumn</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#joinlayer">joinLayer</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#jointype">joinType</a><span class="tsd-signature-symbol">?:</span> <a href="../types/duckdb.DuckDbSpatialAggregateJoinType.html" class="tsd-signature-type tsd-kind-type-alias">DuckDbSpatialAggregateJoinType</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#output">output</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">sourceId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#outputlayer">outputLayer</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#predicate">predicate</a><span class="tsd-signature-symbol">:</span> <a href="../types/duckdb.DuckDbSpatialAggregateJoinPredicate.html" class="tsd-signature-type tsd-kind-type-alias">DuckDbSpatialAggregateJoinPredicate</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#runtime">runtime</a><span class="tsd-signature-symbol">?:</span> <a href="duckdb.DuckDbRuntime.html" class="tsd-signature-type tsd-kind-interface">DuckDbRuntime</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#src">src</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#targetgeometrycolumn">targetGeometryColumn</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#targetlayer">targetLayer</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
-<section class="tsd-panel tsd-hierarchy" data-refl="711">
+<section class="tsd-panel tsd-hierarchy" data-refl="705">
 <h4>Hierarchy (<a href="../hierarchy.html#duckdb.DuckDbSpatialAggregateJoinLayerOptions">View Summary</a>)</h4>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><a href="duckdb.DuckDbSpatialAggregateJoinOptions.html" class="tsd-signature-type tsd-kind-interface">DuckDbSpatialAggregateJoinOptions</a>
@@ -55,7 +55,7 @@
 <div class="tsd-signature"><span class="tsd-kind-property">aggregations</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-keyword">readonly</span> <a href="../types/duckdb.DuckDbSpatialAggregation.html" class="tsd-signature-type tsd-kind-type-alias">DuckDbSpatialAggregation</a><span class="tsd-signature-symbol">[]</span></div><aside class="tsd-sources">
 <p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#aggregations">aggregations</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L42">src/duckdb/spatial-aggregate-join.ts:42</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L39">src/duckdb/spatial-aggregate-join.ts:39</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="join"><span>join</span><a href="#join" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">join</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
@@ -68,19 +68,19 @@
 <div class="tsd-signature"><span class="tsd-kind-property">joinGeometryColumn</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
 <p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#joingeometrycolumn">joinGeometryColumn</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L47">src/duckdb/spatial-aggregate-join.ts:47</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L44">src/duckdb/spatial-aggregate-join.ts:44</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="joinlayer"><code class="tsd-tag">Optional</code><span>join<wbr/>Layer</span><a href="#joinlayer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">joinLayer</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">number</span></div><aside class="tsd-sources">
 <p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#joinlayer">joinLayer</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L45">src/duckdb/spatial-aggregate-join.ts:45</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L42">src/duckdb/spatial-aggregate-join.ts:42</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="jointype"><code class="tsd-tag">Optional</code><span>join<wbr/>Type</span><a href="#jointype" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">joinType</span><span class="tsd-signature-symbol">?:</span> <a href="../types/duckdb.DuckDbSpatialAggregateJoinType.html" class="tsd-signature-type tsd-kind-type-alias">DuckDbSpatialAggregateJoinType</a></div><aside class="tsd-sources">
 <p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#jointype">joinType</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L43">src/duckdb/spatial-aggregate-join.ts:43</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L40">src/duckdb/spatial-aggregate-join.ts:40</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="output"><code class="tsd-tag">Optional</code><span>output</span><a href="#output" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">output</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">sourceId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span></div>
@@ -93,13 +93,13 @@
 <div class="tsd-signature"><span class="tsd-kind-property">outputLayer</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
 <p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#outputlayer">outputLayer</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L48">src/duckdb/spatial-aggregate-join.ts:48</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L45">src/duckdb/spatial-aggregate-join.ts:45</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="predicate"><span>predicate</span><a href="#predicate" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">predicate</span><span class="tsd-signature-symbol">:</span> <a href="../types/duckdb.DuckDbSpatialAggregateJoinPredicate.html" class="tsd-signature-type tsd-kind-type-alias">DuckDbSpatialAggregateJoinPredicate</a></div><aside class="tsd-sources">
 <p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#predicate">predicate</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L41">src/duckdb/spatial-aggregate-join.ts:41</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L38">src/duckdb/spatial-aggregate-join.ts:38</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="runtime"><code class="tsd-tag">Optional</code><span>runtime</span><a href="#runtime" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">runtime</span><span class="tsd-signature-symbol">?:</span> <a href="duckdb.DuckDbRuntime.html" class="tsd-signature-type tsd-kind-interface">DuckDbRuntime</a></div>
@@ -119,13 +119,13 @@
 <div class="tsd-signature"><span class="tsd-kind-property">targetGeometryColumn</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
 <p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#targetgeometrycolumn">targetGeometryColumn</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L46">src/duckdb/spatial-aggregate-join.ts:46</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L43">src/duckdb/spatial-aggregate-join.ts:43</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="targetlayer"><code class="tsd-tag">Optional</code><span>target<wbr/>Layer</span><a href="#targetlayer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">targetLayer</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">number</span></div><aside class="tsd-sources">
 <p>Inherited from <a href="duckdb.DuckDbSpatialAggregateJoinOptions.html">DuckDbSpatialAggregateJoinOptions</a>.<a href="duckdb.DuckDbSpatialAggregateJoinOptions.html#targetlayer">targetLayer</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L44">src/duckdb/spatial-aggregate-join.ts:44</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/duckdb/spatial-aggregate-join.ts#L41">src/duckdb/spatial-aggregate-join.ts:41</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

@@ -29,7 +29,8 @@ export class ScaleControl implements Control {
   private _barText: HTMLElement | null = null;
   private _frameId: number | null = null;
   private _revision = 0;
-  private readonly _options: Required<Omit<ScaleControlOptions, 'className'>> & Pick<ScaleControlOptions, 'className'>;
+  private readonly _options: Required<Omit<ScaleControlOptions, 'className'>> &
+    Pick<ScaleControlOptions, 'className'>;
   private readonly _onUpdateBound: () => void;
   private readonly _onCrsChangeBound: () => void;
 
@@ -134,8 +135,10 @@ export class ScaleControl implements Control {
   private _render(metrics: ScaleViewMetrics): void {
     if (!this._container || !this._summary || !this._labels || !this._bar || !this._barText) return;
     const summary = [];
-    if (this._options.showScale) summary.push(`1:${Math.round(metrics.scaleDenominator).toLocaleString('en-US')}`);
-    if (metrics.zoom !== undefined && this._options.showZoom) summary.push(`Zoom ${Math.round(metrics.zoom * 100) / 100}`);
+    if (this._options.showScale)
+      summary.push(`1:${Math.round(metrics.scaleDenominator).toLocaleString('en-US')}`);
+    if (metrics.zoom !== undefined && this._options.showZoom)
+      summary.push(`Zoom ${Math.round(metrics.zoom * 100) / 100}`);
     this._summary.textContent = summary.join(' · ');
 
     const scale = this._options.showScale
@@ -150,7 +153,9 @@ export class ScaleControl implements Control {
     const dual = this._options.units === 'dual';
     const style = this._options.style;
     const withMidpoint = !dual && (style === 'checker' || style === 'ruler' || style === 'steps');
-    const midpoint = withMidpoint ? formatScaleDistance(scale.distance / 2, this._options.units) : null;
+    const midpoint = withMidpoint
+      ? formatScaleDistance(scale.distance / 2, this._options.units)
+      : null;
     const end = formatScaleDistance(scale.distance, this._options.units);
     if (!end || (withMidpoint && !midpoint)) {
       this._labels.textContent = '';
@@ -163,12 +168,15 @@ export class ScaleControl implements Control {
       this._barText.textContent = end;
     } else {
       this._barText.textContent = '';
-      const labelTexts = style === 'minimal' ? [end] : withMidpoint ? ['0', midpoint, end] : ['0', end];
-      this._labels.replaceChildren(...labelTexts.map((label) => {
-        const element = document.createElement('span');
-        element.textContent = label;
-        return element;
-      }));
+      const labelTexts =
+        style === 'minimal' ? [end] : withMidpoint ? ['0', midpoint, end] : ['0', end];
+      this._labels.replaceChildren(
+        ...labelTexts.map((label) => {
+          const element = document.createElement('span');
+          element.textContent = label;
+          return element;
+        }),
+      );
       this._labels.classList.toggle('emap-scale-labels-dual', labelTexts.length === 2);
     }
     this._container.style.setProperty('--emap-scale-width', `${scale.width}px`);
