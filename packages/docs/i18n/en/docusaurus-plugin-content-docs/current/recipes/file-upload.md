@@ -18,8 +18,8 @@ Catch load errors, display a retryable message, and add the source/layer only af
 
 ## API
 
-- [src.TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
-- [src.TopologySourceFromBytesOptions](/mapseekai/emap/api/interfaces/index.TopologySourceFromBytesOptions.html)
+- [src.TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
+- [src.TopologySourceFromBytesOptions](/mapseekai/emap/api/interfaces/emap.TopologySourceFromBytesOptions.html)
 
 ## Runnable examples
 

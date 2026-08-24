@@ -18,7 +18,7 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.OpError](/mapseekai/emap/api/types/index.OpError.html)
+- [src.OpError](/mapseekai/emap/api/types/emap.OpError.html)
 - [src_duckdb.DuckDbOperationError](/mapseekai/emap/api/classes/src_duckdb.DuckDbOperationError.html)
 
 ## 可运行示例

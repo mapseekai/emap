@@ -1,3 +1,7 @@
+/**
+ * @module emap
+ */
+
 // Public entry point. Sections below match the conceptual layers documented
 // in AGENTS.md and README.md (`map.ts orchestrates → painters → sources → edit commands →
 // UI controls`). Avoid `export *` — every public name is listed explicitly so

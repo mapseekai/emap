@@ -180,10 +180,10 @@ map.on('validationfailed', ({ results, label }) => {
 
 ## API
 
-- [EditCommand](/mapseekai/emap/api/interfaces/index.EditCommand.html)
-- [EditHistory](/mapseekai/emap/api/classes/index.EditHistory.html)
-- [Transaction](/mapseekai/emap/api/classes/index.Transaction.html)
-- [EditToolbar](/mapseekai/emap/api/classes/index.EditToolbar.html)
+- [EditCommand](/mapseekai/emap/api/interfaces/emap.EditCommand.html)
+- [EditHistory](/mapseekai/emap/api/classes/emap.EditHistory.html)
+- [Transaction](/mapseekai/emap/api/classes/emap.Transaction.html)
+- [EditToolbar](/mapseekai/emap/api/classes/emap.EditToolbar.html)
 
 ## 可运行示例
 

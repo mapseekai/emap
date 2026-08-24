@@ -18,8 +18,8 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
-- [src.MapshaperWorkerPool](/mapseekai/emap/api/classes/index.MapshaperWorkerPool.html)
+- [src.MapOptions](/mapseekai/emap/api/interfaces/emap.MapOptions.html)
+- [src.MapshaperWorkerPool](/mapseekai/emap/api/classes/emap.MapshaperWorkerPool.html)
 
 ## 可运行示例
 

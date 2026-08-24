@@ -205,10 +205,10 @@ output, then assign separate paint to each render layer.
 
 ## API
 
-- [FillPaint](/mapseekai/emap/api/interfaces/index.FillPaint.html)
-- [LinePaint](/mapseekai/emap/api/interfaces/index.LinePaint.html)
-- [CirclePaint](/mapseekai/emap/api/interfaces/index.CirclePaint.html)
-- [LayerSpecification](/mapseekai/emap/api/interfaces/index.LayerSpecification.html)
+- [FillPaint](/mapseekai/emap/api/interfaces/emap.FillPaint.html)
+- [LinePaint](/mapseekai/emap/api/interfaces/emap.LinePaint.html)
+- [CirclePaint](/mapseekai/emap/api/interfaces/emap.CirclePaint.html)
+- [LayerSpecification](/mapseekai/emap/api/interfaces/emap.LayerSpecification.html)
 
 ## Runnable examples
 

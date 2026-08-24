@@ -18,8 +18,8 @@ When migrating older examples, explicitly opt into trusted expressions, replace 
 
 ## API
 
-- [src.MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
-- [src.Emap](/mapseekai/emap/api/classes/index.Emap.html)
+- [src.MapOptions](/mapseekai/emap/api/interfaces/emap.MapOptions.html)
+- [src.Emap](/mapseekai/emap/api/classes/emap.Emap.html)
 
 ## Runnable examples
 

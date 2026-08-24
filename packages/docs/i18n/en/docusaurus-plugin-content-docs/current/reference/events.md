@@ -22,8 +22,8 @@ dispatched through `map.on`.
 
 ## API
 
-- [src.EmapEventMap](/mapseekai/emap/api/interfaces/index.EmapEventMap.html)
-- [src.EventListener](/mapseekai/emap/api/types/index.EventListener.html)
+- [src.EmapEventMap](/mapseekai/emap/api/interfaces/emap.EmapEventMap.html)
+- [src.EventListener](/mapseekai/emap/api/types/emap.EventListener.html)
 
 ## Runnable examples
 

@@ -18,8 +18,8 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
-- [src.TopologySourceFromBytesOptions](/mapseekai/emap/api/interfaces/index.TopologySourceFromBytesOptions.html)
+- [src.TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
+- [src.TopologySourceFromBytesOptions](/mapseekai/emap/api/interfaces/emap.TopologySourceFromBytesOptions.html)
 
 ## 可运行示例
 

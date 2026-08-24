@@ -193,11 +193,11 @@ Emap 暴露 TypeScript option，不接受任意 CLI 字符串。检查具体接�
 
 ## API
 
-- [OpResult](/mapseekai/emap/api/types/index.OpResult.html)
-- [OpError](/mapseekai/emap/api/types/index.OpError.html)
-- [BufferOptions](/mapseekai/emap/api/interfaces/index.BufferOptions.html)
-- [SimplifyOptions](/mapseekai/emap/api/interfaces/index.SimplifyOptions.html)
-- [ProjectOptions](/mapseekai/emap/api/interfaces/index.ProjectOptions.html)
+- [OpResult](/mapseekai/emap/api/types/emap.OpResult.html)
+- [OpError](/mapseekai/emap/api/types/emap.OpError.html)
+- [BufferOptions](/mapseekai/emap/api/interfaces/emap.BufferOptions.html)
+- [SimplifyOptions](/mapseekai/emap/api/interfaces/emap.SimplifyOptions.html)
+- [ProjectOptions](/mapseekai/emap/api/interfaces/emap.ProjectOptions.html)
 
 ## 可运行示例
 

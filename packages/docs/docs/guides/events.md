@@ -162,10 +162,10 @@ Promise、`OpResult` 和自己的加载状态驱动进度 UI。
 
 ## API
 
-- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
-- [EmapEventMap](/mapseekai/emap/api/interfaces/index.EmapEventMap.html)
-- [CameraEvent](/mapseekai/emap/api/interfaces/index.CameraEvent.html)
-- [FeatureEvent](/mapseekai/emap/api/interfaces/index.FeatureEvent.html)
+- [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
+- [EmapEventMap](/mapseekai/emap/api/interfaces/emap.EmapEventMap.html)
+- [CameraEvent](/mapseekai/emap/api/interfaces/emap.CameraEvent.html)
+- [FeatureEvent](/mapseekai/emap/api/interfaces/emap.FeatureEvent.html)
 
 ## 可运行示例
 

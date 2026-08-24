@@ -160,8 +160,8 @@ URL.revokeObjectURL(url);
 
 ## API
 
-- [TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
-- [ExportOptions](/mapseekai/emap/api/interfaces/index.ExportOptions.html)
+- [TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
+- [ExportOptions](/mapseekai/emap/api/interfaces/emap.ExportOptions.html)
 - [initParquetWasm](/mapseekai/emap/api/functions/arrow.initParquetWasm.html)
 - [setParquetWasm](/mapseekai/emap/api/functions/arrow.setParquetWasm.html)
 - [toArrowTable](/mapseekai/emap/api/functions/arrow.toArrowTable.html)

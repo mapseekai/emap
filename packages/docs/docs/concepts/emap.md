@@ -146,9 +146,9 @@ viewport，也不要在应用代码中维护另一套矩阵。
 
 ## API
 
-- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
-- [MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
-- [EmapEventMap](/mapseekai/emap/api/interfaces/index.EmapEventMap.html)
+- [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
+- [MapOptions](/mapseekai/emap/api/interfaces/emap.MapOptions.html)
+- [EmapEventMap](/mapseekai/emap/api/interfaces/emap.EmapEventMap.html)
 
 ## 可运行示例
 

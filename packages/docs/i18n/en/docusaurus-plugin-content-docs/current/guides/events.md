@@ -154,10 +154,10 @@ with `requestAnimationFrame` when needed.
 
 ## API
 
-- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
-- [EmapEventMap](/mapseekai/emap/api/interfaces/index.EmapEventMap.html)
-- [CameraEvent](/mapseekai/emap/api/interfaces/index.CameraEvent.html)
-- [FeatureEvent](/mapseekai/emap/api/interfaces/index.FeatureEvent.html)
+- [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
+- [EmapEventMap](/mapseekai/emap/api/interfaces/emap.EmapEventMap.html)
+- [CameraEvent](/mapseekai/emap/api/interfaces/emap.CameraEvent.html)
+- [FeatureEvent](/mapseekai/emap/api/interfaces/emap.FeatureEvent.html)
 
 ## Runnable examples
 

@@ -392,20 +392,20 @@ boxButton.addEventListener('click', () => {
 
 ## API
 
-- [Control](/mapseekai/emap/api/interfaces/index.Control.html)
-- [ControlPosition](/mapseekai/emap/api/types/index.ControlPosition.html)
-- [NavigationControl](/mapseekai/emap/api/classes/index.NavigationControl.html)
-- [HistoryControl](/mapseekai/emap/api/classes/index.HistoryControl.html)
-- [StatusControl](/mapseekai/emap/api/classes/index.StatusControl.html)
-- [ScaleControl](/mapseekai/emap/api/classes/index.ScaleControl.html)
-- [ScaleControlOptions](/mapseekai/emap/api/interfaces/index.ScaleControlOptions.html)
-- [ScaleMetrics](/mapseekai/emap/api/interfaces/index.ScaleMetrics.html)
-- [ScaleViewMetrics](/mapseekai/emap/api/interfaces/index.ScaleViewMetrics.html)
-- [MeasureControl](/mapseekai/emap/api/classes/index.MeasureControl.html)
-- [MeasureControlOptions](/mapseekai/emap/api/interfaces/index.MeasureControlOptions.html)
-- [MeasureHandler](/mapseekai/emap/api/classes/index.MeasureHandler.html)
-- [MeasureOptions](/mapseekai/emap/api/interfaces/index.MeasureOptions.html)
-- [MeasureResult](/mapseekai/emap/api/interfaces/index.MeasureResult.html)
+- [Control](/mapseekai/emap/api/interfaces/emap.Control.html)
+- [ControlPosition](/mapseekai/emap/api/types/emap.ControlPosition.html)
+- [NavigationControl](/mapseekai/emap/api/classes/emap.NavigationControl.html)
+- [HistoryControl](/mapseekai/emap/api/classes/emap.HistoryControl.html)
+- [StatusControl](/mapseekai/emap/api/classes/emap.StatusControl.html)
+- [ScaleControl](/mapseekai/emap/api/classes/emap.ScaleControl.html)
+- [ScaleControlOptions](/mapseekai/emap/api/interfaces/emap.ScaleControlOptions.html)
+- [ScaleMetrics](/mapseekai/emap/api/interfaces/emap.ScaleMetrics.html)
+- [ScaleViewMetrics](/mapseekai/emap/api/interfaces/emap.ScaleViewMetrics.html)
+- [MeasureControl](/mapseekai/emap/api/classes/emap.MeasureControl.html)
+- [MeasureControlOptions](/mapseekai/emap/api/interfaces/emap.MeasureControlOptions.html)
+- [MeasureHandler](/mapseekai/emap/api/classes/emap.MeasureHandler.html)
+- [MeasureOptions](/mapseekai/emap/api/interfaces/emap.MeasureOptions.html)
+- [MeasureResult](/mapseekai/emap/api/interfaces/emap.MeasureResult.html)
 
 ## 可运行示例
 

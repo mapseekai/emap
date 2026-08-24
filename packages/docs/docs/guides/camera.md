@@ -165,10 +165,10 @@ zoom 是 WebMercator 便利概念。对其他 CRS 优先使用数据范围、`fi
 
 ## API
 
-- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
-- [CameraOptions](/mapseekai/emap/api/interfaces/index.CameraOptions.html)
-- [FitBoundsOptions](/mapseekai/emap/api/interfaces/index.FitBoundsOptions.html)
-- [FlyToOptions](/mapseekai/emap/api/interfaces/index.FlyToOptions.html)
+- [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
+- [CameraOptions](/mapseekai/emap/api/interfaces/emap.CameraOptions.html)
+- [FitBoundsOptions](/mapseekai/emap/api/interfaces/emap.FitBoundsOptions.html)
+- [FlyToOptions](/mapseekai/emap/api/interfaces/emap.FlyToOptions.html)
 
 ## 可运行示例
 

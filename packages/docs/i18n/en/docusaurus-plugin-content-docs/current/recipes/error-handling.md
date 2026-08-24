@@ -18,7 +18,7 @@ Handle errors at app boundaries: keep the map alive, show retry instructions, an
 
 ## API
 
-- [src.OpError](/mapseekai/emap/api/types/index.OpError.html)
+- [src.OpError](/mapseekai/emap/api/types/emap.OpError.html)
 - [src_duckdb.DuckDbOperationError](/mapseekai/emap/api/classes/src_duckdb.DuckDbOperationError.html)
 
 ## Runnable examples

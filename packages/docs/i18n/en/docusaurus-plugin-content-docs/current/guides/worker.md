@@ -158,9 +158,9 @@ explicit user action. The current Promise still needs failure handling.
 
 ## API
 
-- [MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
-- [MapshaperWorkerPool](/mapseekai/emap/api/classes/index.MapshaperWorkerPool.html)
-- [MapshaperWorkerPoolOptions](/mapseekai/emap/api/interfaces/index.MapshaperWorkerPoolOptions.html)
+- [MapOptions](/mapseekai/emap/api/interfaces/emap.MapOptions.html)
+- [MapshaperWorkerPool](/mapseekai/emap/api/classes/emap.MapshaperWorkerPool.html)
+- [MapshaperWorkerPoolOptions](/mapseekai/emap/api/interfaces/emap.MapshaperWorkerPoolOptions.html)
 
 ## Runnable examples
 

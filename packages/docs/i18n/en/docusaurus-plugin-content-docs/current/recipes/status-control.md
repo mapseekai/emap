@@ -18,8 +18,8 @@ Status UI should distinguish loading, success, warning, and error states; keep t
 
 ## API
 
-- [src.StatusControl](/mapseekai/emap/api/classes/index.StatusControl.html)
-- [src.StatusOptions](/mapseekai/emap/api/interfaces/index.StatusOptions.html)
+- [src.StatusControl](/mapseekai/emap/api/classes/emap.StatusControl.html)
+- [src.StatusOptions](/mapseekai/emap/api/interfaces/emap.StatusOptions.html)
 
 ## Runnable examples
 

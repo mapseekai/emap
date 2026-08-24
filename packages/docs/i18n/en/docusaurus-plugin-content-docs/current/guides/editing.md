@@ -179,10 +179,10 @@ The application chooses whether to warn, continue, or invoke undo.
 
 ## API
 
-- [EditCommand](/mapseekai/emap/api/interfaces/index.EditCommand.html)
-- [EditHistory](/mapseekai/emap/api/classes/index.EditHistory.html)
-- [Transaction](/mapseekai/emap/api/classes/index.Transaction.html)
-- [EditToolbar](/mapseekai/emap/api/classes/index.EditToolbar.html)
+- [EditCommand](/mapseekai/emap/api/interfaces/emap.EditCommand.html)
+- [EditHistory](/mapseekai/emap/api/classes/emap.EditHistory.html)
+- [Transaction](/mapseekai/emap/api/classes/emap.Transaction.html)
+- [EditToolbar](/mapseekai/emap/api/classes/emap.EditToolbar.html)
 
 ## Runnable examples
 

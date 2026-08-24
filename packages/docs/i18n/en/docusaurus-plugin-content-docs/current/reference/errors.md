@@ -18,7 +18,7 @@ Prefer user-facing recovery text near the triggering control and technical error
 
 ## API
 
-- [src.OpError](/mapseekai/emap/api/types/index.OpError.html)
+- [src.OpError](/mapseekai/emap/api/types/emap.OpError.html)
 - [src_duckdb.DuckDbOperationErrorKind](/mapseekai/emap/api/types/src_duckdb.DuckDbOperationErrorKind.html)
 
 ## Runnable examples

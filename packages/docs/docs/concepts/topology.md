@@ -125,10 +125,10 @@ Emap 根据效果决定是否能保留选择。shape-count 操作可能改变 fe
 
 ## API
 
-- [TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
-- [ITopologySource](/mapseekai/emap/api/interfaces/index.ITopologySource.html)
-- [MapshaperDataset](/mapseekai/emap/api/interfaces/index.MapshaperDataset.html)
-- [ArcCollection](/mapseekai/emap/api/interfaces/index.ArcCollection.html)
+- [TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
+- [ITopologySource](/mapseekai/emap/api/interfaces/emap.ITopologySource.html)
+- [MapshaperDataset](/mapseekai/emap/api/interfaces/emap.MapshaperDataset.html)
+- [ArcCollection](/mapseekai/emap/api/interfaces/emap.ArcCollection.html)
 
 ## 可运行示例
 

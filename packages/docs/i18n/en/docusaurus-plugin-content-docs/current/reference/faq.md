@@ -18,8 +18,8 @@ If an operation fails, check expression policy, missing fixtures, CRS constraint
 
 ## API
 
-- [src.Emap](/mapseekai/emap/api/classes/index.Emap.html)
-- [src.TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
+- [src.Emap](/mapseekai/emap/api/classes/emap.Emap.html)
+- [src.TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
 
 ## Runnable examples
 

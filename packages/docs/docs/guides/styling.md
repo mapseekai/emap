@@ -203,10 +203,10 @@ source layers，或先通过数据操作生成分类字段和目标图层，再�
 
 ## API
 
-- [FillPaint](/mapseekai/emap/api/interfaces/index.FillPaint.html)
-- [LinePaint](/mapseekai/emap/api/interfaces/index.LinePaint.html)
-- [CirclePaint](/mapseekai/emap/api/interfaces/index.CirclePaint.html)
-- [LayerSpecification](/mapseekai/emap/api/interfaces/index.LayerSpecification.html)
+- [FillPaint](/mapseekai/emap/api/interfaces/emap.FillPaint.html)
+- [LinePaint](/mapseekai/emap/api/interfaces/emap.LinePaint.html)
+- [CirclePaint](/mapseekai/emap/api/interfaces/emap.CirclePaint.html)
+- [LayerSpecification](/mapseekai/emap/api/interfaces/emap.LayerSpecification.html)
 
 ## 可运行示例
 

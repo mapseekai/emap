@@ -118,10 +118,10 @@ references must not be retained.
 
 ## API
 
-- [TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
-- [ITopologySource](/mapseekai/emap/api/interfaces/index.ITopologySource.html)
-- [MapshaperDataset](/mapseekai/emap/api/interfaces/index.MapshaperDataset.html)
-- [ArcCollection](/mapseekai/emap/api/interfaces/index.ArcCollection.html)
+- [TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
+- [ITopologySource](/mapseekai/emap/api/interfaces/emap.ITopologySource.html)
+- [MapshaperDataset](/mapseekai/emap/api/interfaces/emap.MapshaperDataset.html)
+- [ArcCollection](/mapseekai/emap/api/interfaces/emap.ArcCollection.html)
 
 ## Runnable examples
 

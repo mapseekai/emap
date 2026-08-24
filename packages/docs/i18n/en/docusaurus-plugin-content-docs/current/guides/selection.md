@@ -2,7 +2,7 @@
 id: selection
 slug: /guides/selection
 title: Selection
-api: ["BoxSelectHandler","BoxSelectHandlerOptions","BoxSelectStyle","ClickSelectHandler","DragPanHandler","DragPanOptions","DrawFeatureHandler","DrawFeatureOptions","DrawGeometryType","Emap","featureMatchesLasso","LassoSelectHandler","LassoSelectHandlerOptions","LassoSelectStyle","LassoStyle","ModifierCombo","pointInPolygon","resolveMode","ScrollZoomHandler","ScrollZoomOptions","SelectHandlerOptions","Selection","SelectionDiff","SelectionSnapshot","SelectMode","TransformFeatureHandler","TransformFeatureOptions","VertexEditHandler","VertexEditOptions"]
+api: ["BoxSelectHandler","BoxSelectHandlerOptions","BoxSelectStyle","ClickSelectHandler","DragPanHandler","DragPanOptions","DrawFeatureHandler","DrawFeatureOptions","DrawGeometryType","Emap","featureMatchesLasso","LassoSelectHandler","LassoSelectHandlerOptions","LassoSelectStyle","LassoStyle","MergeSelectedOptions","ModifierCombo","pointInPolygon","resolveMode","ScrollZoomHandler","ScrollZoomOptions","SelectHandlerOptions","Selection","SelectionDiff","SelectionSnapshot","SelectMode","TransformFeatureHandler","TransformFeatureOptions","VertexEditHandler","VertexEditOptions"]
 examples: ["box-select","feature-rotate-scale","feature-selection","feature-translate","lasso-select","merge-selected"]
 stability: stable
 verifiedVersion: 0.5.0
@@ -139,6 +139,27 @@ All deleted features form one history entry. One undo restores the complete
 batch. Selection clears after success. An empty selection returns `false`
 without adding history.
 
+## Merge selected features
+
+After selecting at least two features from one source and source layer, merge them into one:
+
+```ts
+const selected = map.getSelection();
+const result = await map.ops.mergeSelected({
+  attributeSource: selected[1],
+});
+
+if (!result.ok) {
+  console.error(result.error.message);
+}
+```
+
+Polygon features use a true geometric union: internal boundaries between adjacent or overlapping
+parts are removed, while disconnected polygons become one multipart feature. `attributeSource`
+must belong to the current selection and supplies the complete output record; omitting it uses the
+first selected feature. Success clears the selection and creates one undoable and redoable history
+entry.
+
 ## Selection and data operations
 
 Data operations may change shape count, topology, attributes, or CRS. Emap uses
@@ -156,11 +177,12 @@ through `map.ops`; otherwise feature IDs may become stale.
 
 ## API
 
-- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
-- [Selection](/mapseekai/emap/api/classes/index.Selection.html)
-- [FeatureRef](/mapseekai/emap/api/interfaces/index.FeatureRef.html)
-- [BoxSelectControl](/mapseekai/emap/api/classes/index.BoxSelectControl.html)
-- [LassoSelectControl](/mapseekai/emap/api/classes/index.LassoSelectControl.html)
+- [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
+- [Selection](/mapseekai/emap/api/classes/emap.Selection.html)
+- [FeatureRef](/mapseekai/emap/api/interfaces/emap.FeatureRef.html)
+- [MergeSelectedOptions](/mapseekai/emap/api/interfaces/emap.MergeSelectedOptions.html)
+- [BoxSelectControl](/mapseekai/emap/api/classes/emap.BoxSelectControl.html)
+- [LassoSelectControl](/mapseekai/emap/api/classes/emap.LassoSelectControl.html)
 
 ## Runnable examples
 

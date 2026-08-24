@@ -151,10 +151,10 @@ those changes.
 
 ## API
 
-- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
-- [Feature](/mapseekai/emap/api/interfaces/index.Feature.html)
-- [ApplyExpressionOptions](/mapseekai/emap/api/interfaces/index.ApplyExpressionOptions.html)
-- [JoinTableOptions](/mapseekai/emap/api/interfaces/index.JoinTableOptions.html)
+- [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
+- [Feature](/mapseekai/emap/api/interfaces/emap.Feature.html)
+- [ApplyExpressionOptions](/mapseekai/emap/api/interfaces/emap.ApplyExpressionOptions.html)
+- [JoinTableOptions](/mapseekai/emap/api/interfaces/emap.JoinTableOptions.html)
 
 ## Runnable examples
 

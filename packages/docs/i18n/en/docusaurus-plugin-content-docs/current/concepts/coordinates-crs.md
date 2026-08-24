@@ -140,11 +140,11 @@ map.jumpTo({
 
 ## API
 
-- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
-- [Bounds](/mapseekai/emap/api/classes/index.Bounds.html)
-- [Projection](/mapseekai/emap/api/classes/index.Projection.html)
-- [resolveDatasetCRS](/mapseekai/emap/api/functions/index.resolveDatasetCRS.html)
-- [ProjectOptions](/mapseekai/emap/api/interfaces/index.ProjectOptions.html)
+- [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
+- [Bounds](/mapseekai/emap/api/classes/emap.Bounds.html)
+- [Projection](/mapseekai/emap/api/classes/emap.Projection.html)
+- [resolveDatasetCRS](/mapseekai/emap/api/functions/emap.resolveDatasetCRS.html)
+- [ProjectOptions](/mapseekai/emap/api/interfaces/emap.ProjectOptions.html)
 
 ## Runnable examples
 

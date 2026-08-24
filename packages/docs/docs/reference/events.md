@@ -20,8 +20,8 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.EmapEventMap](/mapseekai/emap/api/interfaces/index.EmapEventMap.html)
-- [src.EventListener](/mapseekai/emap/api/types/index.EventListener.html)
+- [src.EmapEventMap](/mapseekai/emap/api/interfaces/emap.EmapEventMap.html)
+- [src.EventListener](/mapseekai/emap/api/types/emap.EventListener.html)
 
 ## 可运行示例
 

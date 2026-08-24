@@ -172,9 +172,9 @@ Worker 已启动，但相对导入 vendor 失败。把 vendor 文件移动到 wo
 
 ## API
 
-- [MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
-- [MapshaperWorkerPool](/mapseekai/emap/api/classes/index.MapshaperWorkerPool.html)
-- [MapshaperWorkerPoolOptions](/mapseekai/emap/api/interfaces/index.MapshaperWorkerPoolOptions.html)
+- [MapOptions](/mapseekai/emap/api/interfaces/emap.MapOptions.html)
+- [MapshaperWorkerPool](/mapseekai/emap/api/classes/emap.MapshaperWorkerPool.html)
+- [MapshaperWorkerPoolOptions](/mapseekai/emap/api/interfaces/emap.MapshaperWorkerPoolOptions.html)
 
 ## 可运行示例
 

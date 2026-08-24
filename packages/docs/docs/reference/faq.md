@@ -18,8 +18,8 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.Emap](/mapseekai/emap/api/classes/index.Emap.html)
-- [src.TopologySource](/mapseekai/emap/api/classes/index.TopologySource.html)
+- [src.Emap](/mapseekai/emap/api/classes/emap.Emap.html)
+- [src.TopologySource](/mapseekai/emap/api/classes/emap.TopologySource.html)
 
 ## 可运行示例
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `map.ops.mergeSelected()` now performs a true polygon union that removes shared and
+  overlap-internal boundaries without changing unselected geometry, and accepts a selected
+  feature as the merged record's attribute source.
+
 ## [0.7.0] - 2026-08-24
 
 ### Added

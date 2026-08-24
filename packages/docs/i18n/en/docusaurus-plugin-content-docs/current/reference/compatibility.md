@@ -18,8 +18,8 @@ Worker builds must serve `emap-worker.js` and mapshaper vendor assets from URLs 
 
 ## API
 
-- [src.MapOptions](/mapseekai/emap/api/interfaces/index.MapOptions.html)
-- [src.MapshaperWorkerPool](/mapseekai/emap/api/classes/index.MapshaperWorkerPool.html)
+- [src.MapOptions](/mapseekai/emap/api/interfaces/emap.MapOptions.html)
+- [src.MapshaperWorkerPool](/mapseekai/emap/api/classes/emap.MapshaperWorkerPool.html)
 
 ## Runnable examples
 

@@ -150,6 +150,17 @@ describe('TypeDoc public API config', () => {
     ] satisfies TypeDocOutputConfig[]);
   });
 
+  it('names public API modules after their import surfaces', async () => {
+    const reflections = JSON.parse(
+      await readFile(resolve(process.cwd(), 'packages/docs/static/api/reflections.json'), 'utf8'),
+    ) as ReflectionNode;
+    const moduleNames = (Array.isArray(reflections.children) ? reflections.children : [])
+      .filter(isReflectionNode)
+      .map((reflection) => reflection.name);
+
+    expect(moduleNames).toEqual(['arrow', 'duckdb', 'emap']);
+  });
+
   it('omits internal host surfaces from generated reflections', async () => {
     const reflections = JSON.parse(
       await readFile(resolve(process.cwd(), 'packages/docs/static/api/reflections.json'), 'utf8'),
@@ -164,7 +175,7 @@ describe('TypeDoc public API config', () => {
 
   it('omits internal host surfaces from generated Emap HTML', async () => {
     const html = await readFile(
-      resolve(process.cwd(), 'packages/docs/static/api/classes/index.Emap.html'),
+      resolve(process.cwd(), 'packages/docs/static/api/classes/emap.Emap.html'),
       'utf8',
     );
 
@@ -191,7 +202,7 @@ describe('TypeDoc public API config', () => {
 
   it('does not leak linked worktree paths in generated HTML', async () => {
     const html = await readFile(
-      resolve(process.cwd(), 'packages/docs/static/api/classes/index.Emap.html'),
+      resolve(process.cwd(), 'packages/docs/static/api/classes/emap.Emap.html'),
       'utf8',
     );
 

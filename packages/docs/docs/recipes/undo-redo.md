@@ -18,8 +18,8 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.HistoryControl](/mapseekai/emap/api/classes/index.HistoryControl.html)
-- [src.EditHistory](/mapseekai/emap/api/classes/index.EditHistory.html)
+- [src.HistoryControl](/mapseekai/emap/api/classes/emap.HistoryControl.html)
+- [src.EditHistory](/mapseekai/emap/api/classes/emap.EditHistory.html)
 
 ## 可运行示例
 

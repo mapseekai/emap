@@ -2,7 +2,7 @@
 id: selection
 slug: /guides/selection
 title: 选择
-api: ["BoxSelectHandler","BoxSelectHandlerOptions","BoxSelectStyle","ClickSelectHandler","DragPanHandler","DragPanOptions","DrawFeatureHandler","DrawFeatureOptions","DrawGeometryType","Emap","featureMatchesLasso","LassoSelectHandler","LassoSelectHandlerOptions","LassoSelectStyle","LassoStyle","ModifierCombo","pointInPolygon","resolveMode","ScrollZoomHandler","ScrollZoomOptions","SelectHandlerOptions","Selection","SelectionDiff","SelectionSnapshot","SelectMode","TransformFeatureHandler","TransformFeatureOptions","VertexEditHandler","VertexEditOptions"]
+api: ["BoxSelectHandler","BoxSelectHandlerOptions","BoxSelectStyle","ClickSelectHandler","DragPanHandler","DragPanOptions","DrawFeatureHandler","DrawFeatureOptions","DrawGeometryType","Emap","featureMatchesLasso","LassoSelectHandler","LassoSelectHandlerOptions","LassoSelectStyle","LassoStyle","MergeSelectedOptions","ModifierCombo","pointInPolygon","resolveMode","ScrollZoomHandler","ScrollZoomOptions","SelectHandlerOptions","Selection","SelectionDiff","SelectionSnapshot","SelectMode","TransformFeatureHandler","TransformFeatureOptions","VertexEditHandler","VertexEditOptions"]
 examples: ["box-select","feature-rotate-scale","feature-selection","feature-translate","lasso-select","merge-selected"]
 stability: stable
 verifiedVersion: 0.5.0
@@ -136,6 +136,26 @@ if (deleted) {
 删除的所有要素组成一次历史记录；一次撤销会恢复整批要素。成功后选择自动清空。
 选择为空时返回 `false`，不会增加历史项。
 
+## 合并已选要素
+
+同一 source、同一 source layer 中至少选择两个要素后，可以把它们合并为一个要素：
+
+```ts
+const selected = map.getSelection();
+const result = await map.ops.mergeSelected({
+  attributeSource: selected[1],
+});
+
+if (!result.ok) {
+  console.error(result.error.message);
+}
+```
+
+多边形会执行真正的几何并集：相邻或重叠部分的内部边被删除；互不相连的多边形
+形成一个 multipart 要素。`attributeSource` 必须是当前选择中的要素，其完整属性
+记录会用于合并结果；省略时使用第一个所选要素。成功后选择自动清空，并生成一条
+可撤销、可重做的历史记录。
+
 ## 选择与数据操作
 
 数据操作可能改变要素数量、拓扑、属性或 CRS。Emap 根据 operation effect 决定选择
@@ -161,11 +181,12 @@ feature ID 是 source layer 内的索引，删除或 shape-count 操作可能改
 
 ## API
 
-- [Emap](/mapseekai/emap/api/classes/index.Emap.html)
-- [Selection](/mapseekai/emap/api/classes/index.Selection.html)
-- [FeatureRef](/mapseekai/emap/api/interfaces/index.FeatureRef.html)
-- [BoxSelectControl](/mapseekai/emap/api/classes/index.BoxSelectControl.html)
-- [LassoSelectControl](/mapseekai/emap/api/classes/index.LassoSelectControl.html)
+- [Emap](/mapseekai/emap/api/classes/emap.Emap.html)
+- [Selection](/mapseekai/emap/api/classes/emap.Selection.html)
+- [FeatureRef](/mapseekai/emap/api/interfaces/emap.FeatureRef.html)
+- [MergeSelectedOptions](/mapseekai/emap/api/interfaces/emap.MergeSelectedOptions.html)
+- [BoxSelectControl](/mapseekai/emap/api/classes/emap.BoxSelectControl.html)
+- [LassoSelectControl](/mapseekai/emap/api/classes/emap.LassoSelectControl.html)
 
 ## 可运行示例
 

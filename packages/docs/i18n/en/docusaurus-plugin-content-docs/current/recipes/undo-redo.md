@@ -18,8 +18,8 @@ Dataset-replace operations should run through `Emap.ops` so history snapshots an
 
 ## API
 
-- [src.HistoryControl](/mapseekai/emap/api/classes/index.HistoryControl.html)
-- [src.EditHistory](/mapseekai/emap/api/classes/index.EditHistory.html)
+- [src.HistoryControl](/mapseekai/emap/api/classes/emap.HistoryControl.html)
+- [src.EditHistory](/mapseekai/emap/api/classes/emap.EditHistory.html)
 
 ## Runnable examples
 

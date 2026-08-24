@@ -18,8 +18,8 @@ verifiedVersion: 0.5.0
 
 ## API
 
-- [src.StatusControl](/mapseekai/emap/api/classes/index.StatusControl.html)
-- [src.StatusOptions](/mapseekai/emap/api/interfaces/index.StatusOptions.html)
+- [src.StatusControl](/mapseekai/emap/api/classes/emap.StatusControl.html)
+- [src.StatusOptions](/mapseekai/emap/api/interfaces/emap.StatusOptions.html)
 
 ## 可运行示例
 
