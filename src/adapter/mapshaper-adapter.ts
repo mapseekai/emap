@@ -63,7 +63,12 @@ export interface PointToShapeInfo {
   [key: string]: unknown;
 }
 
-/** A point where an arc segment is split, keyed by its start vertex id. */
+/**
+ * A point where an arc segment is split, keyed by its start vertex id.
+ *
+ * @example
+ * const cut: ArcCutPoint = { x: 121.5, y: 31.2, i: 42 };
+ */
 export interface ArcCutPoint {
   x: number;
   y: number;

@@ -23,7 +23,13 @@ type SelectionContext = {
   arcIds: readonly number[];
 };
 
-/** Interactive cutter sketch that delegates every geometry mutation to `ops.splitSelected`. */
+/**
+ * Interactive cutter sketch that delegates every geometry mutation to `ops.splitSelected`.
+ *
+ * @example
+ * map.splitFeature.setOptions({ cutterType: 'polyline' });
+ * map.splitFeature.enable();
+ */
 export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
   readonly name = 'splitFeature';
   private _enabled = false;

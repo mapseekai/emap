@@ -35,13 +35,22 @@ export interface RenderRequest {
   navDelta?: AffineDelta;
 }
 
-/** Geometry used to split the currently selected path features. */
+/**
+ * Geometry used to split the currently selected path features.
+ *
+ * @example
+ * const cutter: SplitCutter = { type: 'point', coordinates: [121.5, 31.2] };
+ */
 export type SplitCutter =
   | { type: 'point'; coordinates: [number, number] }
   | { type: 'polyline'; coordinates: Array<[number, number]> };
 
-
-/** Options for the interactive selected-feature split handler. */
+/**
+ * Options for the interactive selected-feature split handler.
+ *
+ * @example
+ * const options: SplitFeatureOptions = { cutterType: 'polyline', snapThreshold: 10 };
+ */
 export interface SplitFeatureOptions {
   cutterType: 'point' | 'polyline';
   snapThreshold?: number;
@@ -216,11 +225,27 @@ export interface FeatureRef {
   layer: string;
 }
 
+/**
+ * Cutter options for splitting the current same-source, same-layer selection.
+ *
+ * @example
+ * const options: SplitSelectedOptions = {
+ *   cutter: { type: 'point', coordinates: [121.5, 31.2] },
+ * };
+ */
 export interface SplitSelectedOptions {
   cutter: SplitCutter;
 }
 
-/** Result of a successful selected-feature split. */
+/**
+ * Result of a successful selected-feature split.
+ *
+ * @example
+ * const result: SplitSelectedResult = {
+ *   splitTargetCount: 1,
+ *   resultFeatures: [{ source: 'main', layer: 'roads', id: 4 }],
+ * };
+ */
 export interface SplitSelectedResult {
   splitTargetCount: number;
   resultFeatures: FeatureRef[];
