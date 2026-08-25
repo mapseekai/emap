@@ -402,6 +402,31 @@ describe('MapshaperOps.splitSelected integration', () => {
     expect(events.history).toHaveBeenCalledTimes(historyEvents);
   });
 
+  it('splits a selected complemented arc while preserving its reversed exported orientation', async () => {
+    const dataset = await importDataset([line([[0, 0], [10, 0]], { name: 'reversed' })]);
+    dataset.layers[0]!.name = 'split-selected';
+    dataset.layers[0]!.shapes![0] = [[-1]];
+    const { ops, source, selection } = harness(dataset, [0]);
+
+    const result = await ops.splitSelected({ cutter: { type: 'point', coordinates: [5, 0] } });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        splitTargetCount: 1,
+        resultFeatures: [
+          { source: 'source', layer: 'split-selected', id: 0 },
+          { source: 'source', layer: 'split-selected', id: 1 },
+        ],
+      },
+    });
+    expect(exportFeatures(source.getDataset()).map((feature) => feature.geometry!.coordinates)).toEqual([
+      [[10, 0], [5, 0]],
+      [[5, 0], [0, 0]],
+    ]);
+    expect(selection.getAll()).toEqual(result.ok ? result.value.resultFeatures : []);
+  });
+
   it('returns mapshaper errors from a splitter seam without committing split side effects', async () => {
     const dataset = await importDataset([line([[0, 0], [10, 0]], { name: 'road' })]);
     dataset.layers[0]!.name = 'split-selected';
