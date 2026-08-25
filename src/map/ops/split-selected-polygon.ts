@@ -127,9 +127,14 @@ function properCrossings(shape: PathShape, cutter: readonly Coordinate[], arcs: 
     return [start[0] + t * (end[0] - start[0]), start[1] + t * (end[1] - start[1])];
   };
   const closed = cutter[0]![0] === cutter.at(-1)![0] && cutter[0]![1] === cutter.at(-1)![1];
-  const seam = closed && groups.length > 1 && groups[0]!.events.some((first) =>
-    groups.at(-1)!.events.some((last) => first.point[0] === last.point[0] && first.point[1] === last.point[1]),
-  );
+  const distanceError = EPSILON * Math.max(totalLength, 1);
+  const seamPoint = cutter[0]!;
+  const seam = closed
+    && groups.length > 1
+    && Math.abs(groups[0]!.distance) <= distanceError
+    && Math.abs(groups.at(-1)!.distance - totalLength) <= distanceError
+    && groups[0]!.events.some((event) => event.point[0] === seamPoint[0] && event.point[1] === seamPoint[1])
+    && groups.at(-1)!.events.some((event) => event.point[0] === seamPoint[0] && event.point[1] === seamPoint[1]);
   const crossings = new Set<string>();
   for (let index = 0; index < groups.length; index++) {
     if (seam && index === groups.length - 1) continue;

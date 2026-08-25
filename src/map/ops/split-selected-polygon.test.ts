@@ -180,6 +180,12 @@ describe('splitSelectedPolygons', () => {
     expect(dataset.layers).toHaveLength(layerCount);
   });
 
+  it('keeps non-seam repeated boundary visits distinct on a closed cutter', async () => {
+    const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
+    const result = split(dataset, new Set([0]), [[-2, 5], [0, 5], [10, 5], [12, 8], [10, 5], [0, 5], [-2, 5]]);
+    expect(result[0]!.pieces).toHaveLength(2);
+  });
+
   it('rejects a nested negative hole before no-op cutter mutation', async () => {
     const dataset = await importPolygons([polygon([[[0, 0], [20, 0], [20, 20], [0, 20], [0, 0]], [[2, 2], [18, 2], [18, 18], [2, 18], [2, 2]], [[5, 5], [15, 5], [15, 15], [5, 15], [5, 5]]])]);
     const arcCount = dataset.arcs!.size();
