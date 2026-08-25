@@ -79,8 +79,17 @@ function directionsAtPartVertices(shape: PathShape, arcs: NonNullable<MapshaperD
   }
   return matches;
 }
+function hasSameDirection(targetDirections: Coordinate[], cutterDirections: Coordinate[]): boolean {
+  return targetDirections.some((targetDirection) => cutterDirections.some((cutterDirection) => {
+    const difference = Math.abs(
+      Math.atan2(targetDirection[1], targetDirection[0]) -
+      Math.atan2(cutterDirection[1], cutterDirection[0]),
+    );
+    return Math.min(difference, Math.abs(Math.PI * 2 - difference)) <= INTERSECTION_EPSILON;
+  }));
+}
 function transverseAtVertex(targetDirections: Coordinate[], cutterDirections: Coordinate[]): boolean {
-  if (targetDirections.length !== 2 || cutterDirections.length !== 2) return false;
+  if (targetDirections.length !== 2 || cutterDirections.length !== 2 || hasSameDirection(targetDirections, cutterDirections)) return false;
   const rays = [
     ...targetDirections.map((direction) => ({ owner: 'target', angle: Math.atan2(direction[1], direction[0]) })),
     ...cutterDirections.map((direction) => ({ owner: 'cutter', angle: Math.atan2(direction[1], direction[0]) })),

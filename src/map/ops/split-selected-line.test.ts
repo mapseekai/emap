@@ -208,4 +208,30 @@ describe('splitSelectedPolylines', () => {
 
     expect(splitSelectedPolylines(dataset, 0, new Set([0]), { type: 'line', coordinates: [[4, -1], [5, 0], [6, 1]] }, adapter).pieces[0]!.pieces).toHaveLength(2);
   });
+  it('ignores a T-junction sharing a target ray with the cutter', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([[[0, 0], [5, 0], [10, 0]]]);
+
+    expect(splitSelectedPolylines(dataset, 0, new Set([0]), {
+      type: 'line', coordinates: [[10, 0], [5, 0], [5, -5]],
+    }, adapter).pieces).toEqual([]);
+  });
+
+  it('ignores a reversed T-junction sharing a target ray with the cutter', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([[[10, 0], [5, 0], [0, 0]]]);
+
+    expect(splitSelectedPolylines(dataset, 0, new Set([0]), {
+      type: 'line', coordinates: [[5, -5], [5, 0], [10, 0]],
+    }, adapter).pieces).toEqual([]);
+  });
+
+  it('splits four distinct alternating rays at an internal crossing', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([[[0, 0], [5, 0], [10, 0]]]);
+
+    expect(splitSelectedPolylines(dataset, 0, new Set([0]), {
+      type: 'line', coordinates: [[5, -5], [5, 0], [5, 5]],
+    }, adapter).pieces[0]!.pieces).toHaveLength(2);
+  });
 });
