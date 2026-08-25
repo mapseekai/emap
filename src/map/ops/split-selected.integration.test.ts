@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
+import { EditHistory } from '../../edit/edit-history';
+import { Transaction } from '../../edit/transaction';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import type { EmapHostInternal } from '../emap-host';
 import { MapshaperOps } from '../mapshaper-ops';
 import { Selection } from '../selection';
+import { _runPreparedDatasetMutation } from './_runner';
+import * as splitLine from './split-selected-line';
 import type { MapshaperDataset, MapshaperLayer } from '../../types/mapshaper-types';
-
 async function importDataset(features: GeoJSON.Feature[]): Promise<MapshaperDataset> {
   return getDefaultMapshaperAdapter().runImport('-i split-selected.geojson', {
     'split-selected.geojson': JSON.stringify({ type: 'FeatureCollection', features }),
@@ -21,6 +24,7 @@ function polygon(coordinates: number[][][], properties: Record<string, unknown> 
 
 function harness(dataset: MapshaperDataset, selected: number[]): {
   ops: MapshaperOps;
+  host: EmapHostInternal;
   source: { getDataset(): MapshaperDataset; getLayers(): MapshaperLayer[]; setDataset(value: MapshaperDataset): void; fire: ReturnType<typeof vi.fn> };
   selection: Selection;
   history: { entries: unknown[]; push(entry: unknown): void; isCapturing(): boolean };
@@ -57,7 +61,7 @@ function harness(dataset: MapshaperDataset, selected: number[]): {
     fire: vi.fn(),
   };
   const typedHost = host as unknown as EmapHostInternal; // complete runner host surface is intentionally limited to exercised paths
-  return { ops: new MapshaperOps(typedHost), source, selection, history, events };
+  return { ops: new MapshaperOps(typedHost), host: typedHost, source, selection, history, events };
 }
 
 describe('MapshaperOps.splitSelected integration', () => {
@@ -186,5 +190,97 @@ describe('MapshaperOps.splitSelected integration', () => {
     expect(noCut).toMatchObject({ ok: false, error: { kind: 'validation', field: 'cutter' } });
     expect(source.getDataset()).toBe(untouched);
     expect(history.entries).toHaveLength(1);
+  });
+  it('rolls split transactions back exactly and commits them as one undoable selection step', async () => {
+    const original = await importDataset([line([[0, 0], [10, 0]], { name: 'road' })]);
+    original.layers[0]!.name = 'split-selected';
+    const rollback = harness(original, [0]);
+    const rollbackHistory = new EditHistory();
+    rollback.host._history = rollbackHistory;
+    const beforeSelection = rollback.selection.getAll();
+
+    const rollbackTx = new Transaction(rollback.host);
+    await expect(rollback.ops.splitSelected({ cutter: { type: 'point', coordinates: [5, 0] } }))
+      .resolves.toMatchObject({ ok: true, value: { splitTargetCount: 1 } });
+    expect(rollback.source.getDataset()).not.toBe(original);
+    rollbackTx.rollback();
+    expect(rollback.source.getDataset()).toBe(original);
+    expect(rollback.selection.getAll()).toEqual(beforeSelection);
+    expect(rollbackHistory.size()).toBe(0);
+
+    const committedOriginal = await importDataset([line([[0, 0], [10, 0]], { name: 'road' })]);
+    committedOriginal.layers[0]!.name = 'split-selected';
+    const committed = harness(committedOriginal, [0]);
+    const committedHistory = new EditHistory();
+    committed.host._history = committedHistory;
+    const committedBeforeSelection = committed.selection.getAll();
+    const commitTx = new Transaction(committed.host);
+    const split = await committed.ops.splitSelected({ cutter: { type: 'point', coordinates: [5, 0] } });
+    expect(split).toMatchObject({ ok: true, value: { splitTargetCount: 1 } });
+    const splitDataset = committed.source.getDataset();
+
+    await expect(commitTx.commit('Split transaction')).resolves.toMatchObject({ ok: true });
+    expect(committedHistory.size()).toBe(1);
+    committedHistory.undo();
+    expect(committed.source.getDataset()).toBe(committedOriginal);
+    expect(committed.selection.getAll()).toEqual(committedBeforeSelection);
+    committedHistory.redo();
+    expect(committed.source.getDataset()).toBe(splitDataset);
+    expect(committed.selection.getAll()).toEqual(split.ok ? split.value.resultFeatures : []);
+  });
+
+  it('rejects a split queued behind a real same-source dataset mutation as stale', async () => {
+    const dataset = await importDataset([line([[0, 0], [10, 0]], { name: 'road' })]);
+    dataset.layers[0]!.name = 'split-selected';
+    const { ops, host, source, selection, history, events } = harness(dataset, [0]);
+    const releasePrior = Promise.withResolvers<void>();
+    const priorStarted = Promise.withResolvers<void>();
+    const prior = _runPreparedDatasetMutation(host, 'source', 'Prior mutation', async (working) => {
+      priorStarted.resolve();
+      await releasePrior.promise;
+      working.layers.unshift({ name: 'prior-layer', geometry_type: 'point', shapes: [] });
+      return { value: undefined, selection: selection.getAll() };
+    });
+    await priorStarted.promise;
+    const pendingSplit = ops.splitSelected({ cutter: { type: 'point', coordinates: [5, 0] } });
+    releasePrior.resolve();
+    await expect(prior).resolves.toMatchObject({ ok: true });
+    const afterPrior = source.getDataset();
+    const selectionAfterPrior = selection.getAll();
+    const historyCount = history.entries.length;
+    const selectionEvents = events.selection.mock.calls.length;
+    const historyEvents = events.history.mock.calls.length;
+
+    await expect(pendingSplit).resolves.toMatchObject({ ok: false, error: { kind: 'stale-operation' } });
+    expect(source.getDataset()).toBe(afterPrior);
+    expect(source.getDataset().layers.map((layer) => layer.name)).toEqual(['prior-layer', 'split-selected']);
+    expect(source.getDataset().layers.some((layer) => layer.name?.startsWith('__emap_split_selected'))).toBe(false);
+    expect(selection.getAll()).toEqual(selectionAfterPrior);
+    expect(history.entries).toHaveLength(historyCount);
+    expect(events.selection).toHaveBeenCalledTimes(selectionEvents);
+    expect(events.history).toHaveBeenCalledTimes(historyEvents);
+  });
+
+  it('returns mapshaper errors from a splitter seam without committing split side effects', async () => {
+    const dataset = await importDataset([line([[0, 0], [10, 0]], { name: 'road' })]);
+    dataset.layers[0]!.name = 'split-selected';
+    const { ops, source, selection, history, events } = harness(dataset, [0]);
+    const beforeSelection = selection.getAll();
+    const throwFromSplitter = vi
+      .spyOn(splitLine, 'splitSelectedPolylines')
+      .mockImplementationOnce(() => { throw new Error('injected splitter failure'); });
+
+    try {
+      await expect(ops.splitSelected({ cutter: { type: 'point', coordinates: [5, 0] } }))
+        .resolves.toMatchObject({ ok: false, error: { kind: 'mapshaper' } });
+    } finally {
+      throwFromSplitter.mockRestore();
+    }
+    expect(source.getDataset()).toBe(dataset);
+    expect(selection.getAll()).toEqual(beforeSelection);
+    expect(history.entries).toHaveLength(0);
+    expect(events.selection).not.toHaveBeenCalled();
+    expect(events.history).not.toHaveBeenCalled();
+    expect(source.fire).not.toHaveBeenCalled();
   });
 });
