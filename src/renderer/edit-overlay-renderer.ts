@@ -5,6 +5,7 @@ import type { EditMode } from '../map/edit-state-store';
 import { EMAP_THEME_COLORS } from '../theme/colors';
 
 const EDIT_VERTEX_COLOR = EMAP_THEME_COLORS.primary;
+const EDIT_POLYGON_FILL_OPACITY = 0.2;
 
 /**
  * Draws edit-mode-only decorations on top of the regular layer pass:
@@ -52,7 +53,17 @@ export class EditOverlayRenderer {
 
     // Polygon fill is drawn first so vertex dots stack on top of it.
     if (state.geometryType === 'polygon' && state.polygonFill) {
-      this._painter.drawPolygonFill(state.shapes, arcs, state.polygonFill, arcFilter);
+      if (state.polygonFill === EMAP_THEME_COLORS.selection) {
+        this._painter.drawPolygonFill(
+          state.shapes,
+          arcs,
+          state.polygonFill,
+          arcFilter,
+          EDIT_POLYGON_FILL_OPACITY,
+        );
+      } else {
+        this._painter.drawPolygonFill(state.shapes, arcs, state.polygonFill, arcFilter);
+      }
     }
 
     this._painter.drawVertexDots(state.shapes, arcs, {

@@ -84,6 +84,8 @@ export async function projectLayer(
   try {
     const adapter = getDefaultMapshaperAdapter();
     const working = adapter.copyDataset(dataset);
+    // mapshaper copyDataset shares dataset.info; projection metadata writes must stay detached.
+    if (dataset.info) working.info = { ...dataset.info };
     const targetIndex = dataset.layers.indexOf(targetLayer);
     const copiedTarget = working.layers[targetIndex];
     if (!copiedTarget) return Err.notFound('layer', target);

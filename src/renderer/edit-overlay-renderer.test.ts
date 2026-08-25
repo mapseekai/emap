@@ -102,6 +102,29 @@ describe('EditOverlayRenderer', () => {
     );
   });
 
+  it('keeps the default themed polygon fill translucent so shared edges remain visible', () => {
+    const painter = makePainter();
+    const renderer = new EditOverlayRenderer(painter);
+    const arcFilter = vi.fn(() => true);
+    const state: EditVertexState = {
+      shapes: [[[0]]],
+      arcs: { getArcIter: () => ({ x: 0, y: 0, hasNext: () => false }) },
+      hoverVertex: null,
+      geometryType: 'polygon',
+      polygonFill: EMAP_THEME_COLORS.selection,
+    };
+
+    renderer.render('vertex', state, null, null, arcFilter);
+
+    expect(painter.drawPolygonFill).toHaveBeenCalledWith(
+      state.shapes,
+      state.arcs,
+      state.polygonFill,
+      arcFilter,
+      0.2,
+    );
+  });
+
   it('routes measurement state only while measure mode is active', () => {
     const painter = makePainter();
     const renderer = new EditOverlayRenderer(painter);

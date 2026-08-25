@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   overlap-internal boundaries without changing unselected geometry, and accepts a selected
   feature as the merged record's attribute source.
 
+## [0.7.2] - 2026-08-24
+
+### Fixed
+
+- Vertex-edit overlays now retain 20% opacity for the default selection theme
+  color, so hovering a shared topology node does not obscure its shared edge.
+
+## [0.7.1] - 2026-08-24
+
+### Fixed
+
+- Detached `projectLayer` export now isolates CRS metadata and leaves the
+  registered source dataset unchanged.
+
 ## [0.7.0] - 2026-08-24
 
 ### Added
@@ -695,7 +709,9 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@mapseekai/emap/style.css`).
 
-[Unreleased]: https://github.com/mapseekai/emap/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/mapseekai/emap/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/mapseekai/emap/compare/v0.7.1...v0.7.2
+[0.7.1]: https://github.com/mapseekai/emap/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/mapseekai/emap/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mapseekai/emap/compare/0c7ef115bbbb6d59829cd244c683f65ef38f39cd...v0.6.0
 [0.5.0]: https://github.com/mapseekai/emap/compare/v0.4.0...0c7ef115bbbb6d59829cd244c683f65ef38f39cd
