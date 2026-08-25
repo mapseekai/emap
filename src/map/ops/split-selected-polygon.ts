@@ -97,20 +97,33 @@ function validatePolygon(shape: PathShape, arcs: NonNullable<MapshaperDataset['a
 
 
 function properCrossings(shape: PathShape, cutter: readonly Coordinate[], arcs: NonNullable<MapshaperDataset['arcs']>, adapter: MapshaperAdapter): Set<string> {
-  const crossings = new Set<string>();
+  const lengths = cutter.slice(1).map((point, index) => Math.hypot(point[0] - cutter[index]![0], point[1] - cutter[index]![1]));
+  const offsets = lengths.reduce<number[]>((all, length) => [...all, all.at(-1)! + length], [0]);
+  const events = new Map<string, { point: Coordinate; distance: number }>();
   for (let index = 1; index < cutter.length; index++) {
-    const start = cutter[index - 1]!, end = cutter[index]!;
-    const length = Math.hypot(end[0] - start[0], end[1] - start[1]);
+    const start = cutter[index - 1]!, end = cutter[index]!, length = lengths[index - 1]!;
     if (length === 0) continue;
     for (const [boundaryStart, boundaryEnd] of shapeSegments(shape, arcs)) {
       const point = segmentIntersection(start, end, boundaryStart, boundaryEnd);
       if (!point) continue;
-      const t = ((point[0] - start[0]) * (end[0] - start[0]) + (point[1] - start[1]) * (end[1] - start[1])) / (length * length);
-      const delta = Math.min(0.25, Math.max(1e-7, Number.EPSILON * Math.max(Math.abs(start[0]), Math.abs(start[1]), Math.abs(end[0]), Math.abs(end[1])) * 64) / length);
-      const before: Coordinate = [start[0] + (t - delta) * (end[0] - start[0]), start[1] + (t - delta) * (end[1] - start[1])];
-      const after: Coordinate = [start[0] + (t + delta) * (end[0] - start[0]), start[1] + (t + delta) * (end[1] - start[1])];
-      if (adapter.testPointInPolygon(before[0], before[1], shape, arcs) !== adapter.testPointInPolygon(after[0], after[1], shape, arcs)) crossings.add(`${point[0]},${point[1]}`);
+      const distance = offsets[index - 1]! + Math.hypot(point[0] - start[0], point[1] - start[1]);
+      events.set(`${point[0]},${point[1]}`, { point, distance });
     }
+  }
+  const ordered = [...events.values()].sort((left, right) => left.distance - right.distance);
+  const pointAt = (distance: number): Coordinate => {
+    const clamped = Math.max(0, Math.min(offsets.at(-1)!, distance));
+    const segment = offsets.findIndex((_offset, index) => index + 1 < offsets.length && clamped <= offsets[index + 1]!);
+    const start = cutter[segment]!, end = cutter[segment + 1]!, length = lengths[segment]!;
+    const t = length === 0 ? 0 : (clamped - offsets[segment]!) / length;
+    return [start[0] + t * (end[0] - start[0]), start[1] + t * (end[1] - start[1])];
+  };
+  const crossings = new Set<string>();
+  for (let index = 0; index < ordered.length; index++) {
+    const event = ordered[index]!, previous = index === 0 ? 0 : ordered[index - 1]!.distance, next = index + 1 === ordered.length ? offsets.at(-1)! : ordered[index + 1]!.distance;
+    if (event.distance === previous || event.distance === next) continue;
+    const before = pointAt((previous + event.distance) / 2), after = pointAt((event.distance + next) / 2);
+    if (adapter.testPointInPolygon(before[0], before[1], shape, arcs) !== adapter.testPointInPolygon(after[0], after[1], shape, arcs)) crossings.add(`${event.point[0]},${event.point[1]}`);
   }
   return crossings;
 }
