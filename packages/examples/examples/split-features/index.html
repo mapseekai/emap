@@ -98,9 +98,9 @@
       enableSplit.disabled = !splittable;
       clearSelection.disabled = selected.length === 0;
 
+      map.clearHighlightedFeatures();
       if (selected.length === 0) {
         status.textContent = '请选择同一图层中的线或面要素。';
-        map.clearHighlightedFeatures();
       } else if (!splittable) {
         status.textContent = '所选要素必须属于同一数据源、同一图层，且几何类型均为线或面。';
       } else {
@@ -112,7 +112,11 @@
     pointMode.addEventListener('click', () => setCutterType('point'));
     lineMode.addEventListener('click', () => setCutterType('polyline'));
     function showError(error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error
+        ? error.message
+        : error && typeof error === 'object'
+          ? error.reason ?? error.message ?? error.kind ?? JSON.stringify(error)
+          : String(error);
       status.textContent = `错误: ${message}`;
       console.error(error);
     }

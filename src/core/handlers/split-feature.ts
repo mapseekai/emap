@@ -27,6 +27,7 @@ type SelectionContext = {
   source: MutableTopologySource;
   layer: PathLayer;
   arcs: ArcCollection;
+  vertexData: ArcVertexData;
   shapes: readonly PathShape[];
   arcIds: readonly number[];
 };
@@ -217,6 +218,7 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
       sourceId: sourceId!,
       source,
       shapes,
+      vertexData,
       arcIds: [...arcIds],
     };
   }
@@ -392,6 +394,20 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     const maxY = Math.max(c0[1], c1[1]);
     let bestDistance = threshold;
     let best: SnapTarget | null = null;
+    const vertexData = context.vertexData;
+    for (const arcId of context.arcIds) {
+      const start = vertexData.ii[arcId]!;
+      const count = vertexData.nn[arcId]!;
+      for (let index = start; index < start + count; index++) {
+        const coord = [vertexData.xx[index]!, vertexData.yy[index]!] as [number, number];
+        const projected = this._map.project(coord[0], coord[1]);
+        const distance = Math.hypot(projected[0] - px, projected[1] - py);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = { coord, kind: 'vertex' };
+        }
+      }
+    }
 
     for (const arcId of context.arcIds) {
       arcs.forEachArcSegment(arcId, (i, j, xx, yy) => {

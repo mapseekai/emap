@@ -474,4 +474,17 @@ describe('SplitFeatureHandler', () => {
     expect(map.ops.splitSelected).not.toHaveBeenCalled();
     expect(map.clearEditDrawState).toHaveBeenCalled();
   });
+  it.each([
+    ['forward arc', [[[0]]]],
+    ['reversed arc', [[[~0]]]],
+  ])('classifies an exact %s endpoint snap as a vertex', (_name, shapes) => {
+    map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes });
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    handler.handlePointer(event('move', 0, 0));
+
+    expect(map.setEditDrawState).toHaveBeenLastCalledWith(
+      expect.objectContaining({ snapKind: 'vertex' }),
+    );
+  });
 });

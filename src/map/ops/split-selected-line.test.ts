@@ -721,4 +721,97 @@ describe('splitSelectedPolylines', () => {
       ).pieces,
     ).toEqual([]);
   });
+  it('treats a point cutter endpoint as a no-op only for that multipart part', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([
+      [
+        [0, 0],
+        [5, 0],
+      ],
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ]);
+    const layer = dataset.layers[0]!;
+    layer.shapes![0] = [
+      [...(layer.shapes![0] as PathShape)[0]!],
+      [...(layer.shapes![1] as PathShape)[0]!],
+    ];
+    layer.shapes!.splice(1, 1);
+    layer.data!.getRecords().splice(1, 1);
+
+    const result = splitSelectedPolylines(
+      dataset,
+      0,
+      new Set([0]),
+      { type: 'point', coordinates: [5, 0] },
+      adapter,
+    );
+
+    expect(result.pieces[0]!.pieces).toHaveLength(3);
+  });
+
+  it('rejects a preceding degenerate selected part before cutter noding can drift part indices', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ]);
+    const arcs = dataset.arcs!;
+    const emptyArc = arcs.size();
+    adapter.appendEmptyArc(arcs);
+    const layer = dataset.layers[0]!;
+    layer.shapes![0] = [[emptyArc], [...(layer.shapes![0] as PathShape)[0]!]];
+    const beforeArcCount = arcs.size();
+
+    expect(() =>
+      splitSelectedPolylines(
+        dataset,
+        0,
+        new Set([0]),
+        {
+          type: 'polyline',
+          coordinates: [
+            [5, -5],
+            [5, 5],
+          ],
+        },
+        adapter,
+      ),
+    ).toThrow(
+      new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid'),
+    );
+    expect(arcs.size()).toBe(beforeArcCount);
+  });
+
+  it('normalizes consecutive duplicate line-cutter coordinates before transverse classification', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ]);
+
+    expect(
+      splitSelectedPolylines(
+        dataset,
+        0,
+        new Set([0]),
+        {
+          type: 'polyline',
+          coordinates: [
+            [5, -5],
+            [5, 0],
+            [5, 0],
+            [5, 5],
+          ],
+        },
+        adapter,
+      ).pieces[0]!.pieces,
+    ).toHaveLength(2);
+  });
 });

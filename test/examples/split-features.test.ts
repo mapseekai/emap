@@ -135,8 +135,8 @@ async function executeSplitFeaturesExample() {
   return {
     map,
     splitFeature,
-    emitError(error: Error) {
-      for (const listener of errorListeners) listener({ error });
+    emitError(error: Error | { kind: string; reason?: string; message?: string }) {
+      for (const listener of errorListeners) listener({ error: error as Error });
     },
     emitSelection(next: FeatureRef[]) {
       selection = next;
@@ -209,6 +209,10 @@ describe('split-features example', () => {
       expect(status.textContent).toContain('已选中 2 个拆分结果');
       result.emitError(new Error('split failed'));
       expect(status.textContent).toContain('split failed');
+      result.emitError({ kind: 'validation', reason: 'Point cutter is not on a selected path' });
+      expect(status.textContent).toContain('Point cutter is not on a selected path');
+      expect(status.textContent).not.toContain('[object Object]');
+      expect(result.map.clearHighlightedFeatures).toHaveBeenCalled();
 
       result.splitFeature.enable.mockImplementationOnce(() => {
         throw new Error('cannot start');

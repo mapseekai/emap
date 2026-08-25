@@ -34,14 +34,15 @@ function arcEndpoints(
     throw new SplitGeometryValidationError('geometry', 'Encountered an empty path arc');
   return signedArcId < 0 ? [last, first] : [first, last];
 }
-function pathEndpoints(shape: PathShape, arcs: NonNullable<MapshaperDataset['arcs']>): Set<string> {
-  const endpoints = new Set<string>();
-  for (const part of shape) {
-    if (!part.length) continue;
-    endpoints.add(coordinateKey(arcEndpoints(arcs, part[0]!)[0]));
-    endpoints.add(coordinateKey(arcEndpoints(arcs, part[part.length - 1]!)[1]));
-  }
-  return endpoints;
+function partEndpoints(
+  part: readonly number[],
+  arcs: NonNullable<MapshaperDataset['arcs']>,
+): Set<string> {
+  if (!part.length) return new Set();
+  return new Set([
+    coordinateKey(arcEndpoints(arcs, part[0]!)[0]),
+    coordinateKey(arcEndpoints(arcs, part[part.length - 1]!)[1]),
+  ]);
 }
 function partitionShape(
   shape: PathShape,
@@ -73,35 +74,37 @@ function collectPointCutPoints(
   point: Coordinate,
   adapter: MapshaperAdapter,
 ): ArcCutPoint[] {
-  const endpointKeys = pathEndpoints(shape, arcs);
   const cutPoints: ArcCutPoint[] = [];
   const seen = new Set<string>();
-  adapter.forEachSegmentInShape(shape, arcs, (i, j, xx, yy) => {
-    const a: [number, number] = [xx[i]!, yy[i]!];
-    const b: [number, number] = [xx[j]!, yy[j]!];
-    const closest = adapter.findClosestPointOnSeg(point[0], point[1], a[0], a[1], b[0], b[1], 0);
-    const scale = Math.max(
-      1,
-      Math.abs(point[0]),
-      Math.abs(point[1]),
-      Math.abs(a[0]),
-      Math.abs(a[1]),
-      Math.abs(b[0]),
-      Math.abs(b[1]),
-    );
-    const tolerance = scale * INTERSECTION_EPSILON;
-    if (
-      (point[0] - closest[0]) ** 2 + (point[1] - closest[1]) ** 2 > tolerance ** 2 ||
-      endpointKeys.has(coordinateKey(closest))
-    )
-      return;
-    const cutIndex = Math.min(i, j);
-    const key = `${closest[0]},${closest[1]},${cutIndex}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      cutPoints.push({ x: closest[0], y: closest[1], i: cutIndex });
-    }
-  });
+  for (const part of shape) {
+    const endpointKeys = partEndpoints(part, arcs);
+    adapter.forEachSegmentInShape([part], arcs, (i, j, xx, yy) => {
+      const a: [number, number] = [xx[i]!, yy[i]!];
+      const b: [number, number] = [xx[j]!, yy[j]!];
+      const closest = adapter.findClosestPointOnSeg(point[0], point[1], a[0], a[1], b[0], b[1], 0);
+      const scale = Math.max(
+        1,
+        Math.abs(point[0]),
+        Math.abs(point[1]),
+        Math.abs(a[0]),
+        Math.abs(a[1]),
+        Math.abs(b[0]),
+        Math.abs(b[1]),
+      );
+      const tolerance = scale * INTERSECTION_EPSILON;
+      if (
+        (point[0] - closest[0]) ** 2 + (point[1] - closest[1]) ** 2 > tolerance ** 2 ||
+        endpointKeys.has(coordinateKey(closest))
+      )
+        return;
+      const cutIndex = Math.min(i, j);
+      const key = `${closest[0]},${closest[1]},${cutIndex}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        cutPoints.push({ x: closest[0], y: closest[1], i: cutIndex });
+      }
+    });
+  }
   return cutPoints;
 }
 function directionsAtPartVertices(
@@ -173,6 +176,67 @@ function transverseAtVertex(
     })),
   ].sort((a, b) => a.angle - b.angle);
   return rays.every((ray, index) => ray.owner !== rays[(index + 1) % rays.length]!.owner);
+}
+function normalizeConsecutiveCoordinates(coordinates: readonly Coordinate[]): Coordinate[] {
+  return coordinates.filter(
+    (coordinate, index) =>
+      index === 0 ||
+      coordinate[0] !== coordinates[index - 1]![0] ||
+      coordinate[1] !== coordinates[index - 1]![1],
+  );
+}
+
+function validateSelectedPolylines(
+  layer: MapshaperLayer,
+  selectedIds: ReadonlySet<number>,
+  arcs: NonNullable<MapshaperDataset['arcs']>,
+): void {
+  for (const featureId of selectedIds) {
+    const shape = layer.shapes?.[featureId];
+    if (shape === null || shape === undefined) continue;
+    if (!Array.isArray(shape))
+      throw new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid');
+    for (const part of shape) {
+      if (!Array.isArray(part) || !part.length)
+        throw new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid');
+      let previous: Coordinate | undefined;
+      let hasLength = false;
+      for (const id of part) {
+        const arcId = typeof id === 'number' && id < 0 ? ~id : id;
+        if (
+          typeof id !== 'number' ||
+          !Number.isSafeInteger(id) ||
+          !Number.isSafeInteger(arcId) ||
+          arcId < 0 ||
+          arcId >= arcs.size()
+        )
+          throw new SplitGeometryValidationError(
+            'geometry',
+            'selected polyline geometry is invalid',
+          );
+        const iterator = arcs.getArcIter(arcId);
+        let vertices = 0;
+        while (iterator.hasNext()) {
+          const point: Coordinate = [iterator.x, iterator.y];
+          if (!Number.isFinite(point[0]) || !Number.isFinite(point[1]))
+            throw new SplitGeometryValidationError(
+              'geometry',
+              'selected polyline geometry is invalid',
+            );
+          if (previous && (previous[0] !== point[0] || previous[1] !== point[1])) hasLength = true;
+          previous = point;
+          vertices++;
+        }
+        if (vertices < 2)
+          throw new SplitGeometryValidationError(
+            'geometry',
+            'selected polyline geometry is invalid',
+          );
+      }
+      if (!hasLength)
+        throw new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid');
+    }
+  }
 }
 function properLineCutCoordinates(
   shape: PathShape,
@@ -272,6 +336,7 @@ export function splitSelectedPolylines(
     layer = dataset.layers[layerIndex];
   if (!arcs || !layer?.shapes)
     throw new SplitGeometryValidationError('geometry', 'Selected layer has no path geometry');
+  validateSelectedPolylines(layer, selectedIds, arcs);
   if (cutter.type === 'point') {
     const allCuts: ArcCutPoint[] = [],
       cutsByFeature = new Map<number, Set<string>>();
@@ -279,11 +344,6 @@ export function splitSelectedPolylines(
     for (const featureId of selectedIds) {
       const shape = layer.shapes[featureId] as PathShape | null;
       if (!shape) continue;
-      const endpoints = pathEndpoints(shape, arcs);
-      if (endpoints.has(coordinateKey(cutter.coordinates))) {
-        pointOnSelectedPath = true;
-        continue;
-      }
       const cuts = collectPointCutPoints(shape, arcs, cutter.coordinates, adapter);
       if (cuts.length) {
         pointOnSelectedPath = true;
@@ -330,7 +390,8 @@ export function splitSelectedPolylines(
     }
     return { pieces, pointOnSelectedPath };
   }
-  if (cutter.coordinates.length < 2)
+  const cutterCoordinates = normalizeConsecutiveCoordinates(cutter.coordinates);
+  if (cutterCoordinates.length < 2)
     throw new SplitGeometryValidationError('cutter', 'Line cutter needs at least two coordinates');
   const properCutsByFeature = new Map<number, Map<number, Set<string>>>();
   for (const featureId of selectedIds) {
@@ -341,14 +402,14 @@ export function splitSelectedPolylines(
       new Map(
         shape.map((part, partIndex) => [
           partIndex,
-          properLineCutCoordinates([part], arcs, cutter.coordinates, adapter),
+          properLineCutCoordinates([part], arcs, cutterCoordinates, adapter),
         ]),
       ),
     );
   }
   const cutterArcId = arcs.size();
   adapter.appendEmptyArc(arcs);
-  for (const coordinate of cutter.coordinates)
+  for (const coordinate of cutterCoordinates)
     adapter.appendVertex(arcs, [coordinate[0], coordinate[1]]);
   const cutterLayer: MapshaperLayer = { geometry_type: 'polyline', shapes: [[[cutterArcId]]] };
   dataset.layers.push(cutterLayer);

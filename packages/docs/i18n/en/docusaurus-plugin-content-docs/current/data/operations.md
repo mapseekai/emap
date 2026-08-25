@@ -135,8 +135,9 @@ map.splitFeature.setOptions({ cutterType: 'polyline' });
 map.splitFeature.enable();
 ```
 
-A point cutter must lie in the interior of a line. A polyline cutter splits
-lines and polygons; finish a polygon cutter with the right mouse button.
+A point cutter must lie in the interior of a selected line; selected lines also
+accept polyline cutters. Selected polygons accept polyline cutters only.
+Right-click completes the interactive polyline cutter.
 The selection must belong to one source and layer. On success, the largest
 area or length result keeps the original feature ID and the other pieces are
 appended as new features; every result duplicates the original attributes. The

@@ -801,4 +801,59 @@ describe('splitSelectedPolygons', () => {
     ).toThrow(new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid'));
     expect(dataset.layers[0]!.shapes).toHaveLength(before);
   });
+  it.each([
+    ['small', 0, 0, 1e-8],
+    ['unit', 0, 0, 1],
+    ['translated', 1e12, -1e12, 1],
+    ['large', 0, 0, 1e8],
+  ] as const)('splits a scale-homogeneous %s square', async (_name, x, y, side) => {
+    const dataset = await importPolygons([
+      polygon([
+        [
+          [x, y],
+          [x + side, y],
+          [x + side, y + side],
+          [x, y + side],
+          [x, y],
+        ],
+      ]),
+    ]);
+    const original = dataset.layers[0]!.shapes![0] as PathShape;
+    const result = split(dataset, new Set([0]), [
+      [x - side, y + side / 2],
+      [x + side * 2, y + side / 2],
+    ]);
+
+    expect(result[0]!.pieces).toHaveLength(2);
+    await expectConserved(dataset, original, result[0]!.pieces);
+  });
+
+  it.each([
+    ['only invalid', [[Number.MAX_SAFE_INTEGER + 1]]],
+    ['mixed invalid', [[0], [Number.MAX_SAFE_INTEGER + 1]]],
+  ] as const)('rejects %s polygon signed arc IDs as geometry validation before mutation', async (_name, shape) => {
+    const dataset = await importPolygons([
+      polygon([
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+      ]),
+    ]);
+    dataset.layers[0]!.shapes![0] = shape;
+    const beforeArcCount = dataset.arcs!.size();
+    const beforeLayers = dataset.layers.length;
+
+    expect(() =>
+      split(dataset, new Set([0]), [
+        [-1, 5],
+        [11, 5],
+      ]),
+    ).toThrow(new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid'));
+    expect(dataset.arcs!.size()).toBe(beforeArcCount);
+    expect(dataset.layers).toHaveLength(beforeLayers);
+  });
 });

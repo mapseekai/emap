@@ -37,7 +37,7 @@ function orientationTolerance(a: Coordinate, b: Coordinate, c: Coordinate): numb
     aby = b[1] - a[1],
     acx = c[0] - a[0],
     acy = c[1] - a[1];
-  return EPSILON * (Math.abs(abx * acy) + Math.abs(aby * acx) + 1);
+  return EPSILON * (Math.abs(abx * acy) + Math.abs(aby * acx));
 }
 
 function segmentIntersection(
@@ -51,7 +51,7 @@ function segmentIntersection(
     cdx = d[0] - c[0],
     cdy = d[1] - c[1];
   const denominator = abx * cdy - aby * cdx;
-  const tolerance = EPSILON * (Math.abs(abx * cdy) + Math.abs(aby * cdx) + 1);
+  const tolerance = EPSILON * (Math.abs(abx * cdy) + Math.abs(aby * cdx));
   if (Math.abs(denominator) <= tolerance) return null;
   const cax = c[0] - a[0],
     cay = c[1] - a[1];
@@ -61,6 +61,47 @@ function segmentIntersection(
   return [a[0] + t * abx, a[1] + t * aby];
 }
 
+function normalizeConsecutiveCoordinates(coordinates: readonly Coordinate[]): Coordinate[] {
+  return coordinates.filter(
+    (coordinate, index) =>
+      index === 0 ||
+      coordinate[0] !== coordinates[index - 1]![0] ||
+      coordinate[1] !== coordinates[index - 1]![1],
+  );
+}
+
+function validatePolygonArcReferences(
+  shape: PathShape,
+  arcs: NonNullable<MapshaperDataset['arcs']>,
+): void {
+  for (const part of shape) {
+    if (!Array.isArray(part) || !part.length)
+      throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
+    for (const id of part) {
+      const arcId = typeof id === 'number' && id < 0 ? ~id : id;
+      if (
+        typeof id !== 'number' ||
+        !Number.isSafeInteger(id) ||
+        !Number.isSafeInteger(arcId) ||
+        arcId < 0 ||
+        arcId >= arcs.size()
+      )
+        throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
+      const iterator = arcs.getArcIter(arcId);
+      let vertices = 0;
+      while (iterator.hasNext()) {
+        if (!Number.isFinite(iterator.x) || !Number.isFinite(iterator.y))
+          throw new SplitGeometryValidationError(
+            'geometry',
+            'selected polygon geometry is invalid',
+          );
+        vertices++;
+      }
+      if (vertices < 2)
+        throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
+    }
+  }
+}
 function shapeSegments(
   shape: PathShape,
   arcs: NonNullable<MapshaperDataset['arcs']>,
@@ -282,22 +323,24 @@ export function splitSelectedPolygons(
   const layer = dataset.layers[layerIndex];
   if (!arcs || !layer?.shapes || layer.geometry_type !== 'polygon')
     throw new SplitGeometryValidationError('geometry', 'Selected layer has no path geometry');
-  if (cutter.coordinates.length < 2)
+  const cutterCoordinates = normalizeConsecutiveCoordinates(cutter.coordinates);
+  if (cutterCoordinates.length < 2)
     throw new SplitGeometryValidationError('cutter', 'Line cutter needs at least two coordinates');
 
   const crossingIds = new Set<number>();
   for (const featureId of selectedIds) {
     const shape = layer.shapes[featureId] as PathShape | null;
     if (!shape) continue;
+    validatePolygonArcReferences(shape, arcs);
     validatePolygon(shape, arcs, adapter);
-    if (properCrossings(shape, cutter.coordinates, arcs, adapter).size >= 2)
+    if (properCrossings(shape, cutterCoordinates, arcs, adapter).size >= 2)
       crossingIds.add(featureId);
   }
   if (!crossingIds.size) return [];
 
   const cutterArcId = arcs.size();
   adapter.appendEmptyArc(arcs);
-  for (const point of cutter.coordinates) adapter.appendVertex(arcs, [point[0], point[1]]);
+  for (const point of cutterCoordinates) adapter.appendVertex(arcs, [point[0], point[1]]);
   const cutterLayer: MapshaperLayer = { geometry_type: 'polyline', shapes: [[[cutterArcId]]] };
   dataset.layers.push(cutterLayer);
   adapter.addIntersectionCuts(dataset, { no_snap: true, rebuild_topology: true });
