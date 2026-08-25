@@ -144,6 +144,16 @@ describe('splitSelectedPolygons', () => {
     expect(dataset.layers).toHaveLength(layerCount);
   });
 
+  it('splits with a very long cutter', async () => {
+    const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
+    expect(split(dataset, new Set([0]), [[-1e9, 5], [1e9, 5]])[0]!.pieces).toHaveLength(2);
+  });
+
+  it('keeps a mixed exterior V touch and one crossing as a no-op', async () => {
+    const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
+    expect(split(dataset, new Set([0]), [[-1, 0], [0, 0], [-1, 1], [-1, 5], [5, 5]])).toEqual([]);
+  });
+
   it('rejects a self-intersecting selected polygon', async () => {
     const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
     const data = dataset.arcs!.getVertexData!(), start = data.ii[0]!;
