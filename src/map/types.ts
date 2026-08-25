@@ -40,6 +40,12 @@ export type SplitCutter =
   | { type: 'point'; coordinates: [number, number] }
   | { type: 'polyline'; coordinates: Array<[number, number]> };
 
+
+/** Options for the interactive selected-feature split handler. */
+export interface SplitFeatureOptions {
+  cutterType: 'point' | 'polyline';
+  snapThreshold?: number;
+}
 export interface MapOptions {
   container: string | HTMLElement;
   interactive?: boolean;

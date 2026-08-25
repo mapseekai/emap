@@ -51,6 +51,7 @@ import { BoxSelectHandler, type BoxSelectHandlerOptions } from '../core/handlers
 import { LassoSelectHandler, type LassoSelectHandlerOptions } from '../core/handlers/lasso-select';
 import { VertexEditHandler, type VertexEditOptions } from '../core/handlers/vertex-edit';
 import { DrawFeatureHandler, type DrawFeatureOptions } from '../core/handlers/draw-feature';
+import { SplitFeatureHandler, type SplitFeatureOptions } from '../core/handlers/split-feature';
 import { MeasureHandler } from '../core/handlers/measure';
 import {
   TransformFeatureHandler,
@@ -287,6 +288,7 @@ export class Emap extends EventDispatcher {
   private _lassoSelect: LassoSelectHandler;
   private _vertexEdit!: VertexEditHandler;
   private _drawFeature!: DrawFeatureHandler;
+  private _splitFeature!: SplitFeatureHandler;
   private _measure!: MeasureHandler;
   private _transformFeature!: TransformFeatureHandler;
   private _dragPanSuspendedByEdit = false;
@@ -502,6 +504,8 @@ export class Emap extends EventDispatcher {
     this._handlers.register(this._vertexEdit);
     this._drawFeature = new DrawFeatureHandler(handlerHost);
     this._handlers.register(this._drawFeature);
+    this._splitFeature = new SplitFeatureHandler(handlerHost);
+    this._handlers.register(this._splitFeature);
     this._measure = new MeasureHandler(handlerHost);
     this._handlers.register(this._measure);
     this._transformFeature = new TransformFeatureHandler(handlerHost);
@@ -1887,6 +1891,10 @@ export class Emap extends EventDispatcher {
   /** The draw-feature interaction handler (disabled by default). */
   get drawFeature(): Handler<DrawFeatureOptions> {
     return this._drawFeature;
+  }
+  /** The selected-feature split interaction handler (disabled by default). */
+  get splitFeature(): Handler<SplitFeatureOptions> {
+    return this._splitFeature;
   }
   /** The spherical length/area measurement handler (disabled by default). */
   get measure(): MeasureHandler {

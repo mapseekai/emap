@@ -34,6 +34,7 @@ export type {
   SplitCutter,
   SplitSelectedOptions,
   SplitSelectedResult,
+  SplitFeatureOptions,
   CleanOptions,
   BufferOptions,
   ApplyExpressionOptions,
@@ -283,6 +284,7 @@ export { VertexEditHandler } from './core/handlers/vertex-edit';
 export type { VertexEditOptions } from './core/handlers/vertex-edit';
 export { DrawFeatureHandler } from './core/handlers/draw-feature';
 export type { DrawFeatureOptions } from './core/handlers/draw-feature';
+export { SplitFeatureHandler } from './core/handlers/split-feature';
 export { MeasureHandler } from './core/handlers/measure';
 export type { MeasureOptions, MeasureResult } from './core/handlers/measure';
 export { TransformFeatureHandler } from './core/handlers/transform-feature';

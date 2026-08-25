@@ -1,0 +1,231 @@
+import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
+import type { EditHandlerHost } from './edit-handler-host';
+import type { SnapKind, SplitFeatureOptions } from '../../map/types';
+import type { ArcCollection, PathShape } from '../../types/mapshaper-types';
+import { isPathLayer } from '../../types/mapshaper-types';
+import { projectPointOnSegment } from './draw-feature';
+import { EMAP_THEME_COLORS } from '../../theme/colors';
+
+export type { SplitFeatureOptions } from '../../map/types';
+
+const DEFAULT_SNAP_THRESHOLD = 10;
+const DEFAULT_OPTIONS: SplitFeatureOptions = { cutterType: 'point', snapThreshold: DEFAULT_SNAP_THRESHOLD };
+
+type SnapTarget = { coord: [number, number]; kind: SnapKind };
+
+/** Interactive cutter sketch that delegates every geometry mutation to `ops.splitSelected`. */
+export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
+  readonly name = 'splitFeature';
+  private _enabled = false;
+  private _opts: SplitFeatureOptions;
+  private _vertices: [number, number][] = [];
+  private _cursorCoord: [number, number] | null = null;
+  private _snapCoord: [number, number] | null = null;
+  private _snapKind: SnapKind = null;
+  private _submitting = false;
+  _manager?: { refreshCursor(): void };
+
+  private readonly _onKeyDownBound = (event: KeyboardEvent) => this._onKeyDown(event);
+  private readonly _onMapMoveBound = () => this._refreshOverlay();
+
+  constructor(private readonly _map: EditHandlerHost, options: Partial<SplitFeatureOptions> = {}) {
+    this._opts = { ...DEFAULT_OPTIONS, ...options };
+    this._map.on('editmodechange', (event: { mode: string }) => {
+      if (event.mode !== 'split' && this._enabled) this._quietDisable();
+    });
+  }
+
+  enable(): void {
+    if (this._enabled) return;
+    this._validateSelection();
+    this._enabled = true;
+    this._map.setEditMode('split');
+    window.addEventListener('keydown', this._onKeyDownBound);
+    this._map.on('move', this._onMapMoveBound);
+    this._manager?.refreshCursor();
+  }
+
+  disable(): void {
+    if (!this._enabled) return;
+    this._enabled = false;
+    this._clearSketch();
+    window.removeEventListener('keydown', this._onKeyDownBound);
+    this._map.off('move', this._onMapMoveBound);
+    this._map.setEditMode('none');
+    this._manager?.refreshCursor();
+    this._map.render();
+  }
+
+  isEnabled(): boolean {
+    return this._enabled;
+  }
+
+  setOptions(options: Partial<SplitFeatureOptions>): void {
+    this._opts = { ...this._opts, ...options };
+    if (this._enabled) this._clearSketch();
+  }
+
+  getOptions(): Readonly<SplitFeatureOptions> {
+    return { ...this._opts };
+  }
+
+  getCursor(): string | null {
+    return this._enabled ? 'crosshair' : null;
+  }
+
+  handlePointer(event: NormalizedPointerEvent): HandlerResult {
+    if (!this._enabled) return 'passthrough';
+    if (event.kind === 'move') {
+      this._updateCursor(event.point.x, event.point.y);
+      return 'passthrough';
+    }
+    if (event.kind === 'click') {
+      if (event.button !== 0 || this._submitting) return 'passthrough';
+      this._placeVertex(event.point.x, event.point.y);
+      return 'consumed';
+    }
+    if (event.kind === 'contextmenu') {
+      event.originalEvent.preventDefault();
+      if (this._submitting) return 'consumed';
+      if (this._opts.cutterType === 'polyline' && this._vertices.length >= 2) {
+        void this._submit();
+      } else {
+        this._clearSketch();
+        this._map.render();
+      }
+      return 'consumed';
+    }
+    return 'passthrough';
+  }
+
+  private _quietDisable(): void {
+    this._enabled = false;
+    this._clearSketch();
+    window.removeEventListener('keydown', this._onKeyDownBound);
+    this._map.off('move', this._onMapMoveBound);
+    this._manager?.refreshCursor();
+    this._map.render();
+  }
+
+  private _validateSelection(): void {
+    const selected = this._map.getSelection();
+    if (selected.length === 0) throw new Error('splitFeature: select features before enabling');
+    const first = selected[0];
+    if (selected.some((ref) => ref.source !== first.source || ref.layer !== first.layer)) {
+      throw new Error('splitFeature: selection must belong to one source layer');
+    }
+    const layer = this._map.layers.resolve(first.source, first.layer);
+    if (!layer || !isPathLayer(layer)) {
+      throw new Error('splitFeature: selection must have path geometry');
+    }
+    if (this._opts.cutterType === 'point' && layer.geometry_type === 'polygon') {
+      throw new Error('splitFeature: point cutter cannot split polygon selection');
+    }
+  }
+
+  private _updateCursor(px: number, py: number): void {
+    const cursor = this._map.unproject(px, py);
+    this._cursorCoord = [cursor[0], cursor[1]];
+    const snap = this._findSnapTarget(px, py);
+    this._snapCoord = snap?.coord ?? null;
+    this._snapKind = snap?.kind ?? null;
+    this._refreshOverlay();
+  }
+
+  private _placeVertex(px: number, py: number): void {
+    if (this._opts.cutterType === 'point' && !this._snapCoord) return;
+    const coord = this._snapCoord ?? this._map.unproject(px, py);
+    this._vertices.push([coord[0], coord[1]]);
+    if (this._opts.cutterType === 'point') {
+      void this._submit();
+      return;
+    }
+    this._refreshOverlay();
+  }
+
+  private async _submit(): Promise<void> {
+    if (this._submitting || this._vertices.length === 0) return;
+    this._submitting = true;
+    const cutter =
+      this._opts.cutterType === 'point'
+        ? { type: 'point' as const, coordinates: this._vertices[0] }
+        : { type: 'polyline' as const, coordinates: this._vertices.slice() };
+    try {
+      const result = await this._map.ops.splitSelected({ cutter });
+      if (!result.ok) this._map.fire('error', { error: result.error });
+    } finally {
+      this._submitting = false;
+      this._clearSketch();
+      this._map.render();
+    }
+  }
+
+  private _onKeyDown(event: KeyboardEvent): void {
+    if (event.key !== 'Escape' || this._submitting) return;
+    this._clearSketch();
+    this._map.render();
+  }
+
+  private _refreshOverlay(): void {
+    if (this._vertices.length === 0 && !this._snapCoord) return;
+    this._map.setEditDrawState({
+      vertices: this._vertices.slice(),
+      cursorCoord: this._snapCoord ?? this._cursorCoord,
+      snapCoord: this._snapCoord,
+      snapKind: this._snapKind,
+      geometryType: 'polyline',
+      drawColor: EMAP_THEME_COLORS.primary,
+    });
+    this._map.render();
+  }
+
+  private _clearSketch(): void {
+    this._vertices = [];
+    this._cursorCoord = null;
+    this._snapCoord = null;
+    this._snapKind = null;
+    this._map.clearEditDrawState();
+  }
+
+  private _findSnapTarget(px: number, py: number): SnapTarget | null {
+    const selected = this._map.getSelection();
+    const first = selected[0];
+    const layer = first && this._map.layers.resolve(first.source, first.layer);
+    const source = first && this._map.getSource(first.source);
+    const arcs = source?.getArcs() as ArcCollection | undefined;
+    if (!layer || layer.geometry_type !== 'polyline' || !layer.shapes || !arcs?.forEachArcSegment) {
+      return null;
+    }
+    const threshold = this._opts.snapThreshold ?? DEFAULT_SNAP_THRESHOLD;
+    const c0 = this._map.unproject(px - threshold, py - threshold);
+    const c1 = this._map.unproject(px + threshold, py + threshold);
+    const minX = Math.min(c0[0], c1[0]);
+    const maxX = Math.max(c0[0], c1[0]);
+    const minY = Math.min(c0[1], c1[1]);
+    const maxY = Math.max(c0[1], c1[1]);
+    let bestDistance = threshold;
+    let best: SnapTarget | null = null;
+    const arcIds = new Set<number>();
+
+    for (const ref of selected) {
+      const shape = layer.shapes[ref.id];
+      if (!shape) continue;
+      for (const part of shape as PathShape) {
+        for (const signedArcId of part) arcIds.add(signedArcId < 0 ? ~signedArcId : signedArcId);
+      }
+    }
+    for (const arcId of arcIds) {
+      arcs.forEachArcSegment(arcId, (i, j, xx, yy) => {
+        const ax = xx[i], ay = yy[i], bx = xx[j], by = yy[j];
+        if (Math.max(ax, bx) < minX || Math.min(ax, bx) > maxX || Math.max(ay, by) < minY || Math.min(ay, by) > maxY) return;
+        const a = this._map.project(ax, ay);
+        const b = this._map.project(bx, by);
+        const projected = projectPointOnSegment([px, py], a, b);
+        if (projected.dist >= bestDistance) return;
+        bestDistance = projected.dist;
+        best = { coord: this._map.unproject(projected.point[0], projected.point[1]), kind: 'edge' };
+      });
+    }
+    return best;
+  }
+}

@@ -430,6 +430,12 @@ describe('Emap handler registry (Phase 1)', () => {
     expect(canvas.style.cursor).toBe('move');
   });
 
+  it('exposes splitFeature disabled by default', () => {
+    const map = new Emap({ container: container() });
+    expect(map.splitFeature.name).toBe('splitFeature');
+    expect(map.splitFeature.isEnabled()).toBe(false);
+  });
+
   it('enabling vertexEdit cross-deactivates an active transformFeature', () => {
     const map = new Emap({ container: container() });
     map.transformFeature.enable();

@@ -16,4 +16,5 @@ export interface SelectionHandlerHost {
     options?: QueryFeaturesOptions,
   ): QueriedFeature[];
   select(features: ReadonlyArray<FeatureRef>, options?: { mode?: SelectMode }): void;
+  getSelection(): FeatureRef[];
 }

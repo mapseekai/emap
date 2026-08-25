@@ -8,6 +8,7 @@ const PRIORITY = [
   'boxSelect',
   'clickSelect',
   'transformFeature',
+  'splitFeature',
   'drawFeature',
   'measure',
   'vertexEdit',
