@@ -45,6 +45,15 @@ const measurementState: EditMeasurementState = {
   drawColor: '#000',
 };
 
+const drawState = {
+  vertices: [],
+  cursorCoord: null,
+  snapCoord: null,
+  snapKind: null,
+  geometryType: 'polygon' as const,
+  drawColor: '#000',
+};
+
 describe('EditOverlayRenderer', () => {
   it('renders vertex edit dots and hover affordances with the primary theme color', () => {
     const painter = makePainter();
@@ -102,5 +111,14 @@ describe('EditOverlayRenderer', () => {
 
     expect(painter.drawMeasurementOverlay).toHaveBeenCalledTimes(1);
     expect(painter.drawMeasurementOverlay).toHaveBeenCalledWith(measurementState);
+  });
+
+  it('routes split sketches through the draw overlay', () => {
+    const painter = makePainter();
+    const renderer = new EditOverlayRenderer(painter);
+
+    renderer.render('split', null, drawState, null);
+
+    expect(painter.drawDrawingOverlay).toHaveBeenCalledWith(drawState);
   });
 });

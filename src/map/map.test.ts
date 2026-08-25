@@ -8848,3 +8848,29 @@ describe('Phase-6 integration', () => {
 function flushPromises(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+describe('Emap edit-mode drag pan', () => {
+  it('suspends drag pan for split mode and restores its prior enabled state on exit', () => {
+    const dragPan = { isEnabled: vi.fn(() => true), disable: vi.fn(), enable: vi.fn() };
+    const map = {
+      _dragPan: dragPan,
+      _dragPanSuspendedByEdit: false,
+      _dragPanEnabledBeforeEditSuspend: false,
+    };
+    type EditModeDragPanHost = typeof map;
+    type SyncEditModeDragPan = (this: EditModeDragPanHost, mode: 'none' | 'split') => void;
+    // Private runtime method under test; the public path is covered by handler-registry tests.
+    const syncEditModeDragPan = Reflect.get(
+      Emap.prototype,
+      '_syncEditModeDragPan',
+    ) as unknown as SyncEditModeDragPan;
+
+    syncEditModeDragPan.call(map, 'split');
+    expect(dragPan.disable).toHaveBeenCalledTimes(1);
+    expect(map._dragPanSuspendedByEdit).toBe(true);
+
+    syncEditModeDragPan.call(map, 'none');
+    expect(dragPan.enable).toHaveBeenCalledTimes(1);
+    expect(map._dragPanSuspendedByEdit).toBe(false);
+  });
+});

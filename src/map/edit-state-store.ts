@@ -5,7 +5,7 @@
 
 import type { EditMeasurementState, EditVertexState, EditDrawState } from './types';
 
-export type EditMode = 'none' | 'vertex' | 'draw' | 'measure' | 'transform';
+export type EditMode = 'none' | 'vertex' | 'draw' | 'split' | 'measure' | 'transform';
 
 export interface EditStateSnapshot {
   mode: EditMode;
@@ -61,7 +61,7 @@ export class EditStateStore {
     // Drop any state that no longer belongs to the active mode. Setting
     // to `null` directly (not via the setters) so we only emit one change.
     if (mode !== 'vertex') this._vertex = null;
-    if (mode !== 'draw') this._draw = null;
+    this._draw = null;
     if (mode !== 'measure') this._measurement = null;
     this._fire(previousMode);
   }

@@ -33,7 +33,7 @@ export class EditOverlayRenderer {
   ): void {
     if (editMode === 'vertex' && vertexState) {
       this._renderVertexOverlay(vertexState, vertexArcFilter);
-    } else if (editMode === 'draw' && drawState) {
+    } else if ((editMode === 'draw' || editMode === 'split') && drawState) {
       this._painter.drawDrawingOverlay(drawState);
     } else if (editMode === 'measure' && measurementState) {
       this._painter.drawMeasurementOverlay(measurementState);

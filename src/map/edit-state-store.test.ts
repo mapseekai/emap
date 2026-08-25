@@ -85,6 +85,23 @@ describe('EditStateStore', () => {
     expect(store.mode).toBe('vertex');
   });
 
+  it('clears the old sketch once when ownership moves between split and draw', () => {
+    const { store, onChange } = makeStore();
+    store.setMode('split');
+    store.setDraw(dummyDraw);
+    expect(store.draw).toBe(dummyDraw);
+    onChange.mockClear();
+
+    store.setMode('draw');
+
+    expect(store.draw).toBeNull();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toMatchObject({
+      previousMode: 'split',
+      current: { mode: 'draw', draw: null },
+    });
+  });
+
   it('auto-clears measurement state when leaving measure mode', () => {
     const { store, onChange } = makeStore();
     store.setMode('measure');

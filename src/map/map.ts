@@ -378,7 +378,7 @@ export class Emap extends EventDispatcher {
   private _editState: EditStateStore = new EditStateStore((change) => {
     if (change.modeChanged) {
       // Wholesale-disable pan only for modal editors that need full pointer
-      // ownership (`vertex`, `draw`) — their handlers don't claim `'exclusive'`
+      // ownership (`vertex`, `draw`, `split`) — their handlers don't claim `'exclusive'`
       // on `'down'`, so they rely on this gate to keep `dragPan` from
       // intercepting. `'transform'` is different: `transformFeature` returns
       // `'exclusive'` on `'down'` when (and only when) the hit is an already-
@@ -751,7 +751,7 @@ export class Emap extends EventDispatcher {
   }
 
   private _syncEditModeDragPan(mode: EditMode): void {
-    const blocksPan = mode === 'vertex' || mode === 'draw';
+    const blocksPan = mode === 'vertex' || mode === 'draw' || mode === 'split';
 
     if (blocksPan) {
       if (!this._dragPanSuspendedByEdit) {
