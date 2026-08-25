@@ -1,7 +1,7 @@
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
 import type { EditHandlerHost } from './edit-handler-host';
 import type { FeatureRef, SnapKind, SplitFeatureOptions } from '../../map/types';
-import type { ArcCollection, PathShape } from '../../types/mapshaper-types';
+import type { ArcCollection, ArcVertexData, PathShape } from '../../types/mapshaper-types';
 import { isPathLayer } from '../../types/mapshaper-types';
 import { projectPointOnSegment } from './draw-feature';
 import { EMAP_THEME_COLORS } from '../../theme/colors';
@@ -150,17 +150,40 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     const layer = this._map.layers.resolve(first.source, first.layer);
     if (!layer || !isPathLayer(layer) || !layer.shapes) return false;
     if (this._opts.cutterType === 'point' && layer.geometry_type === 'polygon') return false;
-    if (!this._map.getSource(first.source)?.getArcs()) return false;
+    const arcs = this._map.getSource(first.source)?.getArcs() as ArcCollection | undefined;
+    const vertexData = arcs?.getVertexData?.();
+    if (!vertexData) return false;
     const shapes = layer.shapes;
-    return selected.every(
-      (ref) => Number.isInteger(ref.id) && ref.id >= 0 && ref.id < shapes.length && shapes[ref.id] !== null,
-    );
+    return selected.every((ref) => this._isValidPathShape(shapes[ref.id], ref.id, shapes.length, vertexData));
+  }
+
+  private _isValidPathShape(
+    shape: unknown,
+    id: number,
+    shapeCount: number,
+    vertexData: ArcVertexData,
+  ): boolean {
+    if (!Number.isInteger(id) || id < 0 || id >= shapeCount || !Array.isArray(shape) || shape.length === 0) return false;
+    return shape.every((part) => {
+      if (!Array.isArray(part) || part.length === 0) return false;
+      return part.every((raw) => {
+        if (!Number.isSafeInteger(raw)) return false;
+        const arcId = raw < 0 ? -raw - 1 : raw;
+        if (arcId < 0 || arcId >= vertexData.nn.length) return false;
+        const start = vertexData.ii[arcId];
+        const count = vertexData.nn[arcId];
+        if (!Number.isInteger(start) || !Number.isInteger(count) || count < 2) return false;
+        if (start < 0 || start + count > vertexData.xx.length || vertexData.yy.length < start + count) return false;
+        for (let index = start; index < start + count; index++) {
+          if (!Number.isFinite(vertexData.xx[index]) || !Number.isFinite(vertexData.yy[index])) return false;
+        }
+        return true;
+      });
+    });
   }
 
   private _selectionKeyFor(selected: readonly FeatureRef[]): string {
-    return [...new Set(selected.map((ref) => `${ref.source}\u0000${ref.layer}\u0000${ref.id}`))]
-      .sort()
-      .join('\u0001');
+    return JSON.stringify([...new Set(selected.map((ref) => JSON.stringify([ref.source, ref.layer, ref.id])))].sort());
   }
 
   private _hasCurrentSelection(): boolean {
@@ -280,7 +303,7 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
       const shape = layer.shapes[ref.id];
       if (!shape) continue;
       for (const part of shape as PathShape) {
-        for (const signedArcId of part) arcIds.add(signedArcId < 0 ? ~signedArcId : signedArcId);
+        for (const signedArcId of part) arcIds.add(signedArcId < 0 ? -signedArcId - 1 : signedArcId);
       }
     }
     for (const arcId of arcIds) {

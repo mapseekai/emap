@@ -29,6 +29,13 @@ function createMap(options: { geometry?: 'polyline' | 'polygon'; selection?: typ
         if (id === 1) callback(0, 1, new Float64Array([20, 30]), new Float64Array([0, 0]));
       },
     ),
+    getVertexData: () => ({
+      xx: new Float64Array([0, 10, 20, 30]),
+      yy: new Float64Array([0, 0, 0, 0]),
+      nn: new Int32Array([2, 2]),
+      ii: new Int32Array([0, 2]),
+      zz: null,
+    }),
   };
   return {
     layers: { resolve: vi.fn(() => layer) },
@@ -291,6 +298,40 @@ describe('SplitFeatureHandler', () => {
     expect(map.fire).toHaveBeenCalledTimes(1);
   });
 
+  it('cancels a sketch when delimiter-containing source/layer identities change', () => {
+    const first = { source: 'a\u0000b', layer: 'c', id: 0 };
+    const second = { source: 'a', layer: 'b\u0000c', id: 0 };
+    map.getSelection.mockReturnValue([first]);
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    handler.handlePointer(event('move', 5, 2));
+    map.getSelection.mockReturnValue([second]);
+    handler.handlePointer(event('click', 5, 2));
+    expect(map.ops.splitSelected).not.toHaveBeenCalled();
+    expect(map.clearEditDrawState).toHaveBeenCalled();
+  });
+
+  it('rejects malformed selected paths at enable and cancels invalid active paths without iterating them', () => {
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
+    map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: [[[]]] });
+    expect(() => handler.enable()).toThrow(/invalid feature geometry/i);
+    map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: [[[0]]] });
+    handler.enable();
+    handler.handlePointer(event('move', 5, 2));
+    map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: [[[Number.MAX_SAFE_INTEGER + 1]]] });
+    handler.handlePointer(event('click', 5, 2));
+    expect(map.ops.splitSelected).not.toHaveBeenCalled();
+    expect(map.clearEditDrawState).toHaveBeenCalled();
+  });
+
+
+  it('rejects empty shapes and out-of-range signed arc references', () => {
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
+    map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: [[]] });
+    expect(() => handler.enable()).toThrow(/invalid feature geometry/i);
+    map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: [[[2]]] });
+    expect(() => handler.enable()).toThrow(/invalid feature geometry/i);
+  });
 
   it('cancels incomplete polylines on context menu and Escape without dispatching', () => {
     const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
