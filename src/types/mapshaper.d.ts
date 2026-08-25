@@ -149,6 +149,21 @@ declare module 'mapshaper' {
     deleteLastArc(arcs: ArcCollection): void;
     findArcIdFromVertexId(vertexId: number, ii: Int32Array | Uint32Array): number;
 
+    // Feature splitting / polygon mosaics
+    insertCutPoints(
+      points: Array<{ x: number; y: number; i: number }>,
+      arcs: ArcCollection,
+    ): unknown;
+    remapDividedArcs(dataset: MapshaperDataset, map: unknown): void;
+    NodeCollection: new (arcs: ArcCollection) => {
+      setArcFilter(filter: (arcId: number) => boolean): void;
+    };
+    buildPolygonMosaic(nodes: {
+      setArcFilter(filter: (arcId: number) => boolean): void;
+    }): { mosaic: number[][][] };
+    findAnchorPoint(shape: number[][], arcs: ArcCollection): [number, number] | null;
+    pruneArcs(dataset: MapshaperDataset): void;
+
     // Direct dataset construction — used by the Arrow module
     // (GeoParquet / GeoArrow) to build datasets from coordinate buffers
     // without a GeoJSON intermediate.
@@ -211,6 +226,8 @@ declare module 'mapshaper' {
     testPointInPolygon(x: number, y: number, shape: number[][], arcs: ArcCollection): boolean;
     /** Winding-number test against the ring formed by signed arc ids. */
     testPointInRing(x: number, y: number, ids: number[], arcs: ArcCollection): number;
+    getShapeArea(shape: number[][], arcs: ArcCollection): number;
+    getShapePerimeter(shape: number[][], arcs: ArcCollection): number;
   }
 
   const mapshaper: {

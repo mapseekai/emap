@@ -25,6 +25,7 @@ import type {
   DataTable,
   MapshaperDataset,
   MapshaperLayer,
+  PathShape,
 } from '../types/mapshaper-types';
 
 // -- Pack / snapshot serialisation ------------------------------------------
@@ -60,6 +61,13 @@ export interface MapshaperBBox {
 export interface PointToShapeInfo {
   distance: number;
   [key: string]: unknown;
+}
+
+/** A point where an arc segment is split, keyed by its start vertex id. */
+export interface ArcCutPoint {
+  x: number;
+  y: number;
+  i: number;
 }
 
 /**
@@ -229,6 +237,22 @@ export interface MapshaperAdapter {
     dataset: MapshaperDataset,
     opts?: { snap_interval?: number; no_snap?: boolean; rebuild_topology?: boolean },
   ): void;
+
+  /**
+   * Split arcs at the supplied points and remap every affected layer path to
+   * the divided arc ids.
+   */
+  insertCutPoints(dataset: MapshaperDataset, points: ArcCutPoint[]): void;
+
+  /** Build polygon tiles from only the supplied absolute arc ids. */
+  buildPolygonMosaic(arcs: ArcCollection, arcIds: ReadonlySet<number>): PathShape[];
+
+  getShapeArea(shape: PathShape, arcs: ArcCollection): number;
+  getShapePerimeter(shape: PathShape, arcs: ArcCollection): number;
+  getShapeAnchor(shape: PathShape, arcs: ArcCollection): [number, number] | null;
+
+  /** Drop arcs that no remaining layer path references. */
+  cleanArcReferences(dataset: MapshaperDataset): void;
 
   /**
    * Read-only segment-intersection scan; populates the report consumed
@@ -649,6 +673,36 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     snapArg: number,
   ): [number, number] {
     return mapshaper.internal.findClosestPointOnSeg(px, py, ax, ay, bx, by, snapArg);
+  }
+
+  insertCutPoints(dataset: MapshaperDataset, points: ArcCutPoint[]): void {
+    const map = mapshaper.internal.insertCutPoints(points, dataset.arcs!);
+    mapshaper.internal.remapDividedArcs(dataset, map);
+  }
+
+  buildPolygonMosaic(arcs: ArcCollection, arcIds: ReadonlySet<number>): PathShape[] {
+    const nodes = new mapshaper.internal.NodeCollection(arcs);
+    nodes.setArcFilter((id: number) => arcIds.has(id < 0 ? ~id : id));
+    return mapshaper.internal
+      .buildPolygonMosaic(nodes)
+      .mosaic.map((shape: number[][]) => shape.map((part) => part.slice()));
+  }
+
+  getShapeArea(shape: PathShape, arcs: ArcCollection): number {
+    return mapshaper.geom.getShapeArea(shape, arcs);
+  }
+
+  getShapePerimeter(shape: PathShape, arcs: ArcCollection): number {
+    return mapshaper.geom.getShapePerimeter(shape, arcs);
+  }
+
+  getShapeAnchor(shape: PathShape, arcs: ArcCollection): [number, number] | null {
+    const anchor = mapshaper.internal.findAnchorPoint(shape, arcs);
+    return anchor ? [anchor[0], anchor[1]] : null;
+  }
+
+  cleanArcReferences(dataset: MapshaperDataset): void {
+    mapshaper.internal.pruneArcs(dataset);
   }
 
   addIntersectionCuts(
