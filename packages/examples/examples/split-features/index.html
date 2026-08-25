@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 拆分选中要素</title>
+</head>
+
+<body class="emap-example-with-floating-header">
+  <div id="header">
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>拆分选中要素</strong>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>拆分选中要素</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <p class="emap-example-hint">单击选择同一数据源、同一图层中的线或面。线可用点或折线拆分；面只能用穿过其内部的折线拆分。</p>
+        <div class="emap-example-field">
+          <label for="file-input">数据文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple />
+        </div>
+        <div class="emap-example-row" role="group" aria-label="切刀类型">
+          <button id="point-mode" type="button" class="emap-example-primary-button">点拆分线</button>
+          <button id="line-mode" type="button">折线拆分</button>
+        </div>
+        <div class="emap-example-row">
+          <button id="enable-split" type="button" class="emap-example-primary-button" disabled>开始拆分</button>
+          <button id="cancel-split" type="button">取消拆分</button>
+          <button id="clear-selection" type="button" disabled>清空选择</button>
+        </div>
+        <p id="status" class="emap-example-status">请选择同一图层中的线或面要素。</p>
+      </section>
+    </div>
+  </details>
+
+  <script type="module">
+    import { installExampleMapUi } from '/src/example-runtime.ts';
+    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+
+    const emap = await loadExampleRuntime();
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    installExampleMapUi(map, emap);
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const pointMode = document.getElementById('point-mode');
+    const fileInput = document.getElementById('file-input');
+    const lineMode = document.getElementById('line-mode');
+    const enableSplit = document.getElementById('enable-split');
+    const cancelSplit = document.getElementById('cancel-split');
+    const clearSelection = document.getElementById('clear-selection');
+    const status = document.getElementById('status');
+    const mapContainer = map.getCanvasContainer();
+    let cutterType = 'point';
+
+    function selectedGeometryType(ref) {
+      return map.features.get(ref)?.geometry?.type;
+    }
+
+    function selectionIsSplittable(selected) {
+      if (selected.length === 0) return false;
+      const { source, layer } = selected[0];
+      return selected.every((ref) => {
+        const geometryType = selectedGeometryType(ref);
+        return ref.source === source && ref.layer === layer &&
+          (geometryType === 'LineString' || geometryType === 'Polygon');
+      });
+    }
+
+    function setCutterType(next) {
+      cutterType = next;
+      map.splitFeature.setOptions({ cutterType });
+      pointMode.classList.toggle('emap-example-primary-button', cutterType === 'point');
+      lineMode.classList.toggle('emap-example-primary-button', cutterType === 'polyline');
+    }
+
+    function stopSplitting() {
+      map.splitFeature.disable();
+    }
+
+    function syncSelection(selected) {
+      const splittable = selectionIsSplittable(selected);
+      const hasPolygon = selected.some((ref) => selectedGeometryType(ref) === 'Polygon');
+      pointMode.disabled = hasPolygon;
+      if (hasPolygon && cutterType === 'point') setCutterType('polyline');
+      enableSplit.disabled = !splittable;
+      clearSelection.disabled = selected.length === 0;
+
+      if (selected.length === 0) {
+        status.textContent = '请选择同一图层中的线或面要素。';
+        map.clearHighlightedFeatures();
+      } else if (!splittable) {
+        status.textContent = '所选要素必须属于同一数据源、同一图层，且几何类型均为线或面。';
+      } else {
+        status.textContent = `已选中 ${selected.length} 个拆分结果。选择切刀后开始拆分。`;
+        map.setHighlightedFeatures(selected, { color: '#1e88e5', width: 3 });
+      }
+    }
+
+    pointMode.addEventListener('click', () => setCutterType('point'));
+    lineMode.addEventListener('click', () => setCutterType('polyline'));
+    enableSplit.addEventListener('click', () => {
+      const selected = map.getSelection();
+      if (!selectionIsSplittable(selected)) {
+        status.textContent = '请先选择同一图层中的线或面要素。';
+        return;
+      }
+      map.splitFeature.setOptions({ cutterType });
+      map.splitFeature.enable();
+      status.textContent = cutterType === 'point'
+        ? '在线的内部单击以拆分；按 Esc 或取消退出。'
+        : '左键绘制切线，右键完成；按 Esc 或取消退出。';
+    });
+    cancelSplit.addEventListener('click', () => {
+      stopSplitting();
+      syncSelection(map.getSelection());
+    });
+    clearSelection.addEventListener('click', () => {
+      stopSplitting();
+      map.clearSelection();
+    });
+
+    fileInput.addEventListener('change', async () => {
+      const files = Array.from(fileInput.files ?? []);
+      if (files.length === 0) return;
+      status.textContent = `正在加载 ${files.length} 个数据文件…`;
+      try {
+        await Promise.all(files.map(async (file, index) => {
+          const source = new TopologySource(`split-source-${index}`);
+          const content = new Uint8Array(await file.arrayBuffer());
+          await source.setData({ filename: file.name, content });
+          await map.addSource(`split-source-${index}`, source);
+          map.setExtent(source.getExtent());
+        }));
+        status.textContent = '单击选择同一图层中的线或面要素。';
+      } catch (error) {
+        status.textContent = `加载失败: ${error instanceof Error ? error.message : String(error)}`;
+        console.error(error);
+      }
+    });
+
+    map.on('selectionchange', (event) => syncSelection(event.selected));
+    mapContainer.addEventListener('click', (event) => {
+      if (map.splitFeature.isEnabled?.()) return;
+      const rect = mapContainer.getBoundingClientRect();
+      const hits = map.queryFeatures([event.clientX - rect.left, event.clientY - rect.top]);
+      if (hits.length === 0) {
+        if (!event.shiftKey && !event.ctrlKey && !event.metaKey) map.clearSelection();
+        return;
+      }
+      const mode = event.shiftKey ? 'add' : (event.ctrlKey || event.metaKey) ? 'toggle' : 'replace';
+      map.select(hits, { mode });
+    });
+
+    await autoLoadExampleFixtures('split-features');
+  </script>
+</body>
+
+</html>

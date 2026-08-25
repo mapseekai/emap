@@ -146,6 +146,10 @@ const exampleDescriptions = {
     zh: '对同图层所选多边形执行几何并集，并由用户指定合并结果使用哪个要素的属性。',
     en: 'Geometrically unions selected polygons from one layer and lets the user choose the output attribute source.',
   },
+  'split-features': {
+    zh: '选择同图层线或面后，用点或折线切刀拆分要素，并查看自动更新的结果选择。',
+    en: 'Selects same-layer lines or polygons, splits them with point or polyline cutters, and shows the updated result selection.',
+  },
   'rename-layer': {
     zh: '修改数据源中的图层名称，并同步刷新图层选择器和地图状态。',
     en: 'Renames a source layer and synchronizes the layer picker and map state with the new name.',
@@ -593,6 +597,7 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('filter-features', 'data-editing', '要素过滤', 'Filter features', [docsAttributes, docsOperations], 'Emap', ['expressions', 'layer-ops', 'history'], [task6Fixture]),
   recipe('data-engineering', 'data-editing', '数据工程批次', 'Data engineering batch', [docsOperations, docsAttributes], 'Emap', ['expressions', 'layer-ops', 'history'], [task6Fixture]),
   recipe('merge-selected', 'data-editing', '合并选中要素', 'Merge selected features', [docsSelection, docsOperations], 'Emap', ['selection', 'layer-ops', 'history'], [task6Fixture]),
+  recipe('split-features', 'data-editing', '拆分选中要素', 'Split selected features', [docsSelection, docsOperations, docsUndoRedo], 'Emap', ['selection', 'split', 'history'], [task7LineFixture, task7Fixture]),
   recipe('vertex-editing', 'data-editing', '顶点编辑', 'Vertex editing', [docsEditing, docsControls], 'Emap', ['editing', 'vertex', 'basemap'], [task6Fixture]),
   recipe('feature-translate', 'data-editing', '平移选中要素', 'Translate selected feature', [docsEditing, docsSelection], 'Emap', ['selection', 'transform', 'history'], [task6Fixture]),
   recipe('feature-rotate-scale', 'data-editing', '旋转 / 缩放选中要素', 'Rotate and scale selected feature', [docsEditing, docsSelection], 'Emap', ['selection', 'transform', 'history'], [task6Fixture]),

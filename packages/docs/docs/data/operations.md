@@ -2,8 +2,8 @@
 id: operations
 slug: /data/operations
 title: 数据操作
-api: ["AffineLayerOptions","ApplyExpressionOptions","BufferOptions","CheckGeometryOptions","CleanOptions","ClipEraseOptions","DataFillOptions","DissolveOptions","DivideOptions","DragSessionOptions","DropLayerOptions","Emap","ExplodeOptions","ExportSnapshotOptions","ExpressionEvaluationPolicy","FeatureAffineSession","FeatureRef","FeatureTranslateSession","FilterFieldsOptions","FilterGeomOptions","FilterIslandsOptions","FilterOptions","FilterSliversOptions","GeometryCheckReport","HighlightFeatureRef","HighlightStyle","InnerlinesOptions","IntersectionPointsLayerOptions","JoinTableData","JoinTableOptions","LinesOptions","LoadSnapshotOptions","MapOptions","MergeLayersOptions","MosaicOptions","PointsMode","PointsOptions","PolygonsOptions","ProjectLayerExport","ProjectLayerOutputOptions","ProjectOptions","QueriedFeature","QueryFeaturesOptions","RebuildTopologyOptions","RenameFieldsOptions","RenameLayerOptions","SimplifyMethod","SimplifyOptions","SnapOptions","SortFeaturesOptions","SplitLayerOptions","UnionOptions","UniqueFeaturesOptions"]
-examples: ["buffer","check-geometry","clip-erase","data-engineering","dissolve","divide","duckdb-overlay","duckdb-spatial-aggregate-join","explode","filter-features","innerlines","merge-layers","merge-selected","mosaic","project","rebuild-topology","rename-layer","simplify","simplify-control","snap-layer","split-layer","union"]
+api: ["AffineLayerOptions","ApplyExpressionOptions","BufferOptions","CheckGeometryOptions","CleanOptions","ClipEraseOptions","DataFillOptions","DissolveOptions","DivideOptions","DragSessionOptions","DropLayerOptions","Emap","ExplodeOptions","ExportSnapshotOptions","ExpressionEvaluationPolicy","FeatureAffineSession","FeatureRef","FeatureTranslateSession","FilterFieldsOptions","FilterGeomOptions","FilterIslandsOptions","FilterOptions","FilterSliversOptions","GeometryCheckReport","HighlightFeatureRef","HighlightStyle","InnerlinesOptions","IntersectionPointsLayerOptions","JoinTableData","JoinTableOptions","LinesOptions","LoadSnapshotOptions","MapOptions","MergeLayersOptions","MosaicOptions","PointsMode","PointsOptions","PolygonsOptions","ProjectLayerExport","ProjectLayerOutputOptions","ProjectOptions","QueriedFeature","QueryFeaturesOptions","RebuildTopologyOptions","RenameFieldsOptions","RenameLayerOptions","SimplifyMethod","SimplifyOptions","SnapOptions","SortFeaturesOptions","SplitCutter","SplitFeatureOptions","SplitLayerOptions","SplitSelectedOptions","SplitSelectedResult","UnionOptions","UniqueFeaturesOptions"]
+examples: ["buffer","check-geometry","clip-erase","data-engineering","dissolve","divide","duckdb-overlay","duckdb-spatial-aggregate-join","explode","filter-features","innerlines","merge-layers","merge-selected","mosaic","project","rebuild-topology","rename-layer","simplify","simplify-control","snap-layer","split-features","split-layer","union"]
 stability: stable
 verifiedVersion: 0.5.0
 ---
@@ -136,6 +136,25 @@ await map.ops.filterFields({
 ```
 
 涉及 expression、`where` 或 `calc` 的 operation 受 expression policy 控制。
+
+## 拆分选中要素
+
+先用 `map.select()` 选择同一 source、同一 layer 中的线或面要素，再提供坐标切刀：
+
+```ts
+map.select([{ source: 'main', layer: 'roads', id: 4 }]);
+const result = await map.ops.splitSelected({
+  cutter: { type: 'point', coordinates: [121.5, 31.2] },
+});
+
+map.splitFeature.setOptions({ cutterType: 'polyline' });
+map.splitFeature.enable();
+```
+
+点切刀只能落在线要素内部；折线切刀可拆分线和面，面切刀使用右键完成。
+选择必须来自同一 source 和 layer。成功后，面积或长度最大的结果保留原 feature ID，
+其余结果追加为新要素；每个结果都复制原有属性。结果选择会替换为最终拆分结果，
+整次拆分作为一个原子历史步骤，可用一次撤销恢复。
 
 ## Operation effect
 

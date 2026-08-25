@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Selected line and polygon features can now be split with point or polyline
+  cutters. Split pieces duplicate the original attributes, replace the current
+  selection with the results, and are available through the interactive
+  `map.splitFeature` handler.
+
 ### Fixed
 
 - `map.ops.mergeSelected()` now performs a true polygon union that removes shared and

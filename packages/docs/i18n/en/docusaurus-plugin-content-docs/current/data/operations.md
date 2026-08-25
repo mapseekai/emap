@@ -2,8 +2,8 @@
 id: operations
 slug: /data/operations
 title: Data operations
-api: ["AffineLayerOptions","ApplyExpressionOptions","BufferOptions","CheckGeometryOptions","CleanOptions","ClipEraseOptions","DataFillOptions","DissolveOptions","DivideOptions","DragSessionOptions","DropLayerOptions","Emap","ExplodeOptions","ExportSnapshotOptions","ExpressionEvaluationPolicy","FeatureAffineSession","FeatureRef","FeatureTranslateSession","FilterFieldsOptions","FilterGeomOptions","FilterIslandsOptions","FilterOptions","FilterSliversOptions","GeometryCheckReport","HighlightFeatureRef","HighlightStyle","InnerlinesOptions","IntersectionPointsLayerOptions","JoinTableData","JoinTableOptions","LinesOptions","LoadSnapshotOptions","MapOptions","MergeLayersOptions","MosaicOptions","PointsMode","PointsOptions","PolygonsOptions","ProjectLayerExport","ProjectLayerOutputOptions","ProjectOptions","QueriedFeature","QueryFeaturesOptions","RebuildTopologyOptions","RenameFieldsOptions","RenameLayerOptions","SimplifyMethod","SimplifyOptions","SnapOptions","SortFeaturesOptions","SplitLayerOptions","UnionOptions","UniqueFeaturesOptions"]
-examples: ["buffer","check-geometry","clip-erase","data-engineering","dissolve","divide","duckdb-overlay","duckdb-spatial-aggregate-join","explode","filter-features","innerlines","merge-layers","merge-selected","mosaic","project","rebuild-topology","rename-layer","simplify","simplify-control","snap-layer","split-layer","union"]
+api: ["AffineLayerOptions","ApplyExpressionOptions","BufferOptions","CheckGeometryOptions","CleanOptions","ClipEraseOptions","DataFillOptions","DissolveOptions","DivideOptions","DragSessionOptions","DropLayerOptions","Emap","ExplodeOptions","ExportSnapshotOptions","ExpressionEvaluationPolicy","FeatureAffineSession","FeatureRef","FeatureTranslateSession","FilterFieldsOptions","FilterGeomOptions","FilterIslandsOptions","FilterOptions","FilterSliversOptions","GeometryCheckReport","HighlightFeatureRef","HighlightStyle","InnerlinesOptions","IntersectionPointsLayerOptions","JoinTableData","JoinTableOptions","LinesOptions","LoadSnapshotOptions","MapOptions","MergeLayersOptions","MosaicOptions","PointsMode","PointsOptions","PolygonsOptions","ProjectLayerExport","ProjectLayerOutputOptions","ProjectOptions","QueriedFeature","QueryFeaturesOptions","RebuildTopologyOptions","RenameFieldsOptions","RenameLayerOptions","SimplifyMethod","SimplifyOptions","SnapOptions","SortFeaturesOptions","SplitCutter","SplitFeatureOptions","SplitLayerOptions","SplitSelectedOptions","SplitSelectedResult","UnionOptions","UniqueFeaturesOptions"]
+examples: ["buffer","check-geometry","clip-erase","data-engineering","dissolve","divide","duckdb-overlay","duckdb-spatial-aggregate-join","explode","filter-features","innerlines","merge-layers","merge-selected","mosaic","project","rebuild-topology","rename-layer","simplify","simplify-control","snap-layer","split-features","split-layer","union"]
 stability: stable
 verifiedVersion: 0.5.0
 ---
@@ -119,6 +119,29 @@ await map.ops.filterFields({
 
 Operations containing expressions, `where`, or `calc` are controlled by the
 expression policy.
+
+## Split selected features
+
+Use `map.select()` to choose line or polygon features from one source and layer,
+then provide a coordinate cutter:
+
+```ts
+map.select([{ source: 'main', layer: 'roads', id: 4 }]);
+const result = await map.ops.splitSelected({
+  cutter: { type: 'point', coordinates: [121.5, 31.2] },
+});
+
+map.splitFeature.setOptions({ cutterType: 'polyline' });
+map.splitFeature.enable();
+```
+
+A point cutter must lie in the interior of a line. A polyline cutter splits
+lines and polygons; finish a polygon cutter with the right mouse button.
+The selection must belong to one source and layer. On success, the largest
+area or length result keeps the original feature ID and the other pieces are
+appended as new features; every result duplicates the original attributes. The
+selection is replaced by the final split results, and the complete split is one
+atomic history entry that one undo restores.
 
 ## Operation effects
 
