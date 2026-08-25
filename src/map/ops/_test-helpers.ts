@@ -4,7 +4,7 @@
 // coupling. Extracted so multiple op test files can stay in sync when
 // the host contract grows new fields.
 
-import { OK } from '../op-result';
+import { OK, type OpResult } from '../op-result';
 import type { OpContext } from './_context';
 import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
 import type { MapshaperLayer, MapshaperDataset } from '../../types/mapshaper-types';
@@ -66,7 +66,7 @@ export function makeStubCtx(layers: StubLayerSpec[] = [{ name: 'parks' }]): Stub
       return Promise.resolve(OK);
     },
     runPreparedDatasetCommandParsed: () => Promise.resolve(OK),
-    runPreparedDatasetMutation: () => Promise.resolve(OK),
+    runPreparedDatasetMutation: <T>() => Promise.resolve(OK as OpResult<T>),
   };
   return { ctx, calls };
 }

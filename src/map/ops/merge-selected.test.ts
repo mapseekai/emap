@@ -286,6 +286,7 @@ async function runRealMerge(
       current = await adapter.runOnDatasetParsed(commands, working);
       return OK;
     },
+    runPreparedDatasetMutation: async () => OK,
   };
 
   const result = await mergeSelected(ctx, {

@@ -262,7 +262,6 @@ export function _runPreparedDatasetMutation<T>(
     if (!original) return Err.notFound('source', sourceId);
 
     const originalEditVersion = original.editVersion ?? 0;
-    const beforeSelection = host._selection.snapshot();
     let outcome: PreparedDatasetMutationResult<T> | OpResult<T>;
     try {
       const working = getDefaultMapshaperAdapter().copyDataset(original);
@@ -279,6 +278,7 @@ export function _runPreparedDatasetMutation<T>(
         return Err.staleOperation(sourceId, typeof label === 'string' ? label : 'prepared dataset mutation');
       }
 
+      const beforeSelection = host._selection.snapshot();
       const resolvedLabel = typeof label === 'function' ? label(outcome.value) : label;
       commitDatasetReplaceSelection(
         host,

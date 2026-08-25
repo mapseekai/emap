@@ -109,6 +109,80 @@ describe('prepared dataset mutation runner', () => {
       copyDataset.mockRestore();
     }
   });
+
+  it('undoes each cross-source commit to the selection that preceded it', async () => {
+    const originalA = {
+      layers: [{ name: 'a', geometry_type: 'polygon', shapes: [null] }],
+    } as MapshaperDataset;
+    const originalB = {
+      layers: [{ name: 'b', geometry_type: 'polygon', shapes: [null] }],
+    } as MapshaperDataset;
+    const sourceA = {
+      getDataset: vi.fn(() => originalA),
+      setDataset: vi.fn(),
+      fire: vi.fn(),
+    };
+    const sourceB = {
+      getDataset: vi.fn(() => originalB),
+      setDataset: vi.fn(),
+      fire: vi.fn(),
+    };
+    const selection = new Selection();
+    const initialRefs = [{ source: 'a', layer: 'roads', id: 9 }];
+    const bRefs = [{ source: 'b', layer: 'roads', id: 1 }];
+    const aRefs = [{ source: 'a', layer: 'roads', id: 2 }];
+    selection.apply(initialRefs, 'replace');
+    const history = { push: vi.fn(), isCapturing: () => false };
+    const host = {
+      _activeTransaction: null,
+      _removed: false,
+      _sources: new Map([
+        ['a', sourceA],
+        ['b', sourceB],
+      ]),
+      _history: history,
+      _selection: selection,
+      _invalidateShapeCachesForSources: vi.fn(),
+      _scheduleRender: vi.fn(),
+      _fireHistoryChange: vi.fn(),
+      _fireSelectionChange: vi.fn(),
+      fire: vi.fn(),
+    };
+    const adapter = getDefaultMapshaperAdapter();
+    const copyDataset = vi.spyOn(adapter, 'copyDataset').mockImplementation((dataset) => ({
+      ...dataset,
+      layers: [...dataset.layers],
+    }));
+    const aStarted = Promise.withResolvers<void>();
+    const aResult = Promise.withResolvers<{
+      value: { count: number };
+      selection: typeof aRefs;
+    }>();
+
+    try {
+      const pendingA = _runPreparedDatasetMutation(host as never, 'a', 'split A', () => {
+        aStarted.resolve();
+        return aResult.promise;
+      });
+      await aStarted.promise;
+
+      await _runPreparedDatasetMutation(host as never, 'b', 'split B', () => ({
+        value: { count: 1 },
+        selection: bRefs,
+      }));
+      aResult.resolve({ value: { count: 1 }, selection: aRefs });
+      await pendingA;
+
+      const [commitB, commitA] = history.push.mock.calls.map(([command]) => command);
+      expect(selection.getAll()).toEqual(aRefs);
+      (commitA as DatasetReplaceSelectionCommand).undo();
+      expect(selection.getAll()).toEqual(bRefs);
+      (commitB as DatasetReplaceSelectionCommand).undo();
+      expect(selection.getAll()).toEqual(initialRefs);
+    } finally {
+      copyDataset.mockRestore();
+    }
+  });
 });
 
 describe('prepared parsed-command runner', () => {
