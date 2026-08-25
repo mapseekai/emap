@@ -109,6 +109,32 @@ describe('MapshaperOps.splitSelected integration', () => {
     expect(source.getDataset().layers[0]!.data!.getRecords!().map((record) => record.id)).toEqual(['first', 'unhit', 'last', 'first']);
   });
 
+  it('preserves layers without an attribute table and exports only the target layer after cleanup', async () => {
+    const dataset = await importDataset([line([[0, 0], [10, 0]])]);
+    dataset.layers[0]!.name = 'split-selected';
+    dataset.layers[0]!.data = undefined;
+    const { ops, source } = harness(dataset, [0]);
+
+    await expect(ops.splitSelected({ cutter: { type: 'point', coordinates: [5, 0] } })).resolves.toMatchObject({ ok: true });
+    const split = source.getDataset();
+    expect(split.layers).toHaveLength(1);
+    expect(split.layers[0]!.data).toBeUndefined();
+    const output = getDefaultMapshaperAdapter().exportFileContent(split, { format: 'geojson' });
+    expect(output).toHaveLength(1);
+  });
+
+  it('rejects malformed cutters and point polygon cutters before a history mutation', async () => {
+    const dataset = await importDataset([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
+    dataset.layers[0]!.name = 'split-selected';
+    const { ops, source, history, events } = harness(dataset, [0]);
+    const invalid = { cutter: { type: 'polyline', coordinates: [[0, 0], [0, 0]] } } as unknown as Parameters<MapshaperOps['splitSelected']>[0];
+    await expect(ops.splitSelected(invalid)).resolves.toMatchObject({ ok: false, error: { kind: 'validation', field: 'cutter' } });
+    await expect(ops.splitSelected({ cutter: { type: 'point', coordinates: [5, 5] } })).resolves.toMatchObject({ ok: false, error: { kind: 'validation', field: 'cutter' } });
+    expect(source.getDataset()).toBe(dataset);
+    expect(history.entries).toHaveLength(0);
+    expect(events.selection).not.toHaveBeenCalled();
+  });
+
   it('splits a real polygon through the facade and rejects no-effective cuts atomically', async () => {
     const dataset = await importDataset([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]], { name: 'parcel' })]);
     dataset.layers[0]!.name = 'split-selected';
