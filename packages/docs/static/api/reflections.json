@@ -74523,9 +74523,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/split-feature.ts",
-									"line": 59,
+									"line": 60,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L59"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L60"
 								}
 							],
 							"signatures": [
@@ -74538,9 +74538,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/split-feature.ts",
-											"line": 59,
+											"line": 60,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L59"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L60"
 										}
 									],
 									"parameters": [
@@ -74632,9 +74632,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/split-feature.ts",
-									"line": 53,
+									"line": 54,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L53"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L54"
 								}
 							],
 							"type": {
@@ -74655,9 +74655,9 @@
 											"sources": [
 												{
 													"fileName": "src/core/handlers/split-feature.ts",
-													"line": 53,
+													"line": 54,
 													"character": 15,
-													"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L53"
+													"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L54"
 												}
 											],
 											"signatures": [
@@ -74670,9 +74670,9 @@
 													"sources": [
 														{
 															"fileName": "src/core/handlers/split-feature.ts",
-															"line": 53,
+															"line": 54,
 															"character": 15,
-															"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L53"
+															"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L54"
 														}
 													],
 													"type": {
@@ -74713,9 +74713,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/split-feature.ts",
-									"line": 42,
+									"line": 43,
 									"character": 11,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L42"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L43"
 								}
 							],
 							"type": {
@@ -74746,9 +74746,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/split-feature.ts",
-									"line": 84,
+									"line": 85,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L84"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L85"
 								}
 							],
 							"signatures": [
@@ -74769,9 +74769,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/split-feature.ts",
-											"line": 84,
+											"line": 85,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L84"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L85"
 										}
 									],
 									"type": {
@@ -74808,9 +74808,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/split-feature.ts",
-									"line": 69,
+									"line": 70,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L69"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L70"
 								}
 							],
 							"signatures": [
@@ -74831,9 +74831,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/split-feature.ts",
-											"line": 69,
+											"line": 70,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L69"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L70"
 										}
 									],
 									"type": {
@@ -74862,9 +74862,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/split-feature.ts",
-									"line": 114,
+									"line": 115,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L114"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L115"
 								}
 							],
 							"signatures": [
@@ -74917,9 +74917,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/split-feature.ts",
-											"line": 114,
+											"line": 115,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L114"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L115"
 										}
 									],
 									"type": {
@@ -74965,9 +74965,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/split-feature.ts",
-									"line": 110,
+									"line": 111,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L110"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L111"
 								}
 							],
 							"signatures": [
@@ -74988,9 +74988,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/split-feature.ts",
-											"line": 110,
+											"line": 111,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L110"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L111"
 										}
 									],
 									"type": {
@@ -75033,9 +75033,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/split-feature.ts",
-									"line": 118,
+									"line": 119,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L118"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L119"
 								}
 							],
 							"signatures": [
@@ -75056,9 +75056,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/split-feature.ts",
-											"line": 118,
+											"line": 119,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L118"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L119"
 										}
 									],
 									"parameters": [
@@ -75120,9 +75120,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/split-feature.ts",
-									"line": 97,
+									"line": 98,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L97"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L98"
 								}
 							],
 							"signatures": [
@@ -75143,9 +75143,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/split-feature.ts",
-											"line": 97,
+											"line": 98,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L97"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L98"
 										}
 									],
 									"type": {
@@ -75182,9 +75182,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/split-feature.ts",
-									"line": 101,
+									"line": 102,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L101"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L102"
 								}
 							],
 							"signatures": [
@@ -75205,9 +75205,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/split-feature.ts",
-											"line": 101,
+											"line": 102,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L101"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L102"
 										}
 									],
 									"parameters": [
@@ -75293,9 +75293,9 @@
 					"sources": [
 						{
 							"fileName": "src/core/handlers/split-feature.ts",
-							"line": 41,
+							"line": 42,
 							"character": 13,
-							"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L41"
+							"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/split-feature.ts#L42"
 						}
 					],
 					"implementedTypes": [
