@@ -80,17 +80,12 @@ function directionsAtPartVertices(shape: PathShape, arcs: NonNullable<MapshaperD
   return matches;
 }
 function transverseAtVertex(targetDirections: Coordinate[], cutterDirections: Coordinate[]): boolean {
-  if (targetDirections.length < 2 || cutterDirections.length < 2) return false;
-  return targetDirections.some((target) => {
-    let positive = false;
-    let negative = false;
-    for (const cutter of cutterDirections) {
-      const cross = target[0] * cutter[1] - target[1] * cutter[0];
-      positive ||= cross > 0;
-      negative ||= cross < 0;
-    }
-    return positive && negative;
-  });
+  if (targetDirections.length !== 2 || cutterDirections.length !== 2) return false;
+  const rays = [
+    ...targetDirections.map((direction) => ({ owner: 'target', angle: Math.atan2(direction[1], direction[0]) })),
+    ...cutterDirections.map((direction) => ({ owner: 'cutter', angle: Math.atan2(direction[1], direction[0]) })),
+  ].sort((a, b) => a.angle - b.angle);
+  return rays.every((ray, index) => ray.owner !== rays[(index + 1) % rays.length]!.owner);
 }
 function properLineCutCoordinates(shape: PathShape, arcs: NonNullable<MapshaperDataset['arcs']>, coordinates: readonly Coordinate[], adapter: MapshaperAdapter): Set<string> {
   const proper = new Set<string>();
@@ -168,8 +163,12 @@ export function splitSelectedPolylines(dataset: MapshaperDataset, layerIndex: nu
     return { pieces, pointOnSelectedPath };
   }
   if (cutter.coordinates.length < 2) throw new SplitGeometryValidationError('cutter', 'Line cutter needs at least two coordinates');
-  const properCutsByFeature = new Map<number, Set<string>>();
-  for (const featureId of selectedIds) { const shape = layer.shapes[featureId] as PathShape | null; if (shape) properCutsByFeature.set(featureId, properLineCutCoordinates(shape, arcs, cutter.coordinates, adapter)); }
+  const properCutsByFeature = new Map<number, Map<number, Set<string>>>();
+  for (const featureId of selectedIds) {
+    const shape = layer.shapes[featureId] as PathShape | null;
+    if (!shape) continue;
+    properCutsByFeature.set(featureId, new Map(shape.map((part, partIndex) => [partIndex, properLineCutCoordinates([part], arcs, cutter.coordinates, adapter)])));
+  }
   const cutterArcId = arcs.size();
   adapter.appendEmptyArc(arcs);
   for (const coordinate of cutter.coordinates) adapter.appendVertex(arcs, [coordinate[0], coordinate[1]]);
@@ -179,10 +178,15 @@ export function splitSelectedPolylines(dataset: MapshaperDataset, layerIndex: nu
   const cutCoordinates = cutterEndpointKeys(cutterLayer.shapes![0] as PathShape, arcs), pieces: SplitPieces[] = [];
   for (const featureId of selectedIds) {
     const shape = layer.shapes[featureId] as PathShape | null;
-    const properCuts = properCutsByFeature.get(featureId);
-    if (!shape || !properCuts?.size) continue;
-    const partitioned = partitionShape(shape, new Set([...cutCoordinates].filter((key) => properCuts.has(key))), arcs, adapter);
-    if (partitioned.length >= 2) pieces.push({ featureId, pieces: partitioned });
+    const cutsByPart = properCutsByFeature.get(featureId);
+    if (!shape || !cutsByPart) continue;
+    const partitioned = shape.flatMap((part, partIndex) => {
+      const properCuts = cutsByPart.get(partIndex);
+      return properCuts?.size
+        ? partitionShape([part], new Set([...cutCoordinates].filter((key) => properCuts.has(key))), arcs, adapter)
+        : [[...part] as number[]].map((unchanged) => [unchanged]);
+    });
+    if ([...cutsByPart.values()].some((cuts) => cuts.size) && partitioned.length >= 2) pieces.push({ featureId, pieces: partitioned });
   }
   return { pieces, pointOnSelectedPath: false };
 }

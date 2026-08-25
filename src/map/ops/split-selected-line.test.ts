@@ -195,4 +195,17 @@ describe('splitSelectedPolylines', () => {
     replaceFixtureShapeWithPieces(dataset.layers[0]!, result.pieces[0]!.pieces);
     expect(exportLineCoordinates(dataset)).toEqual([[[10, 0], [5, 0]], [[5, 0], [0, 0]]]);
   });
+  it('ignores a same-side target V touch against a straight cutter', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([[[4, 1], [5, 0], [6, 1]]]);
+
+    expect(splitSelectedPolylines(dataset, 0, new Set([0]), { type: 'line', coordinates: [[4, 0], [6, 0]] }, adapter).pieces).toEqual([]);
+  });
+
+  it('splits alternating V/V rays at an internal vertex crossing', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([[[4, 1], [5, 0], [6, -1]]]);
+
+    expect(splitSelectedPolylines(dataset, 0, new Set([0]), { type: 'line', coordinates: [[4, -1], [5, 0], [6, 1]] }, adapter).pieces[0]!.pieces).toHaveLength(2);
+  });
 });
