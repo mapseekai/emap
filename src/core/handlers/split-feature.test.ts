@@ -141,6 +141,79 @@ describe('SplitFeatureHandler', () => {
     expect(handler.isEnabled()).toBe(true);
   });
 
+  it('cancels a snapped point sketch when the selection changes before click', () => {
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    handler.handlePointer(event('move', 5, 2));
+    const selectionChange = map.on.mock.calls.find(([name]) => name === 'selectionchange')?.[1];
+    expect(selectionChange).toBeTypeOf('function');
+    if (typeof selectionChange === 'function') selectionChange({});
+    handler.handlePointer(event('click', 5, 2));
+    expect(map.ops.splitSelected).not.toHaveBeenCalled();
+    expect(map.clearEditDrawState).toHaveBeenCalled();
+  });
+
+  it('cancels a polyline sketch when the selection changes after its first vertex', () => {
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    handler.enable();
+    handler.handlePointer(event('click', 1, 1));
+    const selectionChange = map.on.mock.calls.find(([name]) => name === 'selectionchange')?.[1];
+    if (typeof selectionChange === 'function') selectionChange({});
+    handler.handlePointer(event('click', 9, 1));
+    handler.handlePointer(event('contextmenu', 9, 1));
+    expect(map.ops.splitSelected).not.toHaveBeenCalled();
+  });
+
+  it('clears a published snap overlay when the cursor leaves the threshold', () => {
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    handler.handlePointer(event('move', 5, 2));
+    expect(map.setEditDrawState).toHaveBeenCalled();
+    handler.handlePointer(event('move', 50, 50));
+    expect(map.clearEditDrawState).toHaveBeenCalled();
+  });
+
+  it('does not let a pending completion clear a later split sketch', async () => {
+    let resolveSplit: ((result: typeof OK) => void) | undefined;
+    const pending = new Promise<typeof OK>((resolve) => {
+      resolveSplit = resolve;
+    });
+    map.ops.splitSelected.mockImplementationOnce(() => pending);
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    handler.enable();
+    handler.handlePointer(event('click', 1, 1));
+    handler.handlePointer(event('click', 9, 1));
+    handler.handlePointer(event('contextmenu', 9, 1));
+    handler.disable();
+    handler.enable();
+    handler.handlePointer(event('click', 2, 2));
+    const clearCount = map.clearEditDrawState.mock.calls.length;
+    resolveSplit?.(OK);
+    await Promise.resolve();
+    expect(map.clearEditDrawState).toHaveBeenCalledTimes(clearCount);
+  });
+
+  it('does not clear a draw overlay after draw mode takes over a pending split', async () => {
+    let resolveSplit: ((result: typeof OK) => void) | undefined;
+    const pending = new Promise<typeof OK>((resolve) => {
+      resolveSplit = resolve;
+    });
+    map.ops.splitSelected.mockImplementationOnce(() => pending);
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    handler.enable();
+    handler.handlePointer(event('click', 1, 1));
+    handler.handlePointer(event('click', 9, 1));
+    handler.handlePointer(event('contextmenu', 9, 1));
+    const modeChange = map.on.mock.calls.find(([name]) => name === 'editmodechange')?.[1];
+    if (typeof modeChange === 'function') modeChange({ mode: 'draw' });
+    map.setEditDrawState.mockClear();
+    map.clearEditDrawState.mockClear();
+    map.setEditDrawState({ vertices: [[3, 3]], geometryType: 'polyline' });
+    resolveSplit?.(OK);
+    await Promise.resolve();
+    expect(map.clearEditDrawState).not.toHaveBeenCalled();
+  });
+
   it('cancels incomplete polylines on context menu and Escape without dispatching', () => {
     const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
     handler.enable();
