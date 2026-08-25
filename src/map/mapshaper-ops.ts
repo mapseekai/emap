@@ -62,6 +62,8 @@ import type {
   SnapOptions,
   SortFeaturesOptions,
   SplitLayerOptions,
+  SplitSelectedOptions,
+  SplitSelectedResult,
   UniqueFeaturesOptions,
   UnionOptions,
 } from './types';
@@ -99,6 +101,7 @@ import { filterSlivers } from './ops/filter-slivers';
 import { filterGeom } from './ops/filter-geom';
 import { affineLayer } from './ops/affine';
 import { dataFill } from './ops/data-fill';
+import { splitSelected } from './ops/split-selected';
 
 /**
  * Mapshaper command manager. Owned by Emap and exposed as `emap.ops`.
@@ -257,5 +260,8 @@ export class MapshaperOps {
 
   mergeSelected(options?: MergeSelectedOptions): Promise<OpResult> {
     return mergeSelected(this._ctx, options);
+  }
+  splitSelected(options: SplitSelectedOptions): Promise<OpResult<SplitSelectedResult>> {
+    return splitSelected(this._ctx, options);
   }
 }

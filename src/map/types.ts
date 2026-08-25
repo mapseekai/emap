@@ -35,10 +35,10 @@ export interface RenderRequest {
   navDelta?: AffineDelta;
 }
 
-/** Geometry supplied to selected-polyline split operations. */
+/** Geometry used to split the currently selected path features. */
 export type SplitCutter =
-  | { type: 'point'; coordinates: readonly [number, number] }
-  | { type: 'line'; coordinates: readonly (readonly [number, number])[] };
+  | { type: 'point'; coordinates: [number, number] }
+  | { type: 'polyline'; coordinates: Array<[number, number]> };
 
 export interface MapOptions {
   container: string | HTMLElement;
@@ -208,6 +208,16 @@ export interface FeatureRef {
   id: number;
   source: string;
   layer: string;
+}
+
+export interface SplitSelectedOptions {
+  cutter: SplitCutter;
+}
+
+/** Result of a successful selected-feature split. */
+export interface SplitSelectedResult {
+  splitTargetCount: number;
+  resultFeatures: FeatureRef[];
 }
 
 /** Options controlling a same-layer selected-feature merge. */

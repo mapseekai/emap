@@ -171,7 +171,7 @@ export function splitSelectedPolygons(
   dataset: MapshaperDataset,
   layerIndex: number,
   selectedIds: ReadonlySet<number>,
-  cutter: Extract<SplitCutter, { type: 'line' }>,
+  cutter: Extract<SplitCutter, { type: 'polyline' }>,
   adapter: MapshaperAdapter,
 ): SplitPieces[] {
   const arcs = dataset.arcs;

@@ -55,7 +55,7 @@ async function expectConserved(dataset: MapshaperDataset, original: PathShape, p
 }
 
 function split(dataset: MapshaperDataset, selectedIds: ReadonlySet<number>, coordinates: Position[]) {
-  return splitSelectedPolygons(dataset, 0, selectedIds, { type: 'line', coordinates }, adapter);
+  return splitSelectedPolygons(dataset, 0, selectedIds, { type: 'polyline', coordinates }, adapter);
 }
 
 describe('splitSelectedPolygons', () => {
