@@ -154,6 +154,21 @@ describe('splitSelectedPolygons', () => {
     expect(split(dataset, new Set([0]), [[-1, 0], [0, 0], [-1, 1], [-1, 5], [5, 5]])).toEqual([]);
   });
 
+  it('rejects a nested negative hole before no-op cutter mutation', async () => {
+    const dataset = await importPolygons([polygon([[[0, 0], [20, 0], [20, 20], [0, 20], [0, 0]], [[2, 2], [18, 2], [18, 18], [2, 18], [2, 2]], [[5, 5], [15, 5], [15, 15], [5, 15], [5, 5]]])]);
+    const arcCount = dataset.arcs!.size();
+    expect(() => split(dataset, new Set([0]), [[6, 6], [7, 7]])).toThrow(new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid'));
+    expect(dataset.arcs!.size()).toBe(arcCount);
+  });
+
+  it('accepts a positive island inside a hole', async () => {
+    const dataset = await importPolygons([{ type: 'MultiPolygon', coordinates: [
+      [[[0, 0], [20, 0], [20, 20], [0, 20], [0, 0]], [[2, 2], [2, 18], [18, 18], [18, 2], [2, 2]]],
+      [[[6, 6], [14, 6], [14, 14], [6, 14], [6, 6]]],
+    ] }]);
+    expect(split(dataset, new Set([0]), [[-1, 10], [21, 10]])[0]!.pieces.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('rejects a self-intersecting selected polygon', async () => {
     const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
     const data = dataset.arcs!.getVertexData!(), start = data.ii[0]!;

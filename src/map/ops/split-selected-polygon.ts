@@ -84,13 +84,17 @@ function validatePolygon(shape: PathShape, arcs: NonNullable<MapshaperDataset['a
     }
   }
   const pathData = adapter.exportPathData(shape, arcs, 'polygon').pathData;
-  const shellIndexes = pathData.flatMap((path, index) => (path.area ?? 0) > 0 ? [index] : []);
-  if (!shellIndexes.length) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
+  const anchors = shape.map((part) => adapter.getShapeAnchor([part], arcs));
+  if (anchors.some((anchor) => anchor === null)) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
+  const parents = shape.map((_, index) => {
+    const anchor = anchors[index]!;
+    const candidates = shape.flatMap((ring, candidate) => candidate !== index && Math.abs(pathData[candidate]?.area ?? 0) > Math.abs(pathData[index]?.area ?? 0) && adapter.testPointInRing(anchor[0], anchor[1], ring, arcs) !== 0 ? [candidate] : []);
+    return candidates.sort((left, right) => Math.abs(pathData[left]?.area ?? 0) - Math.abs(pathData[right]?.area ?? 0))[0] ?? null;
+  });
+  const depth = (index: number): number => parents[index] === null ? 0 : depth(parents[index]!) + 1;
   for (let index = 0; index < shape.length; index++) {
-    const anchor = adapter.getShapeAnchor([shape[index]!], arcs);
-    if (!anchor) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
-    const containingShells = shellIndexes.filter((shellIndex) => adapter.testPointInRing(anchor[0], anchor[1], shape[shellIndex]!, arcs) !== 0);
-    if (containingShells.length !== 1) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
+    const area = pathData[index]?.area ?? 0;
+    if (area === 0 || ((depth(index) % 2 === 0) !== (area > 0))) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
   }
   if (!(adapter.getShapeArea(shape, arcs) > 0)) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
 }
