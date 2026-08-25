@@ -163,4 +163,36 @@ describe('splitSelectedPolylines', () => {
 
     expect(result.pieces[0]!.pieces).toHaveLength(2);
   });
+  it.each([
+    ['internal cutter touch', [[5, 1], [5, 0], [6, 1]]],
+    ['internal target touch', [[4, 1], [5, 0], [6, 1]]],
+  ] as const)('ignores an %s without splitting', async (_name, coordinates) => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([[[0, 0], [10, 0]]]);
+
+    expect(splitSelectedPolylines(dataset, 0, new Set([0]), { type: 'line', coordinates }, adapter).pieces).toEqual([]);
+  });
+
+  it('partitions a mixed cutter only at its proper crossing', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([[[0, 0], [10, 0]]]);
+
+    const result = splitSelectedPolylines(dataset, 0, new Set([0]), {
+      type: 'line', coordinates: [[2, -1], [2, 1], [8, 1], [8, 0], [9, 1]],
+    }, adapter);
+
+    expect(result.pieces[0]!.pieces).toHaveLength(2);
+  });
+
+  it('preserves reversed path orientation when splitting a point', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([[[0, 0], [10, 0]]]);
+    const shape = dataset.layers[0]!.shapes![0] as PathShape;
+    shape[0]![0] = ~shape[0]![0]!;
+
+    const result = splitSelectedPolylines(dataset, 0, new Set([0]), { type: 'point', coordinates: [5, 0] }, adapter);
+
+    replaceFixtureShapeWithPieces(dataset.layers[0]!, result.pieces[0]!.pieces);
+    expect(exportLineCoordinates(dataset)).toEqual([[[10, 0], [5, 0]], [[5, 0], [0, 0]]]);
+  });
 });

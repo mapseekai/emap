@@ -63,10 +63,37 @@ function collectPointCutPoints(shape: PathShape, arcs: NonNullable<MapshaperData
   });
   return cutPoints;
 }
+function directionsAtPartVertices(shape: PathShape, arcs: NonNullable<MapshaperDataset['arcs']>, key: string): Coordinate[][] {
+  const matches: Coordinate[][] = [];
+  for (const part of shape) {
+    const iterator = arcs.getShapeIter!(part);
+    const points: [number, number][] = [];
+    while (iterator.hasNext()) points.push([iterator.x, iterator.y]);
+    for (let index = 0; index < points.length; index += 1) {
+      if (coordinateKey(points[index]!) !== key) continue;
+      const directions: Coordinate[] = [];
+      if (index > 0) directions.push([points[index - 1]![0] - points[index]![0], points[index - 1]![1] - points[index]![1]]);
+      if (index + 1 < points.length) directions.push([points[index + 1]![0] - points[index]![0], points[index + 1]![1] - points[index]![1]]);
+      matches.push(directions);
+    }
+  }
+  return matches;
+}
+function transverseAtVertex(targetDirections: Coordinate[], cutterDirections: Coordinate[]): boolean {
+  if (targetDirections.length < 2 || cutterDirections.length < 2) return false;
+  return targetDirections.some((target) => {
+    let positive = false;
+    let negative = false;
+    for (const cutter of cutterDirections) {
+      const cross = target[0] * cutter[1] - target[1] * cutter[0];
+      positive ||= cross > 0;
+      negative ||= cross < 0;
+    }
+    return positive && negative;
+  });
+}
 function properLineCutCoordinates(shape: PathShape, arcs: NonNullable<MapshaperDataset['arcs']>, coordinates: readonly Coordinate[], adapter: MapshaperAdapter): Set<string> {
   const proper = new Set<string>();
-  const shapeEndpoints = pathEndpoints(shape, arcs);
-  const cutterInternalVertices = new Set(coordinates.slice(1, -1).map(coordinateKey));
   adapter.forEachSegmentInShape(shape, arcs, (i, j, xx, yy) => {
     const a: [number, number] = [xx[i]!, yy[i]!], b: [number, number] = [xx[j]!, yy[j]!];
     for (let n = 1; n < coordinates.length; n += 1) {
@@ -77,9 +104,25 @@ function properLineCutCoordinates(shape: PathShape, arcs: NonNullable<MapshaperD
       const acx = c[0] - a[0], acy = c[1] - a[1];
       const targetT = (acx * sy - acy * sx) / denominator, cutterT = (acx * ry - acy * rx) / denominator;
       if (targetT < -INTERSECTION_EPSILON || targetT > 1 + INTERSECTION_EPSILON || cutterT < -INTERSECTION_EPSILON || cutterT > 1 + INTERSECTION_EPSILON) continue;
-      const targetInternal = targetT > INTERSECTION_EPSILON && targetT < 1 - INTERSECTION_EPSILON || !shapeEndpoints.has(coordinateKey(targetT <= INTERSECTION_EPSILON ? a : b));
-      const cutterInternal = cutterT > INTERSECTION_EPSILON && cutterT < 1 - INTERSECTION_EPSILON || cutterInternalVertices.has(coordinateKey(cutterT <= INTERSECTION_EPSILON ? c : d));
-      if (targetInternal && cutterInternal) proper.add(coordinateKey([a[0] + targetT * rx, a[1] + targetT * ry]));
+      const intersection: [number, number] = [a[0] + targetT * rx, a[1] + targetT * ry];
+      const targetInterior = targetT > INTERSECTION_EPSILON && targetT < 1 - INTERSECTION_EPSILON;
+      const cutterInterior = cutterT > INTERSECTION_EPSILON && cutterT < 1 - INTERSECTION_EPSILON;
+      if (targetInterior && cutterInterior) { proper.add(coordinateKey(intersection)); continue; }
+      const key = coordinateKey(intersection);
+      const cutterDirections: Coordinate[] = cutterInterior
+        ? [[c[0] - intersection[0], c[1] - intersection[1]], [d[0] - intersection[0], d[1] - intersection[1]]]
+        : [];
+      if (!cutterInterior) {
+        for (let index = 0; index < coordinates.length; index += 1) {
+          if (coordinateKey(coordinates[index]!) !== key) continue;
+          if (index > 0) cutterDirections.push([coordinates[index - 1]![0] - coordinates[index]![0], coordinates[index - 1]![1] - coordinates[index]![1]]);
+          if (index + 1 < coordinates.length) cutterDirections.push([coordinates[index + 1]![0] - coordinates[index]![0], coordinates[index + 1]![1] - coordinates[index]![1]]);
+        }
+      }
+      const targetDirectionGroups: Coordinate[][] = [];
+      if (targetInterior) targetDirectionGroups.push([[a[0] - intersection[0], a[1] - intersection[1]], [b[0] - intersection[0], b[1] - intersection[1]]]);
+      else targetDirectionGroups.push(...directionsAtPartVertices(shape, arcs, key));
+      if (targetDirectionGroups.some((directions) => transverseAtVertex(directions, cutterDirections))) proper.add(key);
     }
   });
   return proper;
@@ -136,8 +179,9 @@ export function splitSelectedPolylines(dataset: MapshaperDataset, layerIndex: nu
   const cutCoordinates = cutterEndpointKeys(cutterLayer.shapes![0] as PathShape, arcs), pieces: SplitPieces[] = [];
   for (const featureId of selectedIds) {
     const shape = layer.shapes[featureId] as PathShape | null;
-    if (!shape || !properCutsByFeature.get(featureId)?.size) continue;
-    const partitioned = partitionShape(shape, cutCoordinates, arcs, adapter);
+    const properCuts = properCutsByFeature.get(featureId);
+    if (!shape || !properCuts?.size) continue;
+    const partitioned = partitionShape(shape, new Set([...cutCoordinates].filter((key) => properCuts.has(key))), arcs, adapter);
     if (partitioned.length >= 2) pieces.push({ featureId, pieces: partitioned });
   }
   return { pieces, pointOnSelectedPath: false };
