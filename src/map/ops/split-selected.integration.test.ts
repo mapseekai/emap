@@ -135,6 +135,27 @@ describe('MapshaperOps.splitSelected integration', () => {
     expect(events.selection).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['invalid-only', [0], (dataset: MapshaperDataset) => { dataset.layers[0]!.shapes![0] = [[999]]; }],
+    ['mixed-valid-invalid', [0, 1], (dataset: MapshaperDataset) => { dataset.layers[0]!.shapes![1] = [[999]]; }],
+  ] as const)('rejects %s polyline geometry atomically', async (_name, selected, corrupt) => {
+    const dataset = await importDataset([
+      line([[0, 0], [10, 0]]),
+      line([[0, 10], [10, 10]]),
+    ]);
+    dataset.layers[0]!.name = 'split-selected';
+    corrupt(dataset);
+    const { ops, source, history, events, selection } = harness(dataset, selected);
+
+    await expect(ops.splitSelected({ cutter: { type: 'point', coordinates: [5, 0] } })).resolves.toMatchObject({
+      ok: false,
+      error: { kind: 'validation', field: 'geometry', reason: 'selected polyline geometry is invalid' },
+    });
+    expect(source.getDataset()).toBe(dataset);
+    expect(history.entries).toHaveLength(0);
+    expect(events.selection).not.toHaveBeenCalled();
+    expect(selection.getAll()).toHaveLength(selected.length);
+  });
   it('splits a real polygon through the facade and rejects no-effective cuts atomically', async () => {
     const dataset = await importDataset([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]], { name: 'parcel' })]);
     dataset.layers[0]!.name = 'split-selected';
