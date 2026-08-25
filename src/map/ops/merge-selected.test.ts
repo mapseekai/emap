@@ -56,6 +56,7 @@ function createFixture(
       preparedCall = { sourceId, commands, label, prepare };
       return OK;
     },
+    runPreparedDatasetMutation: async () => OK,
   };
 
   return {

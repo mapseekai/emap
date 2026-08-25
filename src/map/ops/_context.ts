@@ -11,6 +11,7 @@ import type { EmapHostInternal } from '../emap-host';
 import type { OpResult } from '../op-result';
 import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
+import type { FeatureRef } from '../types';
 
 /**
  * Run a CLI-style mapshaper command against a source's dataset, snapshotting
@@ -50,6 +51,20 @@ export type RunPreparedDatasetCommandParsed = (
   inputFiles?: Record<string, Uint8Array | string>,
 ) => Promise<OpResult>;
 
+export interface PreparedDatasetMutationResult<T> {
+  value: T;
+  selection: FeatureRef[];
+}
+
+export type RunPreparedDatasetMutation = <T>(
+  sourceId: string,
+  label: string | ((value: T) => string),
+  mutate: (
+    working: MapshaperDataset,
+    original: MapshaperDataset,
+  ) => PreparedDatasetMutationResult<T> | OpResult<T> | Promise<PreparedDatasetMutationResult<T> | OpResult<T>>,
+) => Promise<OpResult<T>>;
+
 /**
  * Everything an op function needs from the host. Intentionally narrow —
  * adding new fields here is a deliberate signal that the op surface is
@@ -64,4 +79,6 @@ export interface OpContext {
   runDatasetCommandParsed: RunDatasetCommandParsed;
   /** Prepared parsed-command runner; see {@link RunPreparedDatasetCommandParsed}. */
   runPreparedDatasetCommandParsed: RunPreparedDatasetCommandParsed;
+  /** Prepared mutation runner that installs an explicit final selection. */
+  runPreparedDatasetMutation: RunPreparedDatasetMutation;
 }

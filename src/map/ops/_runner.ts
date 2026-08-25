@@ -15,11 +15,12 @@
 // Buffer transfer (PR-12) lives here too via `collectTransferables`.
 
 import { DatasetReplaceCommand } from '../../edit/commands/dataset-replace';
+import { DatasetReplaceSelectionCommand } from '../../edit/commands/dataset-replace-selection';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import type { EmapHostInternal } from '../emap-host';
 import type { MutableTopologySource } from '../../source/source';
 import type { TransactionInternal } from '../../edit/transaction-internal';
-import { Err, OK, type OpResult } from '../op-result';
+import { Err, OK, okValue, type OpResult } from '../op-result';
 import {
   getDefaultMapshaperAdapter,
   resolveMapshaperCrsSignature,
@@ -29,7 +30,9 @@ import {
 import { resolveProjectCrs } from '../../geo/crs-resolver';
 import { parseCommandHeads, shouldUseWorkerForHeads } from '../worker-routing';
 import { collectTransferables } from '../../worker/transferables';
-import type { PrepareDatasetCommand } from './_context';
+import type { PrepareDatasetCommand, PreparedDatasetMutationResult } from './_context';
+import type { FeatureRef } from '../types';
+import type { SelectionSnapshot } from '../selection';
 
 /**
  * What a dataset-replace op CHANGES about the dataset. Drives the
@@ -90,6 +93,7 @@ const COMMAND_EFFECTS: Readonly<Record<string, OpEffect>> = {
   buffer: 'shape-count',
   drop: 'shape-count',
   'intersection-points': 'shape-count',
+  'split-selected': 'shape-count',
   // topology-only: rebuild arcs but feature ids stay
   clean: 'topology-only',
   snap: 'topology-only',
@@ -238,6 +242,66 @@ export function _runPreparedDatasetCommandParsed(
     inputFiles,
     prepare,
   );
+}
+
+export function _runPreparedDatasetMutation<T>(
+  host: EmapHostInternal,
+  sourceId: string,
+  label: string | ((value: T) => string),
+  mutate: (
+    working: MapshaperDataset,
+    original: MapshaperDataset,
+  ) => PreparedDatasetMutationResult<T> | OpResult<T> | Promise<PreparedDatasetMutationResult<T> | OpResult<T>>,
+): Promise<OpResult<T>> {
+  const transaction = host._activeTransaction ?? null;
+  const operation = enqueueSourceOperation(host, sourceId, async () => {
+    if (host._removed) return Err.hostRemoved();
+    const source = host._sources.get(sourceId);
+    if (!source) return Err.notFound('source', sourceId);
+    const original = source.getDataset();
+    if (!original) return Err.notFound('source', sourceId);
+
+    const originalEditVersion = original.editVersion ?? 0;
+    const beforeSelection = host._selection.snapshot();
+    let outcome: PreparedDatasetMutationResult<T> | OpResult<T>;
+    try {
+      const working = getDefaultMapshaperAdapter().copyDataset(original);
+      outcome = await mutate(working, original);
+      if ('ok' in outcome) return outcome;
+      if (host._removed) return Err.hostRemoved();
+      if (
+        host._sources.get(sourceId) !== source ||
+        source.getDataset() !== original ||
+        (original.editVersion ?? 0) !== originalEditVersion ||
+        host._activeTransaction !== transaction ||
+        (transaction !== null && !transaction.isOpen)
+      ) {
+        return Err.staleOperation(sourceId, typeof label === 'string' ? label : 'prepared dataset mutation');
+      }
+
+      const resolvedLabel = typeof label === 'function' ? label(outcome.value) : label;
+      commitDatasetReplaceSelection(
+        host,
+        sourceId,
+        source,
+        original,
+        working,
+        resolvedLabel,
+        beforeSelection,
+        outcome.selection,
+        transaction,
+      );
+      return okValue(outcome.value);
+    } catch (err) {
+      if (host._removed) return Err.hostRemoved();
+      host.fire('error', { error: err });
+      return Err.mapshaper(err, {
+        operation: typeof label === 'string' ? label : 'prepared dataset mutation',
+      });
+    }
+  });
+  transaction?._trackOperation(operation);
+  return operation;
 }
 
 function runDatasetCommand(
@@ -496,4 +560,34 @@ function commitDatasetReplace(
   if (!host._history.isCapturing()) host._fireHistoryChange();
   if (selectionDiff) host._fireSelectionChange(selectionDiff);
   return OK;
+}
+
+function commitDatasetReplaceSelection(
+  host: EmapHostInternal,
+  sourceId: string,
+  source: MutableTopologySource,
+  before: MapshaperDataset,
+  after: MapshaperDataset,
+  label: string,
+  beforeSelection: SelectionSnapshot,
+  afterSelection: FeatureRef[],
+  transaction: TransactionInternal | null,
+): void {
+  transaction?._captureFirstTouch(sourceId, before);
+  const command = new DatasetReplaceSelectionCommand({
+    source,
+    before,
+    after,
+    label,
+    selection: host._selection,
+    beforeSelection,
+    afterSelection,
+    publishSelection: (diff) => host._fireSelectionChange(diff),
+  });
+  command.do();
+  host._history.push(command);
+  host._invalidateShapeCachesForSources([sourceId]);
+  host._scheduleRender();
+  command.publish();
+  if (!host._history.isCapturing()) host._fireHistoryChange();
 }
