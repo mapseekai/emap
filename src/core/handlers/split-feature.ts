@@ -9,11 +9,7 @@ import { EMAP_THEME_COLORS } from '../../theme/colors';
 export type { SplitFeatureOptions } from '../../map/types';
 
 const DEFAULT_SNAP_THRESHOLD = 10;
-const DEFAULT_OPTIONS: SplitFeatureOptions = {
-  cutterType: 'point',
-  snapThreshold: DEFAULT_SNAP_THRESHOLD,
-};
-
+const DEFAULT_OPTIONS: SplitFeatureOptions = { cutterType: 'point', snapThreshold: DEFAULT_SNAP_THRESHOLD };
 type SnapTarget = { coord: [number, number]; kind: SnapKind };
 
 /** Interactive cutter sketch that delegates every geometry mutation to `ops.splitSelected`. */
@@ -25,8 +21,8 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
   private _cursorCoord: [number, number] | null = null;
   private _snapCoord: [number, number] | null = null;
   private _snapKind: SnapKind = null;
-  private _submitting = false;
   private _generation = 0;
+  private _submissionGeneration: number | null = null;
   private _selectionKey: string | null = null;
   private _overlayPublished = false;
   _manager?: { refreshCursor(): void };
@@ -77,9 +73,8 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     if (!this._enabled) return;
     this._generation++;
     this._clearSketch();
-    this._selectionKey = this._isSelectionValid(this._map.getSelection())
-      ? this._selectionKeyFor(this._map.getSelection())
-      : null;
+    const selected = this._map.getSelection();
+    this._selectionKey = this._isSelectionValid(selected) ? this._selectionKeyFor(selected) : null;
   }
 
   getOptions(): Readonly<SplitFeatureOptions> {
@@ -97,16 +92,15 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
       return 'passthrough';
     }
     if (event.kind === 'click') {
-      if (event.button !== 0 || this._submitting) return 'passthrough';
+      if (event.button !== 0 || this._submissionGeneration === this._generation) return 'passthrough';
       this._placeVertex(event.point.x, event.point.y);
       return 'consumed';
     }
     if (event.kind === 'contextmenu') {
       event.originalEvent.preventDefault();
-      if (this._submitting) return 'consumed';
-      if (this._opts.cutterType === 'polyline' && this._vertices.length >= 2) {
-        void this._submit();
-      } else {
+      if (this._submissionGeneration === this._generation) return 'consumed';
+      if (this._opts.cutterType === 'polyline' && this._vertices.length >= 2) void this._submit();
+      else {
         this._clearSketch();
         this._map.render();
       }
@@ -129,9 +123,8 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
   private _onSelectionChange(): void {
     this._generation++;
     this._clearSketch();
-    this._selectionKey = this._isSelectionValid(this._map.getSelection())
-      ? this._selectionKeyFor(this._map.getSelection())
-      : null;
+    const selected = this._map.getSelection();
+    this._selectionKey = this._isSelectionValid(selected) ? this._selectionKeyFor(selected) : null;
     this._map.render();
   }
 
@@ -143,12 +136,11 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
       throw new Error('splitFeature: selection must belong to one source layer');
     }
     const layer = this._map.layers.resolve(first.source, first.layer);
-    if (!layer || !isPathLayer(layer)) {
-      throw new Error('splitFeature: selection must have path geometry');
-    }
+    if (!layer || !isPathLayer(layer)) throw new Error('splitFeature: selection must have path geometry');
     if (this._opts.cutterType === 'point' && layer.geometry_type === 'polygon') {
       throw new Error('splitFeature: point cutter cannot split polygon selection');
     }
+    if (!this._isSelectionValid(selected)) throw new Error('splitFeature: selection has invalid feature geometry');
   }
 
   private _isSelectionValid(selected: readonly FeatureRef[]): boolean {
@@ -156,11 +148,19 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     const first = selected[0];
     if (selected.some((ref) => ref.source !== first.source || ref.layer !== first.layer)) return false;
     const layer = this._map.layers.resolve(first.source, first.layer);
-    return !!layer && isPathLayer(layer) && !(this._opts.cutterType === 'point' && layer.geometry_type === 'polygon');
+    if (!layer || !isPathLayer(layer) || !layer.shapes) return false;
+    if (this._opts.cutterType === 'point' && layer.geometry_type === 'polygon') return false;
+    if (!this._map.getSource(first.source)?.getArcs()) return false;
+    const shapes = layer.shapes;
+    return selected.every(
+      (ref) => Number.isInteger(ref.id) && ref.id >= 0 && ref.id < shapes.length && shapes[ref.id] !== null,
+    );
   }
 
   private _selectionKeyFor(selected: readonly FeatureRef[]): string {
-    return selected.map((ref) => `${ref.source}\u0000${ref.layer}\u0000${ref.id}`).join('\u0001');
+    return [...new Set(selected.map((ref) => `${ref.source}\u0000${ref.layer}\u0000${ref.id}`))]
+      .sort()
+      .join('\u0001');
   }
 
   private _hasCurrentSelection(): boolean {
@@ -183,21 +183,27 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
   }
 
   private _placeVertex(px: number, py: number): void {
-    if (!this._hasCurrentSelection()) return;
+    if (!this._hasCurrentSelection()) {
+      this._clearSketch();
+      this._map.render();
+      return;
+    }
     if (this._opts.cutterType === 'point' && !this._snapCoord) return;
     const coord = this._snapCoord ?? this._map.unproject(px, py);
     this._vertices.push([coord[0], coord[1]]);
-    if (this._opts.cutterType === 'point') {
-      void this._submit();
-      return;
-    }
-    this._refreshOverlay();
+    if (this._opts.cutterType === 'point') void this._submit();
+    else this._refreshOverlay();
   }
 
   private async _submit(): Promise<void> {
-    if (this._submitting || this._vertices.length === 0 || !this._hasCurrentSelection()) return;
-    this._submitting = true;
+    if (this._submissionGeneration === this._generation || this._vertices.length === 0) return;
+    if (!this._hasCurrentSelection()) {
+      this._clearSketch();
+      this._map.render();
+      return;
+    }
     const generation = this._generation;
+    this._submissionGeneration = generation;
     const cutter =
       this._opts.cutterType === 'point'
         ? { type: 'point' as const, coordinates: this._vertices[0] }
@@ -206,7 +212,7 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
       const result = await this._map.ops.splitSelected({ cutter });
       if (generation === this._generation && !result.ok) this._map.fire('error', { error: result.error });
     } finally {
-      this._submitting = false;
+      if (this._submissionGeneration === generation) this._submissionGeneration = null;
       if (generation === this._generation) {
         this._clearSketch();
         this._map.render();
@@ -215,7 +221,7 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
   }
 
   private _onKeyDown(event: KeyboardEvent): void {
-    if (event.key !== 'Escape' || this._submitting) return;
+    if (event.key !== 'Escape' || this._submissionGeneration === this._generation) return;
     this._clearSketch();
     this._map.render();
   }
@@ -284,9 +290,7 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
         const bx = xx[j];
         const by = yy[j];
         if (Math.max(ax, bx) < minX || Math.min(ax, bx) > maxX || Math.max(ay, by) < minY || Math.min(ay, by) > maxY) return;
-        const a = this._map.project(ax, ay);
-        const b = this._map.project(bx, by);
-        const projected = projectPointOnSegment([px, py], a, b);
+        const projected = projectPointOnSegment([px, py], this._map.project(ax, ay), this._map.project(bx, by));
         if (projected.dist >= bestDistance) return;
         bestDistance = projected.dist;
         best = { coord: this._map.unproject(projected.point[0], projected.point[1]), kind: 'edge' };

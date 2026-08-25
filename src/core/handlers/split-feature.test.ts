@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SplitFeatureHandler } from './split-feature';
 import type { NormalizedPointerEvent } from '../handler';
 import type { EditHandlerHost } from './edit-handler-host';
-import { OK, Err } from '../../map/op-result';
+import { OK, Err, type OpResult } from '../../map/op-result';
 
 const selected = { source: 'source', layer: 'lines', id: 0 };
 const modifiers = { shift: false, ctrl: false, alt: false, meta: false };
@@ -21,11 +21,12 @@ function event(
 function createMap(options: { geometry?: 'polyline' | 'polygon'; selection?: typeof selected[] } = {}) {
   const geometry = options.geometry ?? 'polyline';
   const selection = options.selection ?? [selected];
-  const layer = { name: 'lines', geometry_type: geometry, shapes: [[[0]]] };
+  const layer = { name: 'lines', geometry_type: geometry, shapes: [[[0]], [[1]]] };
   const arcs = {
     forEachArcSegment: vi.fn(
       (id: number, callback: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void) => {
         if (id === 0) callback(0, 1, new Float64Array([0, 10]), new Float64Array([0, 0]));
+        if (id === 1) callback(0, 1, new Float64Array([20, 30]), new Float64Array([0, 0]));
       },
     ),
   };
@@ -213,6 +214,83 @@ describe('SplitFeatureHandler', () => {
     await Promise.resolve();
     expect(map.clearEditDrawState).not.toHaveBeenCalled();
   });
+
+  it('keeps a polyline sketch when equivalent selected refs are reordered', async () => {
+    const second = { source: 'source', layer: 'lines', id: 1 };
+    map.getSelection.mockReturnValue([selected, second]);
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    handler.enable();
+    handler.handlePointer(event('click', 1, 1));
+    map.getSelection.mockReturnValue([second, selected]);
+    handler.handlePointer(event('click', 9, 1));
+    handler.handlePointer(event('contextmenu', 9, 1));
+    await vi.waitFor(() => expect(map.ops.splitSelected).toHaveBeenCalledTimes(1));
+  });
+
+  it('cancels a snapped cutter when the current selection contains an invalid ref', () => {
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    handler.handlePointer(event('move', 5, 2));
+    map.getSelection.mockReturnValue([{ ...selected, id: 10 }]);
+    handler.handlePointer(event('click', 5, 2));
+    expect(map.ops.splitSelected).not.toHaveBeenCalled();
+    expect(map.clearEditDrawState).toHaveBeenCalled();
+  });
+
+  it('allows a re-enabled generation to submit before an older request settles', async () => {
+    let resolveOld: ((result: typeof OK) => void) | undefined;
+    let resolveNew: ((result: typeof OK) => void) | undefined;
+    const oldPending = new Promise<typeof OK>((resolve) => {
+      resolveOld = resolve;
+    });
+    const newPending = new Promise<typeof OK>((resolve) => {
+      resolveNew = resolve;
+    });
+    map.ops.splitSelected.mockImplementationOnce(() => oldPending).mockImplementationOnce(() => newPending);
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    handler.enable();
+    handler.handlePointer(event('click', 1, 1));
+    handler.handlePointer(event('click', 9, 1));
+    handler.handlePointer(event('contextmenu', 9, 1));
+    handler.disable();
+    handler.enable();
+    handler.handlePointer(event('click', 2, 2));
+    handler.handlePointer(event('click', 8, 2));
+    handler.handlePointer(event('contextmenu', 8, 2));
+    expect(map.ops.splitSelected).toHaveBeenCalledTimes(2);
+    resolveOld?.(OK);
+    await Promise.resolve();
+    handler.handlePointer(event('contextmenu', 8, 2));
+    expect(map.ops.splitSelected).toHaveBeenCalledTimes(2);
+    resolveNew?.(OK);
+  });
+  it('keeps newer completion ownership when concurrent generations settle in either order', async () => {
+    let resolveOld: ((result: OpResult) => void) | undefined;
+    let resolveNew: ((result: OpResult) => void) | undefined;
+    const oldPending = new Promise<OpResult>((resolve) => {
+      resolveOld = resolve;
+    });
+    const newPending = new Promise<OpResult>((resolve) => {
+      resolveNew = resolve;
+    });
+    map.ops.splitSelected.mockImplementationOnce(() => oldPending).mockImplementationOnce(() => newPending);
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    handler.enable();
+    handler.handlePointer(event('click', 1, 1));
+    handler.handlePointer(event('click', 9, 1));
+    handler.handlePointer(event('contextmenu', 9, 1));
+    handler.disable();
+    handler.enable();
+    handler.handlePointer(event('click', 2, 2));
+    handler.handlePointer(event('click', 8, 2));
+    handler.handlePointer(event('contextmenu', 8, 2));
+    resolveNew?.(Err.validation('cutter', 'new failure'));
+    await vi.waitFor(() => expect(map.fire).toHaveBeenCalledTimes(1));
+    resolveOld?.(Err.validation('cutter', 'old failure'));
+    await Promise.resolve();
+    expect(map.fire).toHaveBeenCalledTimes(1);
+  });
+
 
   it('cancels incomplete polylines on context menu and Escape without dispatching', () => {
     const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
