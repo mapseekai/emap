@@ -1,4 +1,5 @@
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
+import type { MapshaperDataset, PathLayer, PathShape } from '../../types/mapshaper-types';
 import { isPathLayer } from '../../types/mapshaper-types';
 import { Err, type OpResult } from '../op-result';
 import type { SplitCutter, SplitSelectedOptions, SplitSelectedResult } from '../types';
@@ -27,6 +28,36 @@ function isSplitCutter(value: unknown): value is SplitCutter {
       coordinate[0] !== coordinates[index - 1]![0]
       || coordinate[1] !== coordinates[index - 1]![1]
     ));
+}
+
+function validateSelectedPolylines(
+  layer: PathLayer,
+  selectedIds: ReadonlySet<number>,
+  arcs: NonNullable<MapshaperDataset['arcs']>,
+): void {
+  for (const featureId of selectedIds) {
+    const shape = layer.shapes?.[featureId];
+    if (!shape || shape.length === 0 || shape.some((part) => part.length === 0)) {
+      throw new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid');
+    }
+    for (const part of shape as PathShape) {
+      for (const signedArcId of part) {
+        const arcId = signedArcId < 0 ? ~signedArcId : signedArcId;
+        if (!Number.isInteger(signedArcId) || arcId < 0 || arcId >= arcs.size()) {
+          throw new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid');
+        }
+        const iterator = arcs.getArcIter(arcId);
+        let vertices = 0;
+        while (iterator.hasNext()) {
+          if (!Number.isFinite(iterator.x) || !Number.isFinite(iterator.y)) {
+            throw new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid');
+          }
+          vertices += 1;
+        }
+        if (vertices < 2) throw new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid');
+      }
+    }
+  }
 }
 
 /** Split selected lines or polygons with a point or polyline cutter. */
@@ -65,22 +96,34 @@ export async function splitSelected(
     selectedIds.add(ref.id);
   }
 
-  const layerIndex = source.getLayers().indexOf(layer);
-  if (layerIndex === -1) return Err.notFound('layer', layerId);
+  const callTimeDataset = source.getDataset();
+  if (!callTimeDataset) return Err.notFound('source', sourceId);
   const adapter = getDefaultMapshaperAdapter();
-  const originalLayerCount = source.getDataset()?.layers.length ?? 0;
 
   return ctx.runPreparedDatasetMutation(
     sourceId,
     (value) => `Split ${value.splitTargetCount} feature${value.splitTargetCount === 1 ? '' : 's'}`,
-    (working) => {
+    (working, original) => {
+      if (original !== callTimeDataset) return Err.staleOperation(sourceId, 'Split selected features');
       try {
+        const workingLayer = ctx.host.layers.resolveInLayers(working.layers, layerId);
+        if (!workingLayer || !isPathLayer(workingLayer) || !workingLayer.shapes) {
+          return Err.staleOperation(sourceId, 'Split selected features');
+        }
+        const workingLayerIndex = working.layers.indexOf(workingLayer);
+        if (workingLayerIndex === -1) return Err.staleOperation(sourceId, 'Split selected features');
+        if (workingLayer.geometry_type === 'polyline') {
+          const arcs = working.arcs;
+          if (!arcs) throw new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid');
+          validateSelectedPolylines(workingLayer, selectedIds, arcs);
+        }
+        const layerCountBeforeSplit = working.layers.length;
         let pieces;
-        if (layer.geometry_type === 'polygon') {
+        if (workingLayer.geometry_type === 'polygon') {
           if (cutter.type !== 'polyline') return Err.validation('cutter', 'point cutters can only split polyline features');
-          pieces = splitSelectedPolygons(working, layerIndex, selectedIds, cutter, adapter);
+          pieces = splitSelectedPolygons(working, workingLayerIndex, selectedIds, cutter, adapter);
         } else {
-          const outcome = splitSelectedPolylines(working, layerIndex, selectedIds, cutter, adapter);
+          const outcome = splitSelectedPolylines(working, workingLayerIndex, selectedIds, cutter, adapter);
           if (cutter.type === 'point' && !outcome.pointOnSelectedPath) {
             throw new SplitGeometryValidationError('cutter', 'point is not on any selected line');
           }
@@ -89,12 +132,12 @@ export async function splitSelected(
         if (pieces.length === 0) return Err.validation('cutter', 'did not split any selected feature');
         return applySplitPieces(
           working,
-          layerIndex,
+          workingLayerIndex,
           sourceId,
           layerId,
           selectedIds,
           pieces,
-          Math.max(0, working.layers.length - originalLayerCount),
+          working.layers.length - layerCountBeforeSplit,
           adapter,
         );
       } catch (error) {
