@@ -103,18 +103,17 @@ function validatePolygon(shape: PathShape, arcs: NonNullable<MapshaperDataset['a
 function properCrossings(shape: PathShape, cutter: readonly Coordinate[], arcs: NonNullable<MapshaperDataset['arcs']>, adapter: MapshaperAdapter): Set<string> {
   const lengths = cutter.slice(1).map((point, index) => Math.hypot(point[0] - cutter[index]![0], point[1] - cutter[index]![1]));
   const offsets = lengths.reduce<number[]>((all, length) => [...all, all.at(-1)! + length], [0]);
-  const events = new Map<string, { point: Coordinate; distance: number }>();
+  const events: Array<{ point: Coordinate; distance: number }> = [];
   for (let index = 1; index < cutter.length; index++) {
     const start = cutter[index - 1]!, end = cutter[index]!, length = lengths[index - 1]!;
     if (length === 0) continue;
     for (const [boundaryStart, boundaryEnd] of shapeSegments(shape, arcs)) {
       const point = segmentIntersection(start, end, boundaryStart, boundaryEnd);
       if (!point) continue;
-      const distance = offsets[index - 1]! + Math.hypot(point[0] - start[0], point[1] - start[1]);
-      events.set(`${point[0]},${point[1]}`, { point, distance });
+      events.push({ point, distance: offsets[index - 1]! + Math.hypot(point[0] - start[0], point[1] - start[1]) });
     }
   }
-  const ordered = [...events.values()].sort((left, right) => left.distance - right.distance);
+  const ordered = events.sort((left, right) => left.distance - right.distance).filter((event, index, all) => index === 0 || event.distance !== all[index - 1]!.distance || event.point[0] !== all[index - 1]!.point[0] || event.point[1] !== all[index - 1]!.point[1]);
   const pointAt = (distance: number): Coordinate => {
     const clamped = Math.max(0, Math.min(offsets.at(-1)!, distance));
     const segment = offsets.findIndex((_offset, index) => index + 1 < offsets.length && clamped <= offsets[index + 1]!);
