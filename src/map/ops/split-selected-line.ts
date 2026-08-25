@@ -79,14 +79,22 @@ function directionsAtPartVertices(shape: PathShape, arcs: NonNullable<MapshaperD
   }
   return matches;
 }
+function crossProductIsIndistinguishableFromZero(
+  leftX: number,
+  leftY: number,
+  rightX: number,
+  rightY: number,
+): boolean {
+  const firstProduct = leftX * rightY;
+  const secondProduct = leftY * rightX;
+  const floatingError = (Math.abs(firstProduct) + Math.abs(secondProduct)) * Number.EPSILON * 4;
+  return Math.abs(firstProduct - secondProduct) <= floatingError;
+}
 function hasSameDirection(targetDirections: Coordinate[], cutterDirections: Coordinate[]): boolean {
-  return targetDirections.some((targetDirection) => cutterDirections.some((cutterDirection) => {
-    const difference = Math.abs(
-      Math.atan2(targetDirection[1], targetDirection[0]) -
-      Math.atan2(cutterDirection[1], cutterDirection[0]),
-    );
-    return Math.min(difference, Math.abs(Math.PI * 2 - difference)) <= INTERSECTION_EPSILON;
-  }));
+  return targetDirections.some(([targetX, targetY]) => cutterDirections.some(([cutterX, cutterY]) => (
+    targetX * cutterX + targetY * cutterY > 0 &&
+    crossProductIsIndistinguishableFromZero(targetX, targetY, cutterX, cutterY)
+  )));
 }
 function transverseAtVertex(targetDirections: Coordinate[], cutterDirections: Coordinate[]): boolean {
   if (targetDirections.length !== 2 || cutterDirections.length !== 2 || hasSameDirection(targetDirections, cutterDirections)) return false;
@@ -104,7 +112,7 @@ function properLineCutCoordinates(shape: PathShape, arcs: NonNullable<MapshaperD
       const c = coordinates[n - 1]!, d = coordinates[n]!;
       const rx = b[0] - a[0], ry = b[1] - a[1], sx = d[0] - c[0], sy = d[1] - c[1];
       const denominator = rx * sy - ry * sx;
-      if (Math.abs(denominator) <= Math.hypot(rx, ry) * Math.hypot(sx, sy) * INTERSECTION_EPSILON) continue;
+      if (crossProductIsIndistinguishableFromZero(rx, ry, sx, sy)) continue;
       const acx = c[0] - a[0], acy = c[1] - a[1];
       const targetT = (acx * sy - acy * sx) / denominator, cutterT = (acx * ry - acy * rx) / denominator;
       if (targetT < -INTERSECTION_EPSILON || targetT > 1 + INTERSECTION_EPSILON || cutterT < -INTERSECTION_EPSILON || cutterT > 1 + INTERSECTION_EPSILON) continue;

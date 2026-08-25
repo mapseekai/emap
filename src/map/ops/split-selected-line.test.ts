@@ -234,4 +234,31 @@ describe('splitSelectedPolylines', () => {
       type: 'line', coordinates: [[5, -5], [5, 0], [5, 5]],
     }, adapter).pieces[0]!.pieces).toHaveLength(2);
   });
+
+  it('splits shallow distinct alternating rays at an internal crossing', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([[[0, 0], [5, 0], [10, 0]]]);
+
+    expect(splitSelectedPolylines(dataset, 0, new Set([0]), {
+      type: 'line', coordinates: [[4, -1e-14], [5, 0], [6, 1e-14]],
+    }, adapter).pieces[0]!.pieces).toHaveLength(2);
+  });
+
+  it('ignores a scaled exact shared ray', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([[[0, 0], [5, 0], [10, 0]]]);
+
+    expect(splitSelectedPolylines(dataset, 0, new Set([0]), {
+      type: 'line', coordinates: [[5, -50], [5, 0], [50, 0]],
+    }, adapter).pieces).toEqual([]);
+  });
+
+  it('ignores a cyclic west shared ray', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([[[0, 0], [5, 0], [10, 0]]]);
+
+    expect(splitSelectedPolylines(dataset, 0, new Set([0]), {
+      type: 'line', coordinates: [[0, -0], [5, 0], [5, -5]],
+    }, adapter).pieces).toEqual([]);
+  });
 });
