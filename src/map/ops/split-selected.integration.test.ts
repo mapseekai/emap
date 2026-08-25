@@ -141,6 +141,8 @@ describe('MapshaperOps.splitSelected integration', () => {
 
   it.each([
     ['invalid-only', [0], (dataset: MapshaperDataset) => { dataset.layers[0]!.shapes![0] = [[999]]; }],
+    ['bitwise-alias arc id', [0], (dataset: MapshaperDataset) => { dataset.layers[0]!.shapes![0] = [[-4294967297]]; }],
+    ['unsafe arc id', [0], (dataset: MapshaperDataset) => { dataset.layers[0]!.shapes![0] = [[Number.MAX_SAFE_INTEGER + 1]]; }],
     ['mixed-valid-invalid', [0, 1], (dataset: MapshaperDataset) => { dataset.layers[0]!.shapes![1] = [[999]]; }],
   ] as const)('rejects %s polyline geometry atomically', async (_name, selected, corrupt) => {
     const dataset = await importDataset([

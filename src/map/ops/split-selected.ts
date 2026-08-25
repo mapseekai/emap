@@ -42,8 +42,11 @@ function validateSelectedPolylines(
     }
     for (const part of shape as PathShape) {
       for (const signedArcId of part) {
-        const arcId = signedArcId < 0 ? ~signedArcId : signedArcId;
-        if (!Number.isInteger(signedArcId) || arcId < 0 || arcId >= arcs.size()) {
+        if (!Number.isSafeInteger(signedArcId)) {
+          throw new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid');
+        }
+        const arcId = signedArcId < 0 ? -signedArcId - 1 : signedArcId;
+        if (!Number.isSafeInteger(arcId) || arcId < 0 || arcId >= arcs.size()) {
           throw new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid');
         }
         const iterator = arcs.getArcIter(arcId);
