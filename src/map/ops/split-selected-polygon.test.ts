@@ -105,6 +105,14 @@ describe('splitSelectedPolygons', () => {
     }
   });
 
+  it.each([
+    ['polygon vertex', [[-1, -1], [0, 0], [11, 5]]],
+    ['cutter vertex', [[-1, 5], [5, 5], [11, 5]]],
+  ] as const)('splits through a %s crossing', async (_name, coordinates) => {
+    const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
+    expect(split(dataset, new Set([0]), coordinates)[0]!.pieces).toHaveLength(2);
+  });
+
   it.each([['tangent', [[-1, 0], [0, 0], [-1, 1]]], ['single touch', [[-1, 5], [0, 5]]], ['boundary overlap', [[0, 0], [10, 0]]], ['inside-only cutter', [[2, 2], [8, 8]]] ] as const)('keeps a %s as a no-op', async (_name, coordinates) => {
     const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
     const before = dataset.layers[0]!.shapes!.length;

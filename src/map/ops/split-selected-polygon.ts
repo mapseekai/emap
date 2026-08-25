@@ -28,22 +28,21 @@ function cross(a: Coordinate, b: Coordinate, c: Coordinate): number {
   return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
 }
 
-function scale(...points: Coordinate[]): number {
-  return Math.max(1, ...points.flatMap(([x, y]) => [Math.abs(x), Math.abs(y)]));
+function orientationTolerance(a: Coordinate, b: Coordinate, c: Coordinate): number {
+  const abx = b[0] - a[0], aby = b[1] - a[1], acx = c[0] - a[0], acy = c[1] - a[1];
+  return EPSILON * (Math.abs(abx * acy) + Math.abs(aby * acx) + 1);
 }
 
-function properSegmentIntersection(a: Coordinate, b: Coordinate, c: Coordinate, d: Coordinate): Coordinate | null {
-  const tolerance = EPSILON * scale(a, b, c, d);
-  const abC = cross(a, b, c), abD = cross(a, b, d), cdA = cross(c, d, a), cdB = cross(c, d, b);
-  if (Math.abs(abC) <= tolerance || Math.abs(abD) <= tolerance || Math.abs(cdA) <= tolerance || Math.abs(cdB) <= tolerance) return null;
-  if ((abC > 0) === (abD > 0) || (cdA > 0) === (cdB > 0)) return null;
-  const denominator = (a[0] - b[0]) * (c[1] - d[1]) - (a[1] - b[1]) * (c[0] - d[0]);
+
+function segmentIntersection(a: Coordinate, b: Coordinate, c: Coordinate, d: Coordinate): Coordinate | null {
+  const abx = b[0] - a[0], aby = b[1] - a[1], cdx = d[0] - c[0], cdy = d[1] - c[1];
+  const denominator = abx * cdy - aby * cdx;
+  const tolerance = EPSILON * (Math.abs(abx * cdy) + Math.abs(aby * cdx) + 1);
   if (Math.abs(denominator) <= tolerance) return null;
-  const determinantAB = a[0] * b[1] - a[1] * b[0], determinantCD = c[0] * d[1] - c[1] * d[0];
-  return [
-    (determinantAB * (c[0] - d[0]) - (a[0] - b[0]) * determinantCD) / denominator,
-    (determinantAB * (c[1] - d[1]) - (a[1] - b[1]) * determinantCD) / denominator,
-  ];
+  const cax = c[0] - a[0], cay = c[1] - a[1];
+  const t = (cax * cdy - cay * cdx) / denominator, u = (cax * aby - cay * abx) / denominator;
+  if (t < -EPSILON || t > 1 + EPSILON || u < -EPSILON || u > 1 + EPSILON) return null;
+  return [a[0] + t * abx, a[1] + t * aby];
 }
 
 function shapeSegments(shape: PathShape, arcs: NonNullable<MapshaperDataset['arcs']>): Array<[Coordinate, Coordinate]> {
@@ -62,18 +61,26 @@ function shapeSegments(shape: PathShape, arcs: NonNullable<MapshaperDataset['arc
   }
   return segments;
 }
+
+function segmentsConflict(a: Coordinate, b: Coordinate, c: Coordinate, d: Coordinate): boolean {
+  if (segmentIntersection(a, b, c, d)) return true;
+  if (Math.abs(cross(a, b, c)) > orientationTolerance(a, b, c) || Math.abs(cross(a, b, d)) > orientationTolerance(a, b, d)) return false;
+  return [a, b].some((point) => point[0] >= Math.min(c[0], d[0]) - EPSILON && point[0] <= Math.max(c[0], d[0]) + EPSILON && point[1] >= Math.min(c[1], d[1]) - EPSILON && point[1] <= Math.max(c[1], d[1]) + EPSILON)
+    || [c, d].some((point) => point[0] >= Math.min(a[0], b[0]) - EPSILON && point[0] <= Math.max(a[0], b[0]) + EPSILON && point[1] >= Math.min(a[1], b[1]) - EPSILON && point[1] <= Math.max(a[1], b[1]) + EPSILON);
+}
+
 function validatePolygon(shape: PathShape, arcs: NonNullable<MapshaperDataset['arcs']>): void {
   if (!shape.length || shape.some((part) => part.length === 0)) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
-  for (const part of shape) {
-    const segments = shapeSegments([part], arcs);
-    if (segments.length < 3) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
-    const first = segments[0]![0], last = segments.at(-1)![1];
-    if (first[0] !== last[0] || first[1] !== last[1]) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
-    for (let i = 0; i < segments.length; i++) {
-      for (let j = i + 1; j < segments.length; j++) {
-        if (j === i + 1 || (i === 0 && j === segments.length - 1)) continue;
-        if (properSegmentIntersection(...segments[i]!, ...segments[j]!)) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
-      }
+  const rings = shape.map((part) => shapeSegments([part], arcs));
+  for (let ringIndex = 0; ringIndex < rings.length; ringIndex++) {
+    const segments = rings[ringIndex]!;
+    if (segments.length < 3 || segments[0]![0][0] !== segments.at(-1)![1][0] || segments[0]![0][1] !== segments.at(-1)![1][1]) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
+    for (let i = 0; i < segments.length; i++) for (let j = i + 1; j < segments.length; j++) {
+      if (j === i + 1 || (i === 0 && j === segments.length - 1)) continue;
+      if (segmentsConflict(...segments[i]!, ...segments[j]!)) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
+    }
+    for (let otherIndex = 0; otherIndex < ringIndex; otherIndex++) for (const segment of segments) for (const other of rings[otherIndex]!) {
+      if (segmentsConflict(...segment, ...other)) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
     }
   }
   if (!(adapterArea(shape, arcs) > 0)) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
@@ -90,12 +97,20 @@ function adapterArea(shape: PathShape, arcs: NonNullable<MapshaperDataset['arcs'
   return Math.abs(area);
 }
 
-function properCrossings(shape: PathShape, cutter: readonly Coordinate[], arcs: NonNullable<MapshaperDataset['arcs']>): Set<string> {
+function properCrossings(shape: PathShape, cutter: readonly Coordinate[], arcs: NonNullable<MapshaperDataset['arcs']>, adapter: MapshaperAdapter): Set<string> {
   const crossings = new Set<string>();
-  for (const [start, end] of shapeSegments(shape, arcs)) {
-    for (let index = 1; index < cutter.length; index++) {
-      const point = properSegmentIntersection(start, end, cutter[index - 1]!, cutter[index]!);
-      if (point) crossings.add(`${point[0]},${point[1]}`);
+  for (let index = 1; index < cutter.length; index++) {
+    const start = cutter[index - 1]!, end = cutter[index]!;
+    const length = Math.hypot(end[0] - start[0], end[1] - start[1]);
+    if (length === 0) continue;
+    for (const [boundaryStart, boundaryEnd] of shapeSegments(shape, arcs)) {
+      const point = segmentIntersection(start, end, boundaryStart, boundaryEnd);
+      if (!point) continue;
+      const t = ((point[0] - start[0]) * (end[0] - start[0]) + (point[1] - start[1]) * (end[1] - start[1])) / (length * length);
+      const delta = Math.min(1e-7, 0.25 / length);
+      const before: Coordinate = [start[0] + (t - delta) * (end[0] - start[0]), start[1] + (t - delta) * (end[1] - start[1])];
+      const after: Coordinate = [start[0] + (t + delta) * (end[0] - start[0]), start[1] + (t + delta) * (end[1] - start[1])];
+      if (adapter.testPointInPolygon(before[0], before[1], shape, arcs) !== adapter.testPointInPolygon(after[0], after[1], shape, arcs)) crossings.add(`${point[0]},${point[1]}`);
     }
   }
   return crossings;
@@ -129,7 +144,7 @@ export function splitSelectedPolygons(
     const shape = layer.shapes[featureId] as PathShape | null;
     if (!shape) continue;
     validatePolygon(shape, arcs);
-    if (properCrossings(shape, cutter.coordinates, arcs).size >= 2) crossingIds.add(featureId);
+    if (properCrossings(shape, cutter.coordinates, arcs, adapter).size >= 2) crossingIds.add(featureId);
   }
   if (!crossingIds.size) return [];
 
