@@ -57,10 +57,16 @@
     const clearSelection = document.getElementById('clear-selection');
     const status = document.getElementById('status');
     const mapContainer = map.getCanvasContainer();
+    const ownedSourceIds = new Set();
     let cutterType = 'point';
 
     function selectedGeometryType(ref) {
-      return map.features.get(ref)?.geometry?.type;
+      const layers = map.getSource(ref.source)?.getLayers() ?? [];
+      const layer = layers.find((candidate, index) => {
+        const canonicalId = candidate.name ?? candidate.id ?? `layer-${index}`;
+        return canonicalId === ref.layer;
+      });
+      return layer?.geometry_type;
     }
 
     function selectionIsSplittable(selected) {
@@ -69,7 +75,7 @@
       return selected.every((ref) => {
         const geometryType = selectedGeometryType(ref);
         return ref.source === source && ref.layer === layer &&
-          (geometryType === 'LineString' || geometryType === 'Polygon');
+          (geometryType === 'polyline' || geometryType === 'polygon');
       });
     }
 
@@ -86,7 +92,7 @@
 
     function syncSelection(selected) {
       const splittable = selectionIsSplittable(selected);
-      const hasPolygon = selected.some((ref) => selectedGeometryType(ref) === 'Polygon');
+      const hasPolygon = selected.some((ref) => selectedGeometryType(ref) === 'polygon');
       pointMode.disabled = hasPolygon;
       if (hasPolygon && cutterType === 'point') setCutterType('polyline');
       enableSplit.disabled = !splittable;
@@ -105,17 +111,27 @@
 
     pointMode.addEventListener('click', () => setCutterType('point'));
     lineMode.addEventListener('click', () => setCutterType('polyline'));
+    function showError(error) {
+      const message = error instanceof Error ? error.message : String(error);
+      status.textContent = `错误: ${message}`;
+      console.error(error);
+    }
+
     enableSplit.addEventListener('click', () => {
       const selected = map.getSelection();
       if (!selectionIsSplittable(selected)) {
         status.textContent = '请先选择同一图层中的线或面要素。';
         return;
       }
-      map.splitFeature.setOptions({ cutterType });
-      map.splitFeature.enable();
-      status.textContent = cutterType === 'point'
-        ? '在线的内部单击以拆分；按 Esc 或取消退出。'
-        : '左键绘制切线，右键完成；按 Esc 或取消退出。';
+      try {
+        map.splitFeature.setOptions({ cutterType });
+        map.splitFeature.enable();
+        status.textContent = cutterType === 'point'
+          ? '在线的内部单击以拆分；按 Esc 或取消退出。'
+          : '左键绘制切线，右键完成；按 Esc 或取消退出。';
+      } catch (error) {
+        showError(error);
+      }
     });
     cancelSplit.addEventListener('click', () => {
       stopSplitting();
@@ -131,21 +147,25 @@
       if (files.length === 0) return;
       status.textContent = `正在加载 ${files.length} 个数据文件…`;
       try {
-        await Promise.all(files.map(async (file, index) => {
-          const source = new TopologySource(`split-source-${index}`);
+        for (const sourceId of ownedSourceIds) map.removeSource(sourceId);
+        ownedSourceIds.clear();
+        for (const [index, file] of files.entries()) {
+          const sourceId = `split-source-${index}`;
+          const source = new TopologySource(sourceId);
           const content = new Uint8Array(await file.arrayBuffer());
           await source.setData({ filename: file.name, content });
-          await map.addSource(`split-source-${index}`, source);
+          await map.addSource(sourceId, source);
+          ownedSourceIds.add(sourceId);
           map.setExtent(source.getExtent());
-        }));
+        }
         status.textContent = '单击选择同一图层中的线或面要素。';
       } catch (error) {
-        status.textContent = `加载失败: ${error instanceof Error ? error.message : String(error)}`;
-        console.error(error);
+        showError(error);
       }
     });
 
     map.on('selectionchange', (event) => syncSelection(event.selected));
+    map.on('error', (event) => showError(event?.error ?? event));
     mapContainer.addEventListener('click', (event) => {
       if (map.splitFeature.isEnabled?.()) return;
       const rect = mapContainer.getBoundingClientRect();

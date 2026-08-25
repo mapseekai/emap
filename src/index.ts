@@ -174,6 +174,7 @@ export {
   setDefaultMapshaperAdapter,
 } from './adapter/mapshaper-adapter';
 export type {
+  ArcCutPoint,
   ExportedFile,
   MapshaperAdapter,
   MapshaperBBox,

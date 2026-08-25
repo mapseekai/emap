@@ -27,6 +27,8 @@ async function executeSplitFeaturesExample() {
 
   let selection: FeatureRef[] = [];
   const selectionListeners: Array<(event: SelectionEvent) => void> = [];
+  const errorListeners: Array<(event: { error: Error }) => void> = [];
+  const sources = new Map<string, { getLayers: () => unknown[] }>();
   const splitFeature = {
     setOptions: vi.fn(),
     enable: vi.fn(),
@@ -36,29 +38,65 @@ async function executeSplitFeaturesExample() {
     splitFeature,
     addControl: vi.fn(),
     addLayer: vi.fn(),
+    addSource: vi.fn(async (id: string, source: { getLayers: () => unknown[] }) => {
+      if (sources.has(id)) throw new Error(`duplicate source ${id}`);
+      sources.set(id, source);
+    }),
     bindHistoryShortcuts: vi.fn(),
     clearHighlightedFeatures: vi.fn(),
     clearSelection: vi.fn(),
     drawFeature: vi.fn(),
-    features: {
-      get: (selected: FeatureRef) => ({
-        geometry: { type: selected.layer === 'parcels' ? 'Polygon' : 'LineString' },
-      }),
-    },
+    features: undefined,
     getCanvasContainer: () => document.getElementById('map')!,
     getSelection: () => selection,
-    getSource: vi.fn(),
+    getSource: (id: string) => sources.get(id) ?? {
+      getLayers: () => [
+        {
+          name: 'points',
+          id: 'roads',
+          geometry_type: 'point',
+          shapes: [[0]],
+        },
+        {
+          name: 'roads',
+          geometry_type: 'polyline',
+          shapes: [[0, 1]],
+        },
+        {
+          id: 'parcels',
+          geometry_type: 'polygon',
+          shapes: [[[2, 3, 4]]],
+        },
+        {
+          geometry_type: 'polyline',
+          shapes: [[5, 6]],
+        },
+      ],
+    },
     queryFeatures: vi.fn(() => []),
+    removeSource: vi.fn((id: string) => sources.delete(id)),
     select: vi.fn(),
+    setExtent: vi.fn(),
     setHighlightedFeatures: vi.fn(),
-    on: (type: string, listener: (event: SelectionEvent) => void) => {
-      if (type === 'selectionchange') selectionListeners.push(listener);
+    on: (type: string, listener: (event: SelectionEvent | { error: Error }) => void) => {
+      if (type === 'selectionchange') selectionListeners.push(listener as (event: SelectionEvent) => void);
+      if (type === 'error') errorListeners.push(listener as (event: { error: Error }) => void);
     },
   };
   const runtime = {
     Emap: class {
       constructor() {
         return map;
+      }
+    },
+    TopologySource: class {
+      constructor(id: string) {
+        return {
+          getExtent: () => ({}),
+          getLayers: () => [],
+          id,
+          setData: vi.fn(async () => {}),
+        };
       }
     },
     NavigationControl: class {},
@@ -95,9 +133,21 @@ async function executeSplitFeaturesExample() {
   return {
     map,
     splitFeature,
+    emitError(error: Error) {
+      for (const listener of errorListeners) listener({ error });
+    },
     emitSelection(next: FeatureRef[]) {
       selection = next;
       for (const listener of selectionListeners) listener({ selected: next });
+    },
+    async replaceFiles(files: Array<{ name: string; arrayBuffer: () => Promise<ArrayBuffer> }>) {
+      const input = document.querySelector<HTMLInputElement>('#file-input')!;
+      const previouslyAdded = map.addSource.mock.calls.length;
+      Object.defineProperty(input, 'files', { configurable: true, value: files });
+      input.dispatchEvent(new Event('change'));
+      await vi.waitFor(() =>
+        expect(map.addSource).toHaveBeenCalledTimes(previouslyAdded + files.length),
+      );
     },
     dispose() {
       document.head.innerHTML = originalHead;
@@ -110,8 +160,12 @@ function ref(id: number, layer: string, source = 'source'): FeatureRef {
   return { source, layer, id };
 }
 
+function fixtureFile(name: string) {
+  return { arrayBuffer: async () => new ArrayBuffer(0), name };
+}
+
 describe('split-features example', () => {
-  it('configures public split handler modes, gates valid selections, and reports final selection', async () => {
+  it('uses source layer metadata for handler gating and surfaces errors', async () => {
     const result = await executeSplitFeaturesExample();
     try {
       const pointButton = document.querySelector<HTMLButtonElement>('#point-mode')!;
@@ -143,14 +197,37 @@ describe('split-features example', () => {
       expect(lineButton.disabled).toBe(false);
       expect(enableButton.disabled).toBe(false);
 
+      result.emitSelection([ref(6, 'layer-3')]);
+      expect(enableButton.disabled).toBe(false);
       result.emitSelection([ref(4, 'roads'), ref(5, 'parcels')]);
       expect(enableButton.disabled).toBe(true);
       expect(status.textContent).toContain('同一数据源、同一图层');
 
       result.emitSelection([ref(6, 'roads'), ref(7, 'roads')]);
       expect(status.textContent).toContain('已选中 2 个拆分结果');
+      result.emitError(new Error('split failed'));
+      expect(status.textContent).toContain('split failed');
+
+      result.splitFeature.enable.mockImplementationOnce(() => {
+        throw new Error('cannot start');
+      });
+      enableButton.click();
+      expect(status.textContent).toContain('cannot start');
       expect(result.map.drawFeature).not.toHaveBeenCalled();
       expect(result.map.addLayer).not.toHaveBeenCalled();
+    } finally {
+      result.dispose();
+    }
+  });
+
+  it('replaces owned fixture sources before loading another file selection', async () => {
+    const result = await executeSplitFeaturesExample();
+    try {
+      await result.replaceFiles([fixtureFile('roads.geojson'), fixtureFile('parcels.geojson')]);
+      await result.replaceFiles([fixtureFile('roads-next.geojson')]);
+      expect(result.map.removeSource).toHaveBeenCalledWith('split-source-0');
+      expect(result.map.removeSource).toHaveBeenCalledWith('split-source-1');
+      expect(result.map.addSource).toHaveBeenCalledTimes(3);
     } finally {
       result.dispose();
     }

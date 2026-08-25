@@ -20,7 +20,7 @@
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">MapOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#container">container</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">HTMLElement</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#expressionpolicy">expressionPolicy</a><span class="tsd-signature-symbol">?:</span> <a href="../types/emap.ExpressionEvaluationPolicy.html" class="tsd-signature-type tsd-kind-type-alias">ExpressionEvaluationPolicy</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#interactive">interactive</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#maplibre">mapLibre</a><span class="tsd-signature-symbol">?:</span> <a href="emap.MapLibreIntegrationOptions.html" class="tsd-signature-type tsd-kind-interface">MapLibreIntegrationOptions</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#useworker">useWorker</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;auto&quot;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workermode">workerMode</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;auto&quot;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workerpool">workerPool</a><span class="tsd-signature-symbol">?:</span> <a href="../classes/emap.MapshaperWorkerPool.html" class="tsd-signature-type tsd-kind-class">MapshaperWorkerPool</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workerpoolsize">workerPoolSize</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workerrouting">workerRouting</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">WorkerRoutingFn</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workerthreshold">workerThreshold</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#workerurl">workerUrl</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L38">src/map/types.ts:38</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L58">src/map/types.ts:58</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -49,7 +49,7 @@
 <div class="tsd-comment tsd-typography"><p>container is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L39">src/map/types.ts:39</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L59">src/map/types.ts:59</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="expressionpolicy"><code class="tsd-tag">Optional</code><span>expression<wbr/>Policy</span><a href="#expressionpolicy" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">expressionPolicy</span><span class="tsd-signature-symbol">?:</span> <a href="../types/emap.ExpressionEvaluationPolicy.html" class="tsd-signature-type tsd-kind-type-alias">ExpressionEvaluationPolicy</a></div>
@@ -63,21 +63,21 @@ via <a href="../classes/emap.Emap.html#setexpressionpolicy" class="tsd-kind-meth
 <p>BREAKING: prior to this release the default was <code>'trusted'</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L55">src/map/types.ts:55</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L75">src/map/types.ts:75</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="interactive"><code class="tsd-tag">Optional</code><span>interactive</span><a href="#interactive" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">interactive</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
 <div class="tsd-comment tsd-typography"><p>interactive is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L40">src/map/types.ts:40</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L60">src/map/types.ts:60</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="maplibre"><code class="tsd-tag">Optional</code><span>map<wbr/>Libre</span><a href="#maplibre" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">mapLibre</span><span class="tsd-signature-symbol">?:</span> <a href="emap.MapLibreIntegrationOptions.html" class="tsd-signature-type tsd-kind-interface">MapLibreIntegrationOptions</a></div>
 <div class="tsd-comment tsd-typography"><p>Native MapLibre basemap and online-overlay integration.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L42">src/map/types.ts:42</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L62">src/map/types.ts:62</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="useworker"><code class="tsd-tag">Optional</code><span>use<wbr/>Worker</span><a href="#useworker" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">useWorker</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;auto&quot;</span></div>
@@ -98,7 +98,7 @@ flag — their per-vertex cost is far below the worker round-trip
 overhead.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L73">src/map/types.ts:73</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L93">src/map/types.ts:93</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="workermode"><code class="tsd-tag">Optional</code><span>worker<wbr/>Mode</span><a href="#workermode" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">workerMode</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;auto&quot;</span></div>
@@ -106,7 +106,7 @@ overhead.</p>
 <code>useWorker</code> wins.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L78">src/map/types.ts:78</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L98">src/map/types.ts:98</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="workerpool"><code class="tsd-tag">Optional</code><span>worker<wbr/>Pool</span><a href="#workerpool" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">workerPool</span><span class="tsd-signature-symbol">?:</span> <a href="../classes/emap.MapshaperWorkerPool.html" class="tsd-signature-type tsd-kind-class">MapshaperWorkerPool</a></div>
@@ -118,7 +118,7 @@ When worker mode is disabled, the option is ignored and ownership stays
 with the caller.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L114">src/map/types.ts:114</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L134">src/map/types.ts:134</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="workerpoolsize"><code class="tsd-tag">Optional</code><span>worker<wbr/>Pool<wbr/>Size</span><a href="#workerpoolsize" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">workerPoolSize</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
@@ -133,7 +133,7 @@ parallel (one per source). Workers spawn lazily, so a high
 configures its own size).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L104">src/map/types.ts:104</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L124">src/map/types.ts:124</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="workerrouting"><code class="tsd-tag">Optional</code><span>worker<wbr/>Routing</span><a href="#workerrouting" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">workerRouting</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">WorkerRoutingFn</span></div>
@@ -147,7 +147,7 @@ domain knowledge can refine it here. Ignored when <code>useWorker</code> is
 <code>true</code> / <code>false</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L125">src/map/types.ts:125</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L145">src/map/types.ts:145</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="workerthreshold"><code class="tsd-tag">Optional</code><span>worker<wbr/>Threshold</span><a href="#workerthreshold" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">workerThreshold</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
@@ -157,7 +157,7 @@ worker; smaller datasets stay on the main thread. Default <code>50000</code>.
 Ignored when <code>useWorker</code> is a boolean.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L85">src/map/types.ts:85</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L105">src/map/types.ts:105</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="workerurl"><code class="tsd-tag">Optional</code><span>worker<wbr/>Url</span><a href="#workerurl" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">workerUrl</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
@@ -166,7 +166,7 @@ Ignored when <code>useWorker</code> is a boolean.</p>
 is truthy. Defaults to <code>'emap-worker.js'</code> (sibling of the page).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L91">src/map/types.ts:91</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/map/types.ts#L111">src/map/types.ts:111</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
