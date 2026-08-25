@@ -92,19 +92,9 @@ function validatePolygon(shape: PathShape, arcs: NonNullable<MapshaperDataset['a
     const containingShells = shellIndexes.filter((shellIndex) => adapter.testPointInRing(anchor[0], anchor[1], shape[shellIndex]!, arcs) !== 0);
     if (containingShells.length !== 1) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
   }
-  if (!(adapterArea(shape, arcs) > 0)) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
+  if (!(adapter.getShapeArea(shape, arcs) > 0)) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
 }
 
-function adapterArea(shape: PathShape, arcs: NonNullable<MapshaperDataset['arcs']>): number {
-  // Mapshaper's path data assigns shell / hole winding; this independent shoelace sum
-  // only gates malformed zero-area rings before the topology-mutating operation.
-  let area = 0;
-  for (const part of shape) {
-    const segments = shapeSegments([part], arcs);
-    area += segments.reduce((sum, [start, end]) => sum + start[0] * end[1] - end[0] * start[1], 0) / 2;
-  }
-  return Math.abs(area);
-}
 
 function properCrossings(shape: PathShape, cutter: readonly Coordinate[], arcs: NonNullable<MapshaperDataset['arcs']>, adapter: MapshaperAdapter): Set<string> {
   const crossings = new Set<string>();
@@ -116,7 +106,7 @@ function properCrossings(shape: PathShape, cutter: readonly Coordinate[], arcs: 
       const point = segmentIntersection(start, end, boundaryStart, boundaryEnd);
       if (!point) continue;
       const t = ((point[0] - start[0]) * (end[0] - start[0]) + (point[1] - start[1]) * (end[1] - start[1])) / (length * length);
-      const delta = Math.min(1e-7, 0.25 / length);
+      const delta = Math.min(0.25, Math.max(1e-7, Number.EPSILON * Math.max(Math.abs(start[0]), Math.abs(start[1]), Math.abs(end[0]), Math.abs(end[1])) * 64) / length);
       const before: Coordinate = [start[0] + (t - delta) * (end[0] - start[0]), start[1] + (t - delta) * (end[1] - start[1])];
       const after: Coordinate = [start[0] + (t + delta) * (end[0] - start[0]), start[1] + (t + delta) * (end[1] - start[1])];
       if (adapter.testPointInPolygon(before[0], before[1], shape, arcs) !== adapter.testPointInPolygon(after[0], after[1], shape, arcs)) crossings.add(`${point[0]},${point[1]}`);

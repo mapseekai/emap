@@ -120,6 +120,30 @@ describe('splitSelectedPolygons', () => {
     expect(dataset.layers[0]!.shapes).toHaveLength(before);
   });
 
+  it('is translation-invariant at a large finite offset', async () => {
+    const offset: Position = [1e12, -1e12];
+    const origin = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
+    const translated = await importPolygons([polygon([[[offset[0], offset[1]], [offset[0] + 10, offset[1]], [offset[0] + 10, offset[1] + 10], [offset[0], offset[1] + 10], [offset[0], offset[1]]]])]);
+    const originPieces = split(origin, new Set([0]), [[-1, 5], [11, 5]])[0]!.pieces;
+    const translatedPieces = split(translated, new Set([0]), [[offset[0] - 1, offset[1] + 5], [offset[0] + 11, offset[1] + 5]])[0]!.pieces;
+    expect(translatedPieces).toHaveLength(originPieces.length);
+    expect(translatedPieces.map((piece) => planarArea(piece, translated.arcs!)).sort()).toEqual(originPieces.map((piece) => planarArea(piece, origin.arcs!)).sort());
+    await expectConserved(translated, translated.layers[0]!.shapes![0] as PathShape, translatedPieces);
+  });
+
+  it.each([
+    ['overlapping shells', { type: 'MultiPolygon', coordinates: [[[[0, 0], [8, 0], [8, 8], [0, 8], [0, 0]]], [[[4, 4], [12, 4], [12, 12], [4, 12], [4, 4]]]] } as GeoJSON.MultiPolygon],
+    ['outside hole', polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]], [[20, 20], [24, 20], [24, 24], [20, 24], [20, 20]]])],
+    ['crossing hole', polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]], [[8, 2], [12, 2], [12, 8], [8, 8], [8, 2]]])],
+    ['overlapping holes', polygon([[[0, 0], [12, 0], [12, 12], [0, 12], [0, 0]], [[2, 2], [7, 2], [7, 7], [2, 7], [2, 2]], [[5, 5], [10, 5], [10, 10], [5, 10], [5, 5]]])],
+  ] as const)('rejects %s before no-op cutter mutation', async (_name, geometry) => {
+    const dataset = await importPolygons([geometry]);
+    const arcCount = dataset.arcs!.size(), layerCount = dataset.layers.length;
+    expect(() => split(dataset, new Set([0]), [[2, 2], [3, 3]])).toThrow(new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid'));
+    expect(dataset.arcs!.size()).toBe(arcCount);
+    expect(dataset.layers).toHaveLength(layerCount);
+  });
+
   it('rejects a self-intersecting selected polygon', async () => {
     const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
     const data = dataset.arcs!.getVertexData!(), start = data.ii[0]!;
