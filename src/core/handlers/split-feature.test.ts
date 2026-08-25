@@ -325,6 +325,72 @@ describe('SplitFeatureHandler', () => {
   });
 
 
+
+  it.each([
+    ['sparse shape', new Array(1)],
+    ['sparse part', [new Array(1)]],
+    ['undefined part', [undefined]],
+  ])('cancels an active snapped cutter when selection has a %s', (_name, malformedShape) => {
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    handler.handlePointer(event('move', 5, 2));
+    expect(map.setEditDrawState).toHaveBeenCalled();
+
+    map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: [malformedShape] });
+    expect(() => handler.handlePointer(event('move', 5, 2))).not.toThrow();
+
+    expect(map.clearEditDrawState).toHaveBeenCalled();
+    expect(map.ops.splitSelected).not.toHaveBeenCalled();
+  });
+
+  it('cancels an active snapped cutter when the selection contains an undefined ref', () => {
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    handler.handlePointer(event('move', 5, 2));
+    map.getSelection.mockReturnValue([undefined]);
+
+    expect(() => handler.handlePointer(event('move', 5, 2))).not.toThrow();
+
+    expect(map.clearEditDrawState).toHaveBeenCalled();
+    expect(map.ops.splitSelected).not.toHaveBeenCalled();
+  });
+
+  it('validates a pointer move once and scans shared selected arcs once', () => {
+    const repeatedSelection = [selected, { ...selected, id: 1 }];
+    const sharedShapes = [[[0, 0, 1]], [[~0, 1]]];
+    const getVertexData = vi.fn(() => ({
+      xx: new Float64Array([0, 10, 20, 30]),
+      yy: new Float64Array([0, 0, 0, 0]),
+      nn: new Int32Array([2, 2]),
+      ii: new Int32Array([0, 2]),
+      zz: null,
+    }));
+    const forEachArcSegment = vi.fn(
+      (id: number, callback: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void) => {
+        if (id === 0) callback(0, 1, new Float64Array([0, 10]), new Float64Array([0, 0]));
+        if (id === 1) callback(0, 1, new Float64Array([20, 30]), new Float64Array([0, 0]));
+      },
+    );
+    map.getSelection.mockReturnValue(repeatedSelection);
+    map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: sharedShapes });
+    map.getSource.mockReturnValue({ getArcs: () => ({ getVertexData, forEachArcSegment }) });
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    map.getSelection.mockClear();
+    map.layers.resolve.mockClear();
+    map.getSource.mockClear();
+    getVertexData.mockClear();
+    forEachArcSegment.mockClear();
+
+    handler.handlePointer(event('move', 5, 2));
+
+    expect(map.getSelection).toHaveBeenCalledTimes(1);
+    expect(map.layers.resolve).toHaveBeenCalledTimes(1);
+    expect(map.getSource).toHaveBeenCalledTimes(1);
+    expect(getVertexData).toHaveBeenCalledTimes(1);
+    expect(forEachArcSegment.mock.calls.map(([id]) => id).sort()).toEqual([0, 1]);
+  });
+
   it('rejects empty shapes and out-of-range signed arc references', () => {
     const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
     map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: [[]] });

@@ -1,7 +1,8 @@
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
 import type { EditHandlerHost } from './edit-handler-host';
 import type { FeatureRef, SnapKind, SplitFeatureOptions } from '../../map/types';
-import type { ArcCollection, ArcVertexData, PathShape } from '../../types/mapshaper-types';
+import type { ArcCollection, ArcVertexData, PathLayer, PathShape } from '../../types/mapshaper-types';
+import type { MutableTopologySource } from '../../source/source';
 import { isPathLayer } from '../../types/mapshaper-types';
 import { projectPointOnSegment } from './draw-feature';
 import { EMAP_THEME_COLORS } from '../../theme/colors';
@@ -11,6 +12,16 @@ export type { SplitFeatureOptions } from '../../map/types';
 const DEFAULT_SNAP_THRESHOLD = 10;
 const DEFAULT_OPTIONS: SplitFeatureOptions = { cutterType: 'point', snapThreshold: DEFAULT_SNAP_THRESHOLD };
 type SnapTarget = { coord: [number, number]; kind: SnapKind };
+type SelectionContext = {
+  key: string;
+  refs: readonly FeatureRef[];
+  sourceId: string;
+  source: MutableTopologySource;
+  layer: PathLayer;
+  arcs: ArcCollection;
+  shapes: readonly PathShape[];
+  arcIds: readonly number[];
+};
 
 /** Interactive cutter sketch that delegates every geometry mutation to `ops.splitSelected`. */
 export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
@@ -40,8 +51,10 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
 
   enable(): void {
     if (this._enabled) return;
-    this._validateSelection();
-    this._selectionKey = this._selectionKeyFor(this._map.getSelection());
+    const context = this._resolveSelectionContext();
+    if (!context) throw new Error('splitFeature: selection has invalid feature geometry');
+    this._validateSelection(context);
+    this._selectionKey = context.key;
     this._generation++;
     this._enabled = true;
     this._map.setEditMode('split');
@@ -73,8 +86,8 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     if (!this._enabled) return;
     this._generation++;
     this._clearSketch();
-    const selected = this._map.getSelection();
-    this._selectionKey = this._isSelectionValid(selected) ? this._selectionKeyFor(selected) : null;
+    const context = this._resolveSelectionContext();
+    this._selectionKey = context && this._isContextCompatible(context) ? context.key : null;
   }
 
   getOptions(): Readonly<SplitFeatureOptions> {
@@ -123,90 +136,143 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
   private _onSelectionChange(): void {
     this._generation++;
     this._clearSketch();
-    const selected = this._map.getSelection();
-    this._selectionKey = this._isSelectionValid(selected) ? this._selectionKeyFor(selected) : null;
+    const context = this._resolveSelectionContext();
+    this._selectionKey = context && this._isContextCompatible(context) ? context.key : null;
     this._map.render();
   }
 
-  private _validateSelection(): void {
-    const selected = this._map.getSelection();
-    if (selected.length === 0) throw new Error('splitFeature: select features before enabling');
-    const first = selected[0];
-    if (selected.some((ref) => ref.source !== first.source || ref.layer !== first.layer)) {
-      throw new Error('splitFeature: selection must belong to one source layer');
-    }
-    const layer = this._map.layers.resolve(first.source, first.layer);
-    if (!layer || !isPathLayer(layer)) throw new Error('splitFeature: selection must have path geometry');
-    if (this._opts.cutterType === 'point' && layer.geometry_type === 'polygon') {
+  private _validateSelection(context: SelectionContext): void {
+    if (this._opts.cutterType === 'point' && context.layer.geometry_type === 'polygon') {
       throw new Error('splitFeature: point cutter cannot split polygon selection');
     }
-    if (!this._isSelectionValid(selected)) throw new Error('splitFeature: selection has invalid feature geometry');
   }
 
-  private _isSelectionValid(selected: readonly FeatureRef[]): boolean {
-    if (selected.length === 0) return false;
-    const first = selected[0];
-    if (selected.some((ref) => ref.source !== first.source || ref.layer !== first.layer)) return false;
-    const layer = this._map.layers.resolve(first.source, first.layer);
-    if (!layer || !isPathLayer(layer) || !layer.shapes) return false;
-    if (this._opts.cutterType === 'point' && layer.geometry_type === 'polygon') return false;
-    const arcs = this._map.getSource(first.source)?.getArcs() as ArcCollection | undefined;
+  private _resolveSelectionContext(): SelectionContext | null {
+    const selected = this._map.getSelection();
+    if (!Array.isArray(selected) || selected.length === 0) return null;
+
+    let sourceId: string | null = null;
+    let layerId: string | null = null;
+    for (let index = 0; index < selected.length; index++) {
+      if (!(index in selected)) return null;
+      const ref = selected[index];
+      if (
+        !ref ||
+        typeof ref.source !== 'string' ||
+        typeof ref.layer !== 'string' ||
+        !Number.isInteger(ref.id) ||
+        ref.id < 0
+      ) {
+        return null;
+      }
+      if (sourceId === null) {
+        sourceId = ref.source;
+        layerId = ref.layer;
+      } else if (ref.source !== sourceId || ref.layer !== layerId) {
+        return null;
+      }
+    }
+    const layer = this._map.layers.resolve(sourceId!, layerId!);
+    if (!layer || !isPathLayer(layer) || !layer.shapes) return null;
+    const source = this._map.getSource(sourceId!);
+    const arcs = source?.getArcs() as ArcCollection | undefined;
     const vertexData = arcs?.getVertexData?.();
-    if (!vertexData) return false;
-    const shapes = layer.shapes;
-    return selected.every((ref) => this._isValidPathShape(shapes[ref.id], ref.id, shapes.length, vertexData));
+    if (!source || !arcs || !vertexData) return null;
+
+    const shapes: PathShape[] = [];
+    const arcIds = new Set<number>();
+    for (let index = 0; index < selected.length; index++) {
+      const ref = selected[index];
+      const shape = layer.shapes[ref.id];
+      if (!this._collectPathShape(shape, ref.id, layer.shapes.length, vertexData, arcIds)) return null;
+      shapes.push(shape);
+    }
+    for (const arcId of arcIds) {
+      if (!this._isValidArc(arcId, vertexData)) return null;
+    }
+    return {
+      key: this._selectionKeyFor(selected),
+      refs: selected,
+      layer,
+      arcs,
+      sourceId: sourceId!,
+      source,
+      shapes,
+      arcIds: [...arcIds],
+    };
   }
 
-  private _isValidPathShape(
+  private _collectPathShape(
     shape: unknown,
     id: number,
     shapeCount: number,
     vertexData: ArcVertexData,
-  ): boolean {
+    arcIds: Set<number>,
+  ): shape is PathShape {
     if (!Number.isInteger(id) || id < 0 || id >= shapeCount || !Array.isArray(shape) || shape.length === 0) return false;
-    return shape.every((part) => {
+    for (let partIndex = 0; partIndex < shape.length; partIndex++) {
+      if (!(partIndex in shape)) return false;
+      const part = shape[partIndex];
       if (!Array.isArray(part) || part.length === 0) return false;
-      return part.every((raw) => {
+      for (let arcIndex = 0; arcIndex < part.length; arcIndex++) {
+        if (!(arcIndex in part)) return false;
+        const raw = part[arcIndex];
         if (!Number.isSafeInteger(raw)) return false;
         const arcId = raw < 0 ? -raw - 1 : raw;
         if (arcId < 0 || arcId >= vertexData.nn.length) return false;
-        const start = vertexData.ii[arcId];
-        const count = vertexData.nn[arcId];
-        if (!Number.isInteger(start) || !Number.isInteger(count) || count < 2) return false;
-        if (start < 0 || start + count > vertexData.xx.length || vertexData.yy.length < start + count) return false;
-        for (let index = start; index < start + count; index++) {
-          if (!Number.isFinite(vertexData.xx[index]) || !Number.isFinite(vertexData.yy[index])) return false;
-        }
-        return true;
-      });
-    });
+        arcIds.add(arcId);
+      }
+    }
+    return true;
+  }
+
+  private _isValidArc(arcId: number, vertexData: ArcVertexData): boolean {
+    const start = vertexData.ii[arcId];
+    const count = vertexData.nn[arcId];
+    if (!Number.isInteger(start) || !Number.isInteger(count) || count < 2) return false;
+    if (start < 0 || start + count > vertexData.xx.length || vertexData.yy.length < start + count) return false;
+    for (let index = start; index < start + count; index++) {
+      if (!Number.isFinite(vertexData.xx[index]) || !Number.isFinite(vertexData.yy[index])) return false;
+    }
+    return true;
   }
 
   private _selectionKeyFor(selected: readonly FeatureRef[]): string {
-    return JSON.stringify([...new Set(selected.map((ref) => JSON.stringify([ref.source, ref.layer, ref.id])))].sort());
+    const keys: string[] = [];
+    for (let index = 0; index < selected.length; index++) {
+      if (!(index in selected)) return '';
+      const ref = selected[index];
+      if (!ref) return '';
+      keys.push(JSON.stringify([ref.source, ref.layer, ref.id]));
+    }
+    return JSON.stringify([...new Set(keys)].sort());
   }
 
-  private _hasCurrentSelection(): boolean {
-    const selected = this._map.getSelection();
-    return this._selectionKey !== null && this._selectionKey === this._selectionKeyFor(selected) && this._isSelectionValid(selected);
+  private _hasCurrentSelection(context: SelectionContext | null): context is SelectionContext {
+    return context !== null && this._isContextCompatible(context) && this._selectionKey !== null && this._selectionKey === context.key;
+  }
+
+  private _isContextCompatible(context: SelectionContext): boolean {
+    return this._opts.cutterType !== 'point' || context.layer.geometry_type !== 'polygon';
   }
 
   private _updateCursor(px: number, py: number): void {
-    if (!this._hasCurrentSelection()) {
+    const context = this._resolveSelectionContext();
+    if (!this._hasCurrentSelection(context)) {
       this._clearSketch();
       this._map.render();
       return;
     }
     const cursor = this._map.unproject(px, py);
     this._cursorCoord = [cursor[0], cursor[1]];
-    const snap = this._findSnapTarget(px, py);
+    const snap = this._findSnapTarget(px, py, context);
     this._snapCoord = snap?.coord ?? null;
     this._snapKind = snap?.kind ?? null;
     this._refreshOverlay();
   }
 
   private _placeVertex(px: number, py: number): void {
-    if (!this._hasCurrentSelection()) {
+    if (!this._hasCurrentSelection(this._resolveSelectionContext())) {
       this._clearSketch();
       this._map.render();
       return;
@@ -220,7 +286,7 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
 
   private async _submit(): Promise<void> {
     if (this._submissionGeneration === this._generation || this._vertices.length === 0) return;
-    if (!this._hasCurrentSelection()) {
+    if (!this._hasCurrentSelection(this._resolveSelectionContext())) {
       this._clearSketch();
       this._map.render();
       return;
@@ -279,14 +345,9 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     this._map.clearEditDrawState();
   }
 
-  private _findSnapTarget(px: number, py: number): SnapTarget | null {
-    if (!this._hasCurrentSelection()) return null;
-    const selected = this._map.getSelection();
-    const first = selected[0];
-    const layer = this._map.layers.resolve(first.source, first.layer);
-    const source = this._map.getSource(first.source);
-    const arcs = source?.getArcs() as ArcCollection | undefined;
-    if (!layer || layer.geometry_type !== 'polyline' || !layer.shapes || !arcs?.forEachArcSegment) return null;
+  private _findSnapTarget(px: number, py: number, context: SelectionContext): SnapTarget | null {
+    const { arcs } = context;
+    if (context.layer.geometry_type !== 'polyline' || !arcs.forEachArcSegment) return null;
 
     const threshold = this._opts.snapThreshold ?? DEFAULT_SNAP_THRESHOLD;
     const c0 = this._map.unproject(px - threshold, py - threshold);
@@ -297,16 +358,8 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     const maxY = Math.max(c0[1], c1[1]);
     let bestDistance = threshold;
     let best: SnapTarget | null = null;
-    const arcIds = new Set<number>();
 
-    for (const ref of selected) {
-      const shape = layer.shapes[ref.id];
-      if (!shape) continue;
-      for (const part of shape as PathShape) {
-        for (const signedArcId of part) arcIds.add(signedArcId < 0 ? -signedArcId - 1 : signedArcId);
-      }
-    }
-    for (const arcId of arcIds) {
+    for (const arcId of context.arcIds) {
       arcs.forEachArcSegment(arcId, (i, j, xx, yy) => {
         const ax = xx[i];
         const ay = yy[i];
