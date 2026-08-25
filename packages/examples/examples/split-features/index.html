@@ -63,7 +63,7 @@
     function selectedGeometryType(ref) {
       const layers = map.getSource(ref.source)?.getLayers() ?? [];
       const layer = layers.find((candidate, index) => {
-        const canonicalId = candidate.name ?? candidate.id ?? `layer-${index}`;
+        const canonicalId = candidate.name || candidate.id || `layer-${index}`;
         return canonicalId === ref.layer;
       });
       return layer?.geometry_type;

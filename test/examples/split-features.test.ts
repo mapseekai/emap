@@ -52,15 +52,15 @@ async function executeSplitFeaturesExample() {
     getSource: (id: string) => sources.get(id) ?? {
       getLayers: () => [
         {
-          name: 'points',
+          name: '',
           id: 'roads',
-          geometry_type: 'point',
+          geometry_type: 'polyline',
           shapes: [[0]],
         },
         {
-          name: 'roads',
-          geometry_type: 'polyline',
-          shapes: [[0, 1]],
+          name: 'other',
+          geometry_type: 'point',
+          shapes: [[0]],
         },
         {
           id: 'parcels',
