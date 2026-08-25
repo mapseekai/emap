@@ -88,17 +88,23 @@
     <div class="emap-example-workbench-body">
       <section class="emap-example-section">
         <div class="emap-example-field">
+          <label for="online-source">在线数据</label>
+          <select id="online-source">
+            <option value="topojson">TopoJSON（默认）</option>
+            <option value="geojson">GeoJSON</option>
+          </select>
+        </div>
+        <div class="emap-example-field">
           <label for="file-input">文件</label>
           <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
         </div>
-        <p id="status" class="emap-example-status">正在加载本地示例数据...</p>
+        <p id="status" class="emap-example-status">正在加载在线 TopoJSON...</p>
       </section>
     </div>
   </details>
 
   <script type="module">
-    import { installExampleMapUi } from '/src/example-runtime.ts';
-    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+    import { installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
 
     const emap = await loadExampleRuntime();
     const { Emap, TopologySource, EditToolbar } = emap;
@@ -123,52 +129,90 @@
       logEl.scrollTop = logEl.scrollHeight;
     });
 
+    const ONLINE_DATASETS = {
+      topojson: {
+        label: "TopoJSON",
+        url: "https://geojson.cn/api/china/1.6.3/china.topo.json",
+        filename: "china.topo.json",
+      },
+      geojson: {
+        label: "GeoJSON",
+        url: "https://geojson.cn/api/china/1.6.3/china.json",
+        filename: "china.json",
+      },
+    };
+    const SOURCE_ID = "china-editing-source";
     const status = document.getElementById("status");
     const overlay = document.getElementById("loading-overlay");
     const loadingText = document.getElementById("loading-text");
+    const onlineSource = document.getElementById("online-source");
     const fileInput = document.getElementById("file-input");
     let currentSourceId = null;
+    let currentOnlineKind = null;
 
-    function showLoading(msg) {
-      loadingText.textContent = msg;
-      overlay.classList.remove("hidden");
-    }
-    function hideLoading() {
-      overlay.classList.add("hidden");
-    }
-    async function loadExampleData(file) {
-      const sourceId = "china-editing-source";
+    async function loadExampleData({ label, filename, read, onlineKind = null }) {
+      onlineSource.disabled = true;
       fileInput.disabled = true;
-      showLoading(`正在加载 ${file.name}...`);
+      loadingText.textContent = `正在加载 ${label}...`;
+      overlay.classList.remove("hidden");
 
       try {
-        if (currentSourceId) {
-          try { map.removeSource(currentSourceId); } catch (_) { }
-        }
+        const content = await read();
+        const source = new TopologySource(SOURCE_ID);
+        await source.setData({ filename, content });
 
-        const source = new TopologySource(sourceId);
-        const content = new Uint8Array(await file.arrayBuffer());
-        await source.setData({ filename: file.name, content });
-        await map.addSource(sourceId, source);
+        if (currentSourceId) map.removeSource(currentSourceId);
+        await map.addSource(SOURCE_ID, source);
         map.setExtent(source.getExtent());
-        currentSourceId = sourceId;
-        status.textContent = `${file.name} 已加载 — 点击 ✏ 编辑顶点`;
-      } catch (err) {
-        console.error(err);
-        status.textContent = `错误: ${err.message}`;
+        currentSourceId = SOURCE_ID;
+        currentOnlineKind = onlineKind;
+
+        const size = `${(content.byteLength / 1024).toFixed(1)} KB`;
+        status.textContent = `${label}（${size}）已加载 — 点击 ✏ 编辑顶点`;
+      } catch (error) {
+        console.error(error);
+        if (currentOnlineKind) onlineSource.value = currentOnlineKind;
+        status.textContent = `错误: ${error instanceof Error ? error.message : String(error)}`;
       } finally {
-        hideLoading();
+        overlay.classList.add("hidden");
+        onlineSource.disabled = false;
         fileInput.disabled = false;
       }
     }
 
+    async function loadOnlineData(kind) {
+      const dataset = ONLINE_DATASETS[kind];
+      if (!dataset) throw new Error(`未知在线数据格式: ${kind}`);
+
+      await loadExampleData({
+        label: `在线 ${dataset.label}`,
+        filename: dataset.filename,
+        onlineKind: kind,
+        read: async () => {
+          const response = await fetch(dataset.url);
+          if (!response.ok) {
+            throw new Error(`${dataset.label} 请求失败: ${response.status}`);
+          }
+          return new Uint8Array(await response.arrayBuffer());
+        },
+      });
+    }
+
+    onlineSource.addEventListener("change", () => {
+      void loadOnlineData(onlineSource.value);
+    });
     fileInput.addEventListener("change", () => {
       const file = fileInput.files?.[0];
-      if (file) void loadExampleData(file);
+      if (!file) return;
+      void loadExampleData({
+        label: file.name,
+        filename: file.name,
+        read: async () => new Uint8Array(await file.arrayBuffer()),
+      });
     });
 
     window.addEventListener("resize", () => map.resize());
-    await autoLoadExampleFixtures('china-editing');
+    await loadOnlineData(onlineSource.value);
   </script>
 </body>
 

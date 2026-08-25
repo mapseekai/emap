@@ -651,20 +651,29 @@ describe('DuckDB spatial example runner', () => {
   });
 
   it('does not offer CRS recovery for a rejected source', async () => {
-    const { map } = fixture();
-    map.preflightSource.mockResolvedValueOnce({
-      status: 'rejected',
-      diagnostics: [{ code: 'source-load-rejected', severity: 'error', message: 'broken input' }],
-    });
-    await mountDuckDbSpatialExample({ id: 'test', operation: 'centroid' });
-    const input = document.getElementById('file') as HTMLInputElement;
-    Object.defineProperty(input, 'files', { value: [new File(['point'], 'point.geojson')] });
-    input.dispatchEvent(new Event('change'));
-    await vi.waitFor(() =>
-      expect(document.getElementById('status')?.textContent).toContain('加载失败: broken input'),
-    );
-    expect(document.getElementById('crs-recovery')?.hidden).toBe(true);
-    expect(map.confirmSource).not.toHaveBeenCalled();
+    const reportError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { map } = fixture();
+      map.preflightSource.mockResolvedValueOnce({
+        status: 'rejected',
+        diagnostics: [{ code: 'source-load-rejected', severity: 'error', message: 'broken input' }],
+      });
+      await mountDuckDbSpatialExample({ id: 'test', operation: 'centroid' });
+      const input = document.getElementById('file') as HTMLInputElement;
+      Object.defineProperty(input, 'files', { value: [new File(['point'], 'point.geojson')] });
+      input.dispatchEvent(new Event('change'));
+      await vi.waitFor(() =>
+        expect(document.getElementById('status')?.textContent).toContain('加载失败: broken input'),
+      );
+      expect(document.getElementById('crs-recovery')?.hidden).toBe(true);
+      expect(map.confirmSource).not.toHaveBeenCalled();
+      expect(reportError).toHaveBeenCalledTimes(1);
+      expect(reportError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'broken input' }),
+      );
+    } finally {
+      reportError.mockRestore();
+    }
   });
 
   it('replaces output, renders clicked attributes, and discards stale results before publication', async () => {

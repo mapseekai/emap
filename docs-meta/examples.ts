@@ -179,8 +179,8 @@ const exampleDescriptions = {
     en: 'Switches between rectangular box selection and freehand lasso selection to compare their results.',
   },
   'china-editing': {
-    zh: '加载中国行政区划数据，结合底图和编辑控件修改行政区几何。',
-    en: 'Loads Chinese administrative boundaries and combines a basemap with controls for geometry editing.',
+    zh: '默认在线加载中国行政区划 TopoJSON，可切换为 GeoJSON 或上传本地数据后编辑几何。',
+    en: 'Loads Chinese administrative TopoJSON online by default, with GeoJSON switching and local uploads for geometry editing.',
   },
   'draw-snap-clear': {
     zh: '绘制折线时吸附参考几何，并在完成后清理临时参考图层和绘制状态。',
@@ -603,7 +603,7 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('feature-rotate-scale', 'data-editing', '旋转 / 缩放选中要素', 'Rotate and scale selected feature', [docsEditing, docsSelection], 'Emap', ['selection', 'transform', 'history'], [task6Fixture]),
   recipe('draw-snap-clear', 'data-editing', '绘制吸附清理', 'Draw snap and clear', [docsEditing], 'Emap', ['drawing', 'snap', 'history'], [task6Fixture]),
   recipe('draw-snap-edge', 'data-editing', '绘制时吸附顶点 + 边', 'Draw snap to vertex and edge', [docsEditing, docsControls], 'Emap', ['drawing', 'snap', 'history'], [task6Fixture]),
-  recipe('china-editing', 'data-editing', '中国行政区划编辑', 'China administrative editing', [docsEditing, docsControls], 'Emap', ['editing', 'basemap'], [task6Fixture]),
+  recipe('china-editing', 'data-editing', '中国行政区划编辑', 'China administrative editing', [docsEditing, docsControls], 'Emap', ['editing', 'basemap'], []),
   recipe('transaction', 'data-editing', 'Transaction + Validation', 'Transaction and validation', [docsEditing, docsErrors], 'Emap', ['transaction', 'validation', 'history'], [task6Fixture]),
   recipe('snapshot', 'data-editing', '多源快照保存 / 恢复', 'Snapshot save and restore', [docsEditing], 'Emap', ['snapshot'], [task6Fixture]),
   seed(

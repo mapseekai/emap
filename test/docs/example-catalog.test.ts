@@ -845,7 +845,9 @@ describe('example catalog metadata', () => {
       expect(html, `${example.id} avoids source-tree assets`).not.toMatch(
         /\.\.\/\.\.\/(?:dist|src)\//,
       );
-      expect(html, `${example.id} uses local starter data`).not.toContain('https://geojson.cn/');
+      if (example.id !== 'china-editing') {
+        expect(html, `${example.id} uses local starter data`).not.toContain('https://geojson.cn/');
+      }
     }
   });
 
@@ -1180,43 +1182,63 @@ describe('example catalog metadata', () => {
   });
 
   it('rejects malformed or structurally incomplete MapLibre Style JSON', async () => {
-    const html = await readFile(
-      resolve('packages/examples/examples/online-map-services/index.html'),
-      'utf8',
-    );
+    const reportError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const html = await readFile(
+        resolve('packages/examples/examples/online-map-services/index.html'),
+        'utf8',
+      );
 
-    for (const styleInput of [
-      '{"version":"8"}',
-      '{"version":8}',
-      '{"version":7,"sources":{},"layers":[]}',
-    ]) {
-      const result = await executeOnlineMapServicesExample(html, {
-        type: 'style',
-        styleMode: 'json',
-        styleInput,
-        invalid: true,
-      });
+      for (const styleInput of [
+        '{"version":"8"}',
+        '{"version":8}',
+        '{"version":7,"sources":{},"layers":[]}',
+      ]) {
+        const result = await executeOnlineMapServicesExample(html, {
+          type: 'style',
+          styleMode: 'json',
+          styleInput,
+          invalid: true,
+        });
 
-      expect(result.customServices).toEqual([]);
-      expect(result.customBasemaps).toEqual([]);
-      expect(result.statusText).toContain('Style JSON');
+        expect(result.customServices).toEqual([]);
+        expect(result.customBasemaps).toEqual([]);
+        expect(result.statusText).toContain('Style JSON');
+      }
+      expect(reportError).toHaveBeenCalledTimes(3);
+      expect(reportError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Style JSON 必须包含 version: 8、对象 sources 和数组 layers',
+        }),
+      );
+    } finally {
+      reportError.mockRestore();
     }
   });
 
   it('reports invalid WMS URLs through status without registering a service', async () => {
-    const html = await readFile(
-      resolve('packages/examples/examples/online-map-services/index.html'),
-      'utf8',
-    );
-    const result = await executeOnlineMapServicesExample(html, {
-      type: 'wms',
-      endpoint: 'not-a-url',
-      layers: 'demo:parcels',
-      invalid: true,
-    });
+    const reportError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const html = await readFile(
+        resolve('packages/examples/examples/online-map-services/index.html'),
+        'utf8',
+      );
+      const result = await executeOnlineMapServicesExample(html, {
+        type: 'wms',
+        endpoint: 'not-a-url',
+        layers: 'demo:parcels',
+        invalid: true,
+      });
 
-    expect(result.customServices).toEqual([]);
-    expect(result.statusText).toContain('WMS 地址');
+      expect(result.customServices).toEqual([]);
+      expect(result.statusText).toContain('WMS 地址');
+      expect(reportError).toHaveBeenCalledTimes(1);
+      expect(reportError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'WMS 地址必须是有效 URL' }),
+      );
+    } finally {
+      reportError.mockRestore();
+    }
   });
 
   it('keeps the Shapefile viewer map-first with one banner and one floating workbench', async () => {
