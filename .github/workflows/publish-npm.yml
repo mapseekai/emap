@@ -69,4 +69,4 @@ jobs:
       - run: pnpm run docs:verify
 
       - name: Publish package
-        run: npm publish --provenance --access public --ignore-scripts
+        run: npm publish --access public --ignore-scripts
