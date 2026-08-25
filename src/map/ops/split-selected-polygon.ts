@@ -69,7 +69,7 @@ function segmentsConflict(a: Coordinate, b: Coordinate, c: Coordinate, d: Coordi
     || [c, d].some((point) => point[0] >= Math.min(a[0], b[0]) - EPSILON && point[0] <= Math.max(a[0], b[0]) + EPSILON && point[1] >= Math.min(a[1], b[1]) - EPSILON && point[1] <= Math.max(a[1], b[1]) + EPSILON);
 }
 
-function validatePolygon(shape: PathShape, arcs: NonNullable<MapshaperDataset['arcs']>): void {
+function validatePolygon(shape: PathShape, arcs: NonNullable<MapshaperDataset['arcs']>, adapter: MapshaperAdapter): void {
   if (!shape.length || shape.some((part) => part.length === 0)) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
   const rings = shape.map((part) => shapeSegments([part], arcs));
   for (let ringIndex = 0; ringIndex < rings.length; ringIndex++) {
@@ -82,6 +82,15 @@ function validatePolygon(shape: PathShape, arcs: NonNullable<MapshaperDataset['a
     for (let otherIndex = 0; otherIndex < ringIndex; otherIndex++) for (const segment of segments) for (const other of rings[otherIndex]!) {
       if (segmentsConflict(...segment, ...other)) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
     }
+  }
+  const pathData = adapter.exportPathData(shape, arcs, 'polygon').pathData;
+  const shellIndexes = pathData.flatMap((path, index) => (path.area ?? 0) > 0 ? [index] : []);
+  if (!shellIndexes.length) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
+  for (let index = 0; index < shape.length; index++) {
+    const anchor = adapter.getShapeAnchor([shape[index]!], arcs);
+    if (!anchor) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
+    const containingShells = shellIndexes.filter((shellIndex) => adapter.testPointInRing(anchor[0], anchor[1], shape[shellIndex]!, arcs) !== 0);
+    if (containingShells.length !== 1) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
   }
   if (!(adapterArea(shape, arcs) > 0)) throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
 }
@@ -143,7 +152,7 @@ export function splitSelectedPolygons(
   for (const featureId of selectedIds) {
     const shape = layer.shapes[featureId] as PathShape | null;
     if (!shape) continue;
-    validatePolygon(shape, arcs);
+    validatePolygon(shape, arcs, adapter);
     if (properCrossings(shape, cutter.coordinates, arcs, adapter).size >= 2) crossingIds.add(featureId);
   }
   if (!crossingIds.size) return [];
