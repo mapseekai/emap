@@ -698,11 +698,38 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
 
   getShapeAnchor(shape: PathShape, arcs: ArcCollection): [number, number] | null {
     const anchor = mapshaper.internal.findAnchorPoint(shape, arcs);
-    return anchor ? [anchor[0], anchor[1]] : null;
+    return anchor ? [anchor.x, anchor.y] : null;
   }
 
   cleanArcReferences(dataset: MapshaperDataset): void {
-    mapshaper.internal.pruneArcs(dataset);
+    const arcs = dataset.arcs;
+    if (!arcs?.deleteArcs) return;
+
+    const paths: PathShape[] = [];
+    const used = new Uint8Array(arcs.size());
+    for (const layer of dataset.layers) {
+      if (layer.geometry_type !== 'polygon' && layer.geometry_type !== 'polyline') continue;
+      for (const shape of layer.shapes ?? []) {
+        if (!shape) continue;
+        const path = shape as PathShape;
+        paths.push(path);
+        for (const part of path) {
+          for (const arcId of part) used[arcId < 0 ? ~arcId : arcId] = 1;
+        }
+      }
+    }
+
+    const map = arcs.deleteArcs((arcId) => used[arcId] === 1);
+    if (arcs.size() === map.length) return;
+    for (const path of paths) {
+      for (const part of path) {
+        for (let i = 0; i < part.length; i++) {
+          const arcId = part[i]!;
+          const remapped = map[arcId < 0 ? ~arcId : arcId]!;
+          part[i] = arcId < 0 ? ~remapped : remapped;
+        }
+      }
+    }
   }
 
   addIntersectionCuts(

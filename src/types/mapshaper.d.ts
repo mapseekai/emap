@@ -161,8 +161,10 @@ declare module 'mapshaper' {
     buildPolygonMosaic(nodes: {
       setArcFilter(filter: (arcId: number) => boolean): void;
     }): { mosaic: number[][][] };
-    findAnchorPoint(shape: number[][], arcs: ArcCollection): [number, number] | null;
-    pruneArcs(dataset: MapshaperDataset): void;
+    findAnchorPoint(
+      shape: number[][],
+      arcs: ArcCollection,
+    ): { x: number; y: number; distance?: number } | null;
 
     // Direct dataset construction — used by the Arrow module
     // (GeoParquet / GeoArrow) to build datasets from coordinate buffers

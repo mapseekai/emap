@@ -63,7 +63,8 @@ describe('mapshaper feature-split primitives', () => {
       tiles.reduce((sum, tile) => sum + adapter.getShapeArea(tile, dataset.arcs!), 0),
     ).toBeCloseTo(100, 10);
     expect(adapter.getShapePerimeter(tiles[0]!, dataset.arcs!)).toBeCloseTo(30, 10);
-    expect(adapter.getShapeAnchor(tiles[0]!, dataset.arcs!)).not.toBeNull();
+    const anchor = adapter.getShapeAnchor(tiles[0]!, dataset.arcs!);
+    expect(anchor).toEqual([1005, 1002.5]);
 
     const originalPart = tiles[0]![0]!;
     originalPart[0] = Number.NaN;
@@ -93,7 +94,7 @@ describe('mapshaper feature-split primitives', () => {
     ]);
   });
 
-  it('cleans unreferenced temporary cutter arcs without changing exported target geometry', async () => {
+  it('cleans only unreferenced temporary cutter arcs without changing target partitioning', async () => {
     const adapter = getDefaultMapshaperAdapter();
     const dataset = await importFeatures([
       {
@@ -103,11 +104,11 @@ describe('mapshaper feature-split primitives', () => {
           type: 'Polygon',
           coordinates: [
             [
-              [0, 0],
-              [10, 0],
-              [10, 10],
-              [0, 10],
-              [0, 0],
+              [1000, 1000],
+              [1010, 1000],
+              [1010, 1010],
+              [1000, 1010],
+              [1000, 1000],
             ],
           ],
         },
@@ -115,18 +116,21 @@ describe('mapshaper feature-split primitives', () => {
       {
         type: 'Feature',
         properties: { kind: 'temporary-cutter' },
-        geometry: { type: 'LineString', coordinates: [[20, 0], [30, 0]] },
+        geometry: { type: 'LineString', coordinates: [[1000, 1005], [1010, 1005]] },
       },
     ]);
     const targetLayer = dataset.layers[0]!;
     const targetShape = targetLayer.shapes![0] as PathShape;
+
+    adapter.addIntersectionCuts(dataset, { no_snap: true, rebuild_topology: true });
     const before = adapter.exportPathData(targetShape, dataset.arcs!, 'polygon').pathData[0]!.points;
+    const partitionBefore = targetShape.map((part) => [...part]);
     const arcCountBefore = dataset.arcs!.size();
     dataset.layers.splice(1, 1);
-    targetLayer.shapes = [targetShape];
     adapter.cleanArcReferences(dataset);
 
     expect(dataset.arcs!.size()).toBeLessThan(arcCountBefore);
+    expect(targetShape).toEqual(partitionBefore);
     expect(adapter.exportPathData(targetShape, dataset.arcs!, 'polygon').pathData[0]!.points).toEqual(
       before,
     );

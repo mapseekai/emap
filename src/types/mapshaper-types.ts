@@ -70,6 +70,9 @@ export interface ArcCollection {
   getFilteredCopy?(): ArcCollection;
   getCopy?(): ArcCollection;
 
+  /** Keep only arcs whose ids satisfy `test`, returning old-to-new arc ids. */
+  deleteArcs?(test: (arcId: number) => boolean): Int32Array;
+
   // Vertex access
   getPointCount?(): number;
   getVertexData?(): ArcVertexData;
