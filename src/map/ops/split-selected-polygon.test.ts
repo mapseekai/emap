@@ -149,6 +149,24 @@ describe('splitSelectedPolygons', () => {
     expect(split(dataset, new Set([0]), [[-1e9, 5], [1e9, 5]])[0]!.pieces).toHaveLength(2);
   });
 
+  it('splits when a closed cutter starts and ends at a repeated boundary occurrence', async () => {
+    const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
+    const result = split(dataset, new Set([0]), [[0, 5], [10, 5], [10, 12], [-1, 12], [-1, 5], [0, 5]]);
+    expect(result[0]!.pieces).toHaveLength(2);
+  });
+
+  it('retains a proper crossing before the cutter revisits it as an exterior V touch', async () => {
+    const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
+    const result = split(dataset, new Set([0]), [[-1, 5], [11, 5], [11, 11], [-1, 11], [-1, 4], [0, 5], [-1, 6]]);
+    expect(result[0]!.pieces).toHaveLength(2);
+  });
+
+  it('counts duplicate proper visits at one boundary coordinate once after classification', async () => {
+    const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
+    const result = split(dataset, new Set([0]), [[-1, 5], [11, 5], [11, 11], [-1, 11], [-1, 5], [11, 5]]);
+    expect(result[0]!.pieces).toHaveLength(2);
+  });
+
   it('keeps a mixed exterior V touch and one crossing as a no-op', async () => {
     const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
     expect(split(dataset, new Set([0]), [[-1, 0], [0, 0], [-1, 1], [-1, 5], [5, 5]])).toEqual([]);

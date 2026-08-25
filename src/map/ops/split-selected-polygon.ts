@@ -109,11 +109,11 @@ function properCrossings(shape: PathShape, cutter: readonly Coordinate[], arcs: 
     if (length === 0) continue;
     for (const [boundaryStart, boundaryEnd] of shapeSegments(shape, arcs)) {
       const point = segmentIntersection(start, end, boundaryStart, boundaryEnd);
-      if (!point) continue;
-      events.push({ point, distance: offsets[index - 1]! + Math.hypot(point[0] - start[0], point[1] - start[1]) });
+      if (point) events.push({ point, distance: offsets[index - 1]! + Math.hypot(point[0] - start[0], point[1] - start[1]) });
     }
   }
-  const ordered = events.sort((left, right) => left.distance - right.distance).filter((event, index, all) => index === 0 || event.distance !== all[index - 1]!.distance || event.point[0] !== all[index - 1]!.point[0] || event.point[1] !== all[index - 1]!.point[1]);
+  const ordered = events.sort((left, right) => left.distance - right.distance);
+  const eventDistances = [...new Set(ordered.map((event) => event.distance))];
   const pointAt = (distance: number): Coordinate => {
     const clamped = Math.max(0, Math.min(offsets.at(-1)!, distance));
     const segment = offsets.findIndex((_offset, index) => index + 1 < offsets.length && clamped <= offsets[index + 1]!);
@@ -121,11 +121,19 @@ function properCrossings(shape: PathShape, cutter: readonly Coordinate[], arcs: 
     const t = length === 0 ? 0 : (clamped - offsets[segment]!) / length;
     return [start[0] + t * (end[0] - start[0]), start[1] + t * (end[1] - start[1])];
   };
+  const closed = cutter[0]![0] === cutter.at(-1)![0] && cutter[0]![1] === cutter.at(-1)![1];
   const crossings = new Set<string>();
+  let distanceIndex = 0;
   for (let index = 0; index < ordered.length; index++) {
-    const event = ordered[index]!, previous = index === 0 ? 0 : ordered[index - 1]!.distance, next = index + 1 === ordered.length ? offsets.at(-1)! : ordered[index + 1]!.distance;
-    if (event.distance === previous || event.distance === next) continue;
-    const before = pointAt((previous + event.distance) / 2), after = pointAt((event.distance + next) / 2);
+    if (index > 0 && ordered[index - 1]!.distance !== ordered[index]!.distance) distanceIndex++;
+    const event = ordered[index]!;
+    const previous = eventDistances[distanceIndex - 1];
+    const next = eventDistances[distanceIndex + 1];
+    const beforeDistance = previous ?? (closed ? eventDistances.at(-1) : 0);
+    const afterDistance = next ?? (closed ? eventDistances[0] : offsets.at(-1)!);
+    if (beforeDistance === undefined || afterDistance === undefined || (!closed && (event.distance === beforeDistance || event.distance === afterDistance))) continue;
+    const before = pointAt((beforeDistance + (closed && previous === undefined ? offsets.at(-1)! : event.distance)) / 2);
+    const after = pointAt((event.distance + (closed && next === undefined ? offsets.at(-1)! + afterDistance : afterDistance)) / 2);
     if (adapter.testPointInPolygon(before[0], before[1], shape, arcs) !== adapter.testPointInPolygon(after[0], after[1], shape, arcs)) crossings.add(`${event.point[0]},${event.point[1]}`);
   }
   return crossings;
