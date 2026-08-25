@@ -35,6 +35,11 @@ export interface RenderRequest {
   navDelta?: AffineDelta;
 }
 
+/** Geometry supplied to selected-polyline split operations. */
+export type SplitCutter =
+  | { type: 'point'; coordinates: readonly [number, number] }
+  | { type: 'line'; coordinates: readonly (readonly [number, number])[] };
+
 export interface MapOptions {
   container: string | HTMLElement;
   interactive?: boolean;
