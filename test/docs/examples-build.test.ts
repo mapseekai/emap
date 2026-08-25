@@ -152,6 +152,16 @@ describe('examples build routes', () => {
 
     expect(request.url).toBe('/examples/getting-started/points/index.html?source=dev');
     expect(nextCalls).toBe(1);
+
+    const splitRequest = {
+      url: '/mapseekai/emap/examples/split-features/',
+    } as IncomingMessage;
+    middleware(splitRequest, {} as ServerResponse, () => {
+      nextCalls += 1;
+    });
+
+    expect(splitRequest.url).toBe('/examples/split-features/index.html');
+    expect(nextCalls).toBe(2);
   });
 });
 

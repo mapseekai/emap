@@ -32,6 +32,7 @@ const routeIds = [
   'join',
   'merge-layers',
   'merge-selected',
+  'split-features',
   'rename-layer',
   'split-layer',
   'interaction-handlers',
