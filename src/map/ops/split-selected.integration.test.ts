@@ -156,6 +156,23 @@ describe('MapshaperOps.splitSelected integration', () => {
     expect(events.selection).not.toHaveBeenCalled();
     expect(selection.getAll()).toHaveLength(selected.length);
   });
+  it('rejects mixed selections and missing layers before mutation', async () => {
+    const dataset = await importDataset([line([[0, 0], [10, 0]])]);
+    dataset.layers[0]!.name = 'split-selected';
+    const mixed = harness(dataset, [0]);
+    mixed.selection.apply([{ source: 'other', layer: 'split-selected', id: 0 }], 'add');
+    await expect(mixed.ops.splitSelected({ cutter: { type: 'point', coordinates: [5, 0] } })).resolves.toMatchObject({
+      ok: false, error: { kind: 'validation', field: 'selection' },
+    });
+    expect(mixed.history.entries).toHaveLength(0);
+
+    const missing = harness(dataset, [0]);
+    missing.selection.apply([{ source: 'source', layer: 'missing', id: 0 }], 'replace');
+    await expect(missing.ops.splitSelected({ cutter: { type: 'point', coordinates: [5, 0] } })).resolves.toMatchObject({
+      ok: false, error: { kind: 'not-found', what: 'layer' },
+    });
+    expect(missing.history.entries).toHaveLength(0);
+  });
   it('splits a real polygon through the facade and rejects no-effective cuts atomically', async () => {
     const dataset = await importDataset([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]], { name: 'parcel' })]);
     dataset.layers[0]!.name = 'split-selected';
