@@ -149,9 +149,9 @@ describe('splitSelectedPolygons', () => {
     expect(split(dataset, new Set([0]), [[-1e9, 5], [1e9, 5]])[0]!.pieces).toHaveLength(2);
   });
 
-  it('splits when a closed cutter starts and ends at a repeated boundary occurrence', async () => {
+  it('splits when a closed cutter starts and ends at repeated boundary occurrences', async () => {
     const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
-    const result = split(dataset, new Set([0]), [[0, 5], [10, 5], [10, 12], [-1, 12], [-1, 5], [0, 5]]);
+    const result = split(dataset, new Set([0]), [[0, 5], [10, 5], [10, 12], [-1, 12], [-1, 5], [0, 5], [0, 5]]);
     expect(result[0]!.pieces).toHaveLength(2);
   });
 
@@ -170,6 +170,14 @@ describe('splitSelectedPolygons', () => {
   it('keeps a mixed exterior V touch and one crossing as a no-op', async () => {
     const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
     expect(split(dataset, new Set([0]), [[-1, 0], [0, 0], [-1, 1], [-1, 5], [5, 5]])).toEqual([]);
+  });
+
+  it('keeps a closed exterior seam touch with repeated proper visits as a no-op', async () => {
+    const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
+    const arcCount = dataset.arcs!.size(), layerCount = dataset.layers.length;
+    expect(split(dataset, new Set([0]), [[0, 5], [-1, 5], [-1, 11], [11, 11], [11, 5], [10, 5], [5, 5], [10, 5], [11, 6], [11, 11], [-1, 11], [-1, 5], [0, 5], [0, 5]])).toEqual([]);
+    expect(dataset.arcs!.size()).toBe(arcCount);
+    expect(dataset.layers).toHaveLength(layerCount);
   });
 
   it('rejects a nested negative hole before no-op cutter mutation', async () => {

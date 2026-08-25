@@ -112,29 +112,41 @@ function properCrossings(shape: PathShape, cutter: readonly Coordinate[], arcs: 
       if (point) events.push({ point, distance: offsets[index - 1]! + Math.hypot(point[0] - start[0], point[1] - start[1]) });
     }
   }
-  const ordered = events.sort((left, right) => left.distance - right.distance);
-  const eventDistances = [...new Set(ordered.map((event) => event.distance))];
+  const groups: Array<{ distance: number; events: Array<{ point: Coordinate; distance: number }> }> = [];
+  for (const event of events.sort((left, right) => left.distance - right.distance)) {
+    const group = groups.at(-1);
+    if (group?.distance === event.distance) group.events.push(event);
+    else groups.push({ distance: event.distance, events: [event] });
+  }
+  const totalLength = offsets.at(-1)!;
   const pointAt = (distance: number): Coordinate => {
-    const clamped = Math.max(0, Math.min(offsets.at(-1)!, distance));
+    const clamped = Math.max(0, Math.min(totalLength, distance));
     const segment = offsets.findIndex((_offset, index) => index + 1 < offsets.length && clamped <= offsets[index + 1]!);
     const start = cutter[segment]!, end = cutter[segment + 1]!, length = lengths[segment]!;
     const t = length === 0 ? 0 : (clamped - offsets[segment]!) / length;
     return [start[0] + t * (end[0] - start[0]), start[1] + t * (end[1] - start[1])];
   };
   const closed = cutter[0]![0] === cutter.at(-1)![0] && cutter[0]![1] === cutter.at(-1)![1];
+  const seam = closed && groups.length > 1 && groups[0]!.events.some((first) =>
+    groups.at(-1)!.events.some((last) => first.point[0] === last.point[0] && first.point[1] === last.point[1]),
+  );
   const crossings = new Set<string>();
-  let distanceIndex = 0;
-  for (let index = 0; index < ordered.length; index++) {
-    if (index > 0 && ordered[index - 1]!.distance !== ordered[index]!.distance) distanceIndex++;
-    const event = ordered[index]!;
-    const previous = eventDistances[distanceIndex - 1];
-    const next = eventDistances[distanceIndex + 1];
-    const beforeDistance = previous ?? (closed ? eventDistances.at(-1) : 0);
-    const afterDistance = next ?? (closed ? eventDistances[0] : offsets.at(-1)!);
-    if (beforeDistance === undefined || afterDistance === undefined || (!closed && (event.distance === beforeDistance || event.distance === afterDistance))) continue;
-    const before = pointAt((beforeDistance + (closed && previous === undefined ? offsets.at(-1)! : event.distance)) / 2);
-    const after = pointAt((event.distance + (closed && next === undefined ? offsets.at(-1)! + afterDistance : afterDistance)) / 2);
-    if (adapter.testPointInPolygon(before[0], before[1], shape, arcs) !== adapter.testPointInPolygon(after[0], after[1], shape, arcs)) crossings.add(`${event.point[0]},${event.point[1]}`);
+  for (let index = 0; index < groups.length; index++) {
+    if (seam && index === groups.length - 1) continue;
+    const group = groups[index]!;
+    const previous = index === 0 ? (closed ? groups.at(seam ? -2 : -1) : undefined) : groups[index - 1];
+    const next = index + 1 < groups.length ? groups[index + 1] : (closed ? groups[0] : undefined);
+    const previousDistance = previous?.distance ?? 0;
+    const nextDistance = next?.distance ?? totalLength;
+    if (!closed && (group.distance === previousDistance || group.distance === nextDistance)) continue;
+    const beforeEnd = seam && index === 0 ? totalLength : group.distance;
+    const afterStart = seam && index === 0 ? 0 : group.distance;
+    const before = pointAt((previousDistance + beforeEnd) / 2);
+    const afterEnd = next === groups[0] ? (seam ? totalLength : totalLength + nextDistance) : nextDistance;
+    const after = pointAt((afterStart + afterEnd) / 2);
+    if (adapter.testPointInPolygon(before[0], before[1], shape, arcs) !== adapter.testPointInPolygon(after[0], after[1], shape, arcs)) {
+      for (const event of group.events) crossings.add(`${event.point[0]},${event.point[1]}`);
+    }
   }
   return crossings;
 }
