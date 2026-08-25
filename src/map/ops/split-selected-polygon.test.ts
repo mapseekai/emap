@@ -856,4 +856,86 @@ describe('splitSelectedPolygons', () => {
     expect(dataset.arcs!.size()).toBe(beforeArcCount);
     expect(dataset.layers).toHaveLength(beforeLayers);
   });
+
+  it.each([
+    ['wrapped negative alias', [[-4_294_967_297]]],
+    ['unsafe negative', [[-9_007_199_254_740_992]]],
+    ['mixed wrapped negative alias', [[0], [-4_294_967_297]]],
+  ] as const)('rejects %s polygon arc IDs as geometry validation before mutation', async (_name, shape) => {
+    const dataset = await importPolygons([
+      polygon([
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+      ]),
+    ]);
+    const data = dataset.arcs!.getVertexData!();
+    const start = data.ii[0]!;
+    const count = data.nn[0]!;
+    for (let index = 0; index < Math.floor(count / 2); index++) {
+      const other = count - index - 1;
+      [data.xx[start + index], data.xx[start + other]] = [
+        data.xx[start + other]!,
+        data.xx[start + index]!,
+      ];
+      [data.yy[start + index], data.yy[start + other]] = [
+        data.yy[start + other]!,
+        data.yy[start + index]!,
+      ];
+    }
+    dataset.layers[0]!.shapes![0] = shape;
+    const beforeArcCount = dataset.arcs!.size();
+    const beforeLayers = dataset.layers.length;
+
+    expect(() =>
+      split(dataset, new Set([0]), [
+        [-1, 5],
+        [11, 5],
+      ]),
+    ).toThrow(new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid'));
+    expect(dataset.arcs!.size()).toBe(beforeArcCount);
+    expect(dataset.layers).toHaveLength(beforeLayers);
+  });
+
+  it('splits a valid polygon whose reversed path uses signed arc ID -1', async () => {
+    const dataset = await importPolygons([
+      polygon([
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+      ]),
+    ]);
+    const data = dataset.arcs!.getVertexData!();
+    const start = data.ii[0]!;
+    const count = data.nn[0]!;
+    for (let index = 0; index < Math.floor(count / 2); index++) {
+      const other = count - index - 1;
+      [data.xx[start + index], data.xx[start + other]] = [
+        data.xx[start + other]!,
+        data.xx[start + index]!,
+      ];
+      [data.yy[start + index], data.yy[start + other]] = [
+        data.yy[start + other]!,
+        data.yy[start + index]!,
+      ];
+    }
+    dataset.layers[0]!.shapes![0] = [[-1]];
+    const original = dataset.layers[0]!.shapes![0] as PathShape;
+
+    const result = split(dataset, new Set([0]), [
+      [-1, 5],
+      [11, 5],
+    ]);
+
+    expect(result[0]!.pieces).toHaveLength(2);
+    await expectConserved(dataset, original, result[0]!.pieces);
+  });
 });

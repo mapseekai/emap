@@ -199,7 +199,7 @@ function validateSelectedPolylines(
     for (const part of shape) {
       if (!Array.isArray(part) || !part.length)
         throw new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid');
-      let previous: Coordinate | undefined;
+      let previousArcEnd: Coordinate | undefined;
       let hasLength = false;
       for (const id of part) {
         const arcId = typeof id === 'number' && id < 0 ? ~id : id;
@@ -215,6 +215,9 @@ function validateSelectedPolylines(
             'selected polyline geometry is invalid',
           );
         const iterator = arcs.getArcIter(arcId);
+        let first: Coordinate | undefined;
+        let last: Coordinate | undefined;
+        let previousPoint: Coordinate | undefined;
         let vertices = 0;
         while (iterator.hasNext()) {
           const point: Coordinate = [iterator.x, iterator.y];
@@ -223,8 +226,11 @@ function validateSelectedPolylines(
               'geometry',
               'selected polyline geometry is invalid',
             );
-          if (previous && (previous[0] !== point[0] || previous[1] !== point[1])) hasLength = true;
-          previous = point;
+          first ??= point;
+          last = point;
+          if (previousPoint && (previousPoint[0] !== point[0] || previousPoint[1] !== point[1]))
+            hasLength = true;
+          previousPoint = point;
           vertices++;
         }
         if (vertices < 2)
@@ -232,6 +238,13 @@ function validateSelectedPolylines(
             'geometry',
             'selected polyline geometry is invalid',
           );
+        const [start, end] = id < 0 ? [last!, first!] : [first!, last!];
+        if (previousArcEnd && (previousArcEnd[0] !== start[0] || previousArcEnd[1] !== start[1]))
+          throw new SplitGeometryValidationError(
+            'geometry',
+            'selected polyline geometry is invalid',
+          );
+        previousArcEnd = end;
       }
       if (!hasLength)
         throw new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid');

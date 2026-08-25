@@ -487,4 +487,47 @@ describe('SplitFeatureHandler', () => {
       expect.objectContaining({ snapKind: 'vertex' }),
     );
   });
+
+  it('projects only nearby shared reversed-arc vertices while an endpoint remains a vertex snap', () => {
+    const remoteVertices = Array.from({ length: 100 }, (_, index) => 1_000 + index);
+    const xx = new Float64Array([0, 10, ...remoteVertices]);
+    const yy = new Float64Array([0, 0, ...remoteVertices]);
+    const getVertexData = vi.fn(() => ({
+      xx,
+      yy,
+      nn: new Int32Array([2, remoteVertices.length]),
+      ii: new Int32Array([0, 2]),
+      zz: null,
+    }));
+    const forEachArcSegment = vi.fn(
+      (
+        id: number,
+        callback: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void,
+      ) => {
+        if (id === 0) callback(0, 1, new Float64Array([0, 10]), new Float64Array([0, 0]));
+      },
+    );
+    map.getSelection.mockReturnValue([selected, { ...selected, id: 1 }]);
+    map.layers.resolve.mockReturnValue({
+      name: 'lines',
+      geometry_type: 'polyline',
+      shapes: [[[0, 1]], [[~0, ~1]]],
+    });
+    map.getSource.mockReturnValue({ getArcs: () => ({ getVertexData, forEachArcSegment }) });
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    map.project.mockClear();
+
+    handler.handlePointer(event('move', 0, 0));
+
+    expect(map.project.mock.calls).toEqual([
+      [0, 0],
+      [10, 0],
+      [0, 0],
+      [10, 0],
+    ]);
+    expect(map.setEditDrawState).toHaveBeenLastCalledWith(
+      expect.objectContaining({ snapKind: 'vertex' }),
+    );
+  });
 });

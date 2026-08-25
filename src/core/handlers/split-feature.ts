@@ -400,6 +400,7 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
       const count = vertexData.nn[arcId]!;
       for (let index = start; index < start + count; index++) {
         const coord = [vertexData.xx[index]!, vertexData.yy[index]!] as [number, number];
+        if (coord[0] < minX || coord[0] > maxX || coord[1] < minY || coord[1] > maxY) continue;
         const projected = this._map.project(coord[0], coord[1]);
         const distance = Math.hypot(projected[0] - px, projected[1] - py);
         if (distance < bestDistance) {

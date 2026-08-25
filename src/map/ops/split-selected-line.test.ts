@@ -814,4 +814,45 @@ describe('splitSelectedPolylines', () => {
       ).pieces[0]!.pieces,
     ).toHaveLength(2);
   });
+
+  it('rejects disconnected zero-length arcs in a preceding part before cutter noding', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ]);
+    const arcs = dataset.arcs!;
+    const firstZeroArc = arcs.size();
+    adapter.appendEmptyArc(arcs);
+    adapter.appendVertex(arcs, [0, 0]);
+    adapter.appendVertex(arcs, [0, 0]);
+    const secondZeroArc = arcs.size();
+    adapter.appendEmptyArc(arcs);
+    adapter.appendVertex(arcs, [1, 1]);
+    adapter.appendVertex(arcs, [1, 1]);
+    const layer = dataset.layers[0]!;
+    layer.shapes![0] = [[firstZeroArc, secondZeroArc], [...(layer.shapes![0] as PathShape)[0]!]];
+    const beforeArcCount = arcs.size();
+
+    expect(() =>
+      splitSelectedPolylines(
+        dataset,
+        0,
+        new Set([0]),
+        {
+          type: 'polyline',
+          coordinates: [
+            [5, -5],
+            [5, 5],
+          ],
+        },
+        adapter,
+      ),
+    ).toThrow(
+      new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid'),
+    );
+    expect(arcs.size()).toBe(beforeArcCount);
+  });
 });

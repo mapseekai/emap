@@ -8,7 +8,7 @@ const EPSILON = Number.EPSILON * 1024;
 type Coordinate = readonly [number, number];
 
 function unsignedArcId(id: number): number {
-  return id < 0 ? ~id : id;
+  return id < 0 ? -id - 1 : id;
 }
 
 function arcEndpoints(
@@ -78,14 +78,10 @@ function validatePolygonArcReferences(
     if (!Array.isArray(part) || !part.length)
       throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
     for (const id of part) {
-      const arcId = typeof id === 'number' && id < 0 ? ~id : id;
-      if (
-        typeof id !== 'number' ||
-        !Number.isSafeInteger(id) ||
-        !Number.isSafeInteger(arcId) ||
-        arcId < 0 ||
-        arcId >= arcs.size()
-      )
+      if (typeof id !== 'number' || !Number.isSafeInteger(id))
+        throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
+      const arcId = unsignedArcId(id);
+      if (!Number.isSafeInteger(arcId) || arcId < 0 || arcId >= arcs.size())
         throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
       const iterator = arcs.getArcIter(arcId);
       let vertices = 0;
