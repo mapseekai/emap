@@ -1,7 +1,12 @@
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
 import type { EditHandlerHost } from './edit-handler-host';
 import type { FeatureRef, SnapKind, SplitFeatureOptions } from '../../map/types';
-import type { ArcCollection, ArcVertexData, PathLayer, PathShape } from '../../types/mapshaper-types';
+import type {
+  ArcCollection,
+  ArcVertexData,
+  PathLayer,
+  PathShape,
+} from '../../types/mapshaper-types';
 import type { MutableTopologySource } from '../../source/source';
 import { isPathLayer } from '../../types/mapshaper-types';
 import { projectPointOnSegment } from './draw-feature';
@@ -10,7 +15,10 @@ import { EMAP_THEME_COLORS } from '../../theme/colors';
 export type { SplitFeatureOptions } from '../../map/types';
 
 const DEFAULT_SNAP_THRESHOLD = 10;
-const DEFAULT_OPTIONS: SplitFeatureOptions = { cutterType: 'point', snapThreshold: DEFAULT_SNAP_THRESHOLD };
+const DEFAULT_OPTIONS: SplitFeatureOptions = {
+  cutterType: 'point',
+  snapThreshold: DEFAULT_SNAP_THRESHOLD,
+};
 type SnapTarget = { coord: [number, number]; kind: SnapKind };
 type SelectionContext = {
   key: string;
@@ -48,7 +56,10 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
   private readonly _onMapMoveBound = () => this._refreshOverlay();
   private readonly _onSelectionChangeBound = () => this._onSelectionChange();
 
-  constructor(private readonly _map: EditHandlerHost, options: Partial<SplitFeatureOptions> = {}) {
+  constructor(
+    private readonly _map: EditHandlerHost,
+    options: Partial<SplitFeatureOptions> = {},
+  ) {
     this._opts = { ...DEFAULT_OPTIONS, ...options };
     this._map.on('editmodechange', (event: { mode: string }) => {
       if (event.mode !== 'split' && this._enabled) this._quietDisable();
@@ -111,7 +122,8 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
       return 'passthrough';
     }
     if (event.kind === 'click') {
-      if (event.button !== 0 || this._submissionGeneration === this._generation) return 'passthrough';
+      if (event.button !== 0 || this._submissionGeneration === this._generation)
+        return 'passthrough';
       this._placeVertex(event.point.x, event.point.y);
       return 'consumed';
     }
@@ -190,7 +202,8 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     for (let index = 0; index < selected.length; index++) {
       const ref = selected[index];
       const shape = layer.shapes[ref.id];
-      if (!this._collectPathShape(shape, ref.id, layer.shapes.length, vertexData, arcIds)) return null;
+      if (!this._collectPathShape(shape, ref.id, layer.shapes.length, vertexData, arcIds))
+        return null;
       shapes.push(shape);
     }
     for (const arcId of arcIds) {
@@ -215,7 +228,14 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     vertexData: ArcVertexData,
     arcIds: Set<number>,
   ): shape is PathShape {
-    if (!Number.isInteger(id) || id < 0 || id >= shapeCount || !Array.isArray(shape) || shape.length === 0) return false;
+    if (
+      !Number.isInteger(id) ||
+      id < 0 ||
+      id >= shapeCount ||
+      !Array.isArray(shape) ||
+      shape.length === 0
+    )
+      return false;
     for (let partIndex = 0; partIndex < shape.length; partIndex++) {
       if (!(partIndex in shape)) return false;
       const part = shape[partIndex];
@@ -236,9 +256,11 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     const start = vertexData.ii[arcId];
     const count = vertexData.nn[arcId];
     if (!Number.isInteger(start) || !Number.isInteger(count) || count < 2) return false;
-    if (start < 0 || start + count > vertexData.xx.length || vertexData.yy.length < start + count) return false;
+    if (start < 0 || start + count > vertexData.xx.length || vertexData.yy.length < start + count)
+      return false;
     for (let index = start; index < start + count; index++) {
-      if (!Number.isFinite(vertexData.xx[index]) || !Number.isFinite(vertexData.yy[index])) return false;
+      if (!Number.isFinite(vertexData.xx[index]) || !Number.isFinite(vertexData.yy[index]))
+        return false;
     }
     return true;
   }
@@ -255,7 +277,12 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
   }
 
   private _hasCurrentSelection(context: SelectionContext | null): context is SelectionContext {
-    return context !== null && this._isContextCompatible(context) && this._selectionKey !== null && this._selectionKey === context.key;
+    return (
+      context !== null &&
+      this._isContextCompatible(context) &&
+      this._selectionKey !== null &&
+      this._selectionKey === context.key
+    );
   }
 
   private _isContextCompatible(context: SelectionContext): boolean {
@@ -305,7 +332,8 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
         : { type: 'polyline' as const, coordinates: this._vertices.slice() };
     try {
       const result = await this._map.ops.splitSelected({ cutter });
-      if (generation === this._generation && !result.ok) this._map.fire('error', { error: result.error });
+      if (generation === this._generation && !result.ok)
+        this._map.fire('error', { error: result.error });
     } finally {
       if (this._submissionGeneration === generation) this._submissionGeneration = null;
       if (generation === this._generation) {
@@ -371,8 +399,18 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
         const ay = yy[i];
         const bx = xx[j];
         const by = yy[j];
-        if (Math.max(ax, bx) < minX || Math.min(ax, bx) > maxX || Math.max(ay, by) < minY || Math.min(ay, by) > maxY) return;
-        const projected = projectPointOnSegment([px, py], this._map.project(ax, ay), this._map.project(bx, by));
+        if (
+          Math.max(ax, bx) < minX ||
+          Math.min(ax, bx) > maxX ||
+          Math.max(ay, by) < minY ||
+          Math.min(ay, by) > maxY
+        )
+          return;
+        const projected = projectPointOnSegment(
+          [px, py],
+          this._map.project(ax, ay),
+          this._map.project(bx, by),
+        );
         if (projected.dist >= bestDistance) return;
         bestDistance = projected.dist;
         best = { coord: this._map.unproject(projected.point[0], projected.point[1]), kind: 'edge' };

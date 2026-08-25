@@ -251,7 +251,10 @@ export function _runPreparedDatasetMutation<T>(
   mutate: (
     working: MapshaperDataset,
     original: MapshaperDataset,
-  ) => PreparedDatasetMutationResult<T> | OpResult<T> | Promise<PreparedDatasetMutationResult<T> | OpResult<T>>,
+  ) =>
+    | PreparedDatasetMutationResult<T>
+    | OpResult<T>
+    | Promise<PreparedDatasetMutationResult<T> | OpResult<T>>,
 ): Promise<OpResult<T>> {
   const transaction = host._activeTransaction ?? null;
   const operation = enqueueSourceOperation(host, sourceId, async () => {
@@ -275,7 +278,10 @@ export function _runPreparedDatasetMutation<T>(
         host._activeTransaction !== transaction ||
         (transaction !== null && !transaction.isOpen)
       ) {
-        return Err.staleOperation(sourceId, typeof label === 'string' ? label : 'prepared dataset mutation');
+        return Err.staleOperation(
+          sourceId,
+          typeof label === 'string' ? label : 'prepared dataset mutation',
+        );
       }
 
       const beforeSelection = host._selection.snapshot();

@@ -48,7 +48,13 @@ describe('mapshaper feature-split primitives', () => {
       {
         type: 'Feature',
         properties: { kind: 'cutter' },
-        geometry: { type: 'LineString', coordinates: [[1000, 1005], [1010, 1005]] },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [1000, 1005],
+            [1010, 1005],
+          ],
+        },
       },
     ]);
     const boundaryShape = dataset.layers[0]!.shapes![0] as PathShape;
@@ -77,7 +83,13 @@ describe('mapshaper feature-split primitives', () => {
       {
         type: 'Feature',
         properties: {},
-        geometry: { type: 'LineString', coordinates: [[0, 0], [10, 0]] },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [0, 0],
+            [10, 0],
+          ],
+        },
       },
     ]);
     const shape = dataset.layers[0]!.shapes![0] as PathShape;
@@ -116,14 +128,21 @@ describe('mapshaper feature-split primitives', () => {
       {
         type: 'Feature',
         properties: { kind: 'temporary-cutter' },
-        geometry: { type: 'LineString', coordinates: [[1000, 1005], [1010, 1005]] },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [1000, 1005],
+            [1010, 1005],
+          ],
+        },
       },
     ]);
     const targetLayer = dataset.layers[0]!;
     const targetShape = targetLayer.shapes![0] as PathShape;
 
     adapter.addIntersectionCuts(dataset, { no_snap: true, rebuild_topology: true });
-    const before = adapter.exportPathData(targetShape, dataset.arcs!, 'polygon').pathData[0]!.points;
+    const before = adapter.exportPathData(targetShape, dataset.arcs!, 'polygon').pathData[0]!
+      .points;
     const partitionBefore = targetShape.map((part) => [...part]);
     const arcCountBefore = dataset.arcs!.size();
     dataset.layers.splice(1, 1);
@@ -131,8 +150,8 @@ describe('mapshaper feature-split primitives', () => {
 
     expect(dataset.arcs!.size()).toBeLessThan(arcCountBefore);
     expect(targetShape).toEqual(partitionBefore);
-    expect(adapter.exportPathData(targetShape, dataset.arcs!, 'polygon').pathData[0]!.points).toEqual(
-      before,
-    );
+    expect(
+      adapter.exportPathData(targetShape, dataset.arcs!, 'polygon').pathData[0]!.points,
+    ).toEqual(before);
   });
 });

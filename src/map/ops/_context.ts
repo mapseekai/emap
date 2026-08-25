@@ -62,7 +62,10 @@ export type RunPreparedDatasetMutation = <T>(
   mutate: (
     working: MapshaperDataset,
     original: MapshaperDataset,
-  ) => PreparedDatasetMutationResult<T> | OpResult<T> | Promise<PreparedDatasetMutationResult<T> | OpResult<T>>,
+  ) =>
+    | PreparedDatasetMutationResult<T>
+    | OpResult<T>
+    | Promise<PreparedDatasetMutationResult<T> | OpResult<T>>,
 ) => Promise<OpResult<T>>;
 
 /**

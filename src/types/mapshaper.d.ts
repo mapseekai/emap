@@ -155,12 +155,14 @@ declare module 'mapshaper' {
       arcs: ArcCollection,
     ): unknown;
     remapDividedArcs(dataset: MapshaperDataset, map: unknown): void;
-    NodeCollection: new (arcs: ArcCollection) => {
+    NodeCollection: new (
+      arcs: ArcCollection,
+    ) => {
       setArcFilter(filter: (arcId: number) => boolean): void;
     };
-    buildPolygonMosaic(nodes: {
-      setArcFilter(filter: (arcId: number) => boolean): void;
-    }): { mosaic: number[][][] };
+    buildPolygonMosaic(nodes: { setArcFilter(filter: (arcId: number) => boolean): void }): {
+      mosaic: number[][][];
+    };
     findAnchorPoint(
       shape: number[][],
       arcs: ArcCollection,

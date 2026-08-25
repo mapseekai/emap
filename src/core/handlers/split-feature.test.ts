@@ -18,13 +18,18 @@ function event(
   return { kind, point: { x, y }, modifiers, button: 0, originalEvent };
 }
 
-function createMap(options: { geometry?: 'polyline' | 'polygon'; selection?: typeof selected[] } = {}) {
+function createMap(
+  options: { geometry?: 'polyline' | 'polygon'; selection?: (typeof selected)[] } = {},
+) {
   const geometry = options.geometry ?? 'polyline';
   const selection = options.selection ?? [selected];
   const layer = { name: 'lines', geometry_type: geometry, shapes: [[[0]], [[1]]] };
   const arcs = {
     forEachArcSegment: vi.fn(
-      (id: number, callback: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void) => {
+      (
+        id: number,
+        callback: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void,
+      ) => {
         if (id === 0) callback(0, 1, new Float64Array([0, 10]), new Float64Array([0, 0]));
         if (id === 1) callback(0, 1, new Float64Array([20, 30]), new Float64Array([0, 0]));
       },
@@ -69,11 +74,15 @@ describe('SplitFeatureHandler', () => {
     ).toThrow(/select/i);
     expect(() =>
       new SplitFeatureHandler(
-        createMap({ selection: [selected, { ...selected, layer: 'other' }] }) as unknown as EditHandlerHost,
+        createMap({
+          selection: [selected, { ...selected, layer: 'other' }],
+        }) as unknown as EditHandlerHost,
       ).enable(),
     ).toThrow(/selection/i);
     expect(() =>
-      new SplitFeatureHandler(createMap({ geometry: 'polygon' }) as unknown as EditHandlerHost).enable(),
+      new SplitFeatureHandler(
+        createMap({ geometry: 'polygon' }) as unknown as EditHandlerHost,
+      ).enable(),
     ).toThrow(/point.*polygon/i);
   });
 
@@ -100,7 +109,9 @@ describe('SplitFeatureHandler', () => {
     handler.handlePointer(event('move', 5, 2));
     handler.handlePointer(event('click', 5, 2));
     await vi.waitFor(() =>
-      expect(map.ops.splitSelected).toHaveBeenCalledWith({ cutter: { type: 'point', coordinates: [5, 0] } }),
+      expect(map.ops.splitSelected).toHaveBeenCalledWith({
+        cutter: { type: 'point', coordinates: [5, 0] },
+      }),
     );
   });
 
@@ -110,7 +121,9 @@ describe('SplitFeatureHandler', () => {
       resolveSplit = resolve;
     });
     map.ops.splitSelected.mockImplementationOnce(() => pending);
-    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+    });
     handler.enable();
     handler.handlePointer(event('click', 1, 1));
     handler.handlePointer(event('click', 9, 1));
@@ -122,7 +135,9 @@ describe('SplitFeatureHandler', () => {
   });
 
   it('completes a polyline once, clears its sketch after success or failure, and emits generic errors', async () => {
-    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+    });
     handler.enable();
     handler.handlePointer(event('click', 1, 1));
     handler.handlePointer(event('click', 9, 1));
@@ -131,7 +146,13 @@ describe('SplitFeatureHandler', () => {
     handler.handlePointer(event('contextmenu', 9, 1, contextMenu));
     await vi.waitFor(() => expect(map.ops.splitSelected).toHaveBeenCalledTimes(1));
     expect(map.ops.splitSelected).toHaveBeenCalledWith({
-      cutter: { type: 'polyline', coordinates: [[1, 1], [9, 1]] },
+      cutter: {
+        type: 'polyline',
+        coordinates: [
+          [1, 1],
+          [9, 1],
+        ],
+      },
     });
     expect(contextMenu.defaultPrevented).toBe(true);
     expect(map.clearEditDrawState).toHaveBeenCalled();
@@ -162,7 +183,9 @@ describe('SplitFeatureHandler', () => {
   });
 
   it('cancels a polyline sketch when the selection changes after its first vertex', () => {
-    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+    });
     handler.enable();
     handler.handlePointer(event('click', 1, 1));
     const selectionChange = map.on.mock.calls.find(([name]) => name === 'selectionchange')?.[1];
@@ -187,7 +210,9 @@ describe('SplitFeatureHandler', () => {
       resolveSplit = resolve;
     });
     map.ops.splitSelected.mockImplementationOnce(() => pending);
-    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+    });
     handler.enable();
     handler.handlePointer(event('click', 1, 1));
     handler.handlePointer(event('click', 9, 1));
@@ -207,7 +232,9 @@ describe('SplitFeatureHandler', () => {
       resolveSplit = resolve;
     });
     map.ops.splitSelected.mockImplementationOnce(() => pending);
-    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+    });
     handler.enable();
     handler.handlePointer(event('click', 1, 1));
     handler.handlePointer(event('click', 9, 1));
@@ -225,7 +252,9 @@ describe('SplitFeatureHandler', () => {
   it('keeps a polyline sketch when equivalent selected refs are reordered', async () => {
     const second = { source: 'source', layer: 'lines', id: 1 };
     map.getSelection.mockReturnValue([selected, second]);
-    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+    });
     handler.enable();
     handler.handlePointer(event('click', 1, 1));
     map.getSelection.mockReturnValue([second, selected]);
@@ -253,8 +282,12 @@ describe('SplitFeatureHandler', () => {
     const newPending = new Promise<typeof OK>((resolve) => {
       resolveNew = resolve;
     });
-    map.ops.splitSelected.mockImplementationOnce(() => oldPending).mockImplementationOnce(() => newPending);
-    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    map.ops.splitSelected
+      .mockImplementationOnce(() => oldPending)
+      .mockImplementationOnce(() => newPending);
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+    });
     handler.enable();
     handler.handlePointer(event('click', 1, 1));
     handler.handlePointer(event('click', 9, 1));
@@ -280,8 +313,12 @@ describe('SplitFeatureHandler', () => {
     const newPending = new Promise<OpResult>((resolve) => {
       resolveNew = resolve;
     });
-    map.ops.splitSelected.mockImplementationOnce(() => oldPending).mockImplementationOnce(() => newPending);
-    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    map.ops.splitSelected
+      .mockImplementationOnce(() => oldPending)
+      .mockImplementationOnce(() => newPending);
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+    });
     handler.enable();
     handler.handlePointer(event('click', 1, 1));
     handler.handlePointer(event('click', 9, 1));
@@ -313,18 +350,28 @@ describe('SplitFeatureHandler', () => {
 
   it('rejects malformed selected paths at enable and cancels invalid active paths without iterating them', () => {
     const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
-    map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: [[[]]] });
+    map.layers.resolve.mockReturnValue({
+      name: 'lines',
+      geometry_type: 'polyline',
+      shapes: [[[]]],
+    });
     expect(() => handler.enable()).toThrow(/invalid feature geometry/i);
-    map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: [[[0]]] });
+    map.layers.resolve.mockReturnValue({
+      name: 'lines',
+      geometry_type: 'polyline',
+      shapes: [[[0]]],
+    });
     handler.enable();
     handler.handlePointer(event('move', 5, 2));
-    map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: [[[Number.MAX_SAFE_INTEGER + 1]]] });
+    map.layers.resolve.mockReturnValue({
+      name: 'lines',
+      geometry_type: 'polyline',
+      shapes: [[[Number.MAX_SAFE_INTEGER + 1]]],
+    });
     handler.handlePointer(event('click', 5, 2));
     expect(map.ops.splitSelected).not.toHaveBeenCalled();
     expect(map.clearEditDrawState).toHaveBeenCalled();
   });
-
-
 
   it.each([
     ['sparse shape', new Array(1)],
@@ -336,7 +383,11 @@ describe('SplitFeatureHandler', () => {
     handler.handlePointer(event('move', 5, 2));
     expect(map.setEditDrawState).toHaveBeenCalled();
 
-    map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: [malformedShape] });
+    map.layers.resolve.mockReturnValue({
+      name: 'lines',
+      geometry_type: 'polyline',
+      shapes: [malformedShape],
+    });
     expect(() => handler.handlePointer(event('move', 5, 2))).not.toThrow();
 
     expect(map.clearEditDrawState).toHaveBeenCalled();
@@ -366,13 +417,20 @@ describe('SplitFeatureHandler', () => {
       zz: null,
     }));
     const forEachArcSegment = vi.fn(
-      (id: number, callback: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void) => {
+      (
+        id: number,
+        callback: (i: number, j: number, xx: Float64Array, yy: Float64Array) => void,
+      ) => {
         if (id === 0) callback(0, 1, new Float64Array([0, 10]), new Float64Array([0, 0]));
         if (id === 1) callback(0, 1, new Float64Array([20, 30]), new Float64Array([0, 0]));
       },
     );
     map.getSelection.mockReturnValue(repeatedSelection);
-    map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: sharedShapes });
+    map.layers.resolve.mockReturnValue({
+      name: 'lines',
+      geometry_type: 'polyline',
+      shapes: sharedShapes,
+    });
     map.getSource.mockReturnValue({ getArcs: () => ({ getVertexData, forEachArcSegment }) });
     const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
     handler.enable();
@@ -395,12 +453,18 @@ describe('SplitFeatureHandler', () => {
     const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
     map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: [[]] });
     expect(() => handler.enable()).toThrow(/invalid feature geometry/i);
-    map.layers.resolve.mockReturnValue({ name: 'lines', geometry_type: 'polyline', shapes: [[[2]]] });
+    map.layers.resolve.mockReturnValue({
+      name: 'lines',
+      geometry_type: 'polyline',
+      shapes: [[[2]]],
+    });
     expect(() => handler.enable()).toThrow(/invalid feature geometry/i);
   });
 
   it('cancels incomplete polylines on context menu and Escape without dispatching', () => {
-    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, { cutterType: 'polyline' });
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost, {
+      cutterType: 'polyline',
+    });
     handler.enable();
     handler.handlePointer(event('click', 1, 1));
     handler.handlePointer(event('contextmenu', 1, 1));

@@ -26,7 +26,11 @@ export function applySplitPieces(
   adapter: MapshaperAdapter,
 ): PreparedDatasetMutationResult<SplitSelectedResult> {
   const layer = dataset.layers[layerIndex];
-  if (!layer || layer.geometry_type !== 'polygon' && layer.geometry_type !== 'polyline' || !layer.shapes) {
+  if (
+    !layer ||
+    (layer.geometry_type !== 'polygon' && layer.geometry_type !== 'polyline') ||
+    !layer.shapes
+  ) {
     throw new Error('Selected layer changed during split');
   }
   const pathLayer = layer as PathLayer;
@@ -45,16 +49,18 @@ export function applySplitPieces(
   for (let featureId = 0; featureId < originalLength; featureId += 1) {
     const pieces = splitById.get(featureId);
     if (!pieces) {
-      if (selectedIds.has(featureId)) resultFeatures.push({ source: sourceId, layer: layerId, id: featureId });
+      if (selectedIds.has(featureId))
+        resultFeatures.push({ source: sourceId, layer: layerId, id: featureId });
       continue;
     }
     const ordered = pieces
       .map<OrderedPiece>((shape, order) => ({
         shape,
         order,
-        size: pathLayer.geometry_type === 'polygon'
-          ? adapter.getShapeArea(shape, arcs)
-          : adapter.getShapePerimeter(shape, arcs),
+        size:
+          pathLayer.geometry_type === 'polygon'
+            ? adapter.getShapeArea(shape, arcs)
+            : adapter.getShapePerimeter(shape, arcs),
       }))
       .sort((a, b) => b.size - a.size || a.order - b.order);
     const largest = ordered[0];
@@ -75,7 +81,8 @@ export function applySplitPieces(
     resultFeatures.push({ source: sourceId, layer: layerId, id });
   }
 
-  if (temporaryLayerCount > 0) dataset.layers.splice(dataset.layers.length - temporaryLayerCount, temporaryLayerCount);
+  if (temporaryLayerCount > 0)
+    dataset.layers.splice(dataset.layers.length - temporaryLayerCount, temporaryLayerCount);
   adapter.cleanArcReferences(dataset);
   return {
     value: { splitTargetCount: splitById.size, resultFeatures },

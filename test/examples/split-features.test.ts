@@ -49,37 +49,39 @@ async function executeSplitFeaturesExample() {
     features: undefined,
     getCanvasContainer: () => document.getElementById('map')!,
     getSelection: () => selection,
-    getSource: (id: string) => sources.get(id) ?? {
-      getLayers: () => [
-        {
-          name: '',
-          id: 'roads',
-          geometry_type: 'polyline',
-          shapes: [[0]],
-        },
-        {
-          name: 'other',
-          geometry_type: 'point',
-          shapes: [[0]],
-        },
-        {
-          id: 'parcels',
-          geometry_type: 'polygon',
-          shapes: [[[2, 3, 4]]],
-        },
-        {
-          geometry_type: 'polyline',
-          shapes: [[5, 6]],
-        },
-      ],
-    },
+    getSource: (id: string) =>
+      sources.get(id) ?? {
+        getLayers: () => [
+          {
+            name: '',
+            id: 'roads',
+            geometry_type: 'polyline',
+            shapes: [[0]],
+          },
+          {
+            name: 'other',
+            geometry_type: 'point',
+            shapes: [[0]],
+          },
+          {
+            id: 'parcels',
+            geometry_type: 'polygon',
+            shapes: [[[2, 3, 4]]],
+          },
+          {
+            geometry_type: 'polyline',
+            shapes: [[5, 6]],
+          },
+        ],
+      },
     queryFeatures: vi.fn(() => []),
     removeSource: vi.fn((id: string) => sources.delete(id)),
     select: vi.fn(),
     setExtent: vi.fn(),
     setHighlightedFeatures: vi.fn(),
     on: (type: string, listener: (event: SelectionEvent | { error: Error }) => void) => {
-      if (type === 'selectionchange') selectionListeners.push(listener as (event: SelectionEvent) => void);
+      if (type === 'selectionchange')
+        selectionListeners.push(listener as (event: SelectionEvent) => void);
       if (type === 'error') errorListeners.push(listener as (event: { error: Error }) => void);
     },
   };

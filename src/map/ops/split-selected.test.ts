@@ -13,7 +13,9 @@ describe('splitSelected', () => {
       throw new Error('must not dispatch');
     };
 
-    await expect(splitSelected(ctx, { cutter: { type: 'point', coordinates: [5, 0] } })).resolves.toMatchObject({
+    await expect(
+      splitSelected(ctx, { cutter: { type: 'point', coordinates: [5, 0] } }),
+    ).resolves.toMatchObject({
       ok: false,
       error: { kind: 'validation', field: 'selection' },
     });
@@ -35,7 +37,9 @@ describe('splitSelected', () => {
       throw new Error('must not dispatch');
     };
 
-    await expect(splitSelected(ctx, { cutter: { type: 'point', coordinates: [Number.NaN, 0] } })).resolves.toMatchObject({
+    await expect(
+      splitSelected(ctx, { cutter: { type: 'point', coordinates: [Number.NaN, 0] } }),
+    ).resolves.toMatchObject({
       ok: false,
       error: { kind: 'validation', field: 'cutter' },
     });
