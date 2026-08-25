@@ -144,10 +144,23 @@ describe('splitSelectedPolylines', () => {
     ['target endpoint', [[0, -5], [0, 5]]],
     ['tangent contact', [[5, 0], [5, 5]]],
     ['collinear overlap', [[2, 0], [8, 0]]],
-  ] as const)('rejects a %s line cutter contact', async (_name, coordinates) => {
+  ] as const)('ignores a %s line cutter contact', async (_name, coordinates) => {
     const adapter = getDefaultMapshaperAdapter();
     const dataset = await importLines([[[0, 0], [10, 0]]]);
 
-    expect(() => splitSelectedPolylines(dataset, 0, new Set([0]), { type: 'line', coordinates }, adapter)).toThrow(SplitGeometryValidationError);
+    expect(splitSelectedPolylines(dataset, 0, new Set([0]), { type: 'line', coordinates }, adapter).pieces).toEqual([]);
+  });
+
+  it.each([
+    ['target vertex', [[0, 0], [5, 0], [10, 0]], [[5, -5], [5, 5]]],
+    ['cutter vertex', [[0, 0], [10, 0]], [[5, -5], [5, 0], [5, 5]]],
+    ['small-scale crossing', [[0, 0], [1e-8, 0]], [[5e-9, -5e-9], [5e-9, 5e-9]]],
+  ] as const)('splits a proper %s crossing', async (_name, target, coordinates) => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([target]);
+
+    const result = splitSelectedPolylines(dataset, 0, new Set([0]), { type: 'line', coordinates }, adapter);
+
+    expect(result.pieces[0]!.pieces).toHaveLength(2);
   });
 });
