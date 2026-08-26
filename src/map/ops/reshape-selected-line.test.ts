@@ -81,7 +81,7 @@ describe('reshapeSelectedPolylines', () => {
     ]);
   });
 
-  it('replaces the forward segment of a closed line without crossing its seam', async () => {
+  it('prefers the linear-span candidate when both closed-ring replacements are valid', async () => {
     const dataset = await importLines([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]]);
 
     expect(reshape(dataset, [[3, 0], [5, 2], [7, 0]])).toHaveLength(1);
