@@ -1354,5 +1354,96 @@ describe('VertexEditHandler batch vertex selection', () => {
     pushed[0].undo();
     expect(Array.from(xx)).toEqual([0, 1, 2, 3, 4, 5]);
   });
+  it('selects enclosed nodes and adds to that set with Shift', () => {
+    const arcs = {
+      getArcIter: (arcId: number) =>
+        makeArcIter(arcId === 0 ? [[1, 1]] : [[5, 5]]),
+      getVertexData: () => ({
+        xx: Float64Array.from([1, 5]),
+        yy: Float64Array.from([1, 5]),
+        nn: Int32Array.from([1, 1]),
+        ii: Int32Array.from([0, 1]),
+      }),
+    };
+    const layer = { geometry_type: 'polyline', shapes: [[[0]], [[1]]] };
+    const queryFeatures = vi.fn(() => [
+      { id: 0, source: 'source', layer: 'layer', geometryType: 'polyline' },
+    ]);
+    const map = {
+      queryFeatures,
+      getSource: () => ({ getArcs: () => arcs }),
+      layers: { resolve: () => layer },
+      project: (x: number, y: number) => [x, y] as [number, number],
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+    Reflect.set(
+      mapshaper.internal as object,
+      'findNearestVertices',
+      vi.fn((coord: [number, number]) => (coord[0] === 1 ? [0] : [1])),
+    );
+    const handler = new VertexEditHandler(map as unknown as Emap);
+    setPrivate(handler, '_bandStart', { x: 0, y: 0 });
+    setPrivate(handler, '_bandAdditive', false);
+    callPrivate(handler, '_finishBand', 3, 3);
+    expect(Reflect.get(handler, '_selectedNodes')).toEqual([
+      { source: 'source', layer: 'layer', vertexIds: [0], coords: [1, 1] },
+    ]);
+
+    queryFeatures.mockReturnValue([
+      { id: 1, source: 'source', layer: 'layer', geometryType: 'polyline' },
+    ]);
+    setPrivate(handler, '_bandStart', { x: 3, y: 3 });
+    setPrivate(handler, '_bandAdditive', true);
+    callPrivate(handler, '_finishBand', 7, 7);
+    expect(Reflect.get(handler, '_selectedNodes')).toEqual([
+      { source: 'source', layer: 'layer', vertexIds: [0], coords: [1, 1] },
+      { source: 'source', layer: 'layer', vertexIds: [1], coords: [5, 5] },
+    ]);
+  });
+  it('moves a selected shared node once and records one batch history entry', () => {
+    const arcs = {};
+    const source = { getArcs: () => arcs, refreshDisplayArcs: vi.fn(), getDataset: () => ({}) };
+    const pushCommand = vi.fn();
+    const map = {
+      unproject: (x: number, y: number) => [x, y] as [number, number],
+      getSource: () => source,
+      pushCommand,
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+    const snapVertices = vi.fn();
+    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapVertices);
+    const handler = new VertexEditHandler(map as unknown as Emap);
+    setPrivate(handler, '_selectedNodes', [
+      { source: 'source', layer: 'layer', vertexIds: [1, 4], coords: [1, 1] },
+    ]);
+    setPrivate(handler, '_batchDragging', true);
+    setPrivate(handler, '_dragging', true);
+    setPrivate(handler, '_batchDragFrom', [1, 1]);
+
+    callPrivate(handler, '_handleDrag', 3, 4);
+    callPrivate(handler, '_finishDrag', 3, 4);
+
+    expect(snapVertices).toHaveBeenCalledTimes(1);
+    expect(snapVertices).toHaveBeenCalledWith([1, 4], [3, 4], arcs);
+    expect(pushCommand).toHaveBeenCalledOnce();
+  });
+  it('clears the selected node set on Escape', () => {
+    const map = {
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+      getSource: vi.fn(),
+    };
+    const handler = new VertexEditHandler(map as unknown as Emap);
+    setPrivate(handler, '_selectedNodes', [
+      { source: 'source', layer: 'layer', vertexIds: [1], coords: [1, 0] },
+    ]);
+
+    callPrivate(handler, '_onKeyDown', new KeyboardEvent('keydown', { key: 'Escape' }));
+
+    expect(Reflect.get(handler, '_selectedNodes')).toEqual([]);
+    expect(map.render).toHaveBeenCalledOnce();
+  });
 });
 });
