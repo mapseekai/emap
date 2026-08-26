@@ -64,6 +64,8 @@ import type {
   SplitLayerOptions,
   SplitSelectedOptions,
   SplitSelectedResult,
+  ReshapeSelectedOptions,
+  ReshapeSelectedResult,
   UniqueFeaturesOptions,
   UnionOptions,
 } from './types';
@@ -102,6 +104,7 @@ import { filterGeom } from './ops/filter-geom';
 import { affineLayer } from './ops/affine';
 import { dataFill } from './ops/data-fill';
 import { splitSelected } from './ops/split-selected';
+import { reshapeSelected } from './ops/reshape-selected';
 
 /**
  * Mapshaper command manager. Owned by Emap and exposed as `emap.ops`.
@@ -263,5 +266,8 @@ export class MapshaperOps {
   }
   splitSelected(options: SplitSelectedOptions): Promise<OpResult<SplitSelectedResult>> {
     return splitSelected(this._ctx, options);
+  }
+  reshapeSelected(options: ReshapeSelectedOptions): Promise<OpResult<ReshapeSelectedResult>> {
+    return reshapeSelected(this._ctx, options);
   }
 }

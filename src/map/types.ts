@@ -251,6 +251,16 @@ export interface SplitSelectedResult {
   resultFeatures: FeatureRef[];
 }
 
+/** Coordinates of the line that replaces the selected path segment. */
+export interface ReshapeSelectedOptions {
+  line: [number, number][];
+}
+
+/** Result of a successful selected-feature reshape. */
+export interface ReshapeSelectedResult {
+  reshapedCount: number;
+}
+
 /** Options controlling a same-layer selected-feature merge. */
 export interface MergeSelectedOptions {
   /**
