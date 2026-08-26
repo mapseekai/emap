@@ -266,6 +266,17 @@ export interface DeleteRingOptions {
   point: [number, number];
 }
 
+/** Coordinates for a new independent path part on the selected feature. */
+export interface AddPartOptions {
+  coordinates: [number, number][];
+}
+
+/** Point used to select a path part for removal. */
+export interface DeletePartOptions {
+  point: [number, number];
+  tolerance?: number;
+}
+
 /** Result of a successful selected-feature reshape. */
 export interface ReshapeSelectedResult {
   reshapedCount: number;
