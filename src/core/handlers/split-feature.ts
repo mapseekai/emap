@@ -96,9 +96,12 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
 
   setOptions(options: Partial<SplitFeatureOptions>): void {
     this._opts = { ...this._opts, ...options };
+    if (!this._enabled) {
+      this._session = this._createSession();
+      return;
+    }
     this._session.clear();
     this._session = this._createSession();
-    if (!this._enabled) return;
     this._generation++;
     const context = this._resolveSelectionContext();
     this._selectionKey = context && this._isContextCompatible(context) ? context.key : null;

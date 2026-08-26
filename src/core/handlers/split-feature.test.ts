@@ -530,4 +530,11 @@ describe('SplitFeatureHandler', () => {
       expect.objectContaining({ snapKind: 'vertex' }),
     );
   });
+  it('does not clear another edit overlay when options change while disabled', () => {
+    const handler = new SplitFeatureHandler(map as unknown as EditHandlerHost);
+
+    handler.setOptions({ cutterType: 'polyline' });
+
+    expect(map.clearEditDrawState).not.toHaveBeenCalled();
+  });
 });
