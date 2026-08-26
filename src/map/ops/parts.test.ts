@@ -31,7 +31,6 @@ function exported(dataset: MapshaperDataset): PathGeometry {
 
 async function createFixture(geometry: PathGeometry, refs: FeatureRef[] = [{ source: 'source', layer: 'parts', id: 0 }]) {
   let dataset = await importDataset(geometry);
-  let before: MapshaperDataset | undefined;
   const source = { getDataset: () => dataset };
   const resolve = (layers: MapshaperDataset['layers'], sourceId: string, layerId: string) =>
     sourceId === 'source' && layerId === 'parts' ? (layers.find((layer) => layer.name === layerId) ?? null) : null;
@@ -52,13 +51,12 @@ async function createFixture(geometry: PathGeometry, refs: FeatureRef[] = [{ sou
       const original = dataset;
       const outcome = await mutate(adapter.copyDataset(original), original);
       if ('ok' in outcome) return outcome;
-      before = original;
       dataset = adapter.copyDataset(original);
       const committed = await mutate(dataset, original);
       return 'ok' in committed ? committed : okValue(committed.value);
     },
   };
-  return { ctx, dataset: () => dataset, undo: () => { if (before) dataset = before; } };
+  return { ctx, dataset: () => dataset };
 }
 
 function integrationHarness(dataset: MapshaperDataset) {
@@ -77,11 +75,6 @@ function integrationHarness(dataset: MapshaperDataset) {
   } as unknown as EmapHostInternal;
   return { ops: new MapshaperOps(host), source, selection, history };
 }
-
-function area(ring: Position[]): number {
-  return ring.reduce((total, point, index) => total + point[0] * ring[(index + 1) % ring.length]![1] - point[1] * ring[(index + 1) % ring.length]![0], 0) / 2;
-}
-
 
 const square: Position[] = [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]];
 
@@ -120,6 +113,26 @@ describe('addPart', () => {
     await expect(addPart(fixture.ctx, { coordinates: [[0, 2], [10, 2]] })).resolves.toEqual({ ok: true, value: undefined });
     expect(exported(fixture.dataset())).toEqual({ type: 'MultiLineString', coordinates: [[[0, 0], [10, 0]], [[0, 2], [10, 2]]] });
   });
+
+  it.each([
+    ['has fewer than two vertices', [[1, 1]]],
+    ['self-intersects', [[0, 2], [4, 6], [0, 6], [4, 2]]],
+    ['conflicts with an existing line', [[0, 0], [10, 0]]],
+  ])('rejects a line part that %s', async (_name, coordinates) => {
+    const fixture = await createFixture({ type: 'LineString', coordinates: [[0, 0], [10, 0]] });
+    await expect(addPart(fixture.ctx, { coordinates })).resolves.toMatchObject({
+      ok: false,
+      error: { kind: 'validation', field: 'part' },
+    });
+  });
+
+  it('rejects a zero-area polygon part', async () => {
+    const fixture = await createFixture({ type: 'Polygon', coordinates: [square] });
+    await expect(addPart(fixture.ctx, { coordinates: [[20, 0], [25, 0], [30, 0]] })).resolves.toMatchObject({
+      ok: false,
+      error: { kind: 'validation', field: 'part' },
+    });
+  });
 });
 
 describe('deletePart', () => {
@@ -131,6 +144,20 @@ describe('deletePart', () => {
     const holeFixture = await createFixture(geometry);
     await expect(deletePart(holeFixture.ctx, { point: [3, 3] })).resolves.toMatchObject({ ok: true });
     expect((exported(holeFixture.dataset()) as GeoJSON.MultiPolygon).coordinates[0]).toHaveLength(1);
+  });
+
+  it('deletes an island before the enclosing hole when their hit areas overlap', async () => {
+    const fixture = await createFixture({
+      type: 'Polygon',
+      coordinates: [square, [[2, 2], [2, 8], [8, 8], [8, 2], [2, 2]]],
+    });
+    await expect(addPart(fixture.ctx, { coordinates: [[3, 3], [5, 3], [5, 5], [3, 5]] })).resolves.toMatchObject({ ok: true });
+    await expect(deletePart(fixture.ctx, { point: [4, 4] })).resolves.toMatchObject({ ok: true });
+    const shape = fixture.dataset().layers[0]!.shapes![0]!;
+    expect(shape).toHaveLength(2);
+    const exteriorArea = shoelaceArea(shapeSegments([shape[0]!], fixture.dataset().arcs!).map(([start]) => start));
+    const remainingArea = shoelaceArea(shapeSegments([shape[1]!], fixture.dataset().arcs!).map(([start]) => start));
+    expect(Math.sign(remainingArea)).toBe(-Math.sign(exteriorArea));
   });
 
   it('deletes the closest line part within tolerance', async () => {

@@ -162,12 +162,14 @@ function appendPart(
 }
 
 export async function addPart(ctx: OpContext, options: AddPartOptions): Promise<OpResult<void>> {
+  const normalized = normalizePart(options.coordinates, false);
+  if (!normalized) return Err.validation('part', 'part coordinates must contain at least two points');
   const refs = ctx.host._selection.getAll();
   const selected = selectPath(ctx, refs);
   if (isFailure(selected)) return selected;
   const polygon = selected.layer.geometry_type === 'polygon';
-  const part = normalizePart(options.coordinates, polygon);
-  if (!part) return Err.validation('part', polygon ? 'part coordinates must form a ring' : 'part coordinates must contain at least two points');
+  const part = polygon ? normalizePart(normalized, true) : normalized;
+  if (!part) return Err.validation('part', 'part coordinates must form a ring');
   const arcs = selected.dataset.arcs;
   if (!arcs) return Err.validation('selection', 'selected path geometry is invalid');
   const shape = selected.layer.shapes![selected.featureId] as PathShape;
@@ -183,6 +185,8 @@ export async function addPart(ctx: OpContext, options: AddPartOptions): Promise<
     if (!layer || !isPathLayer(layer) || layer.geometry_type !== selected.layer.geometry_type || !layer.shapes || !workingArcs) return Err.staleOperation(selected.sourceId, 'Add part');
     const workingShape = layer.shapes[selected.featureId] as PathShape | null;
     if (!workingShape) return Err.staleOperation(selected.sourceId, 'Add part');
+    const workingShapeError = polygon ? validatePolygonShape(workingShape, workingArcs, adapter) : null;
+    if (workingShapeError) return workingShapeError;
     const validation = polygon ? validateNewPolygon(part, workingShape, workingArcs, adapter) : validateNewLine(part, workingShape, workingArcs);
     if (validation) return Err.validation('part', validation);
     appendPart(part, workingShape, workingArcs, adapter, polygon);
@@ -207,13 +211,23 @@ function closestPartIndex(
   return closest;
 }
 
-function polygonPartIndex(point: Coordinate, shape: PathShape, arcs: NonNullable<MapshaperDataset['arcs']>, adapter: MapshaperAdapter): number {
-  for (const exterior of collectPolygonExteriors(shape, arcs, adapter)) {
-    for (const holeIndex of exterior.holeIndexes) if (adapter.testPointInPolygon(point[0], point[1], [shape[holeIndex]!], arcs)) return holeIndex;
-    const polygon = [shape[exterior.exteriorIndex]!, ...exterior.holeIndexes.map((index) => shape[index]!)];
-    if (adapter.testPointInPolygon(point[0], point[1], polygon, arcs)) return exterior.exteriorIndex;
+function polygonPartIndex(
+  point: Coordinate,
+  shape: PathShape,
+  arcs: NonNullable<MapshaperDataset['arcs']>,
+  adapter: MapshaperAdapter,
+): number {
+  let candidate = -1;
+  let candidateArea = Infinity;
+  for (let index = 0; index < shape.length; index++) {
+    if (!adapter.testPointInPolygon(point[0], point[1], [shape[index]!], arcs)) continue;
+    const area = Math.abs(shoelaceArea(shapeSegments([shape[index]!], arcs).map(([start]) => start)));
+    if (area < candidateArea) {
+      candidate = index;
+      candidateArea = area;
+    }
   }
-  return -1;
+  return candidate;
 }
 
 export async function deletePart(ctx: OpContext, options: DeletePartOptions): Promise<OpResult<void>> {
@@ -227,6 +241,8 @@ export async function deletePart(ctx: OpContext, options: DeletePartOptions): Pr
   if (shape.length < 2) return Err.validation('part', 'feature has a single part; use deleteSelected');
   const adapter = getDefaultMapshaperAdapter();
   const polygon = selected.layer.geometry_type === 'polygon';
+  const shapeError = polygon ? validatePolygonShape(shape, arcs, adapter) : null;
+  if (shapeError) return shapeError;
   const closest = polygon ? null : closestPartIndex(options.point, shape, arcs, adapter);
   const index =
     polygon
@@ -240,7 +256,10 @@ export async function deletePart(ctx: OpContext, options: DeletePartOptions): Pr
     const layer = ctx.host.layers.resolveInLayers(working.layers, selected.layerId);
     if (!layer || !isPathLayer(layer) || layer.geometry_type !== selected.layer.geometry_type || !layer.shapes) return Err.staleOperation(selected.sourceId, 'Delete part');
     const workingShape = layer.shapes[selected.featureId] as PathShape | null;
-    if (!workingShape || workingShape.length < 2) return Err.staleOperation(selected.sourceId, 'Delete part');
+    const workingArcs = working.arcs;
+    if (!workingShape || workingShape.length < 2 || !workingArcs) return Err.staleOperation(selected.sourceId, 'Delete part');
+    const workingShapeError = polygon ? validatePolygonShape(workingShape, workingArcs, adapter) : null;
+    if (workingShapeError) return workingShapeError;
     workingShape.splice(index, 1);
     adapter.cleanArcReferences(working);
     return { value: undefined, selection: refs };
