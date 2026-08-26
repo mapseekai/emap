@@ -13,7 +13,7 @@ import type { SelectionHandlerHost } from './selection-handler-host';
 
 export interface EditHandlerHost extends SelectionHandlerHost {
   readonly editSession: EditSessions;
-  readonly ops: Pick<MapshaperOps, 'splitSelected' | 'reshapeSelected' | 'addRing' | 'deleteRing'>;
+  readonly ops: Pick<MapshaperOps, 'splitSelected' | 'reshapeSelected' | 'addRing' | 'deleteRing' | 'addPart' | 'deletePart'>;
   readonly on: EventDispatcher['on'];
   readonly off: EventDispatcher['off'];
   readonly fire: EventDispatcher['fire'];
