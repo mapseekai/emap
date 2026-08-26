@@ -52,19 +52,30 @@ function partitionShape(
 ): PathShape[] {
   const pieces: PathShape[] = [];
   for (const part of shape) {
+    const partPieces: PathShape[] = [];
     let current: number[] = [];
     for (const signedArcId of part) {
       current.push(signedArcId);
       if (cutCoordinates.has(coordinateKey(arcEndpoints(arcs, signedArcId)[1]))) {
         const piece: PathShape = [[...current]];
-        if (adapter.getShapePerimeter(piece, arcs) !== 0) pieces.push(piece);
+        if (adapter.getShapePerimeter(piece, arcs) !== 0) partPieces.push(piece);
         current = [];
       }
     }
     if (current.length) {
       const piece: PathShape = [[...current]];
-      if (adapter.getShapePerimeter(piece, arcs) !== 0) pieces.push(piece);
+      if (adapter.getShapePerimeter(piece, arcs) !== 0) {
+        // A closed part's trailing fragment joins its first fragment across
+        // the storage seam when the seam itself is not a cut: a ring cut at
+        // N points yields N pieces, not N + 1.
+        const closed =
+          coordinateKey(arcEndpoints(arcs, part[0]!)[0]) ===
+          coordinateKey(arcEndpoints(arcs, part[part.length - 1]!)[1]);
+        if (closed && partPieces.length > 0) partPieces[0] = [[...current, ...partPieces[0]![0]!]];
+        else partPieces.push(piece);
+      }
     }
+    pieces.push(...partPieces);
   }
   return pieces;
 }

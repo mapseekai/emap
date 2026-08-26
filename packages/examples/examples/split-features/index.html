@@ -48,6 +48,10 @@
     installExampleMapUi(map, emap);
     map.addControl(new HistoryControl(), 'top-left');
     map.bindHistoryShortcuts();
+    // clickSelect owns selection: click = replace, shift+click = add,
+    // click on empty space = clear. It stands down while split mode is
+    // active, so cutter clicks always reach splitFeature.
+    map.clickSelect.enable();
 
     const pointMode = document.getElementById('point-mode');
     const fileInput = document.getElementById('file-input');
@@ -56,7 +60,6 @@
     const cancelSplit = document.getElementById('cancel-split');
     const clearSelection = document.getElementById('clear-selection');
     const status = document.getElementById('status');
-    const mapContainer = map.getCanvasContainer();
     const ownedSourceIds = new Set();
     let cutterType = 'point';
 
@@ -170,17 +173,6 @@
 
     map.on('selectionchange', (event) => syncSelection(event.selected));
     map.on('error', (event) => showError(event?.error ?? event));
-    mapContainer.addEventListener('click', (event) => {
-      if (map.splitFeature.isEnabled?.()) return;
-      const rect = mapContainer.getBoundingClientRect();
-      const hits = map.queryFeatures([event.clientX - rect.left, event.clientY - rect.top]);
-      if (hits.length === 0) {
-        if (!event.shiftKey && !event.ctrlKey && !event.metaKey) map.clearSelection();
-        return;
-      }
-      const mode = event.shiftKey ? 'add' : (event.ctrlKey || event.metaKey) ? 'toggle' : 'replace';
-      map.select(hits, { mode });
-    });
 
     await autoLoadExampleFixtures('split-features');
   </script>

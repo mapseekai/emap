@@ -36,6 +36,10 @@ async function executeSplitFeaturesExample() {
   };
   const map = {
     splitFeature,
+    clickSelect: {
+      enable: vi.fn(),
+      setOptions: vi.fn(),
+    },
     addControl: vi.fn(),
     addLayer: vi.fn(),
     addSource: vi.fn(async (id: string, source: { getLayers: () => unknown[] }) => {
@@ -178,6 +182,7 @@ describe('split-features example', () => {
       const status = document.querySelector<HTMLElement>('#status')!;
 
       expect(enableButton.disabled).toBe(true);
+      expect(result.map.clickSelect.enable).toHaveBeenCalledTimes(1);
       pointButton.click();
       expect(result.splitFeature.setOptions).toHaveBeenLastCalledWith({ cutterType: 'point' });
       lineButton.click();

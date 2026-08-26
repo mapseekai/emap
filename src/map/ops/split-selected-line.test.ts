@@ -855,4 +855,72 @@ describe('splitSelectedPolylines', () => {
     );
     expect(arcs.size()).toBe(beforeArcCount);
   });
+  it('merges seam fragments of a closed ring cut by a polyline into N pieces', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+        [0, 0],
+      ],
+    ]);
+
+    const result = splitSelectedPolylines(
+      dataset,
+      0,
+      new Set([0]),
+      {
+        type: 'polyline',
+        coordinates: [
+          [-1, 5],
+          [11, 5],
+        ],
+      },
+      adapter,
+    );
+
+    expect(result.pieces).toHaveLength(1);
+    expect(result.pieces[0]!.pieces).toHaveLength(2);
+    replaceFixtureShapeWithPieces(dataset.layers[0]!, result.pieces[0]!.pieces);
+    expect(exportLineCoordinates(dataset)).toEqual([
+      [
+        [0, 5],
+        [0, 0],
+        [10, 0],
+        [10, 5],
+      ],
+      [
+        [10, 5],
+        [10, 10],
+        [0, 10],
+        [0, 5],
+      ],
+    ]);
+  });
+
+  it('does not split a closed ring cut at a single point', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await importLines([
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+        [0, 0],
+      ],
+    ]);
+
+    const result = splitSelectedPolylines(
+      dataset,
+      0,
+      new Set([0]),
+      { type: 'point', coordinates: [10, 5] },
+      adapter,
+    );
+
+    expect(result.pointOnSelectedPath).toBe(true);
+    expect(result.pieces).toHaveLength(0);
+  });
 });

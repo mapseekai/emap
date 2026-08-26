@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ClickSelectHandler } from './click-select';
 import type { NormalizedPointerEvent } from '../handler';
+import type { SelectionHandlerHost } from './selection-handler-host';
 
 function clickEv(x: number, y: number, shift = false, alt = false): NormalizedPointerEvent {
   return {
@@ -62,6 +63,30 @@ describe('ClickSelectHandler', () => {
     const h = new ClickSelectHandler(fakeMap([]) as any);
     h.enable();
     expect(h.handlePointer({ ...clickEv(0, 0), kind: 'down' })).toBe('passthrough');
+  });
+
+  it('passes through clicks while a modal edit mode is active', () => {
+    const map = {
+      ...fakeMap([{ source: 's', layer: 'l', id: 1 }]),
+      getEditMode: () => 'split' as const,
+    };
+    // Partial host stub: only the members handlePointer touches are present.
+    const h = new ClickSelectHandler(map as unknown as SelectionHandlerHost);
+    h.enable();
+    expect(h.handlePointer(clickEv(10, 20))).toBe('passthrough');
+    expect(map.queryFeatures).not.toHaveBeenCalled();
+    expect(map.select).not.toHaveBeenCalled();
+  });
+
+  it('resumes consuming clicks once the edit mode clears', () => {
+    let mode: 'none' | 'split' = 'split';
+    const map = { ...fakeMap([]), getEditMode: () => mode };
+    // Partial host stub: only the members handlePointer touches are present.
+    const h = new ClickSelectHandler(map as unknown as SelectionHandlerHost);
+    h.enable();
+    expect(h.handlePointer(clickEv(0, 0))).toBe('passthrough');
+    mode = 'none';
+    expect(h.handlePointer(clickEv(0, 0))).toBe('consumed');
   });
 
   it('setOptions/getOptions round-trips modifiers + layers', () => {

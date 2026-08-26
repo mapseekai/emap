@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `map.ops.mergeSelected()` now performs a true polygon union that removes shared and
   overlap-internal boundaries without changing unselected geometry, and accepts a selected
   feature as the merged record's attribute source.
+- `clickSelect` no longer consumes clicks while a modal edit mode (split, draw, …) is
+  active, so `map.splitFeature` can place cutter points when both handlers are enabled.
+- Splitting a closed ring line no longer yields one extra fragment: the trailing and
+  leading pieces are now joined across the storage seam, so a ring cut at N points
+  produces N pieces.
 
 ## [0.7.2] - 2026-08-24
 

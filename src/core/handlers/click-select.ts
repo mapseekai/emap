@@ -24,6 +24,8 @@ const CLICK_DEFAULT_MODS: Partial<Record<SelectMode, ModifierCombo>> = {
  * box/lasso drag). Hit → resolve mode → `Emap.select`; empty click whose
  * resolved mode is `'replace'` clears the selection. Opt-in (disabled by
  * default) so `new Emap()` behavior is unchanged.
+ * Stands down while a modal edit mode is active so the editor (split, draw,
+ * …) receives the clicks it needs to place vertices.
  */
 export class ClickSelectHandler extends EventDispatcher implements Handler<SelectHandlerOptions> {
   readonly name = 'clickSelect';
@@ -52,6 +54,7 @@ export class ClickSelectHandler extends EventDispatcher implements Handler<Selec
 
   handlePointer(ev: NormalizedPointerEvent): HandlerResult {
     if (!this._enabled || ev.kind !== 'click' || ev.button !== 0) return 'passthrough';
+    if ((this._map.getEditMode?.() ?? 'none') !== 'none') return 'passthrough';
     const mode = resolveMode(ev.modifiers, this._opts.modifiers ?? CLICK_DEFAULT_MODS);
     const hits = this._map.queryFeatures(
       [ev.point.x, ev.point.y],
