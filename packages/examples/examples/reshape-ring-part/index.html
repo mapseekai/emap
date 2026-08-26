@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 整形、洞与部分编辑</title>
+</head>
+
+<body class="emap-example-with-floating-header">
+  <div id="header">
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>整形、洞与部分编辑</strong>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>整形、洞与部分编辑</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <p class="emap-example-hint">单击选择线或面要素。整形用草图替换要素边界；洞工具编辑面内洞；部分工具编辑多部件要素。</p>
+        <div class="emap-example-field">
+          <label for="file-input">数据文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple />
+        </div>
+        <div class="emap-example-row" role="group" aria-label="高级编辑工具">
+          <button id="reshape" type="button" class="emap-example-primary-button">整形</button>
+          <button id="add-ring" type="button">挖洞</button>
+          <button id="delete-ring" type="button">删洞</button>
+          <button id="add-part" type="button">加部分</button>
+          <button id="delete-part" type="button">删部分</button>
+        </div>
+        <p id="status" class="emap-example-status">请选择一个线或面要素。</p>
+      </section>
+    </div>
+  </details>
+
+  <script type="module">
+    import { installExampleMapUi } from '/src/example-runtime.ts';
+    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+
+    const emap = await loadExampleRuntime();
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    installExampleMapUi(map, emap);
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+    map.clickSelect.enable();
+
+    const fileInput = document.getElementById('file-input');
+    const reshape = document.getElementById('reshape');
+    const addRing = document.getElementById('add-ring');
+    const deleteRing = document.getElementById('delete-ring');
+    const addPart = document.getElementById('add-part');
+    const deletePart = document.getElementById('delete-part');
+    const status = document.getElementById('status');
+    const ownedSourceIds = new Set();
+    const tools = [
+      { button: reshape, handler: map.reshapeFeature, mode: 'reshape' },
+      { button: addRing, handler: map.ringEdit, mode: 'ring', operation: 'add' },
+      { button: deleteRing, handler: map.ringEdit, mode: 'ring', operation: 'delete' },
+      { button: addPart, handler: map.partEdit, mode: 'part', operation: 'add' },
+      { button: deletePart, handler: map.partEdit, mode: 'part', operation: 'delete' },
+    ];
+
+    function showError(error) {
+      const message = error instanceof Error
+        ? error.message
+        : error && typeof error === 'object'
+          ? error.reason ?? error.message ?? error.kind ?? JSON.stringify(error)
+          : String(error);
+      status.textContent = `错误: ${message}`;
+      console.error(error);
+    }
+
+    function syncButtons(activeMode) {
+      for (const tool of tools) {
+        const active = activeMode === tool.mode && tool.handler.isEnabled() &&
+          (!tool.operation || tool.handler.getOptions().mode === tool.operation);
+        tool.button.classList.toggle('emap-example-primary-button', active);
+        tool.button.setAttribute('aria-pressed', String(active));
+      }
+    }
+
+    function toggle(tool) {
+      try {
+        const active = tool.handler.isEnabled() &&
+          (!tool.operation || tool.handler.getOptions().mode === tool.operation);
+        if (active) {
+          tool.handler.disable();
+          return;
+        }
+        if (tool.handler.isEnabled()) tool.handler.disable();
+        if (tool.operation) tool.handler.setOptions({ mode: tool.operation });
+        tool.handler.enable();
+      } catch (error) {
+        showError(error);
+      }
+    }
+
+    for (const tool of tools) tool.button.addEventListener('click', () => toggle(tool));
+    fileInput.addEventListener('change', async () => {
+      const files = Array.from(fileInput.files ?? []);
+      if (files.length === 0) return;
+      status.textContent = `正在加载 ${files.length} 个数据文件…`;
+      try {
+        for (const sourceId of ownedSourceIds) map.removeSource(sourceId);
+        ownedSourceIds.clear();
+        for (const [index, file] of files.entries()) {
+          const sourceId = `reshape-ring-part-source-${index}`;
+          const source = new TopologySource(sourceId);
+          const content = new Uint8Array(await file.arrayBuffer());
+          await source.setData({ filename: file.name, content });
+          await map.addSource(sourceId, source);
+          ownedSourceIds.add(sourceId);
+          map.setExtent(source.getExtent());
+        }
+        status.textContent = '请选择一个线或面要素。';
+      } catch (error) {
+        showError(error);
+      }
+    });
+
+    map.on('editmodechange', (event) => syncButtons(event.mode));
+    map.on('error', (event) => showError(event?.error ?? event));
+    await autoLoadExampleFixtures('reshape-ring-part');
+  </script>
+</body>
+
+</html>

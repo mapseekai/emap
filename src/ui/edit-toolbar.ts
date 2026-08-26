@@ -1,7 +1,17 @@
-import { Control } from './control';
-import { Emap } from '../map/map';
+import type { Emap } from '../map/map';
+import type { Control } from './control';
 import { VertexEditControl } from './vertex-edit-control';
 import { DrawFeatureControl } from './draw-feature-control';
+
+type AdvancedTool = 'reshape' | 'ring-add' | 'ring-delete' | 'part-add' | 'part-delete';
+
+const ADVANCED_TOOL_TITLES: Record<AdvancedTool, string> = {
+  reshape: 'Reshape Feature',
+  'ring-add': 'Add Hole',
+  'ring-delete': 'Delete Hole',
+  'part-add': 'Add Part',
+  'part-delete': 'Delete Part',
+};
 
 export interface EditToolbarOptions {
   /** Explicit controls to render. When provided, default edit/draw buttons are not added. */
@@ -10,6 +20,93 @@ export interface EditToolbarOptions {
   drawSource?: string;
   /** Source layer name for draw tools (optional, defaults to first matching layer). */
   drawSourceLayer?: string;
+  /** Include reshape, ring, and part editing tools. Defaults to false. */
+  advancedTools?: boolean;
+}
+
+class AdvancedEditControl implements Control {
+  private _map: Emap | null = null;
+  private _button: HTMLButtonElement | null = null;
+  private readonly _onEditModeChange = (event: { mode: string }): void => this._syncPressed(event.mode);
+
+  constructor(private readonly _tool: AdvancedTool) {}
+
+  onAdd(map: Emap): HTMLElement {
+    this._map = map;
+    const container = document.createElement('div');
+    container.className = 'emap-ctrl emap-ctrl-group';
+    this._button = document.createElement('button');
+    this._button.className = `emap-ctrl-${this._tool}`;
+    this._button.type = 'button';
+    this._button.title = ADVANCED_TOOL_TITLES[this._tool];
+    this._button.setAttribute('aria-label', this._button.title);
+    this._button.setAttribute('aria-pressed', 'false');
+    this._button.textContent = this._button.title;
+    this._button.addEventListener('click', () => this._toggle());
+    container.appendChild(this._button);
+    map.on('editmodechange', this._onEditModeChange);
+    return container;
+  }
+
+  onRemove(): void {
+    const map = this._map;
+    map?.off('editmodechange', this._onEditModeChange);
+    if (map && this._matchesActiveHandler()) this._disable();
+    this._button?.remove();
+    this._button = null;
+    this._map = null;
+  }
+
+  private _toggle(): void {
+    const map = this._map;
+    if (!map) return;
+    if (this._matchesActiveHandler()) {
+      this._disable();
+      return;
+    }
+    if (this._tool === 'reshape') {
+      if (map.reshapeFeature.isEnabled()) map.reshapeFeature.disable();
+      map.reshapeFeature.enable();
+      return;
+    }
+    const handler = this._tool.startsWith('ring') ? map.ringEdit : map.partEdit;
+    if (handler.isEnabled()) handler.disable();
+    handler.setOptions({ mode: this._mode() });
+    handler.enable();
+  }
+
+  private _disable(): void {
+    const map = this._map;
+    if (!map) return;
+    if (this._tool === 'reshape') {
+      map.reshapeFeature.disable();
+      return;
+    }
+    (this._tool.startsWith('ring') ? map.ringEdit : map.partEdit).disable();
+  }
+
+  private _matchesActiveHandler(): boolean {
+    const map = this._map;
+    if (!map) return false;
+    if (this._tool === 'reshape') return map.reshapeFeature.isEnabled();
+    const handler = this._tool.startsWith('ring') ? map.ringEdit : map.partEdit;
+    return handler.isEnabled() && handler.getOptions().mode === this._mode();
+  }
+
+  private _mode(): 'add' | 'delete' {
+    return this._tool.endsWith('add') ? 'add' : 'delete';
+  }
+
+  private _syncPressed(mode: string): void {
+    const expectedMode = this._tool === 'reshape'
+      ? 'reshape'
+      : this._tool.startsWith('ring')
+        ? 'ring'
+        : 'part';
+    const active = mode === expectedMode && this._matchesActiveHandler();
+    this._button?.classList.toggle('active', active);
+    this._button?.setAttribute('aria-pressed', String(active));
+  }
 }
 
 /**
@@ -53,6 +150,15 @@ export class EditToolbar implements Control {
             sourceLayer: this._options.drawSourceLayer,
             type: 'point',
           }),
+        );
+      }
+      if (this._options.advancedTools) {
+        this._controls.push(
+          new AdvancedEditControl('reshape'),
+          new AdvancedEditControl('ring-add'),
+          new AdvancedEditControl('ring-delete'),
+          new AdvancedEditControl('part-add'),
+          new AdvancedEditControl('part-delete'),
         );
       }
     }
