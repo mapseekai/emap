@@ -94,9 +94,12 @@ map.reshapeFeature.enable();
 右键在至少两个顶点后完成，Esc 放弃当前草图。`reshapeFeature` 进入 `'reshape'`
 编辑模式；启用另一编辑模式会使它退出。
 
-校验失败的错误字段为 `selection`、`line`、`layer` 或 `geometry`：草图至少要有两个
-有限坐标且不能只重复同一点；草图必须实际整形至少一个选中要素。无接触的草图会以
-`line` 错误被拒绝，面整形还会拒绝自交或无效的结果。
+`map.ops.reshapeSelected()` 返回 `OpResult`。校验失败（`kind: 'validation'`）的错误形状为
+`{ kind, field, reason }`，其中 `field` 可为 `selection`、`line`、`layer` 或 `geometry`：
+草图至少要有两个有限坐标且不能只重复同一点；草图必须实际整形至少一个选中要素。无接触
+的草图会以 `line` 校验错误被拒绝，面整形还会拒绝自交或无效的结果。找不到 source 或
+layer 时错误形状为 `{ kind: 'not-found', what, id }`；并发修改使预备 mutation 过期时为
+`{ kind: 'stale-operation', sourceId, operation }`，两者都没有 `field`。
 
 ## 顶点批量操作
 
@@ -108,6 +111,7 @@ map.vertexEdit.setOptions({
   snapThreshold: 12,
   snapToVertex: true,
   snapToEdge: true,
+  polygonFillColor: '#6ea8fe', // 面要素悬停填充色
 });
 map.vertexEdit.enable();
 ```
@@ -145,9 +149,11 @@ map.ringEdit.enable();
 `mode: 'delete'` 时点击洞内任一点删除该洞。它使用 `'ring'` 编辑模式，切换到其他编辑
 模式会自动退出。
 
-`addRing` 的错误字段是 `selection` 或 `ring`：洞必须闭合并围成面积，不能自交、接触或
-穿过面边界，且必须严格位于同一个面外环内。`deleteRing` 的错误字段是 `selection` 或
-`ring`；点击未落在洞内会被拒绝。
+`map.ops.addRing()` 和 `map.ops.deleteRing()` 的校验失败（`kind: 'validation'`）形状为
+`{ kind, field, reason }`，`field` 为 `selection` 或 `ring`：洞必须闭合并围成面积，不能
+自交、接触或穿过面边界，且必须严格位于同一个面外环内；点击未落在洞内也会被拒绝。
+找不到资源时形状为 `{ kind: 'not-found', what, id }`，预备 mutation 因并发修改过期时为
+`{ kind: 'stale-operation', sourceId, operation }`；这两种错误没有 `field`。
 
 ## 加和删部分
 
@@ -176,10 +182,12 @@ map.partEdit.enable();
 对线要素，handler 会用 `snapThreshold` 换算为 `tolerance`。它使用 `'part'` 编辑模式，
 切换到其他编辑模式会自动退出。
 
-`addPart` 的错误字段是 `selection` 或 `part`：新 part 不能自交或接触、相交已有几何；
-面 part 还不能重叠已有面、把已有外环包在内部，且方向必须匹配现有外环。`deletePart`
-的错误字段是 `selection` 或 `part`；单一 part 的要素不可删除 part，面要素点击必须落在
-该 part 内，线要素必须在 `tolerance` 范围内。
+`map.ops.addPart()` 和 `map.ops.deletePart()` 的校验失败（`kind: 'validation'`）形状为
+`{ kind, field, reason }`，`field` 为 `selection` 或 `part`：新 part 不能自交或接触、相交
+已有几何；面 part 还不能重叠已有面、把已有外环包在内部，且方向必须匹配现有外环。单一
+part 的要素不可删除 part，面要素点击必须落在该 part 内，线要素必须在 `tolerance` 范围内。
+找不到资源时形状为 `{ kind: 'not-found', what, id }`，预备 mutation 因并发修改过期时为
+`{ kind: 'stale-operation', sourceId, operation }`；这两种错误没有 `field`。
 
 ## 撤销与重做
 

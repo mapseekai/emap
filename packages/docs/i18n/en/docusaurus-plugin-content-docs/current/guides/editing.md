@@ -98,11 +98,15 @@ after at least two vertices, and press Esc to discard the current sketch.
 `reshapeFeature` enters `'reshape'` edit mode; enabling another edit mode
 turns it off.
 
-Failures use the `selection`, `line`, `layer`, or `geometry` error field. The
-sketch needs at least two finite coordinates and cannot be only repeated
-points; it must reshape at least one selected feature. A non-contacting sketch
-is rejected with a `line` error, and polygon reshapes also reject self-
-intersecting or invalid results.
+`map.ops.reshapeSelected()` returns an `OpResult`. A validation failure
+(`kind: 'validation'`) has shape `{ kind, field, reason }`, where `field` can
+be `selection`, `line`, `layer`, or `geometry`: the sketch needs at least two
+finite coordinates and cannot be only repeated points; it must reshape at
+least one selected feature. A non-contacting sketch gets a `line` validation
+error, and polygon reshapes also reject self-intersecting or invalid results.
+A missing source or layer has shape `{ kind: 'not-found', what, id }`; a
+prepared mutation made stale by a concurrent edit has shape
+`{ kind: 'stale-operation', sourceId, operation }`. Neither has `field`.
 
 ## Batch vertex operations
 
@@ -115,6 +119,7 @@ map.vertexEdit.setOptions({
   snapThreshold: 12,
   snapToVertex: true,
   snapToEdge: true,
+  polygonFillColor: '#6ea8fe', // hover fill for polygon features
 });
 map.vertexEdit.enable();
 ```
@@ -156,10 +161,14 @@ click to draw the hole, right-click to finish, and Esc to cancel. With
 `mode: 'delete'`, click any point inside a hole to remove it. It uses `'ring'`
 edit mode and exits when another edit mode is selected.
 
-`addRing` failures use `selection` or `ring`: the hole must be closed and
-enclose area, must not self-intersect, touch, or cross a polygon boundary, and
-must be strictly inside one polygon exterior. `deleteRing` failures use
-`selection` or `ring`; a point outside every hole is rejected.
+Validation failures from `map.ops.addRing()` and `map.ops.deleteRing()` have
+`kind: 'validation'` and shape `{ kind, field, reason }`; `field` is
+`selection` or `ring`. The hole must be closed and enclose area, must not
+self-intersect, touch, or cross a polygon boundary, and must be strictly inside
+one polygon exterior; a point outside every hole is also rejected. A missing
+resource has shape `{ kind: 'not-found', what, id }`, and a prepared mutation
+made stale by a concurrent edit has shape `{ kind: 'stale-operation', sourceId,
+operation }`; neither has `field`.
 
 ## Add and delete parts
 
@@ -191,12 +200,16 @@ parts close automatically; line parts need at least two vertices. With
 `snapThreshold` to `tolerance`. It uses `'part'` edit mode and exits when
 another edit mode is selected.
 
-`addPart` failures use `selection` or `part`: a new part cannot self-intersect,
-touch, or intersect existing geometry. A polygon part also cannot overlap an
-existing polygon, enclose an existing exterior, and must match existing
-exterior orientation. `deletePart` failures use `selection` or `part`: a
+Validation failures from `map.ops.addPart()` and `map.ops.deletePart()` have
+`kind: 'validation'` and shape `{ kind, field, reason }`; `field` is
+`selection` or `part`. A new part cannot self-intersect, touch, or intersect
+existing geometry. A polygon part also cannot overlap an existing polygon,
+enclose an existing exterior, and must match existing exterior orientation. A
 single-part feature cannot lose its part; polygon clicks must be inside the
-part and line clicks must be within `tolerance`.
+part and line clicks must be within `tolerance`. A missing resource has shape
+`{ kind: 'not-found', what, id }`, and a prepared mutation made stale by a
+concurrent edit has shape `{ kind: 'stale-operation', sourceId, operation }`;
+neither has `field`.
 
 ## Undo and redo
 
