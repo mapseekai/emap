@@ -73,6 +73,8 @@ describe('reshapeSelectedPolygon', () => {
       [5, 0.5],
       [5.4, 0],
     ]);
+    expect(geometry.coordinates).toHaveLength(2);
+    expect(geometry.coordinates[1]).toContainEqual([4, 5]);
   });
 
   it('rejects a reshape that would put a hole outside its exterior', async () => {
@@ -111,6 +113,18 @@ describe('reshapeSelectedPolygon', () => {
     const original = exported(dataset);
     expect(reshape(dataset, [[5, -2], [5, 2]])).toBeNull();
     expect(exported(dataset)).toEqual(original);
+  });
+
+  it('chooses the larger exterior candidate when the reshape midpoint is outside', async () => {
+    const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
+    const original = adapter.getShapeArea(dataset.layers[0]!.shapes![0] as PathShape, dataset.arcs!);
+    const shape = reshape(dataset, [[3, 2], [5, -2], [7, 2]]);
+    expect(shape).not.toBeNull();
+    dataset.layers[0]!.shapes![0] = shape!;
+    expect(adapter.getShapeArea(shape!, dataset.arcs!)).toBeGreaterThan(original);
+    expect((exported(dataset)[0] as GeoJSON.Polygon).coordinates[0]).toEqual([
+      [6, 0], [10, 0], [10, 10], [0, 10], [0, 0], [4, 0], [5, -2], [6, 0],
+    ]);
   });
 
   it('groups imported rings by their mapshaper orientation', async () => {
