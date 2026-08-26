@@ -76,6 +76,10 @@ export class RingEditHandler implements Handler<RingEditOptions> {
   setOptions(options: Partial<RingEditOptions>): void {
     const modeChanged = options.mode !== undefined && options.mode !== this._opts.mode;
     this._opts = { ...this._opts, ...options };
+    if (!this._enabled) {
+      this._session = this._createSession();
+      return;
+    }
     if (!modeChanged) return;
     this._generation++;
     this._session.clear();

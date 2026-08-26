@@ -92,11 +92,15 @@ export class PartEditHandler implements Handler<PartEditOptions> {
           ? { snapThreshold }
           : { snapThreshold: DEFAULT_SNAP_THRESHOLD }),
     };
+    if (!this._enabled) {
+      this._session = null;
+      return;
+    }
     if (!modeChanged) return;
     this._generation++;
     this._session?.clear();
     this._session = null;
-    if (this._enabled && this._opts.mode === 'add') this._session = this._createSession();
+    if (this._opts.mode === 'add') this._session = this._createSession();
     this._map.render();
   }
 

@@ -156,6 +156,25 @@ describe('addRing', () => {
     expect(fixture.selection.getAll()).toEqual([{ source: 'source', layer: 'rings', id: 0 }]);
   });
 
+  it('rejects a stale prepared dataset without mutating or recording history', async () => {
+    const fixture = await createFixture();
+    const before = exported(fixture.dataset());
+    let historyEntries = 0;
+    fixture.ctx.runPreparedDatasetMutation = async <T>(_sourceId, _label, mutate): Promise<OpResult<T>> => {
+      const dataset = fixture.dataset();
+      const result = await mutate(adapter.copyDataset(dataset), { ...dataset });
+      if (result.ok) historyEntries++;
+      return result;
+    };
+
+    await expect(addRing(fixture.ctx, { ring: [[3, 3], [7, 3], [7, 7], [3, 7]] })).resolves.toMatchObject({
+      ok: false,
+      error: { kind: 'stale-operation' },
+    });
+    expect(exported(fixture.dataset())).toEqual(before);
+    expect(historyEntries).toBe(0);
+  });
+
   it('automatically closes an unclosed input ring', async () => {
     const fixture = await createFixture();
     await expect(addRing(fixture.ctx, { ring: [[3, 3], [7, 3], [7, 7], [3, 7]] })).resolves.toMatchObject({ ok: true });

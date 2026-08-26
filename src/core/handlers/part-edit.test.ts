@@ -149,6 +149,16 @@ describe('PartEditHandler', () => {
     expect(map.clearEditDrawState).toHaveBeenCalled();
   });
 
+  it('does not clear a shared overlay when disabled options change', () => {
+    const handler = new PartEditHandler(map as unknown as EditHandlerHost);
+    handler.enable();
+    handler.disable();
+    map.clearEditDrawState.mockClear();
+    map.setEditDrawState({ kind: 'other-tool' });
+    handler.setOptions({ mode: 'delete' });
+    expect(map.clearEditDrawState).not.toHaveBeenCalled();
+  });
+
   it('quietly disables when another edit mode takes ownership', () => {
     const handler = new PartEditHandler(map as unknown as EditHandlerHost);
     handler.enable();

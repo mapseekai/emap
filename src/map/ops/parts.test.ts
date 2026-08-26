@@ -89,6 +89,25 @@ describe('addPart', () => {
     expect(Math.sign(first)).toBe(Math.sign(second));
   });
 
+  it('rejects a stale prepared dataset without mutating or recording history', async () => {
+    const fixture = await createFixture({ type: 'Polygon', coordinates: [square] });
+    const before = exported(fixture.dataset());
+    let historyEntries = 0;
+    fixture.ctx.runPreparedDatasetMutation = async <T>(_sourceId, _label, mutate): Promise<OpResult<T>> => {
+      const dataset = fixture.dataset();
+      const result = await mutate(adapter.copyDataset(dataset), { ...dataset });
+      if (result.ok) historyEntries++;
+      return result;
+    };
+
+    await expect(addPart(fixture.ctx, { coordinates: [[20, 0], [30, 0], [30, 10], [20, 10]] })).resolves.toMatchObject({
+      ok: false,
+      error: { kind: 'stale-operation' },
+    });
+    expect(exported(fixture.dataset())).toEqual(before);
+    expect(historyEntries).toBe(0);
+  });
+
   it('allows an island inside an existing hole', async () => {
     const fixture = await createFixture({ type: 'Polygon', coordinates: [square, [[2, 2], [2, 8], [8, 8], [8, 2], [2, 2]]] });
     await expect(addPart(fixture.ctx, { coordinates: [[3, 3], [5, 3], [5, 5], [3, 5]] })).resolves.toMatchObject({ ok: true });
