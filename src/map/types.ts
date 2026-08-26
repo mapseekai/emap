@@ -1264,6 +1264,10 @@ export interface EditVertexState {
   geometryType?: string;
   /** Neighbor shapes sharing the hovered arc (different polygon fill) */
   neighborShapes?: EditVertexShape[];
+  /** Coordinates of topology nodes selected for a batch operation. */
+  selectedVertices?: [number, number][];
+  /** Screen-space rectangle while rubber-band selection is active. */
+  band?: { x0: number; y0: number; x1: number; y1: number } | null;
 }
 
 /** Default vertex-count threshold for `useWorker: 'auto'`. */

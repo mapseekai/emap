@@ -111,6 +111,7 @@ export interface EditPainter extends CorePainter {
     arcs: ArcCollection,
     style: VertexDotStyle,
   ): void;
+  drawVertexBand(band: { x0: number; y0: number; x1: number; y1: number }): void;
   drawDrawingOverlay(state: DrawOverlayState): void;
   drawMeasurementOverlay(state: MeasurementOverlayState): void;
 }

@@ -4,6 +4,7 @@ import mapshaper from 'mapshaper';
 import { VertexEditHandler } from './vertex-edit';
 import type { Emap } from '../../map/map';
 import { EMAP_THEME_COLORS } from '../../theme/colors';
+import type { NormalizedPointerEvent } from '../handler';
 
 type MockMap = {
   getCanvasContainer: () => { getBoundingClientRect: () => { left: number; top: number } };
@@ -1278,4 +1279,80 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
     expect(disabled.tabIndex).toBe(-1);
     document.getElementById('emap-ctx-menu')?.remove();
   });
+
+describe('VertexEditHandler batch vertex selection', () => {
+  function pointer(
+    kind: NormalizedPointerEvent['kind'],
+    x: number,
+    y: number,
+  ): NormalizedPointerEvent {
+    return {
+      kind,
+      point: { x, y },
+      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+      button: 0,
+      originalEvent: new Event(kind),
+    };
+  }
+
+  it('publishes the rubber-band rectangle while selecting from empty space', () => {
+    const setEditVertexState = vi.fn();
+    const map = {
+      setEditVertexState,
+      render: vi.fn(),
+    };
+    const handler = new VertexEditHandler(map as unknown as Emap);
+    setPrivate(handler, '_enabled', true);
+
+    expect(handler.handlePointer(pointer('down', 10, 20))).toBe('exclusive');
+    expect(handler.handlePointer(pointer('move', 30, 50))).toBe('exclusive');
+    expect(setEditVertexState).toHaveBeenLastCalledWith(
+      expect.objectContaining({ band: { x0: 10, y0: 20, x1: 30, y1: 50 } }),
+    );
+  });
+  it('deletes two selected nodes in one source atomically and undo restores both', () => {
+    let nn = Int32Array.from([3, 3]);
+    let xx = Float64Array.from([0, 1, 2, 3, 4, 5]);
+    let yy = Float64Array.from([0, 0, 0, 0, 0, 0]);
+    let ii = Int32Array.from([0, 3]);
+    const arcs = {
+      size: () => nn.length,
+      getVertexData: () => ({ nn, xx, yy, ii, zz: null }),
+      updateVertexData: (nextNn: Int32Array, nextXx: Float64Array, nextYy: Float64Array) => {
+        nn = nextNn;
+        xx = nextXx;
+        yy = nextYy;
+        ii = Int32Array.from([0, nextNn[0]]);
+      },
+    };
+    const layer = { geometry_type: 'polyline', shapes: [[[0]], [[1]]] };
+    const source = {
+      getArcs: () => arcs,
+      getLayers: () => [layer],
+      getDataset: () => ({ arcs, layers: [layer], info: {}, editVersion: 0 }),
+      refreshDisplayArcs: vi.fn(),
+    };
+    const pushed: Array<{ undo(): void }> = [];
+    const map = {
+      getSource: () => source,
+      pushCommand: (command: { undo(): void }) => pushed.push(command),
+      setEditVertexState: vi.fn(),
+      clearEditVertexState: vi.fn(),
+      render: vi.fn(),
+      fire: vi.fn(),
+    };
+    const handler = new VertexEditHandler(map as unknown as Emap);
+    setPrivate(handler, '_selectedNodes', [
+      { source: 'source', layer: 'layer', vertexIds: [1], coords: [1, 0] },
+      { source: 'source', layer: 'layer', vertexIds: [4], coords: [4, 0] },
+    ]);
+
+    callPrivate(handler, '_onKeyDown', new KeyboardEvent('keydown', { key: 'Delete' }));
+
+    expect(Array.from(xx)).toEqual([0, 2, 3, 5]);
+    expect(pushed).toHaveLength(1);
+    pushed[0].undo();
+    expect(Array.from(xx)).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+});
 });

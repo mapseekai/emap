@@ -345,6 +345,8 @@ export interface VertexDotStyle {
   hoverType?: 'vertex' | 'interpolated' | null;
   hoverColor?: string;
   hoverRadius?: number;
+  selectedVertices?: [number, number][];
+  selectedColor?: string;
   /** Fill color for polygon shapes in vertex edit mode */
   polygonFill?: string | null;
   geometryType?: string;

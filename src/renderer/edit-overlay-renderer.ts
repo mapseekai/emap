@@ -45,13 +45,7 @@ export class EditOverlayRenderer {
     state: EditVertexState,
     arcFilter?: (arcId: number) => boolean,
   ): void {
-    // `EditVertexArcs` is structurally a subset of `ArcCollection` (both
-    // expose `getArcIter`/`getShapeIter`); the cast keeps the Painter API
-    // strictly typed without forcing the editor to depend on the full
-    // mapshaper interface.
     const arcs = state.arcs as unknown as ArcCollection;
-
-    // Polygon fill is drawn first so vertex dots stack on top of it.
     if (state.geometryType === 'polygon' && state.polygonFill) {
       if (state.polygonFill === EMAP_THEME_COLORS.selection) {
         this._painter.drawPolygonFill(
@@ -74,6 +68,9 @@ export class EditOverlayRenderer {
       hoverType: state.hoverType ?? 'vertex',
       hoverColor: EDIT_VERTEX_COLOR,
       hoverRadius: 6,
+      selectedVertices: state.selectedVertices,
+      selectedColor: EMAP_THEME_COLORS.selection,
     });
+    if (state.band) this._painter.drawVertexBand(state.band);
   }
 }

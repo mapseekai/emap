@@ -759,6 +759,17 @@ export class CanvasPainter implements Painter {
     });
     ctx.fill();
 
+    if (style.selectedVertices?.length) {
+      ctx.fillStyle = this._resolveColor(style.selectedColor, 'selection');
+      ctx.beginPath();
+      for (const vertex of style.selectedVertices) {
+        const x = vertex[0] * mx + bx;
+        const y = vertex[1] * my + by;
+        ctx.arc(x, y, hoverRadius, 0, Math.PI * 2);
+      }
+      ctx.fill();
+    }
+
     // Draw hover highlight: circle for actual vertex, square for interpolated
     // edge-midpoint (drag-to-insert affordance) — same convention as
     // DrawFeatureControl's snap indicator (vertex=⭕, edge=⬜).
@@ -777,6 +788,21 @@ export class CanvasPainter implements Painter {
       }
       ctx.fill();
     }
+  }
+
+  drawVertexBand(band: { x0: number; y0: number; x1: number; y1: number }): void {
+    const pr = this._pixelRatio;
+    const ctx = this._ctx;
+    const x = Math.min(band.x0, band.x1) * pr;
+    const y = Math.min(band.y0, band.y1) * pr;
+    const width = Math.abs(band.x1 - band.x0) * pr;
+    const height = Math.abs(band.y1 - band.y0) * pr;
+    ctx.save();
+    ctx.strokeStyle = this._resolveColor(EMAP_THEME_COLORS.selection, 'selection');
+    ctx.lineWidth = pr;
+    ctx.setLineDash([4 * pr, 3 * pr]);
+    ctx.strokeRect(x, y, width, height);
+    ctx.restore();
   }
 
   /**

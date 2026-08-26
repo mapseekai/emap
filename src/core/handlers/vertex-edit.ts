@@ -2,7 +2,8 @@ import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler'
 import type { EditVertexShape, EditVertexArcs } from '../../map/types';
 import { VertexMoveCommand } from '../../edit/commands/vertex-move';
 import { VertexInsertCommand } from '../../edit/commands/vertex-insert';
-import { planTopologyNodeDeletion } from '../../edit/commands/vertex-delete';
+import { planTopologyNodeDeletion, type TopologyNodeDeletion } from '../../edit/commands/vertex-delete';
+import { CompositeCommand } from '../../edit/commands/composite';
 import { bumpEditVersion, isPathLayer, type ArcCollection } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
@@ -30,6 +31,13 @@ interface HoveredFeature {
   allLayers: Array<{ shapes?: EditVertexShape[] }>;
 }
 
+interface SelectedNode {
+  source: string;
+  layer: string;
+  vertexIds: number[];
+  coords: [number, number];
+}
+
 interface DetachedNodeSelection {
   source: string;
   layer: string;
@@ -40,6 +48,9 @@ interface DetachedNodeSelection {
 
 /** Pixel threshold for vertex hover detection */
 const VERTEX_HIT_THRESHOLD = 10;
+const EMPTY_EDIT_ARCS: EditVertexArcs = {
+  getArcIter: () => ({ x: 0, y: 0, hasNext: () => false }),
+};
 
 /** Default `EMAP_THEME_COLORS.selection` fill for the polygon being vertex-edited. */
 const DEFAULT_POLYGON_FILL = EMAP_THEME_COLORS.selection;
@@ -107,6 +118,13 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
   private _snapToVertex: boolean;
   private _snapToEdge: boolean;
   private _historyCanRedo = false;
+  private _selectedNodes: SelectedNode[] = [];
+  private _bandStart: { x: number; y: number } | null = null;
+  private _bandEnd: { x: number; y: number } | null = null;
+  private _bandAdditive = false;
+  private _batchDragging = false;
+  private _batchDragFrom: [number, number] | null = null;
+  private _onKeyDownBound = (event: KeyboardEvent) => this._onKeyDown(event);
 
   private _onMapMoveBound = () => this._onMapMove();
   private _onHistoryChangeBound = (state: { canRedo: boolean }) => {
@@ -114,8 +132,10 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     this._historyCanRedo = state.canRedo;
     if (!traversedHistory) return;
     this._detachedNode = null;
+    this._clearSelectedNodes();
     this._clearHoverState();
   };
+  private _onSelectionChangeBound = () => this._onSelectionChange();
   private _contextMenu: HTMLElement | null = null;
   private _contextMenuTimer: number | NodeJS.Timeout | undefined;
   private _dismissContextMenuBound = () => this._dismissContextMenu();
@@ -141,6 +161,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     this._map.setEditMode('vertex');
     this._map.on('move', this._onMapMoveBound);
     this._map.on('historychange', this._onHistoryChangeBound);
+    window.addEventListener('keydown', this._onKeyDownBound);
+    this._map.on('selectionchange', this._onSelectionChangeBound);
     this._manager?.refreshCursor();
   }
 
@@ -159,11 +181,18 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     this._hoverInsertionId = -1;
     this._detachedNode = null;
     this._neighborShapes = [];
+    this._clearSelectedNodes();
+    this._bandStart = null;
+    this._bandEnd = null;
+    this._batchDragging = false;
+    this._batchDragFrom = null;
     this._dragging = false;
     this._map.setEditMode('none');
     this._map.clearEditVertexState();
     this._map.off('move', this._onMapMoveBound);
     this._map.off('historychange', this._onHistoryChangeBound);
+    window.removeEventListener('keydown', this._onKeyDownBound);
+    this._map.off('selectionchange', this._onSelectionChangeBound);
     this._manager?.refreshCursor();
     this._map.render();
   }
@@ -193,6 +222,12 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     const px = ev.point.x,
       py = ev.point.y;
     if (ev.kind === 'move') {
+      if (this._bandStart) {
+        this._bandEnd = { x: px, y: py };
+        this._updateEditState();
+        this._map.render();
+        return 'exclusive';
+      }
       if (this._dragging) {
         this._handleDrag(px, py);
         return 'exclusive';
@@ -202,10 +237,22 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     }
     if (ev.kind === 'down') {
       if (ev.button !== 0) return 'passthrough';
+      if (!this._hoveredFeature) {
+        this._bandStart = { x: px, y: py };
+        this._bandEnd = { x: px, y: py };
+        this._bandAdditive = ev.modifiers.shift;
+        this._updateEditState();
+        this._map.render();
+        return 'exclusive';
+      }
       this._onMouseDown(px, py);
       return this._dragging ? 'exclusive' : 'passthrough';
     }
     if (ev.kind === 'up') {
+      if (this._bandStart) {
+        this._finishBand(px, py);
+        return 'passthrough';
+      }
       if (!this._dragging) return 'passthrough';
       this._finishDrag(px, py);
       return 'passthrough';
@@ -219,10 +266,17 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
 
   /** Redraw on map move/zoom (vertices stay fixed to geography) */
   private _onMapMove(): void {
-    if (this._hoveredFeature && !this._dragging) {
+    if ((this._hoveredFeature && !this._dragging) || this._bandStart) {
       this._updateEditState();
       this._map.render();
     }
+  }
+
+  private _onSelectionChange(): void {
+    if (this._selectedNodes.length === 0) return;
+    this._clearSelectedNodes();
+    this._updateEditState();
+    this._map.render();
   }
 
   /**
@@ -809,9 +863,27 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
 
   /** Update the edit vertex state on the map so render() draws vertex dots (and polygon fill) */
   private _updateEditState(): void {
-    if (!this._hoveredFeature) return;
+    const band =
+      this._bandStart && this._bandEnd
+        ? { x0: this._bandStart.x, y0: this._bandStart.y, x1: this._bandEnd.x, y1: this._bandEnd.y }
+        : null;
+    if (!this._hoveredFeature) {
+      const selectedArcs =
+        this._selectedNodes.length > 0
+          ? (this._map.getSource(this._selectedNodes[0].source)?.getArcs() as EditVertexArcs | undefined)
+          : undefined;
+      if (band || selectedArcs) {
+        this._map.setEditVertexState({
+          shapes: [],
+          arcs: selectedArcs ?? EMPTY_EDIT_ARCS,
+          hoverVertex: null,
+          selectedVertices: this._selectedNodes.map((node) => node.coords),
+          band,
+        });
+      }
+      return;
+    }
     const geomType = this._hoveredFeature.geometryType;
-    // Include neighbor shapes in `shapes` so drawVertexDots renders their vertices too
     const allShapes =
       this._neighborShapes.length > 0
         ? [this._hoveredFeature.shape, ...this._neighborShapes]
@@ -824,6 +896,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       geometryType: geomType,
       polygonFill: geomType === 'polygon' ? this._polygonFillColor : null,
       neighborShapes: this._neighborShapes.length > 0 ? this._neighborShapes : undefined,
+      selectedVertices: this._selectedNodes.map((node) => node.coords),
+      band,
     });
   }
 
@@ -843,7 +917,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     this._hoverType = null;
     this._hoverInsertionId = -1;
     this._neighborShapes = [];
-    this._map.clearEditVertexState();
+    if (this._selectedNodes.length > 0) this._updateEditState();
+    else this._map.clearEditVertexState();
     return true;
   }
 
@@ -881,6 +956,13 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
   private _onMouseDown(_px: number, _py: number): void {
     if (!this._hoverVertexCoords || !this._hoveredFeature) return;
 
+    if (this._isSelectedNode(this._hoveredFeature.source, this._hoverVertexIds)) {
+      this._batchDragging = true;
+      this._dragging = true;
+      this._batchDragFrom = [this._hoverVertexCoords[0], this._hoverVertexCoords[1]];
+      return;
+    }
+
     // Insert a new vertex when dragging from an interpolated edge point.
     // The insertion is itself an undoable step — push a VertexInsertCommand
     // before the drag begins, so undo first reverses the drag, then the insert.
@@ -894,21 +976,11 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
       );
       this._hoverVertexIds = [this._hoverInsertionId];
       this._hoverType = 'vertex';
-      // Live mutation — bump editVersion so feature-query's spatial-index
-      // cache rebuilds on the next hit-test against the post-edit bbox.
-      // The matching VertexInsertCommand bumps too on undo/redo, but its
-      // .do() is never invoked (pushCommand is memento-style); without
-      // this bump the index cache key wouldn't change and the new vertex
-      // wouldn't be hit-testable in any newly-covered area.
       this._bumpSourceEditVersion(this._hoveredFeature.source);
-
       this._pushVertexInsertCommand(this._hoverInsertionId, point);
     }
 
-    // Capture the pre-drag coordinate so mouseup can record a VertexMoveCommand.
-    this._dragFromCoords = this._hoverVertexCoords
-      ? [this._hoverVertexCoords[0], this._hoverVertexCoords[1]]
-      : null;
+    this._dragFromCoords = [this._hoverVertexCoords[0], this._hoverVertexCoords[1]];
     this._dragging = true;
   }
 
@@ -926,7 +998,196 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     );
   }
 
+  private _isSelectedNode(source: string, vertexIds: readonly number[]): boolean {
+    return this._selectedNodes.some(
+      (node) =>
+        node.source === source &&
+        node.vertexIds.length === vertexIds.length &&
+        node.vertexIds.every((vertexId) => vertexIds.includes(vertexId)),
+    );
+  }
+
+  private _clearSelectedNodes(): void {
+    this._selectedNodes = [];
+  }
+
+  private _finishBand(px: number, py: number): void {
+    const start = this._bandStart;
+    if (!start) return;
+    const additive = this._bandAdditive;
+    this._bandStart = null;
+    this._bandEnd = null;
+    this._bandAdditive = false;
+    if (Math.abs(px - start.x) < 3 && Math.abs(py - start.y) < 3) {
+      this._clearSelectedNodes();
+      this._map.clearEditVertexState();
+      this._map.render();
+      return;
+    }
+
+    const minX = Math.min(start.x, px);
+    const maxX = Math.max(start.x, px);
+    const minY = Math.min(start.y, py);
+    const maxY = Math.max(start.y, py);
+    const selected = additive ? this._selectedNodes.slice() : [];
+    const seen = new Set(selected.map((node) => `${node.source}:${node.coords[0]},${node.coords[1]}`));
+    const hits = this._map.queryFeatures(
+      [[minX, minY], [maxX, maxY]],
+      this._layers ? { layers: this._layers } : undefined,
+    );
+    const adapter = getDefaultMapshaperAdapter();
+    for (const hit of hits) {
+      if (hit.geometryType === 'point') continue;
+      const source = this._map.getSource(hit.source);
+      const layer = this._map.layers.resolve(hit.source, hit.layer);
+      const arcs = source?.getArcs() as EditableArcs | undefined;
+      const shape =
+        layer && isPathLayer(layer) && layer.shapes?.[hit.id]
+          ? (layer.shapes[hit.id] as EditVertexShape)
+          : null;
+      if (!source || !arcs || !shape) continue;
+      for (const part of shape) {
+        for (const rawArcId of part) {
+          const iter = arcs.getArcIter(rawArcId);
+          while (iter.hasNext()) {
+            const screen = this._map.project(iter.x, iter.y);
+            if (screen[0] < minX || screen[0] > maxX || screen[1] < minY || screen[1] > maxY) continue;
+            const key = `${hit.source}:${iter.x},${iter.y}`;
+            if (seen.has(key)) continue;
+            const vertexIds = adapter.findNearestVertices(
+              [iter.x, iter.y],
+              shape,
+              arcs as unknown as ArcCollection,
+            );
+            if (vertexIds.length === 0) continue;
+            seen.add(key);
+            selected.push({
+              source: hit.source,
+              layer: hit.layer,
+              vertexIds,
+              coords: [iter.x, iter.y],
+            });
+          }
+        }
+      }
+    }
+    this._selectedNodes = selected;
+    this._updateEditState();
+    this._map.render();
+  }
+
+  private _onKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      if (this._selectedNodes.length === 0) return;
+      this._clearSelectedNodes();
+      this._updateEditState();
+      this._map.render();
+      return;
+    }
+    if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+    if (this._selectedNodes.length === 0) {
+      this._deleteHoveredVertex();
+      return;
+    }
+    const vertexIdsBySource = new Map<string, number[]>();
+    for (const node of this._selectedNodes) {
+      const ids = vertexIdsBySource.get(node.source);
+      if (ids) ids.push(...node.vertexIds);
+      else vertexIdsBySource.set(node.source, node.vertexIds.slice());
+    }
+    const plans: Array<{ sourceId: string; plan: TopologyNodeDeletion }> = [];
+    for (const [sourceId, vertexIds] of vertexIdsBySource) {
+      const source = this._map.getSource(sourceId);
+      if (!source) return;
+      const plan = planTopologyNodeDeletion(source as TopologySource, vertexIds, source.getLayers());
+      if (!plan) {
+        this._map.fire('error', {
+          error: new Error('vertexEdit: selection contains non-deletable nodes'),
+        });
+        return;
+      }
+      plans.push({ sourceId, plan });
+    }
+    for (const { plan } of plans) plan.command.do();
+    this._map.pushCommand(
+      new CompositeCommand(
+        plans.map(({ plan }) => plan.command),
+        `Delete ${this._selectedNodes.length} vertices`,
+      ),
+    );
+    for (const { sourceId } of plans) {
+      this._refreshSourceDisplayArcs(sourceId);
+      this._bumpSourceEditVersion(sourceId);
+    }
+    this._clearSelectedNodes();
+    this._clearHoverState();
+    this._map.render();
+  }
+
+  private _handleBatchDrag(px: number, py: number): void {
+    const from = this._batchDragFrom;
+    if (!from) return;
+    const pointer = this._map.unproject(px, py);
+    const dx = pointer[0] - from[0];
+    const dy = pointer[1] - from[1];
+    const adapter = getDefaultMapshaperAdapter();
+    for (const node of this._selectedNodes) {
+      const source = this._map.getSource(node.source);
+      const arcs = source?.getArcs();
+      if (!arcs) continue;
+      adapter.snapVertices(
+        node.vertexIds,
+        [node.coords[0] + dx, node.coords[1] + dy],
+        arcs as ArcCollection,
+      );
+    }
+    this._updateEditState();
+    this._map.render();
+  }
+
+  private _finishBatchDrag(px: number, py: number): void {
+    const from = this._batchDragFrom;
+    this._batchDragging = false;
+    this._dragging = false;
+    this._batchDragFrom = null;
+    if (!from) return;
+    const pointer = this._map.unproject(px, py);
+    const dx = pointer[0] - from[0];
+    const dy = pointer[1] - from[1];
+    if (dx === 0 && dy === 0) return;
+    const commands = [];
+    const sources = new Set<string>();
+    for (const node of this._selectedNodes) {
+      const source = this._map.getSource(node.source);
+      if (!source) continue;
+      commands.push(
+        new VertexMoveCommand({
+          vertexIds: node.vertexIds.slice(),
+          from: [node.coords[0], node.coords[1]],
+          to: [node.coords[0] + dx, node.coords[1] + dy],
+          arcs: source.getArcs() as ArcCollection,
+          source: source as TopologySource,
+        }),
+      );
+      node.coords = [node.coords[0] + dx, node.coords[1] + dy];
+      sources.add(node.source);
+    }
+    if (commands.length > 0) {
+      this._map.pushCommand(new CompositeCommand(commands, `Move ${commands.length} vertices`));
+      for (const source of sources) {
+        this._refreshSourceDisplayArcs(source);
+        this._bumpSourceEditVersion(source);
+      }
+    }
+    this._updateEditState();
+    this._map.render();
+  }
+
   private _handleDrag(px: number, py: number): void {
+    if (this._batchDragging) {
+      this._handleBatchDrag(px, py);
+      return;
+    }
     if (!this._hoveredFeature || this._hoverVertexIds.length === 0) return;
 
     const dataCoords = this._resolveDragCoords(px, py);
@@ -1111,6 +1372,10 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
   }
 
   private _finishDrag(px: number, py: number): void {
+    if (this._batchDragging) {
+      this._finishBatchDrag(px, py);
+      return;
+    }
     if (!this._dragging || !this._hoveredFeature) return;
     this._dragging = false;
 
