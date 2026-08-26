@@ -44,10 +44,11 @@ export function collectPolygonExteriors(
   );
   for (let holeIndex = 0; holeIndex < shape.length; holeIndex++) {
     if (Math.sign(shoelaceArea(partCoordinates(shape[holeIndex]!, arcs))) === exteriorSign) continue;
-    const anchor = partCoordinates(shape[holeIndex]!, arcs)[0];
-    if (!anchor) continue;
+    const holePoints = partCoordinates(shape[holeIndex]!, arcs);
     const exterior = exteriors.find(({ exteriorIndex }) =>
-      adapter.testPointInPolygon(anchor[0], anchor[1], [shape[exteriorIndex]!], arcs),
+      holePoints.some((point) =>
+        adapter.testPointInPolygon(point[0], point[1], [shape[exteriorIndex]!], arcs),
+      ),
     );
     exterior?.holeIndexes.push(holeIndex);
   }
@@ -89,6 +90,22 @@ function forwardRingPath(
   }
   result.push(pointAlongRing(points, end % total));
   return normalizeConsecutiveCoordinates(result);
+}
+
+function lineMidpoint(points: readonly Coordinate[]): Coordinate {
+  const total = points.slice(1).reduce((sum, point, index) => sum + distance(points[index]!, point), 0);
+  let travelled = 0;
+  for (let index = 1; index < points.length; index++) {
+    const a = points[index - 1]!;
+    const b = points[index]!;
+    const length = distance(a, b);
+    if (travelled + length >= total / 2) {
+      const scale = (total / 2 - travelled) / length;
+      return [a[0] + (b[0] - a[0]) * scale, a[1] + (b[1] - a[1]) * scale];
+    }
+    travelled += length;
+  }
+  return points[0]!;
 }
 
 function appendArc(
@@ -169,11 +186,22 @@ export function reshapeSelectedPolygon(
       while (arcs.size() > arcStart) adapter.deleteLastArc(arcs);
       continue;
     }
-    const chosen = validB ? candidateB : candidateA;
-    const chosenArc = chosen[0]![0]!;
-    const discarded = chosenArc === candidateA[0]![0] ? candidateB[0]![0] : candidateA[0]![0];
-    if (discarded === arcs.size() - 1) adapter.deleteLastArc(arcs);
-    shape[exteriorIndex] = chosen[0]!;
+    let useCandidateB = !validA && validB;
+    if (validA && validB) {
+      const midpoint = lineMidpoint(clipped);
+      const midpointIsInside = adapter.testPointInPolygon(midpoint[0], midpoint[1], original, arcs);
+      const areaA = Math.abs(shoelaceArea(candidateAPoints));
+      const areaB = Math.abs(shoelaceArea(candidateBPoints));
+      useCandidateB = midpointIsInside ? areaB < areaA : areaB > areaA;
+    }
+    if (useCandidateB) {
+      adapter.deleteLastArc(arcs);
+      adapter.deleteLastArc(arcs);
+      shape[exteriorIndex] = [appendArc(arcs, candidateBPoints, adapter)];
+    } else {
+      adapter.deleteLastArc(arcs);
+      shape[exteriorIndex] = candidateA[0]!;
+    }
     changed = true;
   }
   return changed ? shape : null;

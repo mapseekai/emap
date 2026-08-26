@@ -57,7 +57,7 @@ describe('reshapeSelectedPolygon', () => {
       ]),
     ]);
 
-    const shape = reshape(dataset, [[3, -2], [5, 2], [7, -2]]);
+    const shape = reshape(dataset, [[3, -2], [5, 0.5], [7, -2]]);
 
     expect(shape).not.toBeNull();
     dataset.layers[0]!.shapes![0] = shape!;
