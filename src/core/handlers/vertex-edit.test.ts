@@ -1354,6 +1354,64 @@ describe('VertexEditHandler batch vertex selection', () => {
     pushed[0].undo();
     expect(Array.from(xx)).toEqual([0, 1, 2, 3, 4, 5]);
   });
+  it('deletes a shared endpoint and an interior node in one history entry and undo restores both', () => {
+    const buildOffsets = (lengths: Int32Array): Int32Array => {
+      const offsets = new Int32Array(lengths.length);
+      let offset = 0;
+      for (let arcId = 0; arcId < lengths.length; arcId++) {
+        offsets[arcId] = offset;
+        offset += lengths[arcId]!;
+      }
+      return offsets;
+    };
+    let nn = Int32Array.from([2, 2, 3]);
+    let xx = Float64Array.from([0, 1, 1, 2, 10, 11, 12]);
+    let yy = Float64Array.from([0, 0, 0, 0, 0, 0, 0]);
+    let ii = buildOffsets(nn);
+    const arcs = {
+      size: () => nn.length,
+      getVertexData: () => ({ nn, xx, yy, ii, zz: null }),
+      updateVertexData: (nextNn: Int32Array, nextXx: Float64Array, nextYy: Float64Array) => {
+        nn = nextNn;
+        xx = nextXx;
+        yy = nextYy;
+        ii = buildOffsets(nextNn);
+      },
+    };
+    const layer = { geometry_type: 'polyline', shapes: [[[0, 1]], [[~1, ~0]], [[2]]] };
+    const source = {
+      getArcs: () => arcs,
+      getLayers: () => [layer],
+      getDataset: () => ({ arcs, layers: [layer], info: {}, editVersion: 0 }),
+      refreshDisplayArcs: vi.fn(),
+    };
+    const pushed: Array<{ undo(): void }> = [];
+    const map = {
+      getSource: () => source,
+      pushCommand: (command: { undo(): void }) => pushed.push(command),
+      setEditVertexState: vi.fn(),
+      clearEditVertexState: vi.fn(),
+      render: vi.fn(),
+      fire: vi.fn(),
+    };
+    const handler = new VertexEditHandler(map as unknown as Emap);
+    setPrivate(handler, '_selectedNodes', [
+      { source: 'source', layer: 'layer', vertexIds: [1, 2], coords: [1, 0] },
+      { source: 'source', layer: 'layer', vertexIds: [5], coords: [11, 0] },
+    ]);
+
+    callPrivate(handler, '_onKeyDown', new KeyboardEvent('keydown', { key: 'Delete' }));
+
+    // Endpoint (1,0) bridges arc 0 and arc 1; interior vertex 5 drops from arc 2.
+    expect(Array.from(nn)).toEqual([1, 1, 2, 2]);
+    expect(Array.from(xx)).toEqual([0, 2, 10, 12, 0, 2]);
+    expect(layer.shapes).toEqual([[[0, 3, 1]], [[~1, ~3, ~0]], [[2]]]);
+    expect(pushed).toHaveLength(1);
+    pushed[0].undo();
+    expect(Array.from(nn)).toEqual([2, 2, 3]);
+    expect(Array.from(xx)).toEqual([0, 1, 1, 2, 10, 11, 12]);
+    expect(layer.shapes).toEqual([[[0, 1]], [[~1, ~0]], [[2]]]);
+  });
   it('selects enclosed nodes and adds to that set with Shift', () => {
     const arcs = {
       getArcIter: (arcId: number) =>

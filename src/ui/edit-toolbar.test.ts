@@ -136,4 +136,26 @@ describe('EditToolbar', () => {
     expect(map.ringEdit.disable).toHaveBeenCalledTimes(1);
     expect(map.ringEdit.enable).toHaveBeenCalledTimes(2);
   });
+  it('resets pressed state when an external editmodechange reports none', () => {
+    const map = fakeMap();
+    const toolbar = new EditToolbar({ advancedTools: true });
+
+    const root = toolbar.onAdd(map as unknown as Emap);
+    const buttons = root.querySelectorAll('button');
+    const listeners = map.on.mock.calls
+      .filter(([type]) => type === 'editmodechange')
+      .map(([, listener]) => listener as (event: { mode: string }) => void);
+    const fireMode = (mode: string) => listeners.forEach((listener) => listener({ mode }));
+
+    buttons[2]?.click();
+    fireMode('ring');
+    expect(buttons[2]?.getAttribute('aria-pressed')).toBe('true');
+    expect(buttons[2]?.classList.contains('active')).toBe(true);
+
+    fireMode('none');
+    for (const button of buttons) {
+      expect(button.getAttribute('aria-pressed')).toBe('false');
+      expect(button.classList.contains('active')).toBe(false);
+    }
+  });
 });
