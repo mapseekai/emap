@@ -104,6 +104,37 @@ describe('reshapeSelectedPolylines', () => {
     expect(exportLineCoordinates(dataset)).toEqual([[[10, 0], [7, 0], [5, 2], [3, 0], [0, 0]]]);
   });
 
+  it('rejects a reshape candidate that self-intersects', async () => {
+    const dataset = await importLines([[[0, 0], [10, 0]]]);
+
+    expect(reshape(dataset, [[3, 0], [7, 5], [3, 5], [7, 0]])).toEqual([]);
+    expect(exportLineCoordinates(dataset)).toEqual([[[0, 0], [10, 0]]]);
+  });
+
+  it('rolls back a feature when a contacted multipart candidate is invalid', async () => {
+    const dataset = await importLines([
+      {
+        type: 'MultiLineString',
+        coordinates: [[[0, 0], [10, 0]], [[0, 10], [10, 10]]],
+      },
+    ]);
+
+    expect(reshape(dataset, [[3, 0], [5, 2], [7, 0], [7, 10], [3, 15], [7, 15], [3, 10]])).toEqual([]);
+    expect(exportLineCoordinates(dataset)).toEqual([
+      [[[0, 0], [10, 0]], [[0, 10], [10, 10]]],
+    ]);
+  });
+
+  it('preserves intermediate contacts as reshape arc vertices', async () => {
+    const dataset = await importLines([[[0, 0], [10, 0]]]);
+
+    expect(reshape(dataset, [[3, 0], [4, 1], [5, -1], [6, 1], [7, 0]])).toHaveLength(1);
+    const coordinates = exportLineCoordinates(dataset) as [number, number][][];
+    expect(coordinates[0]!.map((point) => point[0])).toEqual([0, 3, 4, 4.5, 5, 5.5, 6, 7, 10]);
+    expect(coordinates[0]![3]![1]).toBeCloseTo(0);
+    expect(coordinates[0]![5]![1]).toBeCloseTo(0);
+  });
+
   it('leaves a feature unchanged when the clipped reshape segment is degenerate', async () => {
     const dataset = await importLines([[[0, 0], [10, 0]]]);
 

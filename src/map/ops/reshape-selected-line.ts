@@ -6,6 +6,8 @@ import {
   cross,
   normalizeConsecutiveCoordinates,
   segmentIntersection,
+  segmentsConflict,
+  shapeSegments,
   unsignedArcId,
   type Coordinate,
 } from './geometry-2d';
@@ -179,6 +181,29 @@ function cutPointsForContacts(
   });
 }
 
+function clipLineThroughContacts(
+  line: readonly Coordinate[],
+  contacts: readonly Contact[],
+  first: Contact,
+  last: Contact,
+): Coordinate[] {
+  const low = Math.min(first.lineDist, last.lineDist);
+  const high = Math.max(first.lineDist, last.lineDist);
+  const ordered = contacts
+    .filter((contact) => contact.lineDist >= low && contact.lineDist <= high)
+    .sort((left, right) =>
+      first.lineDist <= last.lineDist
+        ? left.lineDist - right.lineDist
+        : right.lineDist - left.lineDist,
+    );
+  const clipped: Coordinate[] = [];
+  for (let index = 1; index < ordered.length; index++) {
+    const section = clipLineBetween(line, ordered[index - 1]!.lineDist, ordered[index]!.lineDist);
+    clipped.push(...(clipped.length ? section.slice(1) : section));
+  }
+  return normalizeConsecutiveCoordinates(clipped);
+}
+
 function partArcIndexes(
   part: readonly number[],
   arcs: NonNullable<MapshaperDataset['arcs']>,
@@ -188,6 +213,31 @@ function partArcIndexes(
   const firstEnd = part.findIndex((arc) => isSamePoint(arcEndpoints(arcs, arc)[1], first));
   const lastStart = part.findIndex((arc) => isSamePoint(arcEndpoints(arcs, arc)[0], last));
   return firstEnd === -1 || lastStart === -1 ? null : { firstEnd, lastStart };
+}
+
+function hasSelfConflict(part: readonly number[], arcs: NonNullable<MapshaperDataset['arcs']>): boolean {
+  const segments = shapeSegments([part.slice()], arcs);
+  const closed =
+    segments.length > 1 && isSamePoint(segments[0]![0], segments.at(-1)![1]);
+  for (let left = 0; left < segments.length; left++) {
+    for (let right = left + 1; right < segments.length; right++) {
+      if (right === left + 1 || (closed && left === 0 && right === segments.length - 1)) continue;
+      if (segmentsConflict(...segments[left]!, ...segments[right]!)) return true;
+    }
+  }
+  return false;
+}
+
+function hasCoordinateSelfConflict(points: readonly Coordinate[]): boolean {
+  for (let left = 1; left < points.length; left++) {
+    for (let right = left + 2; right < points.length; right++) {
+      if (left === 1 && right === points.length - 1 && isSamePoint(points[0]!, points.at(-1)!))
+        continue;
+      if (segmentsConflict(points[left - 1]!, points[left]!, points[right - 1]!, points[right]!))
+        return true;
+    }
+  }
+  return false;
 }
 
 export function reshapeSelectedPolylines(
@@ -207,17 +257,36 @@ export function reshapeSelectedPolylines(
   for (const featureId of selectedIds) {
     const shape = layer.shapes[featureId] as PathShape | null;
     if (!shape) continue;
-    const featurePlans = shape.flatMap((part, partIndex) => {
+    const featurePlans: Array<{
+      partIndex: number;
+      first: Contact;
+      last: Contact;
+      clipped: Coordinate[];
+    }> = [];
+    const featureCutPoints: ArcCutPoint[] = [];
+    let invalidFeature = false;
+    for (let partIndex = 0; partIndex < shape.length; partIndex++) {
+      const part = shape[partIndex]!;
       const contacts = collectLineContacts(part, arcs, normalizedLine, adapter);
-      if (contacts.length < 2) return [];
+      if (contacts.length < 2) continue;
       const first = contacts[0]!;
       const last = contacts.at(-1)!;
-      const clipped = clipLineBetween(normalizedLine, first.lineDist, last.lineDist);
-      if (clipped.length < 2 || distance(clipped[0]!, clipped.at(-1)!) === 0) return [];
-      cutPoints.push(...cutPointsForContacts([first, last], targetSegments(part, arcs)));
-      return [{ partIndex, first, last, clipped }];
-    });
-    if (featurePlans.length) planned.set(featureId, featurePlans);
+      const clipped = clipLineThroughContacts(normalizedLine, contacts, first, last);
+      if (
+        clipped.length < 2 ||
+        distance(clipped[0]!, clipped.at(-1)!) === 0 ||
+        hasCoordinateSelfConflict(clipped)
+      ) {
+        invalidFeature = true;
+        break;
+      }
+      featureCutPoints.push(...cutPointsForContacts(contacts, targetSegments(part, arcs)));
+      featurePlans.push({ partIndex, first, last, clipped });
+    }
+    if (!invalidFeature && featurePlans.length) {
+      planned.set(featureId, featurePlans);
+      cutPoints.push(...featureCutPoints);
+    }
   }
   if (!planned.size) return [];
 
@@ -226,11 +295,15 @@ export function reshapeSelectedPolylines(
   for (const [featureId, plans] of planned) {
     const shape = layer.shapes[featureId] as PathShape;
     const reshaped = shape.map((part) => [...part]);
-    let changed = false;
+    const featureArcStart = arcs.size();
+    let accepted = true;
     for (const plan of plans) {
       const part = reshaped[plan.partIndex]!;
       const indexes = partArcIndexes(part, arcs, plan.first.point, plan.last.point);
-      if (!indexes) continue;
+      if (!indexes) {
+        accepted = false;
+        break;
+      }
       const newArc = arcs.size();
       adapter.appendEmptyArc(arcs);
       for (const point of plan.clipped) adapter.appendVertex(arcs, [point[0], point[1]]);
@@ -238,14 +311,17 @@ export function reshapeSelectedPolylines(
       const candidate = closed
         ? [newArc, ...part.slice(indexes.lastStart), ...part.slice(0, indexes.firstEnd + 1)]
         : [...part.slice(0, indexes.firstEnd + 1), newArc, ...part.slice(indexes.lastStart)];
-      if (adapter.getShapePerimeter([candidate], arcs) === 0) {
-        adapter.deleteLastArc(arcs);
-        continue;
+      if (adapter.getShapePerimeter([candidate], arcs) === 0 || hasSelfConflict(candidate, arcs)) {
+        accepted = false;
+        break;
       }
       reshaped[plan.partIndex] = candidate;
-      changed = true;
     }
-    if (changed) results.push({ featureId, shape: reshaped });
+    if (!accepted) {
+      while (arcs.size() > featureArcStart) adapter.deleteLastArc(arcs);
+      continue;
+    }
+    results.push({ featureId, shape: reshaped });
   }
   return results;
 }
