@@ -256,6 +256,16 @@ export interface ReshapeSelectedOptions {
   line: [number, number][];
 }
 
+/** Coordinates of the closed interior ring to add to the selected polygon. */
+export interface AddRingOptions {
+  ring: [number, number][];
+}
+
+/** Point used to select an interior ring of the selected polygon for removal. */
+export interface DeleteRingOptions {
+  point: [number, number];
+}
+
 /** Result of a successful selected-feature reshape. */
 export interface ReshapeSelectedResult {
   reshapedCount: number;

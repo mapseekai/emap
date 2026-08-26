@@ -28,6 +28,7 @@ import {
 } from './ops/_runner';
 import type {
   AffineLayerOptions,
+  AddRingOptions,
   ApplyExpressionOptions,
   BufferOptions,
   CleanOptions,
@@ -36,6 +37,7 @@ import type {
   DataFillOptions,
   DivideOptions,
   DropLayerOptions,
+  DeleteRingOptions,
   DissolveOptions,
   ExplodeOptions,
   FilterFieldsOptions,
@@ -105,6 +107,7 @@ import { affineLayer } from './ops/affine';
 import { dataFill } from './ops/data-fill';
 import { splitSelected } from './ops/split-selected';
 import { reshapeSelected } from './ops/reshape-selected';
+import { addRing, deleteRing } from './ops/rings';
 
 /**
  * Mapshaper command manager. Owned by Emap and exposed as `emap.ops`.
@@ -269,5 +272,11 @@ export class MapshaperOps {
   }
   reshapeSelected(options: ReshapeSelectedOptions): Promise<OpResult<ReshapeSelectedResult>> {
     return reshapeSelected(this._ctx, options);
+  }
+  addRing(options: AddRingOptions): Promise<OpResult<void>> {
+    return addRing(this._ctx, options);
+  }
+  deleteRing(options: DeleteRingOptions): Promise<OpResult<void>> {
+    return deleteRing(this._ctx, options);
   }
 }
