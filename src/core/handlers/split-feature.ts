@@ -1,6 +1,6 @@
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
 import type { EditHandlerHost } from './edit-handler-host';
-import type { FeatureRef, SnapKind, SplitFeatureOptions } from '../../map/types';
+import type { FeatureRef, SplitFeatureOptions } from '../../map/types';
 import type {
   ArcCollection,
   ArcVertexData,
@@ -10,7 +10,7 @@ import type {
 import type { MutableTopologySource } from '../../source/source';
 import { isPathLayer } from '../../types/mapshaper-types';
 import { projectPointOnSegment } from './draw-feature';
-import { EMAP_THEME_COLORS } from '../../theme/colors';
+import { SketchSession, type SketchSnapTarget } from './sketch-session';
 
 export type { SplitFeatureOptions } from '../../map/types';
 
@@ -19,7 +19,7 @@ const DEFAULT_OPTIONS: SplitFeatureOptions = {
   cutterType: 'point',
   snapThreshold: DEFAULT_SNAP_THRESHOLD,
 };
-type SnapTarget = { coord: [number, number]; kind: SnapKind };
+type SnapTarget = SketchSnapTarget;
 type SelectionContext = {
   key: string;
   refs: readonly FeatureRef[];
@@ -43,18 +43,14 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
   readonly name = 'splitFeature';
   private _enabled = false;
   private _opts: SplitFeatureOptions;
-  private _vertices: [number, number][] = [];
-  private _cursorCoord: [number, number] | null = null;
-  private _snapCoord: [number, number] | null = null;
-  private _snapKind: SnapKind = null;
   private _generation = 0;
   private _submissionGeneration: number | null = null;
   private _selectionKey: string | null = null;
-  private _overlayPublished = false;
+  private _snapContext: SelectionContext | null = null;
+  private _session: SketchSession;
   _manager?: { refreshCursor(): void };
 
-  private readonly _onKeyDownBound = (event: KeyboardEvent) => this._onKeyDown(event);
-  private readonly _onMapMoveBound = () => this._refreshOverlay();
+  private readonly _onKeyDownBound = (event: KeyboardEvent) => this._session.handleKeyDown(event);
   private readonly _onSelectionChangeBound = () => this._onSelectionChange();
 
   constructor(
@@ -62,6 +58,7 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     options: Partial<SplitFeatureOptions> = {},
   ) {
     this._opts = { ...DEFAULT_OPTIONS, ...options };
+    this._session = this._createSession();
     this._map.on('editmodechange', (event: { mode: string }) => {
       if (event.mode !== 'split' && this._enabled) this._quietDisable();
     });
@@ -77,7 +74,6 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     this._enabled = true;
     this._map.setEditMode('split');
     window.addEventListener('keydown', this._onKeyDownBound);
-    this._map.on('move', this._onMapMoveBound);
     this._map.on('selectionchange', this._onSelectionChangeBound);
     this._manager?.refreshCursor();
   }
@@ -86,9 +82,8 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     if (!this._enabled) return;
     this._generation++;
     this._enabled = false;
-    this._clearSketch();
+    this._session.clear();
     window.removeEventListener('keydown', this._onKeyDownBound);
-    this._map.off('move', this._onMapMoveBound);
     this._map.off('selectionchange', this._onSelectionChangeBound);
     this._map.setEditMode('none');
     this._manager?.refreshCursor();
@@ -101,9 +96,10 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
 
   setOptions(options: Partial<SplitFeatureOptions>): void {
     this._opts = { ...this._opts, ...options };
+    this._session.clear();
+    this._session = this._createSession();
     if (!this._enabled) return;
     this._generation++;
-    this._clearSketch();
     const context = this._resolveSelectionContext();
     this._selectionKey = context && this._isContextCompatible(context) ? context.key : null;
   }
@@ -118,35 +114,35 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
 
   handlePointer(event: NormalizedPointerEvent): HandlerResult {
     if (!this._enabled) return 'passthrough';
-    if (event.kind === 'move') {
-      this._updateCursor(event.point.x, event.point.y);
+    if (
+      event.kind === 'click' &&
+      (event.button !== 0 || this._submissionGeneration === this._generation)
+    )
       return 'passthrough';
+    if (
+      (event.kind === 'move' || event.kind === 'click') &&
+      !this._setSnapContext(this._resolveSelectionContext())
+    ) {
+      this._session.clear();
+      this._map.render();
+      return event.kind === 'click' ? 'consumed' : 'passthrough';
     }
-    if (event.kind === 'click') {
-      if (event.button !== 0 || this._submissionGeneration === this._generation)
-        return 'passthrough';
-      this._placeVertex(event.point.x, event.point.y);
-      return 'consumed';
-    }
-    if (event.kind === 'contextmenu') {
-      event.originalEvent.preventDefault();
-      if (this._submissionGeneration === this._generation) return 'consumed';
-      if (this._opts.cutterType === 'polyline' && this._vertices.length >= 2) void this._submit();
-      else {
-        this._clearSketch();
-        this._map.render();
+    try {
+      if (event.kind === 'contextmenu' && this._submissionGeneration === this._generation) {
+        event.originalEvent.preventDefault();
+        return 'consumed';
       }
-      return 'consumed';
+      return this._session.handlePointer(event);
+    } finally {
+      this._snapContext = null;
     }
-    return 'passthrough';
   }
 
   private _quietDisable(): void {
     this._generation++;
     this._enabled = false;
-    this._clearSketch();
+    this._session.clear();
     window.removeEventListener('keydown', this._onKeyDownBound);
-    this._map.off('move', this._onMapMoveBound);
     this._map.off('selectionchange', this._onSelectionChangeBound);
     this._manager?.refreshCursor();
     this._map.render();
@@ -154,10 +150,35 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
 
   private _onSelectionChange(): void {
     this._generation++;
-    this._clearSketch();
+    this._session.clear();
     const context = this._resolveSelectionContext();
     this._selectionKey = context && this._isContextCompatible(context) ? context.key : null;
     this._map.render();
+  }
+
+  private _createSession(): SketchSession {
+    return new SketchSession(
+      this._map,
+      this._opts.cutterType === 'point'
+        ? {
+            minVertices: 1,
+            autoFinishAt: 1,
+            canPlace: (snap) => snap !== null,
+            resolveSnap: (px, py) =>
+              this._snapContext ? this._findSnapTarget(px, py, this._snapContext) : null,
+          }
+        : {
+            minVertices: 2,
+            resolveSnap: (px, py) =>
+              this._snapContext ? this._findSnapTarget(px, py, this._snapContext) : null,
+          },
+      (vertices) => void this._submit(vertices),
+    );
+  }
+
+  private _setSnapContext(context: SelectionContext | null): context is SelectionContext {
+    this._snapContext = context && this._hasCurrentSelection(context) ? context : null;
+    return this._snapContext !== null;
   }
 
   private _validateSelection(context: SelectionContext): void {
@@ -291,38 +312,9 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     return this._opts.cutterType !== 'point' || context.layer.geometry_type !== 'polygon';
   }
 
-  private _updateCursor(px: number, py: number): void {
-    const context = this._resolveSelectionContext();
-    if (!this._hasCurrentSelection(context)) {
-      this._clearSketch();
-      this._map.render();
-      return;
-    }
-    const cursor = this._map.unproject(px, py);
-    this._cursorCoord = [cursor[0], cursor[1]];
-    const snap = this._findSnapTarget(px, py, context);
-    this._snapCoord = snap?.coord ?? null;
-    this._snapKind = snap?.kind ?? null;
-    this._refreshOverlay();
-  }
-
-  private _placeVertex(px: number, py: number): void {
+  private async _submit(vertices: [number, number][]): Promise<void> {
+    if (this._submissionGeneration === this._generation || vertices.length === 0) return;
     if (!this._hasCurrentSelection(this._resolveSelectionContext())) {
-      this._clearSketch();
-      this._map.render();
-      return;
-    }
-    if (this._opts.cutterType === 'point' && !this._snapCoord) return;
-    const coord = this._snapCoord ?? this._map.unproject(px, py);
-    this._vertices.push([coord[0], coord[1]]);
-    if (this._opts.cutterType === 'point') void this._submit();
-    else this._refreshOverlay();
-  }
-
-  private async _submit(): Promise<void> {
-    if (this._submissionGeneration === this._generation || this._vertices.length === 0) return;
-    if (!this._hasCurrentSelection(this._resolveSelectionContext())) {
-      this._clearSketch();
       this._map.render();
       return;
     }
@@ -330,55 +322,16 @@ export class SplitFeatureHandler implements Handler<SplitFeatureOptions> {
     this._submissionGeneration = generation;
     const cutter =
       this._opts.cutterType === 'point'
-        ? { type: 'point' as const, coordinates: this._vertices[0] }
-        : { type: 'polyline' as const, coordinates: this._vertices.slice() };
+        ? { type: 'point' as const, coordinates: vertices[0]! }
+        : { type: 'polyline' as const, coordinates: vertices };
     try {
       const result = await this._map.ops.splitSelected({ cutter });
       if (generation === this._generation && !result.ok)
         this._map.fire('error', { error: result.error });
     } finally {
       if (this._submissionGeneration === generation) this._submissionGeneration = null;
-      if (generation === this._generation) {
-        this._clearSketch();
-        this._map.render();
-      }
+      if (generation === this._generation) this._map.render();
     }
-  }
-
-  private _onKeyDown(event: KeyboardEvent): void {
-    if (event.key !== 'Escape' || this._submissionGeneration === this._generation) return;
-    this._clearSketch();
-    this._map.render();
-  }
-
-  private _refreshOverlay(): void {
-    if (this._vertices.length === 0 && !this._snapCoord) {
-      if (this._overlayPublished) {
-        this._overlayPublished = false;
-        this._map.clearEditDrawState();
-        this._map.render();
-      }
-      return;
-    }
-    this._overlayPublished = true;
-    this._map.setEditDrawState({
-      vertices: this._vertices.slice(),
-      cursorCoord: this._snapCoord ?? this._cursorCoord,
-      snapCoord: this._snapCoord,
-      snapKind: this._snapKind,
-      geometryType: 'polyline',
-      drawColor: EMAP_THEME_COLORS.primary,
-    });
-    this._map.render();
-  }
-
-  private _clearSketch(): void {
-    this._vertices = [];
-    this._cursorCoord = null;
-    this._snapCoord = null;
-    this._snapKind = null;
-    this._overlayPublished = false;
-    this._map.clearEditDrawState();
   }
 
   private _findSnapTarget(px: number, py: number, context: SelectionContext): SnapTarget | null {
