@@ -34,6 +34,7 @@ const expectedIds = [
   'data-engineering',
   'merge-selected',
   'split-features',
+  'reshape-ring-part',
   'vertex-editing',
   'feature-translate',
   'feature-rotate-scale',
@@ -104,7 +105,7 @@ const expectedModules = [
     en: 'Styling & Interaction',
     count: 9,
   },
-  { key: 'data-editing', zh: '数据编辑', en: 'Data Editing', count: 15 },
+  { key: 'data-editing', zh: '数据编辑', en: 'Data Editing', count: 16 },
   { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 53 },
 ] as const;
 
@@ -367,7 +368,7 @@ describe('example catalog metadata', () => {
   });
 
   it('defines the complete metadata-only catalog', () => {
-    expect(examples).toHaveLength(89);
+    expect(examples).toHaveLength(90);
     expect(examples.map(({ id }) => id)).toEqual(expectedIds);
     expect(Array.from(new Set(examples.map(({ category }) => category)))).toEqual(
       expectedModules.map(({ key }) => key),
@@ -741,7 +742,7 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-brand img')?.getAttribute('src')).toBe(
       '/mapseekai/emap/examples/emap.svg',
     );
-    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('89');
+    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('90');
 
     const firstCard = root.querySelector<HTMLAnchorElement>(
       'a.example-card[href="/mapseekai/emap/examples/getting-started/geojson-viewer/"]',
