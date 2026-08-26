@@ -70,6 +70,7 @@ function lineDistanceAt(line: readonly Coordinate[], segmentIndex: number, point
 function isTransverseAtTargetVertex(
   segments: readonly TargetSegment[],
   segmentIndex: number,
+  line: readonly Coordinate[],
   lineStart: Coordinate,
   lineEnd: Coordinate,
   point: Coordinate,
@@ -84,6 +85,19 @@ function isTransverseAtTargetVertex(
     ? (segments[segmentIndex + 1] ?? (closed ? segments[0] : undefined))
     : target;
   if (!previous || !next) return false;
+  const collinearWithPrevious =
+    Math.abs(cross(lineStart, lineEnd, previous.a)) <= CONTACT_EPSILON &&
+    Math.abs(cross(lineStart, lineEnd, previous.b)) <= CONTACT_EPSILON;
+  const collinearWithNext =
+    Math.abs(cross(lineStart, lineEnd, next.a)) <= CONTACT_EPSILON &&
+    Math.abs(cross(lineStart, lineEnd, next.b)) <= CONTACT_EPSILON;
+  if (collinearWithPrevious || collinearWithNext) return false;
+  const lineVertex = line.findIndex((candidate) => isSamePoint(candidate, point));
+  if (lineVertex > 0 && lineVertex < line.length - 1) {
+    const before = cross(previous.a, next.b, line[lineVertex - 1]!);
+    const after = cross(previous.a, next.b, line[lineVertex + 1]!);
+    if (before * after >= 0) return false;
+  }
   return cross(lineStart, lineEnd, previous.a) * cross(lineStart, lineEnd, next.b) < 0;
 }
 
@@ -112,7 +126,7 @@ export function collectLineContacts(
       const targetAtVertex = isSamePoint(point, target.a) || isSamePoint(point, target.b);
       if (
         targetAtVertex &&
-        !isTransverseAtTargetVertex(segments, targetIndex, c, d, point)
+        !isTransverseAtTargetVertex(segments, targetIndex, line, c, d, point)
       )
         continue;
       const targetLength = target.endDist - target.startDist;
@@ -304,18 +318,89 @@ export function reshapeSelectedPolylines(
         accepted = false;
         break;
       }
-      const newArc = arcs.size();
+      const closed = isSamePoint(arcEndpoints(arcs, part[0]!)[0], arcEndpoints(arcs, part.at(-1)!)[1]);
+      if (!closed) {
+        const newArc = arcs.size();
+        adapter.appendEmptyArc(arcs);
+        for (const point of plan.clipped) adapter.appendVertex(arcs, [point[0], point[1]]);
+        const candidate = [
+          ...part.slice(0, indexes.firstEnd + 1),
+          newArc,
+          ...part.slice(indexes.lastStart),
+        ];
+        if (adapter.getShapePerimeter([candidate], arcs) === 0 || hasSelfConflict(candidate, arcs)) {
+          accepted = false;
+          break;
+        }
+        reshaped[plan.partIndex] = candidate;
+        continue;
+      }
+
+      const firstArc = arcs.size();
       adapter.appendEmptyArc(arcs);
       for (const point of plan.clipped) adapter.appendVertex(arcs, [point[0], point[1]]);
-      const closed = isSamePoint(arcEndpoints(arcs, part[0]!)[0], arcEndpoints(arcs, part.at(-1)!)[1]);
-      const candidate = closed
-        ? [newArc, ...part.slice(indexes.lastStart), ...part.slice(0, indexes.firstEnd + 1)]
-        : [...part.slice(0, indexes.firstEnd + 1), newArc, ...part.slice(indexes.lastStart)];
-      if (adapter.getShapePerimeter([candidate], arcs) === 0 || hasSelfConflict(candidate, arcs)) {
+      const candidateA = [
+        firstArc,
+        ...part.slice(indexes.lastStart),
+        ...part.slice(0, indexes.firstEnd + 1),
+      ];
+      const validA =
+        adapter.getShapePerimeter([candidateA], arcs) > 0 && !hasSelfConflict(candidateA, arcs);
+
+      const secondArc = arcs.size();
+      adapter.appendEmptyArc(arcs);
+      for (const point of [...plan.clipped].reverse())
+        adapter.appendVertex(arcs, [point[0], point[1]]);
+      const candidateB = [...part.slice(indexes.firstEnd + 1, indexes.lastStart), secondArc];
+      const validB =
+        adapter.getShapePerimeter([candidateB], arcs) > 0 && !hasSelfConflict(candidateB, arcs);
+      if (!validA && !validB) {
         accepted = false;
         break;
       }
-      reshaped[plan.partIndex] = candidate;
+      if (validA && !validB) {
+        adapter.deleteLastArc(arcs);
+        reshaped[plan.partIndex] = candidateA;
+        continue;
+      }
+      if (!validA && validB) {
+        adapter.deleteLastArc(arcs);
+        adapter.deleteLastArc(arcs);
+        const newArc = arcs.size();
+        adapter.appendEmptyArc(arcs);
+        for (const point of [...plan.clipped].reverse())
+          adapter.appendVertex(arcs, [point[0], point[1]]);
+        reshaped[plan.partIndex] = [...part.slice(indexes.firstEnd + 1, indexes.lastStart), newArc];
+        continue;
+      }
+
+      const spanA = shapeSegments([part.slice(indexes.firstEnd + 1, indexes.lastStart)], arcs);
+      const spanB = shapeSegments(
+        [[...part.slice(indexes.lastStart), ...part.slice(0, indexes.firstEnd + 1)]],
+        arcs,
+      );
+      const score = (replacement: readonly Coordinate[], span: Array<[Coordinate, Coordinate]>) => {
+        const replacementStart = replacement[0]!;
+        const replacementEnd = replacement.at(-1)!;
+        const spanStart = span[0]![0];
+        const spanEnd = span.at(-1)![1];
+        return (
+          (replacementEnd[0] - replacementStart[0]) * (spanEnd[0] - spanStart[0]) +
+          (replacementEnd[1] - replacementStart[1]) * (spanEnd[1] - spanStart[1])
+        );
+      };
+      if (score(plan.clipped, spanA) >= score([...plan.clipped].reverse(), spanB)) {
+        adapter.deleteLastArc(arcs);
+        reshaped[plan.partIndex] = candidateA;
+      } else {
+        adapter.deleteLastArc(arcs);
+        adapter.deleteLastArc(arcs);
+        const newArc = arcs.size();
+        adapter.appendEmptyArc(arcs);
+        for (const point of [...plan.clipped].reverse())
+          adapter.appendVertex(arcs, [point[0], point[1]]);
+        reshaped[plan.partIndex] = [...part.slice(indexes.firstEnd + 1, indexes.lastStart), newArc];
+      }
     }
     if (!accepted) {
       while (arcs.size() > featureArcStart) adapter.deleteLastArc(arcs);

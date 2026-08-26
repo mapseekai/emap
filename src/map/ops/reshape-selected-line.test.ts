@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
-import { clipLineBetween, reshapeSelectedPolylines } from './reshape-selected-line';
+import { clipLineBetween, collectLineContacts, reshapeSelectedPolylines } from './reshape-selected-line';
 
 const FIXTURE_NAME = 'selected-polyline-reshape.geojson';
 
@@ -38,13 +38,24 @@ function reshape(
   return results;
 }
 
-  it('clips a line at cumulative distances', () => {
-    expect(clipLineBetween([[3, 0], [5, 2], [7, 0]], 0, Math.sqrt(8) * 2)).toEqual([
-      [3, 0],
-      [5, 2],
-      [7, 0],
-    ]);
-  });
+it('clips a line at cumulative distances', () => {
+  expect(clipLineBetween([[3, 0], [5, 2], [7, 0]], 0, Math.sqrt(8) * 2)).toEqual([
+    [3, 0],
+    [5, 2],
+    [7, 0],
+  ]);
+});
+
+it('counts only transverse target-vertex contacts', async () => {
+  const dataset = await importLines([[[0, 1], [5, 0], [10, 1]]]);
+  const part = (dataset.layers[0]!.shapes![0] as number[][])[0]!;
+  const adapter = getDefaultMapshaperAdapter();
+
+  expect(collectLineContacts(part, dataset.arcs!, [[5, -1], [5, 2]], adapter)).toMatchObject([
+    { point: [5, 0] },
+  ]);
+  expect(collectLineContacts(part, dataset.arcs!, [[4, -1], [5, 0], [4, 1]], adapter)).toEqual([]);
+});
 
 describe('reshapeSelectedPolylines', () => {
   it('leaves an open line unchanged after one transverse crossing', async () => {
