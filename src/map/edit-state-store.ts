@@ -5,7 +5,16 @@
 
 import type { EditMeasurementState, EditVertexState, EditDrawState } from './types';
 
-export type EditMode = 'none' | 'vertex' | 'draw' | 'split' | 'measure' | 'transform';
+export type EditMode =
+  | 'none'
+  | 'vertex'
+  | 'draw'
+  | 'split'
+  | 'measure'
+  | 'transform'
+  | 'reshape'
+  | 'ring'
+  | 'part';
 
 export interface EditStateSnapshot {
   mode: EditMode;

@@ -755,7 +755,13 @@ export class Emap extends EventDispatcher {
   }
 
   private _syncEditModeDragPan(mode: EditMode): void {
-    const blocksPan = mode === 'vertex' || mode === 'draw' || mode === 'split';
+    const blocksPan =
+      mode === 'vertex' ||
+      mode === 'draw' ||
+      mode === 'split' ||
+      mode === 'reshape' ||
+      mode === 'ring' ||
+      mode === 'part';
 
     if (blocksPan) {
       if (!this._dragPanSuspendedByEdit) {

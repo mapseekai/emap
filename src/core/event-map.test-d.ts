@@ -58,7 +58,16 @@ map.off('zoomend', (e) => {
   void z;
 });
 map.once('editmodechange', (e) => {
-  const m: 'none' | 'vertex' | 'draw' | 'split' | 'measure' | 'transform' = e.mode;
+  const m:
+    | 'none'
+    | 'vertex'
+    | 'draw'
+    | 'split'
+    | 'measure'
+    | 'transform'
+    | 'reshape'
+    | 'ring'
+    | 'part' = e.mode;
   void m;
 });
 

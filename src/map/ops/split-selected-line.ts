@@ -1,6 +1,12 @@
 import type { MapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import type { MapshaperDataset, MapshaperLayer, PathShape } from '../../types/mapshaper-types';
 import type { SplitCutter } from '../types';
+import {
+  arcEndpoints,
+  coordinateKey,
+  type Coordinate,
+  normalizeConsecutiveCoordinates,
+} from './geometry-2d';
 import { SplitGeometryValidationError } from './split-selected-error';
 
 export interface SplitPieces {
@@ -11,29 +17,8 @@ export interface PolylineSplitOutcome {
   pieces: SplitPieces[];
   pointOnSelectedPath: boolean;
 }
-type Coordinate = readonly [number, number];
 type ArcCutPoint = { x: number; y: number; i: number };
 const INTERSECTION_EPSILON = Number.EPSILON * 64;
-
-function coordinateKey([x, y]: Coordinate): string {
-  return `${x},${y}`;
-}
-function arcEndpoints(
-  arcs: NonNullable<MapshaperDataset['arcs']>,
-  signedArcId: number,
-): [Coordinate, Coordinate] {
-  const iterator = arcs.getArcIter(signedArcId < 0 ? ~signedArcId : signedArcId);
-  let first: [number, number] | undefined;
-  let last: [number, number] | undefined;
-  while (iterator.hasNext()) {
-    const coordinate: [number, number] = [iterator.x, iterator.y];
-    first ??= coordinate;
-    last = coordinate;
-  }
-  if (!first || !last)
-    throw new SplitGeometryValidationError('geometry', 'Encountered an empty path arc');
-  return signedArcId < 0 ? [last, first] : [first, last];
-}
 function partEndpoints(
   part: readonly number[],
   arcs: NonNullable<MapshaperDataset['arcs']>,
@@ -187,14 +172,6 @@ function transverseAtVertex(
     })),
   ].sort((a, b) => a.angle - b.angle);
   return rays.every((ray, index) => ray.owner !== rays[(index + 1) % rays.length]!.owner);
-}
-function normalizeConsecutiveCoordinates(coordinates: readonly Coordinate[]): Coordinate[] {
-  return coordinates.filter(
-    (coordinate, index) =>
-      index === 0 ||
-      coordinate[0] !== coordinates[index - 1]![0] ||
-      coordinate[1] !== coordinates[index - 1]![1],
-  );
 }
 
 function validateSelectedPolylines(
