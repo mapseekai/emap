@@ -5,6 +5,7 @@ import { Err, type OpResult } from '../op-result';
 import type { ReshapeSelectedOptions, ReshapeSelectedResult } from '../types';
 import { normalizeConsecutiveCoordinates, unsignedArcId, type Coordinate } from './geometry-2d';
 import { reshapeSelectedPolylines } from './reshape-selected-line';
+import { reshapeSelectedPolygon } from './reshape-selected-polygon';
 import { SplitGeometryValidationError } from './split-selected-error';
 import type { OpContext } from './_context';
 
@@ -112,11 +113,27 @@ export async function reshapeSelected(
         }
         const workingLayerIndex = working.layers.indexOf(workingLayer);
         if (workingLayerIndex === -1) return Err.staleOperation(sourceId, 'Reshape selected features');
-        if (workingLayer.geometry_type === 'polygon') {
-          return Err.validation('layer', 'polygon reshape is not supported yet');
-        }
         if (!working.arcs) {
-          throw new SplitGeometryValidationError('geometry', 'selected polyline geometry is invalid');
+          throw new SplitGeometryValidationError(
+            'geometry',
+            `selected ${workingLayer.geometry_type} geometry is invalid`,
+          );
+        }
+        if (workingLayer.geometry_type === 'polygon') {
+          const reshaped = [...selectedIds].flatMap((featureId) => {
+            const shape = reshapeSelectedPolygon(
+              working,
+              workingLayerIndex,
+              featureId,
+              normalizedLine,
+              adapter,
+            );
+            return shape ? [{ featureId, shape }] : [];
+          });
+          if (reshaped.length === 0)
+            return Err.validation('line', 'did not reshape any selected feature');
+          for (const { featureId, shape } of reshaped) workingLayer.shapes.splice(featureId, 1, shape);
+          return { value: { reshapedCount: reshaped.length }, selection: refs };
         }
         validateSelectedPolylines(workingLayer, selectedIds, working.arcs);
         const reshaped = reshapeSelectedPolylines(

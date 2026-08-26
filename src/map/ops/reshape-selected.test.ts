@@ -107,12 +107,12 @@ describe('reshapeSelected', () => {
     });
   });
 
-  it('rejects non-polyline target layers', async () => {
+  it('reshapes selected polygon target layers', async () => {
     const fixture = await createFixture();
     fixture.dataset().layers[0]!.geometry_type = 'polygon';
     await expect(reshapeSelected(fixture.ctx, { line: [[3, 0], [5, 2], [7, 0]] })).resolves.toMatchObject({
-      ok: false,
-      error: { kind: 'validation', field: 'layer', reason: 'polygon reshape is not supported yet' },
+      ok: true,
+      value: { reshapedCount: 1 },
     });
   });
 
