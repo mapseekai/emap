@@ -35,6 +35,12 @@ export type {
   SplitSelectedOptions,
   SplitSelectedResult,
   SplitFeatureOptions,
+  ReshapeSelectedOptions,
+  ReshapeSelectedResult,
+  AddRingOptions,
+  DeleteRingOptions,
+  AddPartOptions,
+  DeletePartOptions,
   CleanOptions,
   BufferOptions,
   ApplyExpressionOptions,
@@ -286,6 +292,12 @@ export type { VertexEditOptions } from './core/handlers/vertex-edit';
 export { DrawFeatureHandler } from './core/handlers/draw-feature';
 export type { DrawFeatureOptions } from './core/handlers/draw-feature';
 export { SplitFeatureHandler } from './core/handlers/split-feature';
+export { ReshapeFeatureHandler } from './core/handlers/reshape-feature';
+export type { ReshapeFeatureOptions } from './core/handlers/reshape-feature';
+export { RingEditHandler } from './core/handlers/ring-edit';
+export type { RingEditOptions } from './core/handlers/ring-edit';
+export { PartEditHandler } from './core/handlers/part-edit';
+export type { PartEditOptions } from './core/handlers/part-edit';
 export { MeasureHandler } from './core/handlers/measure';
 export type { MeasureOptions, MeasureResult } from './core/handlers/measure';
 export { TransformFeatureHandler } from './core/handlers/transform-feature';

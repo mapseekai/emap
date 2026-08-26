@@ -144,4 +144,15 @@ describe('EditOverlayRenderer', () => {
 
     expect(painter.drawDrawingOverlay).toHaveBeenCalledWith(drawState);
   });
+  it.each(['reshape', 'ring', 'part'] as const)(
+    'routes %s sketches through the draw overlay',
+    (mode) => {
+      const painter = makePainter();
+      const renderer = new EditOverlayRenderer(painter);
+
+      renderer.render(mode, null, drawState, null);
+
+      expect(painter.drawDrawingOverlay).toHaveBeenCalledWith(drawState);
+    },
+  );
 });

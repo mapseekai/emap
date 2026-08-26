@@ -2,13 +2,19 @@ import { type Handler, isHandler, type NormalizedPointerEvent } from './handler'
 
 // Highest → lowest. Only registered+enabled handlers participate. The
 // selection handlers (Phase 2b) slot ahead of the modal edit handlers
-// (transformFeature, drawFeature, vertexEdit), which slot ahead of dragPan.
+// (transformFeature, splitFeature, reshapeFeature, ringEdit, partEdit,
+// drawFeature, measure, vertexEdit), which slot ahead of dragPan. Keep the
+// topology-edit sequence together: split establishes the cut, reshape adjusts
+// its path, then ring and part edit polygon and feature structure respectively.
 const PRIORITY = [
   'lassoSelect',
   'boxSelect',
   'clickSelect',
   'transformFeature',
   'splitFeature',
+  'reshapeFeature',
+  'ringEdit',
+  'partEdit',
   'drawFeature',
   'measure',
   'vertexEdit',

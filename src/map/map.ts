@@ -52,6 +52,12 @@ import { LassoSelectHandler, type LassoSelectHandlerOptions } from '../core/hand
 import { VertexEditHandler, type VertexEditOptions } from '../core/handlers/vertex-edit';
 import { DrawFeatureHandler, type DrawFeatureOptions } from '../core/handlers/draw-feature';
 import { SplitFeatureHandler, type SplitFeatureOptions } from '../core/handlers/split-feature';
+import {
+  ReshapeFeatureHandler,
+  type ReshapeFeatureOptions,
+} from '../core/handlers/reshape-feature';
+import { RingEditHandler, type RingEditOptions } from '../core/handlers/ring-edit';
+import { PartEditHandler, type PartEditOptions } from '../core/handlers/part-edit';
 import { MeasureHandler } from '../core/handlers/measure';
 import {
   TransformFeatureHandler,
@@ -289,6 +295,9 @@ export class Emap extends EventDispatcher {
   private _vertexEdit!: VertexEditHandler;
   private _drawFeature!: DrawFeatureHandler;
   private _splitFeature!: SplitFeatureHandler;
+  private _reshapeFeature!: ReshapeFeatureHandler;
+  private _ringEdit!: RingEditHandler;
+  private _partEdit!: PartEditHandler;
   private _measure!: MeasureHandler;
   private _transformFeature!: TransformFeatureHandler;
   private _dragPanSuspendedByEdit = false;
@@ -506,6 +515,12 @@ export class Emap extends EventDispatcher {
     this._handlers.register(this._drawFeature);
     this._splitFeature = new SplitFeatureHandler(handlerHost);
     this._handlers.register(this._splitFeature);
+    this._reshapeFeature = new ReshapeFeatureHandler(handlerHost);
+    this._handlers.register(this._reshapeFeature);
+    this._ringEdit = new RingEditHandler(handlerHost);
+    this._handlers.register(this._ringEdit);
+    this._partEdit = new PartEditHandler(handlerHost);
+    this._handlers.register(this._partEdit);
     this._measure = new MeasureHandler(handlerHost);
     this._handlers.register(this._measure);
     this._transformFeature = new TransformFeatureHandler(handlerHost);
@@ -1901,6 +1916,18 @@ export class Emap extends EventDispatcher {
   /** The selected-feature split interaction handler (disabled by default). */
   get splitFeature(): Handler<SplitFeatureOptions> {
     return this._splitFeature;
+  }
+  /** The selected-feature reshape interaction handler (disabled by default). */
+  get reshapeFeature(): Handler<ReshapeFeatureOptions> {
+    return this._reshapeFeature;
+  }
+  /** The selected polygon ring editing interaction handler (disabled by default). */
+  get ringEdit(): Handler<RingEditOptions> {
+    return this._ringEdit;
+  }
+  /** The selected feature part editing interaction handler (disabled by default). */
+  get partEdit(): Handler<PartEditOptions> {
+    return this._partEdit;
   }
   /** The spherical length/area measurement handler (disabled by default). */
   get measure(): MeasureHandler {

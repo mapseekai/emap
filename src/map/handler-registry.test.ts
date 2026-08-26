@@ -436,6 +436,38 @@ describe('Emap handler registry (Phase 1)', () => {
     expect(map.splitFeature.isEnabled()).toBe(false);
   });
 
+  it('wires reshape, ring, and part editing handlers as mutually exclusive modes', () => {
+    const map = new Emap({ container: container() });
+    const handlers = [map.reshapeFeature, map.ringEdit, map.partEdit];
+    const contexts = handlers as unknown as Array<{
+      _resolveSelectionContext: () => {
+        key: string;
+        layer: { geometry_type: 'polyline' };
+      } | null;
+    }>;
+
+    expect(map.reshapeFeature.name).toBe('reshapeFeature');
+    expect(map.ringEdit.name).toBe('ringEdit');
+    expect(map.partEdit.name).toBe('partEdit');
+    expect(handlers.every((handler) => !handler.isEnabled())).toBe(true);
+
+    for (const handler of contexts) {
+      handler._resolveSelectionContext = () => ({
+        key: 'source/layer/0',
+        layer: { geometry_type: 'polyline' },
+      });
+    }
+
+    map.reshapeFeature.enable();
+    expect(map.getEditMode()).toBe('reshape');
+    map.ringEdit.enable();
+    expect(map.reshapeFeature.isEnabled()).toBe(false);
+    expect(map.getEditMode()).toBe('ring');
+    map.partEdit.enable();
+    expect(map.ringEdit.isEnabled()).toBe(false);
+    expect(map.getEditMode()).toBe('part');
+  });
+
   it('enabling vertexEdit cross-deactivates an active transformFeature', () => {
     const map = new Emap({ container: container() });
     map.transformFeature.enable();
