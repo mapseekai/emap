@@ -13,6 +13,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selected polygon features with polyline cutters. Split pieces duplicate the
   original attributes, replace the current selection with the results, and are
   available through the interactive `map.splitFeature` handler.
+- `map.ops.reshapeSelected({ line })` and the interactive `map.reshapeFeature`
+  handler now reshape selected line and polygon features along a user-drawn
+  line; the `reshape-ring-part` example and editing guide document the workflow.
+- `map.vertexEdit` now supports box-selecting vertices, Shift-additive box
+  selection, group dragging, and Delete/Backspace batch deletion; the
+  `reshape-ring-part` example demonstrates the workflow.
+- `map.ops.addRing({ ring })` and `map.ops.deleteRing({ point })`, together
+  with the `map.ringEdit` handler, now add and remove interior polygon rings;
+  the `reshape-ring-part` example and editing guide document the workflow.
+- `map.ops.addPart({ coordinates })` and `map.ops.deletePart({ point,
+  tolerance? })`, together with the `map.partEdit` handler, now add and remove
+  independent line or polygon parts; the `reshape-ring-part` example and
+  editing guide document the workflow.
 
 ### Fixed
 

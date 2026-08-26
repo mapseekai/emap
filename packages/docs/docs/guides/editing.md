@@ -70,6 +70,117 @@ map.addControl(new DrawFeatureControl(), 'top-left');
 控件只提供 UI 和模式切换，真实指针处理仍由地图 Handler 完成。已有业务工具栏时，
 可以直接启用 `map.vertexEdit`、`map.drawFeature` 或 `map.transformFeature`。
 
+## 整形选中要素
+
+`reshapeFeature` 让用户画一条替换路径片段的线；它把完成的草图提交给
+`map.ops.reshapeSelected()`，可用于选中的线要素和面要素。
+
+```ts
+const result = await map.ops.reshapeSelected({
+  line: [
+    [116.38, 39.90],
+    [116.40, 39.91],
+  ],
+});
+
+if (!result.ok) showError(result.error);
+else console.log(result.value.reshapedCount);
+
+map.reshapeFeature.setOptions({ snapThreshold: 12 });
+map.reshapeFeature.enable();
+```
+
+启用前至少选择一个同 source、同 layer 的路径要素。左键依次放置替换线的顶点，
+右键在至少两个顶点后完成，Esc 放弃当前草图。`reshapeFeature` 进入 `'reshape'`
+编辑模式；启用另一编辑模式会使它退出。
+
+校验失败的错误字段为 `selection`、`line`、`layer` 或 `geometry`：草图至少要有两个
+有限坐标且不能只重复同一点；草图必须实际整形至少一个选中要素。无接触的草图会以
+`line` 错误被拒绝，面整形还会拒绝自交或无效的结果。
+
+## 顶点批量操作
+
+`vertexEdit` 支持框选、整体拖动和批量删除拓扑节点：
+
+```ts
+map.vertexEdit.setOptions({
+  layers: ['roads'],
+  snapThreshold: 12,
+  snapToVertex: true,
+  snapToEdge: true,
+});
+map.vertexEdit.enable();
+```
+
+在未悬停顶点处拖拽以框选顶点；按住 Shift 拖拽可把框选结果追加到现有选择。拖动任一
+已选顶点会整体移动选中的节点。按 Delete 或 Backspace 批量删除；Esc 清除框选。未框选
+时，右键顶点可执行单点删除（共享节点可先拆分）。`vertexEdit` 使用 `'vertex'` 编辑
+模式，不能与其他编辑模式同时工作。
+
+批量删除仍遵守拓扑删除校验：不能删除会令路径或环退化的节点；共享节点按一个拓扑单元
+处理，并且不合法的删除不会提交部分修改。
+
+## 挖洞和删洞
+
+`ringEdit` 为一个选中面要素添加或删除内环（洞），底层 API 是
+`map.ops.addRing()` 和 `map.ops.deleteRing()`：
+
+```ts
+const added = await map.ops.addRing({
+  ring: [
+    [116.39, 39.90],
+    [116.40, 39.90],
+    [116.40, 39.91],
+    [116.39, 39.90],
+  ],
+});
+
+const removed = await map.ops.deleteRing({ point: [116.395, 39.905] });
+
+map.ringEdit.setOptions({ mode: 'add', snapThreshold: 12 });
+map.ringEdit.enable();
+```
+
+`ringEdit` 要求恰好选择一个面要素。`mode: 'add'` 时左键画洞、右键完成、Esc 取消；
+`mode: 'delete'` 时点击洞内任一点删除该洞。它使用 `'ring'` 编辑模式，切换到其他编辑
+模式会自动退出。
+
+`addRing` 的错误字段是 `selection` 或 `ring`：洞必须闭合并围成面积，不能自交、接触或
+穿过面边界，且必须严格位于同一个面外环内。`deleteRing` 的错误字段是 `selection` 或
+`ring`；点击未落在洞内会被拒绝。
+
+## 加和删部分
+
+`partEdit` 为一个选中的线或面要素添加或删除独立 part，底层 API 是
+`map.ops.addPart()` 和 `map.ops.deletePart()`：
+
+```ts
+const added = await map.ops.addPart({
+  coordinates: [
+    [116.41, 39.90],
+    [116.42, 39.91],
+  ],
+});
+
+const removed = await map.ops.deletePart({
+  point: [116.415, 39.905],
+  tolerance: 0.0001,
+});
+
+map.partEdit.setOptions({ mode: 'delete', snapThreshold: 12 });
+map.partEdit.enable();
+```
+
+`partEdit` 要求恰好选择一个路径要素。`mode: 'add'` 时左键画新 part、右键完成、Esc
+取消；面 part 自动闭合，线 part 至少需要两个顶点。`mode: 'delete'` 时点击目标 part；
+对线要素，handler 会用 `snapThreshold` 换算为 `tolerance`。它使用 `'part'` 编辑模式，
+切换到其他编辑模式会自动退出。
+
+`addPart` 的错误字段是 `selection` 或 `part`：新 part 不能自交或接触、相交已有几何；
+面 part 还不能重叠已有面、把已有外环包在内部，且方向必须匹配现有外环。`deletePart`
+的错误字段是 `selection` 或 `part`；单一 part 的要素不可删除 part，面要素点击必须落在
+该 part 内，线要素必须在 `tolerance` 范围内。
+
 ## 撤销与重做
 
 ```ts
@@ -189,6 +300,7 @@ map.on('validationfailed', ({ results, label }) => {
 
 - [综合编辑](/mapseekai/emap/examples/china-editing/)
 - [顶点编辑](/mapseekai/emap/examples/vertex-editing/)
+- [整形、批量顶点、洞和 part 编辑](/mapseekai/emap/examples/reshape-ring-part/)
 - [要素平移](/mapseekai/emap/examples/feature-translate/)
 - [旋转与缩放](/mapseekai/emap/examples/feature-rotate-scale/)
 - [事务](/mapseekai/emap/examples/transaction/)
