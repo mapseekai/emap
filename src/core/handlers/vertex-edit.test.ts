@@ -1429,6 +1429,32 @@ describe('VertexEditHandler batch vertex selection', () => {
     expect(snapVertices).toHaveBeenCalledWith([1, 4], [3, 4], arcs);
     expect(pushCommand).toHaveBeenCalledOnce();
   });
+  it('moves a shared feature edge node once across both feature references', () => {
+    const sharedEdge = [[0]];
+    const layer = { geometry_type: 'polygon', shapes: [sharedEdge, sharedEdge] };
+    const arcs = {};
+    const source = { getArcs: () => arcs };
+    const map = {
+      unproject: (x: number, y: number) => [x, y] as [number, number],
+      getSource: () => source,
+      setEditVertexState: vi.fn(),
+      render: vi.fn(),
+    };
+    const snapVertices = vi.fn();
+    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapVertices);
+    const handler = new VertexEditHandler(map as unknown as Emap);
+    setPrivate(handler, '_selectedNodes', [
+      { source: 'source', layer: 'layer', vertexIds: [1], coords: [1, 0] },
+    ]);
+    setPrivate(handler, '_batchDragging', true);
+    setPrivate(handler, '_batchDragFrom', [1, 0]);
+
+    callPrivate(handler, '_handleDrag', 4, 2);
+
+    expect(layer.shapes[0]).toBe(layer.shapes[1]);
+    expect(snapVertices).toHaveBeenCalledOnce();
+    expect(snapVertices).toHaveBeenCalledWith([1], [4, 2], arcs);
+  });
   it('clears the selected node set on Escape', () => {
     const map = {
       setEditVertexState: vi.fn(),
