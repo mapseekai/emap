@@ -59,6 +59,7 @@ function distance(a: Coordinate, b: Coordinate): number {
   return Math.hypot(b[0] - a[0], b[1] - a[1]);
 }
 
+
 function pointAlongRing(points: readonly Coordinate[], distanceAlong: number): Coordinate {
   let travelled = 0;
   for (let index = 1; index < points.length; index++) {
@@ -82,12 +83,15 @@ function forwardRingPath(
   const total = points.slice(1).reduce((sum, point, index) => sum + distance(points[index]!, point), 0);
   const end = to < from ? to + total : to;
   const result = [pointAlongRing(points, from)];
+  const lifted: Array<{ offset: number; point: Coordinate }> = [];
   let travelled = 0;
   for (let index = 1; index < points.length; index++) {
     travelled += distance(points[index - 1]!, points[index]!);
     for (let offset = travelled; offset < end; offset += total)
-      if (offset > from) result.push(points[index]!);
+      if (offset > from) lifted.push({ offset, point: points[index]! });
   }
+  lifted.sort((left, right) => left.offset - right.offset);
+  for (const { point } of lifted) result.push(point);
   result.push(pointAlongRing(points, end % total));
   return normalizeConsecutiveCoordinates(result);
 }
@@ -128,6 +132,11 @@ function validCandidate(
   adapter: MapshaperAdapter,
 ): boolean {
   const candidateSegments = shapeSegments(candidate, arcs);
+  for (let left = 0; left < candidateSegments.length; left++)
+    for (let right = left + 1; right < candidateSegments.length; right++) {
+      if (right === left + 1 || (left === 0 && right === candidateSegments.length - 1)) continue;
+      if (segmentsConflict(...candidateSegments[left]!, ...candidateSegments[right]!)) return false;
+    }
   for (const hole of holes) {
     const coordinates = partCoordinates(hole, arcs);
     const anchor = coordinates[0];
