@@ -38134,7 +38134,7 @@
 							},
 							{
 								"kind": "text",
-								"text": " behavior is unchanged."
+								"text": " behavior is unchanged.\nStands down while a modal edit mode is active so the editor (split, draw,\n…) receives the clicks it needs to place vertices."
 							}
 						],
 						"blockTags": [
@@ -38159,9 +38159,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/click-select.ts",
-									"line": 33,
+									"line": 35,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L33"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L35"
 								}
 							],
 							"signatures": [
@@ -38174,9 +38174,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/click-select.ts",
-											"line": 33,
+											"line": 35,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L33"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L35"
 										}
 									],
 									"parameters": [
@@ -38244,9 +38244,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/click-select.ts",
-									"line": 29,
+									"line": 31,
 									"character": 11,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L29"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L31"
 								}
 							],
 							"type": {
@@ -38277,9 +38277,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/click-select.ts",
-									"line": 40,
+									"line": 42,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L40"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L42"
 								}
 							],
 							"signatures": [
@@ -38300,9 +38300,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/click-select.ts",
-											"line": 40,
+											"line": 42,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L40"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L42"
 										}
 									],
 									"type": {
@@ -38339,9 +38339,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/click-select.ts",
-									"line": 37,
+									"line": 39,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L37"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L39"
 								}
 							],
 							"signatures": [
@@ -38362,9 +38362,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/click-select.ts",
-											"line": 37,
+											"line": 39,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L37"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L39"
 										}
 									],
 									"type": {
@@ -38509,9 +38509,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/click-select.ts",
-									"line": 49,
+									"line": 51,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L49"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L51"
 								}
 							],
 							"signatures": [
@@ -38532,9 +38532,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/click-select.ts",
-											"line": 49,
+											"line": 51,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L49"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L51"
 										}
 									],
 									"type": {
@@ -38577,9 +38577,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/click-select.ts",
-									"line": 53,
+									"line": 55,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L53"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L55"
 								}
 							],
 							"signatures": [
@@ -38600,9 +38600,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/click-select.ts",
-											"line": 53,
+											"line": 55,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L53"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L55"
 										}
 									],
 									"parameters": [
@@ -38664,9 +38664,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/click-select.ts",
-									"line": 43,
+									"line": 45,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L43"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L45"
 								}
 							],
 							"signatures": [
@@ -38687,9 +38687,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/click-select.ts",
-											"line": 43,
+											"line": 45,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L43"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L45"
 										}
 									],
 									"type": {
@@ -39084,9 +39084,9 @@
 							"sources": [
 								{
 									"fileName": "src/core/handlers/click-select.ts",
-									"line": 46,
+									"line": 48,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L46"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L48"
 								}
 							],
 							"signatures": [
@@ -39107,9 +39107,9 @@
 									"sources": [
 										{
 											"fileName": "src/core/handlers/click-select.ts",
-											"line": 46,
+											"line": 48,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L46"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L48"
 										}
 									],
 									"parameters": [
@@ -39197,9 +39197,9 @@
 					"sources": [
 						{
 							"fileName": "src/core/handlers/click-select.ts",
-							"line": 28,
+							"line": 30,
 							"character": 13,
-							"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L28"
+							"url": "https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L30"
 						}
 					],
 					"extendedTypes": [

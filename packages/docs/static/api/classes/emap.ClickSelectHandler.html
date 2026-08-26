@@ -16,7 +16,9 @@
 synthesizes it from a non-dragging down/up, so it never fights a
 box/lasso drag). Hit → resolve mode → <code>Emap.select</code>; empty click whose
 resolved mode is <code>'replace'</code> clears the selection. Opt-in (disabled by
-default) so <code>new Emap()</code> behavior is unchanged.</p>
+default) so <code>new Emap()</code> behavior is unchanged.
+Stands down while a modal edit mode is active so the editor (split, draw,
+…) receives the clicks it needs to place vertices.</p>
 </div>
 <div class="tsd-comment tsd-typography">
 <div class="tsd-tag-example">
@@ -33,7 +35,7 @@ default) so <code>new Emap()</code> behavior is unchanged.</p>
 <ul class="tsd-hierarchy">
 <li><a href="../interfaces/emap.Handler.html" class="tsd-signature-type tsd-kind-interface">Handler</a><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/emap.SelectHandlerOptions.html" class="tsd-signature-type tsd-kind-interface">SelectHandlerOptions</a><span class="tsd-signature-symbol">&gt;</span></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L28">src/core/handlers/click-select.ts:28</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L30">src/core/handlers/click-select.ts:30</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -78,7 +80,7 @@ default) so <code>new Emap()</code> behavior is unchanged.</p>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">ClickSelectHandler</a></h4><aside class="tsd-sources">
 <p>Overrides <a href="emap.EventDispatcher.html">EventDispatcher</a>.<a href="emap.EventDispatcher.html#constructor">constructor</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L33">src/core/handlers/click-select.ts:33</a></li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L35">src/core/handlers/click-select.ts:35</a></li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -89,7 +91,7 @@ default) so <code>new Emap()</code> behavior is unchanged.</p>
 </div><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.Handler.html">Handler</a>.<a href="../interfaces/emap.Handler.html#name">name</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L29">src/core/handlers/click-select.ts:29</a></li></ul></aside></section></section></details>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L31">src/core/handlers/click-select.ts:31</a></li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -104,7 +106,7 @@ default) so <code>new Emap()</code> behavior is unchanged.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.Handler.html">Handler</a>.<a href="../interfaces/emap.Handler.html#disable">disable</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L40">src/core/handlers/click-select.ts:40</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L42">src/core/handlers/click-select.ts:42</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="enable"><span>enable</span><a href="#enable" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -116,7 +118,7 @@ default) so <code>new Emap()</code> behavior is unchanged.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.Handler.html">Handler</a>.<a href="../interfaces/emap.Handler.html#enable">enable</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L37">src/core/handlers/click-select.ts:37</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L39">src/core/handlers/click-select.ts:39</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="fire"><span>fire</span><a href="#fire" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures tsd-is-inherited">
@@ -147,7 +149,7 @@ default) so <code>new Emap()</code> behavior is unchanged.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Readonly</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/emap.SelectHandlerOptions.html" class="tsd-signature-type tsd-kind-interface">SelectHandlerOptions</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.Handler.html">Handler</a>.<a href="../interfaces/emap.Handler.html#getoptions">getOptions</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L49">src/core/handlers/click-select.ts:49</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L51">src/core/handlers/click-select.ts:51</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="handlepointer"><span>handle<wbr/>Pointer</span><a href="#handlepointer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -165,7 +167,7 @@ default) so <code>new Emap()</code> behavior is unchanged.</p>
 <h4 class="tsd-returns-title">Returns <a href="../types/emap.HandlerResult.html" class="tsd-signature-type tsd-kind-type-alias">HandlerResult</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.Handler.html">Handler</a>.<a href="../interfaces/emap.Handler.html#handlepointer">handlePointer</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L53">src/core/handlers/click-select.ts:53</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L55">src/core/handlers/click-select.ts:55</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="isenabled"><span>is<wbr/>Enabled</span><a href="#isenabled" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -177,7 +179,7 @@ default) so <code>new Emap()</code> behavior is unchanged.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.Handler.html">Handler</a>.<a href="../interfaces/emap.Handler.html#isenabled">isEnabled</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L43">src/core/handlers/click-select.ts:43</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L45">src/core/handlers/click-select.ts:45</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="off"><span>off</span><a href="#off" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures tsd-is-inherited">
@@ -256,7 +258,7 @@ synchronously inside the handler is safe.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.Handler.html">Handler</a>.<a href="../interfaces/emap.Handler.html#setoptions">setOptions</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L46">src/core/handlers/click-select.ts:46</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/core/handlers/click-select.ts#L48">src/core/handlers/click-select.ts:48</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
