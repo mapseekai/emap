@@ -1,0 +1,240 @@
+import { describe, expect, it } from 'vitest';
+import type * as maplibregl from 'maplibre-gl';
+import {
+  composeMapLibreStyle,
+  prepareMapLibreOverlayStyle,
+} from './maplibre-overlay-style';
+
+const STYLE_URL = 'https://tiles.example.test/styles/style.json';
+const PREFIX = 'emap-overlay:bright%2Fservice';
+const GLYPHS_URL = 'https://tiles.example.test/fonts/{fontstack}/{range}.pbf';
+
+function createFixture(): maplibregl.StyleSpecification {
+  return {
+    version: 8,
+    name: 'Bright',
+    sprite: './sprites/bright',
+    glyphs: '../fonts/{fontstack}/{range}.pbf',
+    sources: {
+      earth: { type: 'vector', url: './earth.json' },
+      tiles: { type: 'raster', tiles: ['./raster/{z}/{x}/{y}.png'] },
+    },
+    layers: [
+      { id: 'background', type: 'background', paint: { 'background-color': '#fff' } },
+      {
+        id: 'land',
+        type: 'fill',
+        source: 'earth',
+        'source-layer': 'land',
+        paint: { 'fill-pattern': 'terrain' },
+      },
+      {
+        id: 'labels',
+        type: 'symbol',
+        source: 'earth',
+        'source-layer': 'place',
+        layout: { 'icon-image': ['get', 'kind'] },
+      },
+    ],
+  } as maplibregl.StyleSpecification;
+}
+
+function createBaseStyle(glyphs?: string): maplibregl.StyleSpecification {
+  return {
+    version: 8,
+    ...(glyphs ? { glyphs } : {}),
+    sources: { base: { type: 'vector', url: 'https://base.example.test/tiles.json' } },
+    layers: [{ id: 'base-background', type: 'background' }],
+  } as maplibregl.StyleSpecification;
+}
+
+describe('prepareMapLibreOverlayStyle', () => {
+  it('normalizes URLs, namespaces resources, and rewrites image references', () => {
+    const fixture = createFixture();
+
+    const prepared = prepareMapLibreOverlayStyle('bright/service', fixture, STYLE_URL);
+
+    expect(prepared.style.layers.some((layer) => layer.type === 'background')).toBe(false);
+    expect(Object.keys(prepared.style.sources)).toEqual([`${PREFIX}:earth`, `${PREFIX}:tiles`]);
+    expect(prepared.style.layers.map((layer) => layer.id)).toEqual([
+      `${PREFIX}:land`,
+      `${PREFIX}:labels`,
+    ]);
+    expect(prepared.style.sprite).toEqual([
+      { id: `${PREFIX}:default`, url: 'https://tiles.example.test/styles/sprites/bright' },
+    ]);
+    expect(prepared.style.glyphs).toBe(GLYPHS_URL);
+    expect(prepared.style.sources[`${PREFIX}:earth`]).toMatchObject({
+      url: 'https://tiles.example.test/styles/earth.json',
+    });
+    expect(prepared.style.sources[`${PREFIX}:tiles`]).toMatchObject({
+      tiles: ['https://tiles.example.test/styles/raster/{z}/{x}/{y}.png'],
+    });
+    expect(prepared.style.layers).toMatchObject([
+      {
+        id: `${PREFIX}:land`,
+        source: `${PREFIX}:earth`,
+        paint: { 'fill-pattern': `${PREFIX}:default:terrain` },
+      },
+      {
+        id: `${PREFIX}:labels`,
+        source: `${PREFIX}:earth`,
+        layout: {
+          'icon-image': ['concat', `${PREFIX}:default:`, ['get', 'kind']],
+        },
+      },
+    ]);
+    expect(prepared.sourceIds).toEqual([`${PREFIX}:earth`, `${PREFIX}:tiles`]);
+    expect(prepared.layerIds).toEqual([`${PREFIX}:land`, `${PREFIX}:labels`]);
+    expect(prepared.spriteIds).toEqual([`${PREFIX}:default`]);
+    expect(prepared.resourceUrls).toEqual(
+      new Set([
+        'https://tiles.example.test/styles/sprites/bright',
+        GLYPHS_URL,
+        'https://tiles.example.test/styles/earth.json',
+        'https://tiles.example.test/styles/raster/{z}/{x}/{y}.png',
+      ]),
+    );
+  });
+
+  it('prefixes literal icon-image references for a default sprite', () => {
+    const fixture = createFixture();
+    fixture.layers[2] = {
+      ...fixture.layers[2],
+      layout: { 'icon-image': 'marker' },
+    } as maplibregl.LayerSpecification;
+
+    const prepared = prepareMapLibreOverlayStyle('bright/service', fixture, STYLE_URL);
+
+    expect(prepared.style.layers[1]).toMatchObject({
+      layout: { 'icon-image': `${PREFIX}:default:marker` },
+    });
+  });
+
+  it('preserves inputs and only normalizes URL-bearing fields', () => {
+    const fixture = createFixture();
+    fixture.sources.earth = {
+      type: 'geojson',
+      data: './earth.geojson',
+    } as maplibregl.SourceSpecification;
+    fixture.sources.tiles = {
+      type: 'vector',
+      url: 'mapbox://custom-tiles',
+      tiles: ['data:application/json,{}', 'blob:https://example.test/id'],
+    } as maplibregl.SourceSpecification;
+    fixture.layers[1] = {
+      ...fixture.layers[1],
+      filter: ['==', ['get', 'name'], 'terrain'],
+      layout: { 'text-font': ['Open Sans Regular'] },
+    } as maplibregl.LayerSpecification;
+
+    const original = structuredClone(fixture);
+
+    const prepared = prepareMapLibreOverlayStyle('bright/service', fixture, STYLE_URL);
+
+    expect(fixture).toEqual(original);
+    expect(fixture.sources.earth).toEqual({ type: 'geojson', data: './earth.geojson' });
+    expect(fixture.sources.tiles).toMatchObject({
+      url: 'mapbox://custom-tiles',
+      tiles: ['data:application/json,{}', 'blob:https://example.test/id'],
+    });
+    expect(prepared.style.sources[`${PREFIX}:earth`]).toMatchObject({
+      data: 'https://tiles.example.test/styles/earth.geojson',
+    });
+    expect(prepared.style.sources[`${PREFIX}:tiles`]).toMatchObject({
+      url: 'mapbox://custom-tiles',
+      tiles: ['data:application/json,{}', 'blob:https://example.test/id'],
+    });
+    expect(prepared.style.layers[0]).toMatchObject({
+      filter: ['==', ['get', 'name'], 'terrain'],
+      layout: { 'text-font': ['Open Sans Regular'] },
+    });
+  });
+
+  it('rejects invalid styles and duplicate generated layer IDs', () => {
+    expect(() =>
+      prepareMapLibreOverlayStyle('service', { version: 7, sources: {}, layers: [] } as never),
+    ).toThrow('MapLibre overlay styles must use version 8');
+    expect(() =>
+      prepareMapLibreOverlayStyle('service', { version: 8, sources: [], layers: [] } as never),
+    ).toThrow('MapLibre overlay style sources must be an object');
+    expect(() =>
+      prepareMapLibreOverlayStyle('service', { version: 8, sources: {}, layers: {} } as never),
+    ).toThrow('MapLibre overlay style layers must be an array');
+    expect(() =>
+      prepareMapLibreOverlayStyle('service', {
+        version: 8,
+        sources: {},
+        layers: [
+          { id: 'same', type: 'background' },
+          { id: 'same', type: 'background' },
+        ],
+      } as never),
+    ).toThrow('MapLibre overlay style generated IDs must be unique');
+  });
+});
+
+describe('composeMapLibreStyle', () => {
+  it('merges same-glyph overlays, namespaced sprites, registry-order layers, and hidden visibility', () => {
+    const first = prepareMapLibreOverlayStyle('one', {
+      version: 8,
+      glyphs: GLYPHS_URL,
+      sprite: [
+        { id: 'ui', url: 'https://one.example.test/ui' },
+        { id: 'poi', url: 'https://one.example.test/poi' },
+      ],
+      sources: { one: { type: 'vector', url: 'https://one.example.test/tiles' } },
+      layers: [{ id: 'first', type: 'line', source: 'one', layout: { visibility: 'visible' } }],
+    } as maplibregl.StyleSpecification);
+    const second = prepareMapLibreOverlayStyle('two', {
+      version: 8,
+      glyphs: GLYPHS_URL,
+      sprite: 'https://two.example.test/sprite',
+      sources: { two: { type: 'vector', url: 'https://two.example.test/tiles' } },
+      layers: [{ id: 'second', type: 'fill', source: 'two' }],
+    } as maplibregl.StyleSpecification);
+    const base = {
+      ...createBaseStyle(),
+      sprite: 'https://base.example.test/sprite',
+    } as maplibregl.StyleSpecification;
+    const baseBefore = structuredClone(base);
+
+    const composed = composeMapLibreStyle(base, [
+      { prepared: second, visible: true },
+      { prepared: first, visible: false },
+    ]);
+
+    expect(composed).toMatchObject({ version: 8, glyphs: GLYPHS_URL });
+    expect(composed.layers.map((layer) => layer.id)).toEqual([
+      'base-background',
+      'emap-overlay:two:second',
+      'emap-overlay:one:first',
+    ]);
+    expect(composed.layers[2]).toMatchObject({ layout: { visibility: 'none' } });
+    expect(composed.sprite).toEqual([
+      { id: 'default', url: 'https://base.example.test/sprite' },
+      { id: 'emap-overlay:two:default', url: 'https://two.example.test/sprite' },
+      { id: 'emap-overlay:one:ui', url: 'https://one.example.test/ui' },
+      { id: 'emap-overlay:one:poi', url: 'https://one.example.test/poi' },
+    ]);
+    expect(base).toEqual(baseBefore);
+  });
+
+  it('preserves an overlay layer visibility when visible and rejects conflicting glyphs', () => {
+    const prepared = prepareMapLibreOverlayStyle('visible', {
+      version: 8,
+      glyphs: GLYPHS_URL,
+      sources: { source: { type: 'vector', url: 'https://overlay.example.test/tiles' } },
+      layers: [{ id: 'layer', type: 'line', source: 'source', layout: { visibility: 'none' } }],
+    } as maplibregl.StyleSpecification);
+
+    expect(composeMapLibreStyle(createBaseStyle(GLYPHS_URL), [{ prepared, visible: true }]).layers[1]).toMatchObject({
+      layout: { visibility: 'none' },
+    });
+    expect(() =>
+      composeMapLibreStyle(createBaseStyle('https://fonts.example.test/a/{fontstack}/{range}.pbf'), [
+        { prepared, visible: true },
+      ]),
+    ).toThrow('MapLibre overlay glyphs URL conflicts with the active style');
+  });
+});
