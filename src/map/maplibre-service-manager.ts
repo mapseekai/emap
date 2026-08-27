@@ -1911,6 +1911,16 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           }
           break;
         }
+        if (
+          record.definition.role === 'overlay' &&
+          isStyleOverlayService(record.definition) &&
+          request.preparedOverlays.some(({ record: candidate }) => candidate === record)
+        ) {
+          this._parsedRequest = null;
+          this._publishTransitionFailure(record, operationRevision, error);
+          this._rejectStyleRequest(request, error);
+          return;
+        }
         if (coordinatorLoadingRevisions.get(record) === operationRevision) {
           coordinatorLoadingRevisions.delete(record);
         }

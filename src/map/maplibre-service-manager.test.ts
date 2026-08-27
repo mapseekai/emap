@@ -40,6 +40,8 @@ class FakeMap {
   readonly addFailures = new Map<string, FakeAddFailure>();
   readonly offCalls: string[] = [];
   readonly offErrors = new Map<string, Error>();
+  readonly omittedSources = new Set<string>();
+  readonly omittedLayers = new Set<string>();
   resizeCalls = 0;
   removed = false;
   removeError: Error | null = null;
@@ -138,11 +140,13 @@ class FakeMap {
     if (nextStyle && typeof nextStyle === 'object') {
       this.appliedStyles.push(nextStyle);
       for (const [id, source] of Object.entries(nextStyle.sources)) {
-        this.sources.set(id, { id, specification: source });
+        if (!this.omittedSources.has(id)) this.sources.set(id, { id, specification: source });
       }
       for (const layer of nextStyle.layers) {
-        this.layers.set(layer.id, { id: layer.id, specification: layer });
-        this.layerOrder.push(layer.id);
+        if (!this.omittedLayers.has(layer.id)) {
+          this.layers.set(layer.id, { id: layer.id, specification: layer });
+          this.layerOrder.push(layer.id);
+        }
       }
     }
   }
@@ -334,7 +338,9 @@ const objectBasemap = {
   ...base,
   style: {
     version: 8,
-    sources: {},
+    sources: {
+      base: { type: 'vector', url: 'https://example.test/base.json' },
+    },
     layers: [{ id: 'base-fill', type: 'fill', source: 'base' }],
   },
 } as const satisfies MapLibreService;
@@ -729,6 +735,43 @@ describe('MapLibreServiceManager basemap style coordinator', () => {
     expect(manager.getServices().find((service) => service.id === 'openfreemap-bright')).toMatchObject({
       style: 'https://tiles.openfreemap.org/styles/bright',
     });
+  });
+
+  it.each([
+    ['source', 'emap-overlay:openfreemap-bright:land'],
+    ['layer', 'emap-overlay:openfreemap-bright:land'],
+  ] as const)('rejects a composite style when an expected %s handle is missing', async (kind, id) => {
+    const fetchStyle = vi.fn(async () => new Response(JSON.stringify(brightStyle)));
+    const { manager } = createManager([objectBasemap], { fetchStyle });
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+    const errors: Array<{ phase: string; serviceId: string | undefined }> = [];
+    const statuses: string[] = [];
+    manager.on('error', (event) => errors.push({ phase: event.phase, serviceId: event.serviceId }));
+    manager.on('change', (event) => {
+      if (event.serviceId === 'openfreemap-bright' && event.reason === 'status' && event.state) {
+        statuses.push(event.state.status);
+      }
+    });
+    if (kind === 'source') map.omittedSources.add(id);
+    else map.omittedLayers.add(id);
+
+    const addition = manager.addService({
+      id: 'openfreemap-bright',
+      name: 'OpenFreeMap Bright',
+      role: 'overlay',
+      visible: true,
+      style: 'https://tiles.openfreemap.org/styles/bright',
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'style overlay was not composed');
+    map.emit('style.load');
+
+    await expect(addition).rejects.toThrow(`MapLibre overlay ${kind} "${id}" was not composed`);
+    expect(errors).toEqual([{ phase: kind, serviceId: 'openfreemap-bright' }]);
+    expect(statuses).not.toContain('ready');
+    expect(manager.getServiceState('openfreemap-bright')).toMatchObject({ status: 'error' });
   });
 
   it('commits one selected basemap and publishes old then new snapshots', async () => {
