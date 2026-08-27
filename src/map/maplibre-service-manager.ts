@@ -88,6 +88,7 @@ interface StyleRequest {
     prepared: PreparedMapLibreOverlayStyle;
     visible: boolean;
   }[];
+  bootstrapStyle?: boolean;
 }
 
 interface ReadyStyle {
@@ -780,12 +781,19 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         if (this._desiredRequest !== request) return;
         if (request.requiresProjection) await this._ensureWebMercator();
         if (this._desiredRequest !== request) return;
-        await this._ensureMap(
-          composeMapLibreStyle(
-            request.style as maplibregl.StyleSpecification,
+        const baseStyle = request.style;
+        const bootstrapStyle = typeof baseStyle === 'string';
+        request.bootstrapStyle = bootstrapStyle;
+        let initialStyle: maplibregl.StyleSpecification;
+        if (typeof baseStyle === 'string') {
+          initialStyle = EMPTY_STYLE;
+        } else {
+          initialStyle = composeMapLibreStyle(
+            baseStyle,
             request.preparedOverlays.map(({ prepared, visible }) => ({ prepared, visible })),
-          ),
-        );
+          );
+        }
+        await this._ensureMap(initialStyle);
         if (this._desiredRequest !== request) return;
         this._startDesiredStyleIfIdle();
       } catch (value) {
@@ -1636,7 +1644,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           ...MAP_DEFAULTS,
           ...this._options.mapOptions,
           container,
-          style: request.style ?? initialStyle,
+          style: initialStyle,
           center: this._host.getCenter(),
           zoom: this._host.getZoom(),
           interactive: false,
@@ -2291,6 +2299,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (this._destroyed || !this._appliedRequest) return;
     const request = this._appliedRequest;
     this._appliedRequest = null;
+    if (request.bootstrapStyle) {
+      request.bootstrapStyle = false;
+      this._startDesiredStyleIfIdle();
+      return;
+    }
     if (this._desiredRequest !== request) {
       this._startDesiredStyleIfIdle();
       return;

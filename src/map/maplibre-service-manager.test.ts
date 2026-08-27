@@ -14,6 +14,7 @@ class FakeMap {
   static instances: FakeMap[] = [];
   static rebuildOnSetStyle = true;
   static constructorError: Error | null = null;
+  static readonly urlStyles = new Map<string, maplibregl.StyleSpecification>();
   static constructorCalls = 0;
 
   readonly options: maplibregl.MapOptions;
@@ -126,18 +127,20 @@ class FakeMap {
       this.styleLoading = false;
       throw error;
     }
-    const sameStyle = JSON.stringify(style) === JSON.stringify(this._currentStyle);
+    const resolvedStyle =
+      typeof style === 'string' ? (FakeMap.urlStyles.get(style) ?? style) : style;
+    const sameStyle = JSON.stringify(resolvedStyle) === JSON.stringify(this._currentStyle);
     const nextStyle =
-      style && typeof style === 'object'
+      resolvedStyle && typeof resolvedStyle === 'object'
         ? options?.transformStyle
           ? options.transformStyle(
               typeof this._currentStyle === 'object' && this._currentStyle
                 ? structuredClone(this._currentStyle)
                 : EMPTY_STYLE,
-              structuredClone(style),
+              structuredClone(resolvedStyle),
             )
-          : structuredClone(style)
-        : style;
+          : structuredClone(resolvedStyle)
+        : resolvedStyle;
     this._currentStyle = nextStyle;
     if (style !== null && sameStyle && options?.diff !== false) {
       this.styleLoading = false;
@@ -418,10 +421,10 @@ function createManager(
     fetchStyle?: typeof fetch;
   } = {},
 ) {
-  FakeMap.instances.length = 0;
-  FakeMap.rebuildOnSetStyle = true;
-  FakeMap.constructorError = null;
-  FakeMap.constructorCalls = 0;
+    FakeMap.urlStyles.clear();
+    FakeMap.instances.length = 0;
+    FakeMap.rebuildOnSetStyle = true;
+    FakeMap.constructorError = null;
   const host = createHost(options.crs);
   const loadMapLibre = vi.fn(
     async () => ({ Map: FakeMap }) as unknown as typeof import('maplibre-gl'),
@@ -3613,5 +3616,69 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(manager.getServiceState('light')).toMatchObject({ active: true, status: 'ready' });
     expect(manager.getServiceState('bright')).toMatchObject({ active: true, status: 'ready' });
     expect(manager.getServiceState('dark')).toMatchObject({ active: false, status: 'error' });
+  });
+  it('composes visible style overlays into the initial blank, object, and URL basemap generations', async () => {
+    const blank = createManager([
+      { id: 'bright', name: 'Bright', role: 'overlay', visible: true, style: brightStyle },
+    ]);
+    const blankInitialization = blank.manager.initialize();
+    const blankMap = await waitForFakeMap();
+    expect(blankMap.options.style).toMatchObject({
+      sources: { 'emap-overlay:bright:land': expect.anything() },
+    });
+    blankMap.emit('style.load');
+    await waitForCondition(() => blankMap.setStyleCalls.length === 1, 'blank style did not reconcile');
+    blankMap.emit('style.load');
+    await blankInitialization;
+    expect(blank.manager.getServiceState('bright')).toMatchObject({ active: true, status: 'ready' });
+    expect(blankMap.layers.has('emap-overlay:bright:land')).toBe(true);
+
+    const object = createManager(
+      [
+        objectBasemap,
+        { id: 'bright', name: 'Bright', role: 'overlay', visible: true, style: brightStyle },
+      ],
+      { defaultBasemap: 'light' },
+    );
+    const objectInitialization = object.manager.initialize();
+    const objectMap = await waitForFakeMap();
+    expect(objectMap.options.style).toMatchObject({
+      sources: {
+        base: expect.anything(),
+        'emap-overlay:bright:land': expect.anything(),
+      },
+    });
+    objectMap.emit('style.load');
+    await waitForCondition(() => objectMap.setStyleCalls.length === 1, 'object style did not reconcile');
+    objectMap.emit('style.load');
+    await objectInitialization;
+    expect(object.manager.getServiceState('bright')).toMatchObject({ active: true, status: 'ready' });
+    expect(objectMap.layers.has('base-fill')).toBe(true);
+    expect(objectMap.layers.has('emap-overlay:bright:land')).toBe(true);
+
+    const styleUrl = 'https://example.test/url-style.json';
+    const urlBasemap = { ...base, style: styleUrl } as const;
+    const url = createManager(
+      [
+        urlBasemap,
+        { id: 'bright', name: 'Bright', role: 'overlay', visible: true, style: brightStyle },
+      ],
+      { defaultBasemap: 'light' },
+    );
+    FakeMap.urlStyles.set(styleUrl, objectBasemap.style);
+    const urlInitialization = url.manager.initialize();
+    const urlMap = await waitForFakeMap();
+    expect(urlMap.options.style).toEqual(EMPTY_STYLE);
+    urlMap.emit('style.load');
+    await waitForCondition(() => urlMap.setStyleCalls.at(-1) === styleUrl, 'URL basemap was not transformed');
+    expect(urlMap.setStyleOptions.at(-1)?.transformStyle).toBeTypeOf('function');
+    urlMap.emit('style.load');
+    await waitForCondition(() => urlMap.setStyleCalls.length === 2, 'URL style did not reconcile');
+    urlMap.emit('style.load');
+    urlMap.emit('style.load');
+    await urlInitialization;
+    expect(url.manager.getServiceState('bright')).toMatchObject({ active: true, status: 'ready' });
+    expect(urlMap.layers.has('base-fill')).toBe(true);
+    expect(urlMap.layers.has('emap-overlay:bright:land')).toBe(true);
   });
 });
