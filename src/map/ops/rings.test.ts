@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import type { EmapHostInternal } from '../emap-host';
-import { okValue, type OpResult } from '../op-result';
+import { Err, okValue, type OpResult } from '../op-result';
 import type { FeatureRef } from '../types';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import type { MapshaperLayer } from '../../types/mapshaper-types';
@@ -15,11 +15,18 @@ const adapter = getDefaultMapshaperAdapter();
 const FIXTURE_NAME = 'rings.geojson';
 type Position = [number, number];
 
-async function importDataset(geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon): Promise<MapshaperDataset> {
+async function importDataset(
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon | Array<GeoJSON.Polygon | GeoJSON.MultiPolygon>,
+): Promise<MapshaperDataset> {
+  const geometries = Array.isArray(geometry) ? geometry : [geometry];
   return adapter.runImport(`-i "${FIXTURE_NAME}"`, {
     [FIXTURE_NAME]: JSON.stringify({
       type: 'FeatureCollection',
-      features: [{ type: 'Feature', properties: { name: 'selected' }, geometry }],
+      features: geometries.map((entry, index) => ({
+        type: 'Feature',
+        properties: { name: `feature-${index}` },
+        geometry: entry,
+      })),
     }),
   });
 }
@@ -33,7 +40,7 @@ function exported(dataset: MapshaperDataset): GeoJSON.Polygon {
 async function createFixture(
   rings: Position[][] = [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]],
   refs: FeatureRef[] = [{ source: 'source', layer: 'rings', id: 0 }],
-  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon = { type: 'Polygon', coordinates: rings },
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon | Array<GeoJSON.Polygon | GeoJSON.MultiPolygon> = { type: 'Polygon', coordinates: rings },
 ) {
   let dataset = await importDataset(geometry);
   let before: MapshaperDataset | undefined;
@@ -71,10 +78,6 @@ async function createFixture(
 
 function expectRingValidation(result: OpResult<void>) {
   expect(result).toMatchObject({ ok: false, error: { kind: 'validation', field: 'ring' } });
-}
-
-function expectSelectionValidation(result: OpResult<void>) {
-  expect(result).toMatchObject({ ok: false, error: { kind: 'validation', field: 'selection' } });
 }
 
 function integrationHarness(dataset: MapshaperDataset) {
@@ -239,16 +242,27 @@ describe('addRing', () => {
     expectRingValidation(await addRing(fixture.ctx, { ring: [[4, 3], [6, 3], [6, 6], [3, 6]] }));
   });
 
-  it('rejects empty, multi-feature, and non-polygon selections', async () => {
-    expectSelectionValidation(await addRing((await createFixture([], [])).ctx, { ring: [[3, 3], [7, 3], [7, 7]] }));
-    const multiple = await createFixture(undefined, [
-      { source: 'source', layer: 'rings', id: 0 },
-      { source: 'source', layer: 'rings', id: 1 },
+  it('adds the ring to the feature that contains it, without any selection', async () => {
+    const fixture = await createFixture(undefined, [], [
+      { type: 'Polygon', coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]] },
+      { type: 'Polygon', coordinates: [[[20, 0], [30, 0], [30, 10], [20, 10], [20, 0]]] },
     ]);
-    expectSelectionValidation(await addRing(multiple.ctx, { ring: [[3, 3], [7, 3], [7, 7]] }));
+
+    await expect(addRing(fixture.ctx, { ring: [[23, 3], [27, 3], [27, 7], [23, 7]] })).resolves.toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    const shapes = fixture.dataset().layers[0]!.shapes!;
+    expect(shapes[0]).toHaveLength(1);
+    expect(shapes[1]).toHaveLength(2);
+  });
+
+  it('rejects the ring when no polygon contains it', async () => {
+    expectRingValidation(await addRing((await createFixture([], [])).ctx, { ring: [[3, 3], [7, 3], [7, 7]] }));
     const nonPolygon = await createFixture();
     nonPolygon.dataset().layers[0]!.geometry_type = 'polyline';
-    expectSelectionValidation(await addRing(nonPolygon.ctx, { ring: [[3, 3], [7, 3], [7, 7]] }));
+    expectRingValidation(await addRing(nonPolygon.ctx, { ring: [[3, 3], [7, 3], [7, 7]] }));
   });
 
 
@@ -262,7 +276,69 @@ describe('addRing', () => {
   });
 });
 
+describe('source-scan error flow', () => {
+  it('propagates non-validation runner failures instead of reporting a miss', async () => {
+    const fixture = await createFixture();
+    fixture.ctx.runPreparedDatasetMutation = async () => Err.hostRemoved();
+    await expect(addRing(fixture.ctx, { ring: [[3, 3], [7, 3], [7, 7]] })).resolves.toMatchObject({
+      ok: false,
+      error: { kind: 'host-removed' },
+    });
+    await expect(deleteRing(fixture.ctx, { point: [5, 5] })).resolves.toMatchObject({
+      ok: false,
+      error: { kind: 'host-removed' },
+    });
+  });
+
+  it('prefers a specific boundary reason over a later generic miss', async () => {
+    const conflict = await createFixture([
+      [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],
+      [[4, 4], [6, 4], [6, 6], [4, 6], [4, 4]],
+    ]);
+    const other = await createFixture(undefined, undefined, {
+      type: 'Polygon',
+      coordinates: [[[20, 0], [30, 0], [30, 10], [20, 10], [20, 0]]],
+    });
+    const ctx: OpContext = {
+      ...conflict.ctx,
+      host: {
+        ...conflict.ctx.host,
+        _sources: new Map([
+          ['conflict', { getDataset: () => conflict.dataset() }],
+          ['other', { getDataset: () => other.dataset() }],
+        ]),
+      } as unknown as EmapHostInternal,
+      runPreparedDatasetMutation: async <T,>(
+        sourceId: string,
+        _label: string | ((value: T) => string),
+        mutate: (working: MapshaperDataset, original: MapshaperDataset) => OpResult<T> | { value: T; selection: FeatureRef[] },
+      ): Promise<OpResult<T>> => {
+        const dataset = (sourceId === 'conflict' ? conflict : other).dataset();
+        const outcome = await mutate(adapter.copyDataset(dataset), dataset);
+        return 'ok' in outcome ? outcome : okValue(outcome.value);
+      },
+    };
+
+    await expect(addRing(ctx, { ring: [[3, 5], [7, 5], [7, 7], [3, 7]] })).resolves.toMatchObject({
+      ok: false,
+      error: { kind: 'validation', field: 'ring', reason: 'ring intersects a polygon boundary' },
+    });
+  });
+});
+
 describe('deleteRing', () => {
+  it('deletes the hole containing the point without any selection', async () => {
+    const fixture = await createFixture(
+      [
+        [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],
+        [[2, 2], [8, 2], [8, 8], [2, 8], [2, 2]],
+      ],
+      [],
+    );
+    await expect(deleteRing(fixture.ctx, { point: [5, 5] })).resolves.toEqual({ ok: true, value: undefined });
+    expect(exported(fixture.dataset()).coordinates).toHaveLength(1);
+  });
+
   it('deletes the hole containing the point', async () => {
     const fixture = await createFixture([
       [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],

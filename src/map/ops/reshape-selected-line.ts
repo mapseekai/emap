@@ -172,10 +172,18 @@ export function clipLineBetween(
     if (length > 0 && next >= fromDist && travelled <= toDist) {
       const start = Math.max(fromDist, travelled);
       const end = Math.min(toDist, next);
-      const at = (offset: number): Coordinate => [
-        a[0] + ((b[0] - a[0]) * (offset - travelled)) / length,
-        a[1] + ((b[1] - a[1]) * (offset - travelled)) / length,
-      ];
+      const vertexEpsilon = Math.max(1, Math.abs(travelled), Math.abs(next)) * CONTACT_EPSILON;
+      const at = (offset: number): Coordinate => {
+        // Snap to the segment's endpoints when the clip boundary lands on a
+        // vertex: the lerp is an ulp off and would emit near-duplicate
+        // vertices that downstream reads as self-intersections.
+        if (Math.abs(offset - travelled) <= vertexEpsilon) return [a[0], a[1]];
+        if (Math.abs(offset - next) <= vertexEpsilon) return [b[0], b[1]];
+        return [
+          a[0] + ((b[0] - a[0]) * (offset - travelled)) / length,
+          a[1] + ((b[1] - a[1]) * (offset - travelled)) / length,
+        ];
+      };
       clipped.push(at(start), at(end));
     }
     travelled = next;

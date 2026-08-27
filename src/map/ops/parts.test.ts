@@ -5,7 +5,7 @@ import { MapshaperOps } from '../mapshaper-ops';
 import type { MapshaperDataset, MapshaperLayer } from '../../types/mapshaper-types';
 import type { FeatureRef } from '../types';
 import type { OpContext } from './_context';
-import { okValue, type OpResult } from '../op-result';
+import { Err, okValue, type OpResult } from '../op-result';
 import { Selection } from '../selection';
 import { addPart, deletePart } from './parts';
 import { shapeSegments, shoelaceArea } from './geometry-2d';
@@ -59,11 +59,11 @@ async function createFixture(geometry: PathGeometry, refs: FeatureRef[] = [{ sou
   return { ctx, dataset: () => dataset };
 }
 
-function integrationHarness(dataset: MapshaperDataset) {
+function integrationHarness(dataset: MapshaperDataset, selectionRefs: FeatureRef[] = [{ source: 'source', layer: 'parts', id: 0 }]) {
   let current = dataset;
   const source = { getDataset: () => current, getLayers: () => current.layers, setDataset: (value: MapshaperDataset) => { current = value; }, fire: vi.fn() };
   const selection = new Selection();
-  selection.apply([{ source: 'source', layer: 'parts', id: 0 }], 'replace');
+  selection.apply(selectionRefs, 'replace');
   const history = { entries: [] as Array<{ undo(): void }>, push(entry: { undo(): void }) { this.entries.push(entry); }, isCapturing: () => false };
   const host = {
     _activeTransaction: null, _removed: false, _sources: new Map([['source', source]]), _history: history, _selection: selection,
@@ -185,15 +185,45 @@ describe('deletePart', () => {
     expect(exported(fixture.dataset())).toEqual({ type: 'LineString', coordinates: [[0, 0], [10, 0]] });
   });
 
-  it('rejects deleting the last part and a line point outside tolerance', async () => {
-    const single = await createFixture({ type: 'Polygon', coordinates: [square] });
-    await expect(deletePart(single.ctx, { point: [5, 5] })).resolves.toMatchObject({
-      error: { field: 'part', reason: 'feature has a single part; use deleteSelected' },
+  it('deletes the whole feature when its last part is removed, without any selection', async () => {
+    const single = await createFixture({ type: 'Polygon', coordinates: [square] }, []);
+    await expect(deletePart(single.ctx, { point: [5, 5] })).resolves.toMatchObject({ ok: true });
+    expect(single.dataset().layers[0]!.shapes).toHaveLength(0);
+    expect(single.dataset().layers[0]!.data?.getRecords?.()).toHaveLength(0);
+  });
+
+  it('drops the removed feature from the selection through the real runner', async () => {
+    const dataset = await importDataset({ type: 'Polygon', coordinates: [square] });
+    dataset.layers[0]!.name = 'parts';
+    const fixture = integrationHarness(dataset);
+    await expect(fixture.ops.deletePart({ point: [5, 5] })).resolves.toEqual({ ok: true, value: undefined });
+    expect(fixture.source.getDataset().layers[0]!.shapes).toHaveLength(0);
+    expect(fixture.selection.getAll()).toEqual([]);
+  });
+
+  it('drops alias-addressed refs of the removed feature from the selection', async () => {
+    const dataset = await importDataset({ type: 'Polygon', coordinates: [square] });
+    dataset.layers[0]!.name = 'parts';
+    dataset.layers[0]!.id = 'parts-alias';
+    const fixture = integrationHarness(dataset, [{ source: 'source', layer: 'parts-alias', id: 0 }]);
+    await expect(fixture.ops.deletePart({ point: [5, 5] })).resolves.toEqual({ ok: true, value: undefined });
+    expect(fixture.selection.getAll()).toEqual([]);
+  });
+
+  it('propagates non-validation runner failures instead of reporting a miss', async () => {
+    const fixture = await createFixture({ type: 'Polygon', coordinates: [square] });
+    fixture.ctx.runPreparedDatasetMutation = async () => Err.hostRemoved();
+    await expect(deletePart(fixture.ctx, { point: [5, 5] })).resolves.toMatchObject({
+      ok: false,
+      error: { kind: 'host-removed' },
     });
+  });
+
+  it('rejects a line point outside tolerance', async () => {
     const line = await createFixture({ type: 'MultiLineString', coordinates: [[[0, 0], [10, 0]], [[0, 5], [10, 5]]] });
     await expect(deletePart(line.ctx, { point: [4, 3], tolerance: 0.25 })).resolves.toMatchObject({
       ok: false,
-      error: { kind: 'validation', field: 'part' },
+      error: { kind: 'validation', field: 'part', reason: 'no part near the point' },
     });
   });
 

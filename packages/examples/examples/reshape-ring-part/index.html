@@ -18,7 +18,7 @@
     <summary><h1>整形、洞与部分编辑</h1></summary>
     <div class="emap-example-workbench-body">
       <section class="emap-example-section">
-        <p class="emap-example-hint">单击选择线或面要素。整形用草图替换要素边界；洞工具编辑面内洞；部分工具编辑多部件要素。</p>
+        <p class="emap-example-hint">无需先选择：整形线直接替换其接触的要素边界；在面内画闭合环即挖洞；点击洞内区域删洞；点击部件即删除（仅剩一个部件时删除整个要素）。只有“加部分”需要先选中目标要素。</p>
         <div class="emap-example-field">
           <label for="file-input">数据文件</label>
           <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple />
@@ -116,7 +116,7 @@
           ownedSourceIds.add(sourceId);
           map.setExtent(source.getExtent());
         }
-        status.textContent = '请选择一个线或面要素。';
+        status.textContent = '数据已加载，可直接绘制整形线或洞；仅“加部分”需要先选择要素。';
       } catch (error) {
         showError(error);
       }

@@ -176,6 +176,14 @@ export interface MapshaperAdapter {
    */
   appendVertex(arcs: ArcCollection, point: [number, number]): void;
 
+  /**
+   * Append one arc holding `points` in a single allocation and return its id.
+   * `appendEmptyArc` + per-point `appendVertex` copies the whole vertex table
+   * on every point (mapshaper's `insertVertex`), which is quadratic for long
+   * rings; this batches the copy to O(existing + points) once.
+   */
+  appendArc(arcs: ArcCollection, points: readonly (readonly [number, number])[]): number;
+
   /** Pop the most recently appended arc. Used by FeatureCreateCommand.undo. */
   deleteLastArc(arcs: ArcCollection): void;
 
@@ -642,6 +650,35 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
 
   appendVertex(arcs: ArcCollection, point: [number, number]): void {
     mapshaper.internal.appendVertex(arcs, point);
+  }
+
+  appendArc(arcs: ArcCollection, points: readonly (readonly [number, number])[]): number {
+    const data = arcs.getVertexData!();
+    const arcId = arcs.size();
+    const pointCount = data.xx.length;
+    const nn = new Int32Array(arcId + 1);
+    nn.set(data.nn);
+    nn[arcId] = points.length;
+    const xx = new Float64Array(pointCount + points.length);
+    xx.set(data.xx);
+    const yy = new Float64Array(pointCount + points.length);
+    yy.set(data.yy);
+    for (let index = 0; index < points.length; index++) {
+      xx[pointCount + index] = points[index]![0];
+      yy[pointCount + index] = points[index]![1];
+    }
+    // Mirror insertVertex: appended vertices carry Infinity thresholds (always
+    // retained) when the collection keeps simplification data.
+    const flat = arcs.isFlat?.() ?? data.zz === null;
+    let zz: Float64Array | null = null;
+    if (!flat) {
+      zz = new Float64Array(pointCount + points.length).fill(Infinity);
+      if (data.zz) zz.set(data.zz);
+    }
+    const retained = arcs.getRetainedInterval?.() ?? 0;
+    arcs.updateVertexData!(nn, xx, yy, zz);
+    arcs.setRetainedInterval?.(retained);
+    return arcId;
   }
 
   deleteLastArc(arcs: ArcCollection): void {

@@ -1,13 +1,10 @@
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
 import type { EditHandlerHost } from './edit-handler-host';
-import type { FeatureRef } from '../../map/types';
 import type {
   ArcCollection,
   ArcVertexData,
-  PathLayer,
   PathShape,
 } from '../../types/mapshaper-types';
-import type { MutableTopologySource } from '../../source/source';
 import { isPathLayer } from '../../types/mapshaper-types';
 import { projectPointOnSegment } from './draw-feature';
 import { SketchSession, type SketchSnapTarget } from './sketch-session';
@@ -17,32 +14,28 @@ export interface ReshapeFeatureOptions {
 }
 
 const DEFAULT_SNAP_THRESHOLD = 10;
+/** Snap context resolved best-effort from the current selection. */
 type SelectionContext = {
-  key: string;
-  refs: readonly FeatureRef[];
-  sourceId: string;
-  source: MutableTopologySource;
-  layer: PathLayer;
   arcs: ArcCollection;
   vertexData: ArcVertexData;
-  shapes: readonly PathShape[];
   arcIds: readonly number[];
 };
 
-/** Interactive reshape-line sketch delegated to `ops.reshapeSelected`. */
+/**
+ * Interactive reshape-line sketch delegated to `ops.reshapeSelected`.
+ * Selection is not required: the line reshapes every feature it contacts.
+ */
 export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
   readonly name = 'reshapeFeature';
   private _enabled = false;
   private _opts: ReshapeFeatureOptions;
   private _generation = 0;
   private _submissionGeneration: number | null = null;
-  private _selectionKey: string | null = null;
   private _snapContext: SelectionContext | null = null;
   private _session: SketchSession;
   _manager?: { refreshCursor(): void };
 
   private readonly _onKeyDownBound = (event: KeyboardEvent) => this._session.handleKeyDown(event);
-  private readonly _onSelectionChangeBound = () => this._onSelectionChange();
 
   constructor(private readonly _map: EditHandlerHost, options: ReshapeFeatureOptions = {}) {
     this._opts = { ...options };
@@ -54,14 +47,10 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
 
   enable(): void {
     if (this._enabled) return;
-    const context = this._resolveSelectionContext();
-    if (!context) throw new Error('reshapeFeature: selection has invalid feature geometry');
-    this._selectionKey = context.key;
     this._generation++;
     this._enabled = true;
     this._map.setEditMode('reshape');
     window.addEventListener('keydown', this._onKeyDownBound);
-    this._map.on('selectionchange', this._onSelectionChangeBound);
     this._manager?.refreshCursor();
   }
 
@@ -71,7 +60,6 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     this._enabled = false;
     this._session.clear();
     window.removeEventListener('keydown', this._onKeyDownBound);
-    this._map.off('selectionchange', this._onSelectionChangeBound);
     this._map.setEditMode('none');
     this._manager?.refreshCursor();
     this._map.render();
@@ -90,8 +78,6 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     this._session.clear();
     this._session = this._createSession();
     this._generation++;
-    const context = this._resolveSelectionContext();
-    this._selectionKey = context && this._isCurrentSelection(context) ? context.key : null;
   }
 
   getOptions(): Readonly<ReshapeFeatureOptions> {
@@ -106,14 +92,8 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     if (!this._enabled) return 'passthrough';
     if (event.kind === 'click' && (event.button !== 0 || this._submissionGeneration === this._generation))
       return 'passthrough';
-    if (
-      (event.kind === 'move' || event.kind === 'click') &&
-      !this._setSnapContext(this._resolveSelectionContext())
-    ) {
-      this._session.clear();
-      this._map.render();
-      return event.kind === 'click' ? 'consumed' : 'passthrough';
-    }
+    if (event.kind === 'move' || event.kind === 'click')
+      this._snapContext = this._resolveSelectionContext();
     try {
       if (event.kind === 'contextmenu' && this._submissionGeneration === this._generation) {
         event.originalEvent.preventDefault();
@@ -134,16 +114,7 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     this._enabled = false;
     this._session.clear();
     window.removeEventListener('keydown', this._onKeyDownBound);
-    this._map.off('selectionchange', this._onSelectionChangeBound);
     this._manager?.refreshCursor();
-    this._map.render();
-  }
-
-  private _onSelectionChange(): void {
-    this._generation++;
-    this._session.clear();
-    const context = this._resolveSelectionContext();
-    this._selectionKey = context && this._isCurrentSelection(context) ? context.key : null;
     this._map.render();
   }
 
@@ -157,11 +128,6 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
       },
       (vertices) => void this._submit(vertices),
     );
-  }
-
-  private _setSnapContext(context: SelectionContext | null): context is SelectionContext {
-    this._snapContext = context && this._isCurrentSelection(context) ? context : null;
-    return this._snapContext !== null;
   }
 
   private _resolveSelectionContext(): SelectionContext | null {
@@ -193,27 +159,15 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     const vertexData = arcs?.getVertexData?.();
     if (!source || !arcs || !vertexData) return null;
 
-    const shapes: PathShape[] = [];
     const arcIds = new Set<number>();
     for (const ref of selected) {
       const shape = layer.shapes[ref.id];
       if (!this._collectPathShape(shape, ref.id, layer.shapes.length, vertexData, arcIds)) return null;
-      shapes.push(shape);
     }
     for (const arcId of arcIds) {
       if (!this._isValidArc(arcId, vertexData)) return null;
     }
-    return {
-      key: this._selectionKeyFor(selected),
-      refs: selected,
-      layer,
-      arcs,
-      sourceId: sourceId!,
-      source,
-      shapes,
-      vertexData,
-      arcIds: [...arcIds],
-    };
+    return { arcs, vertexData, arcIds: [...arcIds] };
   }
 
   private _collectPathShape(
@@ -249,23 +203,8 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     return true;
   }
 
-  private _selectionKeyFor(selected: readonly FeatureRef[]): string {
-    return JSON.stringify(
-      [...new Set(selected.map((ref) => JSON.stringify([ref.source, ref.layer, ref.id])))].sort(),
-    );
-  }
-
-  private _isCurrentSelection(context: SelectionContext): boolean {
-    return this._selectionKey !== null && this._selectionKey === context.key;
-  }
-
   private async _submit(vertices: [number, number][]): Promise<void> {
     if (this._submissionGeneration === this._generation || vertices.length === 0) return;
-    const context = this._resolveSelectionContext();
-    if (!context || !this._isCurrentSelection(context)) {
-      this._map.render();
-      return;
-    }
     const generation = this._generation;
     this._submissionGeneration = generation;
     try {

@@ -70,10 +70,11 @@ map.addControl(new DrawFeatureControl(), 'top-left');
 控件只提供 UI 和模式切换，真实指针处理仍由地图 Handler 完成。已有业务工具栏时，
 可以直接启用 `map.vertexEdit`、`map.drawFeature` 或 `map.transformFeature`。
 
-## 整形选中要素
+## 整形
 
 `reshapeFeature` 让用户画一条替换路径片段的线；它把完成的草图提交给
-`map.ops.reshapeSelected()`，可用于选中的线要素和面要素。
+`map.ops.reshapeSelected()`。与 QGIS 一致，无需先选择：整形线会作用于它接触到的
+每一个线和面要素（面需要线进入并离开边界，线需要至少两个接触点）。
 
 ```ts
 const result = await map.ops.reshapeSelected({
@@ -90,16 +91,13 @@ map.reshapeFeature.setOptions({ snapThreshold: 12 });
 map.reshapeFeature.enable();
 ```
 
-启用前至少选择一个同 source、同 layer 的路径要素。左键依次放置替换线的顶点，
-右键在至少两个顶点后完成，Esc 放弃当前草图。`reshapeFeature` 进入 `'reshape'`
-编辑模式；启用另一编辑模式会使它退出。
+左键依次放置替换线的顶点，右键在至少两个顶点后完成，Esc 放弃当前草图。
+`reshapeFeature` 进入 `'reshape'` 编辑模式；启用另一编辑模式会使它退出。
 
 `map.ops.reshapeSelected()` 返回 `OpResult`。校验失败（`kind: 'validation'`）的错误形状为
-`{ kind, field, reason }`，其中 `field` 可为 `selection`、`line`、`layer` 或 `geometry`：
-草图至少要有两个有限坐标且不能只重复同一点；草图必须实际整形至少一个选中要素。无接触
-的草图会以 `line` 校验错误被拒绝，面整形还会拒绝自交或无效的结果。找不到 source 或
-layer 时错误形状为 `{ kind: 'not-found', what, id }`；并发修改使预备 mutation 过期时为
-`{ kind: 'stale-operation', sourceId, operation }`，两者都没有 `field`。
+`{ kind, field, reason }`：草图至少要有两个有限坐标且不能只重复同一点（`line`）；没有
+整形任何要素时同样以 `line` 报错。面整形还会拒绝自交或无效的结果（`geometry`）。并发修改
+使预备 mutation 过期时为 `{ kind: 'stale-operation', sourceId, operation }`，没有 `field`。
 
 ## 顶点批量操作
 
@@ -126,8 +124,9 @@ map.vertexEdit.enable();
 
 ## 挖洞和删洞
 
-`ringEdit` 为一个选中面要素添加或删除内环（洞），底层 API 是
-`map.ops.addRing()` 和 `map.ops.deleteRing()`：
+`ringEdit` 为面要素添加或删除内环（洞），底层 API 是
+`map.ops.addRing()` 和 `map.ops.deleteRing()`。与 QGIS 一致，无需先选择：洞会加到
+包含草图的面要素上；删洞时点击洞内任一点即删除该洞。
 
 ```ts
 const added = await map.ops.addRing({
@@ -145,20 +144,21 @@ map.ringEdit.setOptions({ mode: 'add', snapThreshold: 12 });
 map.ringEdit.enable();
 ```
 
-`ringEdit` 要求恰好选择一个面要素。`mode: 'add'` 时左键画洞、右键完成、Esc 取消；
-`mode: 'delete'` 时点击洞内任一点删除该洞。它使用 `'ring'` 编辑模式，切换到其他编辑
-模式会自动退出。
+`mode: 'add'` 时左键画洞、右键完成、Esc 取消；`mode: 'delete'` 时点击洞内任一点删除
+该洞。它使用 `'ring'` 编辑模式，切换到其他编辑模式会自动退出。
 
 `map.ops.addRing()` 和 `map.ops.deleteRing()` 的校验失败（`kind: 'validation'`）形状为
-`{ kind, field, reason }`，`field` 为 `selection` 或 `ring`：洞必须闭合并围成面积，不能
-自交、接触或穿过面边界，且必须严格位于同一个面外环内；点击未落在洞内也会被拒绝。
-找不到资源时形状为 `{ kind: 'not-found', what, id }`，预备 mutation 因并发修改过期时为
-`{ kind: 'stale-operation', sourceId, operation }`；这两种错误没有 `field`。
+`{ kind, field, reason }`，`field` 为 `ring`：洞必须闭合并围成面积，不能自交、接触或
+穿过面边界，且必须严格位于某个面外环内；没有任何面包含草图或点击未落在洞内也会被拒绝。
+预备 mutation 因并发修改过期时为 `{ kind: 'stale-operation', sourceId, operation }`，
+没有 `field`。
 
 ## 加和删部分
 
-`partEdit` 为一个选中的线或面要素添加或删除独立 part，底层 API 是
-`map.ops.addPart()` 和 `map.ops.deletePart()`：
+`partEdit` 为线或面要素添加或删除独立 part，底层 API 是
+`map.ops.addPart()` 和 `map.ops.deletePart()`。加 part 需要先选中恰好一个目标要素；
+删 part 与 QGIS 一致无需选择——点击哪个 part 就删哪个，要素只剩一个 part 时整个要素
+会被删除。
 
 ```ts
 const added = await map.ops.addPart({
@@ -177,17 +177,16 @@ map.partEdit.setOptions({ mode: 'delete', snapThreshold: 12 });
 map.partEdit.enable();
 ```
 
-`partEdit` 要求恰好选择一个路径要素。`mode: 'add'` 时左键画新 part、右键完成、Esc
-取消；面 part 自动闭合，线 part 至少需要两个顶点。`mode: 'delete'` 时点击目标 part；
-对线要素，handler 会用 `snapThreshold` 换算为 `tolerance`。它使用 `'part'` 编辑模式，
-切换到其他编辑模式会自动退出。
+`mode: 'add'` 要求恰好选择一个路径要素：左键画新 part、右键完成、Esc 取消；面 part
+自动闭合，线 part 至少需要两个顶点。`mode: 'delete'` 时点击目标 part；对线要素，
+handler 会用 `snapThreshold` 换算为 `tolerance`。它使用 `'part'` 编辑模式，切换到其他
+编辑模式会自动退出。
 
 `map.ops.addPart()` 和 `map.ops.deletePart()` 的校验失败（`kind: 'validation'`）形状为
 `{ kind, field, reason }`，`field` 为 `selection` 或 `part`：新 part 不能自交或接触、相交
-已有几何；面 part 还不能重叠已有面、把已有外环包在内部，且方向必须匹配现有外环。单一
-part 的要素不可删除 part，面要素点击必须落在该 part 内，线要素必须在 `tolerance` 范围内。
-找不到资源时形状为 `{ kind: 'not-found', what, id }`，预备 mutation 因并发修改过期时为
-`{ kind: 'stale-operation', sourceId, operation }`；这两种错误没有 `field`。
+已有几何；面 part 还不能重叠已有面、把已有外环包在内部，且方向必须匹配现有外环。删除时
+面要素点击必须落在某个 part 内，线要素必须在 `tolerance` 范围内。预备 mutation 因并发
+修改过期时为 `{ kind: 'stale-operation', sourceId, operation }`，没有 `field`。
 
 ## 撤销与重做
 

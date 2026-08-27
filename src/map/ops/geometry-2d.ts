@@ -1,4 +1,5 @@
 import type { MapshaperAdapter } from '../../adapter/mapshaper-adapter';
+import Flatbush from 'flatbush';
 import type { MapshaperDataset, PathShape } from '../../types/mapshaper-types';
 import { SplitGeometryValidationError } from './split-selected-error';
 
@@ -126,6 +127,100 @@ export function segmentsConflict(
   );
 }
 
+export type SegmentPair = readonly [Coordinate, Coordinate];
+
+/**
+ * Flatbush broad-phase over segment AABBs replacing the O(S²) all-pairs
+ * `segmentsConflict` scans. Boxes are padded by an EPSILON-scaled segment
+ * extent so the exact predicate's parameter slack (t/u ∈ [-ε, 1+ε]) and its
+ * absolute containment pad can never fire between segments whose padded boxes
+ * do not overlap — filtering is false-negative free and `segmentsConflict`
+ * remains the exact final test.
+ */
+export class SegmentConflictIndex {
+  private readonly _segments: SegmentPair[] = [];
+  private readonly _ringOf: number[] = [];
+  private readonly _positionOf: number[] = [];
+  private readonly _ringSizeOf: number[] = [];
+  private readonly _index: InstanceType<typeof Flatbush> | null;
+
+  /**
+   * @param rings segment lists grouped by ring
+   * @param closedRings when true (default), the first/last segment pair of a
+   * ring is exempt like adjacent pairs; open polylines pass false.
+   */
+  constructor(rings: ReadonlyArray<ReadonlyArray<SegmentPair>>, closedRings = true) {
+    let count = 0;
+    for (const ring of rings) count += ring.length;
+    this._closedRings = closedRings;
+    // Flatbush.finish() throws when nothing was added; empty indexes never search.
+    this._index = count === 0 ? null : new Flatbush(count);
+    for (let ring = 0; ring < rings.length; ring++) {
+      const segments = rings[ring]!;
+      for (let position = 0; position < segments.length; position++) {
+        const [a, b] = segments[position]!;
+        this._segments.push([a, b]);
+        this._ringOf.push(ring);
+        this._positionOf.push(position);
+        this._ringSizeOf.push(segments.length);
+        this._index.add(...segmentBox(a, b));
+      }
+    }
+    this._index?.finish();
+  }
+
+  private readonly _closedRings: boolean;
+
+  /**
+   * True when any two indexed segments conflict. Adjacent segments of the same
+   * ring (plus the closing pair for closed rings) are exempt, matching the
+   * exemption rules of the former all-pairs loops.
+   */
+  hasConflict(): boolean {
+    if (!this._index) return false;
+    for (let left = 0; left < this._segments.length; left++) {
+      const [a, b] = this._segments[left]!;
+      for (const right of this._index.search(...segmentBox(a, b))) {
+        if (right <= left) continue;
+        if (this._ringOf[right] === this._ringOf[left]) {
+          const leftPos = this._positionOf[left]!;
+          const rightPos = this._positionOf[right]!;
+          if (
+            rightPos === leftPos + 1 ||
+            (this._closedRings && leftPos === 0 && rightPos === this._ringSizeOf[left]! - 1)
+          )
+            continue;
+        }
+        const [c, d] = this._segments[right]!;
+        if (segmentsConflict(a, b, c, d)) return true;
+      }
+    }
+    return false;
+  }
+
+  /** True when any query segment conflicts with any indexed segment (no exemptions). */
+  conflictsWithAny(segments: ReadonlyArray<SegmentPair>): boolean {
+    if (!this._index) return false;
+    for (const [a, b] of segments) {
+      for (const hit of this._index.search(...segmentBox(a, b))) {
+        const [c, d] = this._segments[hit]!;
+        if (segmentsConflict(a, b, c, d)) return true;
+      }
+    }
+    return false;
+  }
+}
+
+function segmentBox(a: Coordinate, b: Coordinate): [number, number, number, number] {
+  const pad = EPSILON * Math.max(1, Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
+  return [
+    Math.min(a[0], b[0]) - pad,
+    Math.min(a[1], b[1]) - pad,
+    Math.max(a[0], b[0]) + pad,
+    Math.max(a[1], b[1]) + pad,
+  ];
+}
+
 export function validatePolygonArcReferences(
   shape: PathShape,
   arcs: NonNullable<MapshaperDataset['arcs']>,
@@ -160,26 +255,16 @@ export function validatePolygon(
   if (!shape.length || shape.some((part) => part.length === 0))
     throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
   const rings = shape.map((part) => shapeSegments([part], arcs));
-  for (let ringIndex = 0; ringIndex < rings.length; ringIndex++) {
-    const segments = rings[ringIndex]!;
+  for (const segments of rings) {
     if (
       segments.length < 3 ||
       segments[0]![0][0] !== segments.at(-1)![1][0] ||
       segments[0]![0][1] !== segments.at(-1)![1][1]
     )
       throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
-    for (let i = 0; i < segments.length; i++)
-      for (let j = i + 1; j < segments.length; j++) {
-        if (j === i + 1 || (i === 0 && j === segments.length - 1)) continue;
-        if (segmentsConflict(...segments[i]!, ...segments[j]!))
-          throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
-      }
-    for (let otherIndex = 0; otherIndex < ringIndex; otherIndex++)
-      for (const segment of segments)
-        for (const other of rings[otherIndex]!)
-          if (segmentsConflict(...segment, ...other))
-            throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
   }
+  if (new SegmentConflictIndex(rings).hasConflict())
+    throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
   const pathData = adapter.exportPathData(shape, arcs, 'polygon').pathData;
   const anchors = shape.map((part) => adapter.getShapeAnchor([part], arcs));
   if (anchors.some((anchor) => anchor === null))

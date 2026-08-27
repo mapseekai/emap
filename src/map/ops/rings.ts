@@ -1,13 +1,13 @@
 import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
-import type { MapshaperDataset, PathLayer, PathShape } from '../../types/mapshaper-types';
+import type { MapshaperDataset, PathShape } from '../../types/mapshaper-types';
 import { isPathLayer } from '../../types/mapshaper-types';
 import { Err, type OpResult } from '../op-result';
-import type { AddRingOptions, DeleteRingOptions, FeatureRef } from '../types';
+import type { AddRingOptions, DeleteRingOptions } from '../types';
 import type { OpContext } from './_context';
 import {
   type Coordinate,
   normalizeConsecutiveCoordinates,
-  segmentsConflict,
+  SegmentConflictIndex,
   shapeSegments,
   shoelaceArea,
   validatePolygon,
@@ -59,30 +59,7 @@ function distanceToSegment(point: Coordinate, start: Coordinate, end: Coordinate
   return Math.hypot(point[0] - (start[0] + t * dx), point[1] - (start[1] + t * dy));
 }
 
-function selectedPolygon(
-  ctx: OpContext,
-  refs: FeatureRef[],
-): { sourceId: string; layerId: string; layer: PathLayer; featureId: number; dataset: MapshaperDataset } | OpResult<void> {
-  if (refs.length !== 1) return Err.validation('selection', 'select exactly one polygon feature');
-  const { source: sourceId, layer: layerId, id: featureId } = refs[0]!;
-  const source = ctx.host._sources.get(sourceId);
-  if (!source) return Err.notFound('source', sourceId);
-  const layer = ctx.host.layers.resolve(sourceId, layerId);
-  if (!layer) return Err.notFound('layer', layerId);
-  if (!isPathLayer(layer) || layer.geometry_type !== 'polygon' || !layer.shapes)
-    return Err.validation('selection', 'selected layer has no polygon geometry');
-  if (!Number.isInteger(featureId) || featureId < 0 || featureId >= layer.shapes.length || !layer.shapes[featureId])
-    return Err.validation('selection', `selected feature ${featureId} has no geometry`);
-  const dataset = source.getDataset();
-  if (!dataset) return Err.notFound('source', sourceId);
-  return { sourceId, layerId, layer, featureId, dataset };
-}
-
-function isFailure<T>(result: T | OpResult<void>): result is OpResult<void> {
-  return typeof result === 'object' && result !== null && 'ok' in result;
-}
-
-function validateSelectedShape(
+function validateTargetShape(
   shape: PathShape,
   arcs: NonNullable<MapshaperDataset['arcs']>,
   adapter: MapshaperAdapter,
@@ -92,133 +69,136 @@ function validateSelectedShape(
     validatePolygon(shape, arcs, adapter);
     return null;
   } catch (error) {
-    if (error instanceof SplitGeometryValidationError) return Err.validation('selection', error.reason);
+    if (error instanceof SplitGeometryValidationError) return Err.validation('geometry', error.reason);
     throw error;
   }
 }
 
-function validateNewRing(
+/**
+ * Locate where `ring` belongs inside `shape`: the descriptor of the exterior
+ * that should receive it as a hole. Returns `'outside'` when the ring does
+ * not belong to this feature, or a reportable reason when it targets this
+ * feature but conflicts with its boundary.
+ */
+function ringTarget(
   ring: Ring,
   shape: PathShape,
   arcs: NonNullable<MapshaperDataset['arcs']>,
   adapter: MapshaperAdapter,
-): string | null {
-  const segments = ringSegments(ring);
-  if (Math.abs(shoelaceArea(ring)) === 0) return 'ring must enclose an area';
-  for (let index = 0; index < segments.length; index++)
-    for (let otherIndex = index + 1; otherIndex < segments.length; otherIndex++) {
-      if (otherIndex === index + 1 || (index === 0 && otherIndex === segments.length - 1)) continue;
-      if (segmentsConflict(...segments[index]!, ...segments[otherIndex]!)) return 'ring self-intersects';
-    }
+): { exteriorIndex: number; insertIndex: number } | 'outside' | string {
   const boundary = shapeSegments(shape, arcs);
   const tolerance = coordinateScale(ring) * EPSILON;
   for (const point of ring.slice(0, -1)) {
-    if (!adapter.testPointInPolygon(point[0], point[1], shape, arcs))
-      return 'ring vertices must be strictly inside the selected polygon';
+    if (!adapter.testPointInPolygon(point[0], point[1], shape, arcs)) return 'outside';
     if (boundary.some(([start, end]) => distanceToSegment(point, start, end) <= tolerance))
       return 'ring vertices must not lie on a polygon boundary';
   }
-  for (const segment of segments)
-    for (const edge of boundary)
-      if (segmentsConflict(...segment, ...edge)) return 'ring intersects a polygon boundary';
-  return null;
+  if (new SegmentConflictIndex([boundary]).conflictsWithAny(ringSegments(ring)))
+    return 'ring intersects a polygon boundary';
+  const exterior = collectPolygonExteriors(shape, arcs, adapter).find(({ exteriorIndex }) =>
+    ring
+      .slice(0, -1)
+      .every((point) => adapter.testPointInPolygon(point[0], point[1], [shape[exteriorIndex]!], arcs)),
+  );
+  if (!exterior) return 'outside';
+  return {
+    exteriorIndex: exterior.exteriorIndex,
+    insertIndex: Math.max(exterior.exteriorIndex, ...exterior.holeIndexes) + 1,
+  };
 }
 
-/** Adds an interior ring to the one selected polygon feature. */
+/**
+ * Adds an interior ring to the polygon feature containing it, QGIS-style: no
+ * selection is required. Sources are scanned in registry order and the first
+ * feature whose exterior fully contains the ring receives the hole.
+ */
 export async function addRing(ctx: OpContext, options: AddRingOptions): Promise<OpResult<void>> {
-  const refs = ctx.host._selection.getAll();
-  if (refs.length > 0) {
-    const sourceId = refs[0]!.source;
-    const layerId = refs[0]!.layer;
-    if (refs.some((ref) => ref.source !== sourceId || ref.layer !== layerId))
-      return Err.validation('selection', 'selection spans multiple sources or layers');
-  }
   const ring = normalizeRing(options.ring);
   if (!ring) return Err.validation('ring', 'ring coordinates are invalid');
-  const selected = selectedPolygon(ctx, refs);
-  if (isFailure(selected)) return selected;
-  const shape = selected.layer.shapes![selected.featureId] as PathShape;
-  const arcs = selected.dataset.arcs;
-  if (!arcs) return Err.validation('selection', 'selected polygon geometry is invalid');
+  if (Math.abs(shoelaceArea(ring)) === 0) return Err.validation('ring', 'ring must enclose an area');
+  if (new SegmentConflictIndex([ringSegments(ring)]).hasConflict())
+    return Err.validation('ring', 'ring self-intersects');
   const adapter = getDefaultMapshaperAdapter();
-  const shapeError = validateSelectedShape(shape, arcs, adapter);
-  if (shapeError) return shapeError;
-  const ringError = validateNewRing(ring, shape, arcs, adapter);
-  if (ringError) return Err.validation('ring', ringError);
-
-  return ctx.runPreparedDatasetMutation(selected.sourceId, 'Add ring', (working, original) => {
-    if (original !== selected.dataset) return Err.staleOperation(selected.sourceId, 'Add ring');
-    const workingLayer = ctx.host.layers.resolveInLayers(working.layers, selected.layerId);
-    if (!workingLayer || !isPathLayer(workingLayer) || workingLayer.geometry_type !== 'polygon' || !workingLayer.shapes)
-      return Err.staleOperation(selected.sourceId, 'Add ring');
-    const workingShape = workingLayer.shapes[selected.featureId] as PathShape | null;
-    const workingArcs = working.arcs;
-    if (!workingShape || !workingArcs) return Err.staleOperation(selected.sourceId, 'Add ring');
-    const workingShapeError = validateSelectedShape(workingShape, workingArcs, adapter);
-    if (workingShapeError) return workingShapeError;
-    const workingRingError = validateNewRing(ring, workingShape, workingArcs, adapter);
-    if (workingRingError) return Err.validation('ring', workingRingError);
-    const exterior = collectPolygonExteriors(workingShape, workingArcs, adapter).find(({ exteriorIndex }) =>
-      ring.slice(0, -1).every((point) =>
-        adapter.testPointInPolygon(
-          point[0],
-          point[1],
-          [workingShape[exteriorIndex]!],
-          workingArcs,
-        ),
-      ),
-    );
-    if (!exterior) return Err.validation('ring', 'ring is not inside a polygon exterior');
-    const exteriorCoordinates = shapeSegments([workingShape[exterior.exteriorIndex]!], workingArcs).map(
-      ([start]) => start,
-    );
-    const hole = shoelaceArea(ring) * shoelaceArea(exteriorCoordinates) > 0 ? [...ring].reverse() : ring;
-    const arcId = workingArcs.size();
-    adapter.appendEmptyArc(workingArcs);
-    for (const point of hole) adapter.appendVertex(workingArcs, [point[0], point[1]]);
-    workingShape.splice(Math.max(exterior.exteriorIndex, ...exterior.holeIndexes) + 1, 0, [arcId]);
-    return { value: undefined, selection: refs };
-  });
+  let genericFailure: OpResult<void> | null = null;
+  let specificFailure: OpResult<void> | null = null;
+  for (const [sourceId, source] of ctx.host._sources) {
+    const dataset = source.getDataset();
+    if (!dataset?.arcs) continue;
+    const result = await ctx.runPreparedDatasetMutation(sourceId, 'Add ring', (working, original) => {
+      if (original !== dataset) return Err.staleOperation(sourceId, 'Add ring');
+      const workingArcs = working.arcs!;
+      let reason: string | null = null;
+      for (const workingLayer of working.layers) {
+        if (!isPathLayer(workingLayer) || workingLayer.geometry_type !== 'polygon' || !workingLayer.shapes)
+          continue;
+        for (let featureId = 0; featureId < workingLayer.shapes.length; featureId++) {
+          const shape = workingLayer.shapes[featureId] as PathShape | null;
+          if (!shape?.length) continue;
+          const target = ringTarget(ring, shape, workingArcs, adapter);
+          if (target === 'outside') continue;
+          if (typeof target === 'string') {
+            reason = reason ?? target;
+            continue;
+          }
+          const shapeError = validateTargetShape(shape, workingArcs, adapter);
+          if (shapeError) return shapeError;
+          const exteriorCoordinates = shapeSegments([shape[target.exteriorIndex]!], workingArcs).map(
+            ([start]) => start,
+          );
+          const hole = shoelaceArea(ring) * shoelaceArea(exteriorCoordinates) > 0 ? [...ring].reverse() : ring;
+          const arcId = adapter.appendArc(workingArcs, hole);
+          shape.splice(target.insertIndex, 0, [arcId]);
+          return { value: undefined, selection: ctx.host._selection.getAll() };
+        }
+      }
+      return Err.validation('ring', reason ?? 'ring is not inside a polygon exterior');
+    });
+    if (result.ok) return result;
+    if (result.error.kind !== 'validation') return result;
+    if (result.error.reason === 'ring is not inside a polygon exterior') genericFailure ??= result;
+    else specificFailure ??= result;
+  }
+  return specificFailure ?? genericFailure ?? Err.validation('ring', 'ring is not inside a polygon exterior');
 }
 
-/** Removes the interior ring containing the supplied point from the selected polygon. */
+/**
+ * Removes the interior ring containing the supplied point, QGIS-style: no
+ * selection is required — clicking inside a hole deletes that hole.
+ */
 export async function deleteRing(ctx: OpContext, options: DeleteRingOptions): Promise<OpResult<void>> {
-  const refs = ctx.host._selection.getAll();
-  if (refs.length > 0) {
-    const sourceId = refs[0]!.source;
-    const layerId = refs[0]!.layer;
-    if (refs.some((ref) => ref.source !== sourceId || ref.layer !== layerId))
-      return Err.validation('selection', 'selection spans multiple sources or layers');
-  }
   if (!isCoordinate(options.point)) return Err.validation('ring', 'point coordinates are invalid');
-  const selected = selectedPolygon(ctx, refs);
-  if (isFailure(selected)) return selected;
-  const shape = selected.layer.shapes![selected.featureId] as PathShape;
-  const arcs = selected.dataset.arcs;
-  if (!arcs) return Err.validation('selection', 'selected polygon geometry is invalid');
   const adapter = getDefaultMapshaperAdapter();
-  const shapeError = validateSelectedShape(shape, arcs, adapter);
-  if (shapeError) return shapeError;
-  const exterior = shapeSegments([shape[0]!], arcs).map(([start]) => start);
-  const exteriorArea = shoelaceArea(exterior);
-  const ringIndex = shape.findIndex((part, index) =>
-    index > 0 && shoelaceArea(shapeSegments([part], arcs).map(([start]) => start)) * exteriorArea < 0 &&
-      adapter.testPointInPolygon(options.point[0], options.point[1], [part], arcs),
-  );
-  if (ringIndex === -1) return Err.validation('ring', 'no ring contains the point');
-
-  return ctx.runPreparedDatasetMutation(selected.sourceId, 'Delete ring', (working, original) => {
-    if (original !== selected.dataset) return Err.staleOperation(selected.sourceId, 'Delete ring');
-    const workingLayer = ctx.host.layers.resolveInLayers(working.layers, selected.layerId);
-    if (!workingLayer || !isPathLayer(workingLayer) || workingLayer.geometry_type !== 'polygon' || !workingLayer.shapes)
-      return Err.staleOperation(selected.sourceId, 'Delete ring');
-    const workingShape = workingLayer.shapes[selected.featureId] as PathShape | null;
-    const workingArcs = working.arcs;
-    if (!workingShape || !workingArcs) return Err.staleOperation(selected.sourceId, 'Delete ring');
-    const workingShapeError = validateSelectedShape(workingShape, workingArcs, adapter);
-    if (workingShapeError) return workingShapeError;
-    workingShape.splice(ringIndex, 1);
-    adapter.cleanArcReferences(working);
-    return { value: undefined, selection: refs };
-  });
+  const [px, py] = options.point;
+  for (const [sourceId, source] of ctx.host._sources) {
+    const dataset = source.getDataset();
+    if (!dataset?.arcs) continue;
+    const result = await ctx.runPreparedDatasetMutation(sourceId, 'Delete ring', (working, original) => {
+      if (original !== dataset) return Err.staleOperation(sourceId, 'Delete ring');
+      const workingArcs = working.arcs!;
+      for (const workingLayer of working.layers) {
+        if (!isPathLayer(workingLayer) || workingLayer.geometry_type !== 'polygon' || !workingLayer.shapes)
+          continue;
+        for (let featureId = 0; featureId < workingLayer.shapes.length; featureId++) {
+          const shape = workingLayer.shapes[featureId] as PathShape | null;
+          if (!shape?.length) continue;
+          for (const group of collectPolygonExteriors(shape, workingArcs, adapter)) {
+            if (!adapter.testPointInPolygon(px, py, [shape[group.exteriorIndex]!], workingArcs)) continue;
+            const ringIndex = group.holeIndexes.find((holeIndex) =>
+              adapter.testPointInPolygon(px, py, [shape[holeIndex]!], workingArcs),
+            );
+            if (ringIndex === undefined) continue;
+            const shapeError = validateTargetShape(shape, workingArcs, adapter);
+            if (shapeError) return shapeError;
+            shape.splice(ringIndex, 1);
+            adapter.cleanArcReferences(working);
+            return { value: undefined, selection: ctx.host._selection.getAll() };
+          }
+        }
+      }
+      return Err.validation('ring', 'no ring contains the point');
+    });
+    if (result.ok) return result;
+    if (result.error.kind !== 'validation') return result;
+  }
+  return Err.validation('ring', 'no ring contains the point');
 }

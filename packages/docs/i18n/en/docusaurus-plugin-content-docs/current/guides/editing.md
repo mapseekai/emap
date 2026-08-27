@@ -71,11 +71,13 @@ Controls provide UI and mode switching; map handlers still own pointer
 processing. An application-specific toolbar can enable `map.vertexEdit`,
 `map.drawFeature`, or `map.transformFeature` directly.
 
-## Reshape selected features
+## Reshape
 
 `reshapeFeature` lets users draw a line that replaces a path segment. It
-submits the completed sketch to `map.ops.reshapeSelected()` and works with
-selected line and polygon features.
+submits the completed sketch to `map.ops.reshapeSelected()`. Like QGIS, no
+selection is required: the line reshapes every line and polygon feature it
+contacts (a polygon needs the line to enter and leave its boundary, a
+polyline needs at least two contacts).
 
 ```ts
 const result = await map.ops.reshapeSelected({
@@ -92,21 +94,18 @@ map.reshapeFeature.setOptions({ snapThreshold: 12 });
 map.reshapeFeature.enable();
 ```
 
-Select at least one path feature from the same source and layer before
-enabling it. Left-click to place reshape-line vertices, right-click to finish
-after at least two vertices, and press Esc to discard the current sketch.
+Left-click to place reshape-line vertices, right-click to finish after at
+least two vertices, and press Esc to discard the current sketch.
 `reshapeFeature` enters `'reshape'` edit mode; enabling another edit mode
 turns it off.
 
 `map.ops.reshapeSelected()` returns an `OpResult`. A validation failure
-(`kind: 'validation'`) has shape `{ kind, field, reason }`, where `field` can
-be `selection`, `line`, `layer`, or `geometry`: the sketch needs at least two
-finite coordinates and cannot be only repeated points; it must reshape at
-least one selected feature. A non-contacting sketch gets a `line` validation
-error, and polygon reshapes also reject self-intersecting or invalid results.
-A missing source or layer has shape `{ kind: 'not-found', what, id }`; a
-prepared mutation made stale by a concurrent edit has shape
-`{ kind: 'stale-operation', sourceId, operation }`. Neither has `field`.
+(`kind: 'validation'`) has shape `{ kind, field, reason }`: the sketch needs
+at least two finite coordinates and cannot be only repeated points (`line`);
+a sketch that reshapes nothing also fails with `line`. Polygon reshapes
+reject self-intersecting or invalid results (`geometry`). A prepared mutation
+made stale by a concurrent edit has shape
+`{ kind: 'stale-operation', sourceId, operation }`, without `field`.
 
 ## Batch vertex operations
 
@@ -137,8 +136,10 @@ unit, and an invalid deletion commits no partial change.
 
 ## Add and delete holes
 
-`ringEdit` adds or removes an interior ring (hole) on one selected polygon.
-Its underlying APIs are `map.ops.addRing()` and `map.ops.deleteRing()`:
+`ringEdit` adds or removes an interior ring (hole) on polygon features. Its
+underlying APIs are `map.ops.addRing()` and `map.ops.deleteRing()`. Like
+QGIS, no selection is required: the hole is added to the polygon containing
+the sketch, and clicking any point inside a hole removes that hole.
 
 ```ts
 const added = await map.ops.addRing({
@@ -156,25 +157,25 @@ map.ringEdit.setOptions({ mode: 'add', snapThreshold: 12 });
 map.ringEdit.enable();
 ```
 
-`ringEdit` requires exactly one selected polygon. With `mode: 'add'`, left-
-click to draw the hole, right-click to finish, and Esc to cancel. With
-`mode: 'delete'`, click any point inside a hole to remove it. It uses `'ring'`
-edit mode and exits when another edit mode is selected.
+With `mode: 'add'`, left-click to draw the hole, right-click to finish, and
+Esc to cancel. With `mode: 'delete'`, click any point inside a hole to remove
+it. It uses `'ring'` edit mode and exits when another edit mode is selected.
 
 Validation failures from `map.ops.addRing()` and `map.ops.deleteRing()` have
-`kind: 'validation'` and shape `{ kind, field, reason }`; `field` is
-`selection` or `ring`. The hole must be closed and enclose area, must not
-self-intersect, touch, or cross a polygon boundary, and must be strictly inside
-one polygon exterior; a point outside every hole is also rejected. A missing
-resource has shape `{ kind: 'not-found', what, id }`, and a prepared mutation
-made stale by a concurrent edit has shape `{ kind: 'stale-operation', sourceId,
-operation }`; neither has `field`.
+`kind: 'validation'` and shape `{ kind, field, reason }`; `field` is `ring`.
+The hole must be closed and enclose area, must not self-intersect, touch, or
+cross a polygon boundary, and must be strictly inside a polygon exterior; a
+sketch contained by no polygon or a point outside every hole is also rejected.
+A prepared mutation made stale by a concurrent edit has shape
+`{ kind: 'stale-operation', sourceId, operation }`, without `field`.
 
 ## Add and delete parts
 
-`partEdit` adds or deletes an independent part on one selected line or polygon
-feature. Its underlying APIs are `map.ops.addPart()` and
-`map.ops.deletePart()`:
+`partEdit` adds or deletes an independent part on line or polygon features.
+Its underlying APIs are `map.ops.addPart()` and `map.ops.deletePart()`.
+Adding a part requires exactly one selected target feature; deleting is
+QGIS-style and selection-free — the clicked part is removed, and removing a
+feature's last part deletes the whole feature.
 
 ```ts
 const added = await map.ops.addPart({
@@ -193,23 +194,21 @@ map.partEdit.setOptions({ mode: 'delete', snapThreshold: 12 });
 map.partEdit.enable();
 ```
 
-`partEdit` requires exactly one selected path feature. With `mode: 'add'`,
-left-click to draw a part, right-click to finish, and Esc to cancel. Polygon
-parts close automatically; line parts need at least two vertices. With
-`mode: 'delete'`, click the target part; for lines, the handler converts
-`snapThreshold` to `tolerance`. It uses `'part'` edit mode and exits when
-another edit mode is selected.
+With `mode: 'add'`, exactly one path feature must be selected: left-click to
+draw a part, right-click to finish, and Esc to cancel. Polygon parts close
+automatically; line parts need at least two vertices. With `mode: 'delete'`,
+click the target part; for lines, the handler converts `snapThreshold` to
+`tolerance`. It uses `'part'` edit mode and exits when another edit mode is
+selected.
 
 Validation failures from `map.ops.addPart()` and `map.ops.deletePart()` have
 `kind: 'validation'` and shape `{ kind, field, reason }`; `field` is
 `selection` or `part`. A new part cannot self-intersect, touch, or intersect
 existing geometry. A polygon part also cannot overlap an existing polygon,
-enclose an existing exterior, and must match existing exterior orientation. A
-single-part feature cannot lose its part; polygon clicks must be inside the
-part and line clicks must be within `tolerance`. A missing resource has shape
-`{ kind: 'not-found', what, id }`, and a prepared mutation made stale by a
-concurrent edit has shape `{ kind: 'stale-operation', sourceId, operation }`;
-neither has `field`.
+enclose an existing exterior, and must match existing exterior orientation.
+When deleting, polygon clicks must land inside a part and line clicks must be
+within `tolerance`. A prepared mutation made stale by a concurrent edit has
+shape `{ kind: 'stale-operation', sourceId, operation }`, without `field`.
 
 ## Undo and redo
 

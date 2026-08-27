@@ -62,9 +62,10 @@ describe('ReshapeFeatureHandler', () => {
     map = createMap();
   });
 
-  it('throws when enabled without a valid same-layer path selection', () => {
+  it('enables without any selection', () => {
     const handler = new ReshapeFeatureHandler(createMap({ selection: [] }) as unknown as EditHandlerHost);
-    expect(() => handler.enable()).toThrow(/selection/i);
+    expect(() => handler.enable()).not.toThrow();
+    expect(handler.isEnabled()).toBe(true);
   });
 
   it('submits two placed data coordinates on right click', async () => {

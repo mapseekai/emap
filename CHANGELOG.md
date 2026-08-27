@@ -14,21 +14,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   original attributes, replace the current selection with the results, and are
   available through the interactive `map.splitFeature` handler.
 - `map.ops.reshapeSelected({ line })` and the interactive `map.reshapeFeature`
-  handler now reshape selected line and polygon features along a user-drawn
-  line; the `reshape-ring-part` example and editing guide document the workflow.
+  handler now reshape line and polygon features along a user-drawn line. Like
+  QGIS, no selection is required: every feature the line contacts is reshaped;
+  the `reshape-ring-part` example and editing guide document the workflow.
 - `map.vertexEdit` now supports box-selecting vertices, Shift-additive box
   selection, group dragging, and Delete/Backspace batch deletion; the
   `reshape-ring-part` example demonstrates the workflow.
 - `map.ops.addRing({ ring })` and `map.ops.deleteRing({ point })`, together
-  with the `map.ringEdit` handler, now add and remove interior polygon rings;
-  the `reshape-ring-part` example and editing guide document the workflow.
+  with the `map.ringEdit` handler, now add and remove interior polygon rings.
+  No selection is required: holes are added to the polygon containing the
+  sketch and removed by clicking inside them; the `reshape-ring-part` example
+  and editing guide document the workflow.
 - `map.ops.addPart({ coordinates })` and `map.ops.deletePart({ point,
   tolerance? })`, together with the `map.partEdit` handler, now add and remove
-  independent line or polygon parts; the `reshape-ring-part` example and
+  independent line or polygon parts. Adding a part requires one selected
+  target feature; deleting a part is selection-free, and removing a feature's
+  last part deletes the whole feature; the `reshape-ring-part` example and
   editing guide document the workflow.
 
 ### Fixed
 
+- Reshape, ring, and part editing no longer freeze the UI on complex polygons:
+  segment-conflict validation now uses a Flatbush broad-phase index instead of
+  O(S²) all-pairs scans, ring/part ops validate the geometry once per
+  operation instead of twice, and ring/part sketch snapping rejects vertices
+  outside the snap box before projecting.
+- Reshaping a large polygon no longer stalls for seconds: new arcs are now
+  written with one batched allocation (`MapshaperAdapter.appendArc`) instead of
+  mapshaper's per-vertex insert, which copied the whole vertex table on every
+  point.
+- Reshape no longer silently skips a feature when the sketch continues past
+  it: clip boundaries that land on a sketch vertex now snap to the exact
+  vertex instead of emitting near-duplicate vertices that read as
+  self-intersections.
 - `map.ops.mergeSelected()` now performs a true polygon union that removes shared and
   overlap-internal boundaries without changing unselected geometry, and accepts a selected
   feature as the merged record's attribute source.

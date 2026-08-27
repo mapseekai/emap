@@ -251,17 +251,18 @@ export interface SplitSelectedResult {
   resultFeatures: FeatureRef[];
 }
 
-/** Coordinates of the line that replaces the selected path segment. */
+/** Coordinates of the replacement line. Every path feature it contacts is reshaped; no selection is required. */
 export interface ReshapeSelectedOptions {
   line: [number, number][];
 }
 
-/** Coordinates of the closed interior ring to add to the selected polygon. */
+/** Coordinates of the closed interior ring to add. The polygon feature
+ * containing the ring receives the hole; no selection is required. */
 export interface AddRingOptions {
   ring: [number, number][];
 }
 
-/** Point used to select an interior ring of the selected polygon for removal. */
+/** Point inside the interior ring to remove; no selection is required. */
 export interface DeleteRingOptions {
   point: [number, number];
 }
@@ -271,13 +272,14 @@ export interface AddPartOptions {
   coordinates: [number, number][];
 }
 
-/** Point used to select a path part for removal. */
+/** Point on the path part to remove. Removing a feature's last part deletes
+ * the whole feature; no selection is required. */
 export interface DeletePartOptions {
   point: [number, number];
   tolerance?: number;
 }
 
-/** Result of a successful selected-feature reshape. */
+/** Result of a successful reshape. */
 export interface ReshapeSelectedResult {
   reshapedCount: number;
 }

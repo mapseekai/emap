@@ -121,9 +121,37 @@ describe('PartEditHandler', () => {
     expect(map.ops.deletePart).toHaveBeenLastCalledWith({ point: [101, 202], tolerance: 10 });
   });
 
-  it('throws when enabled without exactly one selected path feature', () => {
+  it('throws in add mode when enabled without exactly one selected path feature', () => {
     const handler = new PartEditHandler(createMap({ selection: [] }) as unknown as EditHandlerHost);
     expect(() => handler.enable()).toThrow(/selection/i);
+  });
+
+  it('enables in delete mode without any selection', () => {
+    const handler = new PartEditHandler(createMap({ selection: [] }) as unknown as EditHandlerHost, {
+      mode: 'delete',
+    });
+    expect(() => handler.enable()).not.toThrow();
+    expect(handler.isEnabled()).toBe(true);
+  });
+
+  it('switches from delete to add while enabled and accepts clicks with a valid selection', async () => {
+    const handler = new PartEditHandler(map as unknown as EditHandlerHost, { mode: 'delete' });
+    handler.enable();
+    handler.setOptions({ mode: 'add' });
+    handler.handlePointer(event('click', 1, 2));
+    handler.handlePointer(event('click', 3, 4));
+    handler.handlePointer(event('click', 5, 6));
+    handler.handlePointer(event('contextmenu', 5, 6));
+    await vi.waitFor(() =>
+      expect(map.ops.addPart).toHaveBeenCalledWith({
+        coordinates: [
+          [101, 202],
+          [103, 204],
+          [105, 206],
+          [101, 202],
+        ],
+      }),
+    );
   });
 
   it('fires an error when an operation rejects the interaction', async () => {

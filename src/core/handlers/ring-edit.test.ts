@@ -89,9 +89,10 @@ describe('RingEditHandler', () => {
     expect(map.setEditDrawState).not.toHaveBeenCalled();
   });
 
-  it('throws when enabled without exactly one selected polygon feature', () => {
+  it('enables without a selected polygon feature', () => {
     const handler = new RingEditHandler(createMap({ selection: [] }) as unknown as EditHandlerHost);
-    expect(() => handler.enable()).toThrow(/selection/i);
+    expect(() => handler.enable()).not.toThrow();
+    expect(handler.isEnabled()).toBe(true);
   });
 
   it('fires an error when an operation rejects the interaction', async () => {

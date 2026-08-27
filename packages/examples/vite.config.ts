@@ -45,6 +45,7 @@ const routeIds = [
   'draw-snap-edge',
   'feature-rotate-scale',
   'feature-translate',
+  'reshape-ring-part',
   'snapshot',
   'transaction',
   'undo-redo',

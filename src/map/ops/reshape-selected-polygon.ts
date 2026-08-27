@@ -2,7 +2,7 @@ import type { MapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import type { MapshaperDataset, PathShape } from '../../types/mapshaper-types';
 import {
   normalizeConsecutiveCoordinates,
-  segmentsConflict,
+  SegmentConflictIndex,
   shapeSegments,
   shoelaceArea,
   unsignedArcId,
@@ -112,17 +112,6 @@ function lineMidpoint(points: readonly Coordinate[]): Coordinate {
   return points[0]!;
 }
 
-function appendArc(
-  arcs: NonNullable<MapshaperDataset['arcs']>,
-  points: readonly Coordinate[],
-  adapter: MapshaperAdapter,
-): number {
-  const id = arcs.size();
-  adapter.appendEmptyArc(arcs);
-  for (const point of points) adapter.appendVertex(arcs, [point[0], point[1]]);
-  return id;
-}
-
 
 function validCandidate(
   candidate: PathShape,
@@ -131,17 +120,13 @@ function validCandidate(
   arcs: NonNullable<MapshaperDataset['arcs']>,
   adapter: MapshaperAdapter,
 ): boolean {
-  const candidateSegments = shapeSegments(candidate, arcs);
-  for (let left = 0; left < candidateSegments.length; left++)
-    for (let right = left + 1; right < candidateSegments.length; right++) {
-      if (right === left + 1 || (left === 0 && right === candidateSegments.length - 1)) continue;
-      if (segmentsConflict(...candidateSegments[left]!, ...candidateSegments[right]!)) return false;
-    }
+  const candidateIndex = new SegmentConflictIndex([shapeSegments(candidate, arcs)]);
+  if (candidateIndex.hasConflict()) return false;
   for (const hole of holes) {
     const coordinates = partCoordinates(hole, arcs);
     const anchor = coordinates[0];
     if (!anchor || !adapter.testPointInPolygon(anchor[0], anchor[1], candidate, arcs)) return false;
-    if (shapeSegments([hole], arcs).some((segment) => candidateSegments.some((edge) => segmentsConflict(...segment, ...edge)))) return false;
+    if (candidateIndex.conflictsWithAny(shapeSegments([hole], arcs))) return false;
   }
   return !otherExteriors.some((part) =>
     partCoordinates(part, arcs).slice(0, -1).some((point) =>
@@ -183,8 +168,8 @@ export function reshapeSelectedPolygon(
     if (Math.sign(shoelaceArea(candidateAPoints)) !== originalSign) candidateAPoints.reverse();
     if (Math.sign(shoelaceArea(candidateBPoints)) !== originalSign) candidateBPoints.reverse();
     const arcStart = arcs.size();
-    const candidateA: PathShape = [[appendArc(arcs, candidateAPoints, adapter)]];
-    const candidateB: PathShape = [[appendArc(arcs, candidateBPoints, adapter)]];
+    const candidateA: PathShape = [[adapter.appendArc(arcs, candidateAPoints)]];
+    const candidateB: PathShape = [[adapter.appendArc(arcs, candidateBPoints)]];
     const holes = holeIndexes.map((index) => original[index]!);
     const otherExteriors = exteriors
       .filter((group) => group.exteriorIndex !== exteriorIndex)
@@ -206,7 +191,7 @@ export function reshapeSelectedPolygon(
     if (useCandidateB) {
       adapter.deleteLastArc(arcs);
       adapter.deleteLastArc(arcs);
-      shape[exteriorIndex] = [appendArc(arcs, candidateBPoints, adapter)];
+      shape[exteriorIndex] = [adapter.appendArc(arcs, candidateBPoints)];
     } else {
       adapter.deleteLastArc(arcs);
       shape[exteriorIndex] = candidateA[0]!;

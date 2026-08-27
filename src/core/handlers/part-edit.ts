@@ -21,7 +21,12 @@ type SelectionContext = {
   arcs: ArcCollection | null;
 };
 
-/** Interactive path-part editor delegated to `ops.addPart` and `ops.deletePart`. */
+/**
+ * Interactive path-part editor delegated to `ops.addPart` and
+ * `ops.deletePart`. Add mode requires exactly one selected path feature;
+ * delete mode is selection-free — clicking a part deletes it (and deleting a
+ * feature's last part removes the feature).
+ */
 export class PartEditHandler implements Handler<PartEditOptions> {
   readonly name = 'partEdit';
   private _enabled = false;
@@ -52,11 +57,13 @@ export class PartEditHandler implements Handler<PartEditOptions> {
 
   enable(): void {
     if (this._enabled) return;
-    const context = this._resolveSelectionContext();
-    if (!context) throw new Error('partEdit: selection must contain exactly one path feature');
-    this._selectionKey = context.key;
-    this._generation++;
-    if (this._opts.mode === 'add') this._session = this._createSession(context);
+    if (this._opts.mode === 'add') {
+      const context = this._resolveSelectionContext();
+      if (!context) throw new Error('partEdit: selection must contain exactly one path feature');
+      this._selectionKey = context.key;
+      this._generation++;
+      this._session = this._createSession(context);
+    }
     this._enabled = true;
     this._map.setEditMode('part');
     window.addEventListener('keydown', this._onKeyDownBound);
@@ -100,7 +107,11 @@ export class PartEditHandler implements Handler<PartEditOptions> {
     this._generation++;
     this._session?.clear();
     this._session = null;
-    if (this._opts.mode === 'add') this._session = this._createSession();
+    if (this._opts.mode === 'add') {
+      const context = this._resolveSelectionContext();
+      this._selectionKey = context?.key ?? null;
+      this._session = context ? this._createSession(context) : null;
+    }
     this._map.render();
   }
 
@@ -116,12 +127,6 @@ export class PartEditHandler implements Handler<PartEditOptions> {
     if (!this._enabled) return 'passthrough';
     if (event.kind === 'click' && (event.button !== 0 || this._submissionGeneration === this._generation))
       return 'passthrough';
-    const context = this._resolveSelectionContext();
-    if (!context || !this._isCurrentSelection(context)) {
-      this._session?.clear();
-      this._map.render();
-      return event.kind === 'click' ? 'consumed' : 'passthrough';
-    }
     if (this._opts.mode === 'delete') {
       if (event.kind !== 'click') return 'passthrough';
       const point = this._map.unproject(event.point.x, event.point.y);
@@ -130,6 +135,12 @@ export class PartEditHandler implements Handler<PartEditOptions> {
       const tolerance = Math.hypot(offset[0] - point[0], offset[1] - point[1]);
       void this._submit(() => this._map.ops.deletePart({ point, tolerance }));
       return 'consumed';
+    }
+    const context = this._resolveSelectionContext();
+    if (!context || !this._isCurrentSelection(context)) {
+      this._session?.clear();
+      this._map.render();
+      return event.kind === 'click' ? 'consumed' : 'passthrough';
     }
     this._snapContext = context;
     try {
@@ -159,6 +170,7 @@ export class PartEditHandler implements Handler<PartEditOptions> {
   }
 
   private _onSelectionChange(): void {
+    if (this._opts.mode !== 'add') return;
     this._generation++;
     this._session?.clear();
     const context = this._resolveSelectionContext();
@@ -216,10 +228,12 @@ export class PartEditHandler implements Handler<PartEditOptions> {
 
   private async _submit(operation: () => Promise<OpResult<void>>): Promise<void> {
     if (this._submissionGeneration === this._generation) return;
-    const context = this._resolveSelectionContext();
-    if (!context || !this._isCurrentSelection(context)) {
-      this._map.render();
-      return;
+    if (this._opts.mode === 'add') {
+      const context = this._resolveSelectionContext();
+      if (!context || !this._isCurrentSelection(context)) {
+        this._map.render();
+        return;
+      }
     }
     const generation = this._generation;
     this._submissionGeneration = generation;
@@ -236,6 +250,12 @@ export class PartEditHandler implements Handler<PartEditOptions> {
     const vertexData = context.arcs?.getVertexData?.() as ArcVertexData | undefined;
     if (!vertexData) return null;
     const threshold = this._opts.snapThreshold ?? DEFAULT_SNAP_THRESHOLD;
+    const c0 = this._map.unproject(px - threshold, py - threshold);
+    const c1 = this._map.unproject(px + threshold, py + threshold);
+    const minX = Math.min(c0[0], c1[0]);
+    const maxX = Math.max(c0[0], c1[0]);
+    const minY = Math.min(c0[1], c1[1]);
+    const maxY = Math.max(c0[1], c1[1]);
     let bestDistance = threshold;
     let best: SketchSnapTarget | null = null;
     for (const part of context.layer.shapes![context.ref.id]!) {
@@ -246,6 +266,7 @@ export class PartEditHandler implements Handler<PartEditOptions> {
         if (!Number.isInteger(start) || !Number.isInteger(count)) continue;
         for (let index = start; index < start + count; index++) {
           const coord = [vertexData.xx[index]!, vertexData.yy[index]!] as [number, number];
+          if (coord[0] < minX || coord[0] > maxX || coord[1] < minY || coord[1] > maxY) continue;
           const projected = this._map.project(coord[0], coord[1]);
           const distance = Math.hypot(projected[0] - px, projected[1] - py);
           if (distance < bestDistance) {

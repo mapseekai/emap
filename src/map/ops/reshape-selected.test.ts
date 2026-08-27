@@ -116,15 +116,27 @@ describe('reshapeSelected', () => {
     });
   });
 
-  it('rejects selections spanning source or layer boundaries', async () => {
-    const fixture = await createFixture([
-      { source: 'source', layer: 'reshape-selected', id: 0 },
-      { source: 'other', layer: 'reshape-selected', id: 1 },
-    ]);
-    await expect(reshapeSelected(fixture.ctx, { line: [[3, 0], [5, 2], [7, 0]] })).resolves.toMatchObject({
-      ok: false,
-      error: { kind: 'validation', field: 'selection' },
+  it('reshapes contacted features without any selection', async () => {
+    const fixture = await createFixture([]);
+    await expect(reshapeSelected(fixture.ctx, { line: [[3, 0], [5, 2], [7, 0]] })).resolves.toEqual({
+      ok: true,
+      value: { reshapedCount: 1 },
     });
+    expect(exportCoordinates(fixture.dataset())).toEqual([
+      [[0, 0], [3, 0], [5, 2], [7, 0], [10, 0]],
+      [[0, 10], [10, 10]],
+    ]);
+  });
+
+  it('reshapes every contacted feature, not just selected ones', async () => {
+    const fixture = await createFixture();
+    await expect(
+      reshapeSelected(fixture.ctx, { line: [[3, 0], [5, 2], [7, 0], [5, 4], [3, 10], [5, 12], [7, 10]] }),
+    ).resolves.toEqual({ ok: true, value: { reshapedCount: 2 } });
+    expect(exportCoordinates(fixture.dataset())).toEqual([
+      [[0, 0], [3, 0], [5, 2], [7, 0], [10, 0]],
+      [[0, 10], [3, 10], [5, 12], [7, 10], [10, 10]],
+    ]);
   });
 
   it('rejects stale prepared datasets', async () => {
