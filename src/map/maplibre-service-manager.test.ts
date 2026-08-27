@@ -81,6 +81,18 @@ class FakeMap {
   }
 
   emit(type: string, event?: unknown): void {
+    if (type === 'style.load' && this._currentStyle && typeof this._currentStyle === 'object') {
+      this.appliedStyles.push(structuredClone(this._currentStyle));
+      for (const [id, source] of Object.entries(this._currentStyle.sources)) {
+        if (!this.omittedSources.has(id)) this.sources.set(id, { id, specification: source });
+      }
+      for (const layer of this._currentStyle.layers) {
+        if (!this.omittedLayers.has(layer.id)) {
+          this.layers.set(layer.id, { id: layer.id, specification: layer });
+          if (!this.layerOrder.includes(layer.id)) this.layerOrder.push(layer.id);
+        }
+      }
+    }
     if (type === 'style.load' || type === 'error') this.styleLoading = false;
     for (const listener of [...(this._listeners.get(type) ?? [])]) listener(event);
   }
@@ -219,6 +231,19 @@ class FakeMap {
 
   getLayer(id: string): unknown {
     return this.layers.get(id);
+  }
+  setLayoutProperty(id: string, name: 'visibility', value: 'visible' | 'none'): void {
+    const operation = `setLayoutProperty:${id}:${name}:${value}`;
+    this.operations.push(operation);
+    this.operationHook?.(operation);
+    const layer = this.layers.get(id) as
+      | { id: string; specification: maplibregl.LayerSpecification }
+      | undefined;
+    if (!layer) throw new Error(`Layer "${id}" does not exist`);
+    layer.specification = {
+      ...layer.specification,
+      layout: { ...layer.specification.layout, [name]: value },
+    };
   }
 
   removeLayer(id: string): void {
@@ -3220,5 +3245,155 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect((map.options.container as HTMLElement).hidden).toBe(true);
     expect(errors).toEqual([{ phase: 'layer', fatal: true }]);
     expect(manager.getServiceState('traffic')).toMatchObject({ active: false, status: 'error' });
+  });
+  it('style overlay visibility hides owned layers and restores their original visibility', async () => {
+    const style = {
+      ...brightStyle,
+      layers: [
+        brightStyle.layers[0],
+        brightStyle.layers[1],
+        { ...brightStyle.layers[2], layout: { visibility: 'none' as const } },
+        brightStyle.layers[3],
+      ],
+    } as const satisfies maplibregl.StyleSpecification;
+    const { manager } = createManager([objectBasemap]);
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+    const addition = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'style was not composed');
+    map.emit('style.load');
+    await addition;
+    map.operations.length = 0;
+    const initialSetStyleCalls = map.setStyleCalls.length;
+
+    await manager.setOverlayVisibility('bright', false);
+    expect(map.setStyleCalls).toHaveLength(initialSetStyleCalls);
+    expect(map.operations).toEqual([
+      'setLayoutProperty:emap-overlay:bright:land:visibility:none',
+      'setLayoutProperty:emap-overlay:bright:roads:visibility:none',
+      'setLayoutProperty:emap-overlay:bright:places:visibility:none',
+    ]);
+
+    map.operations.length = 0;
+    await manager.setOverlayVisibility('bright', true);
+    expect(map.operations).toEqual([
+      'setLayoutProperty:emap-overlay:bright:land:visibility:visible',
+      'setLayoutProperty:emap-overlay:bright:roads:visibility:none',
+      'setLayoutProperty:emap-overlay:bright:places:visibility:visible',
+    ]);
+  });
+
+  it('style overlay removal and update rebuild their complete composite resources', async () => {
+    const oldStyle = { ...brightStyle, glyphs: undefined } as const;
+    const replacementStyle = {
+      ...brightStyle,
+      glyphs: undefined,
+      sources: { replacement: { type: 'vector' as const, url: 'https://example.test/replacement.json' } },
+      layers: [{ id: 'replacement', type: 'fill' as const, source: 'replacement' }],
+    } as const;
+    const { manager } = createManager([objectBasemap]);
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+    const addition = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: oldStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'style was not composed');
+    map.emit('style.load');
+    await addition;
+
+    const update = manager.updateService('bright', {
+      id: 'bright',
+      name: 'Replacement',
+      role: 'overlay',
+      visible: true,
+      style: replacementStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'replacement was not composed');
+    map.emit('style.load');
+    await update;
+    expect(map.sources.has('emap-overlay:bright:land')).toBe(false);
+    expect(map.layers.has('emap-overlay:bright:land')).toBe(false);
+    expect(map.layers.has('emap-overlay:bright:replacement')).toBe(true);
+
+    const removal = manager.removeService('bright');
+    await waitForCondition(() => map.setStyleCalls.length === 3, 'removal was not composed');
+    map.emit('style.load');
+    await removal;
+    expect(map.sources.has('emap-overlay:bright:replacement')).toBe(false);
+    expect(map.layers.has('emap-overlay:bright:replacement')).toBe(false);
+    expect(map.appliedStyles.at(-1)?.sources).not.toHaveProperty('emap-overlay:bright:replacement');
+  });
+
+  it('sprite namespace keeps two style overlays while conflicting glyph URL rolls back', async () => {
+    const first = {
+      ...brightStyle,
+      sprite: 'https://one.test/sprite',
+      glyphs: 'https://fonts.test/{fontstack}/{range}.pbf',
+    } as const;
+    const second = {
+      ...brightStyle,
+      sprite: 'https://two.test/sprite',
+      glyphs: 'https://fonts.test/{fontstack}/{range}.pbf',
+    } as const;
+    const conflict = {
+      ...brightStyle,
+      sprite: 'https://three.test/sprite',
+      glyphs: 'https://other-fonts.test/{fontstack}/{range}.pbf',
+    } as const;
+    const { manager } = createManager([objectBasemap]);
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+    const one = manager.addService({
+      id: 'one',
+      name: 'One',
+      role: 'overlay',
+      visible: true,
+      style: first,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'first style was not composed');
+    map.emit('style.load');
+    await one;
+    const two = manager.addService({
+      id: 'two',
+      name: 'Two',
+      role: 'overlay',
+      visible: true,
+      style: second,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'second style was not composed');
+    map.emit('style.load');
+    await two;
+    await manager.addService({ id: 'three', name: 'Three', role: 'overlay', style: conflict });
+    expect(map.appliedStyles.at(-1)?.sprite).toEqual([
+      { id: 'emap-overlay:one:default', url: 'https://one.test/sprite' },
+      { id: 'emap-overlay:two:default', url: 'https://two.test/sprite' },
+    ]);
+
+    const errors: Array<{ serviceId?: string; fatal: boolean; phase: string }> = [];
+    manager.on('error', (event) => errors.push(event));
+    const activation = manager.setOverlayVisibility('three', true);
+    await expect(activation).rejects.toThrow('glyphs URL conflicts');
+    expect(errors.filter((event) => event.serviceId === 'three' && event.fatal)).toHaveLength(1);
+    expect(manager.getServiceState('one')).toMatchObject({ active: true, status: 'ready' });
+    expect(map.appliedStyles.at(-1)?.sprite).toEqual([
+      { id: 'emap-overlay:one:default', url: 'https://one.test/sprite' },
+      { id: 'emap-overlay:two:default', url: 'https://two.test/sprite' },
+    ]);
   });
 });
