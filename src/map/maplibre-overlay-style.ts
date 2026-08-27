@@ -1,4 +1,5 @@
 import type * as maplibregl from 'maplibre-gl';
+import type { MapLibreOverlayStyleService } from './maplibre-service';
 
 export interface PreparedMapLibreOverlayStyle {
   serviceId: string;
@@ -108,6 +109,66 @@ function normalizeSourceUrls(source: StyleObject, baseUrl: string | undefined, r
       resourceUrls.add(normalizedUrl);
       return normalizedUrl;
     });
+  }
+}
+
+export type MapLibreStyleFetch = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response>;
+
+export interface LoadMapLibreOverlayStyleOptions {
+  signal: AbortSignal;
+  transformRequest?: maplibregl.RequestTransformFunction;
+  fetch: MapLibreStyleFetch;
+  timeoutMs?: number;
+}
+
+export async function loadMapLibreOverlayStyle(
+  service: MapLibreOverlayStyleService,
+  options: LoadMapLibreOverlayStyleOptions,
+): Promise<PreparedMapLibreOverlayStyle> {
+  if (typeof service.style !== 'string') {
+    return prepareMapLibreOverlayStyle(service.id, service.style);
+  }
+
+  const controller = new AbortController();
+  const abort = () => controller.abort(options.signal.reason);
+  let timedOut = false;
+  const timeoutMs = options.timeoutMs ?? 30_000;
+  const timeout = globalThis.setTimeout(() => {
+    timedOut = true;
+    controller.abort(new DOMException('Timed out', 'TimeoutError'));
+  }, timeoutMs);
+  options.signal.addEventListener('abort', abort, { once: true });
+  if (options.signal.aborted) abort();
+
+  try {
+    const transformed = options.transformRequest
+      ? await options.transformRequest(service.style, 'Style' as maplibregl.ResourceType)
+      : undefined;
+    const request = transformed ?? { url: service.style };
+    const response = await options.fetch(request.url, {
+      signal: controller.signal,
+      headers: request.headers,
+      method: request.method,
+      body: request.body,
+      credentials: request.credentials,
+      cache: request.cache,
+      referrerPolicy: request.referrerPolicy,
+    });
+    if (!response.ok) {
+      throw new Error(`MapLibre overlay style request failed: HTTP ${response.status}`);
+    }
+    return prepareMapLibreOverlayStyle(service.id, await response.json(), response.url);
+  } catch (error) {
+    if (timedOut) {
+      throw new Error(`MapLibre overlay style request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
+    options.signal.removeEventListener('abort', abort);
   }
 }
 

@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type * as maplibregl from 'maplibre-gl';
+import type { MapLibreOverlayStyleService } from './maplibre-service';
 import {
   composeMapLibreStyle,
+  loadMapLibreOverlayStyle,
   prepareMapLibreOverlayStyle,
 } from './maplibre-overlay-style';
 
@@ -289,5 +291,158 @@ describe('composeMapLibreStyle', () => {
         { prepared, visible: true },
       ]),
     ).toThrow('MapLibre overlay glyphs URL conflicts with the active style');
+  });
+});
+
+function createStyleService(
+  style: string | maplibregl.StyleSpecification,
+): MapLibreOverlayStyleService {
+  return { id: 'bright/service', name: 'Bright', role: 'overlay', style };
+}
+
+function createResponse(
+  body: unknown,
+  options: { status?: number; url?: string } = {},
+): Response {
+  return {
+    ok: (options.status ?? 200) >= 200 && (options.status ?? 200) < 300,
+    status: options.status ?? 200,
+    url: options.url ?? STYLE_URL,
+    json: vi.fn().mockResolvedValue(body),
+  } as unknown as Response;
+}
+
+describe('loadMapLibreOverlayStyle', () => {
+  it('loads overlay style objects without fetching and clones them', async () => {
+    const style = createFixture();
+    const fetch = vi.fn();
+
+    const prepared = await loadMapLibreOverlayStyle(createStyleService(style), {
+      signal: new AbortController().signal,
+      fetch,
+    });
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(prepared.style).not.toBe(style);
+    expect(style.layers[1]?.id).toBe('routes');
+    expect(prepared.layerIds).toEqual([`${PREFIX}:routes`, `${PREFIX}:land`, `${PREFIX}:labels`]);
+  });
+
+  it('loads overlay styles through an async Style transform with matching Fetch parameters', async () => {
+    const response = createResponse(createFixture());
+    const fetch = vi.fn().mockResolvedValue(response);
+    const transformRequest = vi.fn().mockResolvedValue({
+      url: 'https://cdn.example.test/bright.json',
+      headers: { Authorization: 'Bearer token' },
+      method: 'POST',
+      body: 'request body',
+      credentials: 'include',
+      cache: 'no-store',
+      referrerPolicy: 'no-referrer',
+    });
+    const signal = new AbortController().signal;
+
+    await loadMapLibreOverlayStyle(createStyleService('./bright.json'), {
+      signal,
+      transformRequest: transformRequest as never,
+      fetch,
+    });
+
+    expect(transformRequest).toHaveBeenCalledWith('./bright.json', 'Style');
+    expect(fetch).toHaveBeenCalledWith('https://cdn.example.test/bright.json', {
+      signal: expect.anything(),
+      headers: { Authorization: 'Bearer token' },
+      method: 'POST',
+      body: 'request body',
+      credentials: 'include',
+      cache: 'no-store',
+      referrerPolicy: 'no-referrer',
+    });
+  });
+
+  it('uses the redirected response URL as the overlay style base URL', async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      createResponse(createFixture(), {
+        url: 'https://redirected.example.test/released/bright.json',
+      }),
+    );
+
+    const prepared = await loadMapLibreOverlayStyle(createStyleService(STYLE_URL), {
+      signal: new AbortController().signal,
+      fetch,
+    });
+
+    expect(prepared.style.sources[`${PREFIX}:earth`]).toMatchObject({
+      url: 'https://redirected.example.test/released/earth.json',
+    });
+  });
+
+  it('rejects non-successful overlay style responses', async () => {
+    await expect(
+      loadMapLibreOverlayStyle(createStyleService(STYLE_URL), {
+        signal: new AbortController().signal,
+        fetch: vi.fn().mockResolvedValue(createResponse({}, { status: 503 })),
+      }),
+    ).rejects.toThrow('MapLibre overlay style request failed: HTTP 503');
+  });
+
+  it('surfaces JSON and Style v8 errors from overlay style responses', async () => {
+    const invalidJson = createResponse({});
+    vi.mocked(invalidJson.json).mockRejectedValue(new SyntaxError('Unexpected token'));
+
+    await expect(
+      loadMapLibreOverlayStyle(createStyleService(STYLE_URL), {
+        signal: new AbortController().signal,
+        fetch: vi.fn().mockResolvedValue(invalidJson),
+      }),
+    ).rejects.toThrow('Unexpected token');
+    await expect(
+      loadMapLibreOverlayStyle(createStyleService(STYLE_URL), {
+        signal: new AbortController().signal,
+        fetch: vi.fn().mockResolvedValue(createResponse({ version: 7, sources: {}, layers: [] })),
+      }),
+    ).rejects.toThrow('MapLibre overlay styles must use version 8');
+  });
+
+  it('aborts overlay style loading with the caller AbortError', async () => {
+    const controller = new AbortController();
+    const abortError = new DOMException('Superseded', 'AbortError');
+    const fetch = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+        }),
+    );
+    const loading = loadMapLibreOverlayStyle(createStyleService(STYLE_URL), {
+      signal: controller.signal,
+      fetch,
+    });
+
+    controller.abort(abortError);
+
+    await expect(loading).rejects.toBe(abortError);
+  });
+
+  it('times out overlay style loading after exactly 30000ms', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+        }),
+    );
+    const loading = loadMapLibreOverlayStyle(createStyleService(STYLE_URL), {
+      signal: new AbortController().signal,
+      fetch,
+    });
+
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(loading).rejects.toThrow(
+      'MapLibre overlay style request timed out after 30000ms',
+    );
+    vi.useRealTimers();
   });
 });
