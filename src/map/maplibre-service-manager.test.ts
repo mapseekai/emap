@@ -3396,4 +3396,216 @@ describe('MapLibreServiceManager overlay rendering', () => {
       { id: 'emap-overlay:two:default', url: 'https://two.test/sprite' },
     ]);
   });
+  it('style overlay visibility prepares on first show and preserves cached hidden layers across a basemap switch', async () => {
+    const fetchStyle = vi.fn(async () => new Response(JSON.stringify(brightStyle)));
+    const styleOverlay = {
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      style: 'https://example.test/bright.json',
+    } as const;
+    const alternateBasemap = {
+      ...objectBasemap,
+      id: 'dark',
+      name: 'Dark',
+      style: { ...objectBasemap.style, layers: [{ id: 'dark-fill', type: 'fill' as const, source: 'base' }] },
+    } as const;
+    const { manager } = createManager([objectBasemap, alternateBasemap, styleOverlay], { fetchStyle });
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+
+    expect(fetchStyle).not.toHaveBeenCalled();
+    await manager.setOverlayVisibility('bright', false);
+    expect(fetchStyle).not.toHaveBeenCalled();
+    expect(map.setStyleCalls).toHaveLength(0);
+
+    const show = manager.setOverlayVisibility('bright', true);
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'first show did not compose style');
+    map.emit('style.load');
+    await show;
+    expect(fetchStyle).toHaveBeenCalledTimes(1);
+
+    await manager.setOverlayVisibility('bright', false);
+    const switchRequest = manager.setBasemap('dark');
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'basemap switch did not compose style');
+    map.emit('style.load');
+    await switchRequest;
+
+    expect(map.getStyle().layers.filter((layer) => layer.id.startsWith('emap-overlay:bright:'))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ layout: expect.objectContaining({ visibility: 'none' }) }),
+      ]),
+    );
+  });
+
+  it('style overlay update defers an inactive replacement fetch until show', async () => {
+    const fetchStyle = vi.fn(async () => new Response(JSON.stringify(brightStyle)));
+    const original = {
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      style: 'https://example.test/original.json',
+    } as const;
+    const replacement = { ...original, name: 'Replacement', style: 'https://example.test/new.json' };
+    const { manager } = createManager([objectBasemap, original], { fetchStyle });
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+
+    await manager.updateService('bright', replacement);
+    expect(fetchStyle).not.toHaveBeenCalled();
+
+    const show = manager.setOverlayVisibility('bright', true);
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'show did not compose replacement');
+    map.emit('style.load');
+    await show;
+    expect(fetchStyle).toHaveBeenCalledWith('https://example.test/new.json', expect.any(Object));
+  });
+
+  it('style overlay update restores the previous prepared style and ready resources after a failure', async () => {
+    const oldStyle = brightStyle;
+    const replacementStyle = {
+      ...brightStyle,
+      glyphs: 'https://other-fonts.test/{fontstack}/{range}.pbf',
+    } as const;
+    const glyphBasemap = {
+      ...objectBasemap,
+      style: { ...objectBasemap.style, glyphs: oldStyle.glyphs },
+    } as const;
+    const { manager } = createManager([glyphBasemap]);
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+    const addition = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: oldStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'initial style was not composed');
+    map.emit('style.load');
+    await addition;
+
+    const failedUpdate = manager.updateService('bright', {
+      id: 'bright',
+      name: 'Replacement',
+      role: 'overlay',
+      visible: true,
+      style: replacementStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'rollback style was not composed');
+    map.emit('style.load');
+    await expect(failedUpdate).rejects.toThrow('glyphs URL conflicts');
+    expect(manager.getServices().find((service) => service.id === 'bright')).toMatchObject({
+      name: 'Bright',
+      style: oldStyle,
+    });
+    expect(manager.getServiceState('bright')).toMatchObject({ active: true, status: 'ready' });
+    expect(map.layers.has('emap-overlay:bright:land')).toBe(true);
+  });
+
+  it('style overlay removal removes its sprite and sole glyph URL', async () => {
+    const style = {
+      ...brightStyle,
+      sprite: 'https://one.test/sprite',
+      glyphs: 'https://fonts.test/{fontstack}/{range}.pbf',
+    } as const;
+    const { manager } = createManager([objectBasemap]);
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+    const addition = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'style was not composed');
+    map.emit('style.load');
+    await addition;
+
+    const removal = manager.removeService('bright');
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'removal was not composed');
+    map.emit('style.load');
+    await removal;
+    expect(map.appliedStyles.at(-1)).not.toHaveProperty('glyphs');
+    expect(map.appliedStyles.at(-1)).not.toHaveProperty('sprite');
+  });
+
+  it('style overlay update rejects a cross-form replacement without leaving stale resources', async () => {
+    const { manager } = createManager([objectBasemap]);
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+    const addition = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: brightStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'style was not composed');
+    map.emit('style.load');
+    await addition;
+
+    await expect(
+      manager.updateService('bright', {
+        id: 'bright',
+        name: 'Resources',
+        role: 'overlay',
+        sources: { resources: { type: 'vector', url: 'https://example.test/resources.json' } },
+        layers: [{ id: 'resources', type: 'line', source: 'resources' }],
+      }),
+    ).rejects.toThrow('overlay form cannot change');
+    expect(manager.getServices().find((service) => service.id === 'bright')).toMatchObject({
+      style: brightStyle,
+    });
+    expect(map.layers.has('emap-overlay:bright:land')).toBe(true);
+  });
+  it('glyph URL conflicts roll back a basemap switch while the active style overlay remains ready', async () => {
+    const glyphOverlay = {
+      ...brightStyle,
+      glyphs: 'https://fonts.test/{fontstack}/{range}.pbf',
+    } as const;
+    const conflictingBasemap = {
+      ...objectBasemap,
+      id: 'dark',
+      name: 'Dark',
+      style: {
+        ...objectBasemap.style,
+        glyphs: 'https://other-fonts.test/{fontstack}/{range}.pbf',
+      },
+    } as const;
+    const { manager } = createManager([objectBasemap, conflictingBasemap]);
+    const initial = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await initial;
+    const addition = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: glyphOverlay,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'overlay was not composed');
+    map.emit('style.load');
+    await addition;
+
+    const switchRequest = manager.setBasemap('dark');
+    await expect(switchRequest).rejects.toThrow('glyphs URL conflicts');
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'old basemap was not restored');
+    map.emit('style.load');
+    expect(manager.getServiceState('light')).toMatchObject({ active: true, status: 'ready' });
+    expect(manager.getServiceState('bright')).toMatchObject({ active: true, status: 'ready' });
+    expect(manager.getServiceState('dark')).toMatchObject({ active: false, status: 'error' });
+  });
 });

@@ -390,6 +390,13 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (
       record.definition.role === 'overlay' &&
       service.role === 'overlay' &&
+      isStyleOverlayService(record.definition) !== isStyleOverlayService(service)
+    ) {
+      throw new Error('MapLibre overlay form cannot change');
+    }
+    if (
+      record.definition.role === 'overlay' &&
+      service.role === 'overlay' &&
       isStyleOverlayService(record.definition) &&
       isStyleOverlayService(service)
     ) {
