@@ -2109,6 +2109,30 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
   private _handleDesiredSetupFailure(request: StyleRequest, error: Error): void {
     this._rejectStyleRequest(request, error);
+    const trigger = request.triggerServiceId
+      ? this._registry.get(request.triggerServiceId)
+      : undefined;
+    if (trigger?.definition.role === 'overlay' && isStyleOverlayService(trigger.definition)) {
+      trigger.preparedStyle = undefined;
+      trigger.state = {
+        id: trigger.definition.id,
+        active: false,
+        status: 'error',
+        error,
+      };
+      if (this._desiredRequest === request) {
+        const committed =
+          this._committedRequest &&
+          this._readyStyle?.requestRevision === this._committedRequest.revision
+            ? this._committedRequest
+            : null;
+        this._desiredRequest = committed;
+      }
+      this._emitFatalError(trigger.definition.id, error);
+      this._emitChange(trigger.definition, 'status', trigger.state);
+      this._syncVisibility();
+      return;
+    }
     if (request.basemapId === null) return;
     if (!this._publishBasemapFailure(request, error)) return;
     if (this._map) this._enqueueRecovery(request);

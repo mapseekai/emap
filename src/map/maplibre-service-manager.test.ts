@@ -3391,6 +3391,12 @@ describe('MapLibreServiceManager overlay rendering', () => {
     await expect(activation).rejects.toThrow('glyphs URL conflicts');
     expect(errors.filter((event) => event.serviceId === 'three' && event.fatal)).toHaveLength(1);
     expect(manager.getServiceState('one')).toMatchObject({ active: true, status: 'ready' });
+    expect(manager.getServiceState('light')).toMatchObject({ active: true, status: 'ready' });
+    expect(map.sources.has('base')).toBe(true);
+    expect(map.layers.has('base-fill')).toBe(true);
+    await manager.setOverlayVisibility('one', false);
+    await manager.setOverlayVisibility('one', true);
+    expect(manager.getServiceState('one')).toMatchObject({ active: true, status: 'ready' });
     expect(map.appliedStyles.at(-1)?.sprite).toEqual([
       { id: 'emap-overlay:one:default', url: 'https://one.test/sprite' },
       { id: 'emap-overlay:two:default', url: 'https://two.test/sprite' },
