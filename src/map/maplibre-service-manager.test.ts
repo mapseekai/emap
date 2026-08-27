@@ -22,7 +22,17 @@ class FakeMap {
   readonly layerOrder: string[] = [];
   readonly resourceSnapshots: Array<{ sources: string[]; layers: string[] }> = [];
   readonly setStyleCalls: Array<string | maplibregl.StyleSpecification | null> = [];
-  readonly setStyleOptions: Array<{ diff?: boolean } | undefined> = [];
+  readonly appliedStyles: maplibregl.StyleSpecification[] = [];
+  readonly setStyleOptions: Array<
+    | {
+        diff?: boolean;
+        transformStyle?: (
+          previous: maplibregl.StyleSpecification,
+          next: maplibregl.StyleSpecification,
+        ) => maplibregl.StyleSpecification;
+      }
+    | undefined
+  > = [];
   readonly operations: string[] = [];
   readonly jumpToCalls: Array<{ center: [number, number]; zoom: number }> = [];
   readonly ignoredRemovals = new Set<string>();
@@ -79,7 +89,13 @@ class FakeMap {
 
   setStyle(
     style: string | maplibregl.StyleSpecification | null,
-    options?: { diff?: boolean },
+    options?: {
+      diff?: boolean;
+      transformStyle?: (
+        previous: maplibregl.StyleSpecification,
+        next: maplibregl.StyleSpecification,
+      ) => maplibregl.StyleSpecification;
+    },
   ): void {
     this.styleRevision++;
     if (style !== null && this.styleLoading) this.setStyleWhileLoading++;
@@ -97,7 +113,18 @@ class FakeMap {
       throw error;
     }
     const sameStyle = JSON.stringify(style) === JSON.stringify(this._currentStyle);
-    this._currentStyle = style;
+    const nextStyle =
+      style && typeof style === 'object'
+        ? options?.transformStyle
+          ? options.transformStyle(
+              typeof this._currentStyle === 'object' && this._currentStyle
+                ? structuredClone(this._currentStyle)
+                : EMPTY_STYLE,
+              structuredClone(style),
+            )
+          : structuredClone(style)
+        : style;
+    this._currentStyle = nextStyle;
     if (style !== null && sameStyle && options?.diff !== false) {
       this.styleLoading = false;
       return;
@@ -108,6 +135,21 @@ class FakeMap {
       this.layers.clear();
       this.layerOrder.length = 0;
     }
+    if (nextStyle && typeof nextStyle === 'object') {
+      this.appliedStyles.push(nextStyle);
+      for (const [id, source] of Object.entries(nextStyle.sources)) {
+        this.sources.set(id, { id, specification: source });
+      }
+      for (const layer of nextStyle.layers) {
+        this.layers.set(layer.id, { id: layer.id, specification: layer });
+        this.layerOrder.push(layer.id);
+      }
+    }
+  }
+
+  getStyle(): maplibregl.StyleSpecification {
+    if (!this._currentStyle || typeof this._currentStyle === 'string') return EMPTY_STYLE;
+    return structuredClone(this._currentStyle);
   }
 
   delayedStyleLoad(): () => void {
@@ -265,12 +307,37 @@ const EMPTY_STYLE: maplibregl.StyleSpecification = {
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: unknown) => void;
+
   const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
   });
   return { promise, resolve, reject };
 }
+const brightStyle = {
+  version: 8,
+  sprite: 'https://tiles.openfreemap.org/styles/sprite',
+  glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+  sources: {
+    land: { type: 'vector', url: 'https://tiles.openfreemap.org/land.json' },
+    places: { type: 'vector', url: 'https://tiles.openfreemap.org/places.json' },
+  },
+  layers: [
+    { id: 'background', type: 'background', paint: { 'background-color': '#fff' } },
+    { id: 'land', type: 'fill', source: 'land', 'source-layer': 'land' },
+    { id: 'roads', type: 'line', source: 'land', 'source-layer': 'roads' },
+    { id: 'places', type: 'symbol', source: 'places', 'source-layer': 'places' },
+  ],
+} as const satisfies maplibregl.StyleSpecification;
+
+const objectBasemap = {
+  ...base,
+  style: {
+    version: 8,
+    sources: {},
+    layers: [{ id: 'base-fill', type: 'fill', source: 'base' }],
+  },
+} as const satisfies MapLibreService;
 
 function fakeModule(): typeof import('maplibre-gl') {
   return { Map: FakeMap } as unknown as typeof import('maplibre-gl');
@@ -317,6 +384,7 @@ function createManager(
     crs?: string;
     defaultBasemap?: string;
     mapOptions?: maplibregl.MapOptions;
+    fetchStyle?: typeof fetch;
   } = {},
 ) {
   FakeMap.instances.length = 0;
@@ -335,6 +403,7 @@ function createManager(
       mapOptions: options.mapOptions,
     },
     loadMapLibre,
+    options.fetchStyle,
   );
   return { host, loadMapLibre, manager };
 }
@@ -614,6 +683,54 @@ describe('MapLibreServiceManager registry', () => {
 });
 
 describe('MapLibreServiceManager basemap style coordinator', () => {
+
+  it('composes OpenFreeMap Bright without replacing the active basemap', async () => {
+    const fetchStyle = vi.fn(async () => new Response(JSON.stringify(brightStyle)));
+    const { manager } = createManager([{ ...roads, visible: true }, objectBasemap], { fetchStyle });
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+
+    const addition = manager.addService({
+      id: 'openfreemap-bright',
+      name: 'OpenFreeMap Bright',
+      role: 'overlay',
+      visible: true,
+      style: 'https://tiles.openfreemap.org/styles/bright',
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'style overlay was not composed');
+    map.emit('style.load');
+    await addition;
+
+    const style = map.appliedStyles.at(-1);
+    expect(style?.layers.map((layer) => layer.id)).toEqual([
+      'base-fill',
+      'emap-overlay:openfreemap-bright:land',
+      'emap-overlay:openfreemap-bright:roads',
+      'emap-overlay:openfreemap-bright:places',
+    ]);
+    expect(map.layerOrder).toEqual([
+      'base-fill',
+      'emap-overlay:openfreemap-bright:land',
+      'emap-overlay:openfreemap-bright:roads',
+      'emap-overlay:openfreemap-bright:places',
+      'roads-line',
+    ]);
+    expect(style?.sources).toMatchObject({
+      'emap-overlay:openfreemap-bright:land': brightStyle.sources.land,
+      'emap-overlay:openfreemap-bright:places': brightStyle.sources.places,
+    });
+    expect(style?.sprite).toEqual([
+      { id: 'emap-overlay:openfreemap-bright:default', url: brightStyle.sprite },
+    ]);
+    expect(style?.glyphs).toBe(brightStyle.glyphs);
+    expect(manager.getServiceState('openfreemap-bright')).toMatchObject({ status: 'ready' });
+    expect(manager.getServices().find((service) => service.id === 'openfreemap-bright')).toMatchObject({
+      style: 'https://tiles.openfreemap.org/styles/bright',
+    });
+  });
+
   it('commits one selected basemap and publishes old then new snapshots', async () => {
     const { manager } = createManager([base, dark]);
     const changes: Array<{ id: string; active: boolean; status: string }> = [];
