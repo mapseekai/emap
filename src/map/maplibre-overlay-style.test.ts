@@ -22,6 +22,13 @@ function createFixture(): maplibregl.StyleSpecification {
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': '#fff' } },
       {
+        id: 'routes',
+        type: 'line',
+        source: 'earth',
+        'source-layer': 'road',
+        paint: { 'line-pattern': 'highway' },
+      },
+      {
         id: 'land',
         type: 'fill',
         source: 'earth',
@@ -57,6 +64,7 @@ describe('prepareMapLibreOverlayStyle', () => {
     expect(prepared.style.layers.some((layer) => layer.type === 'background')).toBe(false);
     expect(Object.keys(prepared.style.sources)).toEqual([`${PREFIX}:earth`, `${PREFIX}:tiles`]);
     expect(prepared.style.layers.map((layer) => layer.id)).toEqual([
+      `${PREFIX}:routes`,
       `${PREFIX}:land`,
       `${PREFIX}:labels`,
     ]);
@@ -72,6 +80,11 @@ describe('prepareMapLibreOverlayStyle', () => {
     });
     expect(prepared.style.layers).toMatchObject([
       {
+        id: `${PREFIX}:routes`,
+        source: `${PREFIX}:earth`,
+        paint: { 'line-pattern': `${PREFIX}:default:highway` },
+      },
+      {
         id: `${PREFIX}:land`,
         source: `${PREFIX}:earth`,
         paint: { 'fill-pattern': `${PREFIX}:default:terrain` },
@@ -85,7 +98,7 @@ describe('prepareMapLibreOverlayStyle', () => {
       },
     ]);
     expect(prepared.sourceIds).toEqual([`${PREFIX}:earth`, `${PREFIX}:tiles`]);
-    expect(prepared.layerIds).toEqual([`${PREFIX}:land`, `${PREFIX}:labels`]);
+    expect(prepared.layerIds).toEqual([`${PREFIX}:routes`, `${PREFIX}:land`, `${PREFIX}:labels`]);
     expect(prepared.spriteIds).toEqual([`${PREFIX}:default`]);
     expect(prepared.resourceUrls).toEqual(
       new Set([
@@ -99,16 +112,56 @@ describe('prepareMapLibreOverlayStyle', () => {
 
   it('prefixes literal icon-image references for a default sprite', () => {
     const fixture = createFixture();
-    fixture.layers[2] = {
-      ...fixture.layers[2],
+    fixture.layers[3] = {
+      ...fixture.layers[3],
       layout: { 'icon-image': 'marker' },
     } as maplibregl.LayerSpecification;
 
     const prepared = prepareMapLibreOverlayStyle('bright/service', fixture, STYLE_URL);
 
-    expect(prepared.style.layers[1]).toMatchObject({
+    expect(prepared.style.layers[2]).toMatchObject({
       layout: { 'icon-image': `${PREFIX}:default:marker` },
     });
+  });
+
+  it('preserves absolute URL schemes verbatim in styles and resource URLs', () => {
+    const fixture = createFixture();
+    fixture.sprite = 'custom://sprite/%7Bname%7D';
+    fixture.glyphs = 'data:application/octet-stream,%7Bfont%7D';
+    fixture.sources.earth = {
+      type: 'geojson',
+      data: 'blob:https://tiles.example.test/%7Bdata%7D',
+    } as maplibregl.SourceSpecification;
+    fixture.sources.tiles = {
+      type: 'vector',
+      url: 'custom://tiles/%7Burl%7D',
+      tiles: ['data:application/json,%7Btile%7D', 'blob:https://tiles.example.test/%7Btile%7D'],
+      urls: ['custom://tiles/%7Burls%7D'],
+    } as maplibregl.SourceSpecification;
+
+    const prepared = prepareMapLibreOverlayStyle('bright/service', fixture, STYLE_URL);
+
+    expect(prepared.style.sprite).toEqual([{ id: `${PREFIX}:default`, url: 'custom://sprite/%7Bname%7D' }]);
+    expect(prepared.style.glyphs).toBe('data:application/octet-stream,%7Bfont%7D');
+    expect(prepared.style.sources[`${PREFIX}:earth`]).toMatchObject({
+      data: 'blob:https://tiles.example.test/%7Bdata%7D',
+    });
+    expect(prepared.style.sources[`${PREFIX}:tiles`]).toMatchObject({
+      url: 'custom://tiles/%7Burl%7D',
+      tiles: ['data:application/json,%7Btile%7D', 'blob:https://tiles.example.test/%7Btile%7D'],
+      urls: ['custom://tiles/%7Burls%7D'],
+    });
+    expect(prepared.resourceUrls).toEqual(
+      new Set([
+        'custom://sprite/%7Bname%7D',
+        'data:application/octet-stream,%7Bfont%7D',
+        'blob:https://tiles.example.test/%7Bdata%7D',
+        'custom://tiles/%7Burl%7D',
+        'data:application/json,%7Btile%7D',
+        'blob:https://tiles.example.test/%7Btile%7D',
+        'custom://tiles/%7Burls%7D',
+      ]),
+    );
   });
 
   it('preserves inputs and only normalizes URL-bearing fields', () => {
@@ -122,8 +175,8 @@ describe('prepareMapLibreOverlayStyle', () => {
       url: 'mapbox://custom-tiles',
       tiles: ['data:application/json,{}', 'blob:https://example.test/id'],
     } as maplibregl.SourceSpecification;
-    fixture.layers[1] = {
-      ...fixture.layers[1],
+    fixture.layers[2] = {
+      ...fixture.layers[2],
       filter: ['==', ['get', 'name'], 'terrain'],
       layout: { 'text-font': ['Open Sans Regular'] },
     } as maplibregl.LayerSpecification;
@@ -145,7 +198,7 @@ describe('prepareMapLibreOverlayStyle', () => {
       url: 'mapbox://custom-tiles',
       tiles: ['data:application/json,{}', 'blob:https://example.test/id'],
     });
-    expect(prepared.style.layers[0]).toMatchObject({
+    expect(prepared.style.layers[1]).toMatchObject({
       filter: ['==', ['get', 'name'], 'terrain'],
       layout: { 'text-font': ['Open Sans Regular'] },
     });

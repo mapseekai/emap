@@ -36,9 +36,8 @@ function cloneValue<T>(value: T): T {
   }
   return value;
 }
-
 function resolveUrl(url: string, baseUrl: string | undefined): string {
-  if (!baseUrl) return url;
+  if (/^[A-Za-z][A-Za-z\d+.-]*:/.test(url) || !baseUrl) return url;
   try {
     return new URL(url, baseUrl).href.replaceAll('%7B', '{').replaceAll('%7D', '}');
   } catch {
