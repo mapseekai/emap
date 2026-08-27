@@ -16,6 +16,7 @@ function makePainterStub() {
   return {
     drawPoints: vi.fn(),
     drawPaths: vi.fn(),
+    drawPolygonFill: vi.fn(),
     setColor: vi.fn(),
     drawArcs: vi.fn(),
   } as unknown as CorePainter & { drawPoints: any; drawPaths: any };
@@ -128,6 +129,48 @@ describe('HighlightManager.renderHighlights', () => {
       expect.anything(),
     );
     expect(painter.drawPoints).not.toHaveBeenCalled();
+    expect(painter.drawPolygonFill).not.toHaveBeenCalled();
+  });
+
+  it('fills polygon interiors when fillOpacity is set', () => {
+    const h = new HighlightManager();
+    const layer: MapshaperLayer = {
+      name: 'parks',
+      geometry_type: 'polygon',
+      shapes: [[[0]], [[1]], [[2]]],
+    } as MapshaperLayer;
+    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([layer])]]);
+    h.setHighlightedFeatures(
+      [{ source: 'src1', layer: 'parks', id: 1, geometryType: 'polygon', properties: {} }],
+      { color: '#1e88e5', fillOpacity: 0.3 },
+    );
+    const painter = makePainterStub();
+    h.renderHighlights(painter, sources, new AffineTransform(), 1);
+    expect(painter.drawPolygonFill).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      '#1e88e5',
+      undefined,
+      0.3,
+    );
+    expect(painter.drawPaths).toHaveBeenCalled();
+  });
+
+  it('keeps polygon highlights outline-only without fillOpacity', () => {
+    const h = new HighlightManager();
+    const layer: MapshaperLayer = {
+      name: 'parks',
+      geometry_type: 'polygon',
+      shapes: [[[0]], [[1]], [[2]]],
+    } as MapshaperLayer;
+    const sources = new globalThis.Map<string, TopologySource>([['src1', makeSource([layer])]]);
+    h.setHighlightedFeatures([
+      { source: 'src1', layer: 'parks', id: 1, geometryType: 'polygon', properties: {} },
+    ]);
+    const painter = makePainterStub();
+    h.renderHighlights(painter, sources, new AffineTransform(), 1);
+    expect(painter.drawPolygonFill).not.toHaveBeenCalled();
+    expect(painter.drawPaths).toHaveBeenCalled();
   });
 
   it('renders point highlights via drawPoints', () => {

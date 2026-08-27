@@ -99,6 +99,14 @@ export class HighlightManager {
             fill: highlightFill,
           });
         } else if (arcs) {
+          const fillOpacity = this._highlightStyle.fillOpacity;
+          if (
+            layer.geometry_type === 'polygon' &&
+            typeof fillOpacity === 'number' &&
+            fillOpacity > 0
+          ) {
+            painter.drawPolygonFill(shapes, arcs, highlightColor, undefined, fillOpacity);
+          }
           painter.drawPaths(shapes, { color: highlightColor, width: highlightWidth }, arcs);
         }
       }

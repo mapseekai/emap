@@ -1230,6 +1230,12 @@ export interface HighlightStyle {
   width?: number;
   radius?: number;
   fill?: boolean;
+  /**
+   * Fill opacity applied to highlighted polygon interiors, multiplied with
+   * `color`'s own alpha (MapLibre `fill-opacity` semantics). Unset or `0`
+   * keeps polygon highlights outline-only; `fill` remains point-only.
+   */
+  fillOpacity?: number;
 }
 
 // Aliased to the canonical path-shape vocabulary in `types/mapshaper-types`.

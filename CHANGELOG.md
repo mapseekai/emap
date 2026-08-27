@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   target feature; deleting a part is selection-free, and removing a feature's
   last part deletes the whole feature; the `reshape-ring-part` example and
   editing guide document the workflow.
+- `HighlightStyle` gains `fillOpacity` so highlighted polygon interiors can
+  render filled instead of outline-only; the `reshape-ring-part` example now
+  fills its selection highlight.
 
 ### Fixed
 
