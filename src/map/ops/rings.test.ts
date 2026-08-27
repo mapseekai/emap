@@ -124,6 +124,20 @@ function integrationHarness(dataset: MapshaperDataset) {
 }
 
 describe('addRing', () => {
+  it('accepts a target polygon whose existing hole touches the shell at one point', async () => {
+    // GEOS-valid tangent contact (a simplified hole vertex snapped onto the
+    // shell edge) must not block adding another hole.
+    const fixture = await createFixture([
+      [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],
+      [[10, 5], [8, 5], [8, 7], [10, 5]],
+    ]);
+    await expect(addRing(fixture.ctx, { ring: [[4, 4], [6, 4], [6, 6], [4, 6]] })).resolves.toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(exported(fixture.dataset()).coordinates).toHaveLength(3);
+  });
+
   it('adds a centered hole, preserves selection, and supports undo', async () => {
     const fixture = await createFixture();
     const before = exported(fixture.dataset());
@@ -327,6 +341,18 @@ describe('source-scan error flow', () => {
 });
 
 describe('deleteRing', () => {
+  it('deletes a hole that touches the shell at one point', async () => {
+    const fixture = await createFixture([
+      [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],
+      [[10, 5], [8, 5], [8, 7], [10, 5]],
+    ]);
+    await expect(deleteRing(fixture.ctx, { point: [9, 6] })).resolves.toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(exported(fixture.dataset()).coordinates).toHaveLength(1);
+  });
+
   it('deletes the hole containing the point without any selection', async () => {
     const fixture = await createFixture(
       [

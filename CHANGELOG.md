@@ -37,6 +37,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Polygon editing validation now follows GEOS/OGC ring-contact semantics:
+  rings that merely touch at an isolated point (e.g. a hole vertex snapped
+  onto the shell by upstream simplification) no longer make a feature
+  uneditable in `addRing`/`deleteRing`/`addPart`/`deletePart`; proper
+  crossings and shared edges are still rejected.
+- Ring editing no longer analyzes the whole dataset's ring topology per click:
+  `addRing`/`deleteRing` prefilter features with a point-in-ring containment
+  test and only run exterior grouping / segment extraction for candidates
+  (feature scan 6.7s → 0.16s on a 3.6M-vertex land-use dataset).
+- Shapefile-only imports (including ZIP bundles) now restore tangent holes
+  encoded inside one pinched polygon part before CRS normalization. Nested
+  opposite-winding pieces remain holes; non-contained lobes are reoriented as
+  separate exteriors instead of becoming orphan holes, so
+  `addRing`/`deleteRing` match QGIS without losing geometry.
 - Reshape, ring, and part editing no longer freeze the UI on complex polygons:
   segment-conflict validation now uses a Flatbush broad-phase index instead of
   O(S²) all-pairs scans, ring/part ops validate the geometry once per

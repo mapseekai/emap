@@ -163,6 +163,9 @@ declare module 'mapshaper' {
     buildPolygonMosaic(nodes: { setArcFilter(filter: (arcId: number) => boolean): void }): {
       mosaic: number[][][];
     };
+    getSelfIntersectionSplitter(
+      nodes: { setArcFilter(filter: (arcId: number) => boolean): void },
+    ): (ring: number[]) => number[][];
     findAnchorPoint(
       shape: number[][],
       arcs: ArcCollection,

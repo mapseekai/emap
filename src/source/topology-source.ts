@@ -407,6 +407,19 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         : await this._adapter.runImport(cmd, inputFiles);
 
       if (
+        primaryFiles.length > 0 &&
+        primaryFiles.every((filename) => /\.shp$/i.test(filename))
+      ) {
+        // Shapefile has no explicit shell↔hole grouping. Writers such as QGIS
+        // may encode a hole tangent to its shell as one pinched ring; restore
+        // simple rings before CRS normalization or any editing operation sees
+        // the dataset. Mixed-format imports are not normalized as one unit:
+        // layer provenance is no longer available after mapshaper combines
+        // their datasets, so a dataset-wide rewrite would mutate non-SHP data.
+        this._adapter.splitSelfIntersectingPolygonRings(dataset);
+      }
+
+      if (
         resolveDatasetCRSMetadata(dataset) === undefined &&
         primaryFiles.every((f) => WGS84_SPEC_FORMAT_RE.test(f))
       ) {

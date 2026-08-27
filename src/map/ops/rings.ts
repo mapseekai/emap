@@ -134,6 +134,15 @@ export async function addRing(ctx: OpContext, options: AddRingOptions): Promise<
         for (let featureId = 0; featureId < workingLayer.shapes.length; featureId++) {
           const shape = workingLayer.shapes[featureId] as PathShape | null;
           if (!shape?.length) continue;
+          // Cheap prefilter: if the first ring vertex lies outside every ring
+          // of this feature, the ring cannot be contained — skip the precise
+          // (expensive) ringTarget analysis for it.
+          if (
+            !shape.some((part) =>
+              adapter.testPointInPolygon(ring[0]![0], ring[0]![1], [part], workingArcs),
+            )
+          )
+            continue;
           const target = ringTarget(ring, shape, workingArcs, adapter);
           if (target === 'outside') continue;
           if (typeof target === 'string') {
@@ -181,6 +190,13 @@ export async function deleteRing(ctx: OpContext, options: DeleteRingOptions): Pr
         for (let featureId = 0; featureId < workingLayer.shapes.length; featureId++) {
           const shape = workingLayer.shapes[featureId] as PathShape | null;
           if (!shape?.length) continue;
+          // Cheap prefilter: unless the click falls inside at least one ring,
+          // this feature can neither contain the point in a hole nor as a
+          // body — skip the (expensive) exterior grouping for it.
+          if (
+            !shape.some((part) => adapter.testPointInPolygon(px, py, [part], workingArcs))
+          )
+            continue;
           for (const group of collectPolygonExteriors(shape, workingArcs, adapter)) {
             if (!adapter.testPointInPolygon(px, py, [shape[group.exteriorIndex]!], workingArcs)) continue;
             const ringIndex = group.holeIndexes.find((holeIndex) =>

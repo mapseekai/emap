@@ -26,7 +26,7 @@ default adapter implementation can stay a one-line delegation.</p>
 <ul class="tsd-hierarchy">
 <li><a href="../interfaces/emap.MapshaperAdapter.html" class="tsd-signature-type tsd-kind-interface">MapshaperAdapter</a></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L634">src/adapter/mapshaper-adapter.ts:634</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L642">src/adapter/mapshaper-adapter.ts:642</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -79,6 +79,7 @@ default adapter implementation can stay a one-line delegation.</p>
 <a href="#runondatasetparsed" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>run<wbr/>On<wbr/>Dataset<wbr/>Parsed</span></a>
 <a href="#simplifyarcsfast" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>simplify<wbr/>Arcs<wbr/>Fast</span></a>
 <a href="#snapvertices" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>snap<wbr/>Vertices</span></a>
+<a href="#splitselfintersectingpolygonrings" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>split<wbr/>Self<wbr/>Intersecting<wbr/>Polygon<wbr/>Rings</span></a>
 <a href="#testpointinpolygon" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>test<wbr/>Point<wbr/>In<wbr/>Polygon</span></a>
 <a href="#testpointinring" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>test<wbr/>Point<wbr/>In<wbr/>Ring</span></a>
 <a href="#unpacksessiondata" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>unpack<wbr/>Session<wbr/>Data</span></a>
@@ -120,7 +121,7 @@ shared-arc topology. Mutates <code>dataset.arcs</code> in place. Surfaces as
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#addintersectioncuts">addIntersectionCuts</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L777">src/adapter/mapshaper-adapter.ts:777</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L811">src/adapter/mapshaper-adapter.ts:811</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="appendarc"><span>append<wbr/>Arc</span><a href="#appendarc" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -144,7 +145,7 @@ rings; this batches the copy to O(existing + points) once.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#appendarc">appendArc</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L655">src/adapter/mapshaper-adapter.ts:655</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L663">src/adapter/mapshaper-adapter.ts:663</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="appendemptyarc"><span>append<wbr/>Empty<wbr/>Arc</span><a href="#appendemptyarc" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -163,7 +164,7 @@ calls write into it.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#appendemptyarc">appendEmptyArc</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L647">src/adapter/mapshaper-adapter.ts:647</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L655">src/adapter/mapshaper-adapter.ts:655</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="appendvertex"><span>append<wbr/>Vertex</span><a href="#appendvertex" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -186,7 +187,7 @@ directly (mapshaper accepts <code>[x, y]</code> rather than separate args).</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#appendvertex">appendVertex</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L651">src/adapter/mapshaper-adapter.ts:651</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L659">src/adapter/mapshaper-adapter.ts:659</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="buildpolygonmosaic"><span>build<wbr/>Polygon<wbr/>Mosaic</span><a href="#buildpolygonmosaic" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -207,7 +208,7 @@ directly (mapshaper accepts <code>[x, y]</code> rather than separate args).</p>
 <h4 class="tsd-returns-title">Returns <a href="../types/emap.PathShape.html" class="tsd-signature-type tsd-kind-type-alias">PathShape</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#buildpolygonmosaic">buildPolygonMosaic</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L725">src/adapter/mapshaper-adapter.ts:725</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L733">src/adapter/mapshaper-adapter.ts:733</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="buildtopology"><span>build<wbr/>Topology</span><a href="#buildtopology" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -225,7 +226,7 @@ directly (mapshaper accepts <code>[x, y]</code> rather than separate args).</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#buildtopology">buildTopology</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L832">src/adapter/mapshaper-adapter.ts:832</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L866">src/adapter/mapshaper-adapter.ts:866</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="cleanarcreferences"><span>clean<wbr/>Arc<wbr/>References</span><a href="#cleanarcreferences" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -243,7 +244,7 @@ directly (mapshaper accepts <code>[x, y]</code> rather than separate args).</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#cleanarcreferences">cleanArcReferences</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L746">src/adapter/mapshaper-adapter.ts:746</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L780">src/adapter/mapshaper-adapter.ts:780</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="cleanpathsafterimport"><span>clean<wbr/>Paths<wbr/>After<wbr/>Import</span><a href="#cleanpathsafterimport" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -265,7 +266,7 @@ dropping) mapshaper's own importers run before topology building.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#cleanpathsafterimport">cleanPathsAfterImport</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L828">src/adapter/mapshaper-adapter.ts:828</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L862">src/adapter/mapshaper-adapter.ts:862</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="copydataset"><span>copy<wbr/>Dataset</span><a href="#copydataset" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -285,7 +286,7 @@ letting the in-place clip / dissolve / buffer pipeline run.</p>
 <h4 class="tsd-returns-title">Returns <a href="../interfaces/emap.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#copydataset">copyDataset</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L907">src/adapter/mapshaper-adapter.ts:907</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L941">src/adapter/mapshaper-adapter.ts:941</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="createdatatable"><span>create<wbr/>Data<wbr/>Table</span><a href="#createdatatable" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -303,7 +304,7 @@ letting the in-place clip / dissolve / buffer pipeline run.</p>
 <h4 class="tsd-returns-title">Returns <a href="../interfaces/emap.DataTable.html" class="tsd-signature-type tsd-kind-interface">DataTable</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#createdatatable">createDataTable</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L836">src/adapter/mapshaper-adapter.ts:836</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L870">src/adapter/mapshaper-adapter.ts:870</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="createpathimporter"><span>create<wbr/>Path<wbr/>Importer</span><a href="#createpathimporter" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -321,7 +322,7 @@ letting the in-place clip / dissolve / buffer pipeline run.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">PathImporterHandle</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#createpathimporter">createPathImporter</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L824">src/adapter/mapshaper-adapter.ts:824</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L858">src/adapter/mapshaper-adapter.ts:858</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="deletelastarc"><span>delete<wbr/>Last<wbr/>Arc</span><a href="#deletelastarc" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -339,7 +340,7 @@ letting the in-place clip / dissolve / buffer pipeline run.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#deletelastarc">deleteLastArc</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L684">src/adapter/mapshaper-adapter.ts:684</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L692">src/adapter/mapshaper-adapter.ts:692</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="deletevertex"><span>delete<wbr/>Vertex</span><a href="#deletevertex" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -360,7 +361,7 @@ letting the in-place clip / dissolve / buffer pipeline run.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#deletevertex">deleteVertex</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L643">src/adapter/mapshaper-adapter.ts:643</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L651">src/adapter/mapshaper-adapter.ts:651</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="distance2d"><span>distance2<wbr/>D</span><a href="#distance2d" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -387,7 +388,7 @@ letting the in-place clip / dissolve / buffer pipeline run.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#distance2d">distance2D</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L807">src/adapter/mapshaper-adapter.ts:807</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L841">src/adapter/mapshaper-adapter.ts:841</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="exportdatasetstopack"><span>export<wbr/>Datasets<wbr/>To<wbr/>Pack</span><a href="#exportdatasetstopack" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -412,7 +413,7 @@ buffers; <code>false</code> skips that for the worker pipeline.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/emap.PackedSession.html" class="tsd-signature-type tsd-kind-type-alias">PackedSession</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#exportdatasetstopack">exportDatasetsToPack</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L869">src/adapter/mapshaper-adapter.ts:869</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L903">src/adapter/mapshaper-adapter.ts:903</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="exportfilecontent"><span>export<wbr/>File<wbr/>Content</span><a href="#exportfilecontent" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -433,7 +434,7 @@ buffers; <code>false</code> skips that for the worker pipeline.</p>
 <h4 class="tsd-returns-title">Returns <a href="../interfaces/emap.ExportedFile.html" class="tsd-signature-type tsd-kind-interface">ExportedFile</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#exportfilecontent">exportFileContent</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L903">src/adapter/mapshaper-adapter.ts:903</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L937">src/adapter/mapshaper-adapter.ts:937</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="exportpackeddatasets"><span>export<wbr/>Packed<wbr/>Datasets</span><a href="#exportpackeddatasets" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -454,7 +455,7 @@ buffers; <code>false</code> skips that for the worker pipeline.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/emap.ExportedFile.html" class="tsd-signature-type tsd-kind-interface">ExportedFile</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#exportpackeddatasets">exportPackedDatasets</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L893">src/adapter/mapshaper-adapter.ts:893</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L927">src/adapter/mapshaper-adapter.ts:927</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="exportpathdata"><span>export<wbr/>Path<wbr/>Data</span><a href="#exportpathdata" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -480,7 +481,7 @@ rules; polygons get a signed <code>area</code> per path (shell &gt; 0, hole &lt;
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">ExportedPathData</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#exportpathdata">exportPathData</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L840">src/adapter/mapshaper-adapter.ts:840</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L874">src/adapter/mapshaper-adapter.ts:874</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="findarcidfromvertexid"><span>find<wbr/>Arc<wbr/>Id<wbr/>From<wbr/>Vertex<wbr/>Id</span><a href="#findarcidfromvertexid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -503,7 +504,7 @@ Used by VertexEditControl when mapping a vertex hit to a single arc.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#findarcidfromvertexid">findArcIdFromVertexId</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L692">src/adapter/mapshaper-adapter.ts:692</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L700">src/adapter/mapshaper-adapter.ts:700</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="findclosestpointonseg"><span>find<wbr/>Closest<wbr/>Point<wbr/>On<wbr/>Seg</span><a href="#findclosestpointonseg" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -542,7 +543,7 @@ snap-tolerance argument and is forwarded as-is.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#findclosestpointonseg">findClosestPointOnSeg</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L708">src/adapter/mapshaper-adapter.ts:708</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L716">src/adapter/mapshaper-adapter.ts:716</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="findnearestvertices"><span>find<wbr/>Nearest<wbr/>Vertices</span><a href="#findnearestvertices" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -568,7 +569,7 @@ array when no vertex is close enough.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#findnearestvertices">findNearestVertices</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L688">src/adapter/mapshaper-adapter.ts:688</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L696">src/adapter/mapshaper-adapter.ts:696</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="findsegmentintersections"><span>find<wbr/>Segment<wbr/>Intersections</span><a href="#findsegmentintersections" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -590,7 +591,7 @@ by <code>Emap.ops.checkGeometry</code>. Does NOT mutate the arcs.</p>
 <h4 class="tsd-returns-title">Returns <a href="../interfaces/emap.SegmentIntersection.html" class="tsd-signature-type tsd-kind-interface">SegmentIntersection</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#findsegmentintersections">findSegmentIntersections</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L784">src/adapter/mapshaper-adapter.ts:784</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L818">src/adapter/mapshaper-adapter.ts:818</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="foreachsegmentinshape"><span>for<wbr/>Each<wbr/>Segment<wbr/>In<wbr/>Shape</span><a href="#foreachsegmentinshape" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -617,7 +618,7 @@ the cursor for drag-to-insert.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#foreachsegmentinshape">forEachSegmentInShape</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L700">src/adapter/mapshaper-adapter.ts:700</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L708">src/adapter/mapshaper-adapter.ts:708</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getavgsegment"><span>get<wbr/>Avg<wbr/>Segment</span><a href="#getavgsegment" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -636,7 +637,7 @@ the cursor for drag-to-insert.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#getavgsegment">getAvgSegment</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L799">src/adapter/mapshaper-adapter.ts:799</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L833">src/adapter/mapshaper-adapter.ts:833</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getdatasetbounds"><span>get<wbr/>Dataset<wbr/>Bounds</span><a href="#getdatasetbounds" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -654,7 +655,7 @@ the cursor for drag-to-insert.</p>
 <h4 class="tsd-returns-title">Returns <a href="../interfaces/emap.MapshaperBBox.html" class="tsd-signature-type tsd-kind-interface">MapshaperBBox</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#getdatasetbounds">getDatasetBounds</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L864">src/adapter/mapshaper-adapter.ts:864</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L898">src/adapter/mapshaper-adapter.ts:898</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getintersectionlayer"><span>get<wbr/>Intersection<wbr/>Layer</span><a href="#getintersectionlayer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -681,7 +682,7 @@ pickable / editable layer.</p>
 <h4 class="tsd-returns-title">Returns <a href="../interfaces/emap.MapshaperLayer.html" class="tsd-signature-type tsd-kind-interface">MapshaperLayer</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#getintersectionlayer">getIntersectionLayer</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L791">src/adapter/mapshaper-adapter.ts:791</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L825">src/adapter/mapshaper-adapter.ts:825</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getlayerbounds"><span>get<wbr/>Layer<wbr/>Bounds</span><a href="#getlayerbounds" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -704,7 +705,7 @@ caller only reads <code>xmin/ymin/xmax/ymax</code>.</p>
 <h4 class="tsd-returns-title">Returns <a href="../interfaces/emap.MapshaperBBox.html" class="tsd-signature-type tsd-kind-interface">MapshaperBBox</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#getlayerbounds">getLayerBounds</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L856">src/adapter/mapshaper-adapter.ts:856</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L890">src/adapter/mapshaper-adapter.ts:890</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getpointtoshapeinfo"><span>get<wbr/>Point<wbr/>To<wbr/>Shape<wbr/>Info</span><a href="#getpointtoshapeinfo" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -731,7 +732,7 @@ caller only reads <code>xmin/ymin/xmax/ymax</code>.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">PointToShapeInfo</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#getpointtoshapeinfo">getPointToShapeInfo</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L811">src/adapter/mapshaper-adapter.ts:811</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L845">src/adapter/mapshaper-adapter.ts:845</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getshapeanchor"><span>get<wbr/>Shape<wbr/>Anchor</span><a href="#getshapeanchor" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -752,7 +753,7 @@ caller only reads <code>xmin/ymin/xmax/ymax</code>.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">]</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#getshapeanchor">getShapeAnchor</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L741">src/adapter/mapshaper-adapter.ts:741</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L775">src/adapter/mapshaper-adapter.ts:775</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getshapearea"><span>get<wbr/>Shape<wbr/>Area</span><a href="#getshapearea" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -773,7 +774,7 @@ caller only reads <code>xmin/ymin/xmax/ymax</code>.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#getshapearea">getShapeArea</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L733">src/adapter/mapshaper-adapter.ts:733</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L767">src/adapter/mapshaper-adapter.ts:767</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getshapeperimeter"><span>get<wbr/>Shape<wbr/>Perimeter</span><a href="#getshapeperimeter" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -794,7 +795,7 @@ caller only reads <code>xmin/ymin/xmax/ymax</code>.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#getshapeperimeter">getShapePerimeter</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L737">src/adapter/mapshaper-adapter.ts:737</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L771">src/adapter/mapshaper-adapter.ts:771</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="insertcutpoints"><span>insert<wbr/>Cut<wbr/>Points</span><a href="#insertcutpoints" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -816,7 +817,7 @@ the divided arc ids.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#insertcutpoints">insertCutPoints</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L720">src/adapter/mapshaper-adapter.ts:720</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L728">src/adapter/mapshaper-adapter.ts:728</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="insertvertex"><span>insert<wbr/>Vertex</span><a href="#insertvertex" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -846,7 +847,7 @@ inaccurate; this signature matches actual mapshaper.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#insertvertex">insertVertex</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L639">src/adapter/mapshaper-adapter.ts:639</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L647">src/adapter/mapshaper-adapter.ts:647</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="layerhasgeometry"><span>layer<wbr/>Has<wbr/>Geometry</span><a href="#layerhasgeometry" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -867,7 +868,7 @@ extent rebuild.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#layerhasgeometry">layerHasGeometry</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L852">src/adapter/mapshaper-adapter.ts:852</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L886">src/adapter/mapshaper-adapter.ts:886</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="pack"><span>pack</span><a href="#pack" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -885,7 +886,7 @@ extent rebuild.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Uint8Array</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#pack">pack</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L885">src/adapter/mapshaper-adapter.ts:885</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L919">src/adapter/mapshaper-adapter.ts:919</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="restoresessiondata"><span>restore<wbr/>Session<wbr/>Data</span><a href="#restoresessiondata" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -904,7 +905,7 @@ extent rebuild.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">datasets</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/emap.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">[]</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#restoresessiondata">restoreSessionData</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L876">src/adapter/mapshaper-adapter.ts:876</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L910">src/adapter/mapshaper-adapter.ts:910</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="runimport"><span>run<wbr/>Import</span><a href="#runimport" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -927,7 +928,7 @@ import command's <code>input</code> option, matching the GUI import path.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/emap.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#runimport">runImport</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L911">src/adapter/mapshaper-adapter.ts:911</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L945">src/adapter/mapshaper-adapter.ts:945</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="runondataset"><span>run<wbr/>On<wbr/>Dataset</span><a href="#runondataset" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -955,7 +956,7 @@ relative names. Rejects if mapshaper produced no default target
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/emap.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#runondataset">runOnDataset</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L936">src/adapter/mapshaper-adapter.ts:936</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L970">src/adapter/mapshaper-adapter.ts:970</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="runondatasetparsed"><span>run<wbr/>On<wbr/>Dataset<wbr/>Parsed</span><a href="#runondatasetparsed" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -985,7 +986,7 @@ like the string variant, so <code>-join FILE</code> works the same way.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/emap.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#runondatasetparsed">runOnDatasetParsed</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L944">src/adapter/mapshaper-adapter.ts:944</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L978">src/adapter/mapshaper-adapter.ts:978</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="simplifyarcsfast"><span>simplify<wbr/>Arcs<wbr/>Fast</span><a href="#simplifyarcsfast" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -1008,7 +1009,7 @@ the renderer falls back to at zoomed-out scales.</p>
 <h4 class="tsd-returns-title">Returns <a href="../interfaces/emap.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#simplifyarcsfast">simplifyArcsFast</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L803">src/adapter/mapshaper-adapter.ts:803</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L837">src/adapter/mapshaper-adapter.ts:837</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="snapvertices"><span>snap<wbr/>Vertices</span><a href="#snapvertices" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -1034,7 +1035,28 @@ bounds. Used by VertexMoveCommand for both do() and undo().</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#snapvertices">snapVertices</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L635">src/adapter/mapshaper-adapter.ts:635</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L643">src/adapter/mapshaper-adapter.ts:643</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="splitselfintersectingpolygonrings"><span>split<wbr/>Self<wbr/>Intersecting<wbr/>Polygon<wbr/>Rings</span><a href="#splitselfintersectingpolygonrings" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="splitselfintersectingpolygonrings-1"><span class="tsd-kind-call-signature">splitSelfIntersectingPolygonRings</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">dataset</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/emap.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#splitselfintersectingpolygonrings-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Split polygon parts that revisit a topological node into simple rings.
+Shapefile writers commonly encode a hole tangent to its shell as one
+pinched part; mapshaper's splitter restores the explicit shell + hole
+representation expected by ring editing. Mutates polygon shapes in place.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">dataset</span>: <a href="../interfaces/emap.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></span>
+<div class="tsd-comment tsd-typography"><p>dataset accepts <code>MapshaperDataset</code> for splitSelfIntersectingPolygonRings. Required; omission is not allowed. Must be assignable to <code>MapshaperDataset</code>.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#splitselfintersectingpolygonrings">splitSelfIntersectingPolygonRings</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L741">src/adapter/mapshaper-adapter.ts:741</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="testpointinpolygon"><span>test<wbr/>Point<wbr/>In<wbr/>Polygon</span><a href="#testpointinpolygon" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -1061,7 +1083,7 @@ bounds. Used by VertexMoveCommand for both do() and undo().</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#testpointinpolygon">testPointInPolygon</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L820">src/adapter/mapshaper-adapter.ts:820</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L854">src/adapter/mapshaper-adapter.ts:854</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="testpointinring"><span>test<wbr/>Point<wbr/>In<wbr/>Ring</span><a href="#testpointinring" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -1090,7 +1112,7 @@ hole-to-shell grouping (port of mapshaper's groupPolygonRings).</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#testpointinring">testPointInRing</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L848">src/adapter/mapshaper-adapter.ts:848</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L882">src/adapter/mapshaper-adapter.ts:882</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="unpacksessiondata"><span>unpack<wbr/>Session<wbr/>Data</span><a href="#unpacksessiondata" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -1108,7 +1130,7 @@ hole-to-shell grouping (port of mapshaper's groupPolygonRings).</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/emap.PackedSession.html" class="tsd-signature-type tsd-kind-type-alias">PackedSession</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#unpacksessiondata">unpackSessionData</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L889">src/adapter/mapshaper-adapter.ts:889</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L923">src/adapter/mapshaper-adapter.ts:923</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="vertexisarcendpoint"><span>vertex<wbr/>Is<wbr/>Arc<wbr/>Endpoint</span><a href="#vertexisarcendpoint" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -1131,7 +1153,7 @@ deleted without breaking adjacency.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.MapshaperAdapter.html">MapshaperAdapter</a>.<a href="../interfaces/emap.MapshaperAdapter.html#vertexisarcendpoint">vertexIsArcEndpoint</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L696">src/adapter/mapshaper-adapter.ts:696</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/adapter/mapshaper-adapter.ts#L704">src/adapter/mapshaper-adapter.ts:704</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -1150,7 +1172,7 @@ deleted without breaking adjacency.</p>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Constructors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Constructors</summary>
 <div><a href="#constructor"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Constructor"><use href="../assets/icons.svg#icon-512"></use></svg><span>constructor</span></a></div></details>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
-<div><a href="#addintersectioncuts"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>add<wbr/>Intersection<wbr/>Cuts</span></a><a href="#appendarc"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>append<wbr/>Arc</span></a><a href="#appendemptyarc"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>append<wbr/>Empty<wbr/>Arc</span></a><a href="#appendvertex"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>append<wbr/>Vertex</span></a><a href="#buildpolygonmosaic"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>build<wbr/>Polygon<wbr/>Mosaic</span></a><a href="#buildtopology"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>build<wbr/>Topology</span></a><a href="#cleanarcreferences"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>clean<wbr/>Arc<wbr/>References</span></a><a href="#cleanpathsafterimport"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>clean<wbr/>Paths<wbr/>After<wbr/>Import</span></a><a href="#copydataset"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>copy<wbr/>Dataset</span></a><a href="#createdatatable"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>Data<wbr/>Table</span></a><a href="#createpathimporter"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>Path<wbr/>Importer</span></a><a href="#deletelastarc"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>Last<wbr/>Arc</span></a><a href="#deletevertex"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>Vertex</span></a><a href="#distance2d"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>distance2<wbr/>D</span></a><a href="#exportdatasetstopack"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>export<wbr/>Datasets<wbr/>To<wbr/>Pack</span></a><a href="#exportfilecontent"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>export<wbr/>File<wbr/>Content</span></a><a href="#exportpackeddatasets"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>export<wbr/>Packed<wbr/>Datasets</span></a><a href="#exportpathdata"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>export<wbr/>Path<wbr/>Data</span></a><a href="#findarcidfromvertexid"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>find<wbr/>Arc<wbr/>Id<wbr/>From<wbr/>Vertex<wbr/>Id</span></a><a href="#findclosestpointonseg"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>find<wbr/>Closest<wbr/>Point<wbr/>On<wbr/>Seg</span></a><a href="#findnearestvertices"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>find<wbr/>Nearest<wbr/>Vertices</span></a><a href="#findsegmentintersections"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>find<wbr/>Segment<wbr/>Intersections</span></a><a href="#foreachsegmentinshape"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>for<wbr/>Each<wbr/>Segment<wbr/>In<wbr/>Shape</span></a><a href="#getavgsegment"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Avg<wbr/>Segment</span></a><a href="#getdatasetbounds"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Dataset<wbr/>Bounds</span></a><a href="#getintersectionlayer"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Intersection<wbr/>Layer</span></a><a href="#getlayerbounds"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Layer<wbr/>Bounds</span></a><a href="#getpointtoshapeinfo"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Point<wbr/>To<wbr/>Shape<wbr/>Info</span></a><a href="#getshapeanchor"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Shape<wbr/>Anchor</span></a><a href="#getshapearea"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Shape<wbr/>Area</span></a><a href="#getshapeperimeter"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Shape<wbr/>Perimeter</span></a><a href="#insertcutpoints"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>insert<wbr/>Cut<wbr/>Points</span></a><a href="#insertvertex"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>insert<wbr/>Vertex</span></a><a href="#layerhasgeometry"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>layer<wbr/>Has<wbr/>Geometry</span></a><a href="#pack"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>pack</span></a><a href="#restoresessiondata"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>restore<wbr/>Session<wbr/>Data</span></a><a href="#runimport"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>run<wbr/>Import</span></a><a href="#runondataset"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>run<wbr/>On<wbr/>Dataset</span></a><a href="#runondatasetparsed"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>run<wbr/>On<wbr/>Dataset<wbr/>Parsed</span></a><a href="#simplifyarcsfast"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>simplify<wbr/>Arcs<wbr/>Fast</span></a><a href="#snapvertices"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>snap<wbr/>Vertices</span></a><a href="#testpointinpolygon"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>test<wbr/>Point<wbr/>In<wbr/>Polygon</span></a><a href="#testpointinring"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>test<wbr/>Point<wbr/>In<wbr/>Ring</span></a><a href="#unpacksessiondata"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>unpack<wbr/>Session<wbr/>Data</span></a><a href="#vertexisarcendpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>vertex<wbr/>Is<wbr/>Arc<wbr/>Endpoint</span></a></div></details></div></details></div>
+<div><a href="#addintersectioncuts"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>add<wbr/>Intersection<wbr/>Cuts</span></a><a href="#appendarc"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>append<wbr/>Arc</span></a><a href="#appendemptyarc"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>append<wbr/>Empty<wbr/>Arc</span></a><a href="#appendvertex"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>append<wbr/>Vertex</span></a><a href="#buildpolygonmosaic"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>build<wbr/>Polygon<wbr/>Mosaic</span></a><a href="#buildtopology"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>build<wbr/>Topology</span></a><a href="#cleanarcreferences"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>clean<wbr/>Arc<wbr/>References</span></a><a href="#cleanpathsafterimport"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>clean<wbr/>Paths<wbr/>After<wbr/>Import</span></a><a href="#copydataset"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>copy<wbr/>Dataset</span></a><a href="#createdatatable"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>Data<wbr/>Table</span></a><a href="#createpathimporter"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>Path<wbr/>Importer</span></a><a href="#deletelastarc"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>Last<wbr/>Arc</span></a><a href="#deletevertex"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>Vertex</span></a><a href="#distance2d"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>distance2<wbr/>D</span></a><a href="#exportdatasetstopack"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>export<wbr/>Datasets<wbr/>To<wbr/>Pack</span></a><a href="#exportfilecontent"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>export<wbr/>File<wbr/>Content</span></a><a href="#exportpackeddatasets"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>export<wbr/>Packed<wbr/>Datasets</span></a><a href="#exportpathdata"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>export<wbr/>Path<wbr/>Data</span></a><a href="#findarcidfromvertexid"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>find<wbr/>Arc<wbr/>Id<wbr/>From<wbr/>Vertex<wbr/>Id</span></a><a href="#findclosestpointonseg"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>find<wbr/>Closest<wbr/>Point<wbr/>On<wbr/>Seg</span></a><a href="#findnearestvertices"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>find<wbr/>Nearest<wbr/>Vertices</span></a><a href="#findsegmentintersections"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>find<wbr/>Segment<wbr/>Intersections</span></a><a href="#foreachsegmentinshape"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>for<wbr/>Each<wbr/>Segment<wbr/>In<wbr/>Shape</span></a><a href="#getavgsegment"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Avg<wbr/>Segment</span></a><a href="#getdatasetbounds"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Dataset<wbr/>Bounds</span></a><a href="#getintersectionlayer"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Intersection<wbr/>Layer</span></a><a href="#getlayerbounds"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Layer<wbr/>Bounds</span></a><a href="#getpointtoshapeinfo"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Point<wbr/>To<wbr/>Shape<wbr/>Info</span></a><a href="#getshapeanchor"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Shape<wbr/>Anchor</span></a><a href="#getshapearea"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Shape<wbr/>Area</span></a><a href="#getshapeperimeter"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Shape<wbr/>Perimeter</span></a><a href="#insertcutpoints"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>insert<wbr/>Cut<wbr/>Points</span></a><a href="#insertvertex"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>insert<wbr/>Vertex</span></a><a href="#layerhasgeometry"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>layer<wbr/>Has<wbr/>Geometry</span></a><a href="#pack"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>pack</span></a><a href="#restoresessiondata"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>restore<wbr/>Session<wbr/>Data</span></a><a href="#runimport"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>run<wbr/>Import</span></a><a href="#runondataset"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>run<wbr/>On<wbr/>Dataset</span></a><a href="#runondatasetparsed"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>run<wbr/>On<wbr/>Dataset<wbr/>Parsed</span></a><a href="#simplifyarcsfast"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>simplify<wbr/>Arcs<wbr/>Fast</span></a><a href="#snapvertices"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>snap<wbr/>Vertices</span></a><a href="#splitselfintersectingpolygonrings"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>split<wbr/>Self<wbr/>Intersecting<wbr/>Polygon<wbr/>Rings</span></a><a href="#testpointinpolygon"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>test<wbr/>Point<wbr/>In<wbr/>Polygon</span></a><a href="#testpointinring"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>test<wbr/>Point<wbr/>In<wbr/>Ring</span></a><a href="#unpacksessiondata"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>unpack<wbr/>Session<wbr/>Data</span></a><a href="#vertexisarcendpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>vertex<wbr/>Is<wbr/>Arc<wbr/>Endpoint</span></a></div></details></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="../index.html">@mapseekai/emap</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">

@@ -260,6 +260,14 @@ export interface MapshaperAdapter {
   /** Build polygon tiles from only the supplied absolute arc ids. */
   buildPolygonMosaic(arcs: ArcCollection, arcIds: ReadonlySet<number>): PathShape[];
 
+  /**
+   * Split polygon parts that revisit a topological node into simple rings.
+   * Shapefile writers commonly encode a hole tangent to its shell as one
+   * pinched part; mapshaper's splitter restores the explicit shell + hole
+   * representation expected by ring editing. Mutates polygon shapes in place.
+   */
+  splitSelfIntersectingPolygonRings(dataset: MapshaperDataset): void;
+
   getShapeArea(shape: PathShape, arcs: ArcCollection): number;
   getShapePerimeter(shape: PathShape, arcs: ArcCollection): number;
   getShapeAnchor(shape: PathShape, arcs: ArcCollection): [number, number] | null;
@@ -728,6 +736,67 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     return mapshaper.internal
       .buildPolygonMosaic(nodes)
       .mosaic.map((shape: number[][]) => shape.map((part) => part.slice()));
+  }
+
+  splitSelfIntersectingPolygonRings(dataset: MapshaperDataset): void {
+    const arcs = dataset.arcs;
+    if (!arcs) return;
+    const split = mapshaper.internal.getSelfIntersectionSplitter(
+      new mapshaper.internal.NodeCollection(arcs),
+    );
+    const area = (ring: number[]) => mapshaper.geom.getShapeArea([ring], arcs);
+    const isContained = (ring: number[], container: number[]) => {
+      const anchor = mapshaper.internal.findAnchorPoint([ring], arcs);
+      return (
+        anchor !== null &&
+        mapshaper.geom.testPointInPolygon(anchor.x, anchor.y, [container], arcs)
+      );
+    };
+    for (const layer of dataset.layers) {
+      if (layer.geometry_type !== 'polygon' || !layer.shapes) continue;
+      for (const rawShape of layer.shapes) {
+        if (!rawShape) continue;
+        const shape = rawShape as PathShape;
+        const normalized: PathShape = [];
+        for (const original of shape) {
+          const originalSign = Math.sign(area(original));
+          const parts = split(original.slice()).map((ring) => ({
+            ring,
+            area: area(ring),
+            nested: false,
+          }));
+          if (
+            parts.length <= 1 ||
+            parts.some((part) => part.area === 0) ||
+            parts.every((part) => Math.sign(part.area) !== originalSign)
+          ) {
+            normalized.push(original);
+            continue;
+          }
+          const main = parts.filter((part) => Math.sign(part.area) === originalSign);
+          for (const part of parts) {
+            if (Math.sign(part.area) === originalSign) continue;
+            if (main.some((container) => isContained(part.ring, container.ring))) {
+              part.nested = true;
+              continue;
+            }
+            part.ring.reverse();
+            for (let index = 0; index < part.ring.length; index++) {
+              part.ring[index] = ~part.ring[index]!;
+            }
+            part.area = -part.area;
+          }
+          parts.sort(
+            (left, right) =>
+              Number(left.nested) - Number(right.nested) ||
+              Math.abs(right.area) - Math.abs(left.area),
+          );
+          for (const part of parts) normalized.push(part.ring);
+        }
+        shape.length = 0;
+        for (const ring of normalized) shape.push(ring);
+      }
+    }
   }
 
   getShapeArea(shape: PathShape, arcs: ArcCollection): number {

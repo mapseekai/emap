@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mapshaper from 'mapshaper';
 import { unzipSync, strFromU8, zipSync } from 'fflate';
 import { TopologySource } from './topology-source';
-import { getDefaultMapshaperAdapter } from '../adapter/mapshaper-adapter';
+import {
+  getDefaultMapshaperAdapter,
+  type MapshaperAdapter,
+} from '../adapter/mapshaper-adapter';
 import { registerFormat, unregisterFormat } from './format-registry';
 
 function setPrivate(target: object, key: string, value: unknown): void {
@@ -204,7 +207,12 @@ describe('TopologySource.export', () => {
 describe('TopologySource.setData', () => {
   it('imports every shapefile in one zip', async () => {
     const runImport = vi.fn(async () => FAKE_DATASET);
-    const source = new TopologySource('t', { adapter: { runImport } });
+    const splitSelfIntersectingPolygonRings = vi.fn();
+    const adapter = {
+      runImport,
+      splitSelfIntersectingPolygonRings,
+    } as unknown as MapshaperAdapter;
+    const source = new TopologySource('t', { adapter });
     const content = zipSync({
       'roads.shp': new Uint8Array([1]),
       'roads.dbf': new Uint8Array([2]),
@@ -222,6 +230,53 @@ describe('TopologySource.setData', () => {
       'roads.dbf',
       'roads.shp',
     ]);
+  });
+
+  it('splits self-touching polygon rings after importing a zipped Shapefile', async () => {
+    const runImport = vi.fn(async () => FAKE_DATASET);
+    const splitSelfIntersectingPolygonRings = vi.fn();
+    const adapter = {
+      runImport,
+      splitSelfIntersectingPolygonRings,
+    } as unknown as MapshaperAdapter;
+    const source = new TopologySource('t', { adapter });
+    const content = zipSync({
+      'land.shp': new Uint8Array([1]),
+      'land.dbf': new Uint8Array([2]),
+    });
+
+    await source.setData({ filename: 'land.zip', content });
+
+    expect(splitSelfIntersectingPolygonRings).toHaveBeenCalledOnce();
+    expect(splitSelfIntersectingPolygonRings).toHaveBeenCalledWith(FAKE_DATASET);
+  });
+
+  it('does not normalize non-Shapefile layers in a mixed import', async () => {
+    const runImport = vi.fn(async () => FAKE_DATASET);
+    const splitSelfIntersectingPolygonRings = vi.fn();
+    const adapter = {
+      runImport,
+      splitSelfIntersectingPolygonRings,
+    } as unknown as MapshaperAdapter;
+    const source = new TopologySource('t', { adapter });
+
+    await source.setData([
+      { filename: 'land.shp', content: new Uint8Array([1]) },
+      { filename: 'overlay.geojson', content: new Uint8Array([123, 125]) },
+    ]);
+
+    expect(splitSelfIntersectingPolygonRings).not.toHaveBeenCalled();
+  });
+
+  it('rejects Shapefile imports when the adapter lacks ring normalization', async () => {
+    const adapter = {
+      runImport: vi.fn(async () => FAKE_DATASET),
+    } as unknown as MapshaperAdapter;
+    const source = new TopologySource('t', { adapter });
+
+    await expect(
+      source.setData({ filename: 'land.shp', content: new Uint8Array([1]) }),
+    ).rejects.toThrow(/splitSelfIntersectingPolygonRings/);
   });
 
   it('derives filenames from root-relative URLs before import', async () => {
@@ -261,7 +316,12 @@ describe('TopologySource.setData', () => {
 
   it('does not mark shapefile imports as EPSG:4326 without CRS metadata', async () => {
     const runImport = vi.fn(async () => ({ ...FAKE_DATASET, info: {} }));
-    const source = new TopologySource('t', { adapter: { runImport } });
+    const splitSelfIntersectingPolygonRings = vi.fn();
+    const adapter = {
+      runImport,
+      splitSelfIntersectingPolygonRings,
+    } as unknown as MapshaperAdapter;
+    const source = new TopologySource('t', { adapter });
 
     await source.setData({ filename: 'a.shp', content: new Uint8Array([0]) });
 

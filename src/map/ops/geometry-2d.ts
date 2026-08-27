@@ -148,8 +148,18 @@ export class SegmentConflictIndex {
    * @param rings segment lists grouped by ring
    * @param closedRings when true (default), the first/last segment pair of a
    * ring is exempt like adjacent pairs; open polylines pass false.
+   * @param options.allowRingTouching when true, segments of *different* rings
+   * that merely touch at an isolated point (OGC-tangent contact, e.g. a hole
+   * vertex snapped onto the shell) are exempt; proper crossings, collinear
+   * overlaps, and vertex contacts where the rings' rays interleave still
+   * count as conflicts. Same-ring pairs are always strict.
    */
-  constructor(rings: ReadonlyArray<ReadonlyArray<SegmentPair>>, closedRings = true) {
+  constructor(
+    rings: ReadonlyArray<ReadonlyArray<SegmentPair>>,
+    closedRings = true,
+    options: { allowRingTouching?: boolean } = {},
+  ) {
+    this._allowRingTouching = options.allowRingTouching === true;
     let count = 0;
     for (const ring of rings) count += ring.length;
     this._closedRings = closedRings;
@@ -170,6 +180,7 @@ export class SegmentConflictIndex {
   }
 
   private readonly _closedRings: boolean;
+  private readonly _allowRingTouching: boolean;
 
   /**
    * True when any two indexed segments conflict. Adjacent segments of the same
@@ -192,10 +203,75 @@ export class SegmentConflictIndex {
             continue;
         }
         const [c, d] = this._segments[right]!;
-        if (segmentsConflict(a, b, c, d)) return true;
+        if (this._allowRingTouching && this._ringOf[right] !== this._ringOf[left]) {
+          if (this._ringsProperlyConflict(left, right)) return true;
+        } else if (segmentsConflict(a, b, c, d)) {
+          return true;
+        }
       }
     }
     return false;
+  }
+
+  /**
+   * GEOS/OGC-compatible conflict test for a segment pair from different
+   * rings: an isolated point contact (endpoint touching the other segment, or
+   * a shared vertex where the rings do not interleave) is *not* a conflict.
+   */
+  private _ringsProperlyConflict(left: number, right: number): boolean {
+    const [a, b] = this._segments[left]!;
+    const [c, d] = this._segments[right]!;
+    if (!segmentsConflict(a, b, c, d)) return false;
+    const hit = segmentIntersection(a, b, c, d);
+    if (!hit) return collinearOverlap(a, b, c, d);
+    const touchesAB = coincident(hit, a) || coincident(hit, b);
+    const touchesCD = coincident(hit, c) || coincident(hit, d);
+    if (!touchesAB && !touchesCD) return true;
+    if (touchesAB !== touchesCD) return false;
+    return this._ringsCrossAtContact(left, hit, right);
+  }
+
+  /**
+   * Vertex-vertex contact: the rings cross at `point` iff their rays
+   * interleave angularly around it; a tangent (non-interleaved) contact is
+   * exempt.
+   */
+  private _ringsCrossAtContact(
+    left: number,
+    point: Coordinate,
+    right: number,
+  ): boolean {
+    const [lu, lv] = this._raysAtContact(left, point);
+    const [ru, rv] = this._raysAtContact(right, point);
+    const TAU = Math.PI * 2;
+    const angle = (q: Coordinate) =>
+      Math.atan2(q[1] - point[1], q[0] - point[0]);
+    const norm = (x: number) => {
+      const wrapped = x % TAU;
+      return wrapped < 0 ? wrapped + TAU : wrapped;
+    };
+    const base = angle(lu);
+    const span = norm(angle(lv) - base);
+    const toRu = norm(angle(ru) - base);
+    const toRv = norm(angle(rv) - base);
+    // A ray collinear with one of the left ring's rays grazes — not a cross.
+    if (toRu === 0 || toRv === 0 || toRu === span || toRv === span) return false;
+    return toRu < span !== toRv < span;
+  }
+
+  /** Far endpoints of the two segments of `index`'s ring that meet at `point`. */
+  private _raysAtContact(index: number, point: Coordinate): [Coordinate, Coordinate] {
+    const position = this._positionOf[index]!;
+    const size = this._ringSizeOf[index]!;
+    const ringStart = index - position;
+    const [a, b] = this._segments[index]!;
+    const ownFar = coincident(point, a) ? b : a;
+    const neighborIndex =
+      ringStart +
+      (coincident(point, a) ? (position - 1 + size) % size : (position + 1) % size);
+    const [na, nb] = this._segments[neighborIndex]!;
+    const neighborFar = coincident(point, na) ? nb : na;
+    return [ownFar, neighborFar];
   }
 
   /** True when any query segment conflicts with any indexed segment (no exemptions). */
@@ -219,6 +295,30 @@ function segmentBox(a: Coordinate, b: Coordinate): [number, number, number, numb
     Math.max(a[0], b[0]) + pad,
     Math.max(a[1], b[1]) + pad,
   ];
+}
+
+function coincident(p: Coordinate, q: Coordinate): boolean {
+  return p[0] === q[0] && p[1] === q[1];
+}
+
+/**
+ * Positive-length overlap test for the collinear branch of
+ * `segmentsConflict` (no crossing point): contact shorter than the
+ * parameter-scale tolerance is a touch, not a conflict.
+ */
+function collinearOverlap(
+  a: Coordinate,
+  b: Coordinate,
+  c: Coordinate,
+  d: Coordinate,
+): boolean {
+  const dx = Math.abs(b[0] - a[0]);
+  const dy = Math.abs(b[1] - a[1]);
+  const axis = dx >= dy ? 0 : 1;
+  const low = Math.max(Math.min(a[axis], b[axis]), Math.min(c[axis], d[axis]));
+  const high = Math.min(Math.max(a[axis], b[axis]), Math.max(c[axis], d[axis]));
+  const scale = Math.max(dx, dy, 1);
+  return high - low > EPSILON * scale;
 }
 
 export function validatePolygonArcReferences(
@@ -263,7 +363,7 @@ export function validatePolygon(
     )
       throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
   }
-  if (new SegmentConflictIndex(rings).hasConflict())
+  if (new SegmentConflictIndex(rings, true, { allowRingTouching: true }).hasConflict())
     throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
   const pathData = adapter.exportPathData(shape, arcs, 'polygon').pathData;
   const anchors = shape.map((part) => adapter.getShapeAnchor([part], arcs));
