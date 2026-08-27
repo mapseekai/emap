@@ -445,6 +445,24 @@ describe('loadMapLibreOverlayStyle', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('preserves a pre-aborted caller error without invoking Style transforms', async () => {
+    const controller = new AbortController();
+    const abortError = new DOMException('Superseded', 'AbortError');
+    controller.abort(abortError);
+    const transformRequest = vi.fn(() => {
+      throw new Error('transform must not run');
+    });
+
+    await expect(
+      loadMapLibreOverlayStyle(createStyleService(STYLE_URL), {
+        signal: controller.signal,
+        transformRequest: transformRequest as never,
+        fetch: vi.fn(),
+      }),
+    ).rejects.toBe(abortError);
+    expect(transformRequest).not.toHaveBeenCalled();
+  });
+
   it('times out a deferred Style transform after exactly 30000ms', async () => {
     vi.useFakeTimers();
     try {

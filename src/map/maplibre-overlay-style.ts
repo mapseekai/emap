@@ -143,15 +143,13 @@ export async function loadMapLibreOverlayStyle(
   }, timeoutMs);
   options.signal.addEventListener('abort', abort, { once: true });
   if (options.signal.aborted) abort();
-  const interrupted = new Promise<never>((_resolve, reject) => {
-    if (controller.signal.aborted) {
-      reject(controller.signal.reason);
-    } else {
-      controller.signal.addEventListener('abort', () => reject(controller.signal.reason), { once: true });
-    }
-  });
-
   try {
+    if (controller.signal.aborted) throw controller.signal.reason;
+    const interrupted = new Promise<never>((_resolve, reject) => {
+      controller.signal.addEventListener('abort', () => reject(controller.signal.reason), {
+        once: true,
+      });
+    });
     const transformed = options.transformRequest
       ? await Promise.race([
           options.transformRequest(service.style, 'Style' as maplibregl.ResourceType),
