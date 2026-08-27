@@ -2,7 +2,9 @@ import type * as maplibregl from 'maplibre-gl';
 import type {
   MapLibreBasemapService,
   MapLibreIntegrationOptions,
+  MapLibreOverlayResourceService,
   MapLibreOverlayService,
+  MapLibreOverlayStyleService,
   MapLibreServiceManager,
   MapOptions,
 } from '../index';
@@ -19,13 +21,38 @@ const basemap = {
   role: 'basemap',
   style,
 } satisfies MapLibreBasemapService;
-const overlay = {
-  id: 'overlay',
-  name: 'Overlay',
+const resourceOverlay = {
+  id: 'resource-overlay',
+  name: 'Resource overlay',
   role: 'overlay',
   sources: { source },
   layers: [layer],
 } satisfies MapLibreOverlayService;
+const styleOverlay = {
+  id: 'style-overlay',
+  name: 'Style overlay',
+  role: 'overlay',
+  style,
+} satisfies MapLibreOverlayStyleService;
+const styleUrlOverlay = {
+  id: 'style-url-overlay',
+  name: 'Style URL overlay',
+  role: 'overlay',
+  style: 'https://tiles.openfreemap.org/styles/bright',
+} satisfies MapLibreOverlayService;
+const resourceOverlayDeclaration = resourceOverlay satisfies MapLibreOverlayResourceService;
+// @ts-expect-error Overlay definitions cannot mix a complete style with sources/layers.
+const mixedOverlay: MapLibreOverlayService = {
+  ...resourceOverlay,
+  style,
+};
+// @ts-expect-error An overlay must provide either style or sources/layers.
+const emptyOverlay: MapLibreOverlayService = {
+  id: 'empty',
+  name: 'Empty',
+  role: 'overlay',
+};
+const overlay = resourceOverlay;
 const integration = {
   services: [basemap, overlay],
   mapOptions: { transformRequest: (url: string) => ({ url }) },
@@ -83,3 +110,8 @@ void forbiddenStyle;
 void forbiddenCenter;
 void forbiddenZoom;
 void forbiddenInteractive;
+void styleOverlay;
+void styleUrlOverlay;
+void resourceOverlayDeclaration;
+void mixedOverlay;
+void emptyOverlay;

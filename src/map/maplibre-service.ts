@@ -9,14 +9,28 @@ export interface MapLibreBasemapService {
   style: string | maplibregl.StyleSpecification;
 }
 
-export interface MapLibreOverlayService {
+export interface MapLibreOverlayServiceBase {
   id: string;
   name: string;
   role: 'overlay';
-  sources: Record<string, maplibregl.SourceSpecification>;
-  layers: maplibregl.LayerSpecification[];
   visible?: boolean;
 }
+
+export interface MapLibreOverlayResourceService extends MapLibreOverlayServiceBase {
+  sources: Record<string, maplibregl.SourceSpecification>;
+  layers: maplibregl.LayerSpecification[];
+  style?: never;
+}
+
+export interface MapLibreOverlayStyleService extends MapLibreOverlayServiceBase {
+  style: string | maplibregl.StyleSpecification;
+  sources?: never;
+  layers?: never;
+}
+
+export type MapLibreOverlayService =
+  | MapLibreOverlayResourceService
+  | MapLibreOverlayStyleService;
 
 export interface MapLibreIntegrationOptions {
   services?: readonly MapLibreService[];

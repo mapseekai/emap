@@ -2,6 +2,7 @@ import type { Emap } from '../map/map';
 import type { LayerSpecification } from '../map/layer';
 import type {
   MapLibreOverlayService,
+  MapLibreOverlayServiceBase,
   MapLibreServiceErrorEvent,
   MapLibreServiceManager,
 } from '../map/maplibre-service';
@@ -244,7 +245,7 @@ export class LayerControl implements Control {
     );
   }
 
-  private _onlineRow(service: MapLibreOverlayService, index: number): HTMLLabelElement {
+  private _onlineRow(service: MapLibreOverlayServiceBase, index: number): HTMLLabelElement {
     return this._checkboxRow(
       service.id,
       service.name,

@@ -2,7 +2,9 @@ import type * as maplibregl from 'maplibre-gl';
 import { EventDispatcher, type EventListener } from '../core/events';
 import type {
   MapLibreIntegrationOptions,
+  MapLibreOverlayResourceService,
   MapLibreOverlayService,
+  MapLibreOverlayStyleService,
   MapLibreService,
   MapLibreServiceChangeEvent,
   MapLibreServiceErrorEvent,
@@ -32,7 +34,7 @@ interface ServiceRecord {
   operationRevision: number;
   ownedSources: Map<string, OwnedResource>;
   ownedLayers: Map<string, OwnedResource>;
-  installedDefinition?: MapLibreOverlayService;
+  installedDefinition?: MapLibreOverlayResourceService;
 }
 
 interface OwnedResource {
@@ -102,8 +104,20 @@ function cloneValue<T>(value: T): T {
   return value;
 }
 
+function isStyleOverlayService(
+  service: MapLibreOverlayService,
+): service is MapLibreOverlayStyleService {
+  return 'style' in service && service.style !== undefined;
+}
+
+function isResourceOverlayService(
+  service: MapLibreOverlayService,
+): service is MapLibreOverlayResourceService {
+  return 'sources' in service || 'layers' in service;
+}
+
 function cloneService(service: MapLibreService): MapLibreService {
-  if (service.role === 'basemap') {
+  if (service.role === 'basemap' || isStyleOverlayService(service)) {
     return {
       ...service,
       style: typeof service.style === 'string' ? service.style : cloneValue(service.style),
@@ -152,6 +166,23 @@ function validateOverlayDefinition(
   registry: ReadonlyMap<string, ServiceRecord>,
   replacingId?: string,
 ): void {
+  const isStyle = isStyleOverlayService(service);
+  const isResource = isResourceOverlayService(service);
+  if (isStyle === isResource) {
+    throw new Error(
+      `MapLibre overlay service "${service.id}" must define exactly one of style or sources/layers`,
+    );
+  }
+  if (isStyle) {
+    if (
+      typeof service.style !== 'string' &&
+      (typeof service.style !== 'object' || service.style === null || Array.isArray(service.style))
+    ) {
+      throw new Error(`MapLibre overlay service "${service.id}" must define a valid style`);
+    }
+    return;
+  }
+
   if (!service.sources || typeof service.sources !== 'object' || Array.isArray(service.sources)) {
     throw new Error(`MapLibre overlay service "${service.id}" must define sources`);
   }
@@ -194,7 +225,13 @@ function validateOverlayDefinition(
   }
 
   for (const [serviceId, record] of registry) {
-    if (serviceId === replacingId || record.definition.role !== 'overlay') continue;
+    if (
+      serviceId === replacingId ||
+      record.definition.role !== 'overlay' ||
+      !isResourceOverlayService(record.definition)
+    ) {
+      continue;
+    }
     for (const sourceId of Object.keys(record.definition.sources)) {
       if (sourceIds.has(sourceId)) {
         throw new Error(`MapLibre overlay source "${sourceId}" already exists`);
@@ -355,10 +392,16 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           definitionRevision: previousDefinitionRevision,
         },
       });
-    } else if (replacement.definition.role === 'overlay' && replacement.state.active) {
+    } else if (
+      replacement.definition.role === 'overlay' &&
+      replacement.state.active &&
+      isResourceOverlayService(replacement.definition) &&
+      previousDefinition.role === 'overlay' &&
+      isResourceOverlayService(previousDefinition)
+    ) {
       await this._updateActiveOverlay(
         replacement,
-        previousDefinition as MapLibreOverlayService,
+        previousDefinition,
         previousDefinitionRevision,
         replacement.operationRevision,
         pendingReconciliation,
@@ -775,7 +818,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
   private async _updateActiveOverlay(
     record: ServiceRecord,
-    previousDefinition: MapLibreOverlayService,
+    previousDefinition: MapLibreOverlayResourceService,
     previousDefinitionRevision: number,
     operationRevision: number,
     pendingReconciliation?: Promise<void>,
@@ -910,7 +953,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     generation: number,
   ): Promise<void> {
     this._assertCurrentOperation(record, operationRevision);
-    if (!record.state.active || record.definition.role !== 'overlay') {
+    if (
+      !record.state.active ||
+      record.definition.role !== 'overlay' ||
+      !isResourceOverlayService(record.definition)
+    ) {
       throw abortError(`MapLibre service "${record.definition.id}" request was superseded`);
     }
     this._assertStyleGeneration(generation);
@@ -923,10 +970,14 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     generation: number,
   ): void {
     const map = this._map;
-    if (!map || record.definition.role !== 'overlay') {
+    const definition = record.definition;
+    if (
+      !map ||
+      definition.role !== 'overlay' ||
+      !isResourceOverlayService(definition)
+    ) {
       throw new Error('MapLibre overlay runtime is unavailable');
     }
-    const definition = record.definition;
     const addedSourceIds: string[] = [];
     const addedLayerIds: string[] = [];
     try {
@@ -1008,7 +1059,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         record.ownedLayers.set(layer.id, { generation, handle });
         addedLayerIds.push(layer.id);
       }
-      record.installedDefinition = cloneService(definition) as MapLibreOverlayService;
+      record.installedDefinition = {
+        ...definition,
+        sources: cloneValue(definition.sources),
+        layers: cloneValue(definition.layers),
+      };
     } catch (error) {
       try {
         this._rollbackAddedResources(record, addedLayerIds, addedSourceIds);
@@ -1066,7 +1121,13 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (!map) return undefined;
     const desired: Array<{ record: ServiceRecord; id: string }> = [];
     for (const record of this._registry.values()) {
-      if (record.definition.role !== 'overlay' || !record.state.active) continue;
+      if (
+        record.definition.role !== 'overlay' ||
+        !record.state.active ||
+        !isResourceOverlayService(record.definition)
+      ) {
+        continue;
+      }
       for (const layer of record.definition.layers) desired.push({ record, id: layer.id });
     }
     const index = desired.findIndex((item) => item.record === targetRecord && item.id === layerId);
@@ -1080,7 +1141,14 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
   private _isOverlayInstalled(record: ServiceRecord, generation: number): boolean {
     const map = this._map;
-    if (!map || record.definition.role !== 'overlay' || !record.installedDefinition) return false;
+    if (
+      !map ||
+      record.definition.role !== 'overlay' ||
+      !isResourceOverlayService(record.definition) ||
+      !record.installedDefinition
+    ) {
+      return false;
+    }
     const sourceIds = Object.keys(record.definition.sources);
     const layerIds = record.definition.layers.map((layer) => layer.id);
     if (JSON.stringify(record.installedDefinition) !== JSON.stringify(record.definition))

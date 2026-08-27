@@ -256,6 +256,12 @@ const labels = {
   layers: [{ id: 'labels-symbol', type: 'symbol', source: 'labels' }],
 } as const satisfies MapLibreOverlayService;
 
+const EMPTY_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {},
+  layers: [],
+};
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: unknown) => void;
@@ -371,6 +377,28 @@ describe('MapLibreServiceManager registry', () => {
     expect(loadMapLibre).not.toHaveBeenCalled();
     expect(FakeMap.constructorCalls).toBe(0);
     expect(manager.getMapLibreMap()).toBeNull();
+  });
+
+  it('registers an inactive style overlay without loading MapLibre', () => {
+    const styleOverlay = {
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      style: 'https://tiles.openfreemap.org/styles/bright',
+    } as const;
+    const { loadMapLibre, manager } = createManager([styleOverlay]);
+
+    expect(manager.getServices()).toEqual([styleOverlay]);
+    expect(loadMapLibre).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { id: 'mixed', name: 'Mixed', role: 'overlay', style: EMPTY_STYLE, sources: {}, layers: [] },
+    { id: 'missing', name: 'Missing', role: 'overlay' },
+  ])('rejects an invalid overlay form for $id', (service) => {
+    expect(() => createManager([service as MapLibreService])).toThrow(
+      /exactly one of style or sources\/layers/,
+    );
   });
 
   it('adds cloned inactive services and emits one add snapshot', async () => {
