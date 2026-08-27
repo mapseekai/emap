@@ -435,14 +435,15 @@ describe('loadMapLibreOverlayStyle', () => {
       signal: new AbortController().signal,
       fetch,
     });
+    const timeout = expect(loading).rejects.toThrow(
+      'MapLibre overlay style request timed out after 30000ms',
+    );
 
     await vi.advanceTimersByTimeAsync(29_999);
     expect(fetch).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
 
-    await expect(loading).rejects.toThrow(
-      'MapLibre overlay style request timed out after 30000ms',
-    );
+    await timeout;
     vi.useRealTimers();
   });
 });
