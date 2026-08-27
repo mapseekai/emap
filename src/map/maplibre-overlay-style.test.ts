@@ -423,27 +423,63 @@ describe('loadMapLibreOverlayStyle', () => {
     await expect(loading).rejects.toBe(abortError);
   });
 
-  it('times out overlay style loading after exactly 30000ms', async () => {
-    vi.useFakeTimers();
-    const fetch = vi.fn(
-      (_input: RequestInfo | URL, init?: RequestInit) =>
-        new Promise<Response>((_resolve, reject) => {
-          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
-        }),
-    );
+  it('aborts a deferred Style transform with the caller AbortError', async () => {
+    const controller = new AbortController();
+    const abortError = new DOMException('Superseded', 'AbortError');
+    const transformRequest = vi.fn(() => new Promise<never>(() => undefined));
+    const fetch = vi.fn();
     const loading = loadMapLibreOverlayStyle(createStyleService(STYLE_URL), {
-      signal: new AbortController().signal,
+      signal: controller.signal,
+      transformRequest: transformRequest as never,
       fetch,
     });
-    const timeout = expect(loading).rejects.toThrow(
-      'MapLibre overlay style request timed out after 30000ms',
+    const outcome = loading.then(
+      () => ({ status: 'fulfilled' }) as const,
+      (reason) => ({ status: 'rejected', reason }) as const,
     );
 
-    await vi.advanceTimersByTimeAsync(29_999);
-    expect(fetch).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(1);
+    controller.abort(abortError);
 
-    await timeout;
-    vi.useRealTimers();
+    expect(await outcome).toEqual({ status: 'rejected', reason: abortError });
+    expect(transformRequest).toHaveBeenCalledWith(STYLE_URL, 'Style');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('times out a deferred Style transform after exactly 30000ms', async () => {
+    vi.useFakeTimers();
+    try {
+      const transformRequest = vi.fn(() => new Promise<never>(() => undefined));
+      const fetch = vi.fn();
+      const loading = loadMapLibreOverlayStyle(createStyleService(STYLE_URL), {
+        signal: new AbortController().signal,
+        transformRequest: transformRequest as never,
+        fetch,
+      });
+      let settled = false;
+      const outcome = loading.then(
+        () => {
+          settled = true;
+          return { status: 'fulfilled' } as const;
+        },
+        (reason) => {
+          settled = true;
+          return { status: 'rejected', reason } as const;
+        },
+      );
+
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(settled).toBe(false);
+      expect(transformRequest).toHaveBeenCalledWith(STYLE_URL, 'Style');
+      expect(fetch).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(settled).toBe(true);
+      await expect(outcome).resolves.toMatchObject({
+        status: 'rejected',
+        reason: { message: 'MapLibre overlay style request timed out after 30000ms' },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

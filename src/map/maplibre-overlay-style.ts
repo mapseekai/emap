@@ -133,36 +133,51 @@ export async function loadMapLibreOverlayStyle(
   }
 
   const controller = new AbortController();
-  const abort = () => controller.abort(options.signal.reason);
-  let timedOut = false;
+  const abort = () => {
+    if (!controller.signal.aborted) controller.abort(options.signal.reason);
+  };
   const timeoutMs = options.timeoutMs ?? 30_000;
+  const timeoutReason = new DOMException('Timed out', 'TimeoutError');
   const timeout = globalThis.setTimeout(() => {
-    timedOut = true;
-    controller.abort(new DOMException('Timed out', 'TimeoutError'));
+    if (!controller.signal.aborted) controller.abort(timeoutReason);
   }, timeoutMs);
   options.signal.addEventListener('abort', abort, { once: true });
   if (options.signal.aborted) abort();
+  const interrupted = new Promise<never>((_resolve, reject) => {
+    if (controller.signal.aborted) {
+      reject(controller.signal.reason);
+    } else {
+      controller.signal.addEventListener('abort', () => reject(controller.signal.reason), { once: true });
+    }
+  });
 
   try {
     const transformed = options.transformRequest
-      ? await options.transformRequest(service.style, 'Style' as maplibregl.ResourceType)
+      ? await Promise.race([
+          options.transformRequest(service.style, 'Style' as maplibregl.ResourceType),
+          interrupted,
+        ])
       : undefined;
     const request = transformed ?? { url: service.style };
-    const response = await options.fetch(request.url, {
-      signal: controller.signal,
-      headers: request.headers,
-      method: request.method,
-      body: request.body,
-      credentials: request.credentials,
-      cache: request.cache,
-      referrerPolicy: request.referrerPolicy,
-    });
+    const response = await Promise.race([
+      options.fetch(request.url, {
+        signal: controller.signal,
+        headers: request.headers,
+        method: request.method,
+        body: request.body,
+        credentials: request.credentials,
+        cache: request.cache,
+        referrerPolicy: request.referrerPolicy,
+      }),
+      interrupted,
+    ]);
     if (!response.ok) {
       throw new Error(`MapLibre overlay style request failed: HTTP ${response.status}`);
     }
-    return prepareMapLibreOverlayStyle(service.id, await response.json(), response.url);
+    const style = await Promise.race([response.json(), interrupted]);
+    return prepareMapLibreOverlayStyle(service.id, style, response.url);
   } catch (error) {
-    if (timedOut) {
+    if (error === timeoutReason) {
       throw new Error(`MapLibre overlay style request timed out after ${timeoutMs}ms`);
     }
     throw error;
