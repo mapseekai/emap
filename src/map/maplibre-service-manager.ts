@@ -782,7 +782,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         if (request.requiresProjection) await this._ensureWebMercator();
         if (this._desiredRequest !== request) return;
         const baseStyle = request.style;
-        const bootstrapStyle = typeof baseStyle === 'string';
+        const bootstrapStyle = typeof baseStyle === 'string' && !this._map && !this._mapPromise;
         request.bootstrapStyle = bootstrapStyle;
         let initialStyle: maplibregl.StyleSpecification;
         if (typeof baseStyle === 'string') {
@@ -1759,14 +1759,19 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       this._styleGeneration++;
       this._readyStyle = null;
       this._appliedRequest = request;
-      map.setStyle(request.style, {
-        diff: false,
-        transformStyle: (_previous, next) =>
-          composeMapLibreStyle(
-            next,
-            request.preparedOverlays.map(({ prepared, visible }) => ({ prepared, visible })),
-          ),
-      });
+      map.setStyle(
+        request.style,
+        request.preparedOverlays.length === 0
+          ? { diff: false }
+          : {
+              diff: false,
+              transformStyle: (_previous, next) =>
+                composeMapLibreStyle(
+                  next,
+                  request.preparedOverlays.map(({ prepared, visible }) => ({ prepared, visible })),
+                ),
+            },
+      );
       this._committedRequest = null;
     } catch (value) {
       const error = toError(value);

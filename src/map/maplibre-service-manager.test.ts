@@ -422,6 +422,7 @@ function createManager(
   } = {},
 ) {
     FakeMap.urlStyles.clear();
+    FakeMap.constructorCalls = 0;
     FakeMap.instances.length = 0;
     FakeMap.rebuildOnSetStyle = true;
     FakeMap.constructorError = null;
@@ -3675,10 +3676,52 @@ describe('MapLibreServiceManager overlay rendering', () => {
     urlMap.emit('style.load');
     await waitForCondition(() => urlMap.setStyleCalls.length === 2, 'URL style did not reconcile');
     urlMap.emit('style.load');
-    urlMap.emit('style.load');
     await urlInitialization;
     expect(url.manager.getServiceState('bright')).toMatchObject({ active: true, status: 'ready' });
     expect(urlMap.layers.has('base-fill')).toBe(true);
     expect(urlMap.layers.has('emap-overlay:bright:land')).toBe(true);
+  });
+  it('updates and removes URL style overlays with one established-map rebuild each', async () => {
+    const styleUrl = 'https://example.test/url-style.json';
+    const replacementStyle = {
+      ...brightStyle,
+      sources: { replacement: { type: 'vector' as const, url: 'https://example.test/replacement.json' } },
+      layers: [{ id: 'replacement', type: 'line' as const, source: 'replacement' }],
+    } as const;
+    const { manager } = createManager([{ ...base, style: styleUrl }]);
+    FakeMap.urlStyles.set(styleUrl, objectBasemap.style);
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+
+    const addition = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: brightStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'URL overlay was not composed');
+    map.emit('style.load');
+    await addition;
+
+    const update = manager.updateService('bright', {
+      id: 'bright',
+      name: 'Replacement',
+      role: 'overlay',
+      visible: true,
+      style: replacementStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'URL update was not composed');
+    map.emit('style.load');
+    await update;
+    expect(map.setStyleCalls).toHaveLength(2);
+
+    const removal = manager.removeService('bright');
+    await waitForCondition(() => map.setStyleCalls.length === 3, 'URL removal was not composed');
+    map.emit('style.load');
+    await removal;
+    expect(map.setStyleCalls).toHaveLength(3);
   });
 });
