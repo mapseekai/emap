@@ -251,6 +251,28 @@ describe('TopologySource.setData', () => {
     expect(splitSelfIntersectingPolygonRings).toHaveBeenCalledWith(FAKE_DATASET);
   });
 
+  it('splits self-touching rings after importing TopoJSON through a .json file', async () => {
+    const dataset = {
+      ...FAKE_DATASET,
+      info: { input_files: ['land.json'], input_formats: ['topojson'] },
+    };
+    const runImport = vi.fn(async () => dataset);
+    const splitSelfIntersectingPolygonRings = vi.fn();
+    const adapter = {
+      runImport,
+      splitSelfIntersectingPolygonRings,
+    } as unknown as MapshaperAdapter;
+    const source = new TopologySource('t', { adapter });
+
+    await source.setData({
+      filename: 'land.json',
+      content: new TextEncoder().encode('{\"type\":\"Topology\"}'),
+    });
+
+    expect(splitSelfIntersectingPolygonRings).toHaveBeenCalledOnce();
+    expect(splitSelfIntersectingPolygonRings).toHaveBeenCalledWith(dataset);
+  });
+
   it('does not normalize non-Shapefile layers in a mixed import', async () => {
     const runImport = vi.fn(async () => FAKE_DATASET);
     const splitSelfIntersectingPolygonRings = vi.fn();
@@ -1126,6 +1148,31 @@ describe('TopologySource format plugin routing', () => {
     await source.setData({ filename: 'data.parquet', content });
     expect(importBinary).toHaveBeenCalledWith(content, 'data.parquet');
     expect(source.getLayers()[0].name).toBe('plug');
+  });
+
+  it('normalizes GeoParquet plugin imports without changing GeoArrow routing', async () => {
+    registerTestPlugin();
+    const adapter = getDefaultMapshaperAdapter();
+    const splitSpy = vi.spyOn(adapter, 'splitSelfIntersectingPolygonRings');
+    try {
+      const parquet = new TopologySource('parquet');
+      await parquet.setData({
+        filename: 'data.parquet',
+        content: new Uint8Array([1]),
+      });
+      expect(splitSpy).toHaveBeenCalledOnce();
+      expect(splitSpy).toHaveBeenCalledWith(PLUGIN_DATASET);
+
+      splitSpy.mockClear();
+      const arrow = new TopologySource('arrow');
+      await arrow.setData({
+        filename: 'data.arrow',
+        content: new Uint8Array([1]),
+      });
+      expect(splitSpy).not.toHaveBeenCalled();
+    } finally {
+      splitSpy.mockRestore();
+    }
   });
 
   it('throws a registration hint for plugin extensions when unregistered', async () => {

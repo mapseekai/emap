@@ -262,9 +262,10 @@ export interface MapshaperAdapter {
 
   /**
    * Split polygon parts that revisit a topological node into simple rings.
-   * Shapefile writers commonly encode a hole tangent to its shell as one
-   * pinched part; mapshaper's splitter restores the explicit shell + hole
-   * representation expected by ring editing. Mutates polygon shapes in place.
+   * Shapefile, TopoJSON and GeoParquet encoders may represent a hole tangent
+   * to its shell as one pinched part; mapshaper's splitter restores the
+   * explicit shell + hole representation expected by ring editing. Mutates
+   * polygon shapes in place.
    */
   splitSelfIntersectingPolygonRings(dataset: MapshaperDataset): void;
 
@@ -752,6 +753,28 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
         mapshaper.geom.testPointInPolygon(anchor.x, anchor.y, [container], arcs)
       );
     };
+    const vertexData = arcs.getVertexData!();
+    const endpointKey = (signedArcId: number, start: boolean) => {
+      const arcId = signedArcId < 0 ? ~signedArcId : signedArcId;
+      const offset = vertexData.ii[arcId]!;
+      const count = vertexData.nn[arcId]!;
+      const forward = signedArcId >= 0;
+      const vertex =
+        start === forward ? offset : offset + count - 1;
+      return `${vertexData.xx[vertex]},${vertexData.yy[vertex]}`;
+    };
+    const revisitsNode = (ring: number[]) => {
+      if (ring.length === 0) return false;
+      const first = endpointKey(ring[0]!, true);
+      const seen = new Set<string>([first]);
+      for (let index = 0; index < ring.length; index++) {
+        const key = endpointKey(ring[index]!, false);
+        if (index === ring.length - 1 && key === first) continue;
+        if (seen.has(key)) return true;
+        seen.add(key);
+      }
+      return false;
+    };
     for (const layer of dataset.layers) {
       if (layer.geometry_type !== 'polygon' || !layer.shapes) continue;
       for (const rawShape of layer.shapes) {
@@ -759,6 +782,10 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
         const shape = rawShape as PathShape;
         const normalized: PathShape = [];
         for (const original of shape) {
+          if (!revisitsNode(original)) {
+            normalized.push(original);
+            continue;
+          }
           const originalSign = Math.sign(area(original));
           const parts = split(original.slice()).map((ring) => ({
             ring,

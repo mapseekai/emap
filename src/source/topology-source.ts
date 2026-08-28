@@ -406,16 +406,21 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
         ? await pluginImport
         : await this._adapter.runImport(cmd, inputFiles);
 
-      if (
+      const inputFormats = dataset.info?.input_formats ?? [];
+      const isShapefileOnly =
         primaryFiles.length > 0 &&
-        primaryFiles.every((filename) => /\.shp$/i.test(filename))
-      ) {
-        // Shapefile has no explicit shell↔hole grouping. Writers such as QGIS
-        // may encode a hole tangent to its shell as one pinched ring; restore
-        // simple rings before CRS normalization or any editing operation sees
-        // the dataset. Mixed-format imports are not normalized as one unit:
-        // layer provenance is no longer available after mapshaper combines
-        // their datasets, so a dataset-wide rewrite would mutate non-SHP data.
+        primaryFiles.every((filename) => /\.shp$/i.test(filename));
+      const isTopoJsonOnly =
+        inputFormats.length > 0 && inputFormats.every((format) => format === 'topojson');
+      const isGeoParquetOnly =
+        primaryFiles.length === 1 && /\.(?:parquet|geoparquet)$/i.test(primaryFiles[0]!);
+      if (isShapefileOnly || isTopoJsonOnly || isGeoParquetOnly) {
+        // Shapefile, TopoJSON and GeoParquet may carry a hole tangent to its
+        // shell as one pinched ring; restore simple rings before CRS
+        // normalization or editing sees the dataset. Mixed mapshaper imports
+        // are not normalized as one unit: layer provenance is unavailable
+        // after datasets are combined, so a dataset-wide rewrite would mutate
+        // unrelated data. Plugin imports are single-file by contract.
         this._adapter.splitSelfIntersectingPolygonRings(dataset);
       }
 

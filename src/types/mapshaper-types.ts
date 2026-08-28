@@ -241,6 +241,10 @@ export interface MapshaperDataset {
     prj?: string;
     /** WKT1 CRS string, sometimes set by importers (e.g. FlatGeobuf, GeoPackage) */
     wkt1?: string;
+    /** Source filenames recorded by mapshaper's importer. */
+    input_files?: string[];
+    /** Detected source formats (`geojson`, `topojson`, `shapefile`, …). */
+    input_formats?: string[];
     crs?: {
       is_latlong?: boolean;
       projName?: string;
@@ -268,6 +272,8 @@ export interface ReadonlyMapshaperDataset {
     readonly crs_string?: string;
     readonly prj?: string;
     readonly wkt1?: string;
+    readonly input_files?: readonly string[];
+    readonly input_formats?: readonly string[];
     readonly crs?: {
       readonly is_latlong?: boolean;
       readonly projName?: string;
