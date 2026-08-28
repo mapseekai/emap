@@ -3537,6 +3537,70 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(manager.getServiceState('bright')).toBeUndefined();
     expect((map.options.container as HTMLElement).hidden).toBe(true);
   });
+  it('removes the sole style overlay while its fetch preparation is pending without retaining a request', async () => {
+    FakeMap.instances.length = 0;
+    const started = deferred<void>();
+    const fetchStyle = vi.fn(async (_url: string, options?: RequestInit) => {
+      started.resolve();
+      await new Promise<void>((_resolve, reject) =>
+        options?.signal?.addEventListener('abort', () =>
+          reject(new DOMException('aborted', 'AbortError')),
+        ),
+      );
+      return new Response(JSON.stringify(brightStyle));
+    });
+    const { manager } = createManager([], { fetchStyle });
+    const activation = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: 'https://example.test/bright.json',
+    });
+    await started.promise;
+    await manager.removeService('bright');
+
+    await expect(activation).rejects.toMatchObject({ name: 'AbortError' });
+    expect(FakeMap.instances).toEqual([]);
+    expect(manager.getServiceState('bright')).toBeUndefined();
+  });
+
+  it('removes the sole applied style overlay through an empty generation before its first style load', async () => {
+    const style = {
+      ...brightStyle,
+      sprite: 'https://one.test/sprite',
+      glyphs: 'https://fonts.test/{fontstack}/{range}.pbf',
+    } as const;
+    const { manager } = createManager([
+      { id: 'bright', name: 'Bright', role: 'overlay', visible: true, style },
+    ]);
+    const initialization = manager.initialize();
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await waitForCondition(
+      () => map.setStyleCalls.length === 1,
+      'initial style overlay generation did not start',
+    );
+
+    const removal = manager.removeService('bright');
+    await Promise.resolve();
+    expect(map.setStyleCalls).toHaveLength(1);
+
+    map.emit('style.load');
+    await waitForCondition(
+      () => map.setStyleCalls.length === 2,
+      'removal did not replace the applied style with an empty generation',
+    );
+    expect(map.setStyleCalls.at(-1)).toEqual(EMPTY_STYLE);
+    map.emit('style.load');
+    await Promise.all([initialization, removal]);
+
+    expect(map.getStyle()).toEqual(EMPTY_STYLE);
+    expect(map.sources).toEqual(new Map());
+    expect(map.layers).toEqual(new Map());
+    expect(manager.getServiceState('bright')).toBeUndefined();
+  });
+
 
   it('style overlay removal and update rebuild their complete composite resources', async () => {
     const oldStyle = { ...brightStyle, glyphs: undefined } as const;

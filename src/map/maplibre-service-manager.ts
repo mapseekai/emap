@@ -560,12 +560,22 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       record.removing = true;
       record.state = { id: record.definition.id, active: false, status: 'idle' };
       this._syncVisibility();
+      const hasPendingStyleOwnership = [
+        this._desiredRequest,
+        this._appliedRequest,
+        this._parsedRequest,
+      ].some((request) =>
+        request?.preparedOverlays.some(({ record: candidate }) => candidate === record),
+      );
       if (
         (this._map && (record.preparedStyle || record.ownedLayers.size > 0)) ||
-        this._desiredRequest?.preparedOverlays.some(({ record: candidate }) => candidate === record)
+        hasPendingStyleOwnership
       ) {
         try {
-          await this._requestCompositeStyle(record, this._readyStyle !== null);
+          await this._requestCompositeStyle(
+            record,
+            this._map !== null && (this._readyStyle !== null || hasPendingStyleOwnership),
+          );
         } catch (error) {
           record.removing = false;
           this._handleTransitionFailure(record, operationRevision, error);
