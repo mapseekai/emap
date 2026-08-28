@@ -1515,8 +1515,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (!map) return undefined;
     const desired: Array<{ record: ServiceRecord; id: string }> = [];
     for (const record of this._registry.values()) {
-      if (record.definition.role !== 'overlay' || !record.state.active) continue;
+      if (record.definition.role !== 'overlay') continue;
       if (isResourceOverlayService(record.definition)) {
+        if (!record.state.active) continue;
         for (const layer of record.definition.layers) desired.push({ record, id: layer.id });
       } else if (isStyleOverlayService(record.definition)) {
         for (const ownedLayerId of record.preparedStyle?.value.layerIds ?? []) {
@@ -2132,6 +2133,27 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   }
 
   private async _finishParsedStyle(request: StyleRequest, generation: number): Promise<void> {
+    for (const { record, prepared } of request.preparedOverlays) {
+      if (this._desiredRequest !== request) break;
+      if (
+        record.removing ||
+        record.definition.role !== 'overlay' ||
+        !isStyleOverlayService(record.definition)
+      ) {
+        continue;
+      }
+      const operationRevision = record.operationRevision;
+      try {
+        this._adoptStyleOverlayResources(record, prepared, generation);
+      } catch (value) {
+        const error = toError(value);
+        this._parsedRequest = null;
+        this._publishTransitionFailure(record, operationRevision, error);
+        this._rejectStyleRequest(request, error);
+        return;
+      }
+    }
+
     for (const record of this._registry.values()) {
       if (this._desiredRequest !== request) break;
       const preparedOverlay = request.preparedOverlays.find(
@@ -2155,9 +2177,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           this._setStatus(record, operationRevision, 'loading');
           if (this._desiredRequest !== request) break;
         }
-        if (preparedOverlay && isStyleOverlayService(record.definition)) {
-          this._adoptStyleOverlayResources(record, preparedOverlay.prepared, generation);
-        } else {
+        if (!preparedOverlay || !isStyleOverlayService(record.definition)) {
           await this._reconcileOverlayForGeneration(record, operationRevision, generation);
           this._assertCurrentOperation(record, operationRevision);
         }

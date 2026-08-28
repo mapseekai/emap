@@ -753,10 +753,10 @@ describe('MapLibreServiceManager basemap style coordinator', () => {
     ]);
     expect(map.layerOrder).toEqual([
       'base-fill',
+      'roads-line',
       'emap-overlay:openfreemap-bright:land',
       'emap-overlay:openfreemap-bright:roads',
       'emap-overlay:openfreemap-bright:places',
-      'roads-line',
     ]);
     expect(style?.sources).toMatchObject({
       'emap-overlay:openfreemap-bright:land': brightStyle.sources.land,
@@ -3480,7 +3480,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
         layers: [{ id: 'dark-fill', type: 'fill' as const, source: 'base' }],
       },
     } as const;
-    const { manager } = createManager([objectBasemap, alternateBasemap, styleOverlay], {
+    const { manager } = createManager([objectBasemap, alternateBasemap, { ...roads, visible: true }, styleOverlay], {
       fetchStyle,
     });
     const basemap = manager.setBasemap('light');
@@ -3501,6 +3501,13 @@ describe('MapLibreServiceManager overlay rendering', () => {
     map.emit('style.load');
     await show;
     expect(fetchStyle).toHaveBeenCalledTimes(1);
+    expect(map.layerOrder).toEqual([
+      'base-fill',
+      'roads-line',
+      'emap-overlay:bright:land',
+      'emap-overlay:bright:roads',
+      'emap-overlay:bright:places',
+    ]);
 
     await manager.setOverlayVisibility('bright', false);
     const switchRequest = manager.setBasemap('dark');
@@ -3518,7 +3525,25 @@ describe('MapLibreServiceManager overlay rendering', () => {
         expect.objectContaining({ layout: expect.objectContaining({ visibility: 'none' }) }),
       ]),
     );
+    expect(map.layerOrder).toEqual([
+      'dark-fill',
+      'roads-line',
+      'emap-overlay:bright:land',
+      'emap-overlay:bright:roads',
+      'emap-overlay:bright:places',
+    ]);
+    const setStyleCalls = map.setStyleCalls.length;
+    await manager.setOverlayVisibility('bright', true);
+    expect(map.setStyleCalls).toHaveLength(setStyleCalls);
+    expect(map.layerOrder).toEqual([
+      'dark-fill',
+      'roads-line',
+      'emap-overlay:bright:land',
+      'emap-overlay:bright:roads',
+      'emap-overlay:bright:places',
+    ]);
   });
+
 
   it('style overlay update defers an inactive replacement fetch until show', async () => {
     const fetchStyle = vi.fn(async () => new Response(JSON.stringify(brightStyle)));
