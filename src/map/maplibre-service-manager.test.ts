@@ -3968,6 +3968,102 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(manager.getServiceState('other')).toMatchObject({ active: true, status: 'ready' });
   });
 
+  it('attributes a late transformed sprite error to its owner while rolling back an updated overlay', async () => {
+    const transformRequest = vi.fn((url: string) => ({
+      url: `https://proxy.example.test/?url=${encodeURIComponent(url)}`,
+    }));
+    const firstStyle = {
+      ...brightStyle,
+      sprite: 'https://one.example.test/sprite',
+      sources: {
+        first: { type: 'vector' as const, url: 'https://one.example.test/tiles.json' },
+      },
+      layers: [{ id: 'first', type: 'fill' as const, source: 'first' }],
+    } as const satisfies maplibregl.StyleSpecification;
+    const secondStyle = {
+      ...brightStyle,
+      sprite: 'https://two.example.test/sprite',
+      sources: {
+        second: { type: 'vector' as const, url: 'https://two.example.test/tiles.json' },
+      },
+      layers: [{ id: 'second', type: 'fill' as const, source: 'second' }],
+    } as const satisfies maplibregl.StyleSpecification;
+    const replacementStyle = {
+      ...secondStyle,
+      sprite: 'https://replacement.example.test/sprite',
+      sources: {
+        replacement: {
+          type: 'vector' as const,
+          url: 'https://replacement.example.test/tiles.json',
+        },
+      },
+      layers: [{ id: 'replacement', type: 'fill' as const, source: 'replacement' }],
+    } as const satisfies maplibregl.StyleSpecification;
+    const { manager } = createManager([objectBasemap], {
+      mapOptions: { transformRequest: transformRequest as never },
+    });
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+
+    const first = manager.addService({
+      id: 'first',
+      name: 'First',
+      role: 'overlay',
+      visible: true,
+      style: firstStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'first style was not composed');
+    map.emit('style.load');
+    await first;
+    const second = manager.addService({
+      id: 'second',
+      name: 'Second',
+      role: 'overlay',
+      visible: true,
+      style: secondStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'second style was not composed');
+    map.emit('style.load');
+    await second;
+
+    const errors: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
+    manager.on('error', (event) => errors.push(event));
+    const update = manager.updateService('second', {
+      id: 'second',
+      name: 'Updated second',
+      role: 'overlay',
+      visible: true,
+      style: replacementStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 3, 'replacement style was not composed');
+    const rawSprite = `${firstStyle.sprite}@2x.png`;
+    const rewrittenSprite = map.options.transformRequest?.(rawSprite, 'Sprite')?.url;
+    map.emit('style.load');
+    await update;
+
+    map.emit('error', { error: new Error('late first sprite failed'), url: rewrittenSprite });
+    await waitForCondition(() => map.setStyleCalls.length === 5, 'rollback style was not composed');
+    map.emit('style.load');
+    await waitForCondition(
+      () => manager.getServiceState('second')?.status === 'ready',
+      'rolled-back overlay did not recover',
+    );
+
+    expect(errors.map(({ serviceId, phase, fatal }) => ({ serviceId, phase, fatal }))).toEqual([
+      { serviceId: 'first', phase: 'style', fatal: true },
+    ]);
+    expect(manager.getServiceState('first')).toMatchObject({ active: true, status: 'ready' });
+    expect(manager.getServiceState('second')).toMatchObject({ active: true, status: 'ready' });
+    expect(map.sources.has('base')).toBe(true);
+    expect(map.layers.has('base-fill')).toBe(true);
+    expect(map.appliedStyles.at(-1)?.sprite).toEqual([
+      { id: 'emap-overlay:first:default', url: firstStyle.sprite },
+      { id: 'emap-overlay:second:default', url: secondStyle.sprite },
+    ]);
+  });
+
   it('attributes a transformed overlay sprite request to an existing overlay during a basemap recomposition', async () => {
     const dark = { ...objectBasemap, id: 'dark', name: 'Dark' } as const;
     const transformRequest = vi.fn((url: string) => ({

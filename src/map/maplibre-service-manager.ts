@@ -99,6 +99,7 @@ interface StyleRequest {
     visible: boolean;
   }[];
   resourceOwners: StyleRequestResourceOwners;
+  composedStyle?: maplibregl.StyleSpecification;
   bootstrapStyle?: boolean;
   reapplyAfterInitial?: boolean;
   followers?: StyleRequest[];
@@ -959,16 +960,14 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         const baseStyle = request.style;
         const bootstrapStyle = typeof baseStyle === 'string' && !this._map && !this._mapPromise;
         request.bootstrapStyle = bootstrapStyle;
-        let initialStyle: maplibregl.StyleSpecification;
         if (typeof baseStyle === 'string') {
-          initialStyle = EMPTY_STYLE;
-        } else {
-          initialStyle = composeMapLibreStyle(
-            baseStyle,
-            request.preparedOverlays.map(({ prepared, visible }) => ({ prepared, visible })),
-          );
+          throw new Error('MapLibre composite style base was not prepared');
         }
-        await this._ensureMap(initialStyle);
+        request.composedStyle = composeMapLibreStyle(
+          baseStyle,
+          request.preparedOverlays.map(({ prepared, visible }) => ({ prepared, visible })),
+        );
+        await this._ensureMap(request.composedStyle);
         if (this._desiredRequest !== request) return;
         request.readyToApply = true;
         this._startDesiredStyleIfIdle();
@@ -1985,14 +1984,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       if (request.preparedOverlays.length === 0) {
         style = request.style;
       } else {
-        const baseStyle = request.style;
-        if (typeof baseStyle === 'string') {
-          throw new Error('MapLibre composite style base was not prepared');
+        if (!request.composedStyle) {
+          throw new Error('MapLibre composite style was not prepared');
         }
-        style = composeMapLibreStyle(
-          baseStyle,
-          request.preparedOverlays.map(({ prepared, visible }) => ({ prepared, visible })),
-        );
+        style = request.composedStyle;
       }
       const generation = ++this._styleGeneration;
       this._readyStyle = null;
@@ -2441,7 +2436,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         record.definitionRevision = rollbackStyleOverlay.definitionRevision;
         record.preparedStyle = rollbackStyleOverlay.preparedStyle;
         record.state = cloneState(rollbackStyleOverlay.state);
-        this._emitFatalError(record.definition.id, error);
+        const errorOwner =
+          trigger?.definition.role === 'overlay' && isStyleOverlayService(trigger.definition)
+            ? trigger
+            : record;
+        this._emitFatalError(errorOwner.definition.id, error);
         this._emitChange(record.definition, 'update', record.state);
         void this._requestCompositeStyle(record).catch(() => undefined);
         return;
