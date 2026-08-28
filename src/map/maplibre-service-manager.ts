@@ -460,7 +460,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     const previousState = cloneState(record.state);
     record.operationRevision++;
     const operationRevision = record.operationRevision;
-    record.stylePreparation?.controller.abort();
+    this._abortStylePreparation(record);
     record.definition = cloneService(service);
     record.definitionRevision = ++this._definitionRevision;
     record.preparedStyle = undefined;
@@ -505,7 +505,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     ) {
       record.operationRevision++;
       const operationRevision = record.operationRevision;
-      record.stylePreparation?.controller.abort();
+      this._abortStylePreparation(record);
       record.removing = true;
       record.state = { id: record.definition.id, active: false, status: 'idle' };
       this._syncVisibility();
@@ -651,6 +651,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     request.failure = error;
     request.reject(error);
   }
+  private _abortStylePreparation(record: ServiceRecord): void {
+    record.stylePreparation?.controller.abort();
+  }
+
 
   private async _prepareStyleOverlay(
     record: ServiceRecord,
@@ -673,7 +677,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     ) {
       return existing.promise;
     }
-    existing?.controller.abort();
+    this._abortStylePreparation(record);
     const controller = new AbortController();
     const preparation: StylePreparation = {
       definitionRevision: record.definitionRevision,
@@ -958,7 +962,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   destroy(): void {
     if (this._destroyed) return;
     this._destroyed = true;
-    for (const record of this._registry.values()) record.operationRevision++;
+    for (const record of this._registry.values()) {
+      record.operationRevision++;
+      this._abortStylePreparation(record);
+    }
     const destroyedError = abortError('MapLibre service manager was destroyed');
     if (this._desiredRequest) this._rejectStyleRequest(this._desiredRequest, destroyedError);
     if (this._appliedRequest) this._rejectStyleRequest(this._appliedRequest, destroyedError);
@@ -2326,12 +2333,17 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       this._errorServiceIds.set(error, this._mutationContext.serviceId);
       return;
     }
+    const owner = details?.sourceId ? this._findOwnedSource(details.sourceId) : undefined;
     if (details?.tile !== undefined) {
-      this.fire('error', { phase: 'tile', fatal: false, error });
+      this.fire('error', {
+        serviceId: owner?.definition.id,
+        phase: 'tile',
+        fatal: false,
+        error,
+      });
       return;
     }
     if (details?.sourceId) {
-      const owner = this._findOwnedSource(details.sourceId);
       if (owner) {
         this._errorPhases.set(error, 'source');
         try {

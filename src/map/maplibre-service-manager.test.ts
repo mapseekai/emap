@@ -1626,7 +1626,7 @@ describe('MapLibreServiceManager style failures and transactional mutations', ()
     expect(map.setStyleCalls).not.toContain(replacement.style);
   });
 
-  it('classifies tile, owned-source, and post-load lifecycle errors without losing identity', async () => {
+  it('provides tile error attribution before source error transitions', async () => {
     const { manager } = createManager([roads]);
     const map = await activateOverlay(manager);
     const events: Array<{
@@ -1641,12 +1641,12 @@ describe('MapLibreServiceManager style failures and transactional mutations', ()
     const spriteError = new Error('sprite failed');
     const sourceError = new Error('source failed');
 
-    map.emit('error', { error: tileError, tile: {} });
+    map.emit('error', { error: tileError, tile: {}, sourceId: 'roads' });
     map.emit('error', { error: spriteError });
     map.emit('error', { error: sourceError, sourceId: 'roads' });
 
     expect(events).toEqual([
-      { type: 'error', phase: 'tile', fatal: false, error: tileError },
+      { type: 'error', phase: 'tile', fatal: false, error: tileError, serviceId: 'roads' },
       { type: 'error', phase: 'lifecycle', fatal: false, error: spriteError },
       {
         type: 'error',
@@ -3723,5 +3723,66 @@ describe('MapLibreServiceManager overlay rendering', () => {
     map.emit('style.load');
     await removal;
     expect(map.setStyleCalls).toHaveLength(3);
+  });
+  it('attributes applied composite style errors to the trigger overlay', async () => {
+    const { manager } = createManager([objectBasemap]);
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+    const errors: Array<{ serviceId?: string; phase: string; fatal: boolean; message: string }> = [];
+    manager.on('error', (event) =>
+      errors.push({
+        serviceId: event.serviceId,
+        phase: event.phase,
+        fatal: event.fatal,
+        message: event.error.message,
+      }),
+    );
+    const addition = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: brightStyle,
+    }).catch((error: unknown) => error);
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'style was not composed');
+    map.emit('error', { error: new Error('sprite request failed') });
+
+    await expect(addition).resolves.toMatchObject({ name: 'AbortError' });
+    expect(errors).toEqual([
+      {
+        serviceId: 'bright',
+        phase: 'style',
+        fatal: true,
+        message: 'sprite request failed',
+      },
+    ]);
+    expect(manager.getServiceState('bright')).toMatchObject({ status: 'error' });
+    expect(manager.getServiceState('light')).not.toMatchObject({ status: 'error' });
+  });
+
+  it('destroy aborts style overlay fetches without stale events', async () => {
+    const fetchStarted = deferred<void>();
+    let signal: AbortSignal | undefined;
+    const fetchStyle = vi.fn(async (_url: string, options?: RequestInit) => {
+      signal = options?.signal ?? undefined;
+      fetchStarted.resolve();
+      return new Promise<Response>(() => undefined);
+    });
+    const { manager } = createManager(
+      [{ id: 'bright', name: 'Bright', role: 'overlay', style: 'https://example.test/bright.json' }],
+      { fetchStyle },
+    );
+    const events: string[] = [];
+    manager.on('change', (event) => events.push(`${event.serviceId}:${event.reason}`));
+    const activation = manager.setOverlayVisibility('bright', true).catch((error: unknown) => error);
+
+    await fetchStarted.promise;
+    manager.destroy();
+
+    expect(signal?.aborted).toBe(true);
+    await expect(activation).resolves.toMatchObject({ name: 'AbortError' });
+    expect(events).toEqual(['bright:visibility', 'bright:status']);
   });
 });
