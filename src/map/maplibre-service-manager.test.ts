@@ -4071,6 +4071,13 @@ describe('MapLibreServiceManager overlay rendering', () => {
     ['sprite ID', { spriteId: 'base-sprite' }, 'style'],
     ['source ID', { sourceId: 'base-source' }, 'source'],
     ['glyph URL', { glyphUrl: 'https://example.test/base/{fontstack}/{range}.pbf' }, 'style'],
+    [
+      'transformed video URL',
+      (map: FakeMap) => ({
+        url: map.options.transformRequest?.('https://example.test/base-video.mp4', 'Source')?.url,
+      }),
+      'style',
+    ],
   ])('attributes a committed basemap %s failure after a style overlay update to the basemap', async (_kind, details, phase) => {
     const basemap = {
       ...objectBasemap,
@@ -4079,12 +4086,26 @@ describe('MapLibreServiceManager overlay rendering', () => {
         sprite: [{ id: 'base-sprite', url: 'https://example.test/base-sprite' }],
         glyphs: 'https://example.test/base/{fontstack}/{range}.pbf',
         sources: {
-          'base-source': { type: 'vector', url: 'https://example.test/base-source.json' },
+          'base-source': {
+            type: 'video',
+            urls: ['https://example.test/base-video.mp4'],
+            coordinates: [
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 1],
+            ],
+          },
         },
         layers: [{ id: 'base-layer', type: 'fill', source: 'base-source' }],
       },
     } as const;
-    const { manager } = createManager([basemap]);
+    const transformRequest = vi.fn((url: string) => ({
+      url: `https://proxy.example.test/?url=${encodeURIComponent(url)}`,
+    }));
+    const { manager } = createManager([basemap], {
+      mapOptions: { transformRequest: transformRequest as never },
+    });
     const initial = manager.setBasemap('light');
     const map = await waitForFakeMap();
     map.emit('style.load');
@@ -4128,7 +4149,8 @@ describe('MapLibreServiceManager overlay rendering', () => {
         basemapStates.push(event.state.status);
       }
     });
-    map.emit('error', { error: new Error('committed basemap resource failed'), ...details });
+    const errorDetails = typeof details === 'function' ? details(map) : details;
+    map.emit('error', { error: new Error('committed basemap resource failed'), ...errorDetails });
 
     expect(events[0]).toEqual({ serviceId: 'light', phase, fatal: true });
     expect(basemapStates).toContain('error');

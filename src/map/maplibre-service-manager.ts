@@ -801,6 +801,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         if (Array.isArray(sourceRecord.tiles)) {
           for (const tile of sourceRecord.tiles) addResourceUrl(tile);
         }
+        if (Array.isArray(sourceRecord.urls)) {
+          for (const url of sourceRecord.urls) addResourceUrl(url);
+        }
       }
     }
     if (typeof record.glyphs === 'string') {
