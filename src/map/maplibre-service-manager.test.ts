@@ -4048,6 +4048,86 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(manager.getServiceState('light')).toMatchObject({ active: true, status: 'ready' });
     expect(manager.getServiceState('bright')).toMatchObject({ active: true });
   });
+  it('replaces a prepared composite snapshot when a second overlay activates before physical application', async () => {
+    FakeMap.instances.length = 0;
+    const moduleLoad = deferred<typeof import('maplibre-gl')>();
+    const loadMapLibre = vi.fn(() => moduleLoad.promise);
+    const manager = createMapLibreServiceManager(createHost(), {}, loadMapLibre);
+    const first = manager.addService({
+      id: 'one',
+      name: 'One',
+      role: 'overlay',
+      visible: true,
+      style: brightStyle,
+    });
+    await waitForCondition(() => {
+      const request = Reflect.get(manager, '_desiredRequest') as {
+        preparedOverlays: Array<{ record: { definition: { id: string } } }>;
+      } | null;
+      return (
+        request?.preparedOverlays.length === 1 &&
+        request.preparedOverlays[0]?.record.definition.id === 'one' &&
+        Reflect.get(manager, '_appliedRequest') === null
+      );
+    }, 'first composite snapshot was not captured before MapLibre loading');
+    const firstRequest = Reflect.get(manager, '_desiredRequest');
+    const second = manager.addService({
+      id: 'two',
+      name: 'Two',
+      role: 'overlay',
+      visible: true,
+      style: {
+        ...brightStyle,
+        sources: { second: { type: 'vector' as const, url: 'https://example.test/second.json' } },
+        layers: [{ id: 'second', type: 'fill' as const, source: 'second' }],
+      },
+    });
+    await waitForCondition(() => {
+      const registry = Reflect.get(manager, '_registry') as Map<
+        string,
+        { preparedStyle?: unknown }
+      >;
+      return registry.get('two')?.preparedStyle !== undefined;
+    }, 'second overlay did not reach composite coordination');
+    await waitForCondition(
+      () => Reflect.get(manager, '_desiredRequest') !== firstRequest,
+      'second overlay did not replace the stale composite snapshot',
+    );
+
+    moduleLoad.resolve(fakeModule());
+    const map = await waitForFakeMap();
+    await waitForCondition(
+      () => map.listenerCount('style.load') === 1,
+      'initial composite listener did not attach',
+    );
+    map.emit('style.load');
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'replacement composite did not start');
+    map.emit('style.load');
+    await Promise.all([first, second]);
+
+    for (const id of [
+      'emap-overlay:one:land',
+      'emap-overlay:one:places',
+      'emap-overlay:two:second',
+    ]) {
+      expect(map.getSource(id)).toBeDefined();
+      expect(map.getLayer(id)).toBeDefined();
+    }
+    const records = Reflect.get(manager, '_registry') as Map<
+      string,
+      { ownedSources: Map<string, { handle: unknown }>; ownedLayers: Map<string, { handle: unknown }> }
+    >;
+    for (const [serviceId, sourceId, layerId] of [
+      ['one', 'emap-overlay:one:land', 'emap-overlay:one:land'],
+      ['two', 'emap-overlay:two:second', 'emap-overlay:two:second'],
+    ] as const) {
+      const record = records.get(serviceId);
+      expect(record?.ownedSources.get(sourceId)?.handle).toBe(map.getSource(sourceId));
+      expect(record?.ownedLayers.get(layerId)?.handle).toBe(map.getLayer(layerId));
+    }
+    expect(manager.getServiceState('one')).toMatchObject({ active: true, status: 'ready' });
+    expect(manager.getServiceState('two')).toMatchObject({ active: true, status: 'ready' });
+  });
   it('reopens composite preparation when a second style overlay joins after the first snapshot', async () => {
     const firstStyle = brightStyle;
     const secondStyle = {

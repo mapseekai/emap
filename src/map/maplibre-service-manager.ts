@@ -89,6 +89,7 @@ interface StyleRequest {
     visible: boolean;
   }[];
   bootstrapStyle?: boolean;
+  reapplyAfterInitial?: boolean;
   followers?: StyleRequest[];
 }
 
@@ -741,7 +742,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       existing?.triggerServiceId &&
       !existing.settled &&
       !this._appliedRequest &&
-      !this._parsedRequest
+      !this._parsedRequest &&
+      existing.preparedOverlays.some(({ record }) => record === triggerRecord)
     ) {
       return existing.promise;
     }
@@ -756,6 +758,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       true,
     );
     request.triggerServiceId = triggerRecord.definition.id;
+    if (previous?.triggerServiceId && !this._map && this._mapPromise) {
+      request.reapplyAfterInitial = true;
+    }
     this._desiredRequest = request;
     if (previous && previous !== request) {
       if (previous.triggerServiceId) {
@@ -2384,8 +2389,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
     this._detachStyleLoadListener();
     this._appliedRequest = null;
-    if (request.bootstrapStyle) {
+    if (request.bootstrapStyle || request.reapplyAfterInitial) {
       request.bootstrapStyle = false;
+      request.reapplyAfterInitial = false;
       this._startDesiredStyleIfIdle();
       return;
     }
