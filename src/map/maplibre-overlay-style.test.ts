@@ -127,6 +127,24 @@ describe('prepareMapLibreOverlayStyle', () => {
     });
   });
 
+  it('prefixes step outputs without nesting a zoom expression', () => {
+    const fixture = createFixture();
+    fixture.layers[3] = {
+      ...fixture.layers[3],
+      layout: {
+        'icon-image': ['step', ['zoom'], 'circle_11_black', 10, ''],
+      },
+    } as maplibregl.LayerSpecification;
+
+    const prepared = prepareMapLibreOverlayStyle('bright/service', fixture, STYLE_URL);
+
+    expect(prepared.style.layers[2]).toMatchObject({
+      layout: {
+        'icon-image': ['step', ['zoom'], `${PREFIX}:default:circle_11_black`, 10, ''],
+      },
+    });
+  });
+
   it('preserves absolute URL schemes verbatim in styles and resource URLs', () => {
     const fixture = createFixture();
     fixture.sprite = 'custom://sprite/%7Bname%7D';

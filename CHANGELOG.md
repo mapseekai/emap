@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- MapLibre Style overlays now preserve top-level zoom-driven `step` and
+  `interpolate` image expressions while namespacing sprite references, so
+  OpenFreeMap Bright symbol layers pass native MapLibre validation.
+
+
 ## [0.8.0] - 2026-08-28
 
 ### Added

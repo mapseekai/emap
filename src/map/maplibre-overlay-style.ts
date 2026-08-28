@@ -75,6 +75,37 @@ function normalizeSprite(
   };
 }
 
+function prefixImageOutput(value: unknown, imagePrefix: string): unknown {
+  if (value === '' || value === null || value === undefined) return value;
+  if (typeof value === 'string') return `${imagePrefix}${value}`;
+  if (Array.isArray(value)) return ['concat', imagePrefix, value];
+  return value;
+}
+
+function rewriteImageExpression(reference: unknown[], imagePrefix: string): unknown[] {
+  const operator = reference[0];
+  if (operator === 'step') {
+    const rewritten = [...reference];
+    rewritten[2] = prefixImageOutput(rewritten[2], imagePrefix);
+    for (let index = 4; index < rewritten.length; index += 2) {
+      rewritten[index] = prefixImageOutput(rewritten[index], imagePrefix);
+    }
+    return rewritten;
+  }
+  if (
+    operator === 'interpolate' ||
+    operator === 'interpolate-hcl' ||
+    operator === 'interpolate-lab'
+  ) {
+    const rewritten = [...reference];
+    for (let index = 4; index < rewritten.length; index += 2) {
+      rewritten[index] = prefixImageOutput(rewritten[index], imagePrefix);
+    }
+    return rewritten;
+  }
+  return ['concat', imagePrefix, reference];
+}
+
 function rewriteImageReferences(layer: StyleObject, imagePrefix: string | undefined): void {
   if (!imagePrefix) return;
   for (const [section, property] of IMAGE_PROPERTIES) {
@@ -83,9 +114,9 @@ function rewriteImageReferences(layer: StyleObject, imagePrefix: string | undefi
     const sectionValues = values as StyleObject;
     const reference = sectionValues[property];
     if (typeof reference === 'string') {
-      sectionValues[property] = `${imagePrefix}${reference}`;
+      sectionValues[property] = prefixImageOutput(reference, imagePrefix);
     } else if (Array.isArray(reference)) {
-      sectionValues[property] = ['concat', imagePrefix, reference];
+      sectionValues[property] = rewriteImageExpression(reference, imagePrefix);
     }
   }
 }
