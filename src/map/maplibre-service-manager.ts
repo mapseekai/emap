@@ -477,6 +477,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       await this._requestCompositeStyle(record);
       this._setStatus(record, operationRevision, 'ready');
     } catch (error) {
+      if (!this._isCurrentOperation(record, operationRevision)) {
+        throw abortError(`MapLibre service "${record.definition.id}" request was superseded`);
+      }
       record.operationRevision++;
       record.definition = previousDefinition;
       record.definitionRevision = previousDefinitionRevision;
@@ -728,6 +731,15 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   }
 
   private _requestCompositeStyle(triggerRecord: ServiceRecord): Promise<void> {
+    const existing = this._desiredRequest;
+    if (
+      existing?.triggerServiceId &&
+      !existing.settled &&
+      !this._appliedRequest &&
+      !this._parsedRequest
+    ) {
+      return existing.promise;
+    }
     const previous = this._desiredRequest;
     const basemap = this._activeBasemap();
     const request = this._createStyleRequest(
@@ -802,6 +814,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         this._startDesiredStyleIfIdle();
       } catch (value) {
         const error = toError(value);
+        if (hasActiveStyleOverlay) this._errorPhases.set(error, 'style');
         if (this._desiredRequest !== request || isAbortError(error)) return;
         this._handleDesiredSetupFailure(request, error);
       }
