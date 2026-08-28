@@ -7,16 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-28
+
 ### Added
 
 - MapLibre overlay services now accept complete Style v8 URLs or JSON, including
   managed sprite, glyph, source, layer, visibility, update, removal, error, and
   cancellation lifecycles. Overlay resources are namespaced, background layers
   are ignored, and conflicting glyph URLs are rejected deterministically.
-- Selected line features can now be split with point or polyline cutters, and
-  selected polygon features with polyline cutters. Split pieces duplicate the
-  original attributes, replace the current selection with the results, and are
-  available through the interactive `map.splitFeature` handler.
+- `map.ops.splitSelected({ cutter })` now splits the current same-source,
+  same-layer selection: line features accept point or polyline cutters, while
+  polygon features accept polyline cutters. Pieces copy the original attributes
+  and replace the selection; `map.splitFeature` provides the interactive workflow.
 - `map.ops.reshapeSelected({ line })` and the interactive `map.reshapeFeature`
   handler now reshape line and polygon features along a user-drawn line. Like
   QGIS, no selection is required: every feature the line contacts is reshaped;
@@ -35,9 +37,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   target feature; deleting a part is selection-free, and removing a feature's
   last part deletes the whole feature; the `reshape-ring-part` example and
   editing guide document the workflow.
+- `EditToolbar` now accepts `advancedTools: true` to expose built-in reshape,
+  add/delete hole, and add/delete part controls.
 - `HighlightStyle` gains `fillOpacity` so highlighted polygon interiors can
   render filled instead of outline-only; the `reshape-ring-part` example now
   fills its selection highlight.
+
+### Changed
+
+- Custom `MapshaperAdapter` implementations must implement the new arc
+  insertion, polygon mosaic and ring normalization, shape metric, and arc
+  cleanup methods: `appendArc`, `insertCutPoints`, `buildPolygonMosaic`,
+  `splitSelfIntersectingPolygonRings`, `getShapeArea`, `getShapePerimeter`,
+  `getShapeAnchor`, and `cleanArcReferences`. `ArcCutPoint` is now exported.
 
 ### Fixed
 
@@ -767,7 +779,8 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@mapseekai/emap/style.css`).
 
-[Unreleased]: https://github.com/mapseekai/emap/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/mapseekai/emap/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/mapseekai/emap/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/mapseekai/emap/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/mapseekai/emap/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/mapseekai/emap/compare/v0.6.0...v0.7.0
