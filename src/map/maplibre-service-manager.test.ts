@@ -4037,7 +4037,10 @@ describe('MapLibreServiceManager overlay rendering', () => {
       visible: true,
       style: replacementStyle,
     });
-    await waitForCondition(() => map.setStyleCalls.length === 3, 'replacement style was not composed');
+    await waitForCondition(
+      () => map.setStyleCalls.length === 3,
+      'replacement style was not composed',
+    );
     const rawSprite = `${firstStyle.sprite}@2x.png`;
     const rewrittenSprite = map.options.transformRequest?.(rawSprite, 'Sprite')?.url;
     map.emit('style.load');
