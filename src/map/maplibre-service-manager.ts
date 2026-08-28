@@ -92,6 +92,10 @@ interface StyleRequest {
   reapplyAfterInitial?: boolean;
   followers?: StyleRequest[];
   forceEmptyStyleGeneration?: boolean;
+  rollbackStyleOverlay?: {
+    record: ServiceRecord;
+    operationRevision: number;
+  };
 }
 
 interface ReadyStyle {
@@ -481,7 +485,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     try {
       this._setStatus(record, operationRevision, 'loading');
       await this._prepareStyleOverlay(record, operationRevision);
-      await this._requestCompositeStyle(record);
+      await this._requestCompositeStyle(record, false, { record, operationRevision });
       this._setStatus(record, operationRevision, 'ready');
     } catch (error) {
       if (!this._isCurrentOperation(record, operationRevision)) {
@@ -738,6 +742,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   private _requestCompositeStyle(
     triggerRecord: ServiceRecord,
     forceEmptyStyleGeneration = false,
+    rollbackStyleOverlay?: StyleRequest['rollbackStyleOverlay'],
   ): Promise<void> {
     const existing = this._desiredRequest;
     const preparedTrigger = existing?.preparedOverlays.find(
@@ -768,6 +773,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     );
     request.triggerServiceId = triggerRecord.definition.id;
     request.forceEmptyStyleGeneration = forceEmptyStyleGeneration;
+    request.rollbackStyleOverlay = rollbackStyleOverlay;
     if (previous?.triggerServiceId && !this._map && this._mapPromise) {
       request.reapplyAfterInitial = true;
     }
@@ -2234,6 +2240,14 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       return;
     }
     this._rejectStyleRequest(request, error);
+    const rollbackStyleOverlay = request.rollbackStyleOverlay;
+    if (
+      rollbackStyleOverlay &&
+      this._registry.get(rollbackStyleOverlay.record.definition.id) === rollbackStyleOverlay.record &&
+      rollbackStyleOverlay.record.operationRevision === rollbackStyleOverlay.operationRevision
+    ) {
+      return;
+    }
     const trigger = request.triggerServiceId
       ? this._registry.get(request.triggerServiceId)
       : undefined;

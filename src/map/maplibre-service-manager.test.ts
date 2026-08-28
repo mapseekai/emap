@@ -3552,6 +3552,58 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(fetchStyle).toHaveBeenCalledWith('https://example.test/new.json', expect.any(Object));
   });
 
+  it('style overlay update restores the old definition and resources after an applied style error', async () => {
+    const oldStyle = brightStyle;
+    const replacementStyle = {
+      ...brightStyle,
+      sources: {
+        replacement: { type: 'vector' as const, url: 'https://example.test/replacement.json' },
+      },
+      layers: [{ id: 'replacement', type: 'fill' as const, source: 'replacement' }],
+    } as const;
+    const { manager } = createManager([objectBasemap]);
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+    const addition = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: oldStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'initial style was not composed');
+    map.emit('style.load');
+    await addition;
+
+    const styleError = new Error('replacement style failed after setStyle');
+    const update = manager.updateService('bright', {
+      id: 'bright',
+      name: 'Replacement',
+      role: 'overlay',
+      visible: true,
+      style: replacementStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'replacement was not composed');
+    map.emit('error', { error: styleError });
+    await waitForCondition(() => map.setStyleCalls.length === 4, 'rollback style was not composed');
+    map.emit('style.load');
+
+    await expect(update).rejects.toBe(styleError);
+    expect(manager.getServices().find((service) => service.id === 'bright')).toMatchObject({
+      name: 'Bright',
+      style: oldStyle,
+    });
+    expect(manager.getServiceState('bright')).toMatchObject({ active: true, status: 'ready' });
+    expect(map.sources.has('base')).toBe(true);
+    expect(map.layers.has('base-fill')).toBe(true);
+    expect(map.sources.has('emap-overlay:bright:land')).toBe(true);
+    expect(map.layers.has('emap-overlay:bright:land')).toBe(true);
+    expect(map.sources.has('emap-overlay:bright:replacement')).toBe(false);
+    expect(map.layers.has('emap-overlay:bright:replacement')).toBe(false);
+  });
+
   it('style overlay update restores the previous prepared style and ready resources after a failure', async () => {
     const oldStyle = brightStyle;
     const replacementStyle = {
