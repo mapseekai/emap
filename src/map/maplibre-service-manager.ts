@@ -72,6 +72,7 @@ interface StyleRequestResourceOwners {
   spriteIds: ReadonlyMap<string, string>;
   glyphUrls: ReadonlyMap<string, string>;
   resourceUrls: ReadonlyMap<string, string>;
+  runtimeUrls: Map<string, string>;
 }
 
 interface StyleRequest {
@@ -199,6 +200,24 @@ function errorDetailStrings(value: unknown, keys: readonly string[]): readonly s
     }
   }
   return values;
+}
+
+function resourceUrlMatches(template: string, url: string): boolean {
+  const normalizedTemplate = normalizeResourceUrl(template);
+  const normalizedUrl = normalizeResourceUrl(url);
+  if (normalizedTemplate === normalizedUrl) return true;
+  if (
+    normalizedUrl === `${normalizedTemplate}.json` ||
+    normalizedUrl === `${normalizedTemplate}.png` ||
+    normalizedUrl === `${normalizedTemplate}@2x.png`
+  ) {
+    return true;
+  }
+  if (!normalizedTemplate.includes('{')) return false;
+  const pattern = normalizedTemplate
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\\\{[^}]+\\\}/g, '[^/?]+');
+  return new RegExp(`^${pattern}$`).test(normalizedUrl);
 }
 
 function cloneError(error: Error | undefined): Error | undefined {
@@ -693,6 +712,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         spriteIds: new Map(),
         glyphUrls: new Map(),
         resourceUrls: new Map(),
+        runtimeUrls: new Map(),
       },
       revision: ++this._styleRevision,
       basemapId,
@@ -725,7 +745,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         resourceUrls.set(normalizeResourceUrl(url), prepared.serviceId);
       }
     }
-    return { sourceIds, spriteIds, glyphUrls, resourceUrls };
+    return { sourceIds, spriteIds, glyphUrls, resourceUrls, runtimeUrls: new Map() };
   }
   private _resolveStyleRequest(request: StyleRequest): void {
     if (request.settled) return;
@@ -1822,9 +1842,13 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         this._readyStyle = null;
         this._parsedRequest = null;
         this._appliedRequest = request;
+        const transformRequest = this._wrapTransformRequest(
+          this._options.mapOptions?.transformRequest,
+        );
         map = new maplibre.Map({
           ...MAP_DEFAULTS,
           ...this._options.mapOptions,
+          transformRequest,
           container,
           style: initialStyle,
           center: this._host.getCenter(),
@@ -2571,6 +2595,64 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
   }
 
+  private _wrapTransformRequest(
+    transformRequest: maplibregl.MapOptions['transformRequest'],
+  ): NonNullable<maplibregl.MapOptions['transformRequest']> {
+    const manager = this;
+    return function (this: unknown, url, resourceType) {
+      const result = transformRequest?.call(this, url, resourceType);
+      manager._recordRuntimeResourceUrl(url, result);
+      return result;
+    };
+  }
+
+  private _recordRuntimeResourceUrl(url: string, parameters: unknown): void {
+    const record = (value: unknown): void => {
+      const transformedUrl =
+        value && typeof value === 'object' && 'url' in value && typeof value.url === 'string'
+          ? value.url
+          : url;
+      for (const request of this._currentStyleRequests()) {
+        const owner = this._findRequestResourceOwner(request, url);
+        if (owner) request.resourceOwners.runtimeUrls.set(normalizeResourceUrl(transformedUrl), owner);
+      }
+    };
+    if (
+      parameters &&
+      typeof parameters === 'object' &&
+      'then' in parameters &&
+      typeof parameters.then === 'function'
+    ) {
+      void parameters.then(record, () => undefined);
+      return;
+    }
+    record(parameters);
+  }
+
+  private _currentStyleRequests(): StyleRequest[] {
+    const committed =
+      this._committedRequest &&
+      this._readyStyle?.requestRevision === this._committedRequest.revision
+        ? this._committedRequest
+        : null;
+    return [...new Set([this._appliedRequest, this._parsedRequest, committed])].filter(
+      (request): request is StyleRequest => request !== null,
+    );
+  }
+
+  private _findRequestResourceOwner(request: StyleRequest, url: string): string | undefined {
+    const normalizedUrl = normalizeResourceUrl(url);
+    return (
+      request.resourceOwners.runtimeUrls.get(normalizedUrl) ??
+      [...request.resourceOwners.glyphUrls]
+        .find(([template]) => resourceUrlMatches(template, normalizedUrl))?.[1] ??
+      [...request.resourceOwners.resourceUrls]
+        .find(([template]) => resourceUrlMatches(template, normalizedUrl))?.[1]
+    );
+  }
+
+ 
+
   private _findOwnedSource(sourceId: string): ServiceRecord | undefined {
     const current = this._map?.getSource(sourceId);
     if (current === undefined) return undefined;
@@ -2587,20 +2669,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     error: Error,
   ): ServiceRecord | undefined {
     const owners = request.resourceOwners;
-    const serviceId =
-      errorDetailStrings(details, ['sourceId', 'source'])
-        .map((sourceId) => owners.sourceIds.get(sourceId))
-        .find((id) => id !== undefined) ??
-      errorDetailStrings(details, ['spriteId', 'sprite'])
-        .map((spriteId) => owners.spriteIds.get(spriteId))
-        .find((id) => id !== undefined) ??
-      errorDetailStrings(details, ['glyphs', 'glyphUrl'])
-        .map((url) => owners.glyphUrls.get(normalizeResourceUrl(url)))
-        .find((id) => id !== undefined) ??
-      errorDetailStrings(details, ['resourceUrl', 'url'])
-        .map((url) => owners.resourceUrls.get(normalizeResourceUrl(url)))
-        .find((id) => id !== undefined) ??
-      errorDetailStrings(error, [
+    const values = [
+      ...errorDetailStrings(details, [
         'sourceId',
         'source',
         'spriteId',
@@ -2609,15 +2679,26 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         'glyphUrl',
         'resourceUrl',
         'url',
-      ])
-        .map(
-          (value) =>
-            owners.sourceIds.get(value) ??
-            owners.spriteIds.get(value) ??
-            owners.glyphUrls.get(normalizeResourceUrl(value)) ??
-            owners.resourceUrls.get(normalizeResourceUrl(value)),
-        )
-        .find((id) => id !== undefined);
+      ]),
+      ...errorDetailStrings(error, [
+        'sourceId',
+        'source',
+        'spriteId',
+        'sprite',
+        'glyphs',
+        'glyphUrl',
+        'resourceUrl',
+        'url',
+      ]),
+    ];
+    const serviceId = values
+      .map(
+        (value) =>
+          owners.sourceIds.get(value) ??
+          owners.spriteIds.get(value) ??
+          this._findRequestResourceOwner(request, value),
+      )
+      .find((id) => id !== undefined);
     return serviceId ? this._registry.get(serviceId) : undefined;
   }
   private _handleStyleLoad(request: StyleRequest, generation: number): void {
@@ -2659,10 +2740,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
     const sourceId = errorDetailStrings(details, ['sourceId', 'source'])[0];
     const ownedSource = sourceId ? this._findOwnedSource(sourceId) : undefined;
-    const appliedOwner = this._appliedRequest
-      ? this._findAppliedResourceOwner(this._appliedRequest, details, error)
+    const request = this._currentStyleRequests()[0];
+    const requestOwner = request
+      ? this._findAppliedResourceOwner(request, details, error)
       : undefined;
-    const owner = ownedSource ?? appliedOwner;
+    const owner = ownedSource ?? requestOwner;
     if (details?.tile !== undefined) {
       this.fire('error', {
         serviceId: owner?.definition.id,
@@ -2681,9 +2763,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       }
       return;
     }
-    if (this._appliedRequest) {
-      const request = this._appliedRequest;
-      this._appliedRequest = null;
+    if (request && (this._appliedRequest === request || owner)) {
+      if (this._appliedRequest === request) this._appliedRequest = null;
+      if (this._parsedRequest === request) this._parsedRequest = null;
       this._errorPhases.set(error, 'style');
       this._detachFailedStyle();
       this._handleAppliedStyleFailure(request, error, owner);

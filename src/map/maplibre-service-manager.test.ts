@@ -3969,6 +3969,197 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(manager.getServiceState('other')).toMatchObject({ active: true, status: 'ready' });
   });
 
+  it('attributes a transformed overlay sprite request to an existing overlay during a basemap recomposition', async () => {
+    const dark = { ...objectBasemap, id: 'dark', name: 'Dark' } as const;
+    const transformRequest = vi.fn((url: string) => ({
+      url: `https://proxy.example.test/?url=${encodeURIComponent(url)}`,
+    }));
+    const { manager } = createManager([objectBasemap, dark], {
+      mapOptions: { transformRequest: transformRequest as never },
+    });
+    const light = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await light;
+    const overlay = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: brightStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'overlay style was not composed');
+    map.emit('style.load');
+    await overlay;
+
+    const errors: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
+    manager.on('error', (event) => errors.push(event));
+    const switchResult = manager.setBasemap('dark').catch((error: unknown) => error);
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'basemap recomposition did not start');
+    const rawSprite = `${brightStyle.sprite}.json`;
+    const rewrittenSprite = map.options.transformRequest?.(rawSprite, 'Sprite')?.url;
+    expect(rewrittenSprite).toBe(`https://proxy.example.test/?url=${encodeURIComponent(rawSprite)}`);
+
+    map.emit('error', { error: new Error('rewritten sprite failed'), url: rewrittenSprite });
+    await switchResult;
+
+    expect(errors.map(({ serviceId, phase, fatal }) => ({ serviceId, phase, fatal }))).toEqual([
+      { serviceId: 'bright', phase: 'style', fatal: true },
+    ]);
+    expect(manager.getServiceState('bright')).toMatchObject({ active: false, status: 'error' });
+    expect(manager.getServiceState('dark')).not.toMatchObject({ status: 'error' });
+  });
+
+  it('attributes a transformed resource URL to its non-trigger style overlay', async () => {
+    const transformRequest = vi.fn((url: string) => ({
+      url: `https://proxy.example.test/?url=${encodeURIComponent(url)}`,
+    }));
+    const otherStyle = {
+      ...brightStyle,
+      sprite: 'https://other.example.test/sprite',
+      glyphs: brightStyle.glyphs,
+      sources: { other: { type: 'vector' as const, url: 'https://other.example.test/tiles.json' } },
+      layers: [{ id: 'other', type: 'fill' as const, source: 'other' }],
+    } as const satisfies maplibregl.StyleSpecification;
+    const { manager } = createManager([objectBasemap], {
+      mapOptions: { transformRequest: transformRequest as never },
+    });
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+    const other = manager.addService({
+      id: 'other',
+      name: 'Other',
+      role: 'overlay',
+      visible: true,
+      style: otherStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'first overlay was not composed');
+    map.emit('style.load');
+    await other;
+
+    const bright = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: brightStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'second overlay was not composed');
+    map.emit('style.load');
+    await bright;
+    const trigger = manager.updateService('bright', {
+      id: 'bright',
+      name: 'Updated bright',
+      role: 'overlay',
+      visible: true,
+      style: {
+        ...brightStyle,
+        sources: {
+          replacement: {
+            type: 'vector' as const,
+            url: 'https://bright.example.test/replacement.json',
+          },
+        },
+        layers: [{ id: 'replacement', type: 'fill' as const, source: 'replacement' }],
+      },
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 3, 'trigger update was not composed');
+
+    const errors: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
+    manager.on('error', (event) => errors.push(event));
+    const rawSource = otherStyle.sources.other.url;
+    const rewrittenSource = map.options.transformRequest?.(rawSource, 'Source')?.url;
+    map.emit('error', { error: new Error('rewritten source failed'), url: rewrittenSource });
+    await waitForCondition(() => map.setStyleCalls.length === 5, 'rollback style was not composed');
+    map.emit('style.load');
+    await expect(trigger).rejects.toThrow('rewritten source failed');
+
+    expect(errors.map(({ serviceId, phase, fatal }) => ({ serviceId, phase, fatal }))).toEqual([
+      { serviceId: 'other', phase: 'style', fatal: true },
+    ]);
+    expect(manager.getServiceState('other')).toMatchObject({ active: true, status: 'ready' });
+  });
+
+  it('attributes a transformed sprite error emitted after style.load to the committed overlay', async () => {
+    const transformRequest = vi.fn((url: string) => ({
+      url: `https://proxy.example.test/?url=${encodeURIComponent(url)}`,
+    }));
+    const { manager } = createManager(
+      [{ id: 'bright', name: 'Bright', role: 'overlay', visible: true, style: brightStyle }],
+      { mapOptions: { transformRequest: transformRequest as never } },
+    );
+    const initialization = manager.initialize();
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'overlay style was not composed');
+    map.emit('style.load');
+    await initialization;
+
+    const errors: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
+    manager.on('error', (event) => errors.push(event));
+    const rawSprite = `${brightStyle.sprite}@2x.png`;
+    const rewrittenSprite = map.options.transformRequest?.(rawSprite, 'Sprite')?.url;
+    map.emit('error', { error: new Error('late sprite failed'), url: rewrittenSprite });
+
+    expect(errors.map(({ serviceId, phase, fatal }) => ({ serviceId, phase, fatal }))).toEqual([
+      { serviceId: 'bright', phase: 'style', fatal: true },
+    ]);
+    expect(manager.getServiceState('bright')).toMatchObject({ active: false, status: 'error' });
+  });
+
+  it('does not let a transformed stale committed resource error change the current overlay state', async () => {
+    const transformRequest = vi.fn((url: string) => ({
+      url: `https://proxy.example.test/?url=${encodeURIComponent(url)}`,
+    }));
+    const oldStyle = {
+      ...brightStyle,
+      sources: { old: { type: 'vector' as const, url: 'https://old.example.test/tiles.json' } },
+      layers: [{ id: 'old', type: 'fill' as const, source: 'old' }],
+    } as const satisfies maplibregl.StyleSpecification;
+    const currentStyle = {
+      ...brightStyle,
+      sources: { current: { type: 'vector' as const, url: 'https://current.example.test/tiles.json' } },
+      layers: [{ id: 'current', type: 'fill' as const, source: 'current' }],
+    } as const satisfies maplibregl.StyleSpecification;
+    const { manager } = createManager([objectBasemap], {
+      mapOptions: { transformRequest: transformRequest as never },
+    });
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+    const addition = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: oldStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'old style was not composed');
+    map.emit('style.load');
+    await addition;
+    const update = manager.updateService('bright', {
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: currentStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'current style was not composed');
+    map.emit('style.load');
+    await update;
+
+    const errors: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
+    manager.on('error', (event) => errors.push(event));
+    const rewrittenOldSource = map.options.transformRequest?.(oldStyle.sources.old.url, 'Source')?.url;
+    map.emit('error', { error: new Error('stale source failed'), url: rewrittenOldSource });
+
+    expect(errors.filter((event) => event.fatal)).toEqual([]);
+    expect(manager.getServiceState('bright')).toMatchObject({ active: true, status: 'ready' });
+  });
+
   it('style overlay update restores the previous prepared style and ready resources after a failure', async () => {
     const oldStyle = brightStyle;
     const replacementStyle = {
