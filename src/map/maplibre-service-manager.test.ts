@@ -4191,6 +4191,65 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(urlMap.layers.has('base-fill')).toBe(true);
     expect(urlMap.layers.has('emap-overlay:bright:land')).toBe(true);
   });
+  it('passes precomposed object styles directly for established-map overlay changes', async () => {
+    const replacementStyle = {
+      ...brightStyle,
+      sources: {
+        replacement: { type: 'vector' as const, url: 'https://example.test/replacement.json' },
+      },
+      layers: [{ id: 'replacement', type: 'line' as const, source: 'replacement' }],
+    } as const satisfies maplibregl.StyleSpecification;
+    const darkObjectBasemap = { ...objectBasemap, id: 'dark', name: 'Dark' } as const;
+    const { manager } = createManager([objectBasemap, darkObjectBasemap]);
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+
+    const addition = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: brightStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'overlay style did not apply');
+    expect(map.setStyleCalls.at(-1)).toMatchObject({
+      sources: { base: expect.anything(), 'emap-overlay:bright:land': expect.anything() },
+    });
+    expect(map.setStyleOptions.at(-1)).toEqual({ diff: false });
+    expect(map.setStyleOptions.at(-1)?.transformStyle).toBeUndefined();
+    map.emit('style.load');
+    await addition;
+
+    const update = manager.updateService('bright', {
+      id: 'bright',
+      name: 'Replacement',
+      role: 'overlay',
+      visible: true,
+      style: replacementStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'replacement style did not apply');
+    expect(map.setStyleCalls.at(-1)).toMatchObject({
+      sources: { base: expect.anything(), 'emap-overlay:bright:replacement': expect.anything() },
+    });
+    expect(map.setStyleOptions.at(-1)).toEqual({ diff: false });
+    expect(map.setStyleOptions.at(-1)?.transformStyle).toBeUndefined();
+    map.emit('style.load');
+    await update;
+
+    const switchRequest = manager.setBasemap('dark');
+    await waitForCondition(() => map.setStyleCalls.length === 3, 'basemap switch did not apply');
+    expect(map.setStyleCalls.at(-1)).toMatchObject({
+      sources: { base: expect.anything(), 'emap-overlay:bright:replacement': expect.anything() },
+    });
+    expect(map.setStyleOptions.at(-1)).toEqual({ diff: false });
+    expect(map.setStyleOptions.at(-1)?.transformStyle).toBeUndefined();
+    map.emit('style.load');
+    await switchRequest;
+    expect(manager.getServiceState('dark')).toMatchObject({ active: true, status: 'ready' });
+    expect(manager.getServiceState('bright')).toMatchObject({ active: true, status: 'ready' });
+  });
   it('updates and removes URL style overlays with one established-map rebuild each', async () => {
     const styleUrl = 'https://example.test/url-style.json';
     const replacementStyle = {

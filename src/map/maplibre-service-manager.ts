@@ -1945,23 +1945,24 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (this._desiredRequest !== request) return;
 
     try {
+      let style: string | maplibregl.StyleSpecification;
+      if (request.preparedOverlays.length === 0) {
+        style = request.style;
+      } else {
+        const baseStyle = request.style;
+        if (typeof baseStyle === 'string') {
+          throw new Error('MapLibre composite style base was not prepared');
+        }
+        style = composeMapLibreStyle(
+          baseStyle,
+          request.preparedOverlays.map(({ prepared, visible }) => ({ prepared, visible })),
+        );
+      }
       const generation = ++this._styleGeneration;
       this._readyStyle = null;
       this._appliedRequest = request;
       this._attachStyleLoadListener(map, request, generation);
-      map.setStyle(
-        request.style,
-        request.preparedOverlays.length === 0
-          ? { diff: false }
-          : {
-              diff: false,
-              transformStyle: (_previous, next) =>
-                composeMapLibreStyle(
-                  next,
-                  request.preparedOverlays.map(({ prepared, visible }) => ({ prepared, visible })),
-                ),
-            },
-      );
+      map.setStyle(style, { diff: false });
       this._committedRequest = null;
     } catch (value) {
       const error = toError(value);
