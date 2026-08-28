@@ -2614,7 +2614,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           : url;
       for (const request of this._currentStyleRequests()) {
         const owner = this._findRequestResourceOwner(request, url);
-        if (owner) request.resourceOwners.runtimeUrls.set(normalizeResourceUrl(transformedUrl), owner);
+        if (owner)
+          request.resourceOwners.runtimeUrls.set(normalizeResourceUrl(transformedUrl), owner);
       }
     };
     if (
@@ -2644,14 +2645,14 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     const normalizedUrl = normalizeResourceUrl(url);
     return (
       request.resourceOwners.runtimeUrls.get(normalizedUrl) ??
-      [...request.resourceOwners.glyphUrls]
-        .find(([template]) => resourceUrlMatches(template, normalizedUrl))?.[1] ??
-      [...request.resourceOwners.resourceUrls]
-        .find(([template]) => resourceUrlMatches(template, normalizedUrl))?.[1]
+      [...request.resourceOwners.glyphUrls].find(([template]) =>
+        resourceUrlMatches(template, normalizedUrl),
+      )?.[1] ??
+      [...request.resourceOwners.resourceUrls].find(([template]) =>
+        resourceUrlMatches(template, normalizedUrl),
+      )?.[1]
     );
   }
-
- 
 
   private _findOwnedSource(sourceId: string): ServiceRecord | undefined {
     const current = this._map?.getSource(sourceId);

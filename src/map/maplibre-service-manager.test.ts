@@ -3601,7 +3601,6 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(manager.getServiceState('bright')).toBeUndefined();
   });
 
-
   it('style overlay removal and update rebuild their complete composite resources', async () => {
     const oldStyle = { ...brightStyle, glyphs: undefined } as const;
     const replacementStyle = {
@@ -3995,10 +3994,15 @@ describe('MapLibreServiceManager overlay rendering', () => {
     const errors: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
     manager.on('error', (event) => errors.push(event));
     const switchResult = manager.setBasemap('dark').catch((error: unknown) => error);
-    await waitForCondition(() => map.setStyleCalls.length === 2, 'basemap recomposition did not start');
+    await waitForCondition(
+      () => map.setStyleCalls.length === 2,
+      'basemap recomposition did not start',
+    );
     const rawSprite = `${brightStyle.sprite}.json`;
     const rewrittenSprite = map.options.transformRequest?.(rawSprite, 'Sprite')?.url;
-    expect(rewrittenSprite).toBe(`https://proxy.example.test/?url=${encodeURIComponent(rawSprite)}`);
+    expect(rewrittenSprite).toBe(
+      `https://proxy.example.test/?url=${encodeURIComponent(rawSprite)}`,
+    );
 
     map.emit('error', { error: new Error('rewritten sprite failed'), url: rewrittenSprite });
     await switchResult;
@@ -4120,7 +4124,9 @@ describe('MapLibreServiceManager overlay rendering', () => {
     } as const satisfies maplibregl.StyleSpecification;
     const currentStyle = {
       ...brightStyle,
-      sources: { current: { type: 'vector' as const, url: 'https://current.example.test/tiles.json' } },
+      sources: {
+        current: { type: 'vector' as const, url: 'https://current.example.test/tiles.json' },
+      },
       layers: [{ id: 'current', type: 'fill' as const, source: 'current' }],
     } as const satisfies maplibregl.StyleSpecification;
     const { manager } = createManager([objectBasemap], {
@@ -4153,7 +4159,10 @@ describe('MapLibreServiceManager overlay rendering', () => {
 
     const errors: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
     manager.on('error', (event) => errors.push(event));
-    const rewrittenOldSource = map.options.transformRequest?.(oldStyle.sources.old.url, 'Source')?.url;
+    const rewrittenOldSource = map.options.transformRequest?.(
+      oldStyle.sources.old.url,
+      'Source',
+    )?.url;
     map.emit('error', { error: new Error('stale source failed'), url: rewrittenOldSource });
 
     expect(errors.filter((event) => event.fatal)).toEqual([]);
