@@ -143,7 +143,9 @@ describe('prepareMapLibreOverlayStyle', () => {
 
     const prepared = prepareMapLibreOverlayStyle('bright/service', fixture, STYLE_URL);
 
-    expect(prepared.style.sprite).toEqual([{ id: `${PREFIX}:default`, url: 'custom://sprite/%7Bname%7D' }]);
+    expect(prepared.style.sprite).toEqual([
+      { id: `${PREFIX}:default`, url: 'custom://sprite/%7Bname%7D' },
+    ]);
     expect(prepared.style.glyphs).toBe('data:application/octet-stream,%7Bfont%7D');
     expect(prepared.style.sources[`${PREFIX}:earth`]).toMatchObject({
       data: 'blob:https://tiles.example.test/%7Bdata%7D',
@@ -283,13 +285,16 @@ describe('composeMapLibreStyle', () => {
       layers: [{ id: 'layer', type: 'line', source: 'source', layout: { visibility: 'none' } }],
     } as maplibregl.StyleSpecification);
 
-    expect(composeMapLibreStyle(createBaseStyle(GLYPHS_URL), [{ prepared, visible: true }]).layers[1]).toMatchObject({
+    expect(
+      composeMapLibreStyle(createBaseStyle(GLYPHS_URL), [{ prepared, visible: true }]).layers[1],
+    ).toMatchObject({
       layout: { visibility: 'none' },
     });
     expect(() =>
-      composeMapLibreStyle(createBaseStyle('https://fonts.example.test/a/{fontstack}/{range}.pbf'), [
-        { prepared, visible: true },
-      ]),
+      composeMapLibreStyle(
+        createBaseStyle('https://fonts.example.test/a/{fontstack}/{range}.pbf'),
+        [{ prepared, visible: true }],
+      ),
     ).toThrow('MapLibre overlay glyphs URL conflicts with the active style');
   });
 });
@@ -300,10 +305,7 @@ function createStyleService(
   return { id: 'bright/service', name: 'Bright', role: 'overlay', style };
 }
 
-function createResponse(
-  body: unknown,
-  options: { status?: number; url?: string } = {},
-): Response {
+function createResponse(body: unknown, options: { status?: number; url?: string } = {}): Response {
   return {
     ok: (options.status ?? 200) >= 200 && (options.status ?? 200) < 300,
     status: options.status ?? 200,
@@ -410,7 +412,9 @@ describe('loadMapLibreOverlayStyle', () => {
     const fetch = vi.fn(
       (_input: RequestInfo | URL, init?: RequestInit) =>
         new Promise<Response>((_resolve, reject) => {
-          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), {
+            once: true,
+          });
         }),
     );
     const loading = loadMapLibreOverlayStyle(createStyleService(STYLE_URL), {

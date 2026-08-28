@@ -508,10 +508,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         throw abortError(`MapLibre service "${id}" request was superseded`);
       }
     }
-    if (
-      record.definition.role === 'overlay' &&
-      isStyleOverlayService(record.definition)
-    ) {
+    if (record.definition.role === 'overlay' && isStyleOverlayService(record.definition)) {
       record.operationRevision++;
       const operationRevision = record.operationRevision;
       this._abortStylePreparation(record);
@@ -667,15 +664,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     record.stylePreparation?.controller.abort();
   }
 
-
   private async _prepareStyleOverlay(
     record: ServiceRecord,
     operationRevision: number,
   ): Promise<PreparedMapLibreOverlayStyle> {
-    if (
-      record.definition.role !== 'overlay' ||
-      !isStyleOverlayService(record.definition)
-    ) {
+    if (record.definition.role !== 'overlay' || !isStyleOverlayService(record.definition)) {
       throw abortError(`MapLibre service "${record.definition.id}" is not a style overlay`);
     }
     if (record.preparedStyle?.definitionRevision === record.definitionRevision) {
@@ -702,16 +695,18 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       transformRequest: this._options.mapOptions?.transformRequest ?? undefined,
       fetch: this._fetchStyle,
       timeoutMs: 30_000,
-    }).then((prepared) => {
-      this._assertCurrentOperation(record, operationRevision);
-      if (record.definitionRevision !== preparation.definitionRevision) {
-        throw abortError(`MapLibre service "${record.definition.id}" request was superseded`);
-      }
-      record.preparedStyle = { definitionRevision: record.definitionRevision, value: prepared };
-      return prepared;
-    }).finally(() => {
-      if (record.stylePreparation === preparation) record.stylePreparation = undefined;
-    });
+    })
+      .then((prepared) => {
+        this._assertCurrentOperation(record, operationRevision);
+        if (record.definitionRevision !== preparation.definitionRevision) {
+          throw abortError(`MapLibre service "${record.definition.id}" request was superseded`);
+        }
+        record.preparedStyle = { definitionRevision: record.definitionRevision, value: prepared };
+        return prepared;
+      })
+      .finally(() => {
+        if (record.stylePreparation === preparation) record.stylePreparation = undefined;
+      });
     record.stylePreparation = preparation;
     return preparation.promise;
   }
@@ -776,7 +771,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       if (previous.triggerServiceId) {
         request.followers = [...(request.followers ?? []), previous];
       } else {
-        this._rejectStyleRequest(previous, abortError('MapLibre composite style request was superseded'));
+        this._rejectStyleRequest(
+          previous,
+          abortError('MapLibre composite style request was superseded'),
+        );
       }
     }
     if (!this._hasActiveService()) {
@@ -1101,10 +1099,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           await this._ensureWebMercator();
           this._assertCurrentOperation(record, operationRevision);
         }
-        if (
-          record.definition.role === 'overlay' &&
-          isStyleOverlayService(record.definition)
-        ) {
+        if (record.definition.role === 'overlay' && isStyleOverlayService(record.definition)) {
           try {
             await this._prepareStyleOverlay(record, operationRevision);
           } catch (value) {
@@ -1115,7 +1110,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           this._assertCurrentOperation(record, operationRevision);
           await this._requestCompositeStyle(record);
           if (!this._isCurrentOperation(record, operationRevision)) return;
-          if (record.state.status === 'loading') this._setStatus(record, operationRevision, 'ready');
+          if (record.state.status === 'loading')
+            this._setStatus(record, operationRevision, 'ready');
           this._syncVisibility();
           return;
         }
@@ -1300,11 +1296,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   ): void {
     const map = this._map;
     const definition = record.definition;
-    if (
-      !map ||
-      definition.role !== 'overlay' ||
-      !isResourceOverlayService(definition)
-    ) {
+    if (!map || definition.role !== 'overlay' || !isResourceOverlayService(definition)) {
       throw new Error('MapLibre overlay runtime is unavailable');
     }
     const addedSourceIds: string[] = [];
@@ -1538,7 +1530,6 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     options.assertCurrent?.();
     const current = kind === 'layer' ? map.getLayer(id) : map.getSource(id);
     if (current !== undefined && current !== owned.handle) {
-
       throw this._phaseError(
         kind,
         `MapLibre overlay ${kind} "${id}" is no longer manager-owned`,
@@ -2031,18 +2022,31 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     generation: number,
   ): void {
     const map = this._map;
-    if (!map) throw this._phaseError('style', 'MapLibre overlay runtime is unavailable', record.definition.id);
+    if (!map)
+      throw this._phaseError(
+        'style',
+        'MapLibre overlay runtime is unavailable',
+        record.definition.id,
+      );
     for (const id of prepared.sourceIds) {
       const handle = map.getSource(id);
       if (handle === undefined) {
-        throw this._phaseError('source', `MapLibre overlay source "${id}" was not composed`, record.definition.id);
+        throw this._phaseError(
+          'source',
+          `MapLibre overlay source "${id}" was not composed`,
+          record.definition.id,
+        );
       }
       record.ownedSources.set(id, { generation, handle, owner: 'style' });
     }
     for (const id of prepared.layerIds) {
       const handle = map.getLayer(id);
       if (handle === undefined) {
-        throw this._phaseError('layer', `MapLibre overlay layer "${id}" was not composed`, record.definition.id);
+        throw this._phaseError(
+          'layer',
+          `MapLibre overlay layer "${id}" was not composed`,
+          record.definition.id,
+        );
       }
       record.ownedLayers.set(id, { generation, handle, owner: 'style' });
     }
@@ -2052,7 +2056,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   private async _finishParsedStyle(request: StyleRequest, generation: number): Promise<void> {
     for (const record of this._registry.values()) {
       if (this._desiredRequest !== request) break;
-      const preparedOverlay = request.preparedOverlays.find(({ record: candidate }) => candidate === record);
+      const preparedOverlay = request.preparedOverlays.find(
+        ({ record: candidate }) => candidate === record,
+      );
       if (
         record.removing ||
         record.definition.role !== 'overlay' ||
@@ -2365,7 +2371,6 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     this._styleLoadListener = null;
     subscription?.map.off('style.load', subscription.listener);
   }
-
 
   private _detachFailedStyle(): void {
     this._detachStyleLoadListener();

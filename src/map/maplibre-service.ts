@@ -28,9 +28,7 @@ export interface MapLibreOverlayStyleService extends MapLibreOverlayServiceBase 
   layers?: never;
 }
 
-export type MapLibreOverlayService =
-  | MapLibreOverlayResourceService
-  | MapLibreOverlayStyleService;
+export type MapLibreOverlayService = MapLibreOverlayResourceService | MapLibreOverlayStyleService;
 
 export interface MapLibreIntegrationOptions {
   services?: readonly MapLibreService[];

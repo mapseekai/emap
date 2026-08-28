@@ -90,7 +90,11 @@ function rewriteImageReferences(layer: StyleObject, imagePrefix: string | undefi
   }
 }
 
-function normalizeSourceUrls(source: StyleObject, baseUrl: string | undefined, resourceUrls: Set<string>): void {
+function normalizeSourceUrls(
+  source: StyleObject,
+  baseUrl: string | undefined,
+  resourceUrls: Set<string>,
+): void {
   if (typeof source.url === 'string') {
     const normalizedUrl = resolveUrl(source.url, baseUrl);
     source.url = normalizedUrl;
@@ -195,7 +199,8 @@ export function prepareMapLibreOverlayStyle(
   if (!input.sources || typeof input.sources !== 'object' || Array.isArray(input.sources)) {
     throw new Error('MapLibre overlay style sources must be an object');
   }
-  if (!Array.isArray(input.layers)) throw new Error('MapLibre overlay style layers must be an array');
+  if (!Array.isArray(input.layers))
+    throw new Error('MapLibre overlay style layers must be an array');
   const inputLayerIds = (input.layers as unknown[]).map((layer) => {
     const id = (layer as StyleObject).id;
     if (typeof id !== 'string') throw new Error('MapLibre overlay style layers require string IDs');
@@ -229,13 +234,18 @@ export function prepareMapLibreOverlayStyle(
     .map((layer) => {
       const clonedLayer = cloneValue(layer) as StyleObject;
       const originalId = clonedLayer.id;
-      if (typeof originalId !== 'string') throw new Error('MapLibre overlay style layers require string IDs');
-      layerVisibility.set(`${prefix}:${originalId}`, (clonedLayer.layout as StyleObject | undefined)?.visibility as
-        | 'visible'
-        | 'none'
-        | undefined);
+      if (typeof originalId !== 'string')
+        throw new Error('MapLibre overlay style layers require string IDs');
+      layerVisibility.set(
+        `${prefix}:${originalId}`,
+        (clonedLayer.layout as StyleObject | undefined)?.visibility as
+          | 'visible'
+          | 'none'
+          | undefined,
+      );
       clonedLayer.id = `${prefix}:${originalId}`;
-      if (typeof clonedLayer.source === 'string') clonedLayer.source = `${prefix}:${clonedLayer.source}`;
+      if (typeof clonedLayer.source === 'string')
+        clonedLayer.source = `${prefix}:${clonedLayer.source}`;
       rewriteImageReferences(clonedLayer, sprite.imagePrefix);
       return clonedLayer as maplibregl.LayerSpecification;
     });
@@ -284,20 +294,26 @@ export function composeMapLibreStyle(
   const sourceIds = Object.keys(sources);
   const layerIds = layers.map((layer) => layer.id);
   const overlaySprites = overlays.flatMap(({ prepared }) => asSpriteArray(prepared.style.sprite));
-  const sprites = overlaySprites.length > 0 ? [...asSpriteArray(composed.sprite), ...overlaySprites] : [];
+  const sprites =
+    overlaySprites.length > 0 ? [...asSpriteArray(composed.sprite), ...overlaySprites] : [];
 
   for (const { prepared, visible } of overlays) {
     for (const sourceId of prepared.sourceIds) {
-      if (sourceIds.includes(sourceId)) throw new Error('MapLibre overlay style generated IDs must be unique');
+      if (sourceIds.includes(sourceId))
+        throw new Error('MapLibre overlay style generated IDs must be unique');
       sourceIds.push(sourceId);
       sources[sourceId] = cloneValue(prepared.style.sources[sourceId]);
     }
     for (const layer of prepared.style.layers) {
-      if (layerIds.includes(layer.id)) throw new Error('MapLibre overlay style generated IDs must be unique');
+      if (layerIds.includes(layer.id))
+        throw new Error('MapLibre overlay style generated IDs must be unique');
       layerIds.push(layer.id);
       const clonedLayer = cloneValue(layer) as StyleObject;
       if (!visible) {
-        clonedLayer.layout = { ...(clonedLayer.layout as StyleObject | undefined), visibility: 'none' };
+        clonedLayer.layout = {
+          ...(clonedLayer.layout as StyleObject | undefined),
+          visibility: 'none',
+        };
       }
       layers.push(clonedLayer as maplibregl.LayerSpecification);
     }
