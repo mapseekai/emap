@@ -87,6 +87,9 @@ export type { VisibleLayerLookup } from './map/structured-keys';
 export type {
   MapLibreService,
   MapLibreBasemapService,
+  MapLibreOverlayServiceBase,
+  MapLibreOverlayResourceService,
+  MapLibreOverlayStyleService,
   MapLibreOverlayService,
   MapLibreIntegrationOptions,
   MapLibreServiceState,

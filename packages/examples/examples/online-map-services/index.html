@@ -184,6 +184,13 @@
         ],
       },
       {
+        id: 'openfreemap-bright',
+        name: 'OpenFreeMap Bright',
+        role: 'overlay',
+        visible: false,
+        style: 'https://tiles.openfreemap.org/styles/bright',
+      },
+      {
         id: 'usgs-imagery',
         name: 'USGS imagery',
         role: 'overlay',
@@ -250,7 +257,7 @@
       xyz: '输入完整的 XYZ {z}/{x}/{y} 瓦片模板；行坐标从顶部开始。',
       tms: '输入完整的 TMS {z}/{x}/{y} 瓦片模板；MapLibre 会反转行坐标。',
       vector: '输入矢量瓦片模板、source-layer 和渲染类型。',
-      style: '输入 MapLibre Style URL 或粘贴完整的 Style JSON；Style 将作为底图启用。',
+      style: '输入 MapLibre Style URL 或粘贴完整的 Style JSON；Style 将作为叠加层启用。',
     };
 
     function updateCustomServiceFields() {
@@ -265,7 +272,7 @@
       }
       customServiceHint.textContent = customServiceHints[type];
       customServiceSubmit.textContent =
-        type === 'style' ? '添加 / 更新 Style 底图' : `添加 / 更新 ${type.toUpperCase()}`;
+        type === 'style' ? '添加 / 更新 Style 叠加层' : `添加 / 更新 ${type.toUpperCase()}`;
     }
 
     function requireHttpUrl(value, label) {
@@ -415,8 +422,9 @@
       }
       return {
         id: CUSTOM_SERVICE_IDS.style,
-        name: name || 'MapLibre Style',
-        role: 'basemap',
+        name: name || 'MapLibre Style overlay',
+        role: 'overlay',
+        visible: true,
         style: parseStyle(),
       };
     }

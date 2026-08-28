@@ -2,7 +2,7 @@
 id: controls
 slug: /guides/controls
 title: 控件
-api: ["BasemapControl","BasemapOptions","BasemapStyle","BoxSelectControl","BoxSelectControlOptions","Control","ControlPosition","DrawFeatureControl","DrawFeatureControlOptions","EditToolbar","EditToolbarOptions","Emap","GetScaleMetricsOptions","HistoryControl","HistoryControlOptions","LassoSelectControl","LassoSelectControlOptions","LayerChangeEvent","LayerChangeReason","LayerControl","MapLibreBasemapService","MapLibreIntegrationOptions","MapLibreOverlayService","MapLibreService","MapLibreServiceChangeEvent","MapLibreServiceChangeReason","MapLibreServiceErrorEvent","MapLibreServiceEventMap","MapLibreServiceManager","MapLibreServiceState","MapOptions","MeasureControl","MeasureControlOptions","MeasureHandler","MeasurementMode","MeasureOptions","MeasureResult","NavigationControl","NavigationOptions","ScaleCalculationMethod","ScaleControl","ScaleControlOptions","ScaleControlStyle","ScaleMetrics","ScaleViewMetrics","SimplifyControl","SimplifyControlOptions","StatusControl","StatusOptions","VertexEditControl","VertexEditControlOptions"]
+api: ["BasemapControl","BasemapOptions","BasemapStyle","BoxSelectControl","BoxSelectControlOptions","Control","ControlPosition","DrawFeatureControl","DrawFeatureControlOptions","EditToolbar","EditToolbarOptions","Emap","GetScaleMetricsOptions","HistoryControl","HistoryControlOptions","LassoSelectControl","LassoSelectControlOptions","LayerChangeEvent","LayerChangeReason","LayerControl","MapLibreBasemapService","MapLibreIntegrationOptions","MapLibreOverlayService","MapLibreOverlayServiceBase","MapLibreOverlayResourceService","MapLibreOverlayStyleService","MapLibreService","MapLibreServiceChangeEvent","MapLibreServiceChangeReason","MapLibreServiceErrorEvent","MapLibreServiceEventMap","MapLibreServiceManager","MapLibreServiceState","MapOptions","MeasureControl","MeasureControlOptions","MeasureHandler","MeasurementMode","MeasureOptions","MeasureResult","NavigationControl","NavigationOptions","ScaleCalculationMethod","ScaleControl","ScaleControlOptions","ScaleControlStyle","ScaleMetrics","ScaleViewMetrics","SimplifyControl","SimplifyControlOptions","StatusControl","StatusOptions","VertexEditControl","VertexEditControlOptions"]
 examples: ["box-select","china-editing","draw-snap-edge","interaction-handlers","lasso-select","measurement","online-map-services","simplify-control","vertex-editing"]
 stability: stable
 verifiedVersion: 0.7.0
@@ -70,13 +70,15 @@ import '@mapseekai/emap/style.css';
 下面的辅助函数在保留原生 MapLibre source 配置的同时，减少完整叠加层定义的重复代码：
 
 ```ts
-import type { MapLibreOverlayService } from '@mapseekai/emap';
+import type {
+  MapLibreOverlayResourceService,
+} from '@mapseekai/emap';
 
 function rasterOverlay(
   id: string,
   name: string,
-  source: MapLibreOverlayService['sources'][string],
-): MapLibreOverlayService {
+  source: MapLibreOverlayResourceService['sources'][string],
+): MapLibreOverlayResourceService {
   return {
     id,
     name,
@@ -86,7 +88,7 @@ function rasterOverlay(
   };
 }
 
-const overlays: MapLibreOverlayService[] = [
+const overlays: MapLibreOverlayResourceService[] = [
   // XYZ 栅格瓦片
   rasterOverlay('xyz', 'XYZ imagery', {
     type: 'raster',
@@ -197,6 +199,34 @@ const map = new Emap({
 `transformRequest` 是处理服务商 URL 重写、查询参数令牌与请求头的原生入口。Emap
 负责 MapLibre 的 container、style、center、zoom 与非交互模式，因此
 `mapOptions` 不开放这些键。
+
+### 完整样式叠加层
+
+完整的 MapLibre Style v8 URL 或 JSON 也可以作为 `role: 'overlay'` 注册。样式叠加层
+必须定义 `style`，不能同时定义 `sources` 和 `layers`；资源叠加层则使用后两者。
+
+```ts
+await map.mapLibreServices.addService({
+  id: 'openfreemap-bright',
+  name: 'OpenFreeMap Bright',
+  role: 'overlay',
+  visible: true,
+  style: 'https://tiles.openfreemap.org/styles/bright',
+});
+```
+
+管理器会忽略样式中的 `background` layer，并将其余 source、layer 和 sprite 名称以服务
+ID 命名空间隔离；sprite 图像引用也会随之重写。显示或隐藏这种服务会显示或隐藏其完整的
+非背景样式，同时保留各 layer 原有的 visibility。由于一个 MapLibre 样式只能使用一个全局
+glyph URL，活动底图和所有样式叠加层的 glyph URL 必须相同或不存在；相同 URL 可以共用，
+不同 URL 会被确定性地拒绝。
+
+固定画布从下到上依次为：活动的 MapLibre 底图、托管的 MapLibre 叠加层，以及位于两者
+之上的 Emap 业务数据和编辑画布。
+
+样式 URL、相对 source/sprite/glyph URL 与请求头同样经过 `transformRequest`。服务范围内
+的异步错误通过 `error` 事件报告，并在事件的 `serviceId` 中标识相应服务；被后续添加、
+更新、删除或可见性操作取代的请求会以 `AbortError` 取消，而不是作为最终服务错误发布。
 
 激活底图或可见叠加层需要 Web Mercator。必要时，管理器会先把当前 Emap 数据重投影到
 `webmercator`（`EPSG:3857`），再显示服务；启用在线服务时需考虑这一数据 CRS 变化。

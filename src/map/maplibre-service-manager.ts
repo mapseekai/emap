@@ -2,7 +2,9 @@ import type * as maplibregl from 'maplibre-gl';
 import { EventDispatcher, type EventListener } from '../core/events';
 import type {
   MapLibreIntegrationOptions,
+  MapLibreOverlayResourceService,
   MapLibreOverlayService,
+  MapLibreOverlayStyleService,
   MapLibreService,
   MapLibreServiceChangeEvent,
   MapLibreServiceErrorEvent,
@@ -10,6 +12,13 @@ import type {
   MapLibreServiceManager,
   MapLibreServiceState,
 } from './maplibre-service';
+import {
+  composeMapLibreStyle,
+  loadMapLibreOverlayStyle,
+  loadMapLibreStyle,
+  type MapLibreStyleFetch,
+  type PreparedMapLibreOverlayStyle,
+} from './maplibre-overlay-style';
 
 /** @internal */
 export interface MapLibreServiceHost {
@@ -25,6 +34,13 @@ export interface MapLibreServiceHost {
 /** @internal */
 export type MapLibreModuleLoader = () => Promise<typeof import('maplibre-gl')>;
 
+interface StylePreparation {
+  definitionRevision: number;
+  operationRevision: number;
+  controller: AbortController;
+  promise: Promise<PreparedMapLibreOverlayStyle>;
+}
+
 interface ServiceRecord {
   definition: MapLibreService;
   state: MapLibreServiceState;
@@ -32,12 +48,16 @@ interface ServiceRecord {
   operationRevision: number;
   ownedSources: Map<string, OwnedResource>;
   ownedLayers: Map<string, OwnedResource>;
-  installedDefinition?: MapLibreOverlayService;
+  installedDefinition?: MapLibreOverlayResourceService;
+  preparedStyle?: { definitionRevision: number; value: PreparedMapLibreOverlayStyle };
+  stylePreparation?: StylePreparation;
+  removing?: boolean;
 }
 
 interface OwnedResource {
   generation: number;
   handle: unknown;
+  owner: 'runtime' | 'style';
 }
 
 interface MutationContext {
@@ -45,6 +65,14 @@ interface MutationContext {
   phase: 'source' | 'layer';
   resourceId: string;
   error?: Error;
+}
+
+interface StyleRequestResourceOwners {
+  sourceIds: Map<string, string>;
+  spriteIds: Map<string, string>;
+  glyphUrls: Map<string, string>;
+  resourceUrls: Map<string, string>;
+  runtimeUrls: Map<string, string>;
 }
 
 interface StyleRequest {
@@ -57,11 +85,33 @@ interface StyleRequest {
   resolve: () => void;
   reject: (error: Error) => void;
   settled: boolean;
+  readyToApply: boolean;
   requiresProjection: boolean;
   failure?: Error;
   rollback?: {
     definition: MapLibreService;
     definitionRevision: number;
+  };
+  triggerServiceId?: string;
+  preparedOverlays: readonly {
+    record: ServiceRecord;
+    prepared: PreparedMapLibreOverlayStyle;
+    visible: boolean;
+  }[];
+  resourceOwners: StyleRequestResourceOwners;
+  composedStyle?: maplibregl.StyleSpecification;
+  bootstrapStyle?: boolean;
+  reapplyAfterInitial?: boolean;
+  followers?: StyleRequest[];
+  forceEmptyStyleGeneration?: boolean;
+  styleController?: AbortController;
+  rollbackStyleOverlay?: {
+    record: ServiceRecord;
+    operationRevision: number;
+    definition: MapLibreOverlayStyleService;
+    definitionRevision: number;
+    preparedStyle?: ServiceRecord['preparedStyle'];
+    state: MapLibreServiceState;
   };
 }
 
@@ -102,8 +152,20 @@ function cloneValue<T>(value: T): T {
   return value;
 }
 
+function isStyleOverlayService(
+  service: MapLibreOverlayService,
+): service is MapLibreOverlayStyleService {
+  return 'style' in service && service.style !== undefined;
+}
+
+function isResourceOverlayService(
+  service: MapLibreOverlayService,
+): service is MapLibreOverlayResourceService {
+  return 'sources' in service || 'layers' in service;
+}
+
 function cloneService(service: MapLibreService): MapLibreService {
-  if (service.role === 'basemap') {
+  if (service.role === 'basemap' || isStyleOverlayService(service)) {
     return {
       ...service,
       style: typeof service.style === 'string' ? service.style : cloneValue(service.style),
@@ -114,6 +176,54 @@ function cloneService(service: MapLibreService): MapLibreService {
     sources: cloneValue(service.sources),
     layers: cloneValue(service.layers),
   };
+}
+
+function normalizeResourceUrl(url: string): string {
+  try {
+    return new URL(url).href.replaceAll('%7B', '{').replaceAll('%7D', '}');
+  } catch {
+    return url;
+  }
+}
+
+function errorDetailStrings(value: unknown, keys: readonly string[]): readonly string[] {
+  const values: string[] = [];
+  const pending = [value];
+  const visited = new Set<object>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || typeof current !== 'object' || visited.has(current)) continue;
+    visited.add(current);
+    const details = current as Record<string, unknown>;
+    for (const key of keys) {
+      const candidate = details[key];
+      if (typeof candidate === 'string') values.push(candidate);
+    }
+    for (const key of ['data', 'resource', 'request', 'response', 'error']) {
+      const nested = details[key];
+      if (nested && typeof nested === 'object') pending.push(nested);
+    }
+  }
+  return values;
+}
+
+function resourceUrlMatches(template: string, url: string): boolean {
+  const normalizedTemplate = normalizeResourceUrl(template);
+  const normalizedUrl = normalizeResourceUrl(url);
+  if (normalizedTemplate === normalizedUrl) return true;
+  if (
+    normalizedUrl === `${normalizedTemplate}.json` ||
+    normalizedUrl === `${normalizedTemplate}.png` ||
+    normalizedUrl === `${normalizedTemplate}@2x.json` ||
+    normalizedUrl === `${normalizedTemplate}@2x.png`
+  ) {
+    return true;
+  }
+  if (!normalizedTemplate.includes('{')) return false;
+  const pattern = normalizedTemplate
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\\\{[^}]+\\\}/g, '[^/?]+');
+  return new RegExp(`^${pattern}$`).test(normalizedUrl);
 }
 
 function cloneError(error: Error | undefined): Error | undefined {
@@ -152,6 +262,23 @@ function validateOverlayDefinition(
   registry: ReadonlyMap<string, ServiceRecord>,
   replacingId?: string,
 ): void {
+  const isStyle = isStyleOverlayService(service);
+  const isResource = isResourceOverlayService(service);
+  if (isStyle === isResource) {
+    throw new Error(
+      `MapLibre overlay service "${service.id}" must define exactly one of style or sources/layers`,
+    );
+  }
+  if (isStyle) {
+    if (
+      typeof service.style !== 'string' &&
+      (typeof service.style !== 'object' || service.style === null || Array.isArray(service.style))
+    ) {
+      throw new Error(`MapLibre overlay service "${service.id}" must define a valid style`);
+    }
+    return;
+  }
+
   if (!service.sources || typeof service.sources !== 'object' || Array.isArray(service.sources)) {
     throw new Error(`MapLibre overlay service "${service.id}" must define sources`);
   }
@@ -194,7 +321,13 @@ function validateOverlayDefinition(
   }
 
   for (const [serviceId, record] of registry) {
-    if (serviceId === replacingId || record.definition.role !== 'overlay') continue;
+    if (
+      serviceId === replacingId ||
+      record.definition.role !== 'overlay' ||
+      !isResourceOverlayService(record.definition)
+    ) {
+      continue;
+    }
     for (const sourceId of Object.keys(record.definition.sources)) {
       if (sourceIds.has(sourceId)) {
         throw new Error(`MapLibre overlay source "${sourceId}" already exists`);
@@ -244,6 +377,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   private _parsedRequest: StyleRequest | null = null;
   private _committedRequest: StyleRequest | null = null;
   private _readyStyle: ReadyStyle | null = null;
+  private _styleLoadListener: {
+    map: maplibregl.Map;
+    listener: (event?: unknown) => void;
+  } | null = null;
   private _lastReadyBasemap: LastReadyBasemap | null = null;
   private _destroyed = false;
   private _suspended = false;
@@ -263,6 +400,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     private _host: MapLibreServiceHost,
     private _options: MapLibreIntegrationOptions = {},
     private _loadMapLibre: MapLibreModuleLoader = () => import('maplibre-gl'),
+    private _fetchStyle: MapLibreStyleFetch = globalThis.fetch.bind(globalThis),
   ) {
     super();
     for (const service of _options.services ?? []) this._register(service);
@@ -326,6 +464,22 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (service.role !== record.definition.role)
       throw new Error('MapLibre service role cannot change');
     validateService(service, this._registry, id);
+    if (
+      record.definition.role === 'overlay' &&
+      service.role === 'overlay' &&
+      isStyleOverlayService(record.definition) !== isStyleOverlayService(service)
+    ) {
+      throw new Error('MapLibre overlay form cannot change');
+    }
+    if (
+      record.definition.role === 'overlay' &&
+      service.role === 'overlay' &&
+      isStyleOverlayService(record.definition) &&
+      isStyleOverlayService(service)
+    ) {
+      await this._replaceStyleOverlay(record, service);
+      return;
+    }
 
     const pendingReconciliation = this._reconciliationJobs.get(record)?.promise;
     const pendingInitialization = this._initializationPromise ?? undefined;
@@ -355,15 +509,68 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           definitionRevision: previousDefinitionRevision,
         },
       });
-    } else if (replacement.definition.role === 'overlay' && replacement.state.active) {
+    } else if (
+      replacement.definition.role === 'overlay' &&
+      replacement.state.active &&
+      isResourceOverlayService(replacement.definition) &&
+      previousDefinition.role === 'overlay' &&
+      isResourceOverlayService(previousDefinition)
+    ) {
       await this._updateActiveOverlay(
         replacement,
-        previousDefinition as MapLibreOverlayService,
+        previousDefinition,
         previousDefinitionRevision,
         replacement.operationRevision,
         pendingReconciliation,
         pendingInitialization,
       );
+    }
+  }
+  private async _replaceStyleOverlay(
+    record: ServiceRecord,
+    service: MapLibreOverlayStyleService,
+  ): Promise<void> {
+    const previousDefinition = cloneService(record.definition);
+    const previousDefinitionRevision = record.definitionRevision;
+    const previousPrepared = record.preparedStyle;
+    const previousState = cloneState(record.state);
+    record.operationRevision++;
+    const operationRevision = record.operationRevision;
+    this._abortStylePreparation(record);
+    record.definition = cloneService(service);
+    record.definitionRevision = ++this._definitionRevision;
+    record.preparedStyle = undefined;
+    record.state = {
+      id: record.definition.id,
+      active: previousState.active,
+      status: previousState.active ? 'idle' : previousState.status,
+    };
+    this._emitChange(record.definition, 'update', record.state);
+    if (!record.state.active) return;
+    try {
+      this._setStatus(record, operationRevision, 'loading');
+      await this._prepareStyleOverlay(record, operationRevision);
+      await this._requestCompositeStyle(record, false, {
+        record,
+        operationRevision,
+        definition: previousDefinition as MapLibreOverlayStyleService,
+        definitionRevision: previousDefinitionRevision,
+        preparedStyle: previousPrepared,
+        state: previousState,
+      });
+      this._setStatus(record, operationRevision, 'ready');
+    } catch (error) {
+      if (!this._isCurrentOperation(record, operationRevision)) {
+        throw abortError(`MapLibre service "${record.definition.id}" request was superseded`);
+      }
+      record.operationRevision++;
+      record.definition = previousDefinition;
+      record.definitionRevision = previousDefinitionRevision;
+      record.preparedStyle = previousPrepared;
+      record.state = previousState;
+      this._emitChange(record.definition, 'update', record.state);
+      await this._requestCompositeStyle(record);
+      throw error;
     }
   }
 
@@ -377,6 +584,41 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       if (this._registry.get(id) !== record) {
         throw abortError(`MapLibre service "${id}" request was superseded`);
       }
+    }
+    if (record.definition.role === 'overlay' && isStyleOverlayService(record.definition)) {
+      record.operationRevision++;
+      const operationRevision = record.operationRevision;
+      this._abortStylePreparation(record);
+      record.removing = true;
+      record.state = { id: record.definition.id, active: false, status: 'idle' };
+      this._syncVisibility();
+      const hasPendingStyleOwnership = [
+        this._desiredRequest,
+        this._appliedRequest,
+        this._parsedRequest,
+      ].some((request) =>
+        request?.preparedOverlays.some(({ record: candidate }) => candidate === record),
+      );
+      if (
+        (this._map && (record.preparedStyle || record.ownedLayers.size > 0)) ||
+        hasPendingStyleOwnership
+      ) {
+        try {
+          await this._requestCompositeStyle(
+            record,
+            this._map !== null && (this._readyStyle !== null || hasPendingStyleOwnership),
+          );
+        } catch (error) {
+          record.removing = false;
+          this._handleTransitionFailure(record, operationRevision, error);
+        }
+      }
+      this._assertCurrentOperation(record, operationRevision);
+      this._clearStyleOwnership(record);
+      this._registry.delete(id);
+      this._emitChange(record.definition, 'remove');
+      this._syncVisibility();
+      return;
     }
     this._setActive(record, false);
     const operationRevision = record.operationRevision;
@@ -478,8 +720,16 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     });
     void promise.catch(() => undefined);
     return {
+      resourceOwners: {
+        sourceIds: new Map(),
+        spriteIds: new Map(),
+        glyphUrls: new Map(),
+        resourceUrls: new Map(),
+        runtimeUrls: new Map(),
+      },
       revision: ++this._styleRevision,
       basemapId,
+      preparedOverlays: [],
       definitionRevision,
       style: typeof style === 'string' ? style : cloneValue(style),
       phase,
@@ -487,42 +737,311 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       resolve: resolvePromise,
       reject: rejectPromise,
       settled: false,
+      readyToApply: false,
       requiresProjection,
       rollback,
     };
   }
 
+  private _indexPreparedOverlayResources(
+    preparedOverlays: StyleRequest['preparedOverlays'],
+    basemapId: string | null,
+    style: maplibregl.StyleSpecification,
+  ): StyleRequestResourceOwners {
+    const sourceIds = new Map<string, string>();
+    const spriteIds = new Map<string, string>();
+    const glyphUrls = new Map<string, string>();
+    const resourceUrls = new Map<string, string>();
+    const resourceOwners = {
+      sourceIds,
+      spriteIds,
+      glyphUrls,
+      resourceUrls,
+      runtimeUrls: new Map(),
+    };
+    if (basemapId) this._indexStyleResources(style, basemapId, resourceOwners);
+    for (const { prepared } of preparedOverlays) {
+      for (const sourceId of prepared.sourceIds) {
+        if (!sourceIds.has(sourceId)) sourceIds.set(sourceId, prepared.serviceId);
+      }
+      for (const spriteId of prepared.spriteIds) {
+        if (!spriteIds.has(spriteId)) spriteIds.set(spriteId, prepared.serviceId);
+      }
+      if (prepared.glyphs) {
+        const glyphUrl = normalizeResourceUrl(prepared.glyphs);
+        if (!glyphUrls.has(glyphUrl)) glyphUrls.set(glyphUrl, prepared.serviceId);
+      }
+      for (const url of prepared.resourceUrls) {
+        const resourceUrl = normalizeResourceUrl(url);
+        if (!resourceUrls.has(resourceUrl)) resourceUrls.set(resourceUrl, prepared.serviceId);
+      }
+    }
+    return resourceOwners;
+  }
+
+  private _indexStyleResources(
+    style: maplibregl.StyleSpecification,
+    serviceId: string,
+    owners: StyleRequestResourceOwners,
+  ): void {
+    const record = style as unknown as Record<string, unknown>;
+    const addResourceUrl = (value: unknown): void => {
+      if (typeof value !== 'string') return;
+      const url = normalizeResourceUrl(value);
+      if (!owners.resourceUrls.has(url)) owners.resourceUrls.set(url, serviceId);
+    };
+    const sources = record.sources;
+    if (sources && typeof sources === 'object' && !Array.isArray(sources)) {
+      for (const [sourceId, source] of Object.entries(sources)) {
+        if (!owners.sourceIds.has(sourceId)) owners.sourceIds.set(sourceId, serviceId);
+        if (!source || typeof source !== 'object') continue;
+        const sourceRecord = source as Record<string, unknown>;
+        addResourceUrl(sourceRecord.url);
+        addResourceUrl(sourceRecord.data);
+        if (Array.isArray(sourceRecord.tiles)) {
+          for (const tile of sourceRecord.tiles) addResourceUrl(tile);
+        }
+        if (Array.isArray(sourceRecord.urls)) {
+          for (const url of sourceRecord.urls) addResourceUrl(url);
+        }
+      }
+    }
+    if (typeof record.glyphs === 'string') {
+      const glyphUrl = normalizeResourceUrl(record.glyphs);
+      if (!owners.glyphUrls.has(glyphUrl)) owners.glyphUrls.set(glyphUrl, serviceId);
+      addResourceUrl(record.glyphs);
+    }
+    const sprites =
+      typeof record.sprite === 'string'
+        ? [{ id: 'default', url: record.sprite }]
+        : Array.isArray(record.sprite)
+          ? record.sprite
+          : [];
+    for (const sprite of sprites) {
+      if (!sprite || typeof sprite !== 'object') continue;
+      const { id, url } = sprite as { id?: unknown; url?: unknown };
+      if (typeof id === 'string' && !owners.spriteIds.has(id)) owners.spriteIds.set(id, serviceId);
+      addResourceUrl(url);
+    }
+  }
   private _resolveStyleRequest(request: StyleRequest): void {
     if (request.settled) return;
     request.settled = true;
     request.resolve();
+    for (const follower of request.followers ?? []) this._resolveStyleRequest(follower);
   }
-
   private _rejectStyleRequest(request: StyleRequest, error: Error): void {
     if (request.settled) return;
+    request.styleController?.abort(error);
     request.settled = true;
     request.failure = error;
     request.reject(error);
+    for (const follower of request.followers ?? []) this._rejectStyleRequest(follower, error);
+  }
+  private _abortStylePreparation(record: ServiceRecord): void {
+    record.stylePreparation?.controller.abort();
+  }
+
+  private async _prepareStyleOverlay(
+    record: ServiceRecord,
+    operationRevision: number,
+  ): Promise<PreparedMapLibreOverlayStyle> {
+    if (record.definition.role !== 'overlay' || !isStyleOverlayService(record.definition)) {
+      throw abortError(`MapLibre service "${record.definition.id}" is not a style overlay`);
+    }
+    if (record.preparedStyle?.definitionRevision === record.definitionRevision) {
+      return record.preparedStyle.value;
+    }
+    const existing = record.stylePreparation;
+    if (
+      existing &&
+      existing.definitionRevision === record.definitionRevision &&
+      existing.operationRevision === operationRevision
+    ) {
+      return existing.promise;
+    }
+    this._abortStylePreparation(record);
+    const controller = new AbortController();
+    const preparation: StylePreparation = {
+      definitionRevision: record.definitionRevision,
+      operationRevision,
+      controller,
+      promise: Promise.resolve(undefined as never),
+    };
+    preparation.promise = loadMapLibreOverlayStyle(record.definition, {
+      signal: controller.signal,
+      transformRequest: this._options.mapOptions?.transformRequest ?? undefined,
+      fetch: this._fetchStyle,
+      timeoutMs: 30_000,
+    })
+      .then((prepared) => {
+        this._assertCurrentOperation(record, operationRevision);
+        if (record.definitionRevision !== preparation.definitionRevision) {
+          throw abortError(`MapLibre service "${record.definition.id}" request was superseded`);
+        }
+        record.preparedStyle = { definitionRevision: record.definitionRevision, value: prepared };
+        return prepared;
+      })
+      .finally(() => {
+        if (record.stylePreparation === preparation) record.stylePreparation = undefined;
+      });
+    record.stylePreparation = preparation;
+    return preparation.promise;
+  }
+
+  private async _prepareCompositeOverlays(): Promise<StyleRequest['preparedOverlays']> {
+    const preparedOverlays: Array<StyleRequest['preparedOverlays'][number]> = [];
+    for (const record of this._registry.values()) {
+      if (
+        record.removing ||
+        record.definition.role !== 'overlay' ||
+        !isStyleOverlayService(record.definition) ||
+        (!record.state.active && !record.preparedStyle)
+      ) {
+        continue;
+      }
+      const prepared =
+        record.preparedStyle?.definitionRevision === record.definitionRevision
+          ? record.preparedStyle.value
+          : record.state.active
+            ? await this._prepareStyleOverlay(record, record.operationRevision)
+            : record.preparedStyle?.value;
+      if (!prepared) continue;
+      preparedOverlays.push({ record, prepared, visible: record.state.active });
+    }
+    return preparedOverlays;
+  }
+
+  private _requestCompositeStyle(
+    triggerRecord: ServiceRecord,
+    forceEmptyStyleGeneration = false,
+    rollbackStyleOverlay?: StyleRequest['rollbackStyleOverlay'],
+  ): Promise<void> {
+    const existing = this._desiredRequest;
+    const preparedTrigger = existing?.preparedOverlays.find(
+      ({ record }) => record === triggerRecord,
+    );
+    if (
+      existing?.triggerServiceId &&
+      !existing.settled &&
+      !this._appliedRequest &&
+      !this._parsedRequest &&
+      !triggerRecord.removing &&
+      this._registry.get(triggerRecord.definition.id) === triggerRecord &&
+      preparedTrigger?.visible === triggerRecord.state.active &&
+      triggerRecord.preparedStyle?.definitionRevision === triggerRecord.definitionRevision &&
+      triggerRecord.preparedStyle.value === preparedTrigger.prepared
+    ) {
+      return existing.promise;
+    }
+    const previous = this._desiredRequest;
+    const basemap = this._activeBasemap();
+    const request = this._createStyleRequest(
+      basemap?.definition.id ?? null,
+      basemap?.definition.role === 'basemap' ? basemap.definition.style : EMPTY_STYLE,
+      this._map || this._mapPromise ? 'switch' : 'initial',
+      basemap?.definitionRevision,
+      undefined,
+      true,
+    );
+    request.triggerServiceId = triggerRecord.definition.id;
+    request.forceEmptyStyleGeneration = forceEmptyStyleGeneration;
+    request.rollbackStyleOverlay = rollbackStyleOverlay;
+    if (previous?.triggerServiceId && !this._map && this._mapPromise) {
+      request.reapplyAfterInitial = true;
+    }
+    this._desiredRequest = request;
+    if (previous && previous !== request) {
+      if (previous.triggerServiceId) {
+        request.followers = [...(request.followers ?? []), previous];
+      } else {
+        this._rejectStyleRequest(
+          previous,
+          abortError('MapLibre composite style request was superseded'),
+        );
+      }
+    }
+    if (!request.forceEmptyStyleGeneration && !this._hasActiveService()) {
+      this._resolveStyleRequest(request);
+      return request.promise;
+    }
+    this._prepareStyleRequest(request);
+    return request.promise;
   }
 
   private _prepareStyleRequest(request: StyleRequest): void {
-    if (
-      this._map &&
-      (!request.requiresProjection ||
-        (this._isWebMercator(this._host.getCRS()) && !this._projectionPromise))
-    ) {
-      this._startDesiredStyleIfIdle();
+    const hasActiveStyleOverlay = [...this._registry.values()].some(
+      (record) =>
+        !record.removing &&
+        record.definition.role === 'overlay' &&
+        isStyleOverlayService(record.definition) &&
+        (record.state.active || record.preparedStyle !== undefined),
+    );
+    if (!hasActiveStyleOverlay) {
+      if (
+        this._map &&
+        (!request.requiresProjection ||
+          (this._isWebMercator(this._host.getCRS()) && !this._projectionPromise))
+      ) {
+        request.readyToApply = true;
+        this._startDesiredStyleIfIdle();
+        return;
+      }
+      void (async () => {
+        try {
+          if (request.requiresProjection) await this._ensureWebMercator();
+          if (this._desiredRequest !== request) return;
+          await this._ensureMap(request.style);
+          if (this._desiredRequest !== request) return;
+          request.readyToApply = true;
+          this._startDesiredStyleIfIdle();
+        } catch (value) {
+          const error = toError(value);
+          if (this._desiredRequest !== request || isAbortError(error)) return;
+          this._handleDesiredSetupFailure(request, error);
+        }
+      })();
       return;
     }
     void (async () => {
       try {
+        request.preparedOverlays = await this._prepareCompositeOverlays();
+        if (this._desiredRequest !== request) return;
+        if (typeof request.style === 'string') {
+          const controller = new AbortController();
+          request.styleController = controller;
+          request.style = await loadMapLibreStyle(request.style, {
+            signal: controller.signal,
+            transformRequest: this._options.mapOptions?.transformRequest ?? undefined,
+            fetch: this._fetchStyle,
+            timeoutMs: 30_000,
+          });
+          if (request.styleController === controller) request.styleController = undefined;
+        }
         if (request.requiresProjection) await this._ensureWebMercator();
         if (this._desiredRequest !== request) return;
-        await this._ensureMap(request.style);
+        const baseStyle = request.style;
+        const bootstrapStyle = typeof baseStyle === 'string' && !this._map && !this._mapPromise;
+        request.bootstrapStyle = bootstrapStyle;
+        if (typeof baseStyle === 'string') {
+          throw new Error('MapLibre composite style base was not prepared');
+        }
+        request.resourceOwners = this._indexPreparedOverlayResources(
+          request.preparedOverlays,
+          request.basemapId,
+          baseStyle,
+        );
+        request.composedStyle = composeMapLibreStyle(
+          baseStyle,
+          request.preparedOverlays.map(({ prepared, visible }) => ({ prepared, visible })),
+        );
+        await this._ensureMap(request.composedStyle);
         if (this._desiredRequest !== request) return;
+        request.readyToApply = true;
         this._startDesiredStyleIfIdle();
       } catch (value) {
         const error = toError(value);
+        if (hasActiveStyleOverlay) this._errorPhases.set(error, 'style');
         if (this._desiredRequest !== request || isAbortError(error)) return;
         this._handleDesiredSetupFailure(request, error);
       }
@@ -543,6 +1062,26 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     const operationRevision = record.operationRevision;
     this._emitChange(record.definition, 'visibility', record.state);
     this._assertCurrentOperation(record, operationRevision);
+    if (isStyleOverlayService(record.definition)) {
+      if (this._canFastSetStyleOverlayVisibility(record)) {
+        this._setStatus(record, operationRevision, 'loading');
+        this._setStyleOverlayVisibility(record, visible, operationRevision);
+        this._setStatus(record, operationRevision, 'ready');
+        this._syncVisibility();
+        return;
+      }
+      if (!record.preparedStyle || !this._map) {
+        if (visible) await this._startOverlayReconciliation(record, operationRevision);
+        else this._syncVisibility();
+        return;
+      }
+      this._setStatus(record, operationRevision, 'loading');
+      await this._requestCompositeStyle(record);
+      this._assertCurrentOperation(record, operationRevision);
+      this._setStatus(record, operationRevision, 'ready');
+      this._syncVisibility();
+      return;
+    }
     if (visible) {
       await this._startOverlayReconciliation(record, operationRevision);
     } else {
@@ -561,6 +1100,46 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
   }
 
+  private _setStyleOverlayVisibility(
+    record: ServiceRecord,
+    visible: boolean,
+    operationRevision: number,
+  ): void {
+    const map = this._map;
+    const prepared = record.preparedStyle?.value;
+
+    if (!map || !prepared) return;
+    for (const layerId of prepared.layerIds) {
+      this._assertCurrentOperation(record, operationRevision);
+      if (!map.getLayer(layerId)) continue;
+      map.setLayoutProperty(
+        layerId,
+        'visibility',
+        visible ? (prepared.layerVisibility.get(layerId) ?? 'visible') : 'none',
+      );
+    }
+  }
+  private _canFastSetStyleOverlayVisibility(record: ServiceRecord): boolean {
+    const map = this._map;
+    const prepared = record.preparedStyle?.value;
+    const generation = this._readyStyle?.generation;
+    return (
+      map !== null &&
+      prepared !== undefined &&
+      generation !== undefined &&
+      this._appliedRequest === null &&
+      this._parsedRequest === null &&
+      this._readyStyle?.requestRevision === this._desiredRequest?.revision &&
+      prepared.layerIds.every((layerId) => {
+        const owned = record.ownedLayers.get(layerId);
+        return (
+          owned?.owner === 'style' &&
+          owned.generation === generation &&
+          owned.handle === map.getLayer(layerId)
+        );
+      })
+    );
+  }
   getServices(): readonly MapLibreService[] {
     return [...this._registry.values()].map((record) => cloneService(record.definition));
   }
@@ -652,7 +1231,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   destroy(): void {
     if (this._destroyed) return;
     this._destroyed = true;
-    for (const record of this._registry.values()) record.operationRevision++;
+    for (const record of this._registry.values()) {
+      record.operationRevision++;
+      this._abortStylePreparation(record);
+    }
     const destroyedError = abortError('MapLibre service manager was destroyed');
     if (this._desiredRequest) this._rejectStyleRequest(this._desiredRequest, destroyedError);
     if (this._appliedRequest) this._rejectStyleRequest(this._appliedRequest, destroyedError);
@@ -747,6 +1329,22 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           await this._ensureWebMercator();
           this._assertCurrentOperation(record, operationRevision);
         }
+        if (record.definition.role === 'overlay' && isStyleOverlayService(record.definition)) {
+          try {
+            await this._prepareStyleOverlay(record, operationRevision);
+          } catch (value) {
+            const error = toError(value);
+            if (!isAbortError(error)) this._errorPhases.set(error, 'style');
+            throw error;
+          }
+          this._assertCurrentOperation(record, operationRevision);
+          await this._requestCompositeStyle(record);
+          if (!this._isCurrentOperation(record, operationRevision)) return;
+          if (record.state.status === 'loading')
+            this._setStatus(record, operationRevision, 'ready');
+          this._syncVisibility();
+          return;
+        }
         await this._withStableStyleGeneration(record, operationRevision, async (generation) => {
           const failure = this._reconciliationFailures.get(record);
           if (failure?.generation === generation) {
@@ -775,7 +1373,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
   private async _updateActiveOverlay(
     record: ServiceRecord,
-    previousDefinition: MapLibreOverlayService,
+    previousDefinition: MapLibreOverlayResourceService,
     previousDefinitionRevision: number,
     operationRevision: number,
     pendingReconciliation?: Promise<void>,
@@ -910,7 +1508,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     generation: number,
   ): Promise<void> {
     this._assertCurrentOperation(record, operationRevision);
-    if (!record.state.active || record.definition.role !== 'overlay') {
+    if (
+      !record.state.active ||
+      record.definition.role !== 'overlay' ||
+      !isResourceOverlayService(record.definition)
+    ) {
       throw abortError(`MapLibre service "${record.definition.id}" request was superseded`);
     }
     this._assertStyleGeneration(generation);
@@ -923,10 +1525,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     generation: number,
   ): void {
     const map = this._map;
-    if (!map || record.definition.role !== 'overlay') {
+    const definition = record.definition;
+    if (!map || definition.role !== 'overlay' || !isResourceOverlayService(definition)) {
       throw new Error('MapLibre overlay runtime is unavailable');
     }
-    const definition = record.definition;
     const addedSourceIds: string[] = [];
     const addedLayerIds: string[] = [];
     try {
@@ -955,7 +1557,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         } catch (error) {
           const handle = map.getSource(sourceId);
           if (handle !== undefined) {
-            record.ownedSources.set(sourceId, { generation, handle });
+            record.ownedSources.set(sourceId, { generation, handle, owner: 'runtime' });
             addedSourceIds.push(sourceId);
           }
           throw error;
@@ -965,7 +1567,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         const handle = map.getSource(sourceId);
         if (handle === undefined)
           throw new Error(`MapLibre overlay source "${sourceId}" was not added`);
-        record.ownedSources.set(sourceId, { generation, handle });
+        record.ownedSources.set(sourceId, { generation, handle, owner: 'runtime' });
         addedSourceIds.push(sourceId);
       }
 
@@ -995,7 +1597,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         } catch (error) {
           const handle = map.getLayer(layer.id);
           if (handle !== undefined) {
-            record.ownedLayers.set(layer.id, { generation, handle });
+            record.ownedLayers.set(layer.id, { generation, handle, owner: 'runtime' });
             addedLayerIds.push(layer.id);
           }
           throw error;
@@ -1005,10 +1607,14 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         const handle = map.getLayer(layer.id);
         if (handle === undefined)
           throw new Error(`MapLibre overlay layer "${layer.id}" was not added`);
-        record.ownedLayers.set(layer.id, { generation, handle });
+        record.ownedLayers.set(layer.id, { generation, handle, owner: 'runtime' });
         addedLayerIds.push(layer.id);
       }
-      record.installedDefinition = cloneService(definition) as MapLibreOverlayService;
+      record.installedDefinition = {
+        ...definition,
+        sources: cloneValue(definition.sources),
+        layers: cloneValue(definition.layers),
+      };
     } catch (error) {
       try {
         this._rollbackAddedResources(record, addedLayerIds, addedSourceIds);
@@ -1066,8 +1672,15 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (!map) return undefined;
     const desired: Array<{ record: ServiceRecord; id: string }> = [];
     for (const record of this._registry.values()) {
-      if (record.definition.role !== 'overlay' || !record.state.active) continue;
-      for (const layer of record.definition.layers) desired.push({ record, id: layer.id });
+      if (record.definition.role !== 'overlay') continue;
+      if (isResourceOverlayService(record.definition)) {
+        if (!record.state.active) continue;
+        for (const layer of record.definition.layers) desired.push({ record, id: layer.id });
+      } else if (isStyleOverlayService(record.definition)) {
+        for (const ownedLayerId of record.preparedStyle?.value.layerIds ?? []) {
+          desired.push({ record, id: ownedLayerId });
+        }
+      }
     }
     const index = desired.findIndex((item) => item.record === targetRecord && item.id === layerId);
     for (const item of desired.slice(index + 1)) {
@@ -1080,7 +1693,14 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
   private _isOverlayInstalled(record: ServiceRecord, generation: number): boolean {
     const map = this._map;
-    if (!map || record.definition.role !== 'overlay' || !record.installedDefinition) return false;
+    if (
+      !map ||
+      record.definition.role !== 'overlay' ||
+      !isResourceOverlayService(record.definition) ||
+      !record.installedDefinition
+    ) {
+      return false;
+    }
     const sourceIds = Object.keys(record.definition.sources);
     const layerIds = record.definition.layers.map((layer) => layer.id);
     if (JSON.stringify(record.installedDefinition) !== JSON.stringify(record.definition))
@@ -1137,6 +1757,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     const ownedResources = kind === 'layer' ? record.ownedLayers : record.ownedSources;
     const owned = ownedResources.get(id);
     if (!owned) return;
+    if (owned.owner === 'style') return;
     options.assertCurrent?.();
     const current = kind === 'layer' ? map.getLayer(id) : map.getSource(id);
     if (current !== undefined && current !== owned.handle) {
@@ -1164,6 +1785,14 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       (kind === 'layer' ? map.getLayer(id) : map.getSource(id)) === undefined
     ) {
       ownedResources.delete(id);
+    }
+  }
+  private _clearStyleOwnership(record: ServiceRecord): void {
+    for (const [id, owned] of record.ownedLayers) {
+      if (owned.owner === 'style') record.ownedLayers.delete(id);
+    }
+    for (const [id, owned] of record.ownedSources) {
+      if (owned.owner === 'style') record.ownedSources.delete(id);
     }
   }
 
@@ -1219,9 +1848,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     attempt(() => this._host.off('move', this._handleMove));
     attempt(() => this._host.off('resize', this._handleResize));
     attempt(() => this._host.off('crschange', this._handleCrsChange));
+    attempt(() => this._detachStyleLoadListener());
     const map = this._map;
     if (map) {
-      attempt(() => map.off('style.load', this._handleStyleLoad));
       attempt(() => map.off('error', this._handleMapError));
       attempt(() => map.remove());
     }
@@ -1233,6 +1862,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   }
 
   private _resetRuntime(): void {
+    for (const record of this._registry.values()) {
+      if (!record.stylePreparation) continue;
+      record.operationRevision++;
+      this._abortStylePreparation(record);
+    }
     let teardownError: Error | undefined;
     try {
       this._teardownRuntime();
@@ -1283,21 +1917,25 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         canvasContainer.insertBefore(container, firstCanvas ?? canvasContainer.firstChild);
 
         this._container = container;
-        this._styleGeneration++;
+        const generation = ++this._styleGeneration;
         this._readyStyle = null;
         this._parsedRequest = null;
         this._appliedRequest = request;
+        const transformRequest = this._wrapTransformRequest(
+          this._options.mapOptions?.transformRequest,
+        );
         map = new maplibre.Map({
           ...MAP_DEFAULTS,
           ...this._options.mapOptions,
+          transformRequest,
           container,
-          style: request.style ?? initialStyle,
+          style: initialStyle,
           center: this._host.getCenter(),
           zoom: this._host.getZoom(),
           interactive: false,
         });
         this._map = map;
-        map.on('style.load', this._handleStyleLoad);
+        this._attachStyleLoadListener(map, request, generation);
         map.on('error', this._handleMapError);
         this._host.on('move', this._handleMove);
         this._host.on('resize', this._handleResize);
@@ -1310,7 +1948,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         this._host.off('resize', this._handleResize);
         this._host.off('crschange', this._handleCrsChange);
         if (map) {
-          map.off('style.load', this._handleStyleLoad);
+          this._detachStyleLoadListener();
           map.off('error', this._handleMapError);
           try {
             map.remove();
@@ -1379,6 +2017,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (
       !request ||
       request.settled ||
+      !request.readyToApply ||
       !map ||
       this._appliedRequest ||
       this._parsedRequest ||
@@ -1386,7 +2025,13 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     ) {
       return;
     }
-    if (request.basemapId === null && request.phase !== 'recovery' && !this._hasActiveOverlay()) {
+    if (
+      !request.forceEmptyStyleGeneration &&
+      request.basemapId === null &&
+      request.phase !== 'recovery' &&
+      !this._hasActiveOverlay() &&
+      request.preparedOverlays.length === 0
+    ) {
       this._readyStyle = null;
       this._lastReadyBasemap = null;
       this._resolveStyleRequest(request);
@@ -1403,14 +2048,25 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (this._desiredRequest !== request) return;
 
     try {
-      this._styleGeneration++;
+      let style: string | maplibregl.StyleSpecification;
+      if (request.preparedOverlays.length === 0) {
+        style = request.style;
+      } else {
+        if (!request.composedStyle) {
+          throw new Error('MapLibre composite style was not prepared');
+        }
+        style = request.composedStyle;
+      }
+      const generation = ++this._styleGeneration;
       this._readyStyle = null;
       this._appliedRequest = request;
-      map.setStyle(request.style, { diff: false });
+      this._attachStyleLoadListener(map, request, generation);
+      map.setStyle(style, { diff: false });
       this._committedRequest = null;
     } catch (value) {
       const error = toError(value);
       this._errorPhases.set(error, 'style');
+      this._detachStyleLoadListener();
       if (this._appliedRequest === request) this._appliedRequest = null;
       this._detachFailedStyle();
       this._handleAppliedStyleFailure(request, error);
@@ -1595,13 +2251,81 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         });
       }
       record.installedDefinition = undefined;
+      this._clearStyleOwnership(record);
     }
   }
 
+  private _adoptStyleOverlayResources(
+    record: ServiceRecord,
+    prepared: PreparedMapLibreOverlayStyle,
+    generation: number,
+  ): void {
+    const map = this._map;
+    if (!map)
+      throw this._phaseError(
+        'style',
+        'MapLibre overlay runtime is unavailable',
+        record.definition.id,
+      );
+    for (const id of prepared.sourceIds) {
+      const handle = map.getSource(id);
+      if (handle === undefined) {
+        throw this._phaseError(
+          'source',
+          `MapLibre overlay source "${id}" was not composed`,
+          record.definition.id,
+        );
+      }
+      record.ownedSources.set(id, { generation, handle, owner: 'style' });
+    }
+    for (const id of prepared.layerIds) {
+      const handle = map.getLayer(id);
+      if (handle === undefined) {
+        throw this._phaseError(
+          'layer',
+          `MapLibre overlay layer "${id}" was not composed`,
+          record.definition.id,
+        );
+      }
+      record.ownedLayers.set(id, { generation, handle, owner: 'style' });
+    }
+    record.preparedStyle = { definitionRevision: record.definitionRevision, value: prepared };
+  }
+
   private async _finishParsedStyle(request: StyleRequest, generation: number): Promise<void> {
+    for (const { record, prepared } of request.preparedOverlays) {
+      if (this._desiredRequest !== request) break;
+      if (
+        record.removing ||
+        record.definition.role !== 'overlay' ||
+        !isStyleOverlayService(record.definition)
+      ) {
+        continue;
+      }
+      const operationRevision = record.operationRevision;
+      try {
+        this._adoptStyleOverlayResources(record, prepared, generation);
+      } catch (value) {
+        const error = toError(value);
+        this._parsedRequest = null;
+        this._publishTransitionFailure(record, operationRevision, error);
+        this._rejectStyleRequest(request, error);
+        return;
+      }
+    }
+
     for (const record of this._registry.values()) {
       if (this._desiredRequest !== request) break;
-      if (record.definition.role !== 'overlay' || !record.state.active) continue;
+      const preparedOverlay = request.preparedOverlays.find(
+        ({ record: candidate }) => candidate === record,
+      );
+      if (
+        record.removing ||
+        record.definition.role !== 'overlay' ||
+        (!record.state.active && !preparedOverlay)
+      ) {
+        continue;
+      }
       const operationRevision = record.operationRevision;
       const publishRecoveryLoading =
         request.phase === 'recovery' &&
@@ -1613,8 +2337,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           this._setStatus(record, operationRevision, 'loading');
           if (this._desiredRequest !== request) break;
         }
-        await this._reconcileOverlayForGeneration(record, operationRevision, generation);
-        this._assertCurrentOperation(record, operationRevision);
+        if (!preparedOverlay || !isStyleOverlayService(record.definition)) {
+          await this._reconcileOverlayForGeneration(record, operationRevision, generation);
+          this._assertCurrentOperation(record, operationRevision);
+        }
         this._reconciliationFailures.delete(record);
         const coordinatorRevision = coordinatorLoadingRevisions.get(record);
         const independentJob = this._reconciliationJobs.has(record);
@@ -1648,6 +2374,16 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
             coordinatorLoadingRevisions.delete(record);
           }
           break;
+        }
+        if (
+          record.definition.role === 'overlay' &&
+          isStyleOverlayService(record.definition) &&
+          request.preparedOverlays.some(({ record: candidate }) => candidate === record)
+        ) {
+          this._parsedRequest = null;
+          this._publishTransitionFailure(record, operationRevision, error);
+          this._rejectStyleRequest(request, error);
+          return;
         }
         if (coordinatorLoadingRevisions.get(record) === operationRevision) {
           coordinatorLoadingRevisions.delete(record);
@@ -1711,20 +2447,108 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
   private _handleDesiredSetupFailure(request: StyleRequest, error: Error): void {
     this._rejectStyleRequest(request, error);
+    const trigger = request.triggerServiceId
+      ? this._registry.get(request.triggerServiceId)
+      : undefined;
+    if (trigger?.definition.role === 'overlay' && isStyleOverlayService(trigger.definition)) {
+      trigger.preparedStyle = undefined;
+      trigger.state = {
+        id: trigger.definition.id,
+        active: false,
+        status: 'error',
+        error,
+      };
+      if (this._desiredRequest === request) {
+        const committed =
+          this._committedRequest &&
+          this._readyStyle?.requestRevision === this._committedRequest.revision
+            ? this._committedRequest
+            : null;
+        this._desiredRequest = committed;
+      }
+      this._emitFatalError(trigger.definition.id, error);
+      this._emitChange(trigger.definition, 'status', trigger.state);
+      this._syncVisibility();
+      return;
+    }
     if (request.basemapId === null) return;
     if (!this._publishBasemapFailure(request, error)) return;
     if (this._map) this._enqueueRecovery(request);
   }
 
-  private _handleAppliedStyleFailure(request: StyleRequest, error: Error): void {
+  private _handleAppliedStyleFailure(
+    request: StyleRequest,
+    error: Error,
+    resourceOwner?: ServiceRecord,
+  ): void {
     if (this._desiredRequest !== request) {
       this._startDesiredStyleIfIdle();
       return;
     }
+    const wasSettled = request.settled;
     this._rejectStyleRequest(request, error);
+    const trigger =
+      resourceOwner ??
+      (request.triggerServiceId ? this._registry.get(request.triggerServiceId) : undefined);
+    const rollbackStyleOverlay = request.rollbackStyleOverlay;
+    if (
+      rollbackStyleOverlay &&
+      this._registry.get(rollbackStyleOverlay.record.definition.id) ===
+        rollbackStyleOverlay.record &&
+      rollbackStyleOverlay.record.operationRevision === rollbackStyleOverlay.operationRevision &&
+      resourceOwner?.definition.role !== 'basemap'
+    ) {
+      if (wasSettled) {
+        const record = rollbackStyleOverlay.record;
+        record.operationRevision++;
+        record.definition = cloneService(rollbackStyleOverlay.definition);
+        record.definitionRevision = rollbackStyleOverlay.definitionRevision;
+        record.preparedStyle = rollbackStyleOverlay.preparedStyle;
+        record.state = cloneState(rollbackStyleOverlay.state);
+        const errorOwner =
+          trigger?.definition.role === 'overlay' && isStyleOverlayService(trigger.definition)
+            ? trigger
+            : record;
+        this._emitFatalError(errorOwner.definition.id, error);
+        this._emitChange(record.definition, 'update', record.state);
+        void this._requestCompositeStyle(record).catch(() => undefined);
+        return;
+      }
+      if (trigger?.definition.role === 'overlay' && isStyleOverlayService(trigger.definition)) {
+        this._emitFatalError(trigger.definition.id, error);
+      } else {
+        this.fire('error', {
+          serviceId: request.triggerServiceId,
+          phase: this._errorPhases.get(error) ?? 'lifecycle',
+          error,
+          fatal: true,
+        });
+      }
+      return;
+    }
+    if (trigger?.definition.role === 'overlay' && isStyleOverlayService(trigger.definition)) {
+      trigger.operationRevision++;
+      trigger.preparedStyle = undefined;
+      trigger.state = {
+        id: trigger.definition.id,
+        active: false,
+        status: 'error',
+        error,
+      };
+      this._emitFatalError(trigger.definition.id, error);
+      this._emitChange(trigger.definition, 'status', trigger.state);
+      this._enqueueRecovery(request);
+      return;
+    }
     if (request.phase === 'initial' && request.basemapId === null) {
       for (const record of this._registry.values()) {
-        if (record.definition.role !== 'overlay' || !record.state.active) continue;
+        if (
+          record.definition.role !== 'overlay' ||
+          !record.state.active ||
+          record.stylePreparation
+        ) {
+          continue;
+        }
         try {
           this._publishTransitionFailure(record, record.operationRevision, error);
         } catch {
@@ -1821,8 +2645,34 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
     this._prepareStyleRequest(request);
   }
+  private _attachStyleLoadListener(
+    map: maplibregl.Map,
+    request: StyleRequest,
+    generation: number,
+  ): void {
+    this._detachStyleLoadListener();
+    const listener = (): void => {
+      if (
+        this._destroyed ||
+        this._appliedRequest !== request ||
+        this._styleGeneration !== generation
+      ) {
+        return;
+      }
+      this._handleStyleLoad(request, generation);
+    };
+    this._styleLoadListener = { map, listener };
+    map.on('style.load', listener);
+  }
+
+  private _detachStyleLoadListener(): void {
+    const subscription = this._styleLoadListener;
+    this._styleLoadListener = null;
+    subscription?.map.off('style.load', subscription.listener);
+  }
 
   private _detachFailedStyle(): void {
+    this._detachStyleLoadListener();
     try {
       this._map?.setStyle(null);
     } catch {
@@ -1838,6 +2688,70 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
   }
 
+  private _wrapTransformRequest(
+    transformRequest: maplibregl.MapOptions['transformRequest'],
+  ): NonNullable<maplibregl.MapOptions['transformRequest']> {
+    const manager = this;
+    return function (this: unknown, url, resourceType) {
+      const result = transformRequest?.call(this, url, resourceType);
+      manager._recordRuntimeResourceUrl(url, result);
+      return result;
+    };
+  }
+
+  private _recordRuntimeResourceUrl(url: string, parameters: unknown): void {
+    const targets = this._currentStyleRequests()
+      .map((request) => ({ request, owner: this._findRequestResourceOwner(request, url) }))
+      .filter(
+        (target): target is { request: StyleRequest; owner: string } => target.owner !== undefined,
+      );
+    const record = (value: unknown): void => {
+      const transformedUrl =
+        value && typeof value === 'object' && 'url' in value && typeof value.url === 'string'
+          ? value.url
+          : url;
+      for (const { request, owner } of targets) {
+        if (this._currentStyleRequests().includes(request)) {
+          request.resourceOwners.runtimeUrls.set(normalizeResourceUrl(transformedUrl), owner);
+        }
+      }
+    };
+    if (
+      parameters &&
+      typeof parameters === 'object' &&
+      'then' in parameters &&
+      typeof parameters.then === 'function'
+    ) {
+      void parameters.then(record, () => undefined);
+      return;
+    }
+    record(parameters);
+  }
+
+  private _currentStyleRequests(): StyleRequest[] {
+    const committed =
+      this._committedRequest &&
+      this._readyStyle?.requestRevision === this._committedRequest.revision
+        ? this._committedRequest
+        : null;
+    return [...new Set([this._appliedRequest, this._parsedRequest, committed])].filter(
+      (request): request is StyleRequest => request !== null,
+    );
+  }
+
+  private _findRequestResourceOwner(request: StyleRequest, url: string): string | undefined {
+    const normalizedUrl = normalizeResourceUrl(url);
+    return (
+      request.resourceOwners.runtimeUrls.get(normalizedUrl) ??
+      [...request.resourceOwners.glyphUrls].find(([template]) =>
+        resourceUrlMatches(template, normalizedUrl),
+      )?.[1] ??
+      [...request.resourceOwners.resourceUrls].find(([template]) =>
+        resourceUrlMatches(template, normalizedUrl),
+      )?.[1]
+    );
+  }
+
   private _findOwnedSource(sourceId: string): ServiceRecord | undefined {
     const current = this._map?.getSource(sourceId);
     if (current === undefined) return undefined;
@@ -1848,20 +2762,74 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     return undefined;
   }
 
-  private _handleStyleLoad = (): void => {
-    if (this._destroyed || !this._appliedRequest) return;
-    const request = this._appliedRequest;
+  private _findAppliedResourceOwner(
+    request: StyleRequest,
+    details: unknown,
+    error: Error,
+  ): ServiceRecord | undefined {
+    const owners = request.resourceOwners;
+    const values = [
+      ...errorDetailStrings(details, [
+        'sourceId',
+        'source',
+        'spriteId',
+        'sprite',
+        'glyphs',
+        'glyphUrl',
+        'resourceUrl',
+        'url',
+      ]),
+      ...errorDetailStrings(error, [
+        'sourceId',
+        'source',
+        'spriteId',
+        'sprite',
+        'glyphs',
+        'glyphUrl',
+        'resourceUrl',
+        'url',
+      ]),
+    ];
+    const serviceId = values
+      .map(
+        (value) =>
+          owners.sourceIds.get(value) ??
+          owners.spriteIds.get(value) ??
+          this._findRequestResourceOwner(request, value),
+      )
+      .find((id) => id !== undefined);
+    return serviceId ? this._registry.get(serviceId) : undefined;
+  }
+  private _handleStyleLoad(request: StyleRequest, generation: number): void {
+    if (
+      this._destroyed ||
+      this._appliedRequest !== request ||
+      this._styleGeneration !== generation
+    ) {
+      return;
+    }
+    this._detachStyleLoadListener();
     this._appliedRequest = null;
-    if (this._desiredRequest !== request) {
+    if (request.bootstrapStyle) {
+      request.bootstrapStyle = false;
+      this._startDesiredStyleIfIdle();
+      return;
+    }
+    if (request.reapplyAfterInitial) {
+      request.reapplyAfterInitial = false;
+      if (request.basemapId === null && !this._hasActiveOverlay()) {
+        this._map?.setStyle(null);
+      }
       this._startDesiredStyleIfIdle();
       return;
     }
     this._parsedRequest = request;
-    void this._finishParsedStyle(request, this._styleGeneration);
-  };
+    void this._finishParsedStyle(request, generation);
+  }
 
   private _handleMapError = (event?: unknown): void => {
-    const details = event as { error?: unknown; sourceId?: string; tile?: unknown } | undefined;
+    const details =
+      event && typeof event === 'object' ? (event as Record<string, unknown>) : undefined;
     const error = toError(details?.error ?? event);
     if (this._mutationContext) {
       this._mutationContext.error = error;
@@ -1869,28 +2837,37 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       this._errorServiceIds.set(error, this._mutationContext.serviceId);
       return;
     }
+    const sourceId = errorDetailStrings(details, ['sourceId', 'source'])[0];
+    const ownedSource = sourceId ? this._findOwnedSource(sourceId) : undefined;
+    const request = this._currentStyleRequests()[0];
+    const requestOwner = request
+      ? this._findAppliedResourceOwner(request, details, error)
+      : undefined;
+    const owner = ownedSource ?? requestOwner;
     if (details?.tile !== undefined) {
-      this.fire('error', { phase: 'tile', fatal: false, error });
+      this.fire('error', {
+        serviceId: owner?.definition.id,
+        phase: 'tile',
+        fatal: false,
+        error,
+      });
       return;
     }
-    if (details?.sourceId) {
-      const owner = this._findOwnedSource(details.sourceId);
-      if (owner) {
-        this._errorPhases.set(error, 'source');
-        try {
-          this._publishTransitionFailure(owner, owner.operationRevision, error);
-        } catch {
-          // Reentrant listeners may supersede the failing overlay.
-        }
-        return;
+    if (sourceId && owner) {
+      this._errorPhases.set(error, 'source');
+      try {
+        this._publishTransitionFailure(owner, owner.operationRevision, error);
+      } catch {
+        // Reentrant listeners may supersede the failing overlay.
       }
+      return;
     }
-    if (this._appliedRequest) {
-      const request = this._appliedRequest;
-      this._appliedRequest = null;
+    if (request && (this._appliedRequest === request || owner)) {
+      if (this._appliedRequest === request) this._appliedRequest = null;
+      if (this._parsedRequest === request) this._parsedRequest = null;
       this._errorPhases.set(error, 'style');
       this._detachFailedStyle();
-      this._handleAppliedStyleFailure(request, error);
+      this._handleAppliedStyleFailure(request, error, owner);
       return;
     }
     this.fire('error', { phase: 'lifecycle', fatal: false, error });
@@ -2072,8 +3049,9 @@ export function createMapLibreServiceManager(
   host: MapLibreServiceHost,
   options: MapLibreIntegrationOptions = {},
   loadMapLibre: MapLibreModuleLoader = () => import('maplibre-gl'),
+  fetchStyle: MapLibreStyleFetch = globalThis.fetch.bind(globalThis),
 ): MapLibreServiceManagerImpl {
-  return new MapLibreServiceManagerImpl(host, options, loadMapLibre);
+  return new MapLibreServiceManagerImpl(host, options, loadMapLibre, fetchStyle);
 }
 
 const coordinatorLoadingRevisions = new WeakMap<ServiceRecord, number>();
