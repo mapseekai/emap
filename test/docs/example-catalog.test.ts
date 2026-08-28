@@ -171,7 +171,6 @@ async function executeOnlineMapServicesExample(
   const customServiceAdds: Array<Record<string, unknown>> = [];
   const customServiceUpdates: Array<{ id: string; service: Record<string, unknown> }> = [];
   const customBasemaps: string[] = [];
-  let pendingCustomServiceType: CustomServiceSubmission['type'] | undefined;
   let resolveCustomService: (() => void) | undefined;
   class FakeLayerControl {}
   class FakeNavigationControl {}
@@ -193,14 +192,14 @@ async function executeOnlineMapServicesExample(
       addService: async (service: Record<string, unknown>): Promise<void> => {
         customServiceAdds.push(service);
         customServices.push(service);
-        if (pendingCustomServiceType !== 'style') resolveCustomService?.();
+        resolveCustomService?.();
       },
       updateService: async (id: string, service: Record<string, unknown>): Promise<void> => {
         customServiceUpdates.push({ id, service });
         const index = customServices.findIndex((candidate) => candidate.id === id);
         if (index === -1) customServices.push(service);
         else customServices[index] = service;
-        if (pendingCustomServiceType !== 'style') resolveCustomService?.();
+        resolveCustomService?.();
       },
       setBasemap: async (id: string): Promise<void> => {
         customBasemaps.push(id);
@@ -314,14 +313,12 @@ async function executeOnlineMapServicesExample(
         renderType.value = submission.renderType ?? 'fill';
         styleMode.value = submission.styleMode ?? 'url';
         styleInput.value = submission.styleInput ?? '';
-        pendingCustomServiceType = submission.type;
         const customServiceApplied = new Promise<void>((resolve) => {
           resolveCustomService = resolve;
         });
         form.requestSubmit();
         if (submission.invalid) await Promise.resolve();
         else await customServiceApplied;
-        pendingCustomServiceType = undefined;
         resolveCustomService = undefined;
       }
     }
@@ -946,12 +943,13 @@ describe('example catalog metadata', () => {
       services.filter(({ role }) => role === 'overlay').map(({ id, visible }) => ({ id, visible })),
     ).toEqual([
       { id: 'states-wms', visible: true },
+      { id: 'openfreemap-bright', visible: false },
       { id: 'usgs-imagery', visible: true },
     ]);
     expect(services[2].sources?.['states-wms'].tiles).toEqual([
       'https://ahocevar.com/geoserver/wms?service=WMS&request=GetMap&layers=topp:states&styles=&format=image/png&transparent=true&version=1.1.1&srs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256',
     ]);
-    expect(services[3].sources?.['usgs-imagery'].tiles).toEqual([
+    expect(services[4].sources?.['usgs-imagery'].tiles).toEqual([
       'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}',
     ]);
     expect(result.sharedUiCalls).toEqual([{ map: result.maps[0], runtime: result.runtime }]);
@@ -1109,7 +1107,7 @@ describe('example catalog metadata', () => {
     ]);
   });
 
-  it('registers MapLibre Style URLs and inline JSON as an active basemap', async () => {
+  it('registers MapLibre Style URLs and inline JSON as active overlays', async () => {
     const html = await readFile(
       resolve('packages/examples/examples/online-map-services/index.html'),
       'utf8',
@@ -1131,20 +1129,22 @@ describe('example catalog metadata', () => {
       expect.objectContaining({
         id: 'custom-style',
         name: 'Hosted style',
-        role: 'basemap',
+        role: 'overlay',
+        visible: true,
         style: 'https://styles.example.test/basic/style.json',
       }),
     ]);
-    expect(urlResult.customBasemaps).toEqual(['custom-style']);
+    expect(urlResult.customBasemaps).toEqual([]);
     expect(jsonResult.customServices).toEqual([
       expect.objectContaining({
         id: 'custom-style',
         name: 'Inline style',
-        role: 'basemap',
+        role: 'overlay',
+        visible: true,
         style: { version: 8, sources: {}, layers: [] },
       }),
     ]);
-    expect(jsonResult.customBasemaps).toEqual(['custom-style']);
+    expect(jsonResult.customBasemaps).toEqual([]);
   });
 
   it('updates a re-submitted custom service instead of registering a duplicate id', async () => {
