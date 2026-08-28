@@ -179,9 +179,10 @@ class FakeMap {
     };
   }
 
-  delayedStyleLoadEvenIfSuperseded(): () => void {
-    const styleGeneration = this.styleRevision;
-    return () => this.emit('style.load', { styleGeneration });
+  captureStyleLoadListener(): FakeMapListener {
+    const listener = [...(this._listeners.get('style.load') ?? [])].at(-1);
+    if (!listener) throw new Error('style.load listener is unavailable');
+    return listener;
   }
 
   addSource(id: string, source: maplibregl.SourceSpecification): void {
@@ -2275,18 +2276,19 @@ describe('MapLibreServiceManager lazy host lifecycle', () => {
     expect(() => manager.destroy()).not.toThrow();
   });
 
-  it('attempts later map detach and removal after a map listener detach throws', async () => {
+  it('attempts map removal after an error listener detach throws', async () => {
     const { host, manager } = createManager([roads]);
     const map = await activateOverlay(manager);
+    map.offCalls.length = 0;
     const container = map.options.container as HTMLElement;
-    const mapOffError = new Error('style listener detach failed');
-    map.offErrors.set('style.load', mapOffError);
+    const mapOffError = new Error('error listener detach failed');
+    map.offErrors.set('error', mapOffError);
     map.removeError = new Error('native removal also failed');
 
     expect(() => manager.destroy()).toThrow(mapOffError);
 
     expect(host.off.mock.calls.map(([type]) => type)).toEqual(['move', 'resize', 'crschange']);
-    expect(map.offCalls).toEqual(['style.load', 'error']);
+    expect(map.offCalls).toEqual(['error']);
     expect(map.removed).toBe(true);
     expect(container.isConnected).toBe(false);
     expect(manager.getMapLibreMap()).toBeNull();
@@ -4019,8 +4021,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(manager.getServiceState('dark')).toMatchObject({ active: false, status: 'idle' });
     expect(manager.getServiceState('bright')).toMatchObject({ active: true });
   });
-
-  it('ignores a stale delayed style-load callback after the current generation starts', async () => {
+  it('ignores an untagged stale style-load callback after the current generation starts', async () => {
     const { manager } = createManager([
       objectBasemap,
       { ...objectBasemap, id: 'dark', name: 'Dark', style: { ...objectBasemap.style, name: 'dark' } },
@@ -4033,13 +4034,14 @@ describe('MapLibreServiceManager overlay rendering', () => {
 
     const obsolete = manager.setBasemap('dark').catch((error: unknown) => error);
     await waitForCondition(() => map.setStyleCalls.length === 1, 'obsolete basemap style did not start');
-    const staleLoad = map.delayedStyleLoad();
+    const staleLoad = map.captureStyleLoadListener();
     const latest = manager.setBasemap('light');
     await Promise.resolve();
     map.emit('style.load');
     await waitForCondition(() => map.setStyleCalls.length === 2, 'current basemap style did not start');
     staleLoad();
     expect(manager.getServiceState('light')).toMatchObject({ status: 'loading' });
+    expect(map.listenerCount('style.load')).toBe(1);
     map.emit('style.load');
     await expect(obsolete).resolves.toMatchObject({ name: 'AbortError' });
     await latest;
@@ -4071,7 +4073,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(map.getLayer('emap-overlay:two:second')).toBeDefined();
   });
 
-  it('ignores a forced stale style-load generation after a newer composite request', async () => {
+  it('ignores an untagged stale style-load callback after a newer composite request', async () => {
     const { manager } = createManager([objectBasemap]);
     const baseRequest = manager.setBasemap('light');
     const map = await waitForFakeMap();
@@ -4079,7 +4081,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
     await baseRequest;
     const first = manager.addService({ id: 'one', name: 'One', role: 'overlay', visible: true, style: brightStyle });
     await waitForCondition(() => map.setStyleCalls.length === 1, 'first composite did not start');
-    const staleLoad = map.delayedStyleLoadEvenIfSuperseded();
+    const staleLoad = map.captureStyleLoadListener();
     const second = manager.addService({
       id: 'two',
       name: 'Two',

@@ -89,7 +89,6 @@ interface StyleRequest {
     visible: boolean;
   }[];
   bootstrapStyle?: boolean;
-  styleGeneration?: number;
   followers?: StyleRequest[];
 }
 
@@ -307,6 +306,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   private _parsedRequest: StyleRequest | null = null;
   private _committedRequest: StyleRequest | null = null;
   private _readyStyle: ReadyStyle | null = null;
+  private _styleLoadListener: {
+    map: maplibregl.Map;
+    listener: (event?: unknown) => void;
+  } | null = null;
   private _lastReadyBasemap: LastReadyBasemap | null = null;
   private _destroyed = false;
   private _suspended = false;
@@ -1604,9 +1607,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     attempt(() => this._host.off('move', this._handleMove));
     attempt(() => this._host.off('resize', this._handleResize));
     attempt(() => this._host.off('crschange', this._handleCrsChange));
+    attempt(() => this._detachStyleLoadListener());
     const map = this._map;
     if (map) {
-      attempt(() => map.off('style.load', this._handleStyleLoad));
       attempt(() => map.off('error', this._handleMapError));
       attempt(() => map.remove());
     }
@@ -1673,7 +1676,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         canvasContainer.insertBefore(container, firstCanvas ?? canvasContainer.firstChild);
 
         this._container = container;
-        this._styleGeneration++;
+        const generation = ++this._styleGeneration;
         this._readyStyle = null;
         this._parsedRequest = null;
         this._appliedRequest = request;
@@ -1687,7 +1690,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           interactive: false,
         });
         this._map = map;
-        map.on('style.load', this._handleStyleLoad);
+        this._attachStyleLoadListener(map, request, generation);
         map.on('error', this._handleMapError);
         this._host.on('move', this._handleMove);
         this._host.on('resize', this._handleResize);
@@ -1700,7 +1703,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         this._host.off('resize', this._handleResize);
         this._host.off('crschange', this._handleCrsChange);
         if (map) {
-          map.off('style.load', this._handleStyleLoad);
+          this._detachStyleLoadListener();
           map.off('error', this._handleMapError);
           try {
             map.remove();
@@ -1795,8 +1798,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     try {
       const generation = ++this._styleGeneration;
       this._readyStyle = null;
-      request.styleGeneration = generation;
       this._appliedRequest = request;
+      this._attachStyleLoadListener(map, request, generation);
       map.setStyle(
         request.style,
         request.preparedOverlays.length === 0
@@ -1814,6 +1817,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     } catch (value) {
       const error = toError(value);
       this._errorPhases.set(error, 'style');
+      this._detachStyleLoadListener();
       if (this._appliedRequest === request) this._appliedRequest = null;
       this._detachFailedStyle();
       this._handleAppliedStyleFailure(request, error);
@@ -2317,8 +2321,35 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
     this._prepareStyleRequest(request);
   }
+  private _attachStyleLoadListener(
+    map: maplibregl.Map,
+    request: StyleRequest,
+    generation: number,
+  ): void {
+    this._detachStyleLoadListener();
+    const listener = (): void => {
+      if (
+        this._destroyed ||
+        this._appliedRequest !== request ||
+        this._styleGeneration !== generation
+      ) {
+        return;
+      }
+      this._handleStyleLoad(request, generation);
+    };
+    this._styleLoadListener = { map, listener };
+    map.on('style.load', listener);
+  }
+
+  private _detachStyleLoadListener(): void {
+    const subscription = this._styleLoadListener;
+    this._styleLoadListener = null;
+    subscription?.map.off('style.load', subscription.listener);
+  }
+
 
   private _detachFailedStyle(): void {
+    this._detachStyleLoadListener();
     try {
       this._map?.setStyle(null);
     } catch {
@@ -2343,15 +2374,15 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
     return undefined;
   }
-
-  private _handleStyleLoad = (event?: unknown): void => {
-    if (this._destroyed || !this._appliedRequest) return;
-    const request = this._appliedRequest;
-    let eventGeneration: unknown;
-    if (typeof event === 'object' && event !== null && 'styleGeneration' in event) {
-      eventGeneration = event.styleGeneration;
+  private _handleStyleLoad(request: StyleRequest, generation: number): void {
+    if (
+      this._destroyed ||
+      this._appliedRequest !== request ||
+      this._styleGeneration !== generation
+    ) {
+      return;
     }
-    if (eventGeneration !== undefined && eventGeneration !== request.styleGeneration) return;
+    this._detachStyleLoadListener();
     this._appliedRequest = null;
     if (request.bootstrapStyle) {
       request.bootstrapStyle = false;
@@ -2363,8 +2394,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       return;
     }
     this._parsedRequest = request;
-    void this._finishParsedStyle(request, this._styleGeneration);
-  };
+    void this._finishParsedStyle(request, generation);
+  }
 
   private _handleMapError = (event?: unknown): void => {
     const details = event as { error?: unknown; sourceId?: string; tile?: unknown } | undefined;
