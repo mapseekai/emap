@@ -3998,7 +3998,7 @@ describe('MapLibreServiceManager overlay rendering', () => {
       () => map.setStyleCalls.length === 2,
       'basemap recomposition did not start',
     );
-    const rawSprite = `${brightStyle.sprite}.json`;
+    const rawSprite = `${brightStyle.sprite}@2x.json`;
     const rewrittenSprite = map.options.transformRequest?.(rawSprite, 'Sprite')?.url;
     expect(rewrittenSprite).toBe(
       `https://proxy.example.test/?url=${encodeURIComponent(rawSprite)}`,

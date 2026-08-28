@@ -107,6 +107,10 @@ interface StyleRequest {
   rollbackStyleOverlay?: {
     record: ServiceRecord;
     operationRevision: number;
+    definition: MapLibreOverlayStyleService;
+    definitionRevision: number;
+    preparedStyle?: ServiceRecord['preparedStyle'];
+    state: MapLibreServiceState;
   };
 }
 
@@ -209,6 +213,7 @@ function resourceUrlMatches(template: string, url: string): boolean {
   if (
     normalizedUrl === `${normalizedTemplate}.json` ||
     normalizedUrl === `${normalizedTemplate}.png` ||
+    normalizedUrl === `${normalizedTemplate}@2x.json` ||
     normalizedUrl === `${normalizedTemplate}@2x.png`
   ) {
     return true;
@@ -544,7 +549,14 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     try {
       this._setStatus(record, operationRevision, 'loading');
       await this._prepareStyleOverlay(record, operationRevision);
-      await this._requestCompositeStyle(record, false, { record, operationRevision });
+      await this._requestCompositeStyle(record, false, {
+        record,
+        operationRevision,
+        definition: previousDefinition as MapLibreOverlayStyleService,
+        definitionRevision: previousDefinitionRevision,
+        preparedStyle: previousPrepared,
+        state: previousState,
+      });
       this._setStatus(record, operationRevision, 'ready');
     } catch (error) {
       if (!this._isCurrentOperation(record, operationRevision)) {
@@ -2410,6 +2422,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       this._startDesiredStyleIfIdle();
       return;
     }
+    const wasSettled = request.settled;
     this._rejectStyleRequest(request, error);
     const trigger =
       resourceOwner ??
@@ -2421,6 +2434,18 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         rollbackStyleOverlay.record &&
       rollbackStyleOverlay.record.operationRevision === rollbackStyleOverlay.operationRevision
     ) {
+      if (wasSettled) {
+        const record = rollbackStyleOverlay.record;
+        record.operationRevision++;
+        record.definition = cloneService(rollbackStyleOverlay.definition);
+        record.definitionRevision = rollbackStyleOverlay.definitionRevision;
+        record.preparedStyle = rollbackStyleOverlay.preparedStyle;
+        record.state = cloneState(rollbackStyleOverlay.state);
+        this._emitFatalError(record.definition.id, error);
+        this._emitChange(record.definition, 'update', record.state);
+        void this._requestCompositeStyle(record).catch(() => undefined);
+        return;
+      }
       if (trigger?.definition.role === 'overlay' && isStyleOverlayService(trigger.definition)) {
         this._emitFatalError(trigger.definition.id, error);
       } else {
@@ -2607,15 +2632,18 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   }
 
   private _recordRuntimeResourceUrl(url: string, parameters: unknown): void {
+    const targets = this._currentStyleRequests()
+      .map((request) => ({ request, owner: this._findRequestResourceOwner(request, url) }))
+      .filter((target): target is { request: StyleRequest; owner: string } => target.owner !== undefined);
     const record = (value: unknown): void => {
       const transformedUrl =
         value && typeof value === 'object' && 'url' in value && typeof value.url === 'string'
           ? value.url
           : url;
-      for (const request of this._currentStyleRequests()) {
-        const owner = this._findRequestResourceOwner(request, url);
-        if (owner)
+      for (const { request, owner } of targets) {
+        if (this._currentStyleRequests().includes(request)) {
           request.resourceOwners.runtimeUrls.set(normalizeResourceUrl(transformedUrl), owner);
+        }
       }
     };
     if (
