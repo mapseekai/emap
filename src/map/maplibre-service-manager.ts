@@ -2379,7 +2379,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     const rollbackStyleOverlay = request.rollbackStyleOverlay;
     if (
       rollbackStyleOverlay &&
-      this._registry.get(rollbackStyleOverlay.record.definition.id) === rollbackStyleOverlay.record &&
+      this._registry.get(rollbackStyleOverlay.record.definition.id) ===
+        rollbackStyleOverlay.record &&
       rollbackStyleOverlay.record.operationRevision === rollbackStyleOverlay.operationRevision
     ) {
       return;

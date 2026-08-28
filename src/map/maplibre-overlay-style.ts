@@ -203,7 +203,10 @@ export async function loadMapLibreStyle(
     if (!response.ok) {
       throw new Error(`MapLibre style request failed: HTTP ${response.status}`);
     }
-    const style = (await Promise.race([response.json(), interrupted])) as maplibregl.StyleSpecification;
+    const style = (await Promise.race([
+      response.json(),
+      interrupted,
+    ])) as maplibregl.StyleSpecification;
     assertMapLibreStyle(style);
     return normalizeMapLibreStyleUrls(style, response.url);
   } catch (error) {
