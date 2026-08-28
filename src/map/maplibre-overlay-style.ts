@@ -116,6 +116,37 @@ function normalizeSourceUrls(
   }
 }
 
+export function normalizeMapLibreStyleUrls(
+  style: maplibregl.StyleSpecification,
+  baseUrl: string,
+): maplibregl.StyleSpecification {
+  const input = style as unknown as StyleObject;
+  const sources: Record<string, maplibregl.SourceSpecification> = {};
+  for (const [sourceId, source] of Object.entries(input.sources as StyleObject)) {
+    const normalizedSource = cloneValue(source) as StyleObject;
+    normalizeSourceUrls(normalizedSource, baseUrl, new Set());
+    sources[sourceId] = normalizedSource as maplibregl.SourceSpecification;
+  }
+  const sprite =
+    typeof input.sprite === 'string'
+      ? resolveUrl(input.sprite, baseUrl)
+      : Array.isArray(input.sprite)
+        ? input.sprite.map((entry) => ({
+            ...(entry as SpriteEntry),
+            url: resolveUrl((entry as SpriteEntry).url, baseUrl),
+          }))
+        : input.sprite;
+  const glyphs =
+    typeof input.glyphs === 'string' ? resolveUrl(input.glyphs, baseUrl) : input.glyphs;
+
+  return {
+    ...style,
+    sources,
+    ...(sprite ? { sprite } : {}),
+    ...(glyphs ? { glyphs } : {}),
+  } as maplibregl.StyleSpecification;
+}
+
 export type MapLibreStyleFetch = (
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -128,14 +159,10 @@ export interface LoadMapLibreOverlayStyleOptions {
   timeoutMs?: number;
 }
 
-export async function loadMapLibreOverlayStyle(
-  service: MapLibreOverlayStyleService,
+export async function loadMapLibreStyle(
+  styleUrl: string,
   options: LoadMapLibreOverlayStyleOptions,
-): Promise<PreparedMapLibreOverlayStyle> {
-  if (typeof service.style !== 'string') {
-    return prepareMapLibreOverlayStyle(service.id, service.style);
-  }
-
+): Promise<maplibregl.StyleSpecification> {
   const controller = new AbortController();
   const abort = () => {
     if (!controller.signal.aborted) controller.abort(options.signal.reason);
@@ -156,11 +183,11 @@ export async function loadMapLibreOverlayStyle(
     });
     const transformed = options.transformRequest
       ? await Promise.race([
-          options.transformRequest(service.style, 'Style' as maplibregl.ResourceType),
+          options.transformRequest(styleUrl, 'Style' as maplibregl.ResourceType),
           interrupted,
         ])
       : undefined;
-    const request = transformed ?? { url: service.style };
+    const request = transformed ?? { url: styleUrl };
     const response = await Promise.race([
       options.fetch(request.url, {
         signal: controller.signal,
@@ -174,13 +201,14 @@ export async function loadMapLibreOverlayStyle(
       interrupted,
     ]);
     if (!response.ok) {
-      throw new Error(`MapLibre overlay style request failed: HTTP ${response.status}`);
+      throw new Error(`MapLibre style request failed: HTTP ${response.status}`);
     }
-    const style = await Promise.race([response.json(), interrupted]);
-    return prepareMapLibreOverlayStyle(service.id, style, response.url);
+    const style = (await Promise.race([response.json(), interrupted])) as maplibregl.StyleSpecification;
+    assertMapLibreStyle(style);
+    return normalizeMapLibreStyleUrls(style, response.url);
   } catch (error) {
     if (error === timeoutReason) {
-      throw new Error(`MapLibre overlay style request timed out after ${timeoutMs}ms`);
+      throw new Error(`MapLibre style request timed out after ${timeoutMs}ms`);
     }
     throw error;
   } finally {
@@ -189,11 +217,26 @@ export async function loadMapLibreOverlayStyle(
   }
 }
 
-export function prepareMapLibreOverlayStyle(
-  serviceId: string,
-  style: maplibregl.StyleSpecification,
-  baseUrl?: string,
-): PreparedMapLibreOverlayStyle {
+export async function loadMapLibreOverlayStyle(
+  service: MapLibreOverlayStyleService,
+  options: LoadMapLibreOverlayStyleOptions,
+): Promise<PreparedMapLibreOverlayStyle> {
+  if (typeof service.style !== 'string') {
+    return prepareMapLibreOverlayStyle(service.id, service.style);
+  }
+
+  try {
+    const style = await loadMapLibreStyle(service.style, options);
+    return prepareMapLibreOverlayStyle(service.id, style);
+  } catch (error) {
+    if (error instanceof Error && error.name !== 'AbortError') {
+      error.message = error.message.replace('MapLibre style', 'MapLibre overlay style');
+    }
+    throw error;
+  }
+}
+
+function assertMapLibreStyle(style: maplibregl.StyleSpecification): void {
   const input = style as unknown as StyleObject;
   if (input.version !== 8) throw new Error('MapLibre overlay styles must use version 8');
   if (!input.sources || typeof input.sources !== 'object' || Array.isArray(input.sources)) {
@@ -201,6 +244,15 @@ export function prepareMapLibreOverlayStyle(
   }
   if (!Array.isArray(input.layers))
     throw new Error('MapLibre overlay style layers must be an array');
+}
+
+export function prepareMapLibreOverlayStyle(
+  serviceId: string,
+  style: maplibregl.StyleSpecification,
+  baseUrl?: string,
+): PreparedMapLibreOverlayStyle {
+  assertMapLibreStyle(style);
+  const input = style as unknown as StyleObject;
   const inputLayerIds = (input.layers as unknown[]).map((layer) => {
     const id = (layer as StyleObject).id;
     if (typeof id !== 'string') throw new Error('MapLibre overlay style layers require string IDs');

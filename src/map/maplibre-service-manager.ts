@@ -15,6 +15,7 @@ import type {
 import {
   composeMapLibreStyle,
   loadMapLibreOverlayStyle,
+  loadMapLibreStyle,
   type MapLibreStyleFetch,
   type PreparedMapLibreOverlayStyle,
 } from './maplibre-overlay-style';
@@ -101,6 +102,7 @@ interface StyleRequest {
   reapplyAfterInitial?: boolean;
   followers?: StyleRequest[];
   forceEmptyStyleGeneration?: boolean;
+  styleController?: AbortController;
   rollbackStyleOverlay?: {
     record: ServiceRecord;
     operationRevision: number;
@@ -723,6 +725,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   }
   private _rejectStyleRequest(request: StyleRequest, error: Error): void {
     if (request.settled) return;
+    request.styleController?.abort(error);
     request.settled = true;
     request.failure = error;
     request.reject(error);
@@ -898,6 +901,17 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         request.preparedOverlays = await this._prepareCompositeOverlays();
         request.resourceOwners = this._indexPreparedOverlayResources(request.preparedOverlays);
         if (this._desiredRequest !== request) return;
+        if (typeof request.style === 'string') {
+          const controller = new AbortController();
+          request.styleController = controller;
+          request.style = await loadMapLibreStyle(request.style, {
+            signal: controller.signal,
+            transformRequest: this._options.mapOptions?.transformRequest ?? undefined,
+            fetch: this._fetchStyle,
+            timeoutMs: 30_000,
+          });
+          if (request.styleController === controller) request.styleController = undefined;
+        }
         if (request.requiresProjection) await this._ensureWebMercator();
         if (this._desiredRequest !== request) return;
         const baseStyle = request.style;

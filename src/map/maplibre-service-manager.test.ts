@@ -451,7 +451,7 @@ function createManager(
 }
 
 async function waitForFakeMap(index = 0): Promise<FakeMap> {
-  for (let attempt = 0; attempt < 20; attempt++) {
+  for (let attempt = 0; attempt < 40; attempt++) {
     const map = FakeMap.instances[index];
     if (map) return map;
     await Promise.resolve();
@@ -772,6 +772,85 @@ describe('MapLibreServiceManager basemap style coordinator', () => {
     ).toMatchObject({
       style: 'https://tiles.openfreemap.org/styles/bright',
     });
+  });
+
+  it('composes a URL basemap from its redirected resource base', async () => {
+    const basemapStyle = {
+      version: 8,
+      sprite: './sprites/base',
+      glyphs: '../fonts/{fontstack}/{range}.pbf',
+      sources: {
+        base: {
+          type: 'vector',
+          url: './tiles.json',
+          tiles: ['../tiles/{z}/{x}/{y}.pbf'],
+        },
+        geojson: { type: 'geojson', data: './data/features.geojson' },
+      },
+      layers: [{ id: 'background', type: 'background' }],
+    } as const satisfies maplibregl.StyleSpecification;
+    const finalUrl = 'https://redirected.example.test/releases/v2/style.json';
+    const fetchStyle = vi.fn(async () =>
+      ({
+        ok: true,
+        status: 200,
+        url: finalUrl,
+        json: async () => basemapStyle,
+      }) as Response,
+    );
+    const transformRequest = vi.fn((url: string) => ({
+      url: `https://cdn.example.test/proxy?style=${encodeURIComponent(url)}`,
+    }));
+    const { manager } = createManager(
+      [
+        {
+          id: 'redirected',
+          name: 'Redirected',
+          role: 'basemap',
+          style: 'https://origin.example.test/style.json',
+        },
+        {
+          id: 'labels',
+          name: 'Labels',
+          role: 'overlay',
+          visible: true,
+          style: {
+            version: 8,
+            glyphs: 'https://redirected.example.test/releases/fonts/{fontstack}/{range}.pbf',
+            sources: {
+              labels: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+            },
+            layers: [{ id: 'labels', type: 'symbol', source: 'labels' }],
+          },
+        },
+      ],
+      { fetchStyle, mapOptions: { transformRequest: transformRequest as never } },
+    );
+
+    const loading = manager.setBasemap('redirected');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await loading;
+
+    expect(transformRequest).toHaveBeenCalledWith('https://origin.example.test/style.json', 'Style');
+    expect(fetchStyle).toHaveBeenCalledWith(
+      'https://cdn.example.test/proxy?style=https%3A%2F%2Forigin.example.test%2Fstyle.json',
+      expect.objectContaining({ method: undefined }),
+    );
+    const composed = map.getStyle();
+    expect(composed.sprite).toBe('https://redirected.example.test/releases/v2/sprites/base');
+    expect(composed.glyphs).toBe(
+      'https://redirected.example.test/releases/fonts/{fontstack}/{range}.pbf',
+    );
+    expect(composed.sources.base).toMatchObject({
+      url: 'https://redirected.example.test/releases/v2/tiles.json',
+      tiles: ['https://redirected.example.test/releases/tiles/{z}/{x}/{y}.pbf'],
+    });
+    expect(composed.sources.geojson).toMatchObject({
+      data: 'https://redirected.example.test/releases/v2/data/features.geojson',
+    });
+    expect(composed.layers[0]).toMatchObject({ id: 'background', type: 'background' });
+    expect(map.getLayer('emap-overlay:labels:labels')).toBeDefined();
   });
 
   it.each([
@@ -3927,20 +4006,24 @@ describe('MapLibreServiceManager overlay rendering', () => {
         urlBasemap,
         { id: 'bright', name: 'Bright', role: 'overlay', visible: true, style: brightStyle },
       ],
-      { defaultBasemap: 'light' },
+      {
+        defaultBasemap: 'light',
+        fetchStyle: vi.fn(async () => new Response(JSON.stringify(objectBasemap.style))),
+      },
     );
-    FakeMap.urlStyles.set(styleUrl, objectBasemap.style);
     const urlInitialization = url.manager.initialize();
     const urlMap = await waitForFakeMap();
-    expect(urlMap.options.style).toEqual(EMPTY_STYLE);
+    expect(urlMap.options.style).toMatchObject({
+      sources: {
+        base: expect.anything(),
+        'emap-overlay:bright:land': expect.anything(),
+      },
+    });
     urlMap.emit('style.load');
     await waitForCondition(
-      () => urlMap.setStyleCalls.at(-1) === styleUrl,
-      'URL basemap was not transformed',
+      () => urlMap.setStyleCalls.length === 1,
+      'URL style did not reconcile',
     );
-    expect(urlMap.setStyleOptions.at(-1)?.transformStyle).toBeTypeOf('function');
-    urlMap.emit('style.load');
-    await waitForCondition(() => urlMap.setStyleCalls.length === 2, 'URL style did not reconcile');
     urlMap.emit('style.load');
     await urlInitialization;
     expect(url.manager.getServiceState('bright')).toMatchObject({ active: true, status: 'ready' });
@@ -3956,7 +4039,9 @@ describe('MapLibreServiceManager overlay rendering', () => {
       },
       layers: [{ id: 'replacement', type: 'line' as const, source: 'replacement' }],
     } as const;
-    const { manager } = createManager([{ ...base, style: styleUrl }]);
+    const { manager } = createManager([{ ...base, style: styleUrl }], {
+      fetchStyle: vi.fn(async () => new Response(JSON.stringify(objectBasemap.style))),
+    });
     FakeMap.urlStyles.set(styleUrl, objectBasemap.style);
     const basemap = manager.setBasemap('light');
     const map = await waitForFakeMap();

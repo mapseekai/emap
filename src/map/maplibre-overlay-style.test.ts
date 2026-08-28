@@ -4,6 +4,7 @@ import type { MapLibreOverlayStyleService } from './maplibre-service';
 import {
   composeMapLibreStyle,
   loadMapLibreOverlayStyle,
+  normalizeMapLibreStyleUrls,
   prepareMapLibreOverlayStyle,
 } from './maplibre-overlay-style';
 
@@ -296,6 +297,43 @@ describe('composeMapLibreStyle', () => {
         [{ prepared, visible: true }],
       ),
     ).toThrow('MapLibre overlay glyphs URL conflicts with the active style');
+  });
+});
+
+describe('normalizeMapLibreStyleUrls', () => {
+  it('canonicalizes basemap resources against the final style response URL without altering layers', () => {
+    const style = {
+      version: 8,
+      sprite: './sprites/base',
+      glyphs: '../fonts/{fontstack}/{range}.pbf',
+      sources: {
+        vector: { type: 'vector', url: './tiles.json', tiles: ['../tiles/{z}/{x}/{y}.pbf'] },
+        geojson: { type: 'geojson', data: './data/features.geojson' },
+      },
+      layers: [{ id: 'background', type: 'background' }],
+    } as maplibregl.StyleSpecification;
+
+    const normalized = normalizeMapLibreStyleUrls(
+      style,
+      'https://redirected.example.test/releases/v2/style.json',
+    );
+
+    expect(normalized).toMatchObject({
+      sprite: 'https://redirected.example.test/releases/v2/sprites/base',
+      glyphs: 'https://redirected.example.test/releases/fonts/{fontstack}/{range}.pbf',
+      sources: {
+        vector: {
+          url: 'https://redirected.example.test/releases/v2/tiles.json',
+          tiles: ['https://redirected.example.test/releases/tiles/{z}/{x}/{y}.pbf'],
+        },
+        geojson: {
+          data: 'https://redirected.example.test/releases/v2/data/features.geojson',
+        },
+      },
+      layers: [{ id: 'background', type: 'background' }],
+    });
+    expect(normalized.layers[0]).toBe(style.layers[0]);
+    expect(style.sprite).toBe('./sprites/base');
   });
 });
 
