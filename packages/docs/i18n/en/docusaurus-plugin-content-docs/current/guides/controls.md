@@ -224,6 +224,10 @@ one MapLibre style can use only one global glyph URL, the active basemap and all
 style overlays must have identical glyph URLs or no glyph URL; identical URLs
 are shared, while different URLs are rejected deterministically.
 
+The fixed canvas order, from bottom to top, is the active MapLibre basemap,
+managed MapLibre overlay services, then the Emap business-data and editing
+canvas above them.
+
 Style URLs, relative source/sprite/glyph URLs, and request headers also pass
 through `transformRequest`. Service-scoped asynchronous failures are reported
 through the `error` event with the affected service in `serviceId`; a request

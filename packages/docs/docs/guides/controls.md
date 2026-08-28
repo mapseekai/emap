@@ -221,6 +221,9 @@ ID 命名空间隔离；sprite 图像引用也会随之重写。显示或隐藏�
 glyph URL，活动底图和所有样式叠加层的 glyph URL 必须相同或不存在；相同 URL 可以共用，
 不同 URL 会被确定性地拒绝。
 
+固定画布从下到上依次为：活动的 MapLibre 底图、托管的 MapLibre 叠加层，以及位于两者
+之上的 Emap 业务数据和编辑画布。
+
 样式 URL、相对 source/sprite/glyph URL 与请求头同样经过 `transformRequest`。服务范围内
 的异步错误通过 `error` 事件报告，并在事件的 `serviceId` 中标识相应服务；被后续添加、
 更新、删除或可见性操作取代的请求会以 `AbortError` 取消，而不是作为最终服务错误发布。
