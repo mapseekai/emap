@@ -68,13 +68,15 @@ The following helper keeps complete overlay definitions compact while leaving
 each source as native MapLibre configuration:
 
 ```ts
-import type { MapLibreOverlayService } from '@mapseekai/emap';
+import type {
+  MapLibreOverlayResourceService,
+} from '@mapseekai/emap';
 
 function rasterOverlay(
   id: string,
   name: string,
-  source: MapLibreOverlayService['sources'][string],
-): MapLibreOverlayService {
+  source: MapLibreOverlayResourceService['sources'][string],
+): MapLibreOverlayResourceService {
   return {
     id,
     name,
@@ -84,7 +86,7 @@ function rasterOverlay(
   };
 }
 
-const overlays: MapLibreOverlayService[] = [
+const overlays: MapLibreOverlayResourceService[] = [
   // XYZ raster tiles
   rasterOverlay('xyz', 'XYZ imagery', {
     type: 'raster',
@@ -197,6 +199,36 @@ const map = new Emap({
 injection, and request headers. Emap owns the MapLibre container, style,
 center, zoom, and non-interactive mode, so those keys are intentionally not
 available through `mapOptions`.
+
+### Full-style overlays
+
+A complete MapLibre Style v8 URL or JSON object can also be registered with
+`role: 'overlay'`. A style overlay must define `style` and cannot also define
+`sources` and `layers`; a resource overlay uses the latter two properties.
+
+```ts
+await map.mapLibreServices.addService({
+  id: 'openfreemap-bright',
+  name: 'OpenFreeMap Bright',
+  role: 'overlay',
+  visible: true,
+  style: 'https://tiles.openfreemap.org/styles/bright',
+});
+```
+
+The manager ignores `background` layers in the style and namespaces every
+remaining source, layer, and sprite name by service ID; sprite image references
+are rewritten as well. Showing or hiding the service shows or hides its entire
+non-background style while preserving each layer's original visibility. Because
+one MapLibre style can use only one global glyph URL, the active basemap and all
+style overlays must have identical glyph URLs or no glyph URL; identical URLs
+are shared, while different URLs are rejected deterministically.
+
+Style URLs, relative source/sprite/glyph URLs, and request headers also pass
+through `transformRequest`. Service-scoped asynchronous failures are reported
+through the `error` event with the affected service in `serviceId`; a request
+superseded by a later add, update, removal, or visibility operation is cancelled
+with `AbortError` instead of being published as a final service error.
 
 Activating a basemap or visible overlay requires Web Mercator. If necessary,
 the manager reprojects the current Emap data to `webmercator` (`EPSG:3857`)

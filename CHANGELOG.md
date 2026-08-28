@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- MapLibre overlay services now accept complete Style v8 URLs or JSON, including
+  managed sprite, glyph, source, layer, visibility, update, removal, error, and
+  cancellation lifecycles. Overlay resources are namespaced, background layers
+  are ignored, and conflicting glyph URLs are rejected deterministically.
 - Selected line features can now be split with point or polyline cutters, and
   selected polygon features with polyline cutters. Split pieces duplicate the
   original attributes, replace the current selection with the results, and are
