@@ -2634,7 +2634,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   private _recordRuntimeResourceUrl(url: string, parameters: unknown): void {
     const targets = this._currentStyleRequests()
       .map((request) => ({ request, owner: this._findRequestResourceOwner(request, url) }))
-      .filter((target): target is { request: StyleRequest; owner: string } => target.owner !== undefined);
+      .filter(
+        (target): target is { request: StyleRequest; owner: string } => target.owner !== undefined,
+      );
     const record = (value: unknown): void => {
       const transformedUrl =
         value && typeof value === 'object' && 'url' in value && typeof value.url === 'string'
