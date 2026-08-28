@@ -83,6 +83,7 @@ interface StyleRequest {
   resolve: () => void;
   reject: (error: Error) => void;
   settled: boolean;
+  readyToApply: boolean;
   requiresProjection: boolean;
   failure?: Error;
   rollback?: {
@@ -691,6 +692,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       resolve: resolvePromise,
       reject: rejectPromise,
       settled: false,
+      readyToApply: false,
       requiresProjection,
       rollback,
     };
@@ -871,6 +873,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         (!request.requiresProjection ||
           (this._isWebMercator(this._host.getCRS()) && !this._projectionPromise))
       ) {
+        request.readyToApply = true;
         this._startDesiredStyleIfIdle();
         return;
       }
@@ -880,6 +883,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           if (this._desiredRequest !== request) return;
           await this._ensureMap(request.style);
           if (this._desiredRequest !== request) return;
+          request.readyToApply = true;
           this._startDesiredStyleIfIdle();
         } catch (value) {
           const error = toError(value);
@@ -910,6 +914,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         }
         await this._ensureMap(initialStyle);
         if (this._desiredRequest !== request) return;
+        request.readyToApply = true;
         this._startDesiredStyleIfIdle();
       } catch (value) {
         const error = toError(value);
@@ -935,16 +940,23 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     this._emitChange(record.definition, 'visibility', record.state);
     this._assertCurrentOperation(record, operationRevision);
     if (isStyleOverlayService(record.definition)) {
-      if (record.preparedStyle && this._map) {
+      if (this._canFastSetStyleOverlayVisibility(record)) {
         this._setStatus(record, operationRevision, 'loading');
         this._setStyleOverlayVisibility(record, visible, operationRevision);
         this._setStatus(record, operationRevision, 'ready');
         this._syncVisibility();
         return;
       }
-      if (visible) {
-        await this._startOverlayReconciliation(record, operationRevision);
+      if (!record.preparedStyle || !this._map) {
+        if (visible) await this._startOverlayReconciliation(record, operationRevision);
+        else this._syncVisibility();
+        return;
       }
+      this._setStatus(record, operationRevision, 'loading');
+      await this._requestCompositeStyle(record);
+      this._assertCurrentOperation(record, operationRevision);
+      this._setStatus(record, operationRevision, 'ready');
+      this._syncVisibility();
       return;
     }
     if (visible) {
@@ -972,6 +984,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   ): void {
     const map = this._map;
     const prepared = record.preparedStyle?.value;
+
     if (!map || !prepared) return;
     for (const layerId of prepared.layerIds) {
       this._assertCurrentOperation(record, operationRevision);
@@ -982,6 +995,27 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         visible ? (prepared.layerVisibility.get(layerId) ?? 'visible') : 'none',
       );
     }
+  }
+  private _canFastSetStyleOverlayVisibility(record: ServiceRecord): boolean {
+    const map = this._map;
+    const prepared = record.preparedStyle?.value;
+    const generation = this._readyStyle?.generation;
+    return (
+      map !== null &&
+      prepared !== undefined &&
+      generation !== undefined &&
+      this._appliedRequest === null &&
+      this._parsedRequest === null &&
+      this._readyStyle?.requestRevision === this._desiredRequest?.revision &&
+      prepared.layerIds.every((layerId) => {
+        const owned = record.ownedLayers.get(layerId);
+        return (
+          owned?.owner === 'style' &&
+          owned.generation === generation &&
+          owned.handle === map.getLayer(layerId)
+        );
+      })
+    );
   }
   getServices(): readonly MapLibreService[] {
     return [...this._registry.values()].map((record) => cloneService(record.definition));
@@ -1856,6 +1890,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (
       !request ||
       request.settled ||
+      !request.readyToApply ||
       !map ||
       this._appliedRequest ||
       this._parsedRequest ||
@@ -1867,7 +1902,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       !request.forceEmptyStyleGeneration &&
       request.basemapId === null &&
       request.phase !== 'recovery' &&
-      !this._hasActiveOverlay()
+      !this._hasActiveOverlay() &&
+      request.preparedOverlays.length === 0
     ) {
       this._readyStyle = null;
       this._lastReadyBasemap = null;

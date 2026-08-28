@@ -3303,6 +3303,103 @@ describe('MapLibreServiceManager overlay rendering', () => {
       'setLayoutProperty:emap-overlay:bright:places:visibility:visible',
     ]);
   });
+  it('keeps a style overlay hidden when visibility changes during a visible composite generation', async () => {
+    const darkObjectBasemap = { ...objectBasemap, id: 'dark', name: 'Dark' } as const;
+    const { manager } = createManager([objectBasemap, darkObjectBasemap]);
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+    const addition = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: brightStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'style was not composed');
+    map.emit('style.load');
+    await addition;
+
+    const switchRequest = manager.setBasemap('dark').catch((error: unknown) => error);
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'visible composite was not applied');
+    const staleStyleLoad = map.delayedStyleLoad();
+    const hide = manager.setOverlayVisibility('bright', false);
+
+    expect(manager.getServiceState('bright')).toEqual({
+      id: 'bright',
+      active: false,
+      status: 'loading',
+    });
+    expect(map.setStyleCalls).toHaveLength(2);
+    staleStyleLoad();
+    await waitForCondition(() => map.setStyleCalls.length === 3, 'hidden composite was not applied');
+    expect(map.sources.has('emap-overlay:bright:land')).toBe(true);
+    map.emit('style.load');
+    await hide;
+    await expect(switchRequest).resolves.toMatchObject({ name: 'AbortError' });
+
+    expect(manager.getServiceState('bright')).toEqual({
+      id: 'bright',
+      active: false,
+      status: 'ready',
+    });
+    expect(
+      map
+        .getStyle()
+        .layers.find((layer) => layer.id === 'emap-overlay:bright:land')?.layout?.visibility,
+    ).toBe('none');
+  });
+
+  it('keeps a style overlay visible when visibility changes during a hidden composite generation', async () => {
+    const darkObjectBasemap = { ...objectBasemap, id: 'dark', name: 'Dark' } as const;
+    const { manager } = createManager([objectBasemap, darkObjectBasemap]);
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+    const addition = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: brightStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'style was not composed');
+    map.emit('style.load');
+    await addition;
+    await manager.setOverlayVisibility('bright', false);
+
+    const switchRequest = manager.setBasemap('dark').catch((error: unknown) => error);
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'hidden composite was not applied');
+    const staleStyleLoad = map.delayedStyleLoad();
+    const show = manager.setOverlayVisibility('bright', true);
+
+    expect(manager.getServiceState('bright')).toEqual({
+      id: 'bright',
+      active: true,
+      status: 'loading',
+    });
+    expect(map.setStyleCalls).toHaveLength(2);
+    staleStyleLoad();
+    await waitForCondition(() => map.setStyleCalls.length === 3, 'visible composite was not applied');
+    expect(map.sources.has('emap-overlay:bright:land')).toBe(true);
+    map.emit('style.load');
+    await show;
+    await expect(switchRequest).resolves.toMatchObject({ name: 'AbortError' });
+
+    expect(manager.getServiceState('bright')).toEqual({
+      id: 'bright',
+      active: true,
+      status: 'ready',
+    });
+    expect(
+      (map
+        .getStyle()
+        .layers.find((layer) => layer.id === 'emap-overlay:bright:land')?.layout?.visibility ??
+        'visible'),
+    ).toBe('visible');
+  });
   it('removes the final style overlay through an empty style generation without a basemap', async () => {
     const style = {
       ...brightStyle,
