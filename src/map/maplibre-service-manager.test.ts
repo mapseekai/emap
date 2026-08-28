@@ -3303,6 +3303,52 @@ describe('MapLibreServiceManager overlay rendering', () => {
       'setLayoutProperty:emap-overlay:bright:places:visibility:visible',
     ]);
   });
+  it('removes the final style overlay through an empty style generation without a basemap', async () => {
+    const style = {
+      ...brightStyle,
+      sprite: 'https://one.test/sprite',
+      glyphs: 'https://fonts.test/{fontstack}/{range}.pbf',
+    } as const;
+    const { manager } = createManager([
+      { id: 'bright', name: 'Bright', role: 'overlay', visible: true, style },
+    ]);
+    const initialization = manager.initialize();
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await waitForCondition(
+      () => map.setStyleCalls.length === 1,
+      'initial style overlay reconciliation did not start',
+    );
+    map.emit('style.load');
+    await initialization;
+
+    const removal = manager.removeService('bright');
+    await waitForCondition(
+      () => map.setStyleCalls.length === 2,
+      'final style overlay removal did not start an empty generation',
+    );
+    expect(map.setStyleCalls.at(-1)).toEqual(EMPTY_STYLE);
+    expect(map.listenerCount('style.load')).toBe(1);
+    map.emit('style.load');
+    await removal;
+
+    const nativeStyle = map.getStyle();
+    expect(nativeStyle).toEqual(EMPTY_STYLE);
+    expect(nativeStyle.sources).not.toHaveProperty('emap-overlay:bright:land');
+    expect(nativeStyle.layers.map((layer) => layer.id)).not.toEqual(
+      expect.arrayContaining([
+        'emap-overlay:bright:land',
+        'emap-overlay:bright:roads',
+        'emap-overlay:bright:places',
+      ]),
+    );
+    expect(nativeStyle).not.toHaveProperty('sprite');
+    expect(nativeStyle).not.toHaveProperty('glyphs');
+    expect(manager.getServices()).toEqual([]);
+    expect(manager.getServiceState('bright')).toBeUndefined();
+    expect((map.options.container as HTMLElement).hidden).toBe(true);
+  });
+
 
   it('style overlay removal and update rebuild their complete composite resources', async () => {
     const oldStyle = { ...brightStyle, glyphs: undefined } as const;

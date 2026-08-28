@@ -91,6 +91,7 @@ interface StyleRequest {
   bootstrapStyle?: boolean;
   reapplyAfterInitial?: boolean;
   followers?: StyleRequest[];
+  forceEmptyStyleGeneration?: boolean;
 }
 
 interface ReadyStyle {
@@ -520,7 +521,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         this._desiredRequest?.preparedOverlays.some(({ record: candidate }) => candidate === record)
       ) {
         try {
-          await this._requestCompositeStyle(record);
+          await this._requestCompositeStyle(record, this._readyStyle !== null);
         } catch (error) {
           record.removing = false;
           this._handleTransitionFailure(record, operationRevision, error);
@@ -734,7 +735,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     return preparedOverlays;
   }
 
-  private _requestCompositeStyle(triggerRecord: ServiceRecord): Promise<void> {
+  private _requestCompositeStyle(
+    triggerRecord: ServiceRecord,
+    forceEmptyStyleGeneration = false,
+  ): Promise<void> {
     const existing = this._desiredRequest;
     const preparedTrigger = existing?.preparedOverlays.find(
       ({ record }) => record === triggerRecord,
@@ -763,6 +767,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       true,
     );
     request.triggerServiceId = triggerRecord.definition.id;
+    request.forceEmptyStyleGeneration = forceEmptyStyleGeneration;
     if (previous?.triggerServiceId && !this._map && this._mapPromise) {
       request.reapplyAfterInitial = true;
     }
@@ -777,7 +782,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         );
       }
     }
-    if (!this._hasActiveService()) {
+    if (!request.forceEmptyStyleGeneration && !this._hasActiveService()) {
       this._resolveStyleRequest(request);
       return request.promise;
     }
@@ -1789,7 +1794,12 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     ) {
       return;
     }
-    if (request.basemapId === null && request.phase !== 'recovery' && !this._hasActiveOverlay()) {
+    if (
+      !request.forceEmptyStyleGeneration &&
+      request.basemapId === null &&
+      request.phase !== 'recovery' &&
+      !this._hasActiveOverlay()
+    ) {
       this._readyStyle = null;
       this._lastReadyBasemap = null;
       this._resolveStyleRequest(request);
