@@ -4067,6 +4067,77 @@ describe('MapLibreServiceManager overlay rendering', () => {
     ]);
   });
 
+  it.each([
+    ['sprite ID', { spriteId: 'base-sprite' }, 'style'],
+    ['source ID', { sourceId: 'base-source' }, 'source'],
+    ['glyph URL', { glyphUrl: 'https://example.test/base/{fontstack}/{range}.pbf' }, 'style'],
+  ])(
+    'attributes a committed basemap %s failure after a style overlay update to the basemap',
+    async (_kind, details, phase) => {
+      const basemap = {
+        ...objectBasemap,
+        style: {
+          version: 8,
+          sprite: [{ id: 'base-sprite', url: 'https://example.test/base-sprite' }],
+          glyphs: 'https://example.test/base/{fontstack}/{range}.pbf',
+          sources: {
+            'base-source': { type: 'vector', url: 'https://example.test/base-source.json' },
+          },
+          layers: [{ id: 'base-layer', type: 'fill', source: 'base-source' }],
+        },
+      } as const;
+      const { manager } = createManager([basemap]);
+      const initial = manager.setBasemap('light');
+      const map = await waitForFakeMap();
+      map.emit('style.load');
+      await initial;
+      const addition = manager.addService({
+        id: 'bright',
+        name: 'Bright',
+        role: 'overlay',
+        visible: true,
+        style: { ...brightStyle, glyphs: undefined },
+      });
+      await waitForCondition(() => map.setStyleCalls.length === 1, 'overlay was not composed');
+      map.emit('style.load');
+      await addition;
+
+      const update = manager.updateService('bright', {
+        id: 'bright',
+        name: 'Updated bright',
+        role: 'overlay',
+        visible: true,
+        style: {
+          ...brightStyle,
+          glyphs: undefined,
+          sources: {
+            replacement: { type: 'vector', url: 'https://example.test/replacement.json' },
+          },
+          layers: [{ id: 'replacement', type: 'line', source: 'replacement' }],
+        },
+      });
+      await waitForCondition(() => map.setStyleCalls.length === 2, 'overlay update was not composed');
+      map.emit('style.load');
+      await update;
+
+      const events: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
+      const basemapStates: string[] = [];
+      manager.on('error', (event) =>
+        events.push({ serviceId: event.serviceId, phase: event.phase, fatal: event.fatal }),
+      );
+      manager.on('change', (event) => {
+        if (event.serviceId === 'light' && event.reason === 'status' && event.state) {
+          basemapStates.push(event.state.status);
+        }
+      });
+      map.emit('error', { error: new Error('committed basemap resource failed'), ...details });
+
+      expect(events[0]).toEqual({ serviceId: 'light', phase, fatal: true });
+      expect(basemapStates).toContain('error');
+      expect(manager.getServiceState('bright')).toMatchObject({ status: 'ready' });
+    },
+  );
+
   it('attributes a transformed overlay sprite request to an existing overlay during a basemap recomposition', async () => {
     const dark = { ...objectBasemap, id: 'dark', name: 'Dark' } as const;
     const transformRequest = vi.fn((url: string) => ({

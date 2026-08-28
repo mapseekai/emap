@@ -68,10 +68,10 @@ interface MutationContext {
 }
 
 interface StyleRequestResourceOwners {
-  sourceIds: ReadonlyMap<string, string>;
-  spriteIds: ReadonlyMap<string, string>;
-  glyphUrls: ReadonlyMap<string, string>;
-  resourceUrls: ReadonlyMap<string, string>;
+  sourceIds: Map<string, string>;
+  spriteIds: Map<string, string>;
+  glyphUrls: Map<string, string>;
+  resourceUrls: Map<string, string>;
   runtimeUrls: Map<string, string>;
 }
 
@@ -745,20 +745,75 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
   private _indexPreparedOverlayResources(
     preparedOverlays: StyleRequest['preparedOverlays'],
+    basemapId: string | null,
+    style: maplibregl.StyleSpecification,
   ): StyleRequestResourceOwners {
     const sourceIds = new Map<string, string>();
     const spriteIds = new Map<string, string>();
     const glyphUrls = new Map<string, string>();
     const resourceUrls = new Map<string, string>();
+    const resourceOwners = { sourceIds, spriteIds, glyphUrls, resourceUrls, runtimeUrls: new Map() };
+    if (basemapId) this._indexStyleResources(style, basemapId, resourceOwners);
     for (const { prepared } of preparedOverlays) {
-      for (const sourceId of prepared.sourceIds) sourceIds.set(sourceId, prepared.serviceId);
-      for (const spriteId of prepared.spriteIds) spriteIds.set(spriteId, prepared.serviceId);
-      if (prepared.glyphs) glyphUrls.set(normalizeResourceUrl(prepared.glyphs), prepared.serviceId);
+      for (const sourceId of prepared.sourceIds) {
+        if (!sourceIds.has(sourceId)) sourceIds.set(sourceId, prepared.serviceId);
+      }
+      for (const spriteId of prepared.spriteIds) {
+        if (!spriteIds.has(spriteId)) spriteIds.set(spriteId, prepared.serviceId);
+      }
+      if (prepared.glyphs) {
+        const glyphUrl = normalizeResourceUrl(prepared.glyphs);
+        if (!glyphUrls.has(glyphUrl)) glyphUrls.set(glyphUrl, prepared.serviceId);
+      }
       for (const url of prepared.resourceUrls) {
-        resourceUrls.set(normalizeResourceUrl(url), prepared.serviceId);
+        const resourceUrl = normalizeResourceUrl(url);
+        if (!resourceUrls.has(resourceUrl)) resourceUrls.set(resourceUrl, prepared.serviceId);
       }
     }
-    return { sourceIds, spriteIds, glyphUrls, resourceUrls, runtimeUrls: new Map() };
+    return resourceOwners;
+  }
+
+  private _indexStyleResources(
+    style: maplibregl.StyleSpecification,
+    serviceId: string,
+    owners: StyleRequestResourceOwners,
+  ): void {
+    const record = style as unknown as Record<string, unknown>;
+    const addResourceUrl = (value: unknown): void => {
+      if (typeof value !== 'string') return;
+      const url = normalizeResourceUrl(value);
+      if (!owners.resourceUrls.has(url)) owners.resourceUrls.set(url, serviceId);
+    };
+    const sources = record.sources;
+    if (sources && typeof sources === 'object' && !Array.isArray(sources)) {
+      for (const [sourceId, source] of Object.entries(sources)) {
+        if (!owners.sourceIds.has(sourceId)) owners.sourceIds.set(sourceId, serviceId);
+        if (!source || typeof source !== 'object') continue;
+        const sourceRecord = source as Record<string, unknown>;
+        addResourceUrl(sourceRecord.url);
+        addResourceUrl(sourceRecord.data);
+        if (Array.isArray(sourceRecord.tiles)) {
+          for (const tile of sourceRecord.tiles) addResourceUrl(tile);
+        }
+      }
+    }
+    if (typeof record.glyphs === 'string') {
+      const glyphUrl = normalizeResourceUrl(record.glyphs);
+      if (!owners.glyphUrls.has(glyphUrl)) owners.glyphUrls.set(glyphUrl, serviceId);
+      addResourceUrl(record.glyphs);
+    }
+    const sprites =
+      typeof record.sprite === 'string'
+        ? [{ id: 'default', url: record.sprite }]
+        : Array.isArray(record.sprite)
+          ? record.sprite
+          : [];
+    for (const sprite of sprites) {
+      if (!sprite || typeof sprite !== 'object') continue;
+      const { id, url } = sprite as { id?: unknown; url?: unknown };
+      if (typeof id === 'string' && !owners.spriteIds.has(id)) owners.spriteIds.set(id, serviceId);
+      addResourceUrl(url);
+    }
   }
   private _resolveStyleRequest(request: StyleRequest): void {
     if (request.settled) return;
@@ -942,7 +997,6 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     void (async () => {
       try {
         request.preparedOverlays = await this._prepareCompositeOverlays();
-        request.resourceOwners = this._indexPreparedOverlayResources(request.preparedOverlays);
         if (this._desiredRequest !== request) return;
         if (typeof request.style === 'string') {
           const controller = new AbortController();
@@ -963,6 +1017,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         if (typeof baseStyle === 'string') {
           throw new Error('MapLibre composite style base was not prepared');
         }
+        request.resourceOwners = this._indexPreparedOverlayResources(
+          request.preparedOverlays,
+          request.basemapId,
+          baseStyle,
+        );
         request.composedStyle = composeMapLibreStyle(
           baseStyle,
           request.preparedOverlays.map(({ prepared, visible }) => ({ prepared, visible })),
@@ -2427,7 +2486,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       rollbackStyleOverlay &&
       this._registry.get(rollbackStyleOverlay.record.definition.id) ===
         rollbackStyleOverlay.record &&
-      rollbackStyleOverlay.record.operationRevision === rollbackStyleOverlay.operationRevision
+      rollbackStyleOverlay.record.operationRevision === rollbackStyleOverlay.operationRevision &&
+      resourceOwner?.definition.role !== 'basemap'
     ) {
       if (wasSettled) {
         const record = rollbackStyleOverlay.record;
