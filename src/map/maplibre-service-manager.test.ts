@@ -3870,6 +3870,95 @@ describe('MapLibreServiceManager overlay rendering', () => {
     await removal;
     expect(map.setStyleCalls).toHaveLength(3);
   });
+  it('attributes tile and source errors during a basemap switch to the detached style overlay', async () => {
+    const { manager } = createManager([
+      objectBasemap,
+      { ...objectBasemap, id: 'dark', name: 'Dark' },
+    ]);
+    const initial = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await initial;
+    const overlay = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: brightStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'overlay was not composed');
+    map.emit('style.load');
+    await overlay;
+
+    const events: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
+    manager.on('error', (event) =>
+      events.push({ serviceId: event.serviceId, phase: event.phase, fatal: event.fatal }),
+    );
+    const switchRequest = manager.setBasemap('dark');
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'basemap switch was not composed');
+    const sourceId = 'emap-overlay:bright:land';
+    map.emit('error', { error: new Error('overlay tile failed'), tile: {}, sourceId });
+    map.emit('error', { error: new Error('overlay source failed'), sourceId });
+    map.emit('style.load');
+    await switchRequest;
+
+    expect(events).toEqual([
+      { serviceId: 'bright', phase: 'tile', fatal: false },
+      { serviceId: 'bright', phase: 'source', fatal: true },
+    ]);
+  });
+
+  it.each([
+    ['resource URL', { resourceUrl: 'https://tiles.openfreemap.org/land.json' }],
+    ['sprite ID', { spriteId: 'emap-overlay:one:default' }],
+    ['glyph URL', { glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf' }],
+  ])(
+    'attributes an applied %s failure to the non-triggering style overlay',
+    async (_kind, details) => {
+      const { manager } = createManager([objectBasemap]);
+      const initial = manager.setBasemap('light');
+      const map = await waitForFakeMap();
+      map.emit('style.load');
+      await initial;
+      const first = manager.addService({
+        id: 'one',
+        name: 'One',
+        role: 'overlay',
+        visible: true,
+        style: brightStyle,
+      });
+      await waitForCondition(() => map.setStyleCalls.length === 1, 'first overlay was not composed');
+      map.emit('style.load');
+      await first;
+
+      const events: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
+      manager.on('error', (event) =>
+        events.push({ serviceId: event.serviceId, phase: event.phase, fatal: event.fatal }),
+      );
+      const second = manager
+        .addService({
+          id: 'two',
+          name: 'Two',
+          role: 'overlay',
+          visible: true,
+          style: {
+            ...brightStyle,
+            glyphs: undefined,
+            sources: {
+              second: { type: 'vector', url: 'https://example.test/second.json' },
+            },
+            layers: [{ id: 'second', type: 'line', source: 'second' }],
+          },
+        })
+        .catch((error: unknown) => error);
+      await waitForCondition(() => map.setStyleCalls.length === 2, 'second overlay was not composed');
+      map.emit('error', { error: new Error('non-trigger overlay resource failed'), ...details });
+
+      await expect(second).resolves.toBeInstanceOf(Error);
+      expect(events[0]).toEqual({ serviceId: 'one', phase: 'style', fatal: true });
+    },
+  );
+
   it('attributes applied composite style errors to the trigger overlay', async () => {
     const { manager } = createManager([objectBasemap]);
     const basemap = manager.setBasemap('light');

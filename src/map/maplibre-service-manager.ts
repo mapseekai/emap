@@ -66,6 +66,13 @@ interface MutationContext {
   error?: Error;
 }
 
+interface StyleRequestResourceOwners {
+  sourceIds: ReadonlyMap<string, string>;
+  spriteIds: ReadonlyMap<string, string>;
+  glyphUrls: ReadonlyMap<string, string>;
+  resourceUrls: ReadonlyMap<string, string>;
+}
+
 interface StyleRequest {
   revision: number;
   basemapId: string | null;
@@ -88,6 +95,7 @@ interface StyleRequest {
     prepared: PreparedMapLibreOverlayStyle;
     visible: boolean;
   }[];
+  resourceOwners: StyleRequestResourceOwners;
   bootstrapStyle?: boolean;
   reapplyAfterInitial?: boolean;
   followers?: StyleRequest[];
@@ -159,6 +167,35 @@ function cloneService(service: MapLibreService): MapLibreService {
     sources: cloneValue(service.sources),
     layers: cloneValue(service.layers),
   };
+}
+
+function normalizeResourceUrl(url: string): string {
+  try {
+    return new URL(url).href.replaceAll('%7B', '{').replaceAll('%7D', '}');
+  } catch {
+    return url;
+  }
+}
+
+function errorDetailStrings(value: unknown, keys: readonly string[]): readonly string[] {
+  const values: string[] = [];
+  const pending = [value];
+  const visited = new Set<object>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || typeof current !== 'object' || visited.has(current)) continue;
+    visited.add(current);
+    const details = current as Record<string, unknown>;
+    for (const key of keys) {
+      const candidate = details[key];
+      if (typeof candidate === 'string') values.push(candidate);
+    }
+    for (const key of ['data', 'resource', 'request', 'response', 'error']) {
+      const nested = details[key];
+      if (nested && typeof nested === 'object') pending.push(nested);
+    }
+  }
+  return values;
 }
 
 function cloneError(error: Error | undefined): Error | undefined {
@@ -638,6 +675,12 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     });
     void promise.catch(() => undefined);
     return {
+      resourceOwners: {
+        sourceIds: new Map(),
+        spriteIds: new Map(),
+        glyphUrls: new Map(),
+        resourceUrls: new Map(),
+      },
       revision: ++this._styleRevision,
       basemapId,
       preparedOverlays: [],
@@ -651,6 +694,24 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       requiresProjection,
       rollback,
     };
+  }
+
+  private _indexPreparedOverlayResources(
+    preparedOverlays: StyleRequest['preparedOverlays'],
+  ): StyleRequestResourceOwners {
+    const sourceIds = new Map<string, string>();
+    const spriteIds = new Map<string, string>();
+    const glyphUrls = new Map<string, string>();
+    const resourceUrls = new Map<string, string>();
+    for (const { prepared } of preparedOverlays) {
+      for (const sourceId of prepared.sourceIds) sourceIds.set(sourceId, prepared.serviceId);
+      for (const spriteId of prepared.spriteIds) spriteIds.set(spriteId, prepared.serviceId);
+      if (prepared.glyphs) glyphUrls.set(normalizeResourceUrl(prepared.glyphs), prepared.serviceId);
+      for (const url of prepared.resourceUrls) {
+        resourceUrls.set(normalizeResourceUrl(url), prepared.serviceId);
+      }
+    }
+    return { sourceIds, spriteIds, glyphUrls, resourceUrls };
   }
   private _resolveStyleRequest(request: StyleRequest): void {
     if (request.settled) return;
@@ -831,6 +892,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     void (async () => {
       try {
         request.preparedOverlays = await this._prepareCompositeOverlays();
+        request.resourceOwners = this._indexPreparedOverlayResources(request.preparedOverlays);
         if (this._desiredRequest !== request) return;
         if (request.requiresProjection) await this._ensureWebMercator();
         if (this._desiredRequest !== request) return;
@@ -2234,7 +2296,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (this._map) this._enqueueRecovery(request);
   }
 
-  private _handleAppliedStyleFailure(request: StyleRequest, error: Error): void {
+  private _handleAppliedStyleFailure(
+    request: StyleRequest,
+    error: Error,
+    resourceOwner?: ServiceRecord,
+  ): void {
     if (this._desiredRequest !== request) {
       this._startDesiredStyleIfIdle();
       return;
@@ -2248,9 +2314,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     ) {
       return;
     }
-    const trigger = request.triggerServiceId
-      ? this._registry.get(request.triggerServiceId)
-      : undefined;
+    const trigger =
+      resourceOwner ??
+      (request.triggerServiceId ? this._registry.get(request.triggerServiceId) : undefined);
     if (trigger?.definition.role === 'overlay' && isStyleOverlayService(trigger.definition)) {
       trigger.operationRevision++;
       trigger.preparedStyle = undefined;
@@ -2422,6 +2488,46 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
     return undefined;
   }
+
+  private _findAppliedResourceOwner(
+    request: StyleRequest,
+    details: unknown,
+    error: Error,
+  ): ServiceRecord | undefined {
+    const owners = request.resourceOwners;
+    const serviceId =
+      errorDetailStrings(details, ['sourceId', 'source'])
+        .map((sourceId) => owners.sourceIds.get(sourceId))
+        .find((id) => id !== undefined) ??
+      errorDetailStrings(details, ['spriteId', 'sprite'])
+        .map((spriteId) => owners.spriteIds.get(spriteId))
+        .find((id) => id !== undefined) ??
+      errorDetailStrings(details, ['glyphs', 'glyphUrl'])
+        .map((url) => owners.glyphUrls.get(normalizeResourceUrl(url)))
+        .find((id) => id !== undefined) ??
+      errorDetailStrings(details, ['resourceUrl', 'url'])
+        .map((url) => owners.resourceUrls.get(normalizeResourceUrl(url)))
+        .find((id) => id !== undefined) ??
+      errorDetailStrings(error, [
+        'sourceId',
+        'source',
+        'spriteId',
+        'sprite',
+        'glyphs',
+        'glyphUrl',
+        'resourceUrl',
+        'url',
+      ])
+        .map(
+          (value) =>
+            owners.sourceIds.get(value) ??
+            owners.spriteIds.get(value) ??
+            owners.glyphUrls.get(normalizeResourceUrl(value)) ??
+            owners.resourceUrls.get(normalizeResourceUrl(value)),
+        )
+        .find((id) => id !== undefined);
+    return serviceId ? this._registry.get(serviceId) : undefined;
+  }
   private _handleStyleLoad(request: StyleRequest, generation: number): void {
     if (
       this._destroyed ||
@@ -2450,7 +2556,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   }
 
   private _handleMapError = (event?: unknown): void => {
-    const details = event as { error?: unknown; sourceId?: string; tile?: unknown } | undefined;
+    const details =
+      event && typeof event === 'object' ? (event as Record<string, unknown>) : undefined;
     const error = toError(details?.error ?? event);
     if (this._mutationContext) {
       this._mutationContext.error = error;
@@ -2458,7 +2565,12 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       this._errorServiceIds.set(error, this._mutationContext.serviceId);
       return;
     }
-    const owner = details?.sourceId ? this._findOwnedSource(details.sourceId) : undefined;
+    const sourceId = errorDetailStrings(details, ['sourceId', 'source'])[0];
+    const ownedSource = sourceId ? this._findOwnedSource(sourceId) : undefined;
+    const appliedOwner = this._appliedRequest
+      ? this._findAppliedResourceOwner(this._appliedRequest, details, error)
+      : undefined;
+    const owner = ownedSource ?? appliedOwner;
     if (details?.tile !== undefined) {
       this.fire('error', {
         serviceId: owner?.definition.id,
@@ -2468,23 +2580,21 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       });
       return;
     }
-    if (details?.sourceId) {
-      if (owner) {
-        this._errorPhases.set(error, 'source');
-        try {
-          this._publishTransitionFailure(owner, owner.operationRevision, error);
-        } catch {
-          // Reentrant listeners may supersede the failing overlay.
-        }
-        return;
+    if (sourceId && owner) {
+      this._errorPhases.set(error, 'source');
+      try {
+        this._publishTransitionFailure(owner, owner.operationRevision, error);
+      } catch {
+        // Reentrant listeners may supersede the failing overlay.
       }
+      return;
     }
     if (this._appliedRequest) {
       const request = this._appliedRequest;
       this._appliedRequest = null;
       this._errorPhases.set(error, 'style');
       this._detachFailedStyle();
-      this._handleAppliedStyleFailure(request, error);
+      this._handleAppliedStyleFailure(request, error, owner);
       return;
     }
     this.fire('error', { phase: 'lifecycle', fatal: false, error });
