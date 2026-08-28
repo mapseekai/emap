@@ -3856,6 +3856,14 @@ describe('MapLibreServiceManager overlay rendering', () => {
     map.emit('style.load');
     await addition;
 
+    const errors: Array<{
+      type: 'error';
+      serviceId?: string;
+      phase: string;
+      error: Error;
+      fatal: boolean;
+    }> = [];
+    manager.on('error', (event) => errors.push(event));
     const styleError = new Error('replacement style failed after setStyle');
     const update = manager.updateService('bright', {
       id: 'bright',
@@ -3870,6 +3878,9 @@ describe('MapLibreServiceManager overlay rendering', () => {
     map.emit('style.load');
 
     await expect(update).rejects.toBe(styleError);
+    expect(errors).toEqual([
+      { type: 'error', serviceId: 'bright', phase: 'style', error: styleError, fatal: true },
+    ]);
     expect(manager.getServices().find((service) => service.id === 'bright')).toMatchObject({
       name: 'Bright',
       style: oldStyle,
@@ -3881,6 +3892,81 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(map.layers.has('emap-overlay:bright:land')).toBe(true);
     expect(map.sources.has('emap-overlay:bright:replacement')).toBe(false);
     expect(map.layers.has('emap-overlay:bright:replacement')).toBe(false);
+  });
+
+  it('attributes an applied style update rollback error to a non-trigger resource owner', async () => {
+    const otherStyle = {
+      version: 8,
+      sources: {
+        other: { type: 'vector' as const, url: 'https://example.test/other.json' },
+      },
+      layers: [{ id: 'other', type: 'fill' as const, source: 'other' }],
+    } as const satisfies maplibregl.StyleSpecification;
+    const replacementStyle = {
+      ...brightStyle,
+      sources: {
+        replacement: { type: 'vector' as const, url: 'https://example.test/replacement.json' },
+      },
+      layers: [{ id: 'replacement', type: 'fill' as const, source: 'replacement' }],
+    } as const;
+    const { manager } = createManager([objectBasemap]);
+    const basemap = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await basemap;
+
+    const other = manager.addService({
+      id: 'other',
+      name: 'Other',
+      role: 'overlay',
+      visible: true,
+      style: otherStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'other style was not composed');
+    map.emit('style.load');
+    await other;
+    const bright = manager.addService({
+      id: 'bright',
+      name: 'Bright',
+      role: 'overlay',
+      visible: true,
+      style: brightStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'bright style was not composed');
+    map.emit('style.load');
+    await bright;
+
+    const errors: Array<{
+      type: 'error';
+      serviceId?: string;
+      phase: string;
+      error: Error;
+      fatal: boolean;
+    }> = [];
+    manager.on('error', (event) => errors.push(event));
+    const styleError = new Error('other resource failed while bright updated');
+    const update = manager.updateService('bright', {
+      id: 'bright',
+      name: 'Replacement',
+      role: 'overlay',
+      visible: true,
+      style: replacementStyle,
+    });
+    await waitForCondition(() => map.setStyleCalls.length === 3, 'replacement was not composed');
+    map.emit('error', { error: styleError, resourceUrl: 'https://example.test/other.json' });
+    await waitForCondition(() => map.setStyleCalls.length === 5, 'rollback style was not composed');
+    map.emit('style.load');
+
+    await expect(update).rejects.toBe(styleError);
+    expect(errors).toEqual([
+      { type: 'error', serviceId: 'other', phase: 'style', error: styleError, fatal: true },
+    ]);
+    expect(manager.getServices().find((service) => service.id === 'bright')).toMatchObject({
+      name: 'Bright',
+      style: brightStyle,
+    });
+    expect(manager.getServiceState('bright')).toMatchObject({ active: true, status: 'ready' });
+    expect(manager.getServiceState('other')).toMatchObject({ active: true, status: 'ready' });
   });
 
   it('style overlay update restores the previous prepared style and ready resources after a failure', async () => {

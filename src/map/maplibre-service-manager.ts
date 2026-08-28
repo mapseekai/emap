@@ -2386,6 +2386,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       return;
     }
     this._rejectStyleRequest(request, error);
+    const trigger =
+      resourceOwner ??
+      (request.triggerServiceId ? this._registry.get(request.triggerServiceId) : undefined);
     const rollbackStyleOverlay = request.rollbackStyleOverlay;
     if (
       rollbackStyleOverlay &&
@@ -2393,11 +2396,18 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
         rollbackStyleOverlay.record &&
       rollbackStyleOverlay.record.operationRevision === rollbackStyleOverlay.operationRevision
     ) {
+      if (trigger?.definition.role === 'overlay' && isStyleOverlayService(trigger.definition)) {
+        this._emitFatalError(trigger.definition.id, error);
+      } else {
+        this.fire('error', {
+          serviceId: request.triggerServiceId,
+          phase: this._errorPhases.get(error) ?? 'lifecycle',
+          error,
+          fatal: true,
+        });
+      }
       return;
     }
-    const trigger =
-      resourceOwner ??
-      (request.triggerServiceId ? this._registry.get(request.triggerServiceId) : undefined);
     if (trigger?.definition.role === 'overlay' && isStyleOverlayService(trigger.definition)) {
       trigger.operationRevision++;
       trigger.preparedStyle = undefined;
