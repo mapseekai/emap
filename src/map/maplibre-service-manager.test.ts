@@ -64,6 +64,7 @@ class FakeMap {
     this.options = options;
     this._currentStyle = options.style ?? null;
     FakeMap.instances.push(this);
+    this.styleRevision = 1;
   }
 
   on(type: string, listener: FakeMapListener): this {
@@ -176,6 +177,11 @@ class FakeMap {
     return () => {
       if (revision === this.styleRevision) this.emit('style.load');
     };
+  }
+
+  delayedStyleLoadEvenIfSuperseded(): () => void {
+    const styleGeneration = this.styleRevision;
+    return () => this.emit('style.load', { styleGeneration });
   }
 
   addSource(id: string, source: maplibregl.SourceSpecification): void {
@@ -4039,5 +4045,79 @@ describe('MapLibreServiceManager overlay rendering', () => {
     await latest;
     expect(manager.getServiceState('light')).toMatchObject({ active: true, status: 'ready' });
     expect(manager.getServiceState('bright')).toMatchObject({ active: true });
+  });
+  it('reopens composite preparation when a second style overlay joins after the first snapshot', async () => {
+    const firstStyle = brightStyle;
+    const secondStyle = {
+      ...brightStyle,
+      sources: { second: { type: 'vector' as const, url: 'https://example.test/second.json' } },
+      layers: [{ id: 'second', type: 'fill' as const, source: 'second' }],
+    } as const;
+    const { manager } = createManager([objectBasemap]);
+    const baseRequest = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await baseRequest;
+    const first = manager.addService({ id: 'one', name: 'One', role: 'overlay', visible: true, style: firstStyle });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'first composite did not start');
+    const second = manager.addService({ id: 'two', name: 'Two', role: 'overlay', visible: true, style: secondStyle });
+    map.emit('style.load');
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'reopened composite did not start');
+    map.emit('style.load');
+    await Promise.all([first, second]);
+    expect(map.getSource('emap-overlay:one:land')).toBeDefined();
+    expect(map.getLayer('emap-overlay:one:land')).toBeDefined();
+    expect(map.getSource('emap-overlay:two:second')).toBeDefined();
+    expect(map.getLayer('emap-overlay:two:second')).toBeDefined();
+  });
+
+  it('ignores a forced stale style-load generation after a newer composite request', async () => {
+    const { manager } = createManager([objectBasemap]);
+    const baseRequest = manager.setBasemap('light');
+    const map = await waitForFakeMap();
+    map.emit('style.load');
+    await baseRequest;
+    const first = manager.addService({ id: 'one', name: 'One', role: 'overlay', visible: true, style: brightStyle });
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'first composite did not start');
+    const staleLoad = map.delayedStyleLoadEvenIfSuperseded();
+    const second = manager.addService({
+      id: 'two',
+      name: 'Two',
+      role: 'overlay',
+      visible: true,
+      style: {
+        ...brightStyle,
+        sources: { second: { type: 'vector', url: 'https://example.test/second.json' } },
+        layers: [{ id: 'second', type: 'fill', source: 'second' }],
+      },
+    });
+    map.emit('style.load');
+    await waitForCondition(() => map.setStyleCalls.length === 2, 'second composite did not start');
+    staleLoad();
+    expect(manager.getServiceState('two')).toMatchObject({ status: 'loading' });
+    map.emit('style.load');
+    await Promise.all([first, second]);
+    expect(manager.getServiceState('two')).toMatchObject({ status: 'ready' });
+  });
+
+  it('attributes a 30-second style preparation timeout to the current overlay', async () => {
+    vi.useFakeTimers();
+    try {
+      const { manager } = createManager(
+        [{ id: 'bright', name: 'Bright', role: 'overlay', style: 'https://example.test/bright.json' }],
+        { fetchStyle: vi.fn(() => new Promise<Response>(() => undefined)) },
+      );
+      const errors: Array<{ serviceId?: string; phase: string; fatal: boolean }> = [];
+      manager.on('error', (event) =>
+        errors.push({ serviceId: event.serviceId, phase: event.phase, fatal: event.fatal }),
+      );
+      const activation = manager.setOverlayVisibility('bright', true).catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(30_000);
+      await expect(activation).resolves.toMatchObject({ message: expect.stringContaining('timed out') });
+      expect(errors).toEqual([{ serviceId: 'bright', phase: 'style', fatal: true }]);
+      expect(manager.getServiceState('bright')).toMatchObject({ status: 'error' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

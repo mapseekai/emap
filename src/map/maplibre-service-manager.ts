@@ -89,6 +89,8 @@ interface StyleRequest {
     visible: boolean;
   }[];
   bootstrapStyle?: boolean;
+  styleGeneration?: number;
+  followers?: StyleRequest[];
 }
 
 interface ReadyStyle {
@@ -641,18 +643,18 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       rollback,
     };
   }
-
   private _resolveStyleRequest(request: StyleRequest): void {
     if (request.settled) return;
     request.settled = true;
     request.resolve();
+    for (const follower of request.followers ?? []) this._resolveStyleRequest(follower);
   }
-
   private _rejectStyleRequest(request: StyleRequest, error: Error): void {
     if (request.settled) return;
     request.settled = true;
     request.failure = error;
     request.reject(error);
+    for (const follower of request.followers ?? []) this._rejectStyleRequest(follower, error);
   }
   private _abortStylePreparation(record: ServiceRecord): void {
     record.stylePreparation?.controller.abort();
@@ -753,7 +755,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     request.triggerServiceId = triggerRecord.definition.id;
     this._desiredRequest = request;
     if (previous && previous !== request) {
-      this._rejectStyleRequest(previous, abortError('MapLibre composite style request was superseded'));
+      if (previous.triggerServiceId) {
+        request.followers = [...(request.followers ?? []), previous];
+      } else {
+        this._rejectStyleRequest(previous, abortError('MapLibre composite style request was superseded'));
+      }
     }
     this._prepareStyleRequest(request);
     return request.promise;
@@ -1612,6 +1618,11 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
   }
 
   private _resetRuntime(): void {
+    for (const record of this._registry.values()) {
+      if (!record.stylePreparation) continue;
+      record.operationRevision++;
+      this._abortStylePreparation(record);
+    }
     let teardownError: Error | undefined;
     try {
       this._teardownRuntime();
@@ -1782,8 +1793,9 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     if (this._desiredRequest !== request) return;
 
     try {
-      this._styleGeneration++;
+      const generation = ++this._styleGeneration;
       this._readyStyle = null;
+      request.styleGeneration = generation;
       this._appliedRequest = request;
       map.setStyle(
         request.style,
@@ -2326,9 +2338,14 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     return undefined;
   }
 
-  private _handleStyleLoad = (): void => {
+  private _handleStyleLoad = (event?: unknown): void => {
     if (this._destroyed || !this._appliedRequest) return;
     const request = this._appliedRequest;
+    let eventGeneration: unknown;
+    if (typeof event === 'object' && event !== null && 'styleGeneration' in event) {
+      eventGeneration = event.styleGeneration;
+    }
+    if (eventGeneration !== undefined && eventGeneration !== request.styleGeneration) return;
     this._appliedRequest = null;
     if (request.bootstrapStyle) {
       request.bootstrapStyle = false;
