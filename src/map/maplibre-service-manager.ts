@@ -1064,7 +1064,13 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           record.definition.role === 'overlay' &&
           isStyleOverlayService(record.definition)
         ) {
-          await this._prepareStyleOverlay(record, operationRevision);
+          try {
+            await this._prepareStyleOverlay(record, operationRevision);
+          } catch (value) {
+            const error = toError(value);
+            if (!isAbortError(error)) this._errorPhases.set(error, 'style');
+            throw error;
+          }
           this._assertCurrentOperation(record, operationRevision);
           await this._requestCompositeStyle(record);
           this._assertCurrentOperation(record, operationRevision);

@@ -3762,6 +3762,41 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(manager.getServiceState('light')).not.toMatchObject({ status: 'error' });
   });
 
+  it.each([
+    ['HTTP', async () => new Response('', { status: 503 }), 'HTTP 503'],
+    ['CORS', async () => Promise.reject(new TypeError('Failed to fetch')), 'Failed to fetch'],
+    ['JSON', async () => new Response('{', { status: 200 }), 'Expected property'],
+    ['style validation', async () => new Response(JSON.stringify({ version: 7, sources: {}, layers: [] })), 'version'],
+  ])(
+    'publishes one fatal style error for %s overlay fetch failures',
+    async (_kind, fetchResult, message) => {
+      const { manager } = createManager(
+        [{ id: 'bright', name: 'Bright', role: 'overlay', style: 'https://example.test/bright.json' }],
+        { fetchStyle: vi.fn(fetchResult) },
+      );
+      const errors: Array<{ serviceId?: string; phase: string; fatal: boolean; message: string }> = [];
+      manager.on('error', (event) =>
+        errors.push({
+          serviceId: event.serviceId,
+          phase: event.phase,
+          fatal: event.fatal,
+          message: event.error.message,
+        }),
+      );
+
+      await expect(manager.setOverlayVisibility('bright', true)).rejects.toThrow(message);
+      expect(errors).toEqual([
+        expect.objectContaining({
+          serviceId: 'bright',
+          phase: 'style',
+          fatal: true,
+          message: expect.stringContaining(message),
+        }),
+      ]);
+      expect(manager.getServiceState('bright')).toMatchObject({ status: 'error' });
+    },
+  );
+
   it('destroy aborts style overlay fetches without stale events', async () => {
     const fetchStarted = deferred<void>();
     let signal: AbortSignal | undefined;
