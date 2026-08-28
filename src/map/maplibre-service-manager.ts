@@ -2214,7 +2214,13 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
     if (request.phase === 'initial' && request.basemapId === null) {
       for (const record of this._registry.values()) {
-        if (record.definition.role !== 'overlay' || !record.state.active) continue;
+        if (
+          record.definition.role !== 'overlay' ||
+          !record.state.active ||
+          record.stylePreparation
+        ) {
+          continue;
+        }
         try {
           this._publishTransitionFailure(record, record.operationRevision, error);
         } catch {

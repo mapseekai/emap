@@ -4120,4 +4120,41 @@ describe('MapLibreServiceManager overlay rendering', () => {
       vi.useRealTimers();
     }
   });
+  it('aborts a deferred second style preparation when initial runtime failure resets the manager', async () => {
+    const fetched = deferred<Response>();
+    let signal: AbortSignal | undefined;
+    const fetchStyle = vi.fn((_url: string, options?: RequestInit) => {
+      signal = options?.signal ?? undefined;
+      options?.signal?.addEventListener('abort', () =>
+        fetched.reject(new DOMException('aborted', 'AbortError')),
+      );
+      return fetched.promise;
+    });
+    const { manager } = createManager([{ ...roads, visible: true }], { fetchStyle });
+    const events: string[] = [];
+    manager.on('change', (event) => events.push(`${event.serviceId}:${event.reason}:${event.state?.status}`));
+    manager.on('error', (event) => events.push(`error:${event.serviceId}:${event.phase}`));
+    const initialization = manager.initialize().catch((error: unknown) => error);
+    const map = await waitForFakeMap();
+    const activation = manager
+      .addService({
+        id: 'bright',
+        name: 'Bright',
+        role: 'overlay',
+        visible: true,
+        style: 'https://example.test/bright.json',
+      })
+      .catch((error: unknown) => error);
+    await waitForCondition(() => signal !== undefined, 'second style preparation did not start');
+
+    map.emit('error', { error: new Error('initial style failed') });
+    expect(signal?.aborted).toBe(true);
+    fetched.resolve(new Response(JSON.stringify(brightStyle)));
+    await expect(initialization).resolves.toBeInstanceOf(Error);
+    await expect(activation).resolves.toMatchObject({ name: 'AbortError' });
+    expect(manager.getMapLibreMap()).toBeNull();
+    expect(FakeMap.instances).toHaveLength(1);
+    expect(events.filter((event) => event.startsWith('error:bright'))).toEqual([]);
+    expect(events.filter((event) => event === 'bright:status:ready')).toEqual([]);
+  });
 });
