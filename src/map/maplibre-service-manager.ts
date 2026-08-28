@@ -752,7 +752,13 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     const spriteIds = new Map<string, string>();
     const glyphUrls = new Map<string, string>();
     const resourceUrls = new Map<string, string>();
-    const resourceOwners = { sourceIds, spriteIds, glyphUrls, resourceUrls, runtimeUrls: new Map() };
+    const resourceOwners = {
+      sourceIds,
+      spriteIds,
+      glyphUrls,
+      resourceUrls,
+      runtimeUrls: new Map(),
+    };
     if (basemapId) this._indexStyleResources(style, basemapId, resourceOwners);
     for (const { prepared } of preparedOverlays) {
       for (const sourceId of prepared.sourceIds) {
