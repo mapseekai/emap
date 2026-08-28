@@ -4128,6 +4128,86 @@ describe('MapLibreServiceManager overlay rendering', () => {
     expect(manager.getServiceState('one')).toMatchObject({ active: true, status: 'ready' });
     expect(manager.getServiceState('two')).toMatchObject({ active: true, status: 'ready' });
   });
+  it('replaces a prepared snapshot when its style overlay is updated before physical application', async () => {
+    FakeMap.instances.length = 0;
+    const moduleLoad = deferred<typeof import('maplibre-gl')>();
+    const manager = createMapLibreServiceManager(createHost(), {}, () => moduleLoad.promise);
+    const initial = manager.addService({
+      id: 'one',
+      name: 'One',
+      role: 'overlay',
+      visible: true,
+      style: brightStyle,
+    });
+    await waitForCondition(() => {
+      const request = Reflect.get(manager, '_desiredRequest') as {
+        preparedOverlays: Array<{ record: { definition: { id: string } } }>;
+      } | null;
+      return request?.preparedOverlays[0]?.record.definition.id === 'one';
+    }, 'initial composite snapshot was not captured');
+    const staleRequest = Reflect.get(manager, '_desiredRequest');
+    const replacementStyle = {
+      ...brightStyle,
+      sources: { replacement: { type: 'vector' as const, url: 'https://example.test/replacement.json' } },
+      layers: [{ id: 'replacement', type: 'fill' as const, source: 'replacement' }],
+    };
+    const update = manager.updateService('one', {
+      id: 'one',
+      name: 'Updated one',
+      role: 'overlay',
+      visible: true,
+      style: replacementStyle,
+    });
+    await waitForCondition(
+      () => Reflect.get(manager, '_desiredRequest') !== staleRequest,
+      'update did not replace the stale composite snapshot',
+    );
+
+    moduleLoad.resolve(fakeModule());
+    const map = await waitForFakeMap();
+    await waitForCondition(() => map.listenerCount('style.load') === 1, 'initial listener did not attach');
+    map.emit('style.load');
+    await waitForCondition(() => map.setStyleCalls.length === 1, 'replacement composite did not start');
+    map.emit('style.load');
+    await Promise.all([initial, update]);
+
+    expect(map.getSource('emap-overlay:one:replacement')).toBeDefined();
+    expect(map.getLayer('emap-overlay:one:replacement')).toBeDefined();
+    expect(map.getSource('emap-overlay:one:land')).toBeUndefined();
+    expect(map.getLayer('emap-overlay:one:land')).toBeUndefined();
+    expect(manager.getServiceState('one')).toMatchObject({ active: true, status: 'ready' });
+  });
+
+  it('replaces a prepared snapshot when its style overlay is removed before physical application', async () => {
+    FakeMap.instances.length = 0;
+    const moduleLoad = deferred<typeof import('maplibre-gl')>();
+    const manager = createMapLibreServiceManager(createHost(), {}, () => moduleLoad.promise);
+    const initial = manager.addService({
+      id: 'one',
+      name: 'One',
+      role: 'overlay',
+      visible: true,
+      style: brightStyle,
+    });
+    await waitForCondition(() => {
+      const request = Reflect.get(manager, '_desiredRequest') as {
+        preparedOverlays: Array<{ record: { definition: { id: string } } }>;
+      } | null;
+      return request?.preparedOverlays[0]?.record.definition.id === 'one';
+    }, 'initial composite snapshot was not captured');
+    const staleRequest = Reflect.get(manager, '_desiredRequest');
+    const removal = manager.removeService('one');
+    await waitForCondition(
+      () => Reflect.get(manager, '_desiredRequest') !== staleRequest,
+      'removal did not replace the stale composite snapshot',
+    );
+
+    await Promise.all([initial, removal]);
+
+    expect(FakeMap.instances).toEqual([]);
+    expect(manager.getServiceState('one')).toBeUndefined();
+  });
+
   it('reopens composite preparation when a second style overlay joins after the first snapshot', async () => {
     const firstStyle = brightStyle;
     const secondStyle = {

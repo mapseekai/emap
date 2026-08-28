@@ -518,7 +518,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       record.removing = true;
       record.state = { id: record.definition.id, active: false, status: 'idle' };
       this._syncVisibility();
-      if (this._map && (record.preparedStyle || record.ownedLayers.size > 0)) {
+      if (
+        (this._map && (record.preparedStyle || record.ownedLayers.size > 0)) ||
+        this._desiredRequest?.preparedOverlays.some(({ record: candidate }) => candidate === record)
+      ) {
         try {
           await this._requestCompositeStyle(record);
         } catch (error) {
@@ -738,12 +741,19 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
 
   private _requestCompositeStyle(triggerRecord: ServiceRecord): Promise<void> {
     const existing = this._desiredRequest;
+    const preparedTrigger = existing?.preparedOverlays.find(
+      ({ record }) => record === triggerRecord,
+    );
     if (
       existing?.triggerServiceId &&
       !existing.settled &&
       !this._appliedRequest &&
       !this._parsedRequest &&
-      existing.preparedOverlays.some(({ record }) => record === triggerRecord)
+      !triggerRecord.removing &&
+      this._registry.get(triggerRecord.definition.id) === triggerRecord &&
+      preparedTrigger?.visible === triggerRecord.state.active &&
+      triggerRecord.preparedStyle?.definitionRevision === triggerRecord.definitionRevision &&
+      triggerRecord.preparedStyle.value === preparedTrigger.prepared
     ) {
       return existing.promise;
     }
@@ -768,6 +778,10 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       } else {
         this._rejectStyleRequest(previous, abortError('MapLibre composite style request was superseded'));
       }
+    }
+    if (!this._hasActiveService()) {
+      this._resolveStyleRequest(request);
+      return request.promise;
     }
     this._prepareStyleRequest(request);
     return request.promise;
@@ -1100,7 +1114,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
           }
           this._assertCurrentOperation(record, operationRevision);
           await this._requestCompositeStyle(record);
-          this._assertCurrentOperation(record, operationRevision);
+          if (!this._isCurrentOperation(record, operationRevision)) return;
           if (record.state.status === 'loading') this._setStatus(record, operationRevision, 'ready');
           this._syncVisibility();
           return;
@@ -2389,13 +2403,16 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
     }
     this._detachStyleLoadListener();
     this._appliedRequest = null;
-    if (request.bootstrapStyle || request.reapplyAfterInitial) {
+    if (request.bootstrapStyle) {
       request.bootstrapStyle = false;
-      request.reapplyAfterInitial = false;
       this._startDesiredStyleIfIdle();
       return;
     }
-    if (this._desiredRequest !== request) {
+    if (request.reapplyAfterInitial) {
+      request.reapplyAfterInitial = false;
+      if (request.basemapId === null && !this._hasActiveOverlay()) {
+        this._map?.setStyle(null);
+      }
       this._startDesiredStyleIfIdle();
       return;
     }

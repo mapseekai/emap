@@ -67,3 +67,11 @@ Final verification after this follow-up: manager tests 137 passed, Emap integrat
 - **GREEN:** Coalescing now requires the triggering record to be present in the existing prepared snapshot. A late join replaces the stale request, makes the earlier request a follower, and reapplies the replacement composite after an in-progress initial map construction. The regression asserts both generated source/layer handles are physically present and owned, both overlays are ready, and no `AbortError` is emitted.
 - Verification: focused late-join test passed; manager 150 passed; Emap integration 7 passed; `tsc --noEmit` passed.
 - `detect_changes(scope: "all")` reported medium risk through cloned service lifecycle processes (constructor, initialization, and removal). Review confirmed the change only associates composite request snapshots with their triggering overlay and re-applies a replacement after stale initial style construction.
+
+## Same-record prepared snapshot invalidation
+
+- **RED:** Updating or removing the triggering style overlay after its old prepared entry was captured allowed the old request to coalesce by record identity. The update/removal never replaced the stale request.
+- **GREEN:** Coalescing additionally requires current registry membership, non-removal state, matching active visibility, and the exact current prepared value at the current definition revision. Obsolete reconciliation now follows the replacement terminal result without leaking `AbortError`; removal replaces a pending snapshot and settles without constructing/applying a stale runtime.
+- Added deterministic deferred-module regressions: update leaves only replacement generated resources and reaches ready; removal deletes the registry record with no old resource application.
+- Verification: focused same-record regressions passed; manager 152 passed; Emap integration 7 passed; `tsc --noEmit` passed.
+- `detect_changes(scope: "all")` reported medium risk through initialization and active-overlay update processes. Review confirmed replacement only occurs for invalidated snapshots; current snapshot participants retain coalescing, and removal short-circuits before initial runtime construction when no active services remain.
