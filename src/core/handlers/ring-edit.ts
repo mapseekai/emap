@@ -2,7 +2,12 @@ import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler'
 import type { OpResult } from '../../map/op-result';
 import type { EditHandlerHost } from './edit-handler-host';
 import type { FeatureRef } from '../../map/types';
-import type { ArcCollection, ArcVertexData, PathLayer, PathShape } from '../../types/mapshaper-types';
+import type {
+  ArcCollection,
+  ArcVertexData,
+  PathLayer,
+  PathShape,
+} from '../../types/mapshaper-types';
 import { isPathLayer } from '../../types/mapshaper-types';
 import { SketchSession, type SketchSnapTarget } from './sketch-session';
 
@@ -38,7 +43,10 @@ export class RingEditHandler implements Handler<RingEditOptions> {
 
   private readonly _onKeyDownBound = (event: KeyboardEvent) => this._session.handleKeyDown(event);
 
-  constructor(private readonly _map: EditHandlerHost, options: RingEditOptions = {}) {
+  constructor(
+    private readonly _map: EditHandlerHost,
+    options: RingEditOptions = {},
+  ) {
     this._opts = { ...DEFAULT_OPTIONS, ...options };
     this._session = this._createSession();
     this._map.on('editmodechange', (event: { mode: string }) => {
@@ -94,11 +102,16 @@ export class RingEditHandler implements Handler<RingEditOptions> {
 
   handlePointer(event: NormalizedPointerEvent): HandlerResult {
     if (!this._enabled) return 'passthrough';
-    if (event.kind === 'click' && (event.button !== 0 || this._submissionGeneration === this._generation))
+    if (
+      event.kind === 'click' &&
+      (event.button !== 0 || this._submissionGeneration === this._generation)
+    )
       return 'passthrough';
     if (this._opts.mode === 'delete') {
       if (event.kind !== 'click') return 'passthrough';
-      void this._submit(() => this._map.ops.deleteRing({ point: this._map.unproject(event.point.x, event.point.y) }));
+      void this._submit(() =>
+        this._map.ops.deleteRing({ point: this._map.unproject(event.point.x, event.point.y) }),
+      );
       return 'consumed';
     }
     if (event.kind === 'move' || event.kind === 'click')
@@ -153,7 +166,8 @@ export class RingEditHandler implements Handler<RingEditOptions> {
     )
       return null;
     const layer = this._map.layers.resolve(ref.source, ref.layer);
-    if (!layer || !isPathLayer(layer) || layer.geometry_type !== 'polygon' || !layer.shapes) return null;
+    if (!layer || !isPathLayer(layer) || layer.geometry_type !== 'polygon' || !layer.shapes)
+      return null;
     const shape = layer.shapes[ref.id];
     if (!this._isPathShape(shape)) return null;
     const arcs = this._map.getSource(ref.source)?.getArcs() as ArcCollection | undefined;
@@ -161,7 +175,11 @@ export class RingEditHandler implements Handler<RingEditOptions> {
   }
 
   private _isPathShape(shape: unknown): shape is PathShape {
-    return Array.isArray(shape) && shape.length > 0 && shape.every((part) => Array.isArray(part) && part.length > 0);
+    return (
+      Array.isArray(shape) &&
+      shape.length > 0 &&
+      shape.every((part) => Array.isArray(part) && part.length > 0)
+    );
   }
 
   private async _submit(operation: () => Promise<OpResult<void>>): Promise<void> {
@@ -170,14 +188,19 @@ export class RingEditHandler implements Handler<RingEditOptions> {
     this._submissionGeneration = generation;
     try {
       const result = await operation();
-      if (generation === this._generation && !result.ok) this._map.fire('error', { error: result.error });
+      if (generation === this._generation && !result.ok)
+        this._map.fire('error', { error: result.error });
     } finally {
       if (this._submissionGeneration === generation) this._submissionGeneration = null;
       if (generation === this._generation) this._map.render();
     }
   }
 
-  private _findSnapTarget(px: number, py: number, context: SelectionContext): SketchSnapTarget | null {
+  private _findSnapTarget(
+    px: number,
+    py: number,
+    context: SelectionContext,
+  ): SketchSnapTarget | null {
     const vertexData = context.arcs?.getVertexData?.() as ArcVertexData | undefined;
     if (!vertexData) return null;
     const threshold = this._opts.snapThreshold ?? DEFAULT_SNAP_THRESHOLD;

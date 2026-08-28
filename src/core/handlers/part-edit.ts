@@ -2,7 +2,12 @@ import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler'
 import type { OpResult } from '../../map/op-result';
 import type { EditHandlerHost } from './edit-handler-host';
 import type { FeatureRef } from '../../map/types';
-import type { ArcCollection, ArcVertexData, PathLayer, PathShape } from '../../types/mapshaper-types';
+import type {
+  ArcCollection,
+  ArcVertexData,
+  PathLayer,
+  PathShape,
+} from '../../types/mapshaper-types';
 import { isPathLayer } from '../../types/mapshaper-types';
 import { SketchSession, type SketchSnapTarget } from './sketch-session';
 
@@ -41,7 +46,10 @@ export class PartEditHandler implements Handler<PartEditOptions> {
   private readonly _onKeyDownBound = (event: KeyboardEvent) => this._session?.handleKeyDown(event);
   private readonly _onSelectionChangeBound = () => this._onSelectionChange();
 
-  constructor(private readonly _map: EditHandlerHost, options: PartEditOptions = {}) {
+  constructor(
+    private readonly _map: EditHandlerHost,
+    options: PartEditOptions = {},
+  ) {
     const { snapThreshold, ...rest } = options;
     this._opts = {
       ...DEFAULT_OPTIONS,
@@ -125,7 +133,10 @@ export class PartEditHandler implements Handler<PartEditOptions> {
 
   handlePointer(event: NormalizedPointerEvent): HandlerResult {
     if (!this._enabled) return 'passthrough';
-    if (event.kind === 'click' && (event.button !== 0 || this._submissionGeneration === this._generation))
+    if (
+      event.kind === 'click' &&
+      (event.button !== 0 || this._submissionGeneration === this._generation)
+    )
       return 'passthrough';
     if (this._opts.mode === 'delete') {
       if (event.kind !== 'click') return 'passthrough';
@@ -179,7 +190,9 @@ export class PartEditHandler implements Handler<PartEditOptions> {
     this._map.render();
   }
 
-  private _createSession(context: SelectionContext | null = this._resolveSelectionContext()): SketchSession {
+  private _createSession(
+    context: SelectionContext | null = this._resolveSelectionContext(),
+  ): SketchSession {
     const polygon = context?.layer.geometry_type !== 'polyline';
     return new SketchSession(
       this._map,
@@ -219,7 +232,11 @@ export class PartEditHandler implements Handler<PartEditOptions> {
   }
 
   private _isPathShape(shape: unknown): shape is PathShape {
-    return Array.isArray(shape) && shape.length > 0 && shape.every((part) => Array.isArray(part) && part.length > 0);
+    return (
+      Array.isArray(shape) &&
+      shape.length > 0 &&
+      shape.every((part) => Array.isArray(part) && part.length > 0)
+    );
   }
 
   private _isCurrentSelection(context: SelectionContext): boolean {
@@ -239,14 +256,19 @@ export class PartEditHandler implements Handler<PartEditOptions> {
     this._submissionGeneration = generation;
     try {
       const result = await operation();
-      if (generation === this._generation && !result.ok) this._map.fire('error', { error: result.error });
+      if (generation === this._generation && !result.ok)
+        this._map.fire('error', { error: result.error });
     } finally {
       if (this._submissionGeneration === generation) this._submissionGeneration = null;
       if (generation === this._generation) this._map.render();
     }
   }
 
-  private _findSnapTarget(px: number, py: number, context: SelectionContext): SketchSnapTarget | null {
+  private _findSnapTarget(
+    px: number,
+    py: number,
+    context: SelectionContext,
+  ): SketchSnapTarget | null {
     const vertexData = context.arcs?.getVertexData?.() as ArcVertexData | undefined;
     if (!vertexData) return null;
     const threshold = this._opts.snapThreshold ?? DEFAULT_SNAP_THRESHOLD;

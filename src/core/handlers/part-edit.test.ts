@@ -18,10 +18,9 @@ function event(
   return { kind, point: { x, y }, modifiers, button: 0, originalEvent };
 }
 
-function createMap(options: {
-  selection?: (typeof selected)[];
-  geometryType?: 'polygon' | 'polyline';
-} = {}) {
+function createMap(
+  options: { selection?: (typeof selected)[]; geometryType?: 'polygon' | 'polyline' } = {},
+) {
   const selection = options.selection ?? [selected];
   const layer = {
     name: 'paths',
@@ -98,8 +97,13 @@ describe('PartEditHandler', () => {
   });
 
   it('deletes the clicked part using a scaled data-unit tolerance without creating a sketch', async () => {
-    map.unproject.mockImplementation((x: number, y: number) => [x * 2 + 100, 200 - y * 3] as [number, number]);
-    const handler = new PartEditHandler(map as unknown as EditHandlerHost, { mode: 'delete', snapThreshold: 10 });
+    map.unproject.mockImplementation(
+      (x: number, y: number) => [x * 2 + 100, 200 - y * 3] as [number, number],
+    );
+    const handler = new PartEditHandler(map as unknown as EditHandlerHost, {
+      mode: 'delete',
+      snapThreshold: 10,
+    });
     handler.enable();
     handler.handlePointer(event('click', 1, 2));
     await vi.waitFor(() =>
@@ -109,7 +113,10 @@ describe('PartEditHandler', () => {
   });
 
   it('uses the default threshold when a supplied threshold is negative or non-finite', async () => {
-    const handler = new PartEditHandler(map as unknown as EditHandlerHost, { mode: 'delete', snapThreshold: -1 });
+    const handler = new PartEditHandler(map as unknown as EditHandlerHost, {
+      mode: 'delete',
+      snapThreshold: -1,
+    });
     handler.enable();
     handler.handlePointer(event('click', 1, 2));
     await vi.waitFor(() =>
@@ -127,9 +134,12 @@ describe('PartEditHandler', () => {
   });
 
   it('enables in delete mode without any selection', () => {
-    const handler = new PartEditHandler(createMap({ selection: [] }) as unknown as EditHandlerHost, {
-      mode: 'delete',
-    });
+    const handler = new PartEditHandler(
+      createMap({ selection: [] }) as unknown as EditHandlerHost,
+      {
+        mode: 'delete',
+      },
+    );
     expect(() => handler.enable()).not.toThrow();
     expect(handler.isEnabled()).toBe(true);
   });

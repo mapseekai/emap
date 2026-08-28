@@ -27,7 +27,8 @@ export interface EditToolbarOptions {
 class AdvancedEditControl implements Control {
   private _map: Emap | null = null;
   private _button: HTMLButtonElement | null = null;
-  private readonly _onEditModeChange = (event: { mode: string }): void => this._syncPressed(event.mode);
+  private readonly _onEditModeChange = (event: { mode: string }): void =>
+    this._syncPressed(event.mode);
 
   constructor(private readonly _tool: AdvancedTool) {}
 
@@ -98,11 +99,8 @@ class AdvancedEditControl implements Control {
   }
 
   private _syncPressed(mode: string): void {
-    const expectedMode = this._tool === 'reshape'
-      ? 'reshape'
-      : this._tool.startsWith('ring')
-        ? 'ring'
-        : 'part';
+    const expectedMode =
+      this._tool === 'reshape' ? 'reshape' : this._tool.startsWith('ring') ? 'ring' : 'part';
     const active = mode === expectedMode && this._matchesActiveHandler();
     this._button?.classList.toggle('active', active);
     this._button?.setAttribute('aria-pressed', String(active));

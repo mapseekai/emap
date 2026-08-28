@@ -11,7 +11,11 @@ async function importPolygons(geometries: GeoJSON.Polygon[]): Promise<MapshaperD
   const dataset = await adapter.runImport(`-i "${FIXTURE_NAME}"`, {
     [FIXTURE_NAME]: JSON.stringify({
       type: 'FeatureCollection',
-      features: geometries.map((geometry, id) => ({ type: 'Feature', properties: { id }, geometry })),
+      features: geometries.map((geometry, id) => ({
+        type: 'Feature',
+        properties: { id },
+        geometry,
+      })),
     }),
   });
   dataset.info = {};
@@ -35,11 +39,26 @@ function reshape(dataset: MapshaperDataset, line: Position[]): PathShape | null 
 describe('reshapeSelectedPolygon', () => {
   it('replaces the square bottom edge with an inward reshape arc', async () => {
     const dataset = await importPolygons([
-      polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]]),
+      polygon([
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+      ]),
     ]);
-    const original = adapter.getShapeArea(dataset.layers[0]!.shapes![0] as PathShape, dataset.arcs!);
+    const original = adapter.getShapeArea(
+      dataset.layers[0]!.shapes![0] as PathShape,
+      dataset.arcs!,
+    );
 
-    const shape = reshape(dataset, [[3, -2], [5, 3], [7, -2]]);
+    const shape = reshape(dataset, [
+      [3, -2],
+      [5, 3],
+      [7, -2],
+    ]);
 
     expect(shape).not.toBeNull();
     dataset.layers[0]!.shapes![0] = shape!;
@@ -52,12 +71,28 @@ describe('reshapeSelectedPolygon', () => {
   it('keeps a hole with its exterior when the reshape does not conflict', async () => {
     const dataset = await importPolygons([
       polygon([
-        [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],
-        [[4, 5], [6, 5], [6, 7], [4, 7], [4, 5]],
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+        [
+          [4, 5],
+          [6, 5],
+          [6, 7],
+          [4, 7],
+          [4, 5],
+        ],
       ]),
     ]);
 
-    const shape = reshape(dataset, [[3, -2], [5, 0.5], [7, -2]]);
+    const shape = reshape(dataset, [
+      [3, -2],
+      [5, 0.5],
+      [7, -2],
+    ]);
 
     expect(shape).not.toBeNull();
     dataset.layers[0]!.shapes![0] = shape!;
@@ -80,58 +115,172 @@ describe('reshapeSelectedPolygon', () => {
   it('rejects a reshape that would put a hole outside its exterior', async () => {
     const dataset = await importPolygons([
       polygon([
-        [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],
-        [[4, 5], [6, 5], [6, 7], [4, 7], [4, 5]],
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+        [
+          [4, 5],
+          [6, 5],
+          [6, 7],
+          [4, 7],
+          [4, 5],
+        ],
       ]),
     ]);
 
-    expect(reshape(dataset, [[3, -2], [5, 8], [7, -2]])).toBeNull();
+    expect(
+      reshape(dataset, [
+        [3, -2],
+        [5, 8],
+        [7, -2],
+      ]),
+    ).toBeNull();
   });
 
   it('reshapes only the contacted exterior of a multipart polygon', async () => {
     const dataset = await importPolygons([
-      { type: 'Polygon', coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]] },
-      { type: 'Polygon', coordinates: [[[20, 0], [30, 0], [30, 10], [20, 10], [20, 0]]] },
+      {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 0],
+            [10, 0],
+            [10, 10],
+            [0, 10],
+            [0, 0],
+          ],
+        ],
+      },
+      {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [20, 0],
+            [30, 0],
+            [30, 10],
+            [20, 10],
+            [20, 0],
+          ],
+        ],
+      },
     ]);
     const untouched = dataset.layers[0]!.shapes![1] as PathShape;
     const untouchedArea = adapter.getShapeArea(untouched, dataset.arcs!);
-    const shape = reshape(dataset, [[3, -2], [5, 3], [7, -2]]);
+    const shape = reshape(dataset, [
+      [3, -2],
+      [5, 3],
+      [7, -2],
+    ]);
 
     expect(shape).not.toBeNull();
     expect(adapter.getShapeArea(untouched, dataset.arcs!)).toBe(untouchedArea);
   });
 
   it('rejects a self-intersecting reshape line', async () => {
-    const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
+    const dataset = await importPolygons([
+      polygon([
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+      ]),
+    ]);
     const original = exported(dataset);
-    expect(reshape(dataset, [[3, -2], [7, 4], [3, 4], [7, -2]])).toBeNull();
+    expect(
+      reshape(dataset, [
+        [3, -2],
+        [7, 4],
+        [3, 4],
+        [7, -2],
+      ]),
+    ).toBeNull();
     expect(exported(dataset)).toEqual(original);
   });
 
   it('leaves a polygon unchanged with fewer than two contacts', async () => {
-    const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
+    const dataset = await importPolygons([
+      polygon([
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+      ]),
+    ]);
     const original = exported(dataset);
-    expect(reshape(dataset, [[5, -2], [5, 2]])).toBeNull();
+    expect(
+      reshape(dataset, [
+        [5, -2],
+        [5, 2],
+      ]),
+    ).toBeNull();
     expect(exported(dataset)).toEqual(original);
   });
 
   it('chooses the larger exterior candidate when the reshape midpoint is outside', async () => {
-    const dataset = await importPolygons([polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]])]);
-    const original = adapter.getShapeArea(dataset.layers[0]!.shapes![0] as PathShape, dataset.arcs!);
-    const shape = reshape(dataset, [[3, 2], [5, -2], [7, 2]]);
+    const dataset = await importPolygons([
+      polygon([
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+      ]),
+    ]);
+    const original = adapter.getShapeArea(
+      dataset.layers[0]!.shapes![0] as PathShape,
+      dataset.arcs!,
+    );
+    const shape = reshape(dataset, [
+      [3, 2],
+      [5, -2],
+      [7, 2],
+    ]);
     expect(shape).not.toBeNull();
     dataset.layers[0]!.shapes![0] = shape!;
     expect(adapter.getShapeArea(shape!, dataset.arcs!)).toBeGreaterThan(original);
     expect((exported(dataset)[0] as GeoJSON.Polygon).coordinates[0]).toEqual([
-      [6, 0], [10, 0], [10, 10], [0, 10], [0, 0], [4, 0], [5, -2], [6, 0],
+      [6, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+      [0, 0],
+      [4, 0],
+      [5, -2],
+      [6, 0],
     ]);
   });
 
   it('groups imported rings by their mapshaper orientation', async () => {
-    const dataset = await importPolygons([polygon([
-      [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],
-      [[4, 5], [6, 5], [6, 7], [4, 7], [4, 5]],
-    ])]);
+    const dataset = await importPolygons([
+      polygon([
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+        [
+          [4, 5],
+          [6, 5],
+          [6, 7],
+          [4, 7],
+          [4, 5],
+        ],
+      ]),
+    ]);
     const shape = dataset.layers[0]!.shapes![0] as PathShape;
     expect(collectPolygonExteriors(shape, dataset.arcs!, adapter)).toMatchObject([
       { exteriorIndex: 0, holeIndexes: [1] },

@@ -2,7 +2,10 @@ import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler'
 import type { EditVertexShape, EditVertexArcs } from '../../map/types';
 import { VertexMoveCommand } from '../../edit/commands/vertex-move';
 import { VertexInsertCommand } from '../../edit/commands/vertex-insert';
-import { planTopologyNodeDeletion, type TopologyNodeDeletion } from '../../edit/commands/vertex-delete';
+import {
+  planTopologyNodeDeletion,
+  type TopologyNodeDeletion,
+} from '../../edit/commands/vertex-delete';
 import { CompositeCommand } from '../../edit/commands/composite';
 import { bumpEditVersion, isPathLayer, type ArcCollection } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
@@ -870,7 +873,9 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     if (!this._hoveredFeature) {
       const selectedArcs =
         this._selectedNodes.length > 0
-          ? (this._map.getSource(this._selectedNodes[0].source)?.getArcs() as EditVertexArcs | undefined)
+          ? (this._map.getSource(this._selectedNodes[0].source)?.getArcs() as
+              | EditVertexArcs
+              | undefined)
           : undefined;
       if (band || selectedArcs) {
         this._map.setEditVertexState({
@@ -1030,9 +1035,14 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     const minY = Math.min(start.y, py);
     const maxY = Math.max(start.y, py);
     const selected = additive ? this._selectedNodes.slice() : [];
-    const seen = new Set(selected.map((node) => `${node.source}:${node.coords[0]},${node.coords[1]}`));
+    const seen = new Set(
+      selected.map((node) => `${node.source}:${node.coords[0]},${node.coords[1]}`),
+    );
     const hits = this._map.queryFeatures(
-      [[minX, minY], [maxX, maxY]],
+      [
+        [minX, minY],
+        [maxX, maxY],
+      ],
       this._layers ? { layers: this._layers } : undefined,
     );
     const adapter = getDefaultMapshaperAdapter();
@@ -1051,7 +1061,8 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
           const iter = arcs.getArcIter(rawArcId);
           while (iter.hasNext()) {
             const screen = this._map.project(iter.x, iter.y);
-            if (screen[0] < minX || screen[0] > maxX || screen[1] < minY || screen[1] > maxY) continue;
+            if (screen[0] < minX || screen[0] > maxX || screen[1] < minY || screen[1] > maxY)
+              continue;
             const key = `${hit.source}:${iter.x},${iter.y}`;
             if (seen.has(key)) continue;
             const vertexIds = adapter.findNearestVertices(
@@ -1099,7 +1110,11 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
     for (const [sourceId, vertexIds] of vertexIdsBySource) {
       const source = this._map.getSource(sourceId);
       if (!source) return;
-      const plan = planTopologyNodeDeletion(source as TopologySource, vertexIds, source.getLayers());
+      const plan = planTopologyNodeDeletion(
+        source as TopologySource,
+        vertexIds,
+        source.getLayers(),
+      );
       if (!plan) {
         this._map.fire('error', {
           error: new Error('vertexEdit: selection contains non-deletable nodes'),

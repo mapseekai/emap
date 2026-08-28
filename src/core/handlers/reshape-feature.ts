@@ -1,10 +1,6 @@
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
 import type { EditHandlerHost } from './edit-handler-host';
-import type {
-  ArcCollection,
-  ArcVertexData,
-  PathShape,
-} from '../../types/mapshaper-types';
+import type { ArcCollection, ArcVertexData, PathShape } from '../../types/mapshaper-types';
 import { isPathLayer } from '../../types/mapshaper-types';
 import { projectPointOnSegment } from './draw-feature';
 import { SketchSession, type SketchSnapTarget } from './sketch-session';
@@ -37,7 +33,10 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
 
   private readonly _onKeyDownBound = (event: KeyboardEvent) => this._session.handleKeyDown(event);
 
-  constructor(private readonly _map: EditHandlerHost, options: ReshapeFeatureOptions = {}) {
+  constructor(
+    private readonly _map: EditHandlerHost,
+    options: ReshapeFeatureOptions = {},
+  ) {
     this._opts = { ...options };
     this._session = this._createSession();
     this._map.on('editmodechange', (event: { mode: string }) => {
@@ -90,7 +89,10 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
 
   handlePointer(event: NormalizedPointerEvent): HandlerResult {
     if (!this._enabled) return 'passthrough';
-    if (event.kind === 'click' && (event.button !== 0 || this._submissionGeneration === this._generation))
+    if (
+      event.kind === 'click' &&
+      (event.button !== 0 || this._submissionGeneration === this._generation)
+    )
       return 'passthrough';
     if (event.kind === 'move' || event.kind === 'click')
       this._snapContext = this._resolveSelectionContext();
@@ -162,7 +164,8 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     const arcIds = new Set<number>();
     for (const ref of selected) {
       const shape = layer.shapes[ref.id];
-      if (!this._collectPathShape(shape, ref.id, layer.shapes.length, vertexData, arcIds)) return null;
+      if (!this._collectPathShape(shape, ref.id, layer.shapes.length, vertexData, arcIds))
+        return null;
     }
     for (const arcId of arcIds) {
       if (!this._isValidArc(arcId, vertexData)) return null;
@@ -177,7 +180,13 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     vertexData: ArcVertexData,
     arcIds: Set<number>,
   ): shape is PathShape {
-    if (!Number.isInteger(id) || id < 0 || id >= shapeCount || !Array.isArray(shape) || shape.length === 0)
+    if (
+      !Number.isInteger(id) ||
+      id < 0 ||
+      id >= shapeCount ||
+      !Array.isArray(shape) ||
+      shape.length === 0
+    )
       return false;
     for (const part of shape) {
       if (!Array.isArray(part) || part.length === 0) return false;
@@ -198,7 +207,8 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     if (start < 0 || start + count > vertexData.xx.length || vertexData.yy.length < start + count)
       return false;
     for (let index = start; index < start + count; index++) {
-      if (!Number.isFinite(vertexData.xx[index]) || !Number.isFinite(vertexData.yy[index])) return false;
+      if (!Number.isFinite(vertexData.xx[index]) || !Number.isFinite(vertexData.yy[index]))
+        return false;
     }
     return true;
   }
@@ -209,14 +219,19 @@ export class ReshapeFeatureHandler implements Handler<ReshapeFeatureOptions> {
     this._submissionGeneration = generation;
     try {
       const result = await this._map.ops.reshapeSelected({ line: vertices });
-      if (generation === this._generation && !result.ok) this._map.fire('error', { error: result.error });
+      if (generation === this._generation && !result.ok)
+        this._map.fire('error', { error: result.error });
     } finally {
       if (this._submissionGeneration === generation) this._submissionGeneration = null;
       if (generation === this._generation) this._map.render();
     }
   }
 
-  private _findSnapTarget(px: number, py: number, context: SelectionContext): SketchSnapTarget | null {
+  private _findSnapTarget(
+    px: number,
+    py: number,
+    context: SelectionContext,
+  ): SketchSnapTarget | null {
     const threshold = this._opts.snapThreshold ?? DEFAULT_SNAP_THRESHOLD;
     const c0 = this._map.unproject(px - threshold, py - threshold);
     const c1 = this._map.unproject(px + threshold, py + threshold);

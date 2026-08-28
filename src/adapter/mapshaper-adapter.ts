@@ -749,8 +749,7 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     const isContained = (ring: number[], container: number[]) => {
       const anchor = mapshaper.internal.findAnchorPoint([ring], arcs);
       return (
-        anchor !== null &&
-        mapshaper.geom.testPointInPolygon(anchor.x, anchor.y, [container], arcs)
+        anchor !== null && mapshaper.geom.testPointInPolygon(anchor.x, anchor.y, [container], arcs)
       );
     };
     const vertexData = arcs.getVertexData!();
@@ -759,8 +758,7 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
       const offset = vertexData.ii[arcId]!;
       const count = vertexData.nn[arcId]!;
       const forward = signedArcId >= 0;
-      const vertex =
-        start === forward ? offset : offset + count - 1;
+      const vertex = start === forward ? offset : offset + count - 1;
       return `${vertexData.xx[vertex]},${vertexData.yy[vertex]}`;
     };
     const revisitsNode = (ring: number[]) => {

@@ -43,7 +43,8 @@ export function collectPolygonExteriors(
       : [],
   );
   for (let holeIndex = 0; holeIndex < shape.length; holeIndex++) {
-    if (Math.sign(shoelaceArea(partCoordinates(shape[holeIndex]!, arcs))) === exteriorSign) continue;
+    if (Math.sign(shoelaceArea(partCoordinates(shape[holeIndex]!, arcs))) === exteriorSign)
+      continue;
     const holePoints = partCoordinates(shape[holeIndex]!, arcs);
     const exterior = exteriors.find(({ exteriorIndex }) =>
       holePoints.some((point) =>
@@ -58,7 +59,6 @@ export function collectPolygonExteriors(
 function distance(a: Coordinate, b: Coordinate): number {
   return Math.hypot(b[0] - a[0], b[1] - a[1]);
 }
-
 
 function pointAlongRing(points: readonly Coordinate[], distanceAlong: number): Coordinate {
   let travelled = 0;
@@ -75,12 +75,10 @@ function pointAlongRing(points: readonly Coordinate[], distanceAlong: number): C
   return points.at(-1)!;
 }
 
-function forwardRingPath(
-  points: readonly Coordinate[],
-  from: number,
-  to: number,
-): Coordinate[] {
-  const total = points.slice(1).reduce((sum, point, index) => sum + distance(points[index]!, point), 0);
+function forwardRingPath(points: readonly Coordinate[], from: number, to: number): Coordinate[] {
+  const total = points
+    .slice(1)
+    .reduce((sum, point, index) => sum + distance(points[index]!, point), 0);
   const end = to < from ? to + total : to;
   const result = [pointAlongRing(points, from)];
   const lifted: Array<{ offset: number; point: Coordinate }> = [];
@@ -97,7 +95,9 @@ function forwardRingPath(
 }
 
 function lineMidpoint(points: readonly Coordinate[]): Coordinate {
-  const total = points.slice(1).reduce((sum, point, index) => sum + distance(points[index]!, point), 0);
+  const total = points
+    .slice(1)
+    .reduce((sum, point, index) => sum + distance(points[index]!, point), 0);
   let travelled = 0;
   for (let index = 1; index < points.length; index++) {
     const a = points[index - 1]!;
@@ -111,7 +111,6 @@ function lineMidpoint(points: readonly Coordinate[]): Coordinate {
   }
   return points[0]!;
 }
-
 
 function validCandidate(
   candidate: PathShape,
@@ -129,9 +128,9 @@ function validCandidate(
     if (candidateIndex.conflictsWithAny(shapeSegments([hole], arcs))) return false;
   }
   return !otherExteriors.some((part) =>
-    partCoordinates(part, arcs).slice(0, -1).some((point) =>
-      adapter.testPointInPolygon(point[0], point[1], candidate, arcs),
-    ),
+    partCoordinates(part, arcs)
+      .slice(0, -1)
+      .some((point) => adapter.testPointInPolygon(point[0], point[1], candidate, arcs)),
   );
 }
 
@@ -162,7 +161,10 @@ export function reshapeSelectedPolygon(
     const points = partCoordinates(part, arcs);
     const forward = forwardRingPath(points, first.targetDist, last.targetDist);
     const reverse = forwardRingPath(points, last.targetDist, first.targetDist);
-    const candidateAPoints = normalizeConsecutiveCoordinates([...forward, ...[...clipped].reverse().slice(1)]);
+    const candidateAPoints = normalizeConsecutiveCoordinates([
+      ...forward,
+      ...[...clipped].reverse().slice(1),
+    ]);
     const candidateBPoints = normalizeConsecutiveCoordinates([...clipped, ...reverse.slice(1)]);
     const originalSign = Math.sign(shoelaceArea(points));
     if (Math.sign(shoelaceArea(candidateAPoints)) !== originalSign) candidateAPoints.reverse();

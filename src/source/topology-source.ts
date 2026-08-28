@@ -408,8 +408,7 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
 
       const inputFormats = dataset.info?.input_formats ?? [];
       const isShapefileOnly =
-        primaryFiles.length > 0 &&
-        primaryFiles.every((filename) => /\.shp$/i.test(filename));
+        primaryFiles.length > 0 && primaryFiles.every((filename) => /\.shp$/i.test(filename));
       const isTopoJsonOnly =
         inputFormats.length > 0 && inputFormats.every((format) => format === 'topojson');
       const isGeoParquetOnly =

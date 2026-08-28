@@ -55,7 +55,8 @@ async function executeExample() {
     addControl: vi.fn(),
     bindHistoryShortcuts: vi.fn(),
     on: (type: string, listener: (event: EditModeEvent | { error: Error }) => void) => {
-      if (type === 'editmodechange') editModeListeners.push(listener as (event: EditModeEvent) => void);
+      if (type === 'editmodechange')
+        editModeListeners.push(listener as (event: EditModeEvent) => void);
       if (type === 'error') errorListeners.push(listener as (event: { error: Error }) => void);
     },
   };
@@ -80,12 +81,7 @@ async function executeExample() {
       'loadExampleRuntime',
       'document',
       script,
-    )(
-      installExampleMapUi,
-      autoLoadExampleFixtures,
-      loadExampleRuntime,
-      document,
-    );
+    )(installExampleMapUi, autoLoadExampleFixtures, loadExampleRuntime, document);
   } catch (error) {
     document.head.innerHTML = originalHead;
     document.body.innerHTML = originalBody;

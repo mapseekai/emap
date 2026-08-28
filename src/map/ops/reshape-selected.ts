@@ -81,7 +81,8 @@ export async function reshapeSelected(
     if (!dataset?.arcs) continue;
     const result = await ctx.runPreparedDatasetMutation(
       sourceId,
-      (value: ReshapeSelectedResult) => `Reshape ${value.reshapedCount} feature${value.reshapedCount === 1 ? '' : 's'}`,
+      (value: ReshapeSelectedResult) =>
+        `Reshape ${value.reshapedCount} feature${value.reshapedCount === 1 ? '' : 's'}`,
       (working, original) => {
         if (original !== dataset) return Err.staleOperation(sourceId, 'Reshape features');
         if (!working.arcs) {
@@ -103,7 +104,13 @@ export async function reshapeSelected(
               for (let featureId = 0; featureId < layer.shapes.length; featureId++) {
                 let shape: PathShape | null = null;
                 try {
-                  shape = reshapeSelectedPolygon(working, layerIndex, featureId, normalizedLine, adapter);
+                  shape = reshapeSelectedPolygon(
+                    working,
+                    layerIndex,
+                    featureId,
+                    normalizedLine,
+                    adapter,
+                  );
                 } catch (error) {
                   if (!(error instanceof SplitGeometryValidationError)) throw error;
                 }
@@ -121,7 +128,13 @@ export async function reshapeSelected(
                   if (!(error instanceof SplitGeometryValidationError)) throw error;
                 }
               }
-              const reshaped = reshapeSelectedPolylines(working, layerIndex, ids, normalizedLine, adapter);
+              const reshaped = reshapeSelectedPolylines(
+                working,
+                layerIndex,
+                ids,
+                normalizedLine,
+                adapter,
+              );
               for (const { featureId, shape } of reshaped) {
                 layer.shapes.splice(featureId, 1, shape);
                 changed.push({ source: sourceId, layer: layerId, id: featureId });
@@ -129,11 +142,15 @@ export async function reshapeSelected(
             }
           }
         } catch (error) {
-          if (error instanceof SplitGeometryValidationError) return Err.validation(error.field, error.reason);
+          if (error instanceof SplitGeometryValidationError)
+            return Err.validation(error.field, error.reason);
           throw error;
         }
         if (changed.length === 0) return Err.validation('line', 'did not reshape any feature');
-        return { value: { reshapedCount: changed.length }, selection: ctx.host._selection.getAll() };
+        return {
+          value: { reshapedCount: changed.length },
+          selection: ctx.host._selection.getAll(),
+        };
       },
     );
     if (result.ok) {

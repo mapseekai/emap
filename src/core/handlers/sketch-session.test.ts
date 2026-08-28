@@ -30,7 +30,11 @@ function createHost() {
 describe('SketchSession', () => {
   it('places vertices and publishes a cursor overlay', () => {
     const host = createHost();
-    const session = new SketchSession(host as unknown as EditHandlerHost, { minVertices: 2 }, vi.fn());
+    const session = new SketchSession(
+      host as unknown as EditHandlerHost,
+      { minVertices: 2 },
+      vi.fn(),
+    );
 
     expect(session.handlePointer(event('move', 3, 4))).toBe('passthrough');
     session.handlePointer(event('click', 1, 2));
@@ -50,7 +54,11 @@ describe('SketchSession', () => {
   it('clears an incomplete sketch and prevents the native context menu', () => {
     const host = createHost();
     const finish = vi.fn();
-    const session = new SketchSession(host as unknown as EditHandlerHost, { minVertices: 2 }, finish);
+    const session = new SketchSession(
+      host as unknown as EditHandlerHost,
+      { minVertices: 2 },
+      finish,
+    );
     session.handlePointer(event('click', 1, 2));
     const originalEvent = new Event('contextmenu', { cancelable: true });
 
@@ -65,12 +73,19 @@ describe('SketchSession', () => {
   it('finishes sufficient vertices and clears after the callback', () => {
     const host = createHost();
     const finish = vi.fn();
-    const session = new SketchSession(host as unknown as EditHandlerHost, { minVertices: 2 }, finish);
+    const session = new SketchSession(
+      host as unknown as EditHandlerHost,
+      { minVertices: 2 },
+      finish,
+    );
     session.handlePointer(event('click', 1, 2));
     session.handlePointer(event('click', 3, 4));
     session.handlePointer(event('contextmenu'));
 
-    expect(finish).toHaveBeenCalledWith([[1, 2], [3, 4]]);
+    expect(finish).toHaveBeenCalledWith([
+      [1, 2],
+      [3, 4],
+    ]);
     expect(session.vertexCount).toBe(0);
   });
 
@@ -87,7 +102,12 @@ describe('SketchSession', () => {
     session.handlePointer(event('click', 5, 6));
     session.handlePointer(event('contextmenu'));
 
-    expect(finish).toHaveBeenCalledWith([[1, 2], [3, 4], [5, 6], [1, 2]]);
+    expect(finish).toHaveBeenCalledWith([
+      [1, 2],
+      [3, 4],
+      [5, 6],
+      [1, 2],
+    ]);
   });
 
   it('auto-finishes at the configured vertex count', () => {
@@ -106,7 +126,11 @@ describe('SketchSession', () => {
 
   it('clears and renders when Escape is pressed', () => {
     const host = createHost();
-    const session = new SketchSession(host as unknown as EditHandlerHost, { minVertices: 2 }, vi.fn());
+    const session = new SketchSession(
+      host as unknown as EditHandlerHost,
+      { minVertices: 2 },
+      vi.fn(),
+    );
     session.handlePointer(event('click', 1, 2));
     host.render.mockClear();
 
@@ -119,7 +143,10 @@ describe('SketchSession', () => {
 
   it('uses a resolved snap coordinate and displays its kind', () => {
     const host = createHost();
-    const resolveSnap = vi.fn(() => ({ coord: [8, 9] as [number, number], kind: 'vertex' as const }));
+    const resolveSnap = vi.fn(() => ({
+      coord: [8, 9] as [number, number],
+      kind: 'vertex' as const,
+    }));
     const session = new SketchSession(
       host as unknown as EditHandlerHost,
       { minVertices: 2, resolveSnap },
@@ -129,12 +156,14 @@ describe('SketchSession', () => {
     session.handlePointer(event('click', 1, 2));
 
     expect(resolveSnap).toHaveBeenCalledWith(1, 2);
-    expect(host.setEditDrawState).toHaveBeenLastCalledWith(expect.objectContaining({
-      vertices: [[8, 9]],
-      cursorCoord: [8, 9],
-      snapCoord: [8, 9],
-      snapKind: 'vertex',
-    }));
+    expect(host.setEditDrawState).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        vertices: [[8, 9]],
+        cursorCoord: [8, 9],
+        snapCoord: [8, 9],
+        snapKind: 'vertex',
+      }),
+    );
   });
 
   it('does not place a vertex when canPlace rejects the snap result', () => {

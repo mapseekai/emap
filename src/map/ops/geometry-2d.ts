@@ -65,9 +65,7 @@ export function segmentIntersection(
   return [a[0] + t * abx, a[1] + t * aby];
 }
 
-export function normalizeConsecutiveCoordinates(
-  coordinates: readonly Coordinate[],
-): Coordinate[] {
+export function normalizeConsecutiveCoordinates(coordinates: readonly Coordinate[]): Coordinate[] {
   return coordinates.filter(
     (coordinate, index) =>
       index === 0 ||
@@ -236,16 +234,11 @@ export class SegmentConflictIndex {
    * interleave angularly around it; a tangent (non-interleaved) contact is
    * exempt.
    */
-  private _ringsCrossAtContact(
-    left: number,
-    point: Coordinate,
-    right: number,
-  ): boolean {
+  private _ringsCrossAtContact(left: number, point: Coordinate, right: number): boolean {
     const [lu, lv] = this._raysAtContact(left, point);
     const [ru, rv] = this._raysAtContact(right, point);
     const TAU = Math.PI * 2;
-    const angle = (q: Coordinate) =>
-      Math.atan2(q[1] - point[1], q[0] - point[0]);
+    const angle = (q: Coordinate) => Math.atan2(q[1] - point[1], q[0] - point[0]);
     const norm = (x: number) => {
       const wrapped = x % TAU;
       return wrapped < 0 ? wrapped + TAU : wrapped;
@@ -267,8 +260,7 @@ export class SegmentConflictIndex {
     const [a, b] = this._segments[index]!;
     const ownFar = coincident(point, a) ? b : a;
     const neighborIndex =
-      ringStart +
-      (coincident(point, a) ? (position - 1 + size) % size : (position + 1) % size);
+      ringStart + (coincident(point, a) ? (position - 1 + size) % size : (position + 1) % size);
     const [na, nb] = this._segments[neighborIndex]!;
     const neighborFar = coincident(point, na) ? nb : na;
     return [ownFar, neighborFar];
@@ -306,12 +298,7 @@ function coincident(p: Coordinate, q: Coordinate): boolean {
  * `segmentsConflict` (no crossing point): contact shorter than the
  * parameter-scale tolerance is a touch, not a conflict.
  */
-function collinearOverlap(
-  a: Coordinate,
-  b: Coordinate,
-  c: Coordinate,
-  d: Coordinate,
-): boolean {
+function collinearOverlap(a: Coordinate, b: Coordinate, c: Coordinate, d: Coordinate): boolean {
   const dx = Math.abs(b[0] - a[0]);
   const dy = Math.abs(b[1] - a[1]);
   const axis = dx >= dy ? 0 : 1;
@@ -338,7 +325,10 @@ export function validatePolygonArcReferences(
       let vertices = 0;
       while (iterator.hasNext()) {
         if (!Number.isFinite(iterator.x) || !Number.isFinite(iterator.y))
-          throw new SplitGeometryValidationError('geometry', 'selected polygon geometry is invalid');
+          throw new SplitGeometryValidationError(
+            'geometry',
+            'selected polygon geometry is invalid',
+          );
         vertices++;
       }
       if (vertices < 2)
@@ -396,8 +386,13 @@ export function validatePolygon(
 }
 
 export function shoelaceArea(ring: readonly Coordinate[]): number {
-  return ring.reduce(
-    (area, point, index) => area + point[0] * ring[(index + 1) % ring.length]![1] - point[1] * ring[(index + 1) % ring.length]![0],
-    0,
-  ) / 2;
+  return (
+    ring.reduce(
+      (area, point, index) =>
+        area +
+        point[0] * ring[(index + 1) % ring.length]![1] -
+        point[1] * ring[(index + 1) % ring.length]![0],
+      0,
+    ) / 2
+  );
 }

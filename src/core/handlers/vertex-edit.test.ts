@@ -1280,254 +1280,253 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
     document.getElementById('emap-ctx-menu')?.remove();
   });
 
-describe('VertexEditHandler batch vertex selection', () => {
-  function pointer(
-    kind: NormalizedPointerEvent['kind'],
-    x: number,
-    y: number,
-  ): NormalizedPointerEvent {
-    return {
-      kind,
-      point: { x, y },
-      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
-      button: 0,
-      originalEvent: new Event(kind),
-    };
-  }
+  describe('VertexEditHandler batch vertex selection', () => {
+    function pointer(
+      kind: NormalizedPointerEvent['kind'],
+      x: number,
+      y: number,
+    ): NormalizedPointerEvent {
+      return {
+        kind,
+        point: { x, y },
+        modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+        button: 0,
+        originalEvent: new Event(kind),
+      };
+    }
 
-  it('publishes the rubber-band rectangle while selecting from empty space', () => {
-    const setEditVertexState = vi.fn();
-    const map = {
-      setEditVertexState,
-      render: vi.fn(),
-    };
-    const handler = new VertexEditHandler(map as unknown as Emap);
-    setPrivate(handler, '_enabled', true);
+    it('publishes the rubber-band rectangle while selecting from empty space', () => {
+      const setEditVertexState = vi.fn();
+      const map = {
+        setEditVertexState,
+        render: vi.fn(),
+      };
+      const handler = new VertexEditHandler(map as unknown as Emap);
+      setPrivate(handler, '_enabled', true);
 
-    expect(handler.handlePointer(pointer('down', 10, 20))).toBe('exclusive');
-    expect(handler.handlePointer(pointer('move', 30, 50))).toBe('exclusive');
-    expect(setEditVertexState).toHaveBeenLastCalledWith(
-      expect.objectContaining({ band: { x0: 10, y0: 20, x1: 30, y1: 50 } }),
-    );
+      expect(handler.handlePointer(pointer('down', 10, 20))).toBe('exclusive');
+      expect(handler.handlePointer(pointer('move', 30, 50))).toBe('exclusive');
+      expect(setEditVertexState).toHaveBeenLastCalledWith(
+        expect.objectContaining({ band: { x0: 10, y0: 20, x1: 30, y1: 50 } }),
+      );
+    });
+    it('deletes two selected nodes in one source atomically and undo restores both', () => {
+      let nn = Int32Array.from([3, 3]);
+      let xx = Float64Array.from([0, 1, 2, 3, 4, 5]);
+      let yy = Float64Array.from([0, 0, 0, 0, 0, 0]);
+      let ii = Int32Array.from([0, 3]);
+      const arcs = {
+        size: () => nn.length,
+        getVertexData: () => ({ nn, xx, yy, ii, zz: null }),
+        updateVertexData: (nextNn: Int32Array, nextXx: Float64Array, nextYy: Float64Array) => {
+          nn = nextNn;
+          xx = nextXx;
+          yy = nextYy;
+          ii = Int32Array.from([0, nextNn[0]]);
+        },
+      };
+      const layer = { geometry_type: 'polyline', shapes: [[[0]], [[1]]] };
+      const source = {
+        getArcs: () => arcs,
+        getLayers: () => [layer],
+        getDataset: () => ({ arcs, layers: [layer], info: {}, editVersion: 0 }),
+        refreshDisplayArcs: vi.fn(),
+      };
+      const pushed: Array<{ undo(): void }> = [];
+      const map = {
+        getSource: () => source,
+        pushCommand: (command: { undo(): void }) => pushed.push(command),
+        setEditVertexState: vi.fn(),
+        clearEditVertexState: vi.fn(),
+        render: vi.fn(),
+        fire: vi.fn(),
+      };
+      const handler = new VertexEditHandler(map as unknown as Emap);
+      setPrivate(handler, '_selectedNodes', [
+        { source: 'source', layer: 'layer', vertexIds: [1], coords: [1, 0] },
+        { source: 'source', layer: 'layer', vertexIds: [4], coords: [4, 0] },
+      ]);
+
+      callPrivate(handler, '_onKeyDown', new KeyboardEvent('keydown', { key: 'Delete' }));
+
+      expect(Array.from(xx)).toEqual([0, 2, 3, 5]);
+      expect(pushed).toHaveLength(1);
+      pushed[0].undo();
+      expect(Array.from(xx)).toEqual([0, 1, 2, 3, 4, 5]);
+    });
+    it('deletes a shared endpoint and an interior node in one history entry and undo restores both', () => {
+      const buildOffsets = (lengths: Int32Array): Int32Array => {
+        const offsets = new Int32Array(lengths.length);
+        let offset = 0;
+        for (let arcId = 0; arcId < lengths.length; arcId++) {
+          offsets[arcId] = offset;
+          offset += lengths[arcId]!;
+        }
+        return offsets;
+      };
+      let nn = Int32Array.from([2, 2, 3]);
+      let xx = Float64Array.from([0, 1, 1, 2, 10, 11, 12]);
+      let yy = Float64Array.from([0, 0, 0, 0, 0, 0, 0]);
+      let ii = buildOffsets(nn);
+      const arcs = {
+        size: () => nn.length,
+        getVertexData: () => ({ nn, xx, yy, ii, zz: null }),
+        updateVertexData: (nextNn: Int32Array, nextXx: Float64Array, nextYy: Float64Array) => {
+          nn = nextNn;
+          xx = nextXx;
+          yy = nextYy;
+          ii = buildOffsets(nextNn);
+        },
+      };
+      const layer = { geometry_type: 'polyline', shapes: [[[0, 1]], [[~1, ~0]], [[2]]] };
+      const source = {
+        getArcs: () => arcs,
+        getLayers: () => [layer],
+        getDataset: () => ({ arcs, layers: [layer], info: {}, editVersion: 0 }),
+        refreshDisplayArcs: vi.fn(),
+      };
+      const pushed: Array<{ undo(): void }> = [];
+      const map = {
+        getSource: () => source,
+        pushCommand: (command: { undo(): void }) => pushed.push(command),
+        setEditVertexState: vi.fn(),
+        clearEditVertexState: vi.fn(),
+        render: vi.fn(),
+        fire: vi.fn(),
+      };
+      const handler = new VertexEditHandler(map as unknown as Emap);
+      setPrivate(handler, '_selectedNodes', [
+        { source: 'source', layer: 'layer', vertexIds: [1, 2], coords: [1, 0] },
+        { source: 'source', layer: 'layer', vertexIds: [5], coords: [11, 0] },
+      ]);
+
+      callPrivate(handler, '_onKeyDown', new KeyboardEvent('keydown', { key: 'Delete' }));
+
+      // Endpoint (1,0) bridges arc 0 and arc 1; interior vertex 5 drops from arc 2.
+      expect(Array.from(nn)).toEqual([1, 1, 2, 2]);
+      expect(Array.from(xx)).toEqual([0, 2, 10, 12, 0, 2]);
+      expect(layer.shapes).toEqual([[[0, 3, 1]], [[~1, ~3, ~0]], [[2]]]);
+      expect(pushed).toHaveLength(1);
+      pushed[0].undo();
+      expect(Array.from(nn)).toEqual([2, 2, 3]);
+      expect(Array.from(xx)).toEqual([0, 1, 1, 2, 10, 11, 12]);
+      expect(layer.shapes).toEqual([[[0, 1]], [[~1, ~0]], [[2]]]);
+    });
+    it('selects enclosed nodes and adds to that set with Shift', () => {
+      const arcs = {
+        getArcIter: (arcId: number) => makeArcIter(arcId === 0 ? [[1, 1]] : [[5, 5]]),
+        getVertexData: () => ({
+          xx: Float64Array.from([1, 5]),
+          yy: Float64Array.from([1, 5]),
+          nn: Int32Array.from([1, 1]),
+          ii: Int32Array.from([0, 1]),
+        }),
+      };
+      const layer = { geometry_type: 'polyline', shapes: [[[0]], [[1]]] };
+      const queryFeatures = vi.fn(() => [
+        { id: 0, source: 'source', layer: 'layer', geometryType: 'polyline' },
+      ]);
+      const map = {
+        queryFeatures,
+        getSource: () => ({ getArcs: () => arcs }),
+        layers: { resolve: () => layer },
+        project: (x: number, y: number) => [x, y] as [number, number],
+        setEditVertexState: vi.fn(),
+        render: vi.fn(),
+      };
+      Reflect.set(
+        mapshaper.internal as object,
+        'findNearestVertices',
+        vi.fn((coord: [number, number]) => (coord[0] === 1 ? [0] : [1])),
+      );
+      const handler = new VertexEditHandler(map as unknown as Emap);
+      setPrivate(handler, '_bandStart', { x: 0, y: 0 });
+      setPrivate(handler, '_bandAdditive', false);
+      callPrivate(handler, '_finishBand', 3, 3);
+      expect(Reflect.get(handler, '_selectedNodes')).toEqual([
+        { source: 'source', layer: 'layer', vertexIds: [0], coords: [1, 1] },
+      ]);
+
+      queryFeatures.mockReturnValue([
+        { id: 1, source: 'source', layer: 'layer', geometryType: 'polyline' },
+      ]);
+      setPrivate(handler, '_bandStart', { x: 3, y: 3 });
+      setPrivate(handler, '_bandAdditive', true);
+      callPrivate(handler, '_finishBand', 7, 7);
+      expect(Reflect.get(handler, '_selectedNodes')).toEqual([
+        { source: 'source', layer: 'layer', vertexIds: [0], coords: [1, 1] },
+        { source: 'source', layer: 'layer', vertexIds: [1], coords: [5, 5] },
+      ]);
+    });
+    it('moves a selected shared node once and records one batch history entry', () => {
+      const arcs = {};
+      const source = { getArcs: () => arcs, refreshDisplayArcs: vi.fn(), getDataset: () => ({}) };
+      const pushCommand = vi.fn();
+      const map = {
+        unproject: (x: number, y: number) => [x, y] as [number, number],
+        getSource: () => source,
+        pushCommand,
+        setEditVertexState: vi.fn(),
+        render: vi.fn(),
+      };
+      const snapVertices = vi.fn();
+      Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapVertices);
+      const handler = new VertexEditHandler(map as unknown as Emap);
+      setPrivate(handler, '_selectedNodes', [
+        { source: 'source', layer: 'layer', vertexIds: [1, 4], coords: [1, 1] },
+      ]);
+      setPrivate(handler, '_batchDragging', true);
+      setPrivate(handler, '_dragging', true);
+      setPrivate(handler, '_batchDragFrom', [1, 1]);
+
+      callPrivate(handler, '_handleDrag', 3, 4);
+      callPrivate(handler, '_finishDrag', 3, 4);
+
+      expect(snapVertices).toHaveBeenCalledTimes(1);
+      expect(snapVertices).toHaveBeenCalledWith([1, 4], [3, 4], arcs);
+      expect(pushCommand).toHaveBeenCalledOnce();
+    });
+    it('moves a shared feature edge node once across both feature references', () => {
+      const sharedEdge = [[0]];
+      const layer = { geometry_type: 'polygon', shapes: [sharedEdge, sharedEdge] };
+      const arcs = {};
+      const source = { getArcs: () => arcs };
+      const map = {
+        unproject: (x: number, y: number) => [x, y] as [number, number],
+        getSource: () => source,
+        setEditVertexState: vi.fn(),
+        render: vi.fn(),
+      };
+      const snapVertices = vi.fn();
+      Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapVertices);
+      const handler = new VertexEditHandler(map as unknown as Emap);
+      setPrivate(handler, '_selectedNodes', [
+        { source: 'source', layer: 'layer', vertexIds: [1], coords: [1, 0] },
+      ]);
+      setPrivate(handler, '_batchDragging', true);
+      setPrivate(handler, '_batchDragFrom', [1, 0]);
+
+      callPrivate(handler, '_handleDrag', 4, 2);
+
+      expect(layer.shapes[0]).toBe(layer.shapes[1]);
+      expect(snapVertices).toHaveBeenCalledOnce();
+      expect(snapVertices).toHaveBeenCalledWith([1], [4, 2], arcs);
+    });
+    it('clears the selected node set on Escape', () => {
+      const map = {
+        setEditVertexState: vi.fn(),
+        render: vi.fn(),
+        getSource: vi.fn(),
+      };
+      const handler = new VertexEditHandler(map as unknown as Emap);
+      setPrivate(handler, '_selectedNodes', [
+        { source: 'source', layer: 'layer', vertexIds: [1], coords: [1, 0] },
+      ]);
+
+      callPrivate(handler, '_onKeyDown', new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(Reflect.get(handler, '_selectedNodes')).toEqual([]);
+      expect(map.render).toHaveBeenCalledOnce();
+    });
   });
-  it('deletes two selected nodes in one source atomically and undo restores both', () => {
-    let nn = Int32Array.from([3, 3]);
-    let xx = Float64Array.from([0, 1, 2, 3, 4, 5]);
-    let yy = Float64Array.from([0, 0, 0, 0, 0, 0]);
-    let ii = Int32Array.from([0, 3]);
-    const arcs = {
-      size: () => nn.length,
-      getVertexData: () => ({ nn, xx, yy, ii, zz: null }),
-      updateVertexData: (nextNn: Int32Array, nextXx: Float64Array, nextYy: Float64Array) => {
-        nn = nextNn;
-        xx = nextXx;
-        yy = nextYy;
-        ii = Int32Array.from([0, nextNn[0]]);
-      },
-    };
-    const layer = { geometry_type: 'polyline', shapes: [[[0]], [[1]]] };
-    const source = {
-      getArcs: () => arcs,
-      getLayers: () => [layer],
-      getDataset: () => ({ arcs, layers: [layer], info: {}, editVersion: 0 }),
-      refreshDisplayArcs: vi.fn(),
-    };
-    const pushed: Array<{ undo(): void }> = [];
-    const map = {
-      getSource: () => source,
-      pushCommand: (command: { undo(): void }) => pushed.push(command),
-      setEditVertexState: vi.fn(),
-      clearEditVertexState: vi.fn(),
-      render: vi.fn(),
-      fire: vi.fn(),
-    };
-    const handler = new VertexEditHandler(map as unknown as Emap);
-    setPrivate(handler, '_selectedNodes', [
-      { source: 'source', layer: 'layer', vertexIds: [1], coords: [1, 0] },
-      { source: 'source', layer: 'layer', vertexIds: [4], coords: [4, 0] },
-    ]);
-
-    callPrivate(handler, '_onKeyDown', new KeyboardEvent('keydown', { key: 'Delete' }));
-
-    expect(Array.from(xx)).toEqual([0, 2, 3, 5]);
-    expect(pushed).toHaveLength(1);
-    pushed[0].undo();
-    expect(Array.from(xx)).toEqual([0, 1, 2, 3, 4, 5]);
-  });
-  it('deletes a shared endpoint and an interior node in one history entry and undo restores both', () => {
-    const buildOffsets = (lengths: Int32Array): Int32Array => {
-      const offsets = new Int32Array(lengths.length);
-      let offset = 0;
-      for (let arcId = 0; arcId < lengths.length; arcId++) {
-        offsets[arcId] = offset;
-        offset += lengths[arcId]!;
-      }
-      return offsets;
-    };
-    let nn = Int32Array.from([2, 2, 3]);
-    let xx = Float64Array.from([0, 1, 1, 2, 10, 11, 12]);
-    let yy = Float64Array.from([0, 0, 0, 0, 0, 0, 0]);
-    let ii = buildOffsets(nn);
-    const arcs = {
-      size: () => nn.length,
-      getVertexData: () => ({ nn, xx, yy, ii, zz: null }),
-      updateVertexData: (nextNn: Int32Array, nextXx: Float64Array, nextYy: Float64Array) => {
-        nn = nextNn;
-        xx = nextXx;
-        yy = nextYy;
-        ii = buildOffsets(nextNn);
-      },
-    };
-    const layer = { geometry_type: 'polyline', shapes: [[[0, 1]], [[~1, ~0]], [[2]]] };
-    const source = {
-      getArcs: () => arcs,
-      getLayers: () => [layer],
-      getDataset: () => ({ arcs, layers: [layer], info: {}, editVersion: 0 }),
-      refreshDisplayArcs: vi.fn(),
-    };
-    const pushed: Array<{ undo(): void }> = [];
-    const map = {
-      getSource: () => source,
-      pushCommand: (command: { undo(): void }) => pushed.push(command),
-      setEditVertexState: vi.fn(),
-      clearEditVertexState: vi.fn(),
-      render: vi.fn(),
-      fire: vi.fn(),
-    };
-    const handler = new VertexEditHandler(map as unknown as Emap);
-    setPrivate(handler, '_selectedNodes', [
-      { source: 'source', layer: 'layer', vertexIds: [1, 2], coords: [1, 0] },
-      { source: 'source', layer: 'layer', vertexIds: [5], coords: [11, 0] },
-    ]);
-
-    callPrivate(handler, '_onKeyDown', new KeyboardEvent('keydown', { key: 'Delete' }));
-
-    // Endpoint (1,0) bridges arc 0 and arc 1; interior vertex 5 drops from arc 2.
-    expect(Array.from(nn)).toEqual([1, 1, 2, 2]);
-    expect(Array.from(xx)).toEqual([0, 2, 10, 12, 0, 2]);
-    expect(layer.shapes).toEqual([[[0, 3, 1]], [[~1, ~3, ~0]], [[2]]]);
-    expect(pushed).toHaveLength(1);
-    pushed[0].undo();
-    expect(Array.from(nn)).toEqual([2, 2, 3]);
-    expect(Array.from(xx)).toEqual([0, 1, 1, 2, 10, 11, 12]);
-    expect(layer.shapes).toEqual([[[0, 1]], [[~1, ~0]], [[2]]]);
-  });
-  it('selects enclosed nodes and adds to that set with Shift', () => {
-    const arcs = {
-      getArcIter: (arcId: number) =>
-        makeArcIter(arcId === 0 ? [[1, 1]] : [[5, 5]]),
-      getVertexData: () => ({
-        xx: Float64Array.from([1, 5]),
-        yy: Float64Array.from([1, 5]),
-        nn: Int32Array.from([1, 1]),
-        ii: Int32Array.from([0, 1]),
-      }),
-    };
-    const layer = { geometry_type: 'polyline', shapes: [[[0]], [[1]]] };
-    const queryFeatures = vi.fn(() => [
-      { id: 0, source: 'source', layer: 'layer', geometryType: 'polyline' },
-    ]);
-    const map = {
-      queryFeatures,
-      getSource: () => ({ getArcs: () => arcs }),
-      layers: { resolve: () => layer },
-      project: (x: number, y: number) => [x, y] as [number, number],
-      setEditVertexState: vi.fn(),
-      render: vi.fn(),
-    };
-    Reflect.set(
-      mapshaper.internal as object,
-      'findNearestVertices',
-      vi.fn((coord: [number, number]) => (coord[0] === 1 ? [0] : [1])),
-    );
-    const handler = new VertexEditHandler(map as unknown as Emap);
-    setPrivate(handler, '_bandStart', { x: 0, y: 0 });
-    setPrivate(handler, '_bandAdditive', false);
-    callPrivate(handler, '_finishBand', 3, 3);
-    expect(Reflect.get(handler, '_selectedNodes')).toEqual([
-      { source: 'source', layer: 'layer', vertexIds: [0], coords: [1, 1] },
-    ]);
-
-    queryFeatures.mockReturnValue([
-      { id: 1, source: 'source', layer: 'layer', geometryType: 'polyline' },
-    ]);
-    setPrivate(handler, '_bandStart', { x: 3, y: 3 });
-    setPrivate(handler, '_bandAdditive', true);
-    callPrivate(handler, '_finishBand', 7, 7);
-    expect(Reflect.get(handler, '_selectedNodes')).toEqual([
-      { source: 'source', layer: 'layer', vertexIds: [0], coords: [1, 1] },
-      { source: 'source', layer: 'layer', vertexIds: [1], coords: [5, 5] },
-    ]);
-  });
-  it('moves a selected shared node once and records one batch history entry', () => {
-    const arcs = {};
-    const source = { getArcs: () => arcs, refreshDisplayArcs: vi.fn(), getDataset: () => ({}) };
-    const pushCommand = vi.fn();
-    const map = {
-      unproject: (x: number, y: number) => [x, y] as [number, number],
-      getSource: () => source,
-      pushCommand,
-      setEditVertexState: vi.fn(),
-      render: vi.fn(),
-    };
-    const snapVertices = vi.fn();
-    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapVertices);
-    const handler = new VertexEditHandler(map as unknown as Emap);
-    setPrivate(handler, '_selectedNodes', [
-      { source: 'source', layer: 'layer', vertexIds: [1, 4], coords: [1, 1] },
-    ]);
-    setPrivate(handler, '_batchDragging', true);
-    setPrivate(handler, '_dragging', true);
-    setPrivate(handler, '_batchDragFrom', [1, 1]);
-
-    callPrivate(handler, '_handleDrag', 3, 4);
-    callPrivate(handler, '_finishDrag', 3, 4);
-
-    expect(snapVertices).toHaveBeenCalledTimes(1);
-    expect(snapVertices).toHaveBeenCalledWith([1, 4], [3, 4], arcs);
-    expect(pushCommand).toHaveBeenCalledOnce();
-  });
-  it('moves a shared feature edge node once across both feature references', () => {
-    const sharedEdge = [[0]];
-    const layer = { geometry_type: 'polygon', shapes: [sharedEdge, sharedEdge] };
-    const arcs = {};
-    const source = { getArcs: () => arcs };
-    const map = {
-      unproject: (x: number, y: number) => [x, y] as [number, number],
-      getSource: () => source,
-      setEditVertexState: vi.fn(),
-      render: vi.fn(),
-    };
-    const snapVertices = vi.fn();
-    Reflect.set(mapshaper.internal as object, 'snapVerticesToPoint', snapVertices);
-    const handler = new VertexEditHandler(map as unknown as Emap);
-    setPrivate(handler, '_selectedNodes', [
-      { source: 'source', layer: 'layer', vertexIds: [1], coords: [1, 0] },
-    ]);
-    setPrivate(handler, '_batchDragging', true);
-    setPrivate(handler, '_batchDragFrom', [1, 0]);
-
-    callPrivate(handler, '_handleDrag', 4, 2);
-
-    expect(layer.shapes[0]).toBe(layer.shapes[1]);
-    expect(snapVertices).toHaveBeenCalledOnce();
-    expect(snapVertices).toHaveBeenCalledWith([1], [4, 2], arcs);
-  });
-  it('clears the selected node set on Escape', () => {
-    const map = {
-      setEditVertexState: vi.fn(),
-      render: vi.fn(),
-      getSource: vi.fn(),
-    };
-    const handler = new VertexEditHandler(map as unknown as Emap);
-    setPrivate(handler, '_selectedNodes', [
-      { source: 'source', layer: 'layer', vertexIds: [1], coords: [1, 0] },
-    ]);
-
-    callPrivate(handler, '_onKeyDown', new KeyboardEvent('keydown', { key: 'Escape' }));
-
-    expect(Reflect.get(handler, '_selectedNodes')).toEqual([]);
-    expect(map.render).toHaveBeenCalledOnce();
-  });
-});
 });

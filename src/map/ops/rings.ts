@@ -55,7 +55,13 @@ function distanceToSegment(point: Coordinate, start: Coordinate, end: Coordinate
   const dx = end[0] - start[0];
   const dy = end[1] - start[1];
   const lengthSquared = dx * dx + dy * dy;
-  const t = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSquared));
+  const t =
+    lengthSquared === 0
+      ? 0
+      : Math.max(
+          0,
+          Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSquared),
+        );
   return Math.hypot(point[0] - (start[0] + t * dx), point[1] - (start[1] + t * dy));
 }
 
@@ -69,7 +75,8 @@ function validateTargetShape(
     validatePolygon(shape, arcs, adapter);
     return null;
   } catch (error) {
-    if (error instanceof SplitGeometryValidationError) return Err.validation('geometry', error.reason);
+    if (error instanceof SplitGeometryValidationError)
+      return Err.validation('geometry', error.reason);
     throw error;
   }
 }
@@ -98,7 +105,9 @@ function ringTarget(
   const exterior = collectPolygonExteriors(shape, arcs, adapter).find(({ exteriorIndex }) =>
     ring
       .slice(0, -1)
-      .every((point) => adapter.testPointInPolygon(point[0], point[1], [shape[exteriorIndex]!], arcs)),
+      .every((point) =>
+        adapter.testPointInPolygon(point[0], point[1], [shape[exteriorIndex]!], arcs),
+      ),
   );
   if (!exterior) return 'outside';
   return {
@@ -115,7 +124,8 @@ function ringTarget(
 export async function addRing(ctx: OpContext, options: AddRingOptions): Promise<OpResult<void>> {
   const ring = normalizeRing(options.ring);
   if (!ring) return Err.validation('ring', 'ring coordinates are invalid');
-  if (Math.abs(shoelaceArea(ring)) === 0) return Err.validation('ring', 'ring must enclose an area');
+  if (Math.abs(shoelaceArea(ring)) === 0)
+    return Err.validation('ring', 'ring must enclose an area');
   if (new SegmentConflictIndex([ringSegments(ring)]).hasConflict())
     return Err.validation('ring', 'ring self-intersects');
   const adapter = getDefaultMapshaperAdapter();
@@ -124,95 +134,121 @@ export async function addRing(ctx: OpContext, options: AddRingOptions): Promise<
   for (const [sourceId, source] of ctx.host._sources) {
     const dataset = source.getDataset();
     if (!dataset?.arcs) continue;
-    const result = await ctx.runPreparedDatasetMutation(sourceId, 'Add ring', (working, original) => {
-      if (original !== dataset) return Err.staleOperation(sourceId, 'Add ring');
-      const workingArcs = working.arcs!;
-      let reason: string | null = null;
-      for (const workingLayer of working.layers) {
-        if (!isPathLayer(workingLayer) || workingLayer.geometry_type !== 'polygon' || !workingLayer.shapes)
-          continue;
-        for (let featureId = 0; featureId < workingLayer.shapes.length; featureId++) {
-          const shape = workingLayer.shapes[featureId] as PathShape | null;
-          if (!shape?.length) continue;
-          // Cheap prefilter: if the first ring vertex lies outside every ring
-          // of this feature, the ring cannot be contained — skip the precise
-          // (expensive) ringTarget analysis for it.
+    const result = await ctx.runPreparedDatasetMutation(
+      sourceId,
+      'Add ring',
+      (working, original) => {
+        if (original !== dataset) return Err.staleOperation(sourceId, 'Add ring');
+        const workingArcs = working.arcs!;
+        let reason: string | null = null;
+        for (const workingLayer of working.layers) {
           if (
-            !shape.some((part) =>
-              adapter.testPointInPolygon(ring[0]![0], ring[0]![1], [part], workingArcs),
-            )
+            !isPathLayer(workingLayer) ||
+            workingLayer.geometry_type !== 'polygon' ||
+            !workingLayer.shapes
           )
             continue;
-          const target = ringTarget(ring, shape, workingArcs, adapter);
-          if (target === 'outside') continue;
-          if (typeof target === 'string') {
-            reason = reason ?? target;
-            continue;
+          for (let featureId = 0; featureId < workingLayer.shapes.length; featureId++) {
+            const shape = workingLayer.shapes[featureId] as PathShape | null;
+            if (!shape?.length) continue;
+            // Cheap prefilter: if the first ring vertex lies outside every ring
+            // of this feature, the ring cannot be contained — skip the precise
+            // (expensive) ringTarget analysis for it.
+            if (
+              !shape.some((part) =>
+                adapter.testPointInPolygon(ring[0]![0], ring[0]![1], [part], workingArcs),
+              )
+            )
+              continue;
+            const target = ringTarget(ring, shape, workingArcs, adapter);
+            if (target === 'outside') continue;
+            if (typeof target === 'string') {
+              reason = reason ?? target;
+              continue;
+            }
+            const shapeError = validateTargetShape(shape, workingArcs, adapter);
+            if (shapeError) return shapeError;
+            const exteriorCoordinates = shapeSegments(
+              [shape[target.exteriorIndex]!],
+              workingArcs,
+            ).map(([start]) => start);
+            const hole =
+              shoelaceArea(ring) * shoelaceArea(exteriorCoordinates) > 0
+                ? [...ring].reverse()
+                : ring;
+            const arcId = adapter.appendArc(workingArcs, hole);
+            shape.splice(target.insertIndex, 0, [arcId]);
+            return { value: undefined, selection: ctx.host._selection.getAll() };
           }
-          const shapeError = validateTargetShape(shape, workingArcs, adapter);
-          if (shapeError) return shapeError;
-          const exteriorCoordinates = shapeSegments([shape[target.exteriorIndex]!], workingArcs).map(
-            ([start]) => start,
-          );
-          const hole = shoelaceArea(ring) * shoelaceArea(exteriorCoordinates) > 0 ? [...ring].reverse() : ring;
-          const arcId = adapter.appendArc(workingArcs, hole);
-          shape.splice(target.insertIndex, 0, [arcId]);
-          return { value: undefined, selection: ctx.host._selection.getAll() };
         }
-      }
-      return Err.validation('ring', reason ?? 'ring is not inside a polygon exterior');
-    });
+        return Err.validation('ring', reason ?? 'ring is not inside a polygon exterior');
+      },
+    );
     if (result.ok) return result;
     if (result.error.kind !== 'validation') return result;
     if (result.error.reason === 'ring is not inside a polygon exterior') genericFailure ??= result;
     else specificFailure ??= result;
   }
-  return specificFailure ?? genericFailure ?? Err.validation('ring', 'ring is not inside a polygon exterior');
+  return (
+    specificFailure ??
+    genericFailure ??
+    Err.validation('ring', 'ring is not inside a polygon exterior')
+  );
 }
 
 /**
  * Removes the interior ring containing the supplied point, QGIS-style: no
  * selection is required — clicking inside a hole deletes that hole.
  */
-export async function deleteRing(ctx: OpContext, options: DeleteRingOptions): Promise<OpResult<void>> {
+export async function deleteRing(
+  ctx: OpContext,
+  options: DeleteRingOptions,
+): Promise<OpResult<void>> {
   if (!isCoordinate(options.point)) return Err.validation('ring', 'point coordinates are invalid');
   const adapter = getDefaultMapshaperAdapter();
   const [px, py] = options.point;
   for (const [sourceId, source] of ctx.host._sources) {
     const dataset = source.getDataset();
     if (!dataset?.arcs) continue;
-    const result = await ctx.runPreparedDatasetMutation(sourceId, 'Delete ring', (working, original) => {
-      if (original !== dataset) return Err.staleOperation(sourceId, 'Delete ring');
-      const workingArcs = working.arcs!;
-      for (const workingLayer of working.layers) {
-        if (!isPathLayer(workingLayer) || workingLayer.geometry_type !== 'polygon' || !workingLayer.shapes)
-          continue;
-        for (let featureId = 0; featureId < workingLayer.shapes.length; featureId++) {
-          const shape = workingLayer.shapes[featureId] as PathShape | null;
-          if (!shape?.length) continue;
-          // Cheap prefilter: unless the click falls inside at least one ring,
-          // this feature can neither contain the point in a hole nor as a
-          // body — skip the (expensive) exterior grouping for it.
+    const result = await ctx.runPreparedDatasetMutation(
+      sourceId,
+      'Delete ring',
+      (working, original) => {
+        if (original !== dataset) return Err.staleOperation(sourceId, 'Delete ring');
+        const workingArcs = working.arcs!;
+        for (const workingLayer of working.layers) {
           if (
-            !shape.some((part) => adapter.testPointInPolygon(px, py, [part], workingArcs))
+            !isPathLayer(workingLayer) ||
+            workingLayer.geometry_type !== 'polygon' ||
+            !workingLayer.shapes
           )
             continue;
-          for (const group of collectPolygonExteriors(shape, workingArcs, adapter)) {
-            if (!adapter.testPointInPolygon(px, py, [shape[group.exteriorIndex]!], workingArcs)) continue;
-            const ringIndex = group.holeIndexes.find((holeIndex) =>
-              adapter.testPointInPolygon(px, py, [shape[holeIndex]!], workingArcs),
-            );
-            if (ringIndex === undefined) continue;
-            const shapeError = validateTargetShape(shape, workingArcs, adapter);
-            if (shapeError) return shapeError;
-            shape.splice(ringIndex, 1);
-            adapter.cleanArcReferences(working);
-            return { value: undefined, selection: ctx.host._selection.getAll() };
+          for (let featureId = 0; featureId < workingLayer.shapes.length; featureId++) {
+            const shape = workingLayer.shapes[featureId] as PathShape | null;
+            if (!shape?.length) continue;
+            // Cheap prefilter: unless the click falls inside at least one ring,
+            // this feature can neither contain the point in a hole nor as a
+            // body — skip the (expensive) exterior grouping for it.
+            if (!shape.some((part) => adapter.testPointInPolygon(px, py, [part], workingArcs)))
+              continue;
+            for (const group of collectPolygonExteriors(shape, workingArcs, adapter)) {
+              if (!adapter.testPointInPolygon(px, py, [shape[group.exteriorIndex]!], workingArcs))
+                continue;
+              const ringIndex = group.holeIndexes.find((holeIndex) =>
+                adapter.testPointInPolygon(px, py, [shape[holeIndex]!], workingArcs),
+              );
+              if (ringIndex === undefined) continue;
+              const shapeError = validateTargetShape(shape, workingArcs, adapter);
+              if (shapeError) return shapeError;
+              shape.splice(ringIndex, 1);
+              adapter.cleanArcReferences(working);
+              return { value: undefined, selection: ctx.host._selection.getAll() };
+            }
           }
         }
-      }
-      return Err.validation('ring', 'no ring contains the point');
-    });
+        return Err.validation('ring', 'no ring contains the point');
+      },
+    );
     if (result.ok) return result;
     if (result.error.kind !== 'validation') return result;
   }

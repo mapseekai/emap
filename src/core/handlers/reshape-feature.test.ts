@@ -63,7 +63,9 @@ describe('ReshapeFeatureHandler', () => {
   });
 
   it('enables without any selection', () => {
-    const handler = new ReshapeFeatureHandler(createMap({ selection: [] }) as unknown as EditHandlerHost);
+    const handler = new ReshapeFeatureHandler(
+      createMap({ selection: [] }) as unknown as EditHandlerHost,
+    );
     expect(() => handler.enable()).not.toThrow();
     expect(handler.isEnabled()).toBe(true);
   });

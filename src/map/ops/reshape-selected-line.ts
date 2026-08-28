@@ -61,9 +61,14 @@ function targetSegments(
   return segments;
 }
 
-function lineDistanceAt(line: readonly Coordinate[], segmentIndex: number, point: Coordinate): number {
+function lineDistanceAt(
+  line: readonly Coordinate[],
+  segmentIndex: number,
+  point: Coordinate,
+): number {
   let result = 0;
-  for (let index = 1; index <= segmentIndex; index++) result += distance(line[index - 1]!, line[index]!);
+  for (let index = 1; index <= segmentIndex; index++)
+    result += distance(line[index - 1]!, line[index]!);
   return result + distance(line[segmentIndex]!, point);
 }
 
@@ -76,8 +81,7 @@ function isTransverseAtTargetVertex(
   point: Coordinate,
 ): boolean {
   const target = segments[segmentIndex]!;
-  const closed =
-    segments.length > 1 && isSamePoint(segments[0]!.a, segments.at(-1)!.b);
+  const closed = segments.length > 1 && isSamePoint(segments[0]!.a, segments.at(-1)!.b);
   const previous = isSamePoint(point, target.a)
     ? (segments[segmentIndex - 1] ?? (closed ? segments.at(-1) : undefined))
     : target;
@@ -124,27 +128,49 @@ export function collectLineContacts(
       const point = segmentIntersection(target.a, target.b, c, d);
       if (!point) continue;
       const targetAtVertex = isSamePoint(point, target.a) || isSamePoint(point, target.b);
-      if (
-        targetAtVertex &&
-        !isTransverseAtTargetVertex(segments, targetIndex, line, c, d, point)
-      )
+      if (targetAtVertex && !isTransverseAtTargetVertex(segments, targetIndex, line, c, d, point))
         continue;
       const targetLength = target.endDist - target.startDist;
-      add(point, target.startDist + Math.min(targetLength, distance(target.a, point)), lineDistanceAt(line, lineIndex - 1, point));
+      add(
+        point,
+        target.startDist + Math.min(targetLength, distance(target.a, point)),
+        lineDistanceAt(line, lineIndex - 1, point),
+      );
     }
   }
 
   for (const linePoint of [line[0]!, line[line.length - 1]!]) {
-    let lineDist = linePoint === line[0] ? 0 : line.slice(1).reduce((sum, point, index) => sum + distance(line[index]!, point), 0);
+    let lineDist =
+      linePoint === line[0]
+        ? 0
+        : line.slice(1).reduce((sum, point, index) => sum + distance(line[index]!, point), 0);
     for (const target of segments) {
       const closest = adapter.findClosestPointOnSeg(
-        linePoint[0], linePoint[1], target.a[0], target.a[1], target.b[0], target.b[1], 0,
+        linePoint[0],
+        linePoint[1],
+        target.a[0],
+        target.a[1],
+        target.b[0],
+        target.b[1],
+        0,
       );
-      const scale = Math.max(1, ...linePoint.map(Math.abs), ...target.a.map(Math.abs), ...target.b.map(Math.abs));
-      if ((linePoint[0] - closest[0]) ** 2 + (linePoint[1] - closest[1]) ** 2 > (scale * CONTACT_EPSILON) ** 2)
+      const scale = Math.max(
+        1,
+        ...linePoint.map(Math.abs),
+        ...target.a.map(Math.abs),
+        ...target.b.map(Math.abs),
+      );
+      if (
+        (linePoint[0] - closest[0]) ** 2 + (linePoint[1] - closest[1]) ** 2 >
+        (scale * CONTACT_EPSILON) ** 2
+      )
         continue;
       const targetLength = target.endDist - target.startDist;
-      add(closest, target.startDist + Math.min(targetLength, distance(target.a, closest)), lineDist);
+      add(
+        closest,
+        target.startDist + Math.min(targetLength, distance(target.a, closest)),
+        lineDist,
+      );
     }
   }
 
@@ -197,7 +223,8 @@ function cutPointsForContacts(
 ): ArcCutPoint[] {
   return contacts.flatMap((contact) => {
     const segment = segments.find(
-      (candidate) => contact.targetDist >= candidate.startDist && contact.targetDist <= candidate.endDist,
+      (candidate) =>
+        contact.targetDist >= candidate.startDist && contact.targetDist <= candidate.endDist,
     );
     return segment ? [{ x: contact.point[0], y: contact.point[1], i: segment.cutIndex }] : [];
   });
@@ -237,10 +264,12 @@ function partArcIndexes(
   return firstEnd === -1 || lastStart === -1 ? null : { firstEnd, lastStart };
 }
 
-function hasSelfConflict(part: readonly number[], arcs: NonNullable<MapshaperDataset['arcs']>): boolean {
+function hasSelfConflict(
+  part: readonly number[],
+  arcs: NonNullable<MapshaperDataset['arcs']>,
+): boolean {
   const segments = shapeSegments([part.slice()], arcs);
-  const closed =
-    segments.length > 1 && isSamePoint(segments[0]![0], segments.at(-1)![1]);
+  const closed = segments.length > 1 && isSamePoint(segments[0]![0], segments.at(-1)![1]);
   for (let left = 0; left < segments.length; left++) {
     for (let right = left + 1; right < segments.length; right++) {
       if (right === left + 1 || (closed && left === 0 && right === segments.length - 1)) continue;
@@ -273,7 +302,10 @@ export function reshapeSelectedPolylines(
   const layer = dataset.layers[layerIndex];
   if (!arcs || !layer?.shapes) throw new Error('Selected layer has no path geometry');
   const normalizedLine = normalizeConsecutiveCoordinates(line);
-  const planned = new Map<number, Array<{ partIndex: number; first: Contact; last: Contact; clipped: Coordinate[] }>>();
+  const planned = new Map<
+    number,
+    Array<{ partIndex: number; first: Contact; last: Contact; clipped: Coordinate[] }>
+  >();
   const cutPoints: ArcCutPoint[] = [];
 
   for (const featureId of selectedIds) {
@@ -326,7 +358,10 @@ export function reshapeSelectedPolylines(
         accepted = false;
         break;
       }
-      const closed = isSamePoint(arcEndpoints(arcs, part[0]!)[0], arcEndpoints(arcs, part.at(-1)!)[1]);
+      const closed = isSamePoint(
+        arcEndpoints(arcs, part[0]!)[0],
+        arcEndpoints(arcs, part.at(-1)!)[1],
+      );
       if (!closed) {
         const newArc = arcs.size();
         adapter.appendEmptyArc(arcs);
@@ -336,7 +371,10 @@ export function reshapeSelectedPolylines(
           newArc,
           ...part.slice(indexes.lastStart),
         ];
-        if (adapter.getShapePerimeter([candidate], arcs) === 0 || hasSelfConflict(candidate, arcs)) {
+        if (
+          adapter.getShapePerimeter([candidate], arcs) === 0 ||
+          hasSelfConflict(candidate, arcs)
+        ) {
           accepted = false;
           break;
         }
