@@ -137,6 +137,37 @@ describe('PathGeometryPatchCommand', () => {
     expect(layer.shapes[0]).toEqual([[0], [1]]);
   });
 
+  it('owns appended arc coordinates so caller mutation cannot rewrite do or redo', () => {
+    const { arcs, state } = makeArcs();
+    const source = makeSource(arcs);
+    const layer = { name: 'l', geometry_type: 'polygon', shapes: [[[0]]] } as any;
+    const selection = new Selection();
+    const xx = new Float64Array([5, 6]);
+    const yy = new Float64Array([7, 8]);
+    const command = new PathGeometryPatchCommand({
+      source,
+      shapePatches: [{ layer, featureId: 0, before: [[0]], after: [[0], [1]] }],
+      originalArcCount: 1,
+      appendedArcs: [{ xx, yy }],
+      selection,
+      beforeSelection: selection.snapshot(),
+      afterSelection: [],
+      publishSelection: () => {},
+      label: 'Add ring',
+    });
+    xx.fill(999);
+    yy.fill(999);
+
+    command.do();
+    expect(Array.from(state().xx)).toEqual([0, 1, 5, 6]);
+    expect(Array.from(state().yy)).toEqual([0, 1, 7, 8]);
+
+    command.undo();
+    command.do();
+    expect(Array.from(state().xx)).toEqual([0, 1, 5, 6]);
+    expect(Array.from(state().yy)).toEqual([0, 1, 7, 8]);
+  });
+
   it('publish fires data(edit) and the pending selection diff exactly once', () => {
     const { arcs } = makeArcs();
     const source = makeSource(arcs);

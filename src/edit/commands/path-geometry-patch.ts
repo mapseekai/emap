@@ -68,6 +68,11 @@ export class PathGeometryPatchCommand implements EditCommand {
         before: cloneShape(patch.before),
         after: cloneShape(patch.after),
       })),
+      appendedArcs: opts.appendedArcs.map((arc) => ({
+        xx: new Float64Array(arc.xx),
+        yy: new Float64Array(arc.yy),
+        zz: arc.zz ? new Float64Array(arc.zz) : arc.zz,
+      })),
     };
     this.label = opts.label;
   }
