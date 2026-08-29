@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
+import type { EditCommand } from '../../edit/edit-command';
 import type { EmapHostInternal } from '../emap-host';
 import { MapshaperOps } from '../mapshaper-ops';
 import type { MapshaperDataset, MapshaperLayer } from '../../types/mapshaper-types';
@@ -38,13 +39,19 @@ async function createFixture(
   refs: FeatureRef[] = [{ source: 'source', layer: 'parts', id: 0 }],
 ) {
   let dataset = await importDataset(geometry);
-  const source = { getDataset: () => dataset };
+  const entries: EditCommand[] = [];
+  const source = {
+    getDataset: () => dataset,
+    getArcs: () => dataset.arcs,
+  };
   const resolve = (layers: MapshaperDataset['layers'], sourceId: string, layerId: string) =>
     sourceId === 'source' && layerId === 'parts'
       ? (layers.find((layer) => layer.name === layerId) ?? null)
       : null;
+  const selection = new Selection();
+  selection.apply(refs, 'replace');
   const host = {
-    _selection: { getAll: () => refs },
+    _selection: selection,
     _sources: new Map([['source', source]]),
     layers: {
       resolve: (sourceId: string, layerId: string) => resolve(dataset.layers, sourceId, layerId),
@@ -65,8 +72,19 @@ async function createFixture(
       const committed = await mutate(dataset, original);
       return 'ok' in committed ? committed : okValue(committed.value);
     },
+    runPreparedEditCommand: async <T>(
+      _sourceId: string,
+      _label: string,
+      plan: (planned: MapshaperDataset, plannedSource: unknown) => any,
+    ): Promise<OpResult<T>> => {
+      const outcome = plan(dataset, source);
+      if ('ok' in outcome) return outcome;
+      outcome.command.do();
+      entries.push(outcome.command);
+      return okValue(outcome.value);
+    },
   };
-  return { ctx, dataset: () => dataset };
+  return { ctx, dataset: () => dataset, entries };
 }
 
 function integrationHarness(
@@ -76,6 +94,7 @@ function integrationHarness(
   let current = dataset;
   const source = {
     getDataset: () => current,
+    getArcs: () => current.arcs,
     getLayers: () => current.layers,
     setDataset: (value: MapshaperDataset) => {
       current = value;
@@ -150,13 +169,13 @@ describe('addPart', () => {
     const fixture = await createFixture({ type: 'Polygon', coordinates: [square] });
     const before = exported(fixture.dataset());
     let historyEntries = 0;
-    fixture.ctx.runPreparedDatasetMutation = async <T>(
+    fixture.ctx.runPreparedEditCommand = async <T>(
       _sourceId,
       _label,
-      mutate,
+      plan,
     ): Promise<OpResult<T>> => {
       const dataset = fixture.dataset();
-      const result = await mutate(adapter.copyDataset(dataset), { ...dataset });
+      const result = plan({ ...dataset } as MapshaperDataset, { getDataset: () => dataset });
       if (result.ok) historyEntries++;
       return result;
     };
@@ -319,6 +338,42 @@ describe('addPart', () => {
       ok: false,
       error: { kind: 'validation', field: 'part' },
     });
+  });
+});
+
+describe('addPart direct edit', () => {
+  const NEW_PART: [number, number][] = [
+    [20, 0],
+    [30, 0],
+    [30, 10],
+    [20, 10],
+  ];
+
+  it('commits in place; undo/redo stable across rounds; arc count stable', async () => {
+    const fixture = await createFixture({ type: 'Polygon', coordinates: [square] });
+    const arcs = fixture.dataset().arcs!;
+    const originalArcCount = arcs.size();
+    const partCount = () => fixture.dataset().layers[0]!.shapes![0]!.length;
+    const copySpy = vi.spyOn(adapter, 'copyDataset');
+    try {
+      const result = await addPart(fixture.ctx, { coordinates: NEW_PART });
+      expect(result.ok).toBe(true);
+      expect(copySpy).not.toHaveBeenCalled();
+    } finally {
+      copySpy.mockRestore();
+    }
+    expect(partCount()).toBe(2);
+    expect(arcs.size()).toBe(originalArcCount + 1);
+    expect(fixture.entries).toHaveLength(1);
+
+    fixture.entries[0]!.undo();
+    expect(partCount()).toBe(1);
+    expect(arcs.size()).toBe(originalArcCount);
+    fixture.entries[0]!.do();
+    fixture.entries[0]!.undo();
+    fixture.entries[0]!.do();
+    expect(partCount()).toBe(2); // no drift across rounds
+    expect(arcs.size()).toBe(originalArcCount + 1);
   });
 });
 

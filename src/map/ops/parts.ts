@@ -1,4 +1,5 @@
 import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
+import { PathGeometryPatchCommand } from '../../edit/commands/path-geometry-patch';
 import {
   isPathLayer,
   type MapshaperDataset,
@@ -10,6 +11,7 @@ import { Err, type OpResult } from '../op-result';
 import type { AddPartOptions, DeletePartOptions, FeatureRef } from '../types';
 import type { OpContext } from './_context';
 import {
+  coordinatesToArcSnapshot,
   type Coordinate,
   normalizeConsecutiveCoordinates,
   SegmentConflictIndex,
@@ -205,17 +207,6 @@ function validateNewPolygon(
   return null;
 }
 
-function appendPart(
-  part: Part,
-  shape: PathShape,
-  arcs: NonNullable<MapshaperDataset['arcs']>,
-  adapter: MapshaperAdapter,
-  polygon: boolean,
-): void {
-  const arcId = adapter.appendArc(arcs, polygon ? [...part].reverse() : part);
-  shape.push([arcId]);
-}
-
 export async function addPart(ctx: OpContext, options: AddPartOptions): Promise<OpResult<void>> {
   const normalized = normalizePart(options.coordinates, false);
   if (!normalized)
@@ -229,30 +220,45 @@ export async function addPart(ctx: OpContext, options: AddPartOptions): Promise<
   if (!selected.dataset.arcs)
     return Err.validation('selection', 'selected path geometry is invalid');
   const adapter = getDefaultMapshaperAdapter();
-  return ctx.runPreparedDatasetMutation(selected.sourceId, 'Add part', (working, original) => {
-    if (original !== selected.dataset) return Err.staleOperation(selected.sourceId, 'Add part');
-    const layer = ctx.host.layers.resolveInLayers(working.layers, selected.layerId);
-    const workingArcs = working.arcs;
+  return ctx.runPreparedEditCommand(selected.sourceId, 'Add part', (planned, source) => {
+    if (planned !== selected.dataset) return Err.staleOperation(selected.sourceId, 'Add part');
+    const arcs = planned.arcs;
+    // Planned dataset IS the live one: resolve the layer in-place.
+    const layer = ctx.host.layers.resolveInLayers(planned.layers, selected.layerId);
     if (
       !layer ||
       !isPathLayer(layer) ||
       layer.geometry_type !== selected.layer.geometry_type ||
       !layer.shapes ||
-      !workingArcs
+      !arcs
     )
       return Err.staleOperation(selected.sourceId, 'Add part');
-    const workingShape = layer.shapes[selected.featureId] as PathShape | null;
-    if (!workingShape) return Err.staleOperation(selected.sourceId, 'Add part');
-    const workingShapeError = polygon
-      ? validatePolygonShape(workingShape, workingArcs, adapter)
-      : null;
-    if (workingShapeError) return workingShapeError;
+    const shape = layer.shapes[selected.featureId] as PathShape | null;
+    if (!shape) return Err.staleOperation(selected.sourceId, 'Add part');
+    const shapeError = polygon ? validatePolygonShape(shape, arcs, adapter) : null;
+    if (shapeError) return shapeError;
     const validation = polygon
-      ? validateNewPolygon(part, workingShape, workingArcs, adapter)
-      : validateNewLine(part, workingShape, workingArcs);
+      ? validateNewPolygon(part, shape, arcs, adapter)
+      : validateNewLine(part, shape, arcs);
     if (validation) return Err.validation('part', validation);
-    appendPart(part, workingShape, workingArcs, adapter, polygon);
-    return { value: undefined, selection: refs };
+    // Orientation rule unchanged: polygon parts are stored reversed.
+    const stored = polygon ? [...part].reverse() : part;
+    const afterShape = shape.concat([[arcs.size()]]);
+    return {
+      value: undefined,
+      affectedSourceIds: [selected.sourceId],
+      command: new PathGeometryPatchCommand({
+        source,
+        shapePatches: [{ layer, featureId: selected.featureId, before: shape, after: afterShape }],
+        originalArcCount: arcs.size(),
+        appendedArcs: [coordinatesToArcSnapshot(stored)],
+        selection: ctx.host._selection,
+        beforeSelection: ctx.host._selection.snapshot(),
+        afterSelection: refs,
+        publishSelection: (diff) => ctx.host._fireSelectionChange(diff),
+        label: 'Add part',
+      }),
+    };
   });
 }
 
