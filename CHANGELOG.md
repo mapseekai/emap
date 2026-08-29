@@ -7,12 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-08-29
+
 ### Fixed
 
 - MapLibre Style overlays now preserve top-level zoom-driven `step` and
   `interpolate` image expressions while namespacing sprite references, so
   OpenFreeMap Bright symbol layers pass native MapLibre validation.
-
 
 ## [0.8.0] - 2026-08-28
 
@@ -786,7 +787,8 @@ Initial public release.
 - Distributed control stylesheet as `dist/emap.css` (importable via
   `@mapseekai/emap/style.css`).
 
-[Unreleased]: https://github.com/mapseekai/emap/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/mapseekai/emap/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/mapseekai/emap/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/mapseekai/emap/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/mapseekai/emap/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/mapseekai/emap/compare/v0.7.0...v0.7.1

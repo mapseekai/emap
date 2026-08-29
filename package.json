@@ -1,6 +1,6 @@
 {
   "name": "@mapseekai/emap",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "packageManager": "pnpm@11.15.1",
   "description": "A modern, decoupled rendering engine for mapshaper data",
   "main": "dist/emap.mjs",
