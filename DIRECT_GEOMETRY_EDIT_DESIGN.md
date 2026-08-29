@@ -2,10 +2,35 @@
 
 ## 文档状态
 
-- 状态：设计草案
+- 状态：已核实（2026-08-29 对照源码逐条核查 + 独立审查），阶段 A 可实施
 - 目标范围：`reshape-ring-part` 示例及其对应的 ring / part / reshape 编辑操作
 - 主要目标：将局部几何编辑从 whole-dataset replacement 迁移为可逆的原地增量命令，支持稳定的多级 undo / redo
 - 非目标：本设计不要求将 clip、dissolve、union、project、rebuild topology、数据导入等全局操作改为原地编辑
+- 本轮实施范围：**仅阶段 A**（addRing / deleteRing / addPart / deletePart + 命令基础设施 + transaction 修复 + MSX 导出压缩）；reshape（阶段 B）另开一轮
+
+## 0. 核实修订（2026-08-29）
+
+对照源码核查结论：§1 背景、§2 混合模型、§7.1–7.4 写集断言**全部属实**。关键事实：
+
+- `EditHistory.push()` 遇 `invalidatesPriorCommands` 释放全部旧 undo 项并插入一个 stale 占位符（`src/edit/edit-history.ts:107`）；undo/redo 遇 stale 只移动占位符。
+- `_runPreparedDatasetMutation()` 的 `before` 是 live 原对象、`after` 是 working copy（`src/map/ops/_runner.ts:269`）；undo replacement 挂回精确 `before` identity——`edit-command.ts` 注释中"恢复的是不同 identity 的 deep copy"与实现矛盾，§10 对 barrier 过严的怀疑有依据。
+- `appendArc()` 每次整体重分配 nn/xx/yy/zz（`mapshaper-adapter.ts:664`）；reshape-polygon 已有 append 候选 + `deleteLastArc` 试错模式。
+- `FeatureDeleteCommand`、`SplitSharedArcsCommand`、`CompositeCommand`、`markSourceChanged()`（DisplayArcs dirty + editVersion bump）、transaction capture buffer 均已存在；FeatureQuery 缓存 keyed on editVersion。
+
+核查发现的**四处文档与代码的实质冲突**，本稿已修正：
+
+1. ~~§5.2 假定存在 `selectionRestoreCommand`~~ → 实际不存在；改为新增 `FeatureDeleteWithSelectionCommand` wrapper（见 §5.2）。
+2. ~~§6.1 直接复用 `SplitSharedArcsCommand` 私有 helper~~ → 私有实现丢 retained interval、`zz` 全有才保留、无 arc count 断言；须"抽取并修复"（见 §6.1）。
+3. ~~§8 runner 返回裸 `EditCommand`~~ → 无法携带 op 结果值；返回类型改为 `PreparedDirectEdit<T> = { value, command, affectedSourceIds }`。runner 不新建文件，并入 `_runner.ts` 与既有 commit 路径并列。
+4. ~~§11 假定 transaction rollback 兼容 direct command~~ → `Transaction.rollback()` 靠 `setDataset(firstTouchBefore)` 快照，对原地修改无效；修复为反序调用 captured commands 的 `undo()`，快照仅作异常兜底（见 §11）。
+
+其他已决事项：
+
+- 缓存/事件唯一所有者是 direct runner；`source.fire('data')` reason 扩展为 `'edit'`，接线前先核对 data handler 已有职责，避免双重副作用。
+- highlight 无 feature-id remap API；feature 删除导致 id 下移时清除受影响 layer 的 highlight 引用。
+- 导出：live dataset 永不压缩；MSX 快照导出前 `copyDataset` + `cleanArcReferences` 副本（GeoJSON 按 shape 遍历、TopoJSON 自带 dissolve 拷贝，均无需改动）。
+- 阶段 A 每个 add 仅追加一个 arc，批量 append API 的性能收益主要服务阶段 B；仍在本轮实施以统一 `SplitSharedArcsCommand` 实现。
+- 工作量估计：阶段 A 最小切片约 5–8 开发日；含 transaction/highlight/事件归属的完整契约约 2–3 人周；阶段 B reshape 约 4–6 人周（polygon 校验当前依赖可变 ArcCollection 试错，需 coordinate-level validator 或 scratch collection）。
 
 ## 1. 背景
 
@@ -174,16 +199,15 @@ source.fire('data', { reason: 'edit' })
 FeatureDeleteCommand
 ```
 
-并将其与 selection 恢复命令组合：
+注意：代码中不存在独立的 selection restore command（2026-08-29 核实）。改为新增小型 wrapper `FeatureDeleteWithSelectionCommand`（放在 `feature-delete.ts`），内部组合：
 
-```ts
-CompositeCommand([
-  featureDeleteCommand,
-  selectionRestoreCommand,
-]);
+```text
+FeatureDeleteCommand（shape / record splice 与恢复）
++ selection 快照恢复（beforeSelection / afterSelection remap）
++ markSourceChanged(source)
 ```
 
-或者让 `PathGeometryPatchCommand` 支持 feature row splice，但首选复用已有命令，减少重复逻辑。
+`FeatureDeleteCommand` 本身保持现有契约不变——不把 source / cache / event 职责塞回纯命令；缓存、render、history 事件由 direct runner 统一负责（§8、§9）。
 
 ## 5.3 多 source 操作
 
@@ -205,10 +229,10 @@ CompositeCommand(sourceCommands, label)
 O(totalVertices × appendedArcCount)
 ```
 
-建议从 `SplitSharedArcsCommand` 抽取或新增 adapter API：
+建议从 `SplitSharedArcsCommand` 抽取为 adapter 公开 API（"抽取并修复"，不是原样 export 私有实现）：
 
 ```ts
-appendArcs(arcs: ArcCollection, arcsToAppend: AppendedArcSnapshot[]): void;
+appendArcs(arcs: ArcCollection, arcsToAppend: AppendedArcSnapshot[]): number; // 返回首个新 arc id
 truncateArcs(arcs: ArcCollection, targetArcCount: number): void;
 ```
 
@@ -216,9 +240,13 @@ truncateArcs(arcs: ArcCollection, targetArcCount: number): void;
 
 - 一次性计算新增顶点总数；
 - 一次性分配 `nn / xx / yy / zz`；
-- 保留 retained interval；
+- 保留 retained interval（`updateVertexData()` 会重置为 0，必须显式保存并恢复——现有私有实现未做，抽取时修复）；
+- 原 collection 有 `zz` 时，缺失 `zz` 的新 arc 填 `Infinity`（镜像 `appendArc()` 现有行为；现有私有实现只在全部新 arc 带 `zz` 时才保留，否则整体丢弃，抽取时修复）；
 - `truncateArcs()` 一次性恢复历史 arc count；
+- `do()` / `redo()` 追加前断言 `arcs.size() === expectedArcCount`（防止绕过 history 的尾部追加导致 truncate 误删其他 command 的 arc）；
 - redo 追加后的 arc ids 必须与首次 do 完全一致。
+
+抽取后 `SplitSharedArcsCommand` 反向改为调用该 adapter API，消灭重复实现。
 
 ## 6.2 删除 ring / part 时不压缩 arc
 
@@ -396,16 +424,23 @@ insertCutPoints(dataset, cutPoints)
 
 ## 8. Direct Runner
 
-建议新增内部提交路径：
+并入 `_runner.ts`，与 `commitDatasetReplace` / `commitDatasetReplaceSelection` 并列（复用模块私有的 `enqueueSourceOperation` 与 stale guard 骨架，不新建 `_direct-runner.ts`）。内部提交路径：
 
 ```ts
+interface PreparedDirectEdit<T> {
+  value: T;
+  command: EditCommand;                  // 单 source patch 或 Composite
+  affectedSourceIds: readonly string[];
+}
+
 runPreparedEditCommand<T>(
+  host: EmapHostInternal,
   sourceId: string,
   label: string,
   plan: (
     dataset: MapshaperDataset,
     source: MutableTopologySource,
-  ) => EditCommand | OpResult<T>,
+  ) => PreparedDirectEdit<T> | OpResult<T>,   // planner 纯只读；校验失败返回 OpResult
 ): Promise<OpResult<T>>;
 ```
 
@@ -533,8 +568,9 @@ direct edit
 - 同 source 多个 patch 的 arc append 顺序固定；
 - Composite undo 反序截断 arc；
 - 后一个 child 的 `originalArcCount` 与前一个 child 的 after count 对齐；
+- **rollback 修复（2026-08-29 核实为硬冲突）**：现有 `Transaction.rollback()` 仅 `setDataset(firstTouchBefore)` 挂回快照——对 replacement 有效（before 对象未被碰过），对 direct command 无效（原地改的就是 before 对象）。修复为：先反序调用 capture buffer 中每个 command 的 `undo()`，dataset 快照仅作异常兜底。replacement command 反序 undo 与快照恢复等价，行为不回归；
 - rollback 不发布中间 selection/data/history 事件；
-- transaction 只发布最终状态。
+- capture 期间事件维持现状（各 op 立即 publish，commit 不重放）；"transaction 只发布最终状态"的事件合并留给阶段 B reshape 一并处理。
 
 如果多个 child 都操作同一 ArcCollection，建议 transaction planner 合并成一个 source-scoped patch command，避免相互依赖的 arc count。
 
@@ -545,33 +581,46 @@ direct edit
 ```text
 src/edit/commands/path-geometry-patch.ts
 src/edit/commands/path-geometry-patch.test.ts
-src/map/ops/_direct-runner.ts        # 或并入 _runner.ts
 ```
 
-### 修改
+（`_direct-runner.ts` 已取消：direct runner 并入 `_runner.ts`，见 §8。）
+
+### 修改（阶段 A 本轮范围）
 
 ```text
-src/map/ops/_context.ts
-src/map/ops/_runner.ts
-src/map/ops/rings.ts
-src/map/ops/parts.ts
+src/map/ops/_context.ts            # OpContext 增加 runPreparedEditCommand
+src/map/ops/_runner.ts             # runPreparedEditCommand + commitEditCommand 路径
+src/map/ops/rings.ts               # addRing / deleteRing 迁移
+src/map/ops/parts.ts               # addPart / deletePart 迁移（含末 part wrapper）
+src/map/mapshaper-ops.ts           # OpContext 接线（原清单遗漏）
+src/adapter/mapshaper-adapter.ts   # appendArcs / truncateArcs 公开 API
+src/edit/commands/_shared.ts       # 共享 clone / vertex-data helper
+src/edit/commands/feature-delete.ts # FeatureDeleteWithSelectionCommand wrapper
+src/edit/commands/split-shared-arcs.ts # 反向复用 adapter 批量 API
+src/edit/transaction.ts            # rollback 反序 undo 修复
+src/edit/edit-history.ts           # capture buffer 安全取回（rollback 用）
+src/map/map.ts                     # data 事件 reason 扩展、highlight 清除
+src/map/highlight-manager.ts       # 受影响 layer highlight 清除（原清单遗漏）
+src/source/topology-source.ts      # MSX 导出 copy + cleanArcReferences 副本
+src/map/ops/_test-helpers.ts       # runner fixture 更新（原清单遗漏）
+src/map/ops/rings.test.ts          # 真 runner 测试矩阵
+src/map/ops/parts.test.ts          # 真 runner 测试矩阵
+```
+
+### 阶段 B 才修改（本轮不动）
+
+```text
 src/map/ops/reshape-selected.ts
 src/map/ops/reshape-selected-line.ts
 src/map/ops/reshape-selected-polygon.ts
-src/adapter/mapshaper-adapter.ts
-src/edit/commands/_shared.ts
-src/edit/commands/composite.ts
-src/map/map.ts
 ```
 
 ### 可能修改
 
 ```text
-src/edit/edit-command.ts
-src/edit/edit-history.ts
-src/edit/transaction.ts
-src/source/topology-source.ts
-src/map/selection.ts
+src/edit/edit-command.ts           # 如需 affected sources / publish 元数据
+src/edit/commands/composite.ts     # 如需事件合并（阶段 B 再评估）
+src/map/selection.ts               # 如需 remap helper
 ```
 
 ### 文档与示例
@@ -657,7 +706,11 @@ deletePart
 - 示例可连续执行至少 3 次 ring/part 操作；
 - undo / redo 可以逐级恢复；
 - selection / attributes / feature ids 完整；
-- 大数据删除洞不运行 dataset copy / arc compaction。
+- 大数据删除洞不运行 dataset copy / arc compaction；
+- transaction 内 direct op 单 history entry，rollback 反序 undo 无残留 mutation（§11 修复）；
+- 末 part 删除后 feature row / record / selection 恢复，受影响 layer highlight 被清除；
+- MSX 快照导出不含 orphan arcs（导出副本压缩，live dataset 不动）；
+- direct → replacement → undo replacement → undo direct 的 identity 行为有专项测试覆盖（§10，仅观察不收窄 barrier）。
 
 ## 阶段 B：reshape topology patch
 
@@ -705,13 +758,13 @@ splitSelected
 
 ## 16. 待确认问题
 
-1. live dataset 的未引用 arc 是否在所有导出格式中都会自动过滤？若否，导出路径必须先复制并 compact。
-2. `source.fire('data')` 是否应由每个 command publish，还是 direct runner 统一发布？
-3. transaction 中同 source 多个 patch 是否强制合并？
-4. highlight 是否应跟随 selection snapshot，还是单独维护 feature-ref remap？
-5. direct command 是否作为公共 API 导出，还是第一阶段仅内部使用？建议先内部使用。
-6. replacement barrier 是否按 source scope 缩小，而不是全 map 清空？
-7. reshape 是否允许复制 shared arcs，还是必须保持邻接拓扑联动？建议默认复制，仅改命中 feature。
+1. ~~live dataset 的未引用 arc 是否在所有导出格式中都会自动过滤？~~ → **已核实并决策（2026-08-29）**：GeoJSON 按 shape 遍历自然过滤；TopoJSON 导出自带 copy + dissolve；MSX 快照（`compact: true` 仅压缩顶点缓冲，不删 orphan arcs）会随之膨胀 → MSX 导出路径改为 `copyDataset` + `cleanArcReferences` 副本后序列化，live dataset 永不压缩。
+2. ~~`source.fire('data')` 是否应由每个 command publish，还是 direct runner 统一发布？~~ → **已决策**：direct runner 统一发布，reason 扩展为 `'edit'`；接线前核对 data handler 已有职责，避免双重副作用。
+3. transaction 中同 source 多个 patch 是否强制合并？（阶段 A 维持逐 child capture；合并与事件聚合留待阶段 B 评估）
+4. ~~highlight 是否应跟随 selection snapshot，还是单独维护 feature-ref remap？~~ → **已决策**：无 remap API；feature 删除导致 id 下移时清除受影响 layer 的 highlight 引用。
+5. direct command 是否作为公共 API 导出，还是第一阶段仅内部使用？建议先内部使用。（维持）
+6. replacement barrier 是否按 source scope 缩小，而不是全 map 清空？（维持待验证；已核实 barrier 很可能过严——runner 挂回精确 before identity——须 `direct → replacement → undo replacement → undo direct` identity 测试通过后才收窄）
+7. reshape 是否允许复制 shared arcs，还是必须保持邻接拓扑联动？建议默认复制，仅改命中 feature。（维持，阶段 B 决策；注意这是产品行为决策而非纯实现细节——复制会切断目标 feature 与邻接 feature 的 shared-arc identity，影响后续顶点编辑联动）
 
 ## 17. 推荐首个实现切片
 
