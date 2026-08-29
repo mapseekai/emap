@@ -2385,7 +2385,9 @@ export class Emap extends EventDispatcher {
   }
 
   _clearHighlightsForLayer(sourceId: string, layerKeys: readonly string[]): void {
-    for (const key of layerKeys) this._highlightManager.removeLayer(sourceId, key);
+    let removed = false;
+    for (const key of layerKeys) removed = this._highlightManager.removeLayer(sourceId, key) || removed;
+    if (removed) this._scheduleRender();
   }
 
   // ---------------------------------------------------------------------------
