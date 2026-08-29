@@ -7,6 +7,11 @@ import {
 } from '../../types/mapshaper-types';
 import { asMutableTopologySource, type TopologySource } from '../../source/source';
 import { markSourceChanged } from './_shared';
+import type { AppendedArc } from '../../adapter/mapshaper-adapter';
+// Re-exported so the public `@/edit/commands/split-shared-arcs` import path
+// (and `src/index.ts`) keep working after the type moved to the adapter.
+export type { AppendedArc };
+
 
 /**
  * One feature whose shape was rewritten to point at duplicated arc ids.
@@ -21,15 +26,6 @@ export interface SplitSharedArcsRemap {
   newShape: PathShape;
 }
 
-/**
- * Vertex data for a single arc to be appended onto the source's `ArcCollection`.
- * Slices of the original arc's xx/yy (and zz when simplification is in play).
- */
-export interface AppendedArc {
-  xx: Float64Array;
-  yy: Float64Array;
-  zz?: Float64Array | null;
-}
 
 export interface SplitSharedArcsCommandOptions {
   source: TopologySource;

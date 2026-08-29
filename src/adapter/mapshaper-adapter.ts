@@ -131,6 +131,13 @@ export interface ExportedPathData {
   pathData: ExportedPath[];
   pointCount: number;
 }
+/** Vertex data for one arc to append onto an `ArcCollection`. */
+export interface AppendedArc {
+  xx: Float64Array;
+  yy: Float64Array;
+  zz?: Float64Array | null;
+}
+
 
 /**
  * The mapshaper internal API surface the editor depends on. Methods are
@@ -186,6 +193,24 @@ export interface MapshaperAdapter {
 
   /** Pop the most recently appended arc. Used by FeatureCreateCommand.undo. */
   deleteLastArc(arcs: ArcCollection): void;
+  /**
+   * Append multiple arcs in ONE allocation. Returns the id of the first
+   * appended arc (`arcs.size()` at call time). Preserves the retained
+   * interval (`updateVertexData` resets it to 0 — saved and restored here).
+   * When the collection keeps simplification thresholds (`zz`), appended
+   * arcs missing `zz` are filled with `Infinity` (always retained),
+   * mirroring `appendArc`.
+   */
+  appendArcs(arcs: ArcCollection, arcsToAppend: AppendedArc[]): number;
+
+  /**
+   * Truncate back to `targetArcCount` arcs, dropping tail vertex data in
+   * one pass. Preserves the retained interval. Throws when the target
+   * exceeds the current arc count — silently dropping arcs appended by
+   * someone else would corrupt history invariants.
+   */
+  truncateArcs(arcs: ArcCollection, targetArcCount: number): void;
+
 
   // -- Topology queries (used by VertexEditControl) ----------------------
 
@@ -689,6 +714,71 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     arcs.setRetainedInterval?.(retained);
     return arcId;
   }
+  appendArcs(arcs: ArcCollection, arcsToAppend: AppendedArc[]): number {
+    const data = arcs.getVertexData!();
+    const firstArcId = arcs.size();
+    if (arcsToAppend.length === 0) return firstArcId;
+    const { xx, yy, zz, nn } = data;
+    let extraPoints = 0;
+    for (const arc of arcsToAppend) extraPoints += arc.xx.length;
+
+    const newXx = new Float64Array(xx.length + extraPoints);
+    const newYy = new Float64Array(yy.length + extraPoints);
+    newXx.set(xx);
+    newYy.set(yy);
+
+    // Mirror appendArc: appended vertices carry Infinity thresholds (always
+    // retained) when the collection keeps simplification data.
+    const flat = arcs.isFlat?.() ?? zz === null;
+    let newZz: Float64Array | null = null;
+    if (!flat) {
+      newZz = new Float64Array(xx.length + extraPoints).fill(Infinity);
+      if (zz) newZz.set(zz);
+    }
+
+    let cursor = xx.length;
+    for (const arc of arcsToAppend) {
+      newXx.set(arc.xx, cursor);
+      newYy.set(arc.yy, cursor);
+      if (newZz && arc.zz) newZz.set(arc.zz, cursor);
+      cursor += arc.xx.length;
+    }
+
+    const newNn = new Int32Array(nn.length + arcsToAppend.length);
+    newNn.set(nn);
+    for (let i = 0; i < arcsToAppend.length; i++) {
+      newNn[nn.length + i] = arcsToAppend[i]!.xx.length;
+    }
+
+    const retained = arcs.getRetainedInterval?.() ?? 0;
+    arcs.updateVertexData!(newNn, newXx, newYy, newZz);
+    arcs.setRetainedInterval?.(retained);
+    return firstArcId;
+  }
+
+  truncateArcs(arcs: ArcCollection, targetArcCount: number): void {
+    const data = arcs.getVertexData!();
+    const { xx, yy, zz, nn } = data;
+    if (nn.length === targetArcCount) return;
+    if (targetArcCount > nn.length) {
+      throw new Error(
+        `truncateArcs: target ${targetArcCount} exceeds current arc count ${nn.length}`,
+      );
+    }
+    let keptPoints = 0;
+    for (let i = 0; i < targetArcCount; i++) keptPoints += nn[i]!;
+    const newNn = new Int32Array(targetArcCount);
+    newNn.set(nn.subarray(0, targetArcCount));
+    const retained = arcs.getRetainedInterval?.() ?? 0;
+    arcs.updateVertexData!(
+      newNn,
+      new Float64Array(xx.subarray(0, keptPoints)),
+      new Float64Array(yy.subarray(0, keptPoints)),
+      zz ? new Float64Array(zz.subarray(0, keptPoints)) : null,
+    );
+    arcs.setRetainedInterval?.(retained);
+  }
+
 
   deleteLastArc(arcs: ArcCollection): void {
     mapshaper.internal.deleteLastArc(arcs);
