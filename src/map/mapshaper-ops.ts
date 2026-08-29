@@ -25,6 +25,7 @@ import {
   _runDatasetCommandParsed as _runDatasetCommandParsedShared,
   _runPreparedDatasetCommandParsed as _runPreparedDatasetCommandParsedShared,
   _runPreparedDatasetMutation as _runPreparedDatasetMutationShared,
+  _runPreparedEditCommand as _runPreparedEditCommandShared,
 } from './ops/_runner';
 import type {
   AffineLayerOptions,
@@ -145,6 +146,8 @@ export class MapshaperOps {
         ),
       runPreparedDatasetMutation: (sourceId, label, mutate) =>
         _runPreparedDatasetMutationShared(this._emap, sourceId, label, mutate),
+      runPreparedEditCommand: (sourceId, label, plan) =>
+        _runPreparedEditCommandShared(this._emap, sourceId, label, plan),
     };
   }
 

@@ -30,7 +30,11 @@ import {
 import { resolveProjectCrs } from '../../geo/crs-resolver';
 import { parseCommandHeads, shouldUseWorkerForHeads } from '../worker-routing';
 import { collectTransferables } from '../../worker/transferables';
-import type { PrepareDatasetCommand, PreparedDatasetMutationResult } from './_context';
+import type {
+  PrepareDatasetCommand,
+  PreparedDatasetMutationResult,
+  PreparedDirectEdit,
+} from './_context';
 import type { FeatureRef } from '../types';
 import type { SelectionSnapshot } from '../selection';
 
@@ -305,6 +309,80 @@ export function _runPreparedDatasetMutation<T>(
         operation: typeof label === 'string' ? label : 'prepared dataset mutation',
       });
     }
+  });
+  transaction?._trackOperation(operation);
+  return operation;
+}
+
+export function _runPreparedEditCommand<T>(
+  host: EmapHostInternal,
+  sourceId: string,
+  label: string,
+  plan: (
+    dataset: MapshaperDataset,
+    source: MutableTopologySource,
+  ) => PreparedDirectEdit<T> | OpResult<T>,
+): Promise<OpResult<T>> {
+  const transaction = host._activeTransaction ?? null;
+  const operation = enqueueSourceOperation(host, sourceId, async () => {
+    if (host._removed) return Err.hostRemoved();
+    const source = host._sources.get(sourceId);
+    if (!source) return Err.notFound('source', sourceId);
+    const dataset = source.getDataset();
+    if (!dataset) return Err.notFound('source', sourceId);
+
+    const plannedEditVersion = dataset.editVersion ?? 0;
+    let planned: PreparedDirectEdit<T> | OpResult<T>;
+    try {
+      planned = plan(dataset, source);
+      if ('ok' in planned) return planned;
+    } catch (err) {
+      if (host._removed) return Err.hostRemoved();
+      host.fire('error', { error: err });
+      return Err.mapshaper(err, { operation: label });
+    }
+
+    if (host._removed) return Err.hostRemoved();
+    if (
+      host._sources.get(sourceId) !== source ||
+      source.getDataset() !== dataset ||
+      (dataset.editVersion ?? 0) !== plannedEditVersion ||
+      host._activeTransaction !== transaction ||
+      (transaction !== null && !transaction.isOpen)
+    ) {
+      return Err.staleOperation(sourceId, label);
+    }
+
+    // First-touch bookkeeping so Transaction.rollback can notify this source.
+    // For direct edits the snapshot IS the live object (mutated in place) —
+    // rollback correctness comes from reverse-order command undo, not the
+    // snapshot. See transaction.ts rollback.
+    transaction?._captureFirstTouch(sourceId, dataset);
+
+    const { command } = planned;
+    try {
+      command.do();
+    } catch (err) {
+      // do() is designed to be failure-free after planning (all allocation
+      // happens in the planner); if allocation still threw, best-effort undo
+      // to avoid leaving a partial mutation.
+      try {
+        command.undo();
+      } catch {
+        // swallow — the original error is the meaningful one
+      }
+      if (host._removed) return Err.hostRemoved();
+      host.fire('error', { error: err });
+      return Err.mapshaper(err, { operation: label });
+    }
+
+    host._history.push(command);
+    // publish() fires source 'data' → the map's data handler invalidates
+    // shape caches, schedules render, and re-fires map-level 'data'. The
+    // runner deliberately does NOT duplicate those side effects.
+    (command as { publish?: () => void }).publish?.();
+    if (!host._history.isCapturing()) host._fireHistoryChange();
+    return okValue(planned.value);
   });
   transaction?._trackOperation(operation);
   return operation;
