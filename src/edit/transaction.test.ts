@@ -319,6 +319,41 @@ describe('rollback with in-place (direct) commands', () => {
     expect(source.setDataset).toHaveBeenCalledWith(dataset);
   });
 
+  it('logs failed captured undos while continuing rollback', () => {
+    const dataset = { layers: [], arcs: null, editVersion: 0 } as MapshaperDataset;
+    const source = { getDataset: () => dataset, setDataset: vi.fn() };
+    const host = makeRollbackHost(source);
+    const t = new Transaction(host);
+    const order: string[] = [];
+    const failure = new Error('undo failed');
+    host._activeTransaction = t;
+    t._captureFirstTouch('s', dataset);
+    host._history.push({
+      label: 'succeeds',
+      do: () => undefined,
+      undo: () => { order.push('succeeds'); },
+    });
+    host._history.push({
+      label: 'fails',
+      do: () => undefined,
+      undo: () => {
+        order.push('fails');
+        throw failure;
+      },
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      expect(() => t.rollback()).not.toThrow();
+      expect(order).toEqual(['fails', 'succeeds']);
+      expect(source.setDataset).toHaveBeenCalledWith(dataset);
+      expect(errorSpy).toHaveBeenCalledOnce();
+      expect(errorSpy).toHaveBeenCalledWith(expect.any(String), failure);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it('replacement-only rollback keeps working exactly as before', () => {
     const before: any = { layers: [], marker: 'before' };
     const after: any = { layers: [], marker: 'after' };
