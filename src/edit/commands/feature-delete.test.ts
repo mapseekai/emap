@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { FeatureDeleteCommand, BulkFeatureDeleteCommand } from './feature-delete';
+import { describe, expect, it, vi } from 'vitest';
+import { Selection } from '../../map/selection';
+import {
+  BulkFeatureDeleteCommand,
+  FeatureDeleteCommand,
+  FeatureDeleteWithSelectionCommand,
+} from './feature-delete';
 
 describe('FeatureDeleteCommand', () => {
   it('do() splices out the shape and data record', () => {
@@ -181,5 +186,74 @@ describe('BulkFeatureDeleteCommand', () => {
     const cmd = new BulkFeatureDeleteCommand({ layer: layer as any, snapshots: [] });
     cmd.do();
     expect(layer.shapes).toEqual(before);
+  });
+});
+
+describe('FeatureDeleteWithSelectionCommand', () => {
+  function makeSetup() {
+    const layer = {
+      name: 'l',
+      geometry_type: 'polygon',
+      shapes: [[[0]], [[1]]],
+      data: { getRecords: () => records },
+    } as any;
+    const records = [{ name: 'a' }, { name: 'b' }];
+    const source = {
+      getArcs: () => null,
+      getDataset: () => ({ layers: [layer], arcs: null }),
+      markDisplayArcsDirty: vi.fn(),
+      fire: vi.fn(),
+    } as any;
+    const selection = new Selection();
+    selection.apply(
+      [
+        { source: 's', layer: 'l', id: 1 }, // the feature about to be deleted
+        { source: 's', layer: 'l', id: 0 },
+      ],
+      'add',
+    );
+    const publishSelection = vi.fn();
+    const command = new FeatureDeleteWithSelectionCommand({
+      layer,
+      featureId: 1,
+      shape: layer.shapes[1],
+      record: records[1]!,
+      source,
+      selection,
+      beforeSelection: selection.snapshot(),
+      afterSelection: [{ source: 's', layer: 'l', id: 0 }],
+      publishSelection,
+      label: 'Delete part',
+    });
+    return { layer, records, source, selection, publishSelection, command };
+  }
+
+  it('do splices the feature row + record and applies the remapped selection', () => {
+    const { layer, records, selection, command } = makeSetup();
+    command.do();
+    expect(layer.shapes).toEqual([[[0]]]);
+    expect(records).toEqual([{ name: 'a' }]);
+    expect(selection.getAll()).toEqual([{ source: 's', layer: 'l', id: 0 }]);
+  });
+
+  it('undo restores the feature row + record + selection exactly', () => {
+    const { layer, records, selection, command } = makeSetup();
+    command.do();
+    command.undo();
+    expect(layer.shapes).toEqual([[[0]], [[1]]]);
+    expect(records).toEqual([{ name: 'a' }, { name: 'b' }]);
+    expect(selection.getAll()).toHaveLength(2);
+  });
+
+  it('publish fires data(edit) and the selection diff once', () => {
+    const { source, publishSelection, command } = makeSetup();
+    command.do();
+    command.publish();
+    expect(source.fire).toHaveBeenCalledWith('data', { reason: 'edit' });
+    expect(publishSelection).toHaveBeenCalledTimes(1);
+    expect(publishSelection.mock.calls[0]![0]).toMatchObject({
+      added: [],
+      removed: [{ source: 's', layer: 'l', id: 1 }],
+    });
   });
 });
