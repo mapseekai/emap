@@ -890,3 +890,77 @@ describe('addRing direct edit (multi-level undo)', () => {
     expect(arcs.size()).toBe(originalArcCount + 3); // redo reuses the same ids
   });
 });
+
+describe('deleteRing direct edit', () => {
+  const TWO_HOLES: GeoJSON.Polygon = {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+        [0, 0],
+      ],
+      [
+        [8, 4],
+        [9, 4],
+        [9, 6],
+        [8, 6],
+        [8, 4],
+      ], // hole A — click target [8.5, 5]
+      [
+        [1, 1],
+        [2, 1],
+        [2, 2],
+        [1, 2],
+        [1, 1],
+      ], // hole B
+    ],
+  };
+
+  it('does not compact arcs: orphan ring arc survives, later arc ids unchanged', async () => {
+    const fixture = await createFixture(undefined, undefined, TWO_HOLES);
+    const arcs = fixture.dataset().arcs!;
+    const arcCount = arcs.size();
+    const cleanSpy = vi.spyOn(adapter, 'cleanArcReferences');
+    try {
+      const result = await deleteRing(fixture.ctx, { point: [8.5, 5] });
+      expect(result.ok).toBe(true);
+      expect(cleanSpy).not.toHaveBeenCalled();
+      expect(arcs.size()).toBe(arcCount); // hole A's arc retained as orphan
+      expect(exported(fixture.dataset()).coordinates).toHaveLength(2);
+    } finally {
+      cleanSpy.mockRestore();
+    }
+    fixture.entries[0]!.undo();
+    expect(exported(fixture.dataset()).coordinates).toHaveLength(3);
+    expect(arcs.size()).toBe(arcCount);
+    fixture.entries[0]!.do();
+    expect(exported(fixture.dataset()).coordinates).toHaveLength(2);
+  });
+
+  it('addRing → deleteRing → undo × 2 / redo × 2 round-trips exactly', async () => {
+    const fixture = await createFixture(); // single shell, no holes
+    const ringCount = () => exported(fixture.dataset()).coordinates.length;
+    const initial = ringCount();
+    await addRing(fixture.ctx, {
+      ring: [
+        [3, 3],
+        [7, 3],
+        [7, 7],
+        [3, 7],
+      ],
+    });
+    expect(ringCount()).toBe(2);
+    await deleteRing(fixture.ctx, { point: [5, 5] });
+    expect(ringCount()).toBe(initial);
+    fixture.entries[1]!.undo(); // undo delete → hole returns
+    expect(ringCount()).toBe(2);
+    fixture.entries[0]!.undo(); // undo add → back to initial
+    expect(ringCount()).toBe(initial);
+    fixture.entries[0]!.do();
+    fixture.entries[1]!.do();
+    expect(ringCount()).toBe(initial);
+  });
+});

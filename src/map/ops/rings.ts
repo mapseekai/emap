@@ -218,45 +218,48 @@ export async function deleteRing(
   for (const [sourceId, source] of ctx.host._sources) {
     const dataset = source.getDataset();
     if (!dataset?.arcs) continue;
-    const result = await ctx.runPreparedDatasetMutation(
-      sourceId,
-      'Delete ring',
-      (working, original) => {
-        if (original !== dataset) return Err.staleOperation(sourceId, 'Delete ring');
-        const workingArcs = working.arcs!;
-        for (const workingLayer of working.layers) {
-          if (
-            !isPathLayer(workingLayer) ||
-            workingLayer.geometry_type !== 'polygon' ||
-            !workingLayer.shapes
-          )
-            continue;
-          for (let featureId = 0; featureId < workingLayer.shapes.length; featureId++) {
-            const shape = workingLayer.shapes[featureId] as PathShape | null;
-            if (!shape?.length) continue;
-            // Cheap prefilter: unless the click falls inside at least one ring,
-            // this feature can neither contain the point in a hole nor as a
-            // body — skip the (expensive) exterior grouping for it.
-            if (!shape.some((part) => adapter.testPointInPolygon(px, py, [part], workingArcs)))
-              continue;
-            for (const group of collectPolygonExteriors(shape, workingArcs, adapter)) {
-              if (!adapter.testPointInPolygon(px, py, [shape[group.exteriorIndex]!], workingArcs))
-                continue;
-              const ringIndex = group.holeIndexes.find((holeIndex) =>
-                adapter.testPointInPolygon(px, py, [shape[holeIndex]!], workingArcs),
-              );
-              if (ringIndex === undefined) continue;
-              const shapeError = validateTargetShape(shape, workingArcs, adapter);
-              if (shapeError) return shapeError;
-              shape.splice(ringIndex, 1);
-              adapter.cleanArcReferences(working);
-              return { value: undefined, selection: ctx.host._selection.getAll() };
-            }
+    const result = await ctx.runPreparedEditCommand(sourceId, 'Delete ring', (planned) => {
+      if (planned !== dataset) return Err.staleOperation(sourceId, 'Delete ring');
+      const arcs = planned.arcs!;
+      for (const layer of planned.layers) {
+        if (!isPathLayer(layer) || layer.geometry_type !== 'polygon' || !layer.shapes) continue;
+        for (let featureId = 0; featureId < layer.shapes.length; featureId++) {
+          const shape = layer.shapes[featureId] as PathShape | null;
+          if (!shape?.length) continue;
+          // Cheap prefilter (unchanged).
+          if (!shape.some((part) => adapter.testPointInPolygon(px, py, [part], arcs))) continue;
+          for (const group of collectPolygonExteriors(shape, arcs, adapter)) {
+            if (!adapter.testPointInPolygon(px, py, [shape[group.exteriorIndex]!], arcs)) continue;
+            const ringIndex = group.holeIndexes.find((holeIndex) =>
+              adapter.testPointInPolygon(px, py, [shape[holeIndex]!], arcs),
+            );
+            if (ringIndex === undefined) continue;
+            const shapeError = validateTargetShape(shape, arcs, adapter);
+            if (shapeError) return shapeError;
+            // Shape patch only: the ring's arc stays in the collection as an
+            // orphan (reclaimed on export compaction / future clean op) so
+            // arc ids captured by other history entries never shift.
+            const afterShape = shape.filter((_, index) => index !== ringIndex);
+            return {
+              value: undefined,
+              affectedSourceIds: [sourceId],
+              command: new PathGeometryPatchCommand({
+                source,
+                shapePatches: [{ layer, featureId, before: shape, after: afterShape }],
+                originalArcCount: arcs.size(),
+                appendedArcs: [],
+                selection: ctx.host._selection,
+                beforeSelection: ctx.host._selection.snapshot(),
+                afterSelection: ctx.host._selection.getAll(),
+                publishSelection: (diff) => ctx.host._fireSelectionChange(diff),
+                label: 'Delete ring',
+              }),
+            };
           }
         }
-        return Err.validation('ring', 'no ring contains the point');
-      },
-    );
+      }
+      return Err.validation('ring', 'no ring contains the point');
+    });
     if (result.ok) return result;
     if (result.error.kind !== 'validation') return result;
   }
