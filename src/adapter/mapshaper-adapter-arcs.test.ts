@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import mapshaper from 'mapshaper';
+import { describe, expect, it, vi } from 'vitest';
 import { getDefaultMapshaperAdapter } from './mapshaper-adapter';
 
 // Mock ArcCollection mirroring split-shared-arcs.test.ts: tracks vertex data
@@ -31,7 +32,7 @@ function makeArcs(options?: { withZz?: boolean }) {
       xx = newXx;
       yy = newYy;
       zz = newZz;
-      retained = 0; // mirrors mapshaper: updateVertexData resets retained interval
+      retained = 0; // mapshaper resets `_zlimit` only when the new zz is null; this flat mock always does.
     },
   } as any;
   return {
@@ -99,5 +100,56 @@ describe('MapshaperAdapter.appendArcs / truncateArcs', () => {
     const adapter = getDefaultMapshaperAdapter();
     expect(adapter.appendArcs(arcs, [])).toBe(2);
     expect(Array.from(state().nn)).toEqual([2, 2]);
+  });
+
+  it('delegates appendArc to appendArcs', () => {
+    const { arcs } = makeArcs();
+    const adapter = getDefaultMapshaperAdapter();
+    const appendArcs = vi.spyOn(adapter, 'appendArcs');
+
+    expect(adapter.appendArc(arcs, [[2, 3]])).toBe(2);
+
+    expect(appendArcs).toHaveBeenCalledOnce();
+    expect(appendArcs).toHaveBeenCalledWith(
+      arcs,
+      [{ xx: new Float64Array([2]), yy: new Float64Array([3]) }],
+    );
+  });
+
+  it('delegates deleteLastArc to truncateArcs', () => {
+    const { arcs } = makeArcs();
+    const adapter = getDefaultMapshaperAdapter();
+    const truncateArcs = vi.spyOn(adapter, 'truncateArcs');
+
+    adapter.deleteLastArc(arcs);
+
+    expect(truncateArcs).toHaveBeenCalledOnce();
+    expect(truncateArcs).toHaveBeenCalledWith(arcs, 1);
+  });
+
+  it('updates real ArcCollection vertex data and bounds through append then truncate', () => {
+    const arcs = new mapshaper.internal.ArcCollection(
+      new Int32Array([2]),
+      new Float64Array([0, 1]),
+      new Float64Array([0, 1]),
+    );
+    const adapter = getDefaultMapshaperAdapter();
+
+    adapter.appendArcs(arcs, [
+      { xx: new Float64Array([2, 3]), yy: new Float64Array([2, 3]) },
+      { xx: new Float64Array([4]), yy: new Float64Array([4]) },
+    ]);
+
+    const appended = arcs.getVertexData();
+    expect(arcs.size()).toBe(3);
+    expect(Array.from(appended.xx)).toEqual([0, 1, 2, 3, 4]);
+    expect(Array.from(appended.yy)).toEqual([0, 1, 2, 3, 4]);
+
+    adapter.truncateArcs(arcs, 1);
+
+    const truncated = arcs.getVertexData();
+    expect(arcs.size()).toBe(1);
+    expect(Array.from(truncated.xx)).toEqual([0, 1]);
+    expect(Array.from(truncated.yy)).toEqual([0, 1]);
   });
 });

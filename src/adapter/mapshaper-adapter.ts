@@ -687,32 +687,13 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
   }
 
   appendArc(arcs: ArcCollection, points: readonly (readonly [number, number])[]): number {
-    const data = arcs.getVertexData!();
-    const arcId = arcs.size();
-    const pointCount = data.xx.length;
-    const nn = new Int32Array(arcId + 1);
-    nn.set(data.nn);
-    nn[arcId] = points.length;
-    const xx = new Float64Array(pointCount + points.length);
-    xx.set(data.xx);
-    const yy = new Float64Array(pointCount + points.length);
-    yy.set(data.yy);
+    const xx = new Float64Array(points.length);
+    const yy = new Float64Array(points.length);
     for (let index = 0; index < points.length; index++) {
-      xx[pointCount + index] = points[index]![0];
-      yy[pointCount + index] = points[index]![1];
+      xx[index] = points[index]![0];
+      yy[index] = points[index]![1];
     }
-    // Mirror insertVertex: appended vertices carry Infinity thresholds (always
-    // retained) when the collection keeps simplification data.
-    const flat = arcs.isFlat?.() ?? data.zz === null;
-    let zz: Float64Array | null = null;
-    if (!flat) {
-      zz = new Float64Array(pointCount + points.length).fill(Infinity);
-      if (data.zz) zz.set(data.zz);
-    }
-    const retained = arcs.getRetainedInterval?.() ?? 0;
-    arcs.updateVertexData!(nn, xx, yy, zz);
-    arcs.setRetainedInterval?.(retained);
-    return arcId;
+    return this.appendArcs(arcs, [{ xx, yy }]);
   }
   appendArcs(arcs: ArcCollection, arcsToAppend: AppendedArc[]): number {
     const data = arcs.getVertexData!();
@@ -781,7 +762,7 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
 
 
   deleteLastArc(arcs: ArcCollection): void {
-    mapshaper.internal.deleteLastArc(arcs);
+    this.truncateArcs(arcs, arcs.size() - 1);
   }
 
   findNearestVertices(point: [number, number], shape: number[][], arcs: ArcCollection): number[] {

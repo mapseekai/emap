@@ -2,38 +2,49 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mapshaper from 'mapshaper';
 import { FeatureCreateCommand } from './feature-create';
 import type { TopologySource } from '../../source/source';
+import type { ArcCollection } from '../../types/mapshaper-types';
 
-function makeArcs() {
-  return {
-    appendCalls: [] as string[],
-    appendVertexCalls: [] as [number, number][],
-    deleteLastArcCalls: 0,
+function makeArcs(): ArcCollection {
+  let nn = new Int32Array([2]);
+  let xx = new Float64Array([0, 1]);
+  let yy = new Float64Array([0, 1]);
+
+  const arcs = {
+    size: () => nn.length,
+    getVertexData: () => ({ xx, yy, zz: null, nn, ii: new Int32Array([0]), bb: null }),
+    updateVertexData(
+      newNn: Int32Array,
+      newXx: Float64Array,
+      newYy: Float64Array,
+      _newZz: Float64Array | null,
+    ) {
+      nn = newNn;
+      xx = newXx;
+      yy = newYy;
+    },
   };
+  // This focused command fixture implements only the ArcCollection methods it exercises.
+  return arcs as unknown as ArcCollection;
 }
 
 describe('FeatureCreateCommand', () => {
   // Capture mapshaper internals so we can verify which paths got invoked
   const originalAppendEmptyArc = Reflect.get(mapshaper.internal as object, 'appendEmptyArc');
   const originalAppendVertex = Reflect.get(mapshaper.internal as object, 'appendVertex');
-  const originalDeleteLastArc = Reflect.get(mapshaper.internal as object, 'deleteLastArc');
 
   let appendEmptySpy: ReturnType<typeof vi.fn>;
   let appendVertexSpy: ReturnType<typeof vi.fn>;
-  let deleteLastArcSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     appendEmptySpy = vi.fn();
     appendVertexSpy = vi.fn();
-    deleteLastArcSpy = vi.fn();
     Reflect.set(mapshaper.internal as object, 'appendEmptyArc', appendEmptySpy);
     Reflect.set(mapshaper.internal as object, 'appendVertex', appendVertexSpy);
-    Reflect.set(mapshaper.internal as object, 'deleteLastArc', deleteLastArcSpy);
   });
 
   afterEach(() => {
     Reflect.set(mapshaper.internal as object, 'appendEmptyArc', originalAppendEmptyArc);
     Reflect.set(mapshaper.internal as object, 'appendVertex', originalAppendVertex);
-    Reflect.set(mapshaper.internal as object, 'deleteLastArc', originalDeleteLastArc);
   });
 
   function makeSource(): TopologySource {
@@ -46,6 +57,7 @@ describe('FeatureCreateCommand', () => {
       shapes: [[[5]]] as any[][],
       data: { getRecords: () => records },
     };
+    const arcs = makeArcs();
     const cmd = new FeatureCreateCommand({
       geometryType: 'polyline',
       layer: layer as any,
@@ -56,12 +68,12 @@ describe('FeatureCreateCommand', () => {
         [0, 0],
         [1, 1],
       ],
-      arcs: makeArcs() as any,
+      arcs,
     });
     cmd.undo();
     expect(layer.shapes).toEqual([]);
     expect(records).toEqual([]);
-    expect(deleteLastArcSpy).toHaveBeenCalledTimes(1);
+    expect(arcs.size()).toBe(0);
   });
 
   it('undo on a point pops shape and record but does not touch arcs', () => {
@@ -80,7 +92,6 @@ describe('FeatureCreateCommand', () => {
     cmd.undo();
     expect(layer.shapes).toEqual([]);
     expect(records).toEqual([]);
-    expect(deleteLastArcSpy).not.toHaveBeenCalled();
   });
 
   it('redo re-creates the arc and re-pushes shape + record', () => {
@@ -100,7 +111,7 @@ describe('FeatureCreateCommand', () => {
         [3, 4],
         [5, 5],
       ],
-      arcs: makeArcs() as any,
+      arcs: makeArcs(),
     });
     cmd.do();
     expect(layer.shapes.length).toBe(1);
@@ -127,13 +138,12 @@ describe('FeatureCreateCommand', () => {
         [10, 10],
         [0, 0],
       ],
-      arcs: makeArcs() as any,
+      arcs: makeArcs(),
     });
     cmd.undo();
     cmd.do();
     expect(layer.shapes.length).toBe(1);
     expect(records.length).toBe(1);
-    expect(deleteLastArcSpy).toHaveBeenCalledTimes(1);
     expect(appendEmptySpy).toHaveBeenCalledTimes(1);
   });
 });
