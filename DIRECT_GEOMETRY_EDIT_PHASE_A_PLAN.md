@@ -2194,10 +2194,12 @@ In `src/edit/transaction.ts`, replace the `rollback()` body up to the selection 
     for (let i = cmds.length - 1; i >= 0; i--) {
       try {
         cmds[i]!.undo();
-      } catch {
-        // Best effort: replacement-touched sources are still recovered by
-        // the snapshot restore below; in-place undo failures are not
-        // recoverable and surface via the render/event refresh.
+      } catch (error) {
+        // Best effort, but observable (user-adjudicated during review):
+        // log each failure and continue — rollback() stays a total
+        // function; replacement-touched sources are still recovered by
+        // the snapshot restore below.
+        console.error(`emap: rollback could not undo "${cmds[i]!.label}"; in-place state may be partially reverted`, error);
       }
     }
     // Restore every touched source's dataset to its first-touch snapshot.
