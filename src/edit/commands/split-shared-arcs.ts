@@ -1,13 +1,15 @@
 import type { EditCommand } from '../edit-command';
 import {
+  getDefaultMapshaperAdapter,
+  type AppendedArc,
+} from '../../adapter/mapshaper-adapter';
+import {
   isPathLayer,
-  type ArcCollection,
   type MapshaperLayer,
   type PathShape,
 } from '../../types/mapshaper-types';
 import { asMutableTopologySource, type TopologySource } from '../../source/source';
 import { markSourceChanged } from './_shared';
-import type { AppendedArc } from '../../adapter/mapshaper-adapter';
 // Re-exported so the public `@/edit/commands/split-shared-arcs` import path
 // (and `src/index.ts`) keep working after the type moved to the adapter.
 export type { AppendedArc };
@@ -64,7 +66,7 @@ export class SplitSharedArcsCommand implements EditCommand {
     const source = asMutableTopologySource(this.opts.source);
     const arcs = source.getArcs();
     if (!arcs) return;
-    appendArcs(arcs, this.opts.appendedArcs);
+    getDefaultMapshaperAdapter().appendArcs(arcs, this.opts.appendedArcs);
     for (const r of this.opts.remaps) {
       r.layer.shapes![r.featureId] = cloneShape(r.newShape);
     }
@@ -75,7 +77,7 @@ export class SplitSharedArcsCommand implements EditCommand {
     const source = asMutableTopologySource(this.opts.source);
     const arcs = source.getArcs();
     if (!arcs) return;
-    truncateArcs(arcs, this.opts.originalArcCount);
+    getDefaultMapshaperAdapter().truncateArcs(arcs, this.opts.originalArcCount);
     for (const r of this.opts.remaps) {
       r.layer.shapes![r.featureId] = cloneShape(r.originalShape);
     }
@@ -215,60 +217,3 @@ function cloneShape(shape: PathShape): PathShape {
   return shape.map((part) => part.slice());
 }
 
-/**
- * Append the given arcs onto `arcs`. Builds new typed arrays once and hands
- * them to `updateVertexData`, which rebuilds bounds and indexes internally.
- */
-function appendArcs(arcs: ArcCollection, appended: AppendedArc[]): void {
-  const data = arcs.getVertexData?.();
-  if (!data) return;
-  const { xx, yy, zz, nn } = data;
-  const hasZ = !!zz && appended.every((a) => a.zz);
-
-  let extraPoints = 0;
-  for (const a of appended) extraPoints += a.xx.length;
-
-  const newXx = new Float64Array(xx.length + extraPoints);
-  const newYy = new Float64Array(yy.length + extraPoints);
-  const newZz = hasZ ? new Float64Array(zz!.length + extraPoints) : null;
-  newXx.set(xx);
-  newYy.set(yy);
-  if (newZz && zz) newZz.set(zz);
-
-  let cursor = xx.length;
-  for (const a of appended) {
-    newXx.set(a.xx, cursor);
-    newYy.set(a.yy, cursor);
-    if (newZz && a.zz) newZz.set(a.zz, cursor);
-    cursor += a.xx.length;
-  }
-
-  const newNn = new Int32Array(nn.length + appended.length);
-  newNn.set(nn);
-  for (let i = 0; i < appended.length; i++) newNn[nn.length + i] = appended[i].xx.length;
-
-  arcs.updateVertexData!(newNn, newXx, newYy, newZz);
-}
-
-/**
- * Truncate `arcs` back to `targetArcCount`. Used by undo. Drops the tail
- * vertex data along with the arc-count slot.
- */
-function truncateArcs(arcs: ArcCollection, targetArcCount: number): void {
-  const data = arcs.getVertexData?.();
-  if (!data) return;
-  const { xx, yy, zz, nn } = data;
-  if (nn.length === targetArcCount) return;
-  if (targetArcCount > nn.length) return; // shouldn't happen — defensive
-
-  let keptPoints = 0;
-  for (let i = 0; i < targetArcCount; i++) keptPoints += nn[i];
-
-  const newNn = new Int32Array(targetArcCount);
-  newNn.set(nn.subarray(0, targetArcCount));
-  const newXx = new Float64Array(xx.subarray(0, keptPoints));
-  const newYy = new Float64Array(yy.subarray(0, keptPoints));
-  const newZz = zz ? new Float64Array(zz.subarray(0, keptPoints)) : null;
-
-  arcs.updateVertexData!(newNn, newXx, newYy, newZz);
-}
