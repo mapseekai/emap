@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
+import type { EditCommand } from '../../edit/edit-command';
 import type { EmapHostInternal } from '../emap-host';
 import { Err, okValue, type OpResult } from '../op-result';
 import type { FeatureRef } from '../types';
@@ -54,14 +55,19 @@ async function createFixture(
     | Array<GeoJSON.Polygon | GeoJSON.MultiPolygon> = { type: 'Polygon', coordinates: rings },
 ) {
   let dataset = await importDataset(geometry);
-  let before: MapshaperDataset | undefined;
-  const source = { getDataset: () => dataset };
+  const entries: EditCommand[] = [];
+  const source = {
+    getDataset: () => dataset,
+    getArcs: () => dataset.arcs,
+  };
   const resolve = (layers: MapshaperDataset['layers'], sourceId: string, layerId: string) =>
     sourceId === 'source' && layerId === 'rings'
       ? (layers.find((layer) => layer.name === layerId) ?? null)
       : null;
+  const selection = new Selection();
+  selection.apply(refs, 'replace');
   const host = {
-    _selection: { getAll: () => refs },
+    _selection: selection,
     _sources: new Map([['source', source]]),
     layers: {
       resolve: (sourceId: string, layerId: string) => resolve(dataset.layers, sourceId, layerId),
@@ -79,8 +85,18 @@ async function createFixture(
       const working = adapter.copyDataset(original);
       const outcome = await mutate(working, original);
       if ('ok' in outcome) return outcome;
-      before = original;
       dataset = working;
+      return okValue(outcome.value);
+    },
+    runPreparedEditCommand: async <T>(
+      _sourceId: string,
+      _label: string,
+      plan: (planned: MapshaperDataset, plannedSource: unknown) => any,
+    ): Promise<OpResult<T>> => {
+      const outcome = plan(dataset, source);
+      if ('ok' in outcome) return outcome;
+      outcome.command.do();
+      entries.push(outcome.command);
       return okValue(outcome.value);
     },
   };
@@ -88,8 +104,9 @@ async function createFixture(
     ctx,
     dataset: () => dataset,
     refs,
+    entries,
     undo: () => {
-      if (before) dataset = before;
+      entries.at(-1)?.undo();
     },
   };
 }
@@ -102,6 +119,7 @@ function integrationHarness(dataset: MapshaperDataset) {
   let current = dataset;
   const source = {
     getDataset: () => current,
+    getArcs: () => current.arcs,
     getLayers: () => current.layers,
     setDataset: (value: MapshaperDataset) => {
       current = value;
@@ -244,13 +262,16 @@ describe('addRing', () => {
     const fixture = await createFixture();
     const before = exported(fixture.dataset());
     let historyEntries = 0;
-    fixture.ctx.runPreparedDatasetMutation = async <T>(
+    fixture.ctx.runPreparedEditCommand = async <T>(
       _sourceId,
       _label,
-      mutate,
+      plan,
     ): Promise<OpResult<T>> => {
       const dataset = fixture.dataset();
-      const result = await mutate(adapter.copyDataset(dataset), { ...dataset });
+      const result = plan({ ...dataset } as any, {
+        getDataset: () => dataset,
+        getArcs: () => dataset.arcs,
+      });
       if (result.ok) historyEntries++;
       return result;
     };
@@ -513,13 +534,13 @@ describe('addRing', () => {
 
   it('rejects stale prepared datasets', async () => {
     const fixture = await createFixture();
-    fixture.ctx.runPreparedDatasetMutation = async <T>(
+    fixture.ctx.runPreparedEditCommand = async <T>(
       _sourceId,
       _label,
-      mutate,
+      plan,
     ): Promise<OpResult<T>> => {
       const dataset = fixture.dataset();
-      return mutate(adapter.copyDataset(dataset), { ...dataset });
+      return plan({ ...dataset } as any, { getDataset: () => dataset });
     };
     await expect(
       addRing(fixture.ctx, {
@@ -537,6 +558,7 @@ describe('source-scan error flow', () => {
   it('propagates non-validation runner failures instead of reporting a miss', async () => {
     const fixture = await createFixture();
     fixture.ctx.runPreparedDatasetMutation = async () => Err.hostRemoved();
+    fixture.ctx.runPreparedEditCommand = async () => Err.hostRemoved();
     await expect(
       addRing(fixture.ctx, {
         ring: [
@@ -593,16 +615,13 @@ describe('source-scan error flow', () => {
           ['other', { getDataset: () => other.dataset() }],
         ]),
       } as unknown as EmapHostInternal,
-      runPreparedDatasetMutation: async <T>(
-        sourceId: string,
-        _label: string | ((value: T) => string),
-        mutate: (
-          working: MapshaperDataset,
-          original: MapshaperDataset,
-        ) => OpResult<T> | { value: T; selection: FeatureRef[] },
+      runPreparedEditCommand: async <T>(
+        sourceId,
+        _label,
+        plan,
       ): Promise<OpResult<T>> => {
         const dataset = (sourceId === 'conflict' ? conflict : other).dataset();
-        const outcome = await mutate(adapter.copyDataset(dataset), dataset);
+        const outcome = plan(dataset, { getDataset: () => dataset });
         return 'ok' in outcome ? outcome : okValue(outcome.value);
       },
     };
@@ -793,3 +812,81 @@ function area(ring: Position[]): number {
     }, 0) / 2
   );
 }
+
+describe('addRing direct edit (multi-level undo)', () => {
+  const SHELL: GeoJSON.Polygon = {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+        [0, 0],
+      ],
+    ],
+  };
+  const HOLE_A: [number, number][] = [
+    [1, 1],
+    [2, 1],
+    [2, 2],
+    [1, 2],
+  ];
+  const HOLE_B: [number, number][] = [
+    [4, 1],
+    [5, 1],
+    [5, 2],
+    [4, 2],
+  ];
+  const HOLE_C: [number, number][] = [
+    [7, 1],
+    [8, 1],
+    [8, 2],
+    [7, 2],
+  ];
+
+  it('commits an in-place command without copying the dataset', async () => {
+    const fixture = await createFixture(undefined, undefined, SHELL);
+    const live = fixture.dataset();
+    const copySpy = vi.spyOn(adapter, 'copyDataset');
+    try {
+      const result = await addRing(fixture.ctx, { ring: HOLE_A });
+      expect(result.ok).toBe(true);
+      expect(copySpy).not.toHaveBeenCalled();
+      expect(fixture.dataset()).toBe(live); // same object, mutated in place
+      expect(fixture.entries).toHaveLength(1);
+      expect(fixture.entries[0]!.label).toBe('Add ring');
+      expect((fixture.entries[0] as any).invalidatesPriorCommands).toBeUndefined();
+    } finally {
+      copySpy.mockRestore();
+    }
+  });
+
+  it('three consecutive addRings undo/redo level by level with stable arc ids', async () => {
+    const fixture = await createFixture(undefined, undefined, SHELL);
+    const arcs = fixture.dataset().arcs!;
+    const originalArcCount = arcs.size();
+    const ringCount = () => exported(fixture.dataset()).coordinates.length;
+
+    await addRing(fixture.ctx, { ring: HOLE_A });
+    await addRing(fixture.ctx, { ring: HOLE_B });
+    await addRing(fixture.ctx, { ring: HOLE_C });
+    expect(ringCount()).toBe(4);
+    expect(arcs.size()).toBe(originalArcCount + 3);
+    expect(fixture.entries).toHaveLength(3);
+
+    fixture.entries[2]!.undo();
+    expect(ringCount()).toBe(3);
+    fixture.entries[1]!.undo();
+    expect(ringCount()).toBe(2);
+    fixture.entries[0]!.undo();
+    expect(ringCount()).toBe(1);
+    expect(arcs.size()).toBe(originalArcCount);
+
+    fixture.entries[0]!.do();
+    fixture.entries[1]!.do();
+    fixture.entries[2]!.do();
+    expect(ringCount()).toBe(4);
+    expect(arcs.size()).toBe(originalArcCount + 3); // redo reuses the same ids
+  });
+});

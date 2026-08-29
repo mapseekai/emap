@@ -1,4 +1,4 @@
-import type { MapshaperAdapter } from '../../adapter/mapshaper-adapter';
+import type { AppendedArc, MapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import Flatbush from 'flatbush';
 import type { MapshaperDataset, PathShape } from '../../types/mapshaper-types';
 import { SplitGeometryValidationError } from './split-selected-error';
@@ -395,4 +395,15 @@ export function shoelaceArea(ring: readonly Coordinate[]): number {
       0,
     ) / 2
   );
+}
+
+/** Pack planar coordinates into one appendable arc snapshot (no zz). */
+export function coordinatesToArcSnapshot(points: readonly Coordinate[]): AppendedArc {
+  const xx = new Float64Array(points.length);
+  const yy = new Float64Array(points.length);
+  for (let i = 0; i < points.length; i++) {
+    xx[i] = points[i]![0];
+    yy[i] = points[i]![1];
+  }
+  return { xx, yy };
 }
