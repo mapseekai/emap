@@ -59,19 +59,11 @@ async function createFixture(
         layers.find((layer) => layer.name === layerId) ?? null,
     },
   } as unknown as EmapHostInternal;
-  const ctx: OpContext = {
+  const ctx = {
     host,
     runDatasetCommand: async () => okValue(undefined),
     runDatasetCommandParsed: async () => okValue(undefined),
     runPreparedDatasetCommandParsed: async () => okValue(undefined),
-    runPreparedDatasetMutation: async <T>(_sourceId, _label, mutate): Promise<OpResult<T>> => {
-      const original = dataset;
-      const outcome = await mutate(adapter.copyDataset(original), original);
-      if ('ok' in outcome) return outcome;
-      dataset = adapter.copyDataset(original);
-      const committed = await mutate(dataset, original);
-      return 'ok' in committed ? committed : okValue(committed.value);
-    },
     runPreparedEditCommand: async <T>(
       _sourceId: string,
       _label: string,
@@ -83,7 +75,7 @@ async function createFixture(
       entries.push(outcome.command);
       return okValue(outcome.value);
     },
-  };
+  } as unknown as OpContext;
   return { ctx, dataset: () => dataset, entries };
 }
 
@@ -514,7 +506,7 @@ describe('deletePart', () => {
 
   it('propagates non-validation runner failures instead of reporting a miss', async () => {
     const fixture = await createFixture({ type: 'Polygon', coordinates: [square] });
-    fixture.ctx.runPreparedDatasetMutation = async () => Err.hostRemoved();
+    fixture.ctx.runPreparedEditCommand = async () => Err.hostRemoved();
     await expect(deletePart(fixture.ctx, { point: [5, 5] })).resolves.toMatchObject({
       ok: false,
       error: { kind: 'host-removed' },
@@ -561,5 +553,71 @@ describe('deletePart', () => {
     fixture.history.entries[0]!.undo();
     expect(exported(fixture.source.getDataset())).toEqual(before);
     expect(fixture.selection.getAll()).toEqual([{ source: 'source', layer: 'parts', id: 0 }]);
+  });
+});
+
+describe('deletePart direct edit', () => {
+  const MULTI_PART: GeoJSON.MultiPolygon = {
+    type: 'MultiPolygon',
+    coordinates: [
+      [
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+      ], // part 0
+      [
+        [
+          [20, 0],
+          [30, 0],
+          [30, 10],
+          [20, 10],
+          [20, 0],
+        ],
+      ], // part 1 — click target [25, 5]
+    ],
+  };
+
+  it('deleting one of several parts patches the shape without arc compaction', async () => {
+    const fixture = await createFixture(MULTI_PART);
+    const arcs = fixture.dataset().arcs!;
+    const arcCount = arcs.size();
+    const partCount = () => fixture.dataset().layers[0]!.shapes![0]!.length;
+    const cleanSpy = vi.spyOn(adapter, 'cleanArcReferences');
+    try {
+      const result = await deletePart(fixture.ctx, { point: [25, 5] });
+      expect(result.ok).toBe(true);
+      expect(cleanSpy).not.toHaveBeenCalled();
+      expect(arcs.size()).toBe(arcCount); // deleted part's arc retained as orphan
+      expect(partCount()).toBe(1);
+    } finally {
+      cleanSpy.mockRestore();
+    }
+    fixture.entries[0]!.undo();
+    expect(partCount()).toBe(2);
+    expect(arcs.size()).toBe(arcCount);
+  });
+
+  it('deleting the last part removes feature row, record, selection — all restored by undo', async () => {
+    const fixture = await createFixture({ type: 'Polygon', coordinates: [square] });
+    const highlight = vi.fn();
+    (fixture.ctx.host as any)._clearHighlightsForLayer = highlight;
+    const layer = fixture.dataset().layers[0]!;
+    const result = await deletePart(fixture.ctx, { point: [5, 5] });
+    expect(result.ok).toBe(true);
+    expect(layer.shapes).toHaveLength(0);
+    expect(layer.data!.getRecords()).toHaveLength(0);
+    expect(fixture.ctx.host._selection.getAll()).toEqual([]);
+    expect(highlight).toHaveBeenCalledWith('source', expect.arrayContaining(['parts']));
+
+    fixture.entries[0]!.undo();
+    expect(layer.shapes).toHaveLength(1);
+    expect(layer.data!.getRecords()).toHaveLength(1);
+    expect(fixture.ctx.host._selection.getAll()).toEqual([
+      { source: 'source', layer: 'parts', id: 0 },
+    ]);
   });
 });

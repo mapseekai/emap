@@ -1,5 +1,6 @@
 import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import { PathGeometryPatchCommand } from '../../edit/commands/path-geometry-patch';
+import { FeatureDeleteWithSelectionCommand } from '../../edit/commands/feature-delete';
 import {
   isPathLayer,
   type MapshaperDataset,
@@ -355,60 +356,96 @@ export async function deletePart(
   for (const [sourceId, source] of ctx.host._sources) {
     const dataset = source.getDataset();
     if (!dataset?.arcs) continue;
-    const result = await ctx.runPreparedDatasetMutation(
-      sourceId,
-      'Delete part',
-      (working, original) => {
-        if (original !== dataset) return Err.staleOperation(sourceId, 'Delete part');
-        const workingArcs = working.arcs!;
-        for (let layerIndex = 0; layerIndex < working.layers.length; layerIndex++) {
-          const workingLayer = working.layers[layerIndex]!;
-          if (
-            !isPathLayer(workingLayer) ||
-            (workingLayer.geometry_type !== 'polygon' &&
-              workingLayer.geometry_type !== 'polyline') ||
-            !workingLayer.shapes
-          )
-            continue;
-          const polygon = workingLayer.geometry_type === 'polygon';
-          if (polygon) searchedPolygon = true;
-          for (let featureId = 0; featureId < workingLayer.shapes.length; featureId++) {
-            const shape = workingLayer.shapes[featureId] as PathShape | null;
-            if (!shape?.length) continue;
-            const index = polygon
-              ? polygonPartIndex(options.point, shape, workingArcs, adapter)
-              : (() => {
-                  const closest = closestPartIndex(options.point, shape, workingArcs, adapter);
-                  return closest && closest.distance <= tolerance ? closest.index : -1;
-                })();
-            if (index === -1) continue;
-            if (polygon) {
-              const shapeError = validatePolygonShape(shape, workingArcs, adapter);
-              if (shapeError) return shapeError;
-            }
-            shape.splice(index, 1);
-            const removedId = shape.length === 0 ? featureId : null;
-            if (removedId !== null) {
-              workingLayer.shapes.splice(featureId, 1);
-              workingLayer.data?.getRecords?.().splice(featureId, 1);
-            }
-            adapter.cleanArcReferences(working);
+    // Track the deleted feature's layer keys across the planner boundary so
+    // highlights can be cleared after a successful commit.
+    let deletedFeatureLayerKeys: readonly string[] | null = null;
+    const result = await ctx.runPreparedEditCommand(sourceId, 'Delete part', (planned) => {
+      if (planned !== dataset) return Err.staleOperation(sourceId, 'Delete part');
+      const arcs = planned.arcs!;
+      for (let layerIndex = 0; layerIndex < planned.layers.length; layerIndex++) {
+        const layer = planned.layers[layerIndex]!;
+        if (
+          !isPathLayer(layer) ||
+          (layer.geometry_type !== 'polygon' && layer.geometry_type !== 'polyline') ||
+          !layer.shapes
+        )
+          continue;
+        const polygon = layer.geometry_type === 'polygon';
+        if (polygon) searchedPolygon = true;
+        for (let featureId = 0; featureId < layer.shapes.length; featureId++) {
+          const shape = layer.shapes[featureId] as PathShape | null;
+          if (!shape?.length) continue;
+          const index = polygon
+            ? polygonPartIndex(options.point, shape, arcs, adapter)
+            : (() => {
+                const closest = closestPartIndex(options.point, shape, arcs, adapter);
+                return closest && closest.distance <= tolerance ? closest.index : -1;
+              })();
+          if (index === -1) continue;
+          if (polygon) {
+            const shapeError = validatePolygonShape(shape, arcs, adapter);
+            if (shapeError) return shapeError;
+          }
+          const beforeSelection = ctx.host._selection.snapshot();
+          const currentRefs = ctx.host._selection.getAll();
+          if (shape.length > 1) {
+            // Shape patch only — the part's arc stays as an orphan.
+            const afterShape = shape.filter((_, partIndex) => partIndex !== index);
             return {
               value: undefined,
-              selection: selectionAfterFeatureRemoval(
-                ctx.host._selection.getAll(),
-                sourceId,
-                workingLayer,
-                layerIndex,
-                removedId,
-              ),
+              affectedSourceIds: [sourceId],
+              command: new PathGeometryPatchCommand({
+                source,
+                shapePatches: [{ layer, featureId, before: shape, after: afterShape }],
+                originalArcCount: arcs.size(),
+                appendedArcs: [],
+                selection: ctx.host._selection,
+                beforeSelection,
+                afterSelection: currentRefs,
+                publishSelection: (diff) => ctx.host._fireSelectionChange(diff),
+                label: 'Delete part',
+              }),
             };
           }
+          // Last part: the whole feature (row + attribute record) goes away
+          // and every later feature id in the layer shifts down by one.
+          deletedFeatureLayerKeys = [
+            getLayerId(layer, layerIndex),
+            ...(layer.name ? [String(layer.name)] : []),
+            ...(layer.id ? [String(layer.id)] : []),
+          ];
+          return {
+            value: undefined,
+            affectedSourceIds: [sourceId],
+            command: new FeatureDeleteWithSelectionCommand({
+              layer,
+              featureId,
+              shape,
+              record: layer.data?.getRecords?.()[featureId] ?? null,
+              source,
+              selection: ctx.host._selection,
+              beforeSelection,
+              afterSelection: selectionAfterFeatureRemoval(
+                currentRefs,
+                sourceId,
+                layer,
+                layerIndex,
+                featureId,
+              ),
+              publishSelection: (diff) => ctx.host._fireSelectionChange(diff),
+              label: 'Delete part',
+            }),
+          };
         }
-        return Err.validation('part', 'no part contains the point');
-      },
-    );
-    if (result.ok) return result;
+      }
+      return Err.validation('part', 'no part contains the point');
+    });
+    if (result.ok) {
+      if (deletedFeatureLayerKeys) {
+        ctx.host._clearHighlightsForLayer?.(sourceId, deletedFeatureLayerKeys);
+      }
+      return result;
+    }
     if (result.error.kind !== 'validation') return result;
   }
   return Err.validation(
