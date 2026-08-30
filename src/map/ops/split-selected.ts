@@ -131,11 +131,16 @@ export async function splitSelected(
 
   const callTimeDataset = source.getDataset();
   if (!callTimeDataset) return Err.notFound('source', sourceId);
+  const callTimeEditVersion = callTimeDataset.editVersion ?? 0;
   const adapter = getDefaultMapshaperAdapter();
 
   return ctx.runPreparedEditCommand(sourceId, 'Split selected features', (planned, mutableSource) => {
-    if (planned !== callTimeDataset)
+    if (
+      planned !== callTimeDataset ||
+      (planned.editVersion ?? 0) !== callTimeEditVersion
+    ) {
       return Err.staleOperation(sourceId, 'Split selected features');
+    }
     const liveLayer = ctx.host.layers.resolveInLayers(planned.layers, layerId);
     if (!liveLayer || !isPathLayer(liveLayer) || !liveLayer.shapes) {
       return Err.staleOperation(sourceId, 'Split selected features');

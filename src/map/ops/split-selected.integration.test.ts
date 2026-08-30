@@ -240,6 +240,43 @@ describe('MapshaperOps.splitSelected integration', () => {
     expect(state.selection.getAll()).toEqual(splitSelection);
   });
 
+  it('rejects a queued direct split after an earlier direct split changed the live edit version', async () => {
+    const dataset = await importDataset([
+      line(
+        [
+          [0, 0],
+          [10, 0],
+        ],
+        { name: 'road' },
+      ),
+    ]);
+    dataset.layers[0]!.name = 'split-selected';
+    const state = harness(dataset, [0]);
+
+    const first = state.ops.splitSelected({ cutter: { type: 'point', coordinates: [3, 0] } });
+    const queued = state.ops.splitSelected({ cutter: { type: 'point', coordinates: [6, 0] } });
+
+    await expect(first).resolves.toMatchObject({ ok: true, value: { splitTargetCount: 1 } });
+    await expect(queued).resolves.toMatchObject({
+      ok: false,
+      error: { kind: 'stale-operation', operation: 'Split selected features' },
+    });
+    expect(state.source.getDataset()).toBe(dataset);
+    expect(exportFeatures(dataset).map((feature) => feature.geometry!.coordinates)).toEqual([
+      [
+        [3, 0],
+        [10, 0],
+      ],
+      [
+        [0, 0],
+        [3, 0],
+      ],
+    ]);
+    expect(state.history.entries).toHaveLength(1);
+    expect(state.source.fire).toHaveBeenCalledTimes(1);
+    expect(state.events.selection).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps polyline-cutter splits direct and patches a same-id neighbor layer independently', async () => {
     const dataset = await importDataset([
       line(
