@@ -3,6 +3,7 @@ import mapshaper from 'mapshaper';
 import { unzipSync, strFromU8, zipSync } from 'fflate';
 import { TopologySource } from './topology-source';
 import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../adapter/mapshaper-adapter';
+import type { MapshaperDataset } from '../types/mapshaper-types';
 import { registerFormat, unregisterFormat } from './format-registry';
 
 function setPrivate(target: object, key: string, value: unknown): void {
@@ -198,6 +199,62 @@ describe('TopologySource.export', () => {
     } finally {
       Reflect.set(mapshaper.internal as object, 'exportPackedDatasets', originalPack);
     }
+  });
+
+  it('msx export serializes a compacted copy, leaving the live dataset untouched', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const source = new TopologySource('msx-orphan');
+    await source.setData({
+      filename: 'a.geojson',
+      content: new TextEncoder().encode(
+        JSON.stringify({
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'Polygon',
+                coordinates: [
+                  [
+                    [0, 0], [1, 0], [1, 1], [0, 1], [0, 0],
+                  ],
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    });
+    const live = source.getDataset()!;
+    const liveArcCount = live.arcs!.size();
+    // Append an unreferenced (orphan) arc directly to the live collection.
+    adapter.appendArc(live.arcs!, [
+      [5, 5],
+      [6, 6],
+    ]);
+    expect(live.arcs!.size()).toBe(liveArcCount + 1);
+
+    // Note: TopologySource stores the adapter as `this._adapter`. If it holds the
+    // process-wide singleton (getDefaultMapshaperAdapter()), spying on `adapter`
+    // here intercepts the call; if a future refactor hands sources their own
+    // instance, spy on `getPrivate(source, '_adapter')` instead.
+    const seen: number[] = [];
+    const spy = vi
+      .spyOn(adapter, 'exportPackedDatasets')
+      .mockImplementation(async (datasets: MapshaperDataset[]) => {
+        const dataset = datasets[0]!;
+        seen.push(dataset.arcs!.size());
+        expect(dataset).not.toBe(live); // must be a copy
+        return [{ filename: 'a.msx', content: new Uint8Array([0]) }];
+      });
+    try {
+      await source.export({ format: 'msx' });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(seen).toEqual([liveArcCount]); // orphan compacted away in the copy
+    expect(live.arcs!.size()).toBe(liveArcCount + 1); // live dataset untouched
   });
 });
 
