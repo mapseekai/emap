@@ -478,15 +478,24 @@ export function _runPreparedEditCommandMany<T>(
       targets.push({ sourceId, source, dataset, editVersion: dataset.editVersion ?? 0 });
     }
 
-    const planned: PreparedDirectEdit<T>[] = [];
+    const planned: Array<{
+      edit: PreparedDirectEdit<T>;
+      target: (typeof targets)[number];
+    }> = [];
+    let firstValidation: OpResult<T> | null = null;
     try {
       for (const target of targets) {
         const outcome = plan(target.sourceId, target.dataset, target.source);
         if (outcome === null) continue;
         if ('ok' in outcome) {
-          return outcome.ok ? okValue([outcome.value]) : outcome;
+          if (outcome.ok) return okValue([outcome.value]);
+          if (outcome.error.kind === 'validation') {
+            firstValidation ??= outcome;
+            continue;
+          }
+          return outcome;
         }
-        planned.push(outcome);
+        planned.push({ edit: outcome, target });
       }
     } catch (error) {
       if (host._removed) return Err.hostRemoved();
@@ -496,6 +505,9 @@ export function _runPreparedEditCommandMany<T>(
       });
     }
 
+    if (planned.length === 0) {
+      return firstValidation ?? Err.validation('operation', 'did not prepare any edit');
+    }
     if (host._removed) return Err.hostRemoved();
     for (const target of targets) {
       if (
@@ -512,10 +524,21 @@ export function _runPreparedEditCommandMany<T>(
       }
     }
 
-    for (const target of targets) transaction?._captureFirstTouch(target.sourceId, target.dataset);
-    const values = planned.map((outcome) => outcome.value);
+    const targetsById = new Map(targets.map((target) => [target.sourceId, target]));
+    const affectedSourceIds = uniqueSourceIds(
+      planned.flatMap(({ edit }) => edit.affectedSourceIds),
+    );
+    const affectedTargets = affectedSourceIds.map((sourceId) => targetsById.get(sourceId));
+    if (affectedTargets.some((target) => target === undefined)) {
+      return Err.validation('source', 'command affects a source that was not locked');
+    }
+
+    for (const target of affectedTargets) {
+      transaction?._captureFirstTouch(target!.sourceId, target!.dataset);
+    }
+    const values = planned.map(({ edit }) => edit.value);
     const command = new AtomicCompositeCommand(
-      planned.map((outcome) => outcome.command),
+      planned.map(({ edit }) => edit.command),
       typeof label === 'string' ? label : label(values),
     );
     try {

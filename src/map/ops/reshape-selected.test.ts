@@ -110,6 +110,7 @@ async function createFixture(
     ctx,
     host,
     dataset: () => dataset,
+    historyEntries: () => entries.length,
     historyChanges: () => historyChange.mock.calls.length,
     selectionChanges: () => selectionChange.mock.calls.length,
     undo: () => {
@@ -348,6 +349,8 @@ describe('reshapeSelected', () => {
       ok: false,
       error: { kind: 'validation', field: 'line' },
     });
+    expect(fixture.historyEntries()).toBe(0);
+    expect(fixture.historyChanges()).toBe(0);
   });
 
   it('reshapes selected polygon target layers', async () => {

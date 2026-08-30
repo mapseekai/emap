@@ -480,4 +480,124 @@ describe('multi-source direct edit runner', () => {
     expect(host._history.size()).toBe(0);
     expect(host._fireHistoryChange).not.toHaveBeenCalled();
   });
+
+  it('leaves an atomically rolled-back composite redoable when a later redo child throws', async () => {
+    const datasetA = { layers: [], arcs: null };
+    const datasetB = { layers: [], arcs: null };
+    const state = { a: false, b: false };
+    let failRedo = false;
+    const commandA = {
+      do: vi.fn(() => {
+        state.a = true;
+      }),
+      undo: vi.fn(() => {
+        state.a = false;
+      }),
+    };
+    const commandB = {
+      do: vi.fn(() => {
+        state.b = true;
+        if (failRedo) throw new Error('redo boom');
+      }),
+      undo: vi.fn(() => {
+        state.b = false;
+      }),
+    };
+    const host = makeHost(
+      new Map([
+        ['a', { getDataset: () => datasetA }],
+        ['b', { getDataset: () => datasetB }],
+      ]),
+    );
+    await _runPreparedEditCommandMany(host, ['a', 'b'], 'Reshape', (sourceId) => ({
+      value: sourceId,
+      command: sourceId === 'a' ? commandA : commandB,
+      affectedSourceIds: [sourceId],
+    }));
+    host._history.undo();
+    failRedo = true;
+
+    expect(() => host._history.redo()).toThrow('redo boom');
+    expect(state).toEqual({ a: false, b: false });
+    expect(host._history.canRedo()).toBe(true);
+  });
+
+  it('returns a no-plan validation without history, publish, or transaction capture', async () => {
+    const dataset = { layers: [], arcs: null };
+    const host = makeHost(new Map([['a', { getDataset: () => dataset }]]));
+    host._activeTransaction = {
+      isOpen: true,
+      _captureFirstTouch: vi.fn(),
+      _trackOperation: vi.fn(),
+    };
+
+    const result = await _runPreparedEditCommandMany(host, ['a'], 'Reshape', () => null);
+
+    expect(result).toMatchObject({ ok: false, error: { kind: 'validation' } });
+    expect(host._history.size()).toBe(0);
+    expect(host._fireHistoryChange).not.toHaveBeenCalled();
+    expect(host._activeTransaction._captureFirstTouch).not.toHaveBeenCalled();
+  });
+
+  it('continues past a validation-only plan and commits another source', async () => {
+    const datasetA = { layers: [], arcs: null };
+    const datasetB = { layers: [], arcs: null };
+    const command = { do: vi.fn(), undo: vi.fn(), publish: vi.fn() };
+    const host = makeHost(
+      new Map([
+        ['a', { getDataset: () => datasetA }],
+        ['b', { getDataset: () => datasetB }],
+      ]),
+    );
+
+    const result = await _runPreparedEditCommandMany(host, ['a', 'b'], 'Reshape', (sourceId) =>
+      sourceId === 'a'
+        ? Err.validation('geometry', 'invalid')
+        : { value: sourceId, command, affectedSourceIds: ['b'] },
+    );
+
+    expect(result).toEqual({ ok: true, value: ['b'] });
+    expect(command.do).toHaveBeenCalledTimes(1);
+    expect(host._history.size()).toBe(1);
+  });
+
+  it('captures only sources a planned command declares as affected', async () => {
+    const datasetA = { layers: [], arcs: null };
+    const datasetB = { layers: [], arcs: null };
+    const command = { do: vi.fn(), undo: vi.fn() };
+    const host = makeHost(
+      new Map([
+        ['a', { getDataset: () => datasetA }],
+        ['b', { getDataset: () => datasetB }],
+      ]),
+    );
+    host._activeTransaction = {
+      isOpen: true,
+      _captureFirstTouch: vi.fn(),
+      _trackOperation: vi.fn(),
+    };
+
+    await _runPreparedEditCommandMany(host, ['a', 'b'], 'Reshape', (sourceId) =>
+      sourceId === 'a' ? { value: undefined, command, affectedSourceIds: ['a'] } : null,
+    );
+
+    expect(host._activeTransaction._captureFirstTouch).toHaveBeenCalledTimes(1);
+    expect(host._activeTransaction._captureFirstTouch).toHaveBeenCalledWith('a', datasetA);
+  });
+
+  it('rejects an affected source that was not locked before any child runs', async () => {
+    const dataset = { layers: [], arcs: null };
+    const command = { do: vi.fn(), undo: vi.fn() };
+    const host = makeHost(new Map([['a', { getDataset: () => dataset }]]));
+
+    const result = await _runPreparedEditCommandMany(host, ['a'], 'Reshape', () => ({
+      value: undefined,
+      command,
+      affectedSourceIds: ['outside'],
+    }));
+
+    expect(result).toMatchObject({ ok: false, error: { kind: 'validation', field: 'source' } });
+    expect(command.do).not.toHaveBeenCalled();
+    expect(host._history.size()).toBe(0);
+  });
 });

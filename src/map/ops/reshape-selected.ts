@@ -96,7 +96,11 @@ export async function reshapeSelected(
       };
     },
   );
-  if (!result.ok) return result;
+  if (!result.ok) {
+    return result.error.kind === 'validation'
+      ? Err.validation('line', 'did not reshape any feature')
+      : result;
+  }
   const reshapedCount = result.value.reduce((total, value) => total + value.reshapedCount, 0);
   return reshapedCount === 0
     ? Err.validation('line', 'did not reshape any feature')

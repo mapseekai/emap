@@ -53,6 +53,33 @@ describe('EditHistory', () => {
     expect(h.canRedo()).toBe(false);
   });
 
+  it('keeps a command undoable when undo throws', () => {
+    const h = new EditHistory();
+    const cmd = makeCmd();
+    cmd.undo.mockImplementation(() => {
+      throw new Error('undo failed');
+    });
+    h.push(cmd);
+
+    expect(() => h.undo()).toThrow('undo failed');
+    expect(h.canUndo()).toBe(true);
+    expect(h.canRedo()).toBe(false);
+  });
+
+  it('keeps a command redoable when redo throws', () => {
+    const h = new EditHistory();
+    const cmd = makeCmd();
+    h.push(cmd);
+    h.undo();
+    cmd.do.mockImplementation(() => {
+      throw new Error('redo failed');
+    });
+
+    expect(() => h.redo()).toThrow('redo failed');
+    expect(h.canUndo()).toBe(false);
+    expect(h.canRedo()).toBe(true);
+  });
+
   it('undo on an empty stack returns null', () => {
     const h = new EditHistory();
     expect(h.undo()).toBeNull();

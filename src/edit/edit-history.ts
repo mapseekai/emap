@@ -170,7 +170,7 @@ export class EditHistory {
    * a step was traversed.
    */
   undo(): EditCommand | null {
-    const cmd = this._undoStack.pop();
+    const cmd = this._undoStack.at(-1);
     if (!cmd) return null;
     if (cmd.stale) {
       this._lastSkippedStale = true;
@@ -178,6 +178,7 @@ export class EditHistory {
       cmd.undo();
       this._lastSkippedStale = false;
     }
+    this._undoStack.pop();
     this._redoStack.push(cmd);
     return cmd;
   }
@@ -191,7 +192,7 @@ export class EditHistory {
    * are still orphaned even though the entry is moving forward in time.
    */
   redo(): EditCommand | null {
-    const cmd = this._redoStack.pop();
+    const cmd = this._redoStack.at(-1);
     if (!cmd) return null;
     if (cmd.stale) {
       this._lastSkippedStale = true;
@@ -199,6 +200,7 @@ export class EditHistory {
       cmd.do();
       this._lastSkippedStale = false;
     }
+    this._redoStack.pop();
     this._undoStack.push(cmd);
     return cmd;
   }
