@@ -4,16 +4,24 @@
 
 **Goal:** Migrate `reshapeSelected` and `splitSelected` from whole-dataset replacement (`insertCutPoints` on a `copyDataset` working copy + `DatasetReplaceSelectionCommand` barrier) to in-place reversible commands, unlocking stable multi-level undo/redo with topology linkage preserved.
 
-**Architecture:** Spec: `DIRECT_GEOMETRY_EDIT_PHASE_B_DESIGN.md` (commit `fa10219`). Legacy geometry functions run **unchanged** on a bounded mini dataset (candidate features + features sharing their arcs, full-arc copies, live-aligned sparse `shapes` arrays); a translator maps mini results back to live instructions using per-slot provenance (`miniArcId → liveArcId` recorded at copy time; a mini arc that still equals its source copy keeps the live id, everything else appends deterministically in mini-id order). Reshape commits one `PathGeometryPatchCommand` per source wrapped in a `CompositeCommand` (single history entry); split commits a new `SplitFeaturesCommand` (shape patches + appended arcs + appended features + selection). Planners are read-only against LIVE data; commands do/undo via append/truncate only.
+**Architecture:** Spec: `DIRECT_GEOMETRY_EDIT_PHASE_B_DESIGN.md` (latest commit). Legacy geometry functions run **unchanged** on a bounded mini dataset (candidate features + features sharing their arcs, full-arc copies, live-aligned sparse `shapes` arrays, plus a **sentinel provenance layer**: one polyline shape `[[arcId]]` per copied arc). mapshaper's `remapDividedArcs` / `buildTopology` remap the sentinel layer together with real layers, so after any cutting/rebuild the sentinel shapes give the exact ordered piece lineage of every original mini arc — for BOTH the `insertCutPoints` path and the `addIntersectionCuts(rebuild_topology)` path (spike-verified 2026-08-30, see facts below). The translator first builds a **reverse owner map** `postArcId → [{original arc, sign}]` from the sentinels (lineage entries can be negative after dedup merges), then assigns live ids deterministically: singleton lineage + unique owner + orientation-adjusted coordinates equal to the live source arc → keep the live id; multi-owner post arcs (dedup convergence) append exactly once and every owner's references translate to the same new id (legacy merge parity); everything else appends in sentinel order. Reshape commits one `PathGeometryPatchCommand` per source wrapped in a `CompositeCommand` (single history entry); split commits a new `SplitFeaturesCommand`. Planners are read-only against LIVE data; commands do/undo via append/truncate only.
 
 **Tech Stack:** TypeScript, Vitest (`pnpm exec vitest run <file>`), mapshaper data structures, Phase A infrastructure (`PathGeometryPatchCommand`, `appendArcsCompat`/`truncateArcsCompat`, `_runPreparedEditCommand`).
 
+**Verified spike facts (2026-08-30, `node -e` against `mapshaper.internal`):**
+- `insertCutPoints(points, arcs)` returns `Uint32Array map` where pieces of original arc `i` are the contiguous id range `[map[i], (i+1 < map.length ? map[i+1] : arcs.size()) - 1]`; the divided collection is REPACKED (an undivided arc after a divided one still shifts id). Confirmed: arcs [2,3,2]-vertex, cut arc 1 → map `{0:0, 1:1, 2:3}`, size 3→4, untouched arc 2 moved to slot 3.
+- Sentinel layer `[[0]],[[1]],…` through `insertCutPoints` + `remapDividedArcs` → `[[[0]],[[1,2]],[[3]]]` (exact ordered lineage).
+- `addIntersectionCuts(dataset, {rebuild_topology:true})` runs `arcs.flatten()` + snap/dedup/cut loop + `buildTopology` + `cleanShapes` + `cleanArcReferences` (mapshaper.js:17024-17065). Sentinels survive all of it: square + cutter → sentinels `[[[0,1,2]],[[3]],[[4]],[[5]],[[6,7,8]]]`. `cleanShapes` does NOT drop single-arc sentinel shapes; `cleanArcReferences` removes nothing in the mini (sentinels reference every arc) — harmless for scratch.
+- **Dedup convergence + negative lineage (spike C):** live arcs `[(0,0),(1,0)]` ×2 (same direction) + 1 reversed duplicate `[(1,0),(0,0)]` + cutter `[(0.5,-1),(0.5,1)]` through `addIntersectionCuts` → sentinels `[[[0,1]],[[0,1]],[[-2,-1]]]`, cutter `[[[2,3]]]`, 4 post arcs (pieces `(0,0)-(0.5,0)`, `(0.5,0)-(1,0)`, cutter halves). Consequences: (a) multiple sentinels can claim the SAME post id (dedup merge) — reuse-by-coordinate requires a UNIQUE owner, else append once and map every owner to the same new live id; (b) lineage refs can be NEGATIVE (reversed duplicates) — sign must participate in the reuse comparison and shape-level translation keeps per-reference signs.
+- Consequence of snapping: coordinates snapped/flattened by the rebuild path no longer equal live originals; those arcs fail the untouched check and append — geometrically identical to legacy (which snapped the same way on the working copy), just slightly more orphan arcs.
+
 ## Global Constraints
 
-- NEVER import `mapshaper` outside `src/adapter/mapshaper-adapter.ts` (AGENTS.md hard rule). New `createArcCollection` lives in the adapter.
+- NEVER import `mapshaper` outside `src/adapter/mapshaper-adapter.ts` (AGENTS.md hard rule). New `createArcCollection` lives in the adapter; ops tests may import mapshaper for fixtures (existing test precedent: `mapshaper-adapter-arcs.test.ts:154`).
 - Legacy geometry functions (`reshape-selected-line.ts`, `reshape-selected-polygon.ts`, `split-selected-line.ts`, `split-selected-polygon.ts`) are NOT modified — they run on the mini dataset. All migration logic lives in the orchestrators and the two new `_mini-*` modules.
-- Planners MUST be synchronous, pure read-only on LIVE datasets; all mutation happens inside `command.do()` (mini dataset mutation is fine — it is planner-owned scratch).
-- NEVER byte-match a scratch arc against arbitrary live arcs to infer identity; provenance comes only from the build-time `miniToLiveArc` slot mapping (per-slot coordinate equality against its own source).
+- Planners MUST be synchronous, pure read-only on LIVE datasets; all live mutation happens inside `command.do()` (mini dataset mutation is fine — it is planner-owned scratch).
+- Arc lineage comes ONLY from the sentinel layer (plus build-time `miniToLiveArc`); NEVER byte-match a mini arc against arbitrary live arcs to infer identity. The untouched check compares a mini arc against its own provenance source only, with orientation from the sentinel ref sign.
+- A post-op mini arc id maps to exactly ONE live id; a multi-owner post arc (dedup convergence) appends ONE live arc shared by every owner's translated reference.
 - No `cleanArcReferences` on the live path; orphan arcs are expected (export compacts a copy).
 - `invalidatesPriorCommands` stays absent on the new commands — no history barrier.
 - Commands clone shape snapshots at construction (PathGeometryPatchCommand precedent).
@@ -22,13 +30,13 @@
 
 ---
 
-### Task 1: Adapter `createArcCollection` + mini-dataset builder
+### Task 1: Adapter `createArcCollection` + mini-dataset builder (with sentinel layer)
 
 **Files:**
 - Modify: `src/adapter/mapshaper-adapter.ts` (interface near `appendArcs` ~line 206; implementation near `appendArcs` impl ~line 703)
 - Create: `src/map/ops/_mini-dataset.ts`
 - Test: `src/map/ops/_mini-dataset.test.ts` (create)
-- Reference: `src/adapter/mapshaper-adapter-arcs.test.ts:153-157` (real `mapshaper.internal.ArcCollection` construction precedent), `src/map/ops/reshape-selected-line.ts:39-62` (arc coordinate reading via `getArcIter`)
+- Reference: `src/adapter/mapshaper-adapter-arcs.test.ts:153-157` (real `mapshaper.internal.ArcCollection` construction precedent)
 
 **Interfaces:**
 - Produces (Tasks 3,4,7,8 consume):
@@ -39,7 +47,7 @@ createArcCollection(arcsToAppend: AppendedArc[]): ArcCollection;
 
 // src/map/ops/_mini-dataset.ts
 export interface MiniDataset {
-  /** Scratch dataset: mini arcs + layers array aligned with live indexes. */
+  /** Scratch dataset: mini arcs + live-aligned layers + trailing sentinel layer. */
   dataset: MapshaperDataset;
   /** Same object as dataset.arcs — convenience. */
   arcs: ArcCollection;
@@ -47,6 +55,8 @@ export interface MiniDataset {
   miniToLiveArc: readonly number[];
   /** layerIndex → featureIds present in mini (candidates ∪ arc sharers). */
   included: ReadonlyMap<number, ReadonlySet<number>>;
+  /** Index of the sentinel layer in dataset.layers (= live layers.length). */
+  sentinelLayerIndex: number;
 }
 export function buildMiniDataset(opts: {
   dataset: MapshaperDataset; // LIVE, read-only
@@ -67,8 +77,7 @@ import type { MapshaperDataset, PathLayer, PathShape } from '../../types/mapshap
 import { buildMiniDataset } from './_mini-dataset';
 
 function liveDataset(): MapshaperDataset {
-  // Two squares sharing arc 1 (the common edge); a detached third square.
-  // f0: [[0,1]] (outer ring = arcs 0,1 forward), f1: [[-2,1]] sharing arc 1 reversed.
+  // f0 references arcs 0,1; f1 shares arc 1 (reversed) and adds arc 2; f2 detached.
   const arcs = new mapshaper.internal.ArcCollection(
     new Int32Array([3, 3, 3]),
     new Float64Array([0, 1, 1, /**/ 1, 2, 2, /**/ 0, 0, 1]),
@@ -88,10 +97,9 @@ describe('buildMiniDataset', () => {
     const live = liveDataset();
     const mini = buildMiniDataset({
       dataset: live,
-      candidates: new Map([[0, new Set([2])]]), // only the detached square
+      candidates: new Map([[0, new Set([2])]]),
       adapter,
     });
-    // feature 2 references live arc 0 → mini arc 0
     expect(mini.miniToLiveArc).toEqual([0]);
     expect(mini.included.get(0)).toEqual(new Set([2]));
     expect(mini.arcs.size()).toBe(1);
@@ -106,7 +114,7 @@ describe('buildMiniDataset', () => {
     const live = liveDataset();
     const mini = buildMiniDataset({
       dataset: live,
-      candidates: new Map([[0, new Set([0])]]), // f0 references arcs 0,1
+      candidates: new Map([[0, new Set([0])]]),
       adapter,
     });
     // f1 shares arc 1 → included with its other arc (2) copied too
@@ -116,6 +124,19 @@ describe('buildMiniDataset', () => {
     expect(shapes[0]).toEqual([[0, 1]]);
     expect(shapes[1]).toEqual([[-2, 1]]); // signed direction preserved in mini ids
     expect(shapes[2]).toBeNull();
+  });
+
+  it('appends a sentinel layer with one [[arcId]] shape per copied arc', () => {
+    const live = liveDataset();
+    const mini = buildMiniDataset({
+      dataset: live,
+      candidates: new Map([[0, new Set([0])]]),
+      adapter,
+    });
+    expect(mini.sentinelLayerIndex).toBe(1); // live had 1 layer
+    const sentinel = mini.dataset.layers[1] as PathLayer;
+    expect(sentinel.geometry_type).toBe('polyline');
+    expect(sentinel.shapes).toEqual([[[0]], [[1]], [[2]]]);
   });
 
   it('does not alias live vertex buffers (copies are independent)', () => {
@@ -129,6 +150,22 @@ describe('buildMiniDataset', () => {
     const miniXx = mini.arcs.getVertexData().xx;
     expect(miniXx).not.toBe(liveXx);
     expect(Array.from(miniXx)).toEqual([0, 0, 1]);
+  });
+
+  it('keeps legacy geometry functions away from the sentinel layer', () => {
+    // Sentinel layer is only reachable by explicit index; the path-layer loops
+    // in reshape/split receive candidate ids and never target it. This test
+    // pins the contract: sentinel index === live layers.length (trailing).
+    const live = liveDataset();
+    const mini = buildMiniDataset({
+      dataset: live,
+      candidates: new Map([[0, new Set([2])]]),
+      adapter,
+    });
+    expect(mini.dataset.layers.length).toBe(live.layers.length + 1);
+    expect(mini.dataset.layers[mini.sentinelLayerIndex]).toBe(
+      mini.dataset.layers[mini.dataset.layers.length - 1],
+    );
   });
 });
 ```
@@ -147,7 +184,7 @@ Interface (after the `truncateArcs?` declaration, ~line 217):
   createArcCollection(arcsToAppend: AppendedArc[]): ArcCollection;
 ```
 
-Implementation (next to `appendArcs`, reusing its concatenation logic; if appendArcs has a private concat helper, share it):
+Implementation (next to `appendArcs`; `appendArcs` on an empty collection is the degenerate case of its existing concatenation):
 
 ```ts
   createArcCollection(arcsToAppend: AppendedArc[]): ArcCollection {
@@ -160,8 +197,6 @@ Implementation (next to `appendArcs`, reusing its concatenation logic; if append
     return arcs;
   }
 ```
-
-Note: `appendArcs` on an empty collection must still work (it already concatenates onto existing arrays; empty start is the degenerate case — cover it in the test above via `mini.arcs` contents assertions).
 
 - [ ] **Step 4: Implement `buildMiniDataset`**
 
@@ -176,6 +211,7 @@ export interface MiniDataset {
   arcs: ArcCollection;
   miniToLiveArc: readonly number[];
   included: ReadonlyMap<number, ReadonlySet<number>>;
+  sentinelLayerIndex: number;
 }
 
 function unsigned(id: number): number {
@@ -203,7 +239,9 @@ export function buildMiniDataset(opts: {
   const liveArcs = dataset.arcs;
   if (!liveArcs) throw new Error('buildMiniDataset requires path geometry');
 
-  // 1. Expand candidates: any feature sharing an arc with a candidate joins.
+  // 1. Expand candidates: any feature sharing an arc with a candidate joins
+  //    (one hop — topology linkage only breaks where an arc is actually cut,
+  //    and cuts only land on candidate arcs).
   const included = new Map<number, Set<number>>();
   for (const [layerIndex, ids] of candidates) included.set(layerIndex, new Set(ids));
   const candidateArcs = new Set<number>();
@@ -267,11 +305,21 @@ export function buildMiniDataset(opts: {
     return { ...layer, shapes, data: undefined };
   });
 
+  // 4. Sentinel provenance layer: one single-arc polyline shape per copied
+  //    arc. remapDividedArcs / buildTopology remap it together with real
+  //    layers, yielding exact post-op lineage per original mini arc.
+  const sentinelLayerIndex = layers.length;
+  const sentinelLayer = {
+    geometry_type: 'polyline',
+    shapes: sorted.map((_, miniId) => [[miniId]]),
+  } as unknown as PathLayer;
+
   return {
-    dataset: { ...dataset, arcs, layers },
+    dataset: { ...dataset, arcs, layers: [...layers, sentinelLayer] },
     arcs,
     miniToLiveArc: sorted,
     included,
+    sentinelLayerIndex,
   };
 }
 ```
@@ -279,19 +327,19 @@ export function buildMiniDataset(opts: {
 - [ ] **Step 5: Run tests to verify pass**
 
 Run: `pnpm exec vitest run src/map/ops/_mini-dataset.test.ts`
-Expected: PASS (3 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 6: Typecheck + commit**
 
 Run: `pnpm typecheck`
 ```bash
 git add src/adapter/mapshaper-adapter.ts src/map/ops/_mini-dataset.ts src/map/ops/_mini-dataset.test.ts
-git commit -m "feat(ops): mini-dataset builder with provenance arc copies"
+git commit -m "feat(ops): mini-dataset builder with sentinel provenance layer"
 ```
 
 ---
 
-### Task 2: Result translator `_mini-translate.ts`
+### Task 2: Result translator `_mini-translate.ts` (sentinel lineage + owner map)
 
 **Files:**
 - Create: `src/map/ops/_mini-translate.ts`
@@ -307,16 +355,18 @@ export interface MiniTranslation {
   appendedArcs: AppendedArc[];
   /** Patches for every included feature whose translated shape differs from live. */
   shapePatches: PathShapePatch[];
-  /** liveArcId → ordered appended live ids of its pieces (only for divided arcs). */
-  piecesByLiveArc: ReadonlyMap<number, readonly number[]>;
+  /** post-op miniArcId → liveArcId for EVERY post-op mini arc (sentinel lineage + appends). */
+  miniToLiveFinal: readonly number[];
 }
-/** Returns null when any mini arc id referenced by an included shape is unmappable. */
+/** Returns null when lineage is broken (missing/nulled sentinel or unmappable reference). */
 export function translateMiniDataset(opts: {
   mini: MiniDataset;       // AFTER the legacy geometry function ran on it
   liveDataset: MapshaperDataset;
   liveArcCount: number;    // live arcs.size() captured at plan start
   liveLayers: readonly MapshaperLayer[]; // live layers (for patch layer refs)
 }): MiniTranslation | null;
+/** Translate one mini-space shape to live arc ids. Throws on unmappable refs (call after null-check). */
+export function translateShapeFromMini(translation: MiniTranslation, shape: PathShape): PathShape;
 ```
 
 - [ ] **Step 1: Write the failing tests**
@@ -328,9 +378,9 @@ import mapshaper from 'mapshaper';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import type { MapshaperDataset, PathLayer, PathShape } from '../../types/mapshaper-types';
 import { buildMiniDataset } from './_mini-dataset';
-import { translateMiniDataset } from './_mini-translate';
+import { translateMiniDataset, translateShapeFromMini } from './_mini-translate';
 
-// One shared edge scenario: f0 = [[0,1]], f1 = [[-2,1]] (both included).
+// f0 = [[0,1]], f1 = [[-2,1]] sharing arc 1; arc 3 unreferenced by any shape.
 function liveDataset(): MapshaperDataset {
   const arcs = new mapshaper.internal.ArcCollection(
     new Int32Array([2, 2, 2, 2]),
@@ -363,18 +413,18 @@ describe('translateMiniDataset', () => {
     expect(translation).not.toBeNull();
     expect(translation!.appendedArcs).toEqual([]);
     expect(translation!.shapePatches).toEqual([]);
-    expect(translation!.piecesByLiveArc.size).toBe(0);
+    expect(translation!.miniToLiveFinal).toEqual([0, 1, 2]);
   });
 
-  it('appends a mini-only arc and rewrites the referencing shape', () => {
+  it('appends a mini-only arc (no sentinel) and rewrites the referencing shape', () => {
     const live = liveDataset();
     const mini = buildMiniDataset({
       dataset: live,
       candidates: new Map([[0, new Set([0])]]),
       adapter,
     });
-    // Simulate a legacy reshape outcome: append one replacement arc (mini id 3)
-    // and point feature 0's shape at it.
+    // Simulate a legacy reshape outcome: append one replacement arc (mini id 3,
+    // no sentinel) and point feature 0's shape at it.
     adapter.appendArc(mini.arcs, [[5, 5], [6, 6]]);
     const miniLayer = mini.dataset.layers[0] as PathLayer;
     miniLayer.shapes![0] = [[3, 1]];
@@ -387,7 +437,7 @@ describe('translateMiniDataset', () => {
     expect(translation).not.toBeNull();
     expect(translation!.appendedArcs).toHaveLength(1);
     expect(Array.from(translation!.appendedArcs[0]!.xx)).toEqual([5, 6]);
-    // Patch references the live append id (4) and keeps untouched live arc 1.
+    expect(translation!.miniToLiveFinal).toEqual([0, 1, 2, 4]);
     expect(translation!.shapePatches).toEqual([
       {
         layer: live.layers[0],
@@ -398,15 +448,17 @@ describe('translateMiniDataset', () => {
     ]);
   });
 
-  it('treats a divided provenance slot as appended pieces and records piecesByLiveArc', () => {
+  // Contract test: spike A (2026-08-30) — sentinel lineage through insertCutPoints.
+  it('resolves divided-arc lineage via the sentinel layer (insertCutPoints path)', () => {
     const live = liveDataset();
     const mini = buildMiniDataset({
       dataset: live,
-      candidates: new Map([[0, new Set([0])]]),
+      candidates: new Map([[0, new Set([0])]]), // arcs 0,1,2 copied; f1 shares arc 1
       adapter,
     });
-    // Divide mini arc 1 (live arc 1) at its midpoint via the real machinery.
-    adapter.insertCutPoints(mini.dataset, [{ x: 1.5, y: 0, i: 2 }]); // flat vertex idx of arc1 vertex0
+    // Cut mini arc 1 (live arc 1) at its midpoint. Flat vertex index of mini
+    // arc 1 vertex 0 is ii[1] = 2.
+    adapter.insertCutPoints(mini.dataset, [{ x: 1.5, y: 0, i: 2 }]);
     const translation = translateMiniDataset({
       mini,
       liveDataset: live,
@@ -414,19 +466,86 @@ describe('translateMiniDataset', () => {
       liveLayers: live.layers,
     });
     expect(translation).not.toBeNull();
-    // live arc 1 divided into 2 pieces → both appended; arcs 0,2,3 keep live ids.
-    const pieces = translation!.piecesByLiveArc.get(1);
-    expect(pieces).toHaveLength(2);
-    // Mini shapes were remapped by insertCutPoints; translated patches use piece ids.
-        const f0 = translation!.shapePatches.find((p) => p.featureId === 0);
+    // Live arc 1 was divided into 2 pieces → both append (live ids 4,5).
+    // Mini arcs 0 and 2 are untouched → keep live ids 0 and 2.
+    // Sentinel lineage: arc0→[0], arc1→[1,2], arc2→[3] →
+    //   miniToLiveFinal over post-op mini ids [0,1,2,3] = [0, 4, 5, 2].
+    expect(translation!.miniToLiveFinal).toEqual([0, 4, 5, 2]);
+    expect(translation!.appendedArcs).toHaveLength(2);
+    // Both the target and the SHARER reference the same new piece ids (linkage).
+    const f0 = translation!.shapePatches.find((p) => p.featureId === 0);
     const f1 = translation!.shapePatches.find((p) => p.featureId === 1);
-    expect(f0?.after).toEqual([[0, pieces![0], pieces![1]]]);
-    expect(f1?.after).toEqual([[-pieces![0]! - 1, pieces![1]!]]);
+    expect(f0?.after).toEqual([[0, 4, 5]]);
+    expect(f1?.after).toEqual([[-5, 4]]); // shared span: same piece ids, directions preserved
+  });
+
+  // Contract test: spike C (2026-08-30) — dedup convergence + negative lineage.
+  // Fixture verified verbatim against mapshaper.internal.addIntersectionCuts:
+  //   live arcs L0=L1=[(0,0),(1,0)] (same direction), L2=[(1,0),(0,0)] (reverse),
+  //   cutter [(0.5,-1),(0.5,1)] crossing at x=0.5.
+  //   post: sentinels [[[0,1]],[[0,1]],[[-2,-1]]], cutter [[[2,3]]], 4 arcs.
+  it('merges deduped arcs into ONE appended arc per post id (signs preserved)', () => {
+    const arcs = new mapshaper.internal.ArcCollection(
+      new Int32Array([2, 2, 2]),
+      new Float64Array([0, 1, /**/ 0, 1, /**/ 1, 0]),
+      new Float64Array([0, 0, /**/ 0, 0, /**/ 0, 0]),
+    );
+    const layer: PathLayer = {
+      geometry_type: 'polyline',
+      shapes: [[[0]], [[1]], [[2]]] as PathShape[], // f0,f1 identical; f2 reversed
+    } as unknown as PathLayer;
+    const live = { arcs, layers: [layer] } as unknown as MapshaperDataset;
+    const mini = buildMiniDataset({
+      dataset: live,
+      candidates: new Map([[0, new Set([0, 1, 2])]]),
+      adapter,
+    });
+    // Simulate the legacy split path: append the cutter arc (mini id 3, no
+    // sentinel), then run the rebuild cut on the mini.
+    adapter.appendArc(mini.arcs, [[0.5, -1], [0.5, 1]]);
+    adapter.addIntersectionCuts(mini.dataset, { rebuild_topology: true });
+    const translation = translateMiniDataset({
+      mini,
+      liveDataset: live,
+      liveArcCount: live.arcs!.size(),
+      liveLayers: live.layers,
+    });
+    expect(translation).not.toBeNull();
+    // Dedup merged L0/L1/L2 → pieces p0,p1 shared by all three sentinels
+    // (multi-owner) → append once each: live ids 3,4. Cutter pieces → 5,6.
+    expect(translation!.miniToLiveFinal).toEqual([3, 4, 5, 6]);
+    expect(translation!.appendedArcs).toHaveLength(4);
+    expect(Array.from(translation!.appendedArcs[0]!.xx)).toEqual([0, 0.5]);
+    expect(Array.from(translation!.appendedArcs[1]!.xx)).toEqual([0.5, 1]);
+    // All three features converge on the same new ids; f2 reversed.
+    const afterByFeature = new Map(
+      translation!.shapePatches.map((p) => [p.featureId, p.after]),
+    );
+    expect(afterByFeature.get(0)).toEqual([[3, 4]]);
+    expect(afterByFeature.get(1)).toEqual([[3, 4]]);
+    expect(afterByFeature.get(2)).toEqual([[-5, -4]]);
+  });
+
+  it('fails cleanly when a sentinel shape is nulled (degenerate arc cleaned)', () => {
+    const live = liveDataset();
+    const mini = buildMiniDataset({
+      dataset: live,
+      candidates: new Map([[0, new Set([0])]]),
+      adapter,
+    });
+    (mini.dataset.layers[mini.sentinelLayerIndex] as PathLayer).shapes![1] = null;
+    const translation = translateMiniDataset({
+      mini,
+      liveDataset: live,
+      liveArcCount: live.arcs!.size(),
+      liveLayers: live.layers,
+    });
+    expect(translation).toBeNull();
   });
 });
 ```
 
-(Implementation note for the third test: the exact flat vertex index passed to `insertCutPoints` must reference a vertex of mini arc 1; adjust the fixture index so the cut lands inside arc 1 — verify with the real run. If `insertCutPoints` requires the point to lie on the segment, use the arc's actual first-segment midpoint.)
+Calibration note for the implementer: tests 3 and 4 assert exact ids derived from the 2026-08-30 spikes; if a fixture detail shifts an id, re-derive from an actual run — the invariants that MUST hold regardless: `miniToLiveFinal` covers every post-op mini arc exactly once; multi-owner post arcs append exactly once; untouched arcs reuse their live ids; sharer/target patches reference identical piece ids with correct signs.
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -439,7 +558,6 @@ Expected: FAIL — module does not exist.
 // src/map/ops/_mini-translate.ts
 import type { AppendedArc } from '../../adapter/mapshaper-adapter';
 import type {
-  ArcCollection,
   MapshaperLayer,
   PathLayer,
   PathShape,
@@ -450,28 +568,29 @@ import { snapshotLiveArc, type MiniDataset } from './_mini-dataset';
 export interface MiniTranslation {
   appendedArcs: AppendedArc[];
   shapePatches: PathShapePatch[];
-  piecesByLiveArc: ReadonlyMap<number, readonly number[]>;
+  miniToLiveFinal: readonly number[];
 }
 
 function unsigned(id: number): number {
   return id < 0 ? -id - 1 : id;
 }
 
-function snapshotMiniArc(arcs: ArcCollection, arcId: number): AppendedArc {
-  return snapshotLiveArc(arcs, arcId); // same coordinate-slice mechanics
-}
-
-function arcsEqual(a: AppendedArc, b: AppendedArc): boolean {
-  if (a.xx.length !== b.xx.length) return false;
-  for (let i = 0; i < a.xx.length; i++) {
-    if (a.xx[i] !== b.xx[i] || a.yy[i] !== b.yy[i]) return false;
+/** Compare a post-op mini arc against its provenance live arc, honoring direction. */
+function arcsEqualOriented(post: AppendedArc, live: AppendedArc, sign: 1 | -1): boolean {
+  const n = post.xx.length;
+  if (n !== live.xx.length) return false;
+  for (let i = 0; i < n; i++) {
+    const j = sign === 1 ? i : n - 1 - i;
+    if (post.xx[j] !== live.xx[i] || post.yy[j] !== live.yy[i]) return false;
   }
-  const az = a.zz ?? null;
-  const bz = b.zz ?? null;
-  if ((az === null) !== (bz === null)) return false;
-  if (az && bz) {
-    if (az.length !== bz.length) return false;
-    for (let i = 0; i < az.length; i++) if (az[i] !== bz[i]) return false;
+  const pz = post.zz ?? null;
+  const lz = live.zz ?? null;
+  if ((pz === null) !== (lz === null)) return false;
+  if (pz && lz) {
+    if (pz.length !== lz.length) return false;
+    for (let i = 0; i < pz.length; i++) {
+      if (pz[sign === 1 ? i : pz.length - 1 - i] !== lz[i]) return false;
+    }
   }
   return true;
 }
@@ -495,34 +614,67 @@ export function translateMiniDataset(opts: {
 }): MiniTranslation | null {
   const { mini, liveDataset, liveArcCount, liveLayers } = opts;
   const liveArcs = liveDataset.arcs!;
+  const sentinelLayer = mini.dataset.layers[mini.sentinelLayerIndex] as PathLayer;
+  const sentinelShapes = sentinelLayer?.shapes;
+  if (!sentinelShapes) return null;
 
-  // 1. Arc mapping, ascending mini id → deterministic append order.
-  const finalLiveId: number[] = new Array(mini.arcs.size());
-  const appendedArcs: AppendedArc[] = [];
-  const appendedFromSlot: number[] = []; // appended live id, indexed by mini slot
-  const piecesByLiveArc = new Map<number, number[]>();
-  for (let j = 0; j < mini.arcs.size(); j++) {
-    const provenanceLive = j < mini.miniToLiveArc.length ? mini.miniToLiveArc[j]! : -1;
-    const miniCoords = snapshotMiniArc(mini.arcs, j);
-    if (
-      provenanceLive >= 0 &&
-      arcsEqual(miniCoords, snapshotLiveArc(liveArcs, provenanceLive))
-    ) {
-      finalLiveId[j] = provenanceLive;
-      continue;
+  // 1. Parse sentinel lineages (orientation-aware) and build the reverse
+  //    owner map. Lineage refs can be negative after dedup merges.
+  const lineages: (readonly number[])[] = [];
+  const owners = new Map<number, Array<{ original: number; sign: 1 | -1 }>>();
+  for (let k = 0; k < mini.miniToLiveArc.length; k++) {
+    const sentinel = sentinelShapes[k] as PathShape | null;
+    if (!sentinel || sentinel.length !== 1 || sentinel[0]!.length === 0) {
+      return null; // degenerate arc cleaned out from under us — refuse to guess
     }
-    const liveId = liveArcCount + appendedArcs.length;
-    finalLiveId[j] = liveId;
-    appendedArcs.push(miniCoords);
-    appendedFromSlot.push(liveId);
-    if (provenanceLive >= 0) {
-      let pieces = piecesByLiveArc.get(provenanceLive);
-      if (!pieces) piecesByLiveArc.set(provenanceLive, (pieces = []));
-      pieces.push(liveId);
+    const lineage = sentinel[0]!;
+    lineages.push(lineage);
+    for (const ref of lineage) {
+      const postId = unsigned(ref);
+      const list = owners.get(postId) ?? [];
+      list.push({ original: k, sign: ref < 0 ? -1 : 1 });
+      owners.set(postId, list);
     }
   }
 
-  // 2. Translate + diff every included shape.
+  // 2. Assign live ids deterministically (sentinel k ascending, lineage order,
+  //    then unsentinelled arcs ascending). Each post id maps exactly once.
+  const miniToLiveFinal: number[] = new Array(mini.arcs.size());
+  const appendedArcs: AppendedArc[] = [];
+  const assign = (postId: number): void => {
+    if (miniToLiveFinal[postId] !== undefined) return;
+    const list = owners.get(postId) ?? [];
+    if (list.length === 1) {
+      const { original, sign } = list[0]!;
+      if (lineages[original]!.length === 1) {
+        const liveId = mini.miniToLiveArc[original]!;
+        if (
+          arcsEqualOriented(
+            snapshotLiveArc(mini.arcs, postId),
+            snapshotLiveArc(liveArcs, liveId),
+            sign,
+          )
+        ) {
+          miniToLiveFinal[postId] = liveId; // untouched — reuse the live id
+          return;
+        }
+      }
+    }
+    // Divided, snapped, or dedup-merged (multi-owner): append exactly once —
+    // every owner translates to the same new id (legacy merge parity).
+    miniToLiveFinal[postId] = liveArcCount + appendedArcs.length;
+    appendedArcs.push(snapshotLiveArc(mini.arcs, postId));
+  };
+  for (const lineage of lineages) for (const ref of lineage) assign(unsigned(ref));
+  for (let postId = 0; postId < mini.arcs.size(); postId++) {
+    if (miniToLiveFinal[postId] === undefined) {
+      miniToLiveFinal[postId] = liveArcCount + appendedArcs.length;
+      appendedArcs.push(snapshotLiveArc(mini.arcs, postId));
+    }
+  }
+
+  // 3. Translate + diff every included shape (real layers only).
+  const translation: MiniTranslation = { appendedArcs, shapePatches: [], miniToLiveFinal };
   const shapePatches: PathShapePatch[] = [];
   for (const [layerIndex, featureIds] of mini.included) {
     const liveLayer = liveLayers[layerIndex] as PathLayer;
@@ -531,22 +683,12 @@ export function translateMiniDataset(opts: {
       const before = liveLayer.shapes?.[featureId] as PathShape | null;
       const miniShape = miniLayer.shapes?.[featureId] as PathShape | null;
       if (!before || !miniShape) continue;
-      const after: PathShape = [];
-      let unmappable = false;
-      for (const part of miniShape) {
-        const translated: number[] = [];
-        for (const ref of part) {
-          const mapped = finalLiveId[unsigned(ref)];
-          if (mapped === undefined) {
-            unmappable = true;
-            break;
-          }
-          translated.push(ref < 0 ? -mapped - 1 : mapped);
-        }
-        if (unmappable) break;
-        after.push(translated);
+      let after: PathShape;
+      try {
+        after = translateShapeFromMini(translation, miniShape);
+      } catch {
+        return null;
       }
-      if (unmappable) return null;
       if (!sameShape(before, after)) {
         shapePatches.push({
           layer: liveLayer,
@@ -557,32 +699,43 @@ export function translateMiniDataset(opts: {
       }
     }
   }
-  return { appendedArcs, shapePatches, piecesByLiveArc };
+  translation.shapePatches = shapePatches;
+  return translation;
+}
+
+export function translateShapeFromMini(translation: MiniTranslation, shape: PathShape): PathShape {
+  return shape.map((part) =>
+    part.map((ref) => {
+      const mapped = translation.miniToLiveFinal[unsigned(ref)];
+      if (mapped === undefined) throw new Error(`unmappable mini arc ref ${ref}`);
+      return ref < 0 ? -mapped - 1 : mapped;
+    }),
+  );
 }
 ```
 
 - [ ] **Step 4: Run tests to verify pass**
 
 Run: `pnpm exec vitest run src/map/ops/_mini-translate.test.ts`
-Expected: PASS. Iterate on the third fixture until the cut genuinely divides mini arc 1 (assert `mini.arcs.size()` grew by 1 post-`insertCutPoints` before translating).
+Expected: PASS (5 tests). If a contract fixture's exact ids differ, re-derive from an actual spike run — the invariants in the Step 1 calibration note must hold exactly.
 
 - [ ] **Step 5: Typecheck + commit**
 
 Run: `pnpm typecheck`
 ```bash
 git add src/map/ops/_mini-translate.ts src/map/ops/_mini-translate.test.ts
-git commit -m "feat(ops): mini result translator with per-slot provenance"
+git commit -m "feat(ops): mini result translator with owner-map dedup handling"
 ```
 
 ---
 
-### Task 3: Reshape polyline path migration
+### Task 3: Reshape polyline path planner
 
 **Files:**
-- Modify: `src/map/ops/reshape-selected.ts` (polyline branch of the per-source callback)
-- Create: `src/map/ops/_reshape-plan.ts` (per-source planner shared by line/polygon tasks)
-- Test: `src/map/ops/reshape-selected-line.test.ts` (must pass UNCHANGED — geometric equivalence), `src/map/ops/_reshape-plan.test.ts` (create)
-- Consumes: `buildMiniDataset`/`translateMiniDataset` (Tasks 1-2); `reshapeSelectedPolylines` (unchanged); `RunPreparedEditCommand` (Phase A)
+- Create: `src/map/ops/_reshape-plan.ts` (per-source planner shared by line/polygon)
+- Modify: `src/map/ops/reshape-selected.ts` (ONLY the `validatePolylineFeature` extraction — see below)
+- Test: `src/map/ops/_reshape-plan.test.ts` (create); `src/map/ops/reshape-selected-line.test.ts` (must pass UNCHANGED)
+- Consumes: `buildMiniDataset`/`translateMiniDataset` (Tasks 1-2); `reshapeSelectedPolylines` (unchanged)
 
 **Interfaces:**
 - Produces (Tasks 4-5 consume):
@@ -614,43 +767,35 @@ export function planReshapeSource(opts: {
 // src/map/ops/_reshape-plan.test.ts
 import { describe, expect, it } from 'vitest';
 import { planReshapeSource } from './_reshape-plan';
-// Reuse the dataset fixtures from reshape-selected-line.test.ts (two adjacent
-// squares sharing an edge, one polyline) — import or re-declare per that file.
+// Fixtures: real datasets via mapshaper.internal.ArcCollection + PathLayer
+// (mirror _mini-dataset.test.ts); source stub mirrors src/map/ops/_test-helpers.ts.
 
 describe('planReshapeSource', () => {
   it('plans a polyline reshape with appended replacement arc and no live mutation', () => {
-    // given a live dataset with one polyline feature and a drawn line crossing it twice
-    const { source, dataset } = makePolylineSource(); // fixture helper, see below
-    const plan = planReshapeSource({
-      source, sourceId: 's', dataset, line: DRAWN_LINE,
-      adapter: getDefaultMapshaperAdapter(),
-      selection: EMPTY_SELECTION, publishSelection: () => {},
-    });
-    expect(plan).not.toBeNull();
-    expect(plan).not.toBe('invalid');
-    if (plan === null || plan === 'invalid') return;
-    expect(plan.reshapedCount).toBe(1);
-    // Planning is read-only: live arcs/shapes untouched.
-    expect(dataset.arcs!.size()).toBe(ORIGINAL_ARC_COUNT);
-    // Command applies cleanly and undoes exactly.
-    plan.command.do();
-    expect(dataset.arcs!.size()).toBe(ORIGINAL_ARC_COUNT + APPENDED);
-    plan.command.undo();
-    expect(dataset.arcs!.size()).toBe(ORIGINAL_ARC_COUNT);
-    expect(liveShapeCoords()).toEqual(ORIGINAL_COORDS);
+    // live dataset with one polyline feature; drawn line crossing it twice.
+    // expect: plan not null/'invalid'; reshapedCount === 1;
+    //   live arcs.size() unchanged after PLANNING (read-only);
+    //   command.do() grows arcs by exactly the appended count;
+    //   command.undo() restores arcs.size() and original coordinates exactly.
   });
 
   it('patches a non-candidate neighbor sharing a cut arc (topology linkage)', () => {
-    // two polygons sharing an edge; the drawn line contacts only f0
-    // expect: shapePatches contains f1 with its shared span rewritten to piece ids,
-    // and the uncut shared span keeps ONE arc id referenced by BOTH features.
+    // two polygons sharing an edge; the drawn line contacts only f0.
+    // expect: shapePatches contains f1 with its shared span rewritten to the
+    //   SAME piece ids f0's untouched shared span uses; uncut shared span keeps
+    //   ONE arc id referenced by BOTH features.
   });
 
-  it('returns null when the line contacts nothing', () => { /* ... */ });
+  it('returns null when the line contacts nothing', () => {
+    // drawn line far away from every feature → null, no command constructed.
+  });
+
+  it('returns "invalid" when the legacy validator rejects a candidate', () => {
+    // degenerate candidate geometry (e.g. self-conflicting clipped line) →
+    // 'invalid'; live dataset untouched.
+  });
 });
 ```
-
-Fixture helpers: build real datasets via `mapshaper.internal.ArcCollection` + `PathLayer` as in `_mini-dataset.test.ts`; wrap in a minimal `MutableTopologySource` stub (mirror `src/map/ops/_test-helpers.ts` — check that file's existing source stub and reuse it).
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -661,14 +806,12 @@ Expected: FAIL — module does not exist.
 
 ```ts
 // src/map/ops/_reshape-plan.ts
-import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
+import { type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import { PathGeometryPatchCommand } from '../../edit/commands/path-geometry-patch';
 import type { MutableTopologySource } from '../../source/source';
-import { getLayerId } from '../../source/layer-utils';
 import type { Selection, SelectionDiff } from '../selection';
 import type { ArcCollection, MapshaperDataset, PathLayer, PathShape } from '../../types/mapshaper-types';
 import { isPathLayer } from '../../types/mapshaper-types';
-import { Err } from '../op-result';
 import { SplitGeometryValidationError } from './split-selected-error';
 import { normalizeConsecutiveCoordinates, type Coordinate } from './geometry-2d';
 import { reshapeSelectedPolylines } from './reshape-selected-line';
@@ -694,17 +837,20 @@ export function shapeIntersectsBounds(
   bounds: ReturnType<typeof reshapeLineBounds>,
 ): boolean {
   const data = arcs.getVertexData();
-  const bb = data.bb; // per-arc [xmin, ymin, xmax, ymax]
+  const bb = data.bb; // per-arc [xmin, ymin, xmax, ymax] when present
   for (const part of shape) {
     for (const ref of part) {
       const arcId = ref < 0 ? -ref - 1 : ref;
       if (bb) {
-        const x0 = bb[arcId * 4]!, y0 = bb[arcId * 4 + 1]!, x1 = bb[arcId * 4 + 2]!, y1 = bb[arcId * 4 + 3]!;
-        if (x1 >= bounds.minX && x0 <= bounds.maxX && y1 >= bounds.minY && y0 <= bounds.maxY) return true;
+        const x0 = bb[arcId * 4]!, y0 = bb[arcId * 4 + 1]!;
+        const x1 = bb[arcId * 4 + 2]!, y1 = bb[arcId * 4 + 3]!;
+        if (x1 >= bounds.minX && x0 <= bounds.maxX && y1 >= bounds.minY && y0 <= bounds.maxY) {
+          return true;
+        }
         continue;
       }
-      // Fallback: scan vertices.
-      const start = data.ii[arcId]!, end = start + data.nn[arcId]!;
+      const start = data.ii[arcId]!;
+      const end = start + data.nn[arcId]!;
       for (let v = start; v < end; v++) {
         const x = data.xx[v]!, y = data.yy[v]!;
         if (x >= bounds.minX && x <= bounds.maxX && y >= bounds.minY && y <= bounds.maxY) return true;
@@ -723,14 +869,14 @@ export function planReshapeSource(opts: {
   selection: Selection;
   publishSelection: (diff: SelectionDiff) => void;
 }): { command: PathGeometryPatchCommand; reshapedCount: number } | 'invalid' | null {
-  const { source, sourceId, dataset, adapter, selection, publishSelection } = opts;
+  const { source, dataset, adapter, selection, publishSelection } = opts;
   const line = normalizeConsecutiveCoordinates(opts.line);
   const arcs = dataset.arcs;
   if (!arcs) return null;
   const bounds = reshapeLineBounds(line);
 
-  // 1. Candidates per path layer (bbox prefilter). Polyline layers: replicate
-  //    legacy validation (invalid features are skipped, not fatal).
+  // 1. Candidates per path layer (bbox prefilter). Polyline candidates are
+  //    validated on live first (legacy skips invalid features non-fatally).
   const candidates = new Map<number, Set<number>>();
   for (let layerIndex = 0; layerIndex < dataset.layers.length; layerIndex++) {
     const layer = dataset.layers[layerIndex];
@@ -741,7 +887,7 @@ export function planReshapeSource(opts: {
       if (!shape || !shapeIntersectsBounds(shape, arcs, bounds)) continue;
       if (layer.geometry_type === 'polyline') {
         try {
-          validatePolylineFeatureShape(shape, arcs); // extracted copy of reshape-selected.ts's validator, operating on a shape
+          validatePolylineFeatureShape(shape, arcs); // extracted in this task
         } catch (error) {
           if (error instanceof SplitGeometryValidationError) continue;
           throw error;
@@ -756,7 +902,6 @@ export function planReshapeSource(opts: {
 
   // 2. Mini dataset + legacy geometry, unchanged.
   const mini = buildMiniDataset({ dataset, candidates, adapter });
-  const targetCountBefore = 0; // counted below from geometry results
   let reshapedCount = 0;
   try {
     for (const [layerIndex, ids] of candidates) {
@@ -814,12 +959,12 @@ export function planReshapeSource(opts: {
 }
 ```
 
-`validatePolylineFeatureShape`: extract the per-shape body of `validatePolylineFeature` in `reshape-selected.ts:34-60` into an exported helper (either in `_reshape-plan.ts` or `geometry-2d.ts`); the legacy wrapper keeps calling it — no behavior change. (This is the ONLY allowed modification to legacy files in this task; it is a pure extraction.)
+`validatePolylineFeatureShape`: extract the per-shape body of `validatePolylineFeature` (`reshape-selected.ts:34-60`) into an exported helper; the legacy wrapper keeps calling it. Pure extraction, no behavior change — the ONLY allowed legacy-file modification in this task.
 
 - [ ] **Step 4: Run planner tests + existing polyline reshape tests**
 
 Run: `pnpm exec vitest run src/map/ops/_reshape-plan.test.ts src/map/ops/reshape-selected-line.test.ts`
-Expected: planner tests PASS; `reshape-selected-line.test.ts` PASSES UNCHANGED (it tests the geometry function directly, which is unmodified).
+Expected: planner tests PASS; `reshape-selected-line.test.ts` PASSES UNCHANGED.
 
 - [ ] **Step 5: Commit**
 
@@ -830,11 +975,11 @@ git commit -m "feat(ops): per-source reshape planner on mini dataset"
 
 ---
 
-### Task 4: Reshape orchestrator migration (single-source path first)
+### Task 4: Reshape orchestrator migration (per-source direct path)
 
 **Files:**
-- Modify: `src/map/ops/reshape-selected.ts:70-163` (replace `runPreparedDatasetMutation` callback with direct-runner dispatch)
-- Test: `src/map/ops/reshape-selected.test.ts` (behavioral — must pass with the new path; undo assertions now exercise multi-level undo instead of barrier)
+- Modify: `src/map/ops/reshape-selected.ts:70-163` (replace `runPreparedDatasetMutation` with direct-runner dispatch)
+- Test: `src/map/ops/reshape-selected.test.ts` (behavioral — update barrier-era undo assertions to multi-level expectations)
 - Test: `src/map/ops/reshape-selected-polygon.test.ts` (must pass UNCHANGED)
 
 **Interfaces:**
@@ -895,19 +1040,19 @@ Note: this keeps per-source history entries for now; Task 5 replaces the loop wi
 
 - [ ] **Step 2: Update behavioral expectations in `reshape-selected.test.ts`**
 
-The existing test at `reshape-selected.test.ts` (attributes/selection/undo, stale prepared dataset) currently asserts barrier behavior (`invalidatesPriorCommands` clearing prior history). Update the undo-related cases to the new contract:
+The existing undo assertions pin barrier behavior. Update to the new contract:
 - `reshape → reshape → undo → undo` now restores BOTH edits (multi-level), not "only the last one";
 - geometry after each undo matches the pre-op state exactly;
 - `dataset.arcs.size()` returns to its original value after the final undo;
-- remove any assertion on `DatasetReplaceSelectionCommand` for reshape; assert `historychange` fires once per op;
-- the stale-prepared-dataset case keeps working via the runner's editVersion guard (rename the test to reflect the direct-runner guard).
+- remove `DatasetReplaceSelectionCommand` assertions for reshape; assert `historychange` fires once per op;
+- the stale-prepared-dataset case now trips the runner's editVersion guard (rename the test accordingly).
 
-Polygon line/polygon geometry tests (`reshape-selected-polygon.test.ts`, `reshape-selected-line.test.ts`) MUST pass unmodified.
+Polygon/line geometry test files MUST pass unmodified.
 
 - [ ] **Step 3: Run the full reshape test set**
 
 Run: `pnpm exec vitest run src/map/ops/reshape-selected.test.ts src/map/ops/reshape-selected-line.test.ts src/map/ops/reshape-selected-polygon.test.ts src/core/handlers/reshape-feature.test.ts`
-Expected: PASS. Any geometric regression means the mini translation is wrong — fix the translator/planner, NOT the legacy geometry files.
+Expected: PASS. Any geometric regression ⇒ fix the translator/planner, NOT the legacy geometry files.
 
 - [ ] **Step 4: Typecheck + commit**
 
@@ -922,12 +1067,11 @@ git commit -m "feat(ops): migrate reshapeSelected to direct patch commands"
 ### Task 5: Multi-source single-entry runner + reshape composite
 
 **Files:**
-- Modify: `src/map/ops/_runner.ts` (add `_runPreparedEditCommandMany` beside `_runPreparedEditCommand` at line 319)
+- Modify: `src/map/ops/_runner.ts` (add `_runPreparedEditCommandMany` beside `_runPreparedEditCommand` at line 319; refactor `enqueueSourceOperation` at 174-197)
 - Modify: `src/map/ops/_context.ts` (add `RunPreparedEditCommandMany` type + `OpContext` field)
 - Modify: `src/map/mapshaper-ops.ts` (wire the new runner into `OpContext`)
 - Modify: `src/map/ops/reshape-selected.ts` (replace the per-source loop with one multi-source call)
 - Test: `src/map/ops/reshape-selected.test.ts` (multi-source single-entry case)
-- Reference: `enqueueSourceOperation` at `_runner.ts:174-197` (per-source promise-gate queues)
 
 **Interfaces:**
 - Produces:
@@ -970,10 +1114,46 @@ it('commits a multi-source reshape as ONE history entry', async () => {
 Run: `pnpm exec vitest run src/map/ops/reshape-selected.test.ts -t "ONE history entry"`
 Expected: FAIL — `runPreparedEditCommandMany` is not on the context.
 
-- [ ] **Step 3: Implement `_runPreparedEditCommandMany`**
+- [ ] **Step 3: Implement the multi-source queue + runner**
+
+Refactor `enqueueSourceOperation` (`_runner.ts:174-197`) into a multi-id variant and delegate:
 
 ```ts
-// src/map/ops/_runner.ts — beside _runPreparedEditCommand
+function enqueueMultiSourceOperation<T>(
+  host: EmapHostInternal,
+  sourceIds: readonly string[],
+  run: () => Promise<T>,
+): Promise<T> {
+  let queues = operationQueues.get(host);
+  if (!queues) {
+    queues = new Map();
+    operationQueues.set(host, queues);
+  }
+  const uniqueIds = [...new Set(sourceIds)];
+  const previous = uniqueIds.map((id) => queues!.get(id) ?? Promise.resolve());
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  for (const id of uniqueIds) queues.set(id, gate);
+  return Promise.all(previous.map((p) => p.catch(() => undefined)))
+    .then(run)
+    .finally(() => {
+      release();
+      for (const id of uniqueIds) if (queues!.get(id) === gate) queues!.delete(id);
+    });
+}
+
+function enqueueSourceOperation<T>(
+  host: EmapHostInternal,
+  sourceId: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  return enqueueMultiSourceOperation(host, [sourceId], run);
+}
+```
+
+Then add the runner beside `_runPreparedEditCommand`:
+
+```ts
 export function _runPreparedEditCommandMany<T>(
   host: EmapHostInternal,
   sourceIds: readonly string[],
@@ -1049,10 +1229,7 @@ export function _runPreparedEditCommandMany<T>(
     const command =
       planned.length === 1
         ? planned[0]!.edit.command
-        : new CompositeCommand(
-            planned.map((p) => p.edit.command),
-            label,
-          );
+        : new CompositeCommand(planned.map((p) => p.edit.command), label);
     try {
       command.do();
     } catch (err) {
@@ -1066,51 +1243,18 @@ export function _runPreparedEditCommandMany<T>(
     if (!host._history.isCapturing()) host._fireHistoryChange();
     return okValue(values);
   };
-
-  // Chain onto EVERY involved source queue so ops on any of them serialize
-  // (see the enqueueMultiSourceOperation helper below, refactored out of
-  // enqueueSourceOperation at _runner.ts:174-197).
-  return enqueueMultiSourceOperation(host, [...new Set(sourceIds)], run);
+  return enqueueMultiSourceOperation(host, sourceIds, run);
 }
 ```
-
-Implementation detail (do it, don't delegate the decision): refactor `enqueueSourceOperation` to expose
-
-```ts
-function enqueueMultiSourceOperation<T>(
-  host: EmapHostInternal,
-  sourceIds: readonly string[],
-  run: () => Promise<T>,
-): Promise<T> {
-  let queues = operationQueues.get(host);
-  if (!queues) {
-    queues = new Map();
-    operationQueues.set(host, queues);
-  }
-  const previous = sourceIds.map((id) => queues!.get(id) ?? Promise.resolve());
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => { release = resolve; });
-  for (const id of sourceIds) queues.set(id, gate);
-  return Promise.all(previous.map((p) => p.catch(() => undefined)))
-    .then(run)
-    .finally(() => {
-      release();
-      for (const id of sourceIds) if (queues!.get(id) === gate) queues!.delete(id);
-    });
-}
-```
-
-and re-implement `enqueueSourceOperation` as the single-id delegation (`return enqueueMultiSourceOperation(host, [sourceId], run)`).
 
 - [ ] **Step 4: Switch the orchestrator to one multi-source call**
 
 In `reshape-selected.ts`, replace the `for (const [sourceId, source] of ctx.host._sources)` loop with:
 
 ```ts
-  const sourceIds = [...ctx.host._sources.keys()].filter((id) => {
-    const dataset = ctx.host._sources.get(id)?.getDataset();
-    return !!dataset?.arcs;
-  });
+  const sourceIds = [...ctx.host._sources.keys()].filter(
+    (id) => !!ctx.host._sources.get(id)?.getDataset()?.arcs,
+  );
   if (sourceIds.length === 0) return Err.validation('line', 'did not reshape any feature');
   const result = await ctx.runPreparedEditCommandMany(
     sourceIds,
@@ -1171,14 +1315,14 @@ git commit -m "feat(ops): multi-source single-entry reshape via composite comman
 **Files:**
 - Create: `src/edit/commands/split-features.ts`
 - Test: `src/edit/commands/split-features.test.ts`
-- Reference: `src/edit/commands/path-geometry-patch.ts:62-125` (mirror structure/publish/assertions), `src/edit/commands/feature-delete.ts` (record-array handling for feature add/remove — mirror its data-table access)
+- Reference: `src/edit/commands/path-geometry-patch.ts:62-125` (mirror structure/publish/assertions — read the full file before writing), `src/edit/commands/feature-delete.ts` (record-array handling)
 
 **Interfaces:**
 - Produces (Tasks 7-8 consume):
 ```ts
 export interface SplitFeaturesCommandOptions {
   source: TopologySource;
-  /** Neighbor (sharer) patches + split targets' largest-piece after shapes. */
+  /** Sharer patches + split targets' largest-piece after shapes. */
   shapePatches: PathShapePatch[];
   originalArcCount: number;
   appendedArcs: AppendedArc[];
@@ -1204,29 +1348,28 @@ export class SplitFeaturesCommand implements EditCommand { /* do/undo/publish */
 // src/edit/commands/split-features.test.ts
 describe('SplitFeaturesCommand', () => {
   it('do appends arcs/features, patches shapes, replaces selection', () => {
-    // layer with 2 features; command patches f0's shape and appends one feature
-    // expect shapes.length 2 → 3, records cloned (new object, same content),
-    // arcs.size grows by appendedArcs.length, selection === afterSelection
+    // layer with 2 features; command patches f0's shape and appends one feature.
+    // expect shapes.length 2 → 3; appended record is a NEW object with equal
+    // content; arcs.size grows by appendedArcs.length; selection === afterSelection.
   });
 
   it('undo restores shapes, records, arcs and selection exactly', () => {
-    // after undo: shapes.length === originalFeatureCount, f0 shape identity
-    // restored (deep-equal original), records array truncated, arcs.size()
-    // back to originalArcCount, selection === beforeSelection refs
+    // after undo: shapes.length === originalFeatureCount; f0 shape deep-equals
+    // the original; records truncated; arcs.size() back; selection restored.
   });
 
   it('redo reproduces identical arc ids and feature contents', () => {
-    // do → undo → do; compare full shape table + arc vertex data after redo
-    // to the state after the first do (arc ids stable).
+    // do → undo → do; full shape table + arc vertex data after redo deep-equal
+    // the state after the first do (arc ids stable).
   });
 
   it('asserts when the arc count drifted before redo', () => {
-    // do → undo → externally append an arc → redo must throw (bypass guard)
+    // do → undo → externally append an arc → redo must throw (bypass guard).
   });
 });
 ```
 
-Fixtures: mock `ArcCollection` from `feature-create.test.ts:7-28`; layer stub with `data.getRecords()` array; selection stub mirroring `path-geometry-patch.test.ts`.
+Fixtures: mock `ArcCollection` from `feature-create.test.ts:7-28`; layer stub with `data.getRecords()`; selection stub mirroring `path-geometry-patch.test.ts`.
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -1235,32 +1378,16 @@ Expected: FAIL — module does not exist.
 
 - [ ] **Step 3: Implement the command**
 
+Structure (read `path-geometry-patch.ts` in full and mirror its exact publish/selection semantics):
+
 ```ts
 // src/edit/commands/split-features.ts
-import type { EditCommand } from '../edit-command';
-import type { MapshaperLayer, PathLayer, PathShape } from '../../types/mapshaper-types';
-import type { TopologySource } from '../../source/source';
-import type { FeatureRef } from '../../map/types';
-import type { Selection, SelectionDiff, SelectionSnapshot } from '../../map/selection';
-import {
-  getDefaultMapshaperAdapter,
-  type AppendedArc,
-  type MapshaperAdapter,
-} from '../../adapter/mapshaper-adapter';
-import {
-  appendArcsCompat,
-  markSourceChanged,
-  truncateArcsCompat,
-} from './_shared';
-import type { PathShapePatch } from './path-geometry-patch';
-
-export interface SplitFeaturesCommandOptions { /* …exactly the interface above… */ }
-
 export class SplitFeaturesCommand implements EditCommand {
   readonly label: string;
   private readonly adapter: MapshaperAdapter;
+  private readonly opts: SplitFeaturesCommandOptions;
 
-  constructor(private readonly opts: SplitFeaturesCommandOptions) {
+  constructor(opts: SplitFeaturesCommandOptions) {
     this.label = opts.label;
     this.adapter = opts.adapter ?? getDefaultMapshaperAdapter();
     // Clone snapshots: callers reuse their arrays after construction.
@@ -1281,19 +1408,18 @@ export class SplitFeaturesCommand implements EditCommand {
     const { opts } = this;
     const arcs = opts.source.getDataset()?.arcs;
     if (!arcs) throw new Error('SplitFeaturesCommand: source has no arcs');
-    if (arcs.size() !== opts.originalArcCount)
+    if (arcs.size() !== opts.originalArcCount) {
       throw new Error('SplitFeaturesCommand: arc collection drifted');
+    }
     appendArcsCompat(this.adapter, arcs, opts.appendedArcs);
     for (const patch of opts.shapePatches) {
-      (patch.layer as PathLayer).shapes![patch.featureId] = patch.after.map((part) =>
-        part.slice(),
-      );
+      (patch.layer as PathLayer).shapes![patch.featureId] = patch.after.map((part) => part.slice());
     }
     const layer = opts.layer as PathLayer;
     layer.shapes!.push(...opts.appendedShapes.map((shape) => shape.map((part) => part.slice())));
     const records = layer.data?.getRecords?.();
     if (records) records.push(...opts.appendedRecords.map((r) => (r === null ? null : { ...r })));
-    opts.selection.apply(opts.afterSelection, 'replace');
+    opts.selection.apply(opts.afterSelection, 'replace'); // match PathGeometryPatchCommand exactly
     markSourceChanged(opts.source);
   }
 
@@ -1301,31 +1427,24 @@ export class SplitFeaturesCommand implements EditCommand {
     const { opts } = this;
     const arcs = opts.source.getDataset()?.arcs;
     if (!arcs) throw new Error('SplitFeaturesCommand: source has no arcs');
-    opts.selection.apply(opts.beforeSelection.refs, 'replace'); // match PathGeometryPatchCommand's restore semantics exactly
+    // Selection restore first — mirror PathGeometryPatchCommand.undo exactly.
     const layer = opts.layer as PathLayer;
     layer.shapes!.length = opts.originalFeatureCount;
     const records = layer.data?.getRecords?.();
     if (records) records.length = opts.originalFeatureCount;
     for (const patch of opts.shapePatches) {
-      (patch.layer as PathLayer).shapes![patch.featureId] = patch.before.map((part) =>
-        part.slice(),
-      );
+      (patch.layer as PathLayer).shapes![patch.featureId] = patch.before.map((part) => part.slice());
     }
     truncateArcsCompat(this.adapter, arcs, opts.originalArcCount);
     markSourceChanged(opts.source);
   }
 
   publish(): void {
-    // Mirror PathGeometryPatchCommand.publish exactly: fire source 'data'
-    // with reason 'edit', then the selection diff (if any).
+    // Mirror PathGeometryPatchCommand.publish exactly: source 'data' (reason
+    // 'edit') + selection diff publish.
   }
 }
 ```
-
-Implementation checkpoints while writing the real bodies:
-- Copy `PathGeometryPatchCommand`'s exact selection restore + publish code (read the full file first; the plan's sketch is structural, not verbatim).
-- Mirror `FeatureDeleteCommand`'s data-table access pattern for records (it already splices records safely).
-- `markSourceChanged` handles `markDisplayArcsDirty` + `bumpEditVersion` (`_shared.ts`).
 
 - [ ] **Step 4: Run tests to verify pass**
 
@@ -1345,9 +1464,9 @@ git commit -m "feat(edit): SplitFeaturesCommand for in-place feature splits"
 ### Task 7: Split polyline migration (point + polyline cutters)
 
 **Files:**
-- Modify: `src/map/ops/split-selected-geometry.ts` (replace `applySplitPieces` with a pure planner variant)
+- Modify: `src/map/ops/split-selected-geometry.ts` (replace `applySplitPieces` with a pure planner variant; delete the legacy function — clean cutover)
 - Modify: `src/map/ops/split-selected.ts:128-192` (dispatch via `runPreparedEditCommand`)
-- Test: `src/map/ops/split-selected-line.test.ts`, `src/map/ops/split-selected.test.ts` (must pass with updated undo expectations), `src/map/ops/split-selected.integration.test.ts`
+- Test: `src/map/ops/split-selected-line.test.ts`, `src/map/ops/split-selected.test.ts`, `src/map/ops/split-selected.integration.test.ts` (update barrier-era undo expectations)
 - Consumes: Tasks 1-2 (mini builder/translator), Task 6 (`SplitFeaturesCommand`)
 
 **Interfaces:**
@@ -1378,15 +1497,15 @@ export function planSplitPieces(opts: {
 - [ ] **Step 1: Write the failing planner tests**
 
 ```ts
-// src/map/ops/split-selected-geometry.test.ts (extend existing if present, else create)
+// src/map/ops/split-selected-geometry.test.ts (extend if present, else create)
 describe('planSplitPieces', () => {
   it('keeps the largest piece at the original id and appends the rest in order', () => {
     // two-piece split of f0 (areas 10 and 4): f0 after = area-10 piece;
     // appendedShapes = [area-4 piece]; resultFeatures = [f0, appended id];
-    // appendedRecordSource = [0]
+    // appendedRecordSource = [0].
   });
   it('preserves unsplit selected ids in resultFeatures', () => { /* ... */ });
-  it('clones records: appended record content equals source, object identity differs', () => { /* ... */ });
+  it('produces deterministic append order for multi-target splits', () => { /* ... */ });
 });
 ```
 
@@ -1397,17 +1516,17 @@ Expected: FAIL — `planSplitPieces` does not exist.
 
 - [ ] **Step 3: Implement `planSplitPieces`**
 
-Port the ordering/materialization logic from `applySplitPieces` (`split-selected-geometry.ts:42-90`) into the pure planner: same largest-piece sort (`adapter.getShapeArea`/`getShapePerimeter` on the MINI arcs), same append order, same resultFeatures construction. Differences from the legacy body:
+Port the ordering/materialization logic from `applySplitPieces` (`split-selected-geometry.ts:42-90`) into the pure planner: same largest-piece sort (`adapter.getShapeArea`/`getShapePerimeter` on the MINI arcs), same append order (target order then splitter output order), same resultFeatures construction. Differences from the legacy body:
 - no `shapes`/`records` mutation (return data instead);
 - no temporary-layer splicing (temp layers die with the mini);
 - NO `cleanArcReferences`;
-- record cloning is deferred to the orchestrator (the plan carries `appendedRecordSource` feature ids; the orchestrator reads live records and builds `appendedRecords`).
+- record cloning is deferred to the orchestrator via `appendedRecordSource`.
 
-Delete `applySplitPieces` after the orchestrator switches (clean cutover — it has no other callers; verify with `lsp references` before deleting).
+Then delete `applySplitPieces` (clean cutover — run `lsp references` on it first to confirm the orchestrator was its only caller).
 
 - [ ] **Step 4: Switch the orchestrator**
 
-Replace the `runPreparedDatasetMutation` callback in `split-selected.ts` with:
+Replace the `runPreparedDatasetMutation` call in `split-selected.ts` with:
 
 ```ts
   return ctx.runPreparedEditCommand(sourceId, 'Split selected features', (planned, mutableSource) => {
@@ -1422,7 +1541,7 @@ Replace the `runPreparedDatasetMutation` callback in `split-selected.ts` with:
     if (!arcs) return Err.validation('geometry', 'selected polyline geometry is invalid');
     try {
       if (liveLayer.geometry_type === 'polyline') {
-        validateSelectedPolylines(liveLayer, selectedIds, arcs);
+        validateSelectedPolylines(liveLayer, selectedIds, arcs); // live, read-only
       }
       const mini = buildMiniDataset({
         dataset: planned,
@@ -1460,23 +1579,25 @@ Replace the `runPreparedDatasetMutation` callback in `split-selected.ts` with:
       });
       if (!translation) return Err.validation('geometry', 'split result translation failed');
 
-      // Assemble command data. The translator already produced patches for
-      // sharers; add split-target patches (largest piece) and appended features,
-      // translating mini ids → live ids via a shape translator exposed from
-      // _mini-translate (export translateShapeFromMini(translation, shape)).
-      const targetPatches = plan.targetAfterShapes.map(({ featureId, shape }) => ({
-        layer: liveLayer,
-        featureId,
-        before: (liveLayer.shapes![featureId] as PathShape).map((part) => part.slice()),
-        after: translateShapeFromMini(translation, shape),
-      }));
+      // Merge: translator patches cover sharers; target patches (largest piece)
+      // win by featureId — a target's shape may also have been remapped in-mini.
+      const patchByFeature = new Map<number, PathShapePatch>();
+      for (const p of translation.shapePatches) patchByFeature.set(p.featureId, p);
+      for (const { featureId, shape } of plan.targetAfterShapes) {
+        patchByFeature.set(featureId, {
+          layer: liveLayer,
+          featureId,
+          before: (liveLayer.shapes![featureId] as PathShape).map((part) => part.slice()),
+          after: translateShapeFromMini(translation, shape),
+        });
+      }
       const liveRecords = (liveLayer as PathLayer).data?.getRecords?.();
       const appendedRecords = plan.appendedRecordSource.map((sourceFeatureId) =>
         liveRecords ? { ...(liveRecords[sourceFeatureId] ?? {}) } : null,
       );
       const command = new SplitFeaturesCommand({
         source: mutableSource,
-        shapePatches: [...translation.shapePatches, ...targetPatches],
+        shapePatches: [...patchByFeature.values()],
         originalArcCount: arcs.size(),
         appendedArcs: translation.appendedArcs,
         layer: liveLayer,
@@ -1503,29 +1624,14 @@ Replace the `runPreparedDatasetMutation` callback in `split-selected.ts` with:
   });
 ```
 
-Translation overlap check (do this while implementing): `translation.shapePatches` may already include a split target if the target's shape changed inside the mini via remap; the target's FINAL after shape must be the largest piece, so merge by featureId — target patches win. Implement the merge explicitly:
-
-```ts
-const patchByFeature = new Map<number, PathShapePatch>();
-for (const p of translation.shapePatches) patchByFeature.set(p.featureId, p);
-for (const p of targetPatches) patchByFeature.set(p.featureId, p); // target wins
-const shapePatches = [...patchByFeature.values()];
-```
-
-Also export from `_mini-translate.ts` (add in this task, with a unit test):
-
-```ts
-export function translateShapeFromMini(translation: MiniTranslation, shape: PathShape): PathShape;
-```
-
-(Store the `finalLiveId` map on `MiniTranslation` — add field `miniToLiveFinal: readonly number[]` to the Task 2 interface and populate it in the translator.)
+Both cutter paths (point via `insertCutPoints`, polyline via `addIntersectionCuts`) translate through the SAME sentinel-lineage translator — no path-specific handling. Note: on the polyline-cutter path the rebuild may snap/flatten coordinates (legacy did the same on the working copy); affected arcs simply fail the untouched check and append — geometrically identical to legacy.
 
 - [ ] **Step 5: Update undo expectations in split tests**
 
-`split-selected.integration.test.ts` currently pins barrier semantics for undo after split. Update to multi-level expectations:
+`split-selected.integration.test.ts` pins barrier semantics. Update to multi-level expectations:
 - split → split → undo → undo restores both;
 - feature count/records/selection restored exactly after undo;
-- `arcs.size()` returns to the original value after undo (orphan arcs are truncated with the command; note the arcs appended by the split itself are removed on undo);
+- `arcs.size()` returns to the original value after undo;
 - the transaction undo-selection case keeps passing.
 
 - [ ] **Step 6: Run the full split test set**
@@ -1537,7 +1643,7 @@ Expected: PASS. Geometric failures ⇒ fix planner/translator, never the legacy 
 
 Run: `pnpm typecheck`
 ```bash
-git add src/map/ops/split-selected.ts src/map/ops/split-selected-geometry.ts src/map/ops/_mini-translate.ts src/map/ops/split-selected.integration.test.ts
+git add src/map/ops/split-selected.ts src/map/ops/split-selected-geometry.ts src/map/ops/split-selected.integration.test.ts
 git commit -m "feat(ops): migrate splitSelected polylines to SplitFeaturesCommand"
 ```
 
@@ -1546,7 +1652,7 @@ git commit -m "feat(ops): migrate splitSelected polylines to SplitFeaturesComman
 ### Task 8: Split polygon migration
 
 **Files:**
-- Modify: `src/map/ops/split-selected.ts` (polygon branch — already routed in Task 7; this task validates and fixes the polygon-specific path)
+- Modify: `src/map/ops/split-selected.ts` (polygon branch — already routed in Task 7; this task validates and fixes polygon-specific issues)
 - Test: `src/map/ops/split-selected-polygon.test.ts` (must pass UNCHANGED), `src/adapter/mapshaper-feature-split.test.ts` (unchanged — adapter primitives untouched)
 
 **Interfaces:**
@@ -1562,15 +1668,15 @@ Expected: PASS unchanged. The mosaic/noding now runs on the mini dataset; failur
 ```ts
 // appended to src/map/ops/split-selected.integration.test.ts
 it('polygon split undo restores feature table and shared boundary ids', () => {
-  // two adjacent polygons; split one with a polyline cutter
-  // after do: target has largest piece + appended feature; neighbor shares the
-  // uncut boundary arc id with both pieces' boundary where untouched
-  // after undo: exact original shapes/arc count/records
+  // two adjacent polygons; split one with a polyline cutter.
+  // after do: target has largest piece + appended feature; the neighbor shares
+  //   the uncut boundary arc id with the pieces' boundary where untouched;
+  // after undo: exact original shapes/arc count/records.
 });
 
 it('area conservation check still rejects invalid mosaic output on the mini path', () => {
   // reuse an existing rejection fixture from split-selected-polygon.test.ts
-  // routed through the op facade (not the geometry function directly)
+  // routed through the op facade (not the geometry function directly).
 });
 ```
 
@@ -1589,13 +1695,13 @@ git commit -m "feat(ops): migrate splitSelected polygons to SplitFeaturesCommand
 
 ---
 
-### Task 9: Integration hardening, docs, example verification
+### Task 9: Integration hardening, docs, example verification (browser-automated)
 
 **Files:**
 - Test: `src/map/ops/reshape-selected.test.ts`, `src/map/ops/split-selected.integration.test.ts` (append integration cases)
 - Modify: `CHANGELOG.md` (add Phase B entry)
-- Modify: `packages/docs/docs/guides/editing.md` + `packages/docs/i18n/en/docusaurus-plugin-content-docs/current/guides/editing.md` (undo/redo behavior notes for reshape/split)
-- Verify: `packages/examples/examples/reshape-ring-part/index.html` manual run
+- Modify: `packages/docs/docs/guides/editing.md` + `packages/docs/i18n/en/docusaurus-plugin-content-docs/current/guides/editing.md`
+- Verify: `packages/examples/examples/reshape-ring-part/index.html` via **ego-browser** (user-designated tool; read `skill://ego-browser` first)
 
 **Interfaces:** none new.
 
@@ -1614,9 +1720,9 @@ Each stage asserts: full shape table deep-equal, `arcs.size()`, records, selecti
 ```ts
 it('vertex edit on the uncut shared span after reshape moves both features', async () => {
   // adjacent polygons sharing an edge; reshape f0 across the shared edge;
-  // then move a vertex on the remaining shared span via the vertex-edit command
-  // path (VertexMoveCommand or the handler); assert BOTH features' geometry
-  // changed and they still reference the same arc id for that span.
+  // then move a vertex on the remaining shared span via VertexMoveCommand;
+  // assert BOTH features' geometry changed and they still reference the same
+  // arc id for that span.
 });
 ```
 
@@ -1634,7 +1740,7 @@ it('transaction capturing reshape + split commits one entry; rollback leaves no 
 
 ```ts
 it('live arc table grows monotonically across ops; undo returns to exact originalArcCount', () => { /* ... */ });
-it('no cleanArcReferences on the split path (deleted arcs stay referenced by history)', () => {
+it('no cleanArcReferences on the split path', () => {
   // spy on adapter.cleanArcReferences during splitSelected → not called
 });
 ```
@@ -1646,15 +1752,23 @@ Check the runner's publish path: `source.fire('data', { reason: 'edit' })` → m
 - [ ] **Step 6: Full suite + typecheck**
 
 Run: `pnpm exec vitest run` and `pnpm typecheck`
-Expected: full suite PASS (all pre-existing tests unchanged in behavior, updated only where barrier semantics were pinned), 0 type errors.
+Expected: full suite PASS, 0 type errors.
 
-- [ ] **Step 7: Example + docs + CHANGELOG**
+- [ ] **Step 7: Example verification via ego-browser**
 
-- Manual: serve `packages/examples/examples/reshape-ring-part/index.html`, perform 3 consecutive reshape ops and 3 split ops, undo/redo step-by-step; confirm geometry, selection and attributes restore at each level.
+Serve `packages/examples/examples/reshape-ring-part/` (check the examples README for the static server command) and drive it with ego-browser (visual workflow — the map is a canvas):
+
+1. `useOrCreateTaskSpace('phase B example verification')`, `openOrReuseTab(<example url>)`;
+2. perform 3 consecutive reshape ops and 3 split ops via canvas mouse drags (`dragMouse`) on the feature geometry;
+3. after each op, screenshot + read the app's undo-history UI/state (via `js()` on the page's exposed map object if available) to confirm one new history entry per op;
+4. undo step-by-step (Ctrl/Cmd+Z or the example's undo control), screenshot-verifying geometry restoration at each level; then redo;
+5. verify selection/attribute table state matches at each undo level;
+6. `completeTaskSpace(task.id, { keep: false })`.
+
+- [ ] **Step 8: Docs + CHANGELOG + commit**
+
 - `editing.md` (both locales): reshape/split are now incremental, multi-level undoable edits; orphan-arc note (exports compact a copy).
 - `CHANGELOG.md`: Phase B entry under Unreleased.
-
-- [ ] **Step 8: Commit**
 
 ```bash
 git add -A
@@ -1665,6 +1779,7 @@ git commit -m "test(ops): phase B integration hardening + docs"
 
 ## Self-Review Notes (completed by the author)
 
-- **Spec coverage:** §3.1→Task 1, §3.2→Task 2 (+`translateShapeFromMini`/`miniToLiveFinal` addition in Task 7), §3.3→Task 6, §4.1→Tasks 3-5, §4.2→Task 7, §4.3→Task 8, §4.4→Task 7 Step 3 (no cleanArcReferences) + Task 9 Step 4, §5→Task 5 (runner) + Task 9 Step 5, §6→per-task test steps + Task 9.
-- **Type consistency:** `MiniDataset.miniToLiveArc` / `included` (Task 1) consumed verbatim in Task 2; `MiniTranslation` extended once in Task 7 (`miniToLiveFinal`, `translateShapeFromMini`) — Task 2's interface note flags the addition point so the fields exist before Task 7 uses them. `planSplitPieces` field names (`targetAfterShapes`, `appendedShapes`, `appendedRecordSource`, `resultFeatures`, `splitTargetCount`) used identically in the orchestrator code.
-- **Known soft spot (flagged for implementers):** the Task 2 third fixture's flat vertex index for `insertCutPoints` must be calibrated against the real fixture; the test asserts the cut landed before proceeding. Task 9 Step 5 is an explicit check-or-fix gate.
+- **Spec coverage:** §3.1→Task 1, §3.2→Task 2, §3.3→Task 6, §4.1→Tasks 3-5, §4.2→Task 7, §4.3→Task 8, §4.4→Task 7 Step 3 + Task 9 Step 4, §5→Task 5 + Task 9 Step 5, §6→per-task test steps + Task 9.
+- **Type consistency:** `MiniDataset.miniToLiveArc` / `included` / `sentinelLayerIndex` (Task 1) consumed verbatim in Task 2; `MiniTranslation` (`appendedArcs`, `shapePatches`, `miniToLiveFinal`) and `translateShapeFromMini` defined in Task 2 and consumed in Tasks 3/7; `planSplitPieces` field names used identically in the Task 7 orchestrator code; `RunPreparedEditCommandMany` (Task 5) matches its `_context.ts` type.
+- **Lineage mechanism:** spike-verified for both cutting paths plus dedup convergence (see header facts); the translator never infers identity from coordinates across arcs, only per-provenance-slot orientation-adjusted equality for the untouched check; multi-owner post arcs append once and converge on one new live id (legacy merge parity).
+- **Known calibration points (flagged for implementers):** Task 2 contract fixtures assert exact ids derived from the 2026-08-30 spikes — re-derive from an actual run if a fixture detail shifts; Task 9 Step 5 is an explicit check-or-fix gate.

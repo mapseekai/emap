@@ -61,7 +61,7 @@ mini 的成本与**候选 feature 的弧总量**相关,与 dataset 总大小无�
 
 - **候选集**:reshape 用画线 bbox(外扩一个 CONTACT_EPSILON 级 margin)对 feature bbox 预筛,只有可能接触的 feature 进入 mini;split 即选中 feature。bbox 不相交 ⇒ 段级接触不可能,预筛只省拷贝、不改变几何结果。
 - **内容**:候选 feature 引用的全部弧的坐标拷贝(reshape polygon 含洞与多 part;split 为选中 feature 全部边界弧)。`layers` 为原 path layer 的浅拷贝,其 `shapes` 数组与 live **等长对齐**——非候选位置填 `null`(legacy 循环对 null shape 跳过,行为不变),候选位置填翻译成 mini id 的 shape 深拷贝。
-- **provenance(sentinel 层 + 拷贝映射双记录)**:构建时记录 `miniArcId → liveArcId`;同时在 mini 末尾追加一个**不参与几何判定的 polyline sentinel 层**,每条被拷贝弧一个 shape `[[miniArcId]]`。`remapDividedArcs` 与 `addIntersectionCuts`/`buildTopology` 会连同该层一起 remap,运行后 sentinel shape k 即原 mini 弧 k 的有序 piece 序列——同时解决 insertCutPoints 与 rebuild 两条路径的 lineage(2026-08-30 spike 实证:sentinel 在两条路径下均被正确 remap 且不被 `cleanShapes` 丢弃;sentinel 引用全部弧,mini 内 `cleanArcReferences` 不删任何弧,无害)。绝不做跨弧字节匹配——坐标重复但拓扑身份不同的弧真实存在。
+- **provenance(sentinel 层 + 拷贝映射双记录)**:构建时记录 `miniArcId → liveArcId`;同时在 mini 末尾追加一个**不参与几何判定的 polyline sentinel 层**,每条被拷贝弧一个 shape `[[miniArcId]]`。`remapDividedArcs` 与 `addIntersectionCuts`/`buildTopology` 会连同该层一起 remap,运行后 sentinel shape k 即原 mini 弧 k 的有序 piece 序列——同时解决 insertCutPoints 与 rebuild 两条路径的 lineage(2026-08-30 spike 实证:sentinel 在两条路径下均被正确 remap 且不被 `cleanShapes` 丢弃;sentinel 引用全部弧,mini 内 `cleanArcReferences` 不删任何弧,无害;spike C:同向重复弧 + 反向重复弧 + cutter 经 `addIntersectionCuts` dedup 后 sentinels = `[[[0,1]],[[0,1]],[[-2,-1]]]`——多 sentinel 收敛到同一 piece 序列,且 lineage 可带负号)。绝不做跨弧字节匹配——坐标重复但拓扑身份不同的弧真实存在。
 - **属性表**:几何函数不读 record;record 克隆在翻译器/命令数据组装时从 live 读原记录浅拷贝。mini layer 不带 data。
 - **adapter 新 API**:`createArcCollection(arcs: AppendedArc[]): ArcCollection`(经 mapshaper internal 构造,mapshaper import 留在 adapter 边界内,遵守 AGENTS.md 硬规则)。
 
@@ -69,9 +69,13 @@ mini 的成本与**候选 feature 的弧总量**相关,与 dataset 总大小无�
 
 mini 上跑完 legacy 函数后,把产出翻译为 live 指令:
 
-- **弧映射(sentinel lineage)**:对每条原 mini 弧 k(provenance live id L):读 sentinel shape k = 有序 post-op mini id 序列。单元素且该 post 弧坐标与 live 弧 L 逐点一致(未切/未吸附/未 flatten 改动)→ 复用 L;否则序列内每个 post id 依序分配 live 追加 id。运行期新产生的弧(替换弧、cutter 弧,无 sentinel)→ 追加。追加 id 按 post-op mini id 升序分配,确定性。坐标对比是 1:1 provenance 校验,非跨弧身份推断(评审意见一);lineage 经 sentinel remap 获得,不经扁平索引反推(评审意见二)。sentinel 缺失/为 null(弧在 snapping/dedup 后退化被 `cleanShapes` 清除)→ 规划失败,无副作用。
+- **弧映射(sentinel lineage,含方向与 dedup 收敛规则)**:先解析全部 sentinel shape k = 原 mini 弧 k 的有序 piece 序列(**piece 引用可带负号**,`-id-1`,dedup 合并反向同形弧时产生),构建**反向 owner 表** `postArcId -> [{原 mini 弧 k, 方向}]`;再按 k 升序、lineage 顺序分配,每个 post id 恰好映射一次:
+  1. **复用 live id(未触碰)**——仅当 owner 唯一、该 sentinel 为单 piece、且 piece 坐标**按方向校正后**与 live 弧 L 逐点一致(正号正向比、负号反向比,含 zz)→ 复用 L,不追加;
+  2. **多 owner(dedup 收敛)**——多个 sentinel 指向同一 post id(legacy 在 working copy 上 dedup 合并坐标相同/反向相同的弧)→ 该 post id **只追加一条**新 live 弧,所有 owner 的引用经符号保留翻译到**同一新 id**(与 legacy 输出一致:合并为一条弧;被合并的原 live 弧转为孤儿,属预期);
+  3. **其余**——多 piece(被切分)或单 piece 但坐标被 snap/flatten 改动 → 依序追加。
+  无任何 sentinel 覆盖的运行期新弧(替换弧、cutter 段)→ 追加。追加 id 按"sentinel k 升序、lineage 顺序、再按无 sentinel 弧 mini id 升序"分配,确定性。坐标对比是 1:1 provenance 校验,非跨弧身份推断(评审意见一);lineage 经 sentinel remap 获得,不经扁平索引反推(评审意见二)。sentinel 缺失/为 null(弧在 snapping/dedup 后退化被 `cleanShapes` 清除)→ 规划失败,无副作用。
 - **rebuild 路径如实说明**:`addIntersectionCuts` 在 mini 内执行 `flatten()`(烘焙简化)+ snap + dedup + `buildTopology`(重排全部 id)+ `cleanShapes` + `cleanArcReferences`——与 legacy 在 working copy 上的行为逐字一致;坐标被吸附/flatten 的弧坐标不再等于 live 原件,按未命中处理(追加),几何输出与 legacy 相同,仅孤儿弧略多。
-- **shape 翻译**:legacy 产出的 after-shape(mini id)经弧映射翻回 live id;与 live before 比对,不同则生成 `PathShapePatch`。signed 方向在 mini 内已被 legacy 正确处理,翻译仅做无符号 id 映射 + 符号保持。
+- **shape 翻译**:legacy 产出的 after-shape(mini id)经弧映射翻回 live id;与 live before 比对,不同则生成 `PathShapePatch`。signed 方向在 mini 内已被 legacy 正确处理;shape 级翻译对每条引用取 unsigned id 查映射、保留原符号,追加弧恒为正向存储,从不反向复用 live 弧。
 - **共享者收录(邻居 patch 的实现机制)**:候选集在构建 mini 前扩="几何候选 ∪ 与候选共享任一弧的 feature"(live 侧一次 arc→features 扫描)。共享者以完整 feature(全部弧 + 翻译 shape)进入 mini,但不传给几何函数(不参与 reshape/split 判定);mini 内的 `insertCutPoints`/`remapDividedArcs` 会顺带把它们的 shape 重写到正确 piece 序列——翻译器对 mini 内**所有在场 shape** 统一做"翻译 + 与 live 比对,diff 即 patch",目标与邻居一套机制,无需单独的邻居替换逻辑,也无需事后重建 piece 顺序。这保证拓扑联动:未切割共享段在目标与邻居间仍是同一批弧 id。
 - **断言**:任何 mini id 无映射或映射冲突 → 规划失败返回 OpResult failure,无副作用(满足评审意见二的"显式 provenance"诉求:provenance 由构建期拷贝关系携带,不经扁平索引反推)。
 
@@ -136,6 +140,7 @@ reshape **不需要新命令类**:PathGeometryPatchCommand 天然适配(targets 
 
 **新增**:
 - mini 构建器/翻译器单元测试(稀疏对齐、provenance 映射、逐槽位对比、确定性追加序、无映射即失败);
+- **dedup 收敛契约测试**(spike C 场景):同向重复弧 + 反向重复弧经 rebuild 后收敛到同一 piece 序列——翻译只追加一份 post 弧、所有 owner 的 shape 引用(含负号)映射到同一新 live id,与 legacy 合并输出一致;
 - SplitFeaturesCommand do/undo/redo、弧 id 稳定、feature/record 截断恢复;
 - **联动证明**:reshape 后对未整形共享段做顶点编辑,邻居跟随(shared piece 被双方引用);
 - 历史:reshape×3 → undo×3 → redo×3;split×3 同理;multi-source reshape 单 entry undo;
@@ -164,6 +169,7 @@ reshape **不需要新命令类**:PathGeometryPatchCommand 天然适配(targets 
 | mini id ↔ live id 翻译错误 | 翻译器双向断言,失败即 OpResult failure(无副作用);构建/翻译单测 |
 | mini 缺上下文弧(面切割 mosaic、面 reshape 的洞分组) | 候选集按整个 feature(含洞与多 part)收录;面积守恒等现有校验兜底 |
 | sentinel lineage 失效(remap 不覆盖 sentinel 层 / cleanShapes 丢弃) | 2026-08-30 spike 已实证两条路径(insertCutPoints:[[[0]],[[1,2]],[[3]]];addIntersectionCuts:[[[0,1,2]],[[3]],[[4]],[[5]],[[6,7,8]]]);契约测试锁死该行为 |
+| dedup 收敛使同一 post id 被多个 sentinel 认领,映射冲突;或 lineage 负号丢失方向 | 反向 owner 表:仅 owner 唯一 + 单 piece + 方向校正坐标一致才复用 live id;多 owner 单份追加并统一新 id(spike C 实证 `[[[0,1]],[[0,1]],[[-2,-1]]]`,契约测试锁死) |
 | bbox 预筛误排接触 feature | margin 外扩 + 预筛开/关等价测试;几何测试矩阵原样通过 |
 | 共享者收录遗漏(arc→features 索引不全) | 索引构建覆盖 source 全部 path layers;联动证明测试(reshape 后顶点编辑共享段,邻居跟随) |
 | feature 追加后 FeatureQuery 索引失效遗漏 | §5 实现检查点;新增失效测试 |
