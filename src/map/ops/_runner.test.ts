@@ -522,6 +522,45 @@ describe('multi-source direct edit runner', () => {
     expect(host._history.canRedo()).toBe(true);
   });
 
+  it('restores already-undone children when a later undo child throws', async () => {
+    const datasetA = { layers: [], arcs: null };
+    const datasetB = { layers: [], arcs: null };
+    const state = { a: true, b: true };
+    const commandA = {
+      do: vi.fn(() => {
+        state.a = true;
+      }),
+      undo: vi.fn(() => {
+        throw new Error('undo boom');
+      }),
+    };
+    const commandB = {
+      do: vi.fn(() => {
+        state.b = true;
+      }),
+      undo: vi.fn(() => {
+        state.b = false;
+      }),
+    };
+    const host = makeHost(
+      new Map([
+        ['a', { getDataset: () => datasetA }],
+        ['b', { getDataset: () => datasetB }],
+      ]),
+    );
+    await _runPreparedEditCommandMany(host, ['a', 'b'], 'Reshape', (sourceId) => ({
+      value: sourceId,
+      command: sourceId === 'a' ? commandA : commandB,
+      affectedSourceIds: [sourceId],
+    }));
+
+    expect(() => host._history.undo()).toThrow('undo boom');
+    expect(state).toEqual({ a: true, b: true });
+    expect(commandB.do).toHaveBeenCalledTimes(2);
+    expect(host._history.canUndo()).toBe(true);
+    expect(host._history.canRedo()).toBe(false);
+  });
+
   it('returns a no-plan validation without history, publish, or transaction capture', async () => {
     const dataset = { layers: [], arcs: null };
     const host = makeHost(new Map([['a', { getDataset: () => dataset }]]));

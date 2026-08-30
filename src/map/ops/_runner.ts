@@ -413,9 +413,8 @@ export function _runPreparedEditCommand<T>(
 }
 
 /**
- * A CompositeCommand that leaves no child effect behind when a later child
- * fails. The inherited publish()/undo() retain normal composite semantics;
- * overriding do() also makes history redo atomic.
+ * A CompositeCommand that restores its all-or-nothing state when a child do
+ * or undo fails. The inherited publish() still fans out to every child.
  */
 class AtomicCompositeCommand extends CompositeCommand {
   constructor(
@@ -446,6 +445,27 @@ class AtomicCompositeCommand extends CompositeCommand {
         }
       }
       throw error;
+    }
+  }
+
+  override undo(): void {
+    const undone: EditCommand[] = [];
+    for (let index = this.atomicChildren.length - 1; index >= 0; index -= 1) {
+      const child = this.atomicChildren[index]!;
+      try {
+        child.undo();
+        undone.push(child);
+      } catch (error) {
+        for (let replayIndex = undone.length - 1; replayIndex >= 0; replayIndex -= 1) {
+          try {
+            undone[replayIndex]!.do();
+          } catch {
+            // The original undo failure is the meaningful error; each child
+            // remains responsible for reversible, failure-safe do/undo.
+          }
+        }
+        throw error;
+      }
     }
   }
 }
