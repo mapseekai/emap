@@ -19,7 +19,7 @@
 
 ## Global Constraints
 
-- NEVER import `mapshaper` outside `src/adapter/mapshaper-adapter.ts` (AGENTS.md hard rule). New `createArcCollection` lives in the adapter; ops tests may import mapshaper for fixtures (existing test precedent: `mapshaper-adapter-arcs.test.ts:154`).
+- NEVER import `mapshaper` outside `src/adapter/mapshaper-adapter.ts` (AGENTS.md hard rule). New `createArcCollection` lives in the adapter; the NEW ops tests build every ArcCollection fixture through it (`arcsFrom` helper below) and never import mapshaper — legacy test files with direct imports (`feature-create.test.ts`, `vertex-move.test.ts`, …) are grandfathered, not precedent.
 - Legacy geometry functions (`reshape-selected-line.ts`, `reshape-selected-polygon.ts`, `split-selected-line.ts`, `split-selected-polygon.ts`) are NOT modified — they run on the mini dataset. All migration logic lives in the orchestrators and the two new `_mini-*` modules.
 - Planners MUST be synchronous, pure read-only on LIVE datasets; all live mutation happens inside `command.do()` (mini dataset mutation is fine — it is planner-owned scratch).
 - **Soundness invariant:** the mini arc table contains ONLY arcs referenced by candidate features (+ runtime arcs the legacy function itself appends). Nothing outside the table can be modified by `insertCutPoints`/`addIntersectionCuts`/`buildTopology`/`cleanShapes`/`cleanArcReferences`.
@@ -40,7 +40,7 @@
 - Modify: `src/adapter/mapshaper-adapter.ts` (interface near `appendArcs` ~line 206; implementation near `appendArcs` impl ~line 703)
 - Create: `src/map/ops/_mini-dataset.ts`
 - Test: `src/map/ops/_mini-dataset.test.ts` (create)
-- Reference: `src/adapter/mapshaper-adapter-arcs.test.ts:153-157` (real `mapshaper.internal.ArcCollection` construction precedent)
+- Reference: `src/adapter/mapshaper-adapter-arcs.test.ts:153-157` (adapter-side ArcCollection patterns — note that file lives INSIDE the adapter boundary; ops tests build fixtures via `createArcCollection` instead)
 
 **Interfaces:**
 - Produces (Tasks 3,4,7,8 consume):
@@ -81,19 +81,30 @@ export function buildMiniDataset(opts: {
 ```ts
 // src/map/ops/_mini-dataset.test.ts
 import { describe, expect, it } from 'vitest';
-import mapshaper from 'mapshaper';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
-import type { MapshaperDataset, PathLayer, PathShape } from '../../types/mapshaper-types';
+import type { ArcCollection, MapshaperDataset, PathLayer, PathShape } from '../../types/mapshaper-types';
 import { buildMiniDataset } from './_mini-dataset';
+
+// Fixtures build ArcCollection through the adapter — ops tests never import
+// mapshaper directly (AGENTS.md hard rule).
+function arcsFrom(pointsPerArc: [number, number][][]): ArcCollection {
+  return getDefaultMapshaperAdapter().createArcCollection(
+    pointsPerArc.map((pts) => ({
+      xx: Float64Array.from(pts.map((p) => p[0])),
+      yy: Float64Array.from(pts.map((p) => p[1])),
+      zz: null,
+    })),
+  );
+}
 
 function liveDataset(): MapshaperDataset {
   // f0 references arcs 0,1; f1 references arc 1 (twice: reversed + forward);
   // f2 references arc 0; arc 2 is unreferenced.
-  const arcs = new mapshaper.internal.ArcCollection(
-    new Int32Array([2, 2, 2]),
-    new Float64Array([0, 1, /**/ 1, 2, /**/ 9, 9]),
-    new Float64Array([0, 0, /**/ 0, 0, /**/ 9, 9]),
-  );
+  const arcs = arcsFrom([
+    [[0, 0], [1, 0]],
+    [[1, 0], [2, 0]],
+    [[9, 9], [9, 9]],
+  ]);
   const layer: PathLayer = {
     geometry_type: 'polygon',
     shapes: [[[0, 1]], [[-2, 1]], [[0]]] as PathShape[],
@@ -190,11 +201,11 @@ describe('buildMiniDataset', () => {
     // layer 0 holds the candidate (references arc 0); layer 1 has NO
     // candidates and its shapes reference live arc ids that are OUT OF RANGE
     // in the mini arc table (mini copies arc 0 only).
-    const arcs = new mapshaper.internal.ArcCollection(
-      new Int32Array([2, 2, 2]),
-      new Float64Array([0, 1, /**/ 1, 2, /**/ 5, 6]),
-      new Float64Array([0, 0, /**/ 0, 0, /**/ 5, 5]),
-    );
+    const arcs = arcsFrom([
+      [[0, 0], [1, 0]],
+      [[1, 0], [2, 0]],
+      [[5, 5], [6, 5]],
+    ]);
     const layer0 = { geometry_type: 'polyline', shapes: [[[0]]] } as unknown as PathLayer;
     const layer1 = { geometry_type: 'polyline', shapes: [[[1]], [[2]]] } as unknown as PathLayer;
     const live = { arcs, layers: [layer0, layer1] } as unknown as MapshaperDataset;
@@ -441,20 +452,31 @@ export function translateShapeFromMini(translation: MiniTranslation, shape: Path
 ```ts
 // src/map/ops/_mini-translate.test.ts
 import { describe, expect, it } from 'vitest';
-import mapshaper from 'mapshaper';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
-import type { MapshaperDataset, PathLayer, PathShape } from '../../types/mapshaper-types';
+import type { ArcCollection, MapshaperDataset, PathLayer, PathShape } from '../../types/mapshaper-types';
 import { buildMiniDataset } from './_mini-dataset';
 import { translateMiniDataset, translateShapeFromMini } from './_mini-translate';
+
+// Fixtures build ArcCollection through the adapter — ops tests never import
+// mapshaper directly (AGENTS.md hard rule).
+function arcsFrom(pointsPerArc: [number, number][][]): ArcCollection {
+  return getDefaultMapshaperAdapter().createArcCollection(
+    pointsPerArc.map((pts) => ({
+      xx: Float64Array.from(pts.map((p) => p[0])),
+      yy: Float64Array.from(pts.map((p) => p[1])),
+      zz: null,
+    })),
+  );
+}
 
 // f0 = [[0,1]] (candidate); f1 = [[-2]] references ~arc1 (neighbor, NOT copied
 // as a shape); f2 = [[2]] references arc 2 (untouched by everything).
 function liveDataset(): MapshaperDataset {
-  const arcs = new mapshaper.internal.ArcCollection(
-    new Int32Array([2, 2, 2]),
-    new Float64Array([0, 1, /**/ 1, 2, /**/ 9, 9]),
-    new Float64Array([0, 0, /**/ 0, 0, /**/ 9, 9]),
-  );
+  const arcs = arcsFrom([
+    [[0, 0], [1, 0]],
+    [[1, 0], [2, 0]],
+    [[9, 9], [9, 9]],
+  ]);
   const layer: PathLayer = {
     geometry_type: 'polyline',
     shapes: [[[0, 1]], [[-2]], [[2]]] as PathShape[],
@@ -587,11 +609,11 @@ describe('translateMiniDataset', () => {
   //   live L0=L1=[(0,0),(1,0)], L2=[(1,0),(0,0)], cutter [(0.5,-1),(0.5,1)].
   //   post: sentinels [[[0,1]],[[0,1]],[[-2,-1]]], cutter [[[2,3]]].
   it('merges deduped arcs into ONE appended arc per post id (signs preserved)', () => {
-    const arcs = new mapshaper.internal.ArcCollection(
-      new Int32Array([2, 2, 2]),
-      new Float64Array([0, 1, /**/ 0, 1, /**/ 1, 0]),
-      new Float64Array([0, 0, /**/ 0, 0, /**/ 0, 0]),
-    );
+    const arcs = arcsFrom([
+      [[0, 0], [1, 0]],
+      [[0, 0], [1, 0]],
+      [[1, 0], [0, 0]],
+    ]);
     const layer: PathLayer = {
       geometry_type: 'polyline',
       shapes: [[[0]], [[1]], [[2]]] as PathShape[], // f0,f1 identical; f2 reversed
@@ -632,11 +654,7 @@ describe('translateMiniDataset', () => {
   // Contract test: spike D (2026-08-30) — dedup keeps the copied arc over a
   // reversed-duplicate cutter; reuse stays exact; dropped arc not appended.
   it('reuses the live id when dedup keeps the copied arc (positive singleton)', () => {
-    const arcs = new mapshaper.internal.ArcCollection(
-      new Int32Array([2]),
-      new Float64Array([0, 1]),
-      new Float64Array([0, 0]),
-    );
+    const arcs = arcsFrom([[[0, 0], [1, 0]]]);
     const layer: PathLayer = {
       geometry_type: 'polyline',
       shapes: [[[0]]] as PathShape[],
