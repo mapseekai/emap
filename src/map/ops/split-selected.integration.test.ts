@@ -47,6 +47,29 @@ function unsignedArcId(signedArcId: number): number {
   return signedArcId < 0 ? -signedArcId - 1 : signedArcId;
 }
 
+function snapshotLiveGeometry(dataset: MapshaperDataset) {
+  const arcs = dataset.arcs!;
+  const { ii, nn, xx, yy, zz } = arcs.getVertexData!();
+  return {
+    layerCount: dataset.layers.length,
+    layers: dataset.layers.map((layer) => ({
+      name: layer.name,
+      id: layer.id,
+      geometryType: layer.geometry_type,
+      shapes: structuredClone(layer.shapes),
+      records: layer.data?.getRecords ? structuredClone(layer.data.getRecords()) : undefined,
+    })),
+    arcs: {
+      count: arcs.size(),
+      ii: Array.from(ii),
+      nn: Array.from(nn),
+      xx: Array.from(xx),
+      yy: Array.from(yy),
+      zz: zz ? Array.from(zz) : null,
+    },
+  };
+}
+
 interface SplitHarness {
   source: { getDataset(): MapshaperDataset; fire: () => void };
   selection: Selection;
@@ -879,9 +902,9 @@ describe('MapshaperOps.splitSelected integration', () => {
       ),
     ]);
     dataset.layers[0]!.name = 'split-selected';
-    const originalArcCount = dataset.arcs!.size();
     const originalShapes = structuredClone(dataset.layers[0]!.shapes);
-    const originalRecords = structuredClone(dataset.layers[0]!.data!.getRecords!());
+    const originalGeometry = snapshotLiveGeometry(dataset);
+
     const state = harness(dataset, [0]);
     const originalSelection = state.selection.getAll();
     const originalTarget = originalShapes[0] as PathShape;
@@ -924,9 +947,7 @@ describe('MapshaperOps.splitSelected integration', () => {
 
     const [entry] = state.history.entries as Array<{ undo(): void }>;
     entry!.undo();
-    expect(dataset.arcs!.size()).toBe(originalArcCount);
-    expect(dataset.layers[0]!.shapes).toEqual(originalShapes);
-    expect(dataset.layers[0]!.data!.getRecords!()).toEqual(originalRecords);
+    expect(snapshotLiveGeometry(dataset)).toEqual(originalGeometry);
     expect(state.selection.getAll()).toEqual(originalSelection);
   });
 
@@ -944,8 +965,8 @@ describe('MapshaperOps.splitSelected integration', () => {
     ]);
     dataset.layers[0]!.name = 'split-selected';
     const originalArcCount = dataset.arcs!.size();
-    const originalShapes = structuredClone(dataset.layers[0]!.shapes);
-    const originalRecords = structuredClone(dataset.layers[0]!.data!.getRecords!());
+    const originalGeometry = snapshotLiveGeometry(dataset);
+
     const state = harness(dataset, [0]);
     const originalSelection = state.selection.getAll();
 
@@ -984,9 +1005,7 @@ describe('MapshaperOps.splitSelected integration', () => {
 
     const [entry] = state.history.entries as Array<{ undo(): void }>;
     entry!.undo();
-    expect(dataset.arcs!.size()).toBe(originalArcCount);
-    expect(dataset.layers[0]!.shapes).toEqual(originalShapes);
-    expect(dataset.layers[0]!.data!.getRecords!()).toEqual(originalRecords);
+    expect(snapshotLiveGeometry(dataset)).toEqual(originalGeometry);
     expect(state.selection.getAll()).toEqual(originalSelection);
   });
 
@@ -1003,6 +1022,8 @@ describe('MapshaperOps.splitSelected integration', () => {
       ]),
     ]);
     dataset.layers[0]!.name = 'split-selected';
+    const originalGeometry = snapshotLiveGeometry(dataset);
+
     const state = harness(dataset, [0]);
     const originalSelection = state.selection.getAll();
     const adapter = getDefaultMapshaperAdapter();
@@ -1035,6 +1056,7 @@ describe('MapshaperOps.splitSelected integration', () => {
       mosaic.mockRestore();
     }
     expectNoSplitSideEffects(state, dataset, originalSelection);
+    expect(snapshotLiveGeometry(dataset)).toEqual(originalGeometry);
   });
 
   it('returns mapshaper errors from a splitter seam without committing split side effects', async () => {
