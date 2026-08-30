@@ -8,7 +8,7 @@ import {
   type AppendedArc,
   type MapshaperAdapter,
 } from '../../adapter/mapshaper-adapter';
-import { markSourceChanged } from './_shared';
+import { appendArcsCompat, markSourceChanged, truncateArcsCompat } from './_shared';
 
 /** One feature's path shape replaced wholesale (before/after snapshots). */
 export interface PathShapePatch {
@@ -88,7 +88,7 @@ export class PathGeometryPatchCommand implements EditCommand {
           `PathGeometryPatchCommand: expected ${this.opts.originalArcCount} arcs before do(), found ${arcs.size()}`,
         );
       }
-      adapter.appendArcs(arcs, this.opts.appendedArcs);
+      appendArcsCompat(adapter, arcs, this.opts.appendedArcs);
     }
     for (const patch of this.opts.shapePatches) {
       patch.layer.shapes![patch.featureId] = cloneShape(patch.after);
@@ -109,7 +109,7 @@ export class PathGeometryPatchCommand implements EditCommand {
           `PathGeometryPatchCommand: expected ${expected} arcs before undo(), found ${arcs.size()}`,
         );
       }
-      adapter.truncateArcs(arcs, this.opts.originalArcCount);
+      truncateArcsCompat(adapter, arcs, this.opts.originalArcCount);
     }
     for (const patch of this.opts.shapePatches) {
       patch.layer.shapes![patch.featureId] = cloneShape(patch.before);

@@ -194,22 +194,27 @@ export interface MapshaperAdapter {
   /** Pop the most recently appended arc. Used by FeatureCreateCommand.undo. */
   deleteLastArc(arcs: ArcCollection): void;
   /**
-   * Append multiple arcs in ONE allocation. Returns the id of the first
-   * appended arc (`arcs.size()` at call time). Preserves the retained
-   * interval (`updateVertexData` resets it to 0 — saved and restored here).
-   * When the collection keeps simplification thresholds (`zz`), appended
-   * arcs missing `zz` are filled with `Infinity` (always retained),
-   * mirroring `appendArc`.
+   * Optional batch fast-path. Legacy structural adapter implementations can
+   * omit this; command helpers fall back to `appendArc`.
+   *
+   * Returns the id of the first appended arc (`arcs.size()` at call time).
+   * Preserves the retained interval (`updateVertexData` resets it to 0 —
+   * saved and restored here). When the collection keeps simplification
+   * thresholds (`zz`), appended arcs missing `zz` are filled with `Infinity`
+   * (always retained), mirroring `appendArc`.
    */
-  appendArcs(arcs: ArcCollection, arcsToAppend: AppendedArc[]): number;
+  appendArcs?(arcs: ArcCollection, arcsToAppend: AppendedArc[]): number;
 
   /**
-   * Truncate back to `targetArcCount` arcs, dropping tail vertex data in
-   * one pass. Preserves the retained interval. Throws when the target
-   * exceeds the current arc count — silently dropping arcs appended by
-   * someone else would corrupt history invariants.
+   * Optional batch fast-path. Legacy structural adapter implementations can
+   * omit this; command helpers fall back to `deleteLastArc`.
+   *
+   * Truncates back to `targetArcCount` arcs, dropping tail vertex data in one
+   * pass. Preserves the retained interval. Throws when the target exceeds the
+   * current arc count — silently dropping arcs appended by someone else would
+   * corrupt history invariants.
    */
-  truncateArcs(arcs: ArcCollection, targetArcCount: number): void;
+  truncateArcs?(arcs: ArcCollection, targetArcCount: number): void;
 
 
   // -- Topology queries (used by VertexEditControl) ----------------------
@@ -696,9 +701,17 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     return this.appendArcs(arcs, [{ xx, yy }]);
   }
   appendArcs(arcs: ArcCollection, arcsToAppend: AppendedArc[]): number {
-    const data = arcs.getVertexData!();
     const firstArcId = arcs.size();
+    for (let index = 0; index < arcsToAppend.length; index++) {
+      const arc = arcsToAppend[index]!;
+      if (arc.yy.length !== arc.xx.length || (arc.zz && arc.zz.length !== arc.xx.length)) {
+        throw new Error(
+          `appendArcs: arc at index ${index} has mismatched buffer lengths (xx=${arc.xx.length}, yy=${arc.yy.length}, zz=${arc.zz?.length ?? 'none'})`,
+        );
+      }
+    }
     if (arcsToAppend.length === 0) return firstArcId;
+    const data = arcs.getVertexData!();
     const { xx, yy, zz, nn } = data;
     let extraPoints = 0;
     for (const arc of arcsToAppend) extraPoints += arc.xx.length;

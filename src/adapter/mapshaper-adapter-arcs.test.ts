@@ -53,6 +53,29 @@ describe('MapshaperAdapter.appendArcs / truncateArcs', () => {
     expect(Array.from(state().nn)).toEqual([2, 2, 2, 1]);
     expect(Array.from(state().xx)).toEqual([0, 0, 1, 1, 2, 3, 4]);
   });
+  it('rejects an arc with mismatched xx and yy buffer lengths', () => {
+    const { arcs } = makeArcs();
+    const adapter = getDefaultMapshaperAdapter();
+    expect(() =>
+      adapter.appendArcs(arcs, [
+        { xx: new Float64Array([2, 3]), yy: new Float64Array([2]), zz: new Float64Array([1, 1]) },
+      ]),
+    ).toThrow('appendArcs: arc at index 0 has mismatched buffer lengths (xx=2, yy=1, zz=2)');
+  });
+
+  it('rejects an arc with mismatched xx and zz buffer lengths', () => {
+    const { arcs } = makeArcs();
+    const adapter = getDefaultMapshaperAdapter();
+    expect(() =>
+      adapter.appendArcs(arcs, [
+        {
+          xx: new Float64Array([2, 3]),
+          yy: new Float64Array([2, 3]),
+          zz: new Float64Array([1]),
+        },
+      ]),
+    ).toThrow('appendArcs: arc at index 0 has mismatched buffer lengths (xx=2, yy=2, zz=1)');
+  });
 
   it('preserves the retained interval across append and truncate', () => {
     const { arcs, state } = makeArcs();

@@ -9,7 +9,7 @@ import {
   type PathShape,
 } from '../../types/mapshaper-types';
 import { asMutableTopologySource, type TopologySource } from '../../source/source';
-import { markSourceChanged } from './_shared';
+import { appendArcsCompat, markSourceChanged, truncateArcsCompat } from './_shared';
 // Re-exported so the public `@/edit/commands/split-shared-arcs` import path
 // (and `src/index.ts`) keep working after the type moved to the adapter.
 export type { AppendedArc };
@@ -66,7 +66,7 @@ export class SplitSharedArcsCommand implements EditCommand {
     const source = asMutableTopologySource(this.opts.source);
     const arcs = source.getArcs();
     if (!arcs) return;
-    getDefaultMapshaperAdapter().appendArcs(arcs, this.opts.appendedArcs);
+    appendArcsCompat(getDefaultMapshaperAdapter(), arcs, this.opts.appendedArcs);
     for (const r of this.opts.remaps) {
       r.layer.shapes![r.featureId] = cloneShape(r.newShape);
     }
@@ -77,7 +77,7 @@ export class SplitSharedArcsCommand implements EditCommand {
     const source = asMutableTopologySource(this.opts.source);
     const arcs = source.getArcs();
     if (!arcs) return;
-    getDefaultMapshaperAdapter().truncateArcs(arcs, this.opts.originalArcCount);
+    truncateArcsCompat(getDefaultMapshaperAdapter(), arcs, this.opts.originalArcCount);
     for (const r of this.opts.remaps) {
       r.layer.shapes![r.featureId] = cloneShape(r.originalShape);
     }
