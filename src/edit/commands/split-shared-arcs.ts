@@ -57,8 +57,11 @@ export interface SplitSharedArcsCommandOptions {
  */
 export class SplitSharedArcsCommand implements EditCommand {
   readonly label: string;
+  private readonly originalArcCount: number;
 
   constructor(private readonly opts: SplitSharedArcsCommandOptions) {
+    const source = asMutableTopologySource(opts.source);
+    this.originalArcCount = source.getArcs()?.size() ?? 0;
     this.label = `Split ${opts.appendedArcs.length} shared arc${opts.appendedArcs.length === 1 ? '' : 's'}`;
   }
 
@@ -66,7 +69,14 @@ export class SplitSharedArcsCommand implements EditCommand {
     const source = asMutableTopologySource(this.opts.source);
     const arcs = source.getArcs();
     if (!arcs) return;
-    appendArcsCompat(getDefaultMapshaperAdapter(), arcs, this.opts.appendedArcs);
+    if (this.opts.appendedArcs.length > 0) {
+      if (arcs.size() !== this.originalArcCount) {
+        throw new Error(
+          `SplitSharedArcsCommand: expected ${this.originalArcCount} arcs before do(), found ${arcs.size()}`,
+        );
+      }
+      appendArcsCompat(getDefaultMapshaperAdapter(), arcs, this.opts.appendedArcs);
+    }
     for (const r of this.opts.remaps) {
       r.layer.shapes![r.featureId] = cloneShape(r.newShape);
     }
@@ -77,7 +87,15 @@ export class SplitSharedArcsCommand implements EditCommand {
     const source = asMutableTopologySource(this.opts.source);
     const arcs = source.getArcs();
     if (!arcs) return;
-    truncateArcsCompat(getDefaultMapshaperAdapter(), arcs, this.opts.originalArcCount);
+    if (this.opts.appendedArcs.length > 0) {
+      const expected = this.originalArcCount + this.opts.appendedArcs.length;
+      if (arcs.size() !== expected) {
+        throw new Error(
+          `SplitSharedArcsCommand: expected ${expected} arcs before undo(), found ${arcs.size()}`,
+        );
+      }
+      truncateArcsCompat(getDefaultMapshaperAdapter(), arcs, this.originalArcCount);
+    }
     for (const r of this.opts.remaps) {
       r.layer.shapes![r.featureId] = cloneShape(r.originalShape);
     }

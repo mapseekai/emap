@@ -115,6 +115,22 @@ describe('SplitSharedArcsCommand', () => {
     expect(layerB.shapes[0]).toEqual([[3, ~1, 4]]);
   });
 
+  it('do() throws before mutating when the arc count drifted from construction', () => {
+    const { source, arcs, layerA, layerB } = buildFixture();
+    const plan = planSharedArcSplit(source, [{ layer: layerA, featureId: 0 }], [layerA, layerB])!;
+    const command = new SplitSharedArcsCommand(plan);
+    // Simulate a bypassing append after command construction.
+    arcs.updateVertexData(new Int32Array([2, 2, 2, 2, 2, 3]), new Float64Array(13), new Float64Array(13));
+
+    expect(() => command.do()).toThrow(
+      'SplitSharedArcsCommand: expected 5 arcs before do(), found 6',
+    );
+    expect(arcs.size()).toBe(6);
+    expect(arcs.getVertexData().nn).toEqual(new Int32Array([2, 2, 2, 2, 2, 3]));
+    expect(layerA.shapes[0]).toEqual([[0, 1, 2]]);
+    expect(layerB.shapes[0]).toEqual([[3, ~1, 4]]);
+  });
+
   it('undo() restores original shapes and arc count', () => {
     const { source, arcs, layerA, layerB } = buildFixture();
     const plan = planSharedArcSplit(source, [{ layer: layerA, featureId: 0 }], [layerA, layerB])!;
