@@ -78,6 +78,7 @@ export class SplitFeaturesCommand implements EditCommand {
       })),
       appendedShapes: opts.appendedShapes.map(cloneShape),
       appendedRecords: opts.appendedRecords.map(cloneRecord),
+      beforeSelection: new Set(opts.beforeSelection),
       afterSelection: opts.afterSelection.map((ref) => ({ ...ref })),
     };
     this.adapter = opts.adapter ?? getDefaultMapshaperAdapter();

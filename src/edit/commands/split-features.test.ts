@@ -84,6 +84,7 @@ function makeFixture(options: { records?: Record<string, unknown>[]; noTable?: b
   const topologySource = source as unknown as TopologySource;
   const selection = new Selection();
   selection.apply([{ ...BEFORE_REF }], 'replace');
+  const beforeSelection = new Set(selection.snapshot());
   const publishSelection = vi.fn();
   const appendedArcs = [{ xx: new Float64Array([5, 6]), yy: new Float64Array([7, 8]) }];
   const appendedShapes = [[[1]]];
@@ -99,7 +100,7 @@ function makeFixture(options: { records?: Record<string, unknown>[]; noTable?: b
     appendedRecords,
     originalFeatureCount: 2,
     selection,
-    beforeSelection: selection.snapshot(),
+    beforeSelection,
     afterSelection,
     publishSelection,
     label: 'Split features',
@@ -118,6 +119,7 @@ function makeFixture(options: { records?: Record<string, unknown>[]; noTable?: b
     appendedShapes,
     appendedRecords,
     afterSelection,
+    beforeSelection,
   };
 }
 
@@ -193,12 +195,14 @@ describe('SplitFeaturesCommand', () => {
       appendedShapes,
       appendedRecords,
       afterSelection,
+      beforeSelection,
     } = makeFixture();
     appendedArcs[0]!.xx.fill(999);
     appendedArcs[0]!.yy.fill(999);
     appendedShapes[0]![0]![0] = 999;
     appendedRecords[0]!.name = 'mutated';
     afterSelection[0]!.id = 999;
+    beforeSelection.clear();
 
     command.do();
 
@@ -207,6 +211,8 @@ describe('SplitFeaturesCommand', () => {
     expect(layer.shapes[2]).toEqual([[1]]);
     expect(records[2]).toEqual({ name: 'first' });
     expect(selection.getAll()).toEqual([AFTER_REF]);
+    command.undo();
+    expect(selection.getAll()).toEqual([BEFORE_REF]);
   });
 
   it('restores selection and publishes each pending diff exactly once', () => {
