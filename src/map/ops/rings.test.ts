@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import type { EditCommand } from '../../edit/edit-command';
+import { EditHistory } from '../../edit/edit-history';
 import type { EmapHostInternal } from '../emap-host';
 import { Err, okValue, type OpResult } from '../op-result';
 import type { FeatureRef } from '../types';
@@ -11,6 +12,7 @@ import { MapshaperOps } from '../mapshaper-ops';
 import { Selection } from '../selection';
 import { addRing, deleteRing } from './rings';
 import { collectPolygonExteriors } from './reshape-selected-polygon';
+import { _runPreparedDatasetMutation } from './_runner';
 
 const adapter = getDefaultMapshaperAdapter();
 const FIXTURE_NAME = 'rings.geojson';
@@ -963,4 +965,51 @@ describe('deleteRing direct edit', () => {
     fixture.entries[1]!.do();
     expect(ringCount()).toBe(initial);
   });
+});
+
+it('barrier probe: direct → replacement → undo replacement restores captured identity', async () => {
+  const dataset = await importDataset({
+    type: 'Polygon',
+    coordinates: [
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+        [0, 0],
+      ],
+    ],
+  });
+  dataset.layers[0]!.name = 'rings';
+  const harness = integrationHarness(dataset);
+  const realHistory = new EditHistory(); // import from '../../edit/edit-history'
+  (harness.ops as any)._emap._history = realHistory;
+
+  const liveBefore = harness.source.getDataset();
+  await expect(
+    harness.ops.addRing({ ring: [[3, 3], [7, 3], [7, 7], [3, 7]] }),
+  ).resolves.toMatchObject({ ok: true });
+  expect(harness.source.getDataset()).toBe(liveBefore); // in-place: same identity
+  expect(realHistory.size()).toBe(1);
+
+  // Replacement through the real prepared-mutation runner (no-op mutation,
+  // but the commit path pushes a DatasetReplaceSelectionCommand barrier).
+  const result = await _runPreparedDatasetMutation(
+    (harness.ops as any)._emap,
+    'source',
+    'Probe replace',
+    () => ({ value: undefined, selection: [] }),
+  );
+  expect(result.ok).toBe(true);
+  expect(realHistory.size()).toBe(2); // stale placeholder + barrier command
+  expect(realHistory.snapshot().staleCount).toBe(1);
+
+  realHistory.undo(); // undo replacement: re-attaches the exact pre-replace object
+  expect(harness.source.getDataset()).toBe(liveBefore);
+  // Barrier semantics unchanged: the direct command below the placeholder is
+  // skipped, not replayed — the hole stays on the map. This pins CURRENT
+  // behavior; narrowing the barrier is Phase D (spec §16.6).
+  realHistory.undo();
+  expect(realHistory.snapshot().skippedStale).toBe(true);
+  expect(exported(harness.source.getDataset()).coordinates).toHaveLength(2);
 });
