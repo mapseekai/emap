@@ -38,6 +38,22 @@ export function appendArcsCompat(
 ): number {
   if (adapter.appendArcs) return adapter.appendArcs(arcs, arcsToAppend);
 
+  for (const [index, arc] of arcsToAppend.entries()) {
+    if (arc.yy.length !== arc.xx.length || (arc.zz && arc.zz.length !== arc.xx.length)) {
+      throw new Error(
+        `appendArcs: arc at index ${index} has mismatched buffer lengths (xx=${arc.xx.length}, yy=${arc.yy.length}, zz=${arc.zz?.length ?? 'none'})`,
+      );
+    }
+  }
+  if (
+    !(arcs.isFlat?.() ?? true) &&
+    arcsToAppend.some((arc) => arc.zz !== null && arc.zz !== undefined)
+  ) {
+    throw new Error(
+      'appendArcs: legacy adapter without appendArcs cannot preserve simplification thresholds; implement appendArcs/truncateArcs or flatten the collection',
+    );
+  }
+
   const firstArcId = arcs.size();
   for (const arc of arcsToAppend) {
     const points: [number, number][] = new Array(arc.xx.length);
