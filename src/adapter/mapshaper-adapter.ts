@@ -131,6 +131,13 @@ export interface ExportedPathData {
   pathData: ExportedPath[];
   pointCount: number;
 }
+/** Vertex data for one arc to append onto an `ArcCollection`. */
+export interface AppendedArc {
+  xx: Float64Array;
+  yy: Float64Array;
+  zz?: Float64Array | null;
+}
+
 
 /**
  * The mapshaper internal API surface the editor depends on. Methods are
@@ -186,6 +193,29 @@ export interface MapshaperAdapter {
 
   /** Pop the most recently appended arc. Used by FeatureCreateCommand.undo. */
   deleteLastArc(arcs: ArcCollection): void;
+  /**
+   * Optional batch fast-path. Legacy structural adapter implementations can
+   * omit this; command helpers fall back to `appendArc`.
+   *
+   * Returns the id of the first appended arc (`arcs.size()` at call time).
+   * Preserves the retained interval (`updateVertexData` resets it to 0 —
+   * saved and restored here). When the collection keeps simplification
+   * thresholds (`zz`), appended arcs missing `zz` are filled with `Infinity`
+   * (always retained), mirroring `appendArc`.
+   */
+  appendArcs?(arcs: ArcCollection, arcsToAppend: AppendedArc[]): number;
+
+  /**
+   * Optional batch fast-path. Legacy structural adapter implementations can
+   * omit this; command helpers fall back to `deleteLastArc`.
+   *
+   * Truncates back to `targetArcCount` arcs, dropping tail vertex data in one
+   * pass. Preserves the retained interval. Throws when the target exceeds the
+   * current arc count — silently dropping arcs appended by someone else would
+   * corrupt history invariants.
+   */
+  truncateArcs?(arcs: ArcCollection, targetArcCount: number): void;
+
 
   // -- Topology queries (used by VertexEditControl) ----------------------
 
@@ -662,36 +692,90 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
   }
 
   appendArc(arcs: ArcCollection, points: readonly (readonly [number, number])[]): number {
-    const data = arcs.getVertexData!();
-    const arcId = arcs.size();
-    const pointCount = data.xx.length;
-    const nn = new Int32Array(arcId + 1);
-    nn.set(data.nn);
-    nn[arcId] = points.length;
-    const xx = new Float64Array(pointCount + points.length);
-    xx.set(data.xx);
-    const yy = new Float64Array(pointCount + points.length);
-    yy.set(data.yy);
+    const xx = new Float64Array(points.length);
+    const yy = new Float64Array(points.length);
     for (let index = 0; index < points.length; index++) {
-      xx[pointCount + index] = points[index]![0];
-      yy[pointCount + index] = points[index]![1];
+      xx[index] = points[index]![0];
+      yy[index] = points[index]![1];
     }
-    // Mirror insertVertex: appended vertices carry Infinity thresholds (always
+    return this.appendArcs(arcs, [{ xx, yy }]);
+  }
+  appendArcs(arcs: ArcCollection, arcsToAppend: AppendedArc[]): number {
+    const firstArcId = arcs.size();
+    for (let index = 0; index < arcsToAppend.length; index++) {
+      const arc = arcsToAppend[index]!;
+      if (arc.yy.length !== arc.xx.length || (arc.zz && arc.zz.length !== arc.xx.length)) {
+        throw new Error(
+          `appendArcs: arc at index ${index} has mismatched buffer lengths (xx=${arc.xx.length}, yy=${arc.yy.length}, zz=${arc.zz?.length ?? 'none'})`,
+        );
+      }
+    }
+    if (arcsToAppend.length === 0) return firstArcId;
+    const data = arcs.getVertexData!();
+    const { xx, yy, zz, nn } = data;
+    let extraPoints = 0;
+    for (const arc of arcsToAppend) extraPoints += arc.xx.length;
+
+    const newXx = new Float64Array(xx.length + extraPoints);
+    const newYy = new Float64Array(yy.length + extraPoints);
+    newXx.set(xx);
+    newYy.set(yy);
+
+    // Mirror appendArc: appended vertices carry Infinity thresholds (always
     // retained) when the collection keeps simplification data.
-    const flat = arcs.isFlat?.() ?? data.zz === null;
-    let zz: Float64Array | null = null;
+    const flat = arcs.isFlat?.() ?? zz === null;
+    let newZz: Float64Array | null = null;
     if (!flat) {
-      zz = new Float64Array(pointCount + points.length).fill(Infinity);
-      if (data.zz) zz.set(data.zz);
+      newZz = new Float64Array(xx.length + extraPoints).fill(Infinity);
+      if (zz) newZz.set(zz);
     }
+
+    let cursor = xx.length;
+    for (const arc of arcsToAppend) {
+      newXx.set(arc.xx, cursor);
+      newYy.set(arc.yy, cursor);
+      if (newZz && arc.zz) newZz.set(arc.zz, cursor);
+      cursor += arc.xx.length;
+    }
+
+    const newNn = new Int32Array(nn.length + arcsToAppend.length);
+    newNn.set(nn);
+    for (let i = 0; i < arcsToAppend.length; i++) {
+      newNn[nn.length + i] = arcsToAppend[i]!.xx.length;
+    }
+
     const retained = arcs.getRetainedInterval?.() ?? 0;
-    arcs.updateVertexData!(nn, xx, yy, zz);
+    arcs.updateVertexData!(newNn, newXx, newYy, newZz);
     arcs.setRetainedInterval?.(retained);
-    return arcId;
+    return firstArcId;
   }
 
+  truncateArcs(arcs: ArcCollection, targetArcCount: number): void {
+    const data = arcs.getVertexData!();
+    const { xx, yy, zz, nn } = data;
+    if (nn.length === targetArcCount) return;
+    if (targetArcCount > nn.length) {
+      throw new Error(
+        `truncateArcs: target ${targetArcCount} exceeds current arc count ${nn.length}`,
+      );
+    }
+    let keptPoints = 0;
+    for (let i = 0; i < targetArcCount; i++) keptPoints += nn[i]!;
+    const newNn = new Int32Array(targetArcCount);
+    newNn.set(nn.subarray(0, targetArcCount));
+    const retained = arcs.getRetainedInterval?.() ?? 0;
+    arcs.updateVertexData!(
+      newNn,
+      new Float64Array(xx.subarray(0, keptPoints)),
+      new Float64Array(yy.subarray(0, keptPoints)),
+      zz ? new Float64Array(zz.subarray(0, keptPoints)) : null,
+    );
+    arcs.setRetainedInterval?.(retained);
+  }
+
+
   deleteLastArc(arcs: ArcCollection): void {
-    mapshaper.internal.deleteLastArc(arcs);
+    this.truncateArcs(arcs, arcs.size() - 1);
   }
 
   findNearestVertices(point: [number, number], shape: number[][], arcs: ArcCollection): number[] {

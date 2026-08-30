@@ -99,6 +99,29 @@ describe('HighlightManager state', () => {
     ]);
     expect(h.setHighlightStyle({ color: '#000' })).toBe(true);
   });
+
+  it('removeLayer drops every highlight pinned to one layer only', () => {
+    const h = new HighlightManager();
+    h.setHighlightedFeatures([
+      { source: 's', layer: 'a', id: 0, geometryType: 'polygon', properties: {} },
+      { source: 's', layer: 'a', id: 1, geometryType: 'polygon', properties: {} },
+      { source: 's', layer: 'b', id: 2, geometryType: 'polygon', properties: {} },
+    ]);
+    expect(h.removeLayer('s', 'a')).toBe(true);
+    expect(h.removeLayer('s', 'a')).toBe(false); // already gone
+    expect(h.removeLayer('s', 'b')).toBe(true); // sibling layer unaffected until removed
+    expect(h.size).toBe(0);
+  });
+
+  it('removeLayer removes the source bucket when its last layer is dropped', () => {
+    const h = new HighlightManager();
+    h.setHighlightedFeatures([
+      { source: 's', layer: 'a', id: 0, geometryType: 'polygon', properties: {} },
+    ]);
+    expect(h.removeLayer('s', 'a')).toBe(true);
+    expect(h.size).toBe(0);
+    expect(h.removeLayer('s', 'a')).toBe(false);
+  });
 });
 
 describe('HighlightManager.renderHighlights', () => {

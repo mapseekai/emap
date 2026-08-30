@@ -67,6 +67,7 @@ export function makeStubCtx(layers: StubLayerSpec[] = [{ name: 'parks' }]): Stub
     },
     runPreparedDatasetCommandParsed: () => Promise.resolve(OK),
     runPreparedDatasetMutation: <T>() => Promise.resolve(OK as OpResult<T>),
+    runPreparedEditCommand: <T>() => Promise.resolve(OK as OpResult<T>),
   };
   return { ctx, calls };
 }

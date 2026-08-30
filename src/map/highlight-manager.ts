@@ -53,6 +53,15 @@ export class HighlightManager {
     return this._highlighted.delete(sourceId);
   }
 
+  /** Drop every highlight pinned to `layerId` under `sourceId`. */
+  removeLayer(sourceId: string, layerId: string): boolean {
+    const byLayer = this._highlighted.get(sourceId);
+    if (!byLayer) return false;
+    const removed = byLayer.delete(layerId);
+    if (byLayer.size === 0) this._highlighted.delete(sourceId);
+    return removed;
+  }
+
   setHighlightStyle(style: HighlightStyle): boolean {
     this._highlightStyle = { ...this._highlightStyle, ...style };
     return this._highlighted.size > 0;

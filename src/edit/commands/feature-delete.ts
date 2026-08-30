@@ -1,5 +1,9 @@
 import type { EditCommand } from '../edit-command';
 import type { FeatureShape, MapshaperLayer } from '../../types/mapshaper-types';
+import { asMutableTopologySource, type TopologySource } from '../../source/source';
+import type { FeatureRef } from '../../map/types';
+import type { Selection, SelectionDiff, SelectionSnapshot } from '../../map/selection';
+import { markSourceChanged } from './_shared';
 
 export interface FeatureDeleteCommandOptions {
   /** The layer object that owns the feature. */
@@ -32,8 +36,15 @@ export interface FeatureDeleteCommandOptions {
  */
 export class FeatureDeleteCommand implements EditCommand {
   readonly label = 'Delete feature';
+  private readonly opts: FeatureDeleteCommandOptions;
 
-  constructor(private readonly opts: FeatureDeleteCommandOptions) {}
+  constructor(opts: FeatureDeleteCommandOptions) {
+    this.opts = {
+      ...opts,
+      shape: cloneFeatureShape(opts.shape),
+      record: opts.record ? { ...opts.record } : opts.record,
+    };
+  }
 
   do(): void {
     const { layer, featureId } = this.opts;
@@ -52,6 +63,11 @@ export class FeatureDeleteCommand implements EditCommand {
       records?.splice(featureId, 0, record);
     }
   }
+}
+
+function cloneFeatureShape(shape: FeatureShape | null): FeatureShape | null {
+  if (!shape) return shape;
+  return shape.map((part) => (Array.isArray(part) ? part.slice() : part)) as FeatureShape;
 }
 
 export interface BulkFeatureDeleteCommandOptions {
@@ -155,5 +171,51 @@ export class BulkFeatureDeleteCommand implements EditCommand {
         records[dst] = records[recordSource--];
       }
     }
+  }
+}
+
+export interface FeatureDeleteWithSelectionCommandOptions extends FeatureDeleteCommandOptions {
+  source: TopologySource;
+  selection: Selection;
+  beforeSelection: SelectionSnapshot;
+  afterSelection: FeatureRef[];
+  publishSelection: (diff: SelectionDiff) => void;
+  label: string;
+}
+
+/**
+ * Source-aware wrapper around {@link FeatureDeleteCommand} for op-driven
+ * deletions (e.g. `deletePart` removing a feature's last part). Adds the
+ * three things the plain command deliberately does not own: selection
+ * snapshot/remap, `markSourceChanged`, and the publish contract
+ * (`data` + one selection diff). Cache invalidation / render / history
+ * events stay with the runner.
+ */
+export class FeatureDeleteWithSelectionCommand implements EditCommand {
+  readonly label: string;
+  private readonly inner: FeatureDeleteCommand;
+  private pendingSelectionDiff: SelectionDiff | null = null;
+
+  constructor(private readonly opts: FeatureDeleteWithSelectionCommandOptions) {
+    this.inner = new FeatureDeleteCommand(opts);
+    this.label = opts.label;
+  }
+
+  do(): void {
+    this.inner.do();
+    this.pendingSelectionDiff = this.opts.selection.apply(this.opts.afterSelection, 'replace');
+    markSourceChanged(asMutableTopologySource(this.opts.source));
+  }
+
+  undo(): void {
+    this.inner.undo();
+    this.pendingSelectionDiff = this.opts.selection.restore(this.opts.beforeSelection);
+    markSourceChanged(asMutableTopologySource(this.opts.source));
+  }
+
+  publish(): void {
+    this.opts.source.fire?.('data', { reason: 'edit' });
+    if (this.pendingSelectionDiff?.changed) this.opts.publishSelection(this.pendingSelectionDiff);
+    this.pendingSelectionDiff = null;
   }
 }

@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { DatasetReplaceSelectionCommand } from '../../edit/commands/dataset-replace-selection';
+import { EditHistory } from '../../edit/edit-history';
 import { Selection } from '../selection';
-import { _runPreparedDatasetMutation, inferEffect } from './_runner';
+import { Err } from '../op-result';
+import { _runPreparedDatasetMutation, _runPreparedEditCommand, inferEffect } from './_runner';
 import * as runnerModule from './_runner';
 
 describe('inferEffect (PR-10)', () => {
@@ -260,5 +262,109 @@ describe('prepared parsed-command runner', () => {
       copyDataset.mockRestore();
       runOnDatasetParsed.mockRestore();
     }
+  });
+});
+
+describe('_runPreparedEditCommand', () => {
+  function makeHost(source: any) {
+    return {
+      _removed: false,
+      _sources: new Map([['s', source]]),
+      _selection: new Selection(),
+      _history: new EditHistory(),
+      _activeTransaction: null,
+      _scheduleRender: vi.fn(),
+      _fireHistoryChange: vi.fn(),
+      _fireSelectionChange: vi.fn(),
+      _invalidateShapeCachesForSources: vi.fn(),
+      _clearSpatialIndexesForSources: vi.fn(),
+      fire: vi.fn(),
+    } as any;
+  }
+
+  it('runs planner on the live dataset, commits the command, publishes once', async () => {
+    const dataset = { layers: [], arcs: null, editVersion: 0 };
+    const source = { getDataset: () => dataset, fire: vi.fn(), markDisplayArcsDirty: vi.fn() };
+    const host = makeHost(source);
+    const command = { do: vi.fn(), undo: vi.fn(), publish: vi.fn(), label: 'X' };
+    const result = await _runPreparedEditCommand(host as any, 's', 'X', (planned, plannedSource) => {
+      expect(planned).toBe(dataset); // live, NOT a copy
+      expect(plannedSource).toBe(source);
+      return { value: 42, command, affectedSourceIds: ['s'] };
+    });
+    expect(result).toEqual({ ok: true, value: 42 });
+    expect(command.do).toHaveBeenCalledTimes(1);
+    expect(command.publish).toHaveBeenCalledTimes(1);
+    expect(host._history.size()).toBe(1);
+    expect(host._fireHistoryChange).toHaveBeenCalledTimes(1);
+    // Side effects ride on publish's data event — runner must NOT duplicate them:
+    expect(host._invalidateShapeCachesForSources).not.toHaveBeenCalled();
+    expect(host._scheduleRender).not.toHaveBeenCalled();
+  });
+
+  it('returns planner failure without touching history', async () => {
+    const dataset = { layers: [], arcs: null };
+    const source = { getDataset: () => dataset };
+    const host = makeHost(source);
+    const result = await _runPreparedEditCommand(host as any, 's', 'X', () =>
+      Err.validation('ring', 'nope'),
+    );
+    expect(result.ok).toBe(false);
+    expect(host._history.size()).toBe(0);
+  });
+
+  it('rejects with stale-operation when editVersion changed during planning', async () => {
+    const dataset: any = { layers: [], arcs: null, editVersion: 0 };
+    const source = { getDataset: () => dataset };
+    const host = makeHost(source);
+    const command = { do: vi.fn(), undo: vi.fn() };
+    const result = await _runPreparedEditCommand(host as any, 's', 'X', () => {
+      dataset.editVersion = 1; // concurrent edit slipped in
+      return { value: undefined, command, affectedSourceIds: ['s'] };
+    });
+    expect(result).toMatchObject({ ok: false, error: { kind: 'stale-operation' } });
+    expect(command.do).not.toHaveBeenCalled();
+    expect(host._history.size()).toBe(0);
+  });
+
+  it('undoes a throwing do() and reports a mapshaper error without pushing history', async () => {
+    const dataset = { layers: [], arcs: null };
+    const source = { getDataset: () => dataset };
+    const host = makeHost(source);
+    const command = {
+      do: vi.fn(() => { throw new Error('boom'); }),
+      undo: vi.fn(),
+    };
+    const result = await _runPreparedEditCommand(host as any, 's', 'X', () => ({
+      value: undefined,
+      command,
+      affectedSourceIds: ['s'],
+    }));
+    expect(result).toMatchObject({ ok: false, error: { kind: 'mapshaper' } });
+    expect(command.undo).toHaveBeenCalledTimes(1);
+    expect(host._history.size()).toBe(0);
+  });
+
+  it('diverts the command into an active transaction capture buffer', async () => {
+    const dataset = { layers: [], arcs: null };
+    const source = { getDataset: () => dataset };
+    const host = makeHost(source);
+    host._history.beginCapture();
+    host._activeTransaction = {
+      isOpen: true,
+      _captureFirstTouch: vi.fn(),
+      _trackOperation: vi.fn(),
+    };
+    const command = { do: vi.fn(), undo: vi.fn(), publish: vi.fn() };
+    const result = await _runPreparedEditCommand(host as any, 's', 'X', () => ({
+      value: undefined,
+      command,
+      affectedSourceIds: ['s'],
+    }));
+    expect(result.ok).toBe(true);
+    expect(host._history.size()).toBe(0); // captured, not pushed
+    expect(host._history.endCapture()).toEqual([command]);
+    expect(host._fireHistoryChange).not.toHaveBeenCalled();
+    expect(host._activeTransaction._captureFirstTouch).toHaveBeenCalledWith('s', dataset);
   });
 });

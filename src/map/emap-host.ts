@@ -51,6 +51,13 @@ export interface EmapHostInternal {
   _fireSelectionChange(diff: import('./selection').SelectionDiff): void;
   _invalidateShapeCachesForSources(sourceIds: Iterable<string>): void;
   _clearSpatialIndexesForSources(sourceIds: Iterable<string>): void;
+
+  /**
+   * Clear highlights pinned to a layer whose feature ids just shifted
+   * (feature deletion). Optional so stub hosts in tests need not stub it;
+   * managers must call it defensively (`?.`).
+   */
+  _clearHighlightsForLayer?(sourceId: string, layerKeys: readonly string[]): void;
   _allowExpressionEvaluation(values: Array<string | undefined>, operation: string): boolean;
 
   // ---- event surface (narrow overloads for events managers fire) -----

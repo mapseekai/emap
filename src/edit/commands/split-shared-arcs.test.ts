@@ -18,7 +18,8 @@ function buildFixture() {
   let storedNn: any = nn,
     storedXx: any = xx,
     storedYy: any = yy,
-    storedIi: any = ii;
+    storedIi: any = ii,
+    retained = 0;
 
   const arcs = {
     size: () => storedNn.length,
@@ -41,6 +42,11 @@ function buildFixture() {
         cur += newNn[i];
       }
       storedIi = ii2;
+      retained = 0;
+    },
+    getRetainedInterval: () => retained,
+    setRetainedInterval: (v: number) => {
+      retained = v;
     },
   } as any;
 
@@ -52,7 +58,7 @@ function buildFixture() {
     refreshDisplayArcs: () => {},
   } as any;
 
-  return { arcs, layerA, layerB, source };
+  return { arcs, layerA, layerB, source, state: () => ({ retained }) };
 }
 
 describe('planSharedArcSplit', () => {
@@ -109,6 +115,22 @@ describe('SplitSharedArcsCommand', () => {
     expect(layerB.shapes[0]).toEqual([[3, ~1, 4]]);
   });
 
+  it('do() throws before mutating when the arc count drifted from the plan', () => {
+    const { source, arcs, layerA, layerB } = buildFixture();
+    const plan = planSharedArcSplit(source, [{ layer: layerA, featureId: 0 }], [layerA, layerB])!;
+    // Simulate a bypassing append between planning and command construction.
+    arcs.updateVertexData(new Int32Array([2, 2, 2, 2, 2, 3]), new Float64Array(13), new Float64Array(13));
+    const command = new SplitSharedArcsCommand(plan);
+
+    expect(() => command.do()).toThrow(
+      'SplitSharedArcsCommand: expected 5 arcs before do(), found 6',
+    );
+    expect(arcs.size()).toBe(6);
+    expect(arcs.getVertexData().nn).toEqual(new Int32Array([2, 2, 2, 2, 2, 3]));
+    expect(layerA.shapes[0]).toEqual([[0, 1, 2]]);
+    expect(layerB.shapes[0]).toEqual([[3, ~1, 4]]);
+  });
+
   it('undo() restores original shapes and arc count', () => {
     const { source, arcs, layerA, layerB } = buildFixture();
     const plan = planSharedArcSplit(source, [{ layer: layerA, featureId: 0 }], [layerA, layerB])!;
@@ -118,5 +140,16 @@ describe('SplitSharedArcsCommand', () => {
     expect(arcs.size()).toBe(5);
     expect(layerA.shapes[0]).toEqual([[0, 1, 2]]);
     expect(layerB.shapes[0]).toEqual([[3, ~1, 4]]);
+  });
+
+  it('preserves the retained interval across do/undo', () => {
+    const { source, layerA, layerB, arcs } = buildFixture();
+    arcs.setRetainedInterval(17);
+    const plan = planSharedArcSplit(source, [{ layer: layerA, featureId: 0 }], [layerA, layerB])!;
+    const command = new SplitSharedArcsCommand(plan);
+    command.do();
+    expect(arcs.getRetainedInterval()).toBe(17);
+    command.undo();
+    expect(arcs.getRetainedInterval()).toBe(17);
   });
 });

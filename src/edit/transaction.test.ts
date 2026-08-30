@@ -271,3 +271,108 @@ describe('EditHistory.beginCapture / endCapture', () => {
     expect(buf.every((c) => !c.stale)).toBe(true);
   });
 });
+
+describe('rollback with in-place (direct) commands', () => {
+  function makeRollbackHost(source: { getDataset(): any; setDataset(d: any): void }) {
+    return {
+      _removed: false,
+      _sources: new Map([['s', source]]),
+      _history: new EditHistory(),
+      _selection: new Selection(),
+      _activeTransaction: null as any,
+      _fireHistoryChange: vi.fn(),
+      _fireSelectionChange: vi.fn(),
+      _scheduleRender: vi.fn(),
+    } as any;
+  }
+
+  it('reverse-undoes captured commands instead of relying on dataset snapshots', () => {
+    // The dataset is a plain object mutated IN PLACE by the fake direct
+    // commands — the snapshot the transaction holds is the same reference,
+    // so only reverse-order undo() can revert it.
+    const dataset: any = { layers: [], arcs: null, editVersion: 0, marker: 0 };
+    const source = { getDataset: () => dataset, setDataset: vi.fn() };
+    const host = makeRollbackHost(source);
+    const t = new Transaction(host);
+    host._activeTransaction = t;
+    t._captureFirstTouch('s', dataset); // runner behavior for direct ops
+    const order: string[] = [];
+    const directA = {
+      label: 'A',
+      do: () => { dataset.marker = 1; },
+      undo: () => { order.push('undoA'); dataset.marker = 0; },
+    };
+    const directB = {
+      label: 'B',
+      do: () => { dataset.marker = 2; },
+      undo: () => { order.push('undoB'); dataset.marker = 1; },
+    };
+    host._history.push(directA); // diverted to capture buffer
+    host._history.push(directB);
+    directA.do();
+    directB.do();
+    t.rollback();
+    expect(order).toEqual(['undoB', 'undoA']); // strict reverse order
+    expect(dataset.marker).toBe(0); // in-place state actually reverted
+    expect(host._history.size()).toBe(0);
+    // Snapshot re-attach still happens (acts as data notification for the source).
+    expect(source.setDataset).toHaveBeenCalledWith(dataset);
+  });
+
+  it('logs failed captured undos while continuing rollback', () => {
+    const dataset = { layers: [], arcs: null, editVersion: 0 } as MapshaperDataset;
+    const source = { getDataset: () => dataset, setDataset: vi.fn() };
+    const host = makeRollbackHost(source);
+    const t = new Transaction(host);
+    const order: string[] = [];
+    const failure = new Error('undo failed');
+    host._activeTransaction = t;
+    t._captureFirstTouch('s', dataset);
+    host._history.push({
+      label: 'succeeds',
+      do: () => undefined,
+      undo: () => { order.push('succeeds'); },
+    });
+    host._history.push({
+      label: 'fails',
+      do: () => undefined,
+      undo: () => {
+        order.push('fails');
+        throw failure;
+      },
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      expect(() => t.rollback()).not.toThrow();
+      expect(order).toEqual(['fails', 'succeeds']);
+      expect(source.setDataset).toHaveBeenCalledWith(dataset);
+      expect(errorSpy).toHaveBeenCalledOnce();
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('fails'), failure);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('replacement-only rollback keeps working exactly as before', () => {
+    const before: any = { layers: [], marker: 'before' };
+    const after: any = { layers: [], marker: 'after' };
+    let live = before;
+    const source = { getDataset: () => live, setDataset: vi.fn((d: any) => { live = d; }) };
+    const host = makeRollbackHost(source);
+    const t = new Transaction(host);
+    host._activeTransaction = t;
+    t._captureFirstTouch('s', before);
+    const replacement = {
+      label: 'R',
+      invalidatesPriorCommands: true,
+      do: () => { live = after; },
+      undo: () => { live = before; },
+    };
+    replacement.do();
+    host._history.push(replacement);
+    t.rollback();
+    expect(live).toBe(before);
+    expect(host._history.size()).toBe(0);
+  });
+});

@@ -12,6 +12,8 @@ import type { OpResult } from '../op-result';
 import type { ParsedCommand } from '../../adapter/mapshaper-adapter';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import type { FeatureRef } from '../types';
+import type { EditCommand } from '../../edit/edit-command';
+import type { MutableTopologySource } from '../../source/source';
 
 /**
  * Run a CLI-style mapshaper command against a source's dataset, snapshotting
@@ -68,6 +70,28 @@ export type RunPreparedDatasetMutation = <T>(
     | Promise<PreparedDatasetMutationResult<T> | OpResult<T>>,
 ) => Promise<OpResult<T>>;
 
+/** Planner output for {@link RunPreparedEditCommand}: value + ready-to-commit command. */
+export interface PreparedDirectEdit<T> {
+  value: T;
+  command: EditCommand;
+  /** Sources the command mutates; asserted in tests, consumed by the Phase-B batch runner. */
+  affectedSourceIds: readonly string[];
+}
+
+/**
+ * In-place edit runner: plans read-only against the LIVE dataset, then
+ * commits the returned command (do → history push → publish). No dataset
+ * copy, no replacement barrier. See DIRECT_GEOMETRY_EDIT_DESIGN.md §8.
+ */
+export type RunPreparedEditCommand = <T>(
+  sourceId: string,
+  label: string,
+  plan: (
+    dataset: MapshaperDataset,
+    source: MutableTopologySource,
+  ) => PreparedDirectEdit<T> | OpResult<T>,
+) => Promise<OpResult<T>>;
+
 /**
  * Everything an op function needs from the host. Intentionally narrow —
  * adding new fields here is a deliberate signal that the op surface is
@@ -84,4 +108,5 @@ export interface OpContext {
   runPreparedDatasetCommandParsed: RunPreparedDatasetCommandParsed;
   /** Prepared mutation runner that installs an explicit final selection. */
   runPreparedDatasetMutation: RunPreparedDatasetMutation;
+  runPreparedEditCommand: RunPreparedEditCommand;
 }

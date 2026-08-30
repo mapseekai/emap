@@ -273,7 +273,7 @@ export class Emap extends EventDispatcher {
   }
   private _sourceListeners = new globalThis.Map<
     string,
-    EventListener<{ reason?: 'load' | 'replace' | 'reproject' }>
+    EventListener<{ reason?: 'edit' | 'load' | 'replace' | 'reproject' }>
   >();
   private _pendingSourceCommits = new globalThis.Map<string, symbol>();
   private _crsEstablished = false;
@@ -1276,7 +1276,9 @@ export class Emap extends EventDispatcher {
     const previousDefaultLayersDirty = this._defaultLayersDirty;
     const renderedLayersBefore = this.getRenderedLayers();
     const adoptedMapCrs = expectedMapCrs === undefined;
-    const onData: EventListener<{ reason?: 'load' | 'replace' | 'reproject' }> = (event) => {
+    const onData: EventListener<{ reason?: 'edit' | 'load' | 'replace' | 'reproject' }> = (
+      event,
+    ) => {
       this._handleSourceData(id, source, event);
     };
 
@@ -1334,7 +1336,7 @@ export class Emap extends EventDispatcher {
   private _handleSourceData(
     id: string,
     source: MutableTopologySource,
-    event: { reason?: 'load' | 'replace' | 'reproject' },
+    event: { reason?: 'edit' | 'load' | 'replace' | 'reproject' },
     renderedLayersBefore = this.getRenderedLayers(),
     crsChanged = false,
   ): void {
@@ -2382,6 +2384,12 @@ export class Emap extends EventDispatcher {
       this._layerArcIdsCache.delete(sourceId);
       this._featureQuery?.clear(sourceId);
     }
+  }
+
+  _clearHighlightsForLayer(sourceId: string, layerKeys: readonly string[]): void {
+    let removed = false;
+    for (const key of layerKeys) removed = this._highlightManager.removeLayer(sourceId, key) || removed;
+    if (removed) this._scheduleRender();
   }
 
   // ---------------------------------------------------------------------------

@@ -765,13 +765,22 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       }
       // mapshaper's `.msx` snapshot format is special-cased: exportFileContent
       // does not handle it, so we go through the Pack pipeline directly.
-      // `compact: true` matches mapshaper CLI defaults — bakes simplification
-      // thresholds into `zz` and gzip-compresses arc buffers for a small file.
+      // MSX packs the raw arc table; `compact: true` gzip-compresses vertex
+      // buffers and bakes simplification thresholds via `flattenArcs`, but does
+      // NOT drop orphan arcs left behind by direct edits. Serialize a compacted
+      // copy so history lifetime never forces live-dataset arc compaction
+      // (which would invalidate captured ids).
       const adapter = this._adapter;
-      const files =
-        options.format === 'msx'
-          ? await adapter.exportPackedDatasets([this._dataset], { compact: true })
-          : adapter.exportFileContent(this._dataset, { format: options.format });
+      let files;
+      if (options.format === 'msx') {
+        const copy = adapter.copyDataset(this._dataset);
+        adapter.cleanArcReferences(copy);
+        files = await adapter.exportPackedDatasets([copy], { compact: true });
+      } else {
+        // GeoJSON iterates shapes (orphans drop out naturally); TopoJSON
+        // export dissolves arcs on its own copy. Both stay untouched.
+        files = adapter.exportFileContent(this._dataset, { format: options.format });
+      }
       return this._filesToBlob(files, options.format);
     } finally {
       if (savedInterval && arcs?.setRetainedInterval) {

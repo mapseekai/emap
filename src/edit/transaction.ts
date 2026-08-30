@@ -30,7 +30,7 @@
 //    - `historychange` fires, and the transaction is closed.
 //
 // 4. On `rollback()`:
-//    - the buffer is drained and discarded;
+//    - the buffer is drained and captured commands are reverse-undone;
 //    - every source touched during the transaction has its dataset
 //      restored to the pre-transaction snapshot;
 //    - the selection is restored;
@@ -126,9 +126,9 @@ export class Transaction implements TransactionInternal {
   }
 
   /**
-   * Discard every staged command, restore each touched source's dataset
-   * to its pre-transaction snapshot, restore the selection, and close
-   * the transaction. Fires `selectionchange`, `historychange`, and
+   * Reverse-undo every staged command, restore each touched source's
+   * dataset to its pre-transaction snapshot, restore the selection, and
+   * close the transaction. Fires `selectionchange`, `historychange`, and
    * schedules a render.
    *
    * Idempotent only in the sense that calling it twice throws — once
@@ -136,11 +136,30 @@ export class Transaction implements TransactionInternal {
    */
   rollback(): void {
     this._end();
-    // Drain & discard capture buffer.
-    this._host._history.endCapture();
-    // Restore every touched source's dataset to its first-touch
-    // snapshot. Iterate insertion order; mapshaper dataset references
-    // are swapped wholesale, no merge needed.
+    // Drain the capture buffer and reverse every captured command in
+    // reverse order. This is the only correct rollback path for in-place
+    // (direct) commands: they mutate the very dataset object the snapshots
+    // below reference, so `setDataset(snapshot)` alone cannot revert them.
+    // For replacement commands, undo() re-attaches the pre-op dataset —
+    // equivalent to the snapshot restore that follows — so existing
+    // behavior is preserved.
+    const cmds = this._host._history.endCapture();
+    for (let i = cmds.length - 1; i >= 0; i--) {
+      try {
+        cmds[i]!.undo();
+      } catch (error) {
+        // Best effort — failures are logged via console.error; replacement-touched
+        // sources are still recovered by the snapshot restore below.
+        console.error(
+          `emap: rollback could not undo "${cmds[i]!.label}"; in-place state may be partially reverted`,
+          error,
+        );
+      }
+    }
+    // Restore every touched source's dataset to its first-touch snapshot.
+    // For sources touched only by direct commands the snapshot IS the live
+    // object; re-attaching it is a no-op mutation-wise and doubles as the
+    // 'data' notification + DisplayArcs rebuild for the in-place rollback.
     for (const [sourceId, before] of this._datasetSnapshots) {
       const source = this._host._sources.get(sourceId);
       if (source) source.setDataset(before);

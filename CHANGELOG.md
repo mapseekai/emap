@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Ring/part editing ops (`addRing`, `deleteRing`, `addPart`, `deletePart`) now commit in-place reversible commands instead of whole-dataset replacement: consecutive local edits support multi-level undo/redo, no per-op dataset clone, and deleting a ring/part no longer compacts the arc collection. MSX snapshot export serializes a compacted copy so orphan arcs never bloat the file.
+
+### Fixed
+
+- Transaction rollback now reverse-undoes captured commands, so in-place edits staged inside a transaction are actually reverted (previously only dataset-replacing ops rolled back correctly).
+
 ## [0.8.1] - 2026-08-29
 
 ### Fixed
