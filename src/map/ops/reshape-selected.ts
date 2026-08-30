@@ -1,15 +1,11 @@
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
-import type { MapshaperDataset, PathLayer, PathShape } from '../../types/mapshaper-types';
-import { isPathLayer } from '../../types/mapshaper-types';
+import type { MapshaperDataset, PathShape } from '../../types/mapshaper-types';
 import { Err, okValue, type OpResult } from '../op-result';
 import type { ReshapeSelectedOptions, ReshapeSelectedResult } from '../types';
 import { normalizeConsecutiveCoordinates, unsignedArcId, type Coordinate } from './geometry-2d';
-import { reshapeSelectedPolylines } from './reshape-selected-line';
-import { reshapeSelectedPolygon } from './reshape-selected-polygon';
-import { SplitGeometryValidationError } from './split-selected-error';
+import { planReshapeSource } from './_reshape-plan';
 import type { OpContext } from './_context';
-import { getLayerId } from '../../source/layer-utils';
-import type { FeatureRef } from '../types';
+import { SplitGeometryValidationError } from './split-selected-error';
 
 function isFiniteCoordinate(value: unknown): value is [number, number] {
   return (
@@ -59,13 +55,6 @@ export function validatePolylineFeatureShape(
   }
 }
 
-function validatePolylineFeature(
-  layer: PathLayer,
-  featureId: number,
-  arcs: NonNullable<MapshaperDataset['arcs']>,
-): void {
-  validatePolylineFeatureShape(layer.shapes?.[featureId], arcs);
-}
 
 /**
  * Reshape every path feature contacted by a user-drawn line, QGIS-style: no
@@ -86,77 +75,26 @@ export async function reshapeSelected(
   for (const [sourceId, source] of ctx.host._sources) {
     const dataset = source.getDataset();
     if (!dataset?.arcs) continue;
-    const result = await ctx.runPreparedDatasetMutation(
+    const result = await ctx.runPreparedEditCommand(
       sourceId,
-      (value: ReshapeSelectedResult) =>
-        `Reshape ${value.reshapedCount} feature${value.reshapedCount === 1 ? '' : 's'}`,
-      (working, original) => {
-        if (original !== dataset) return Err.staleOperation(sourceId, 'Reshape features');
-        if (!working.arcs) {
-          return Err.validation('geometry', 'path geometry is invalid');
-        }
-        const workingArcs = working.arcs;
-        const changed: FeatureRef[] = [];
-        try {
-          for (let layerIndex = 0; layerIndex < working.layers.length; layerIndex++) {
-            const layer = working.layers[layerIndex];
-            if (
-              !isPathLayer(layer) ||
-              (layer.geometry_type !== 'polygon' && layer.geometry_type !== 'polyline') ||
-              !layer.shapes
-            )
-              continue;
-            const layerId = getLayerId(layer, layerIndex);
-            if (layer.geometry_type === 'polygon') {
-              for (let featureId = 0; featureId < layer.shapes.length; featureId++) {
-                let shape: PathShape | null = null;
-                try {
-                  shape = reshapeSelectedPolygon(
-                    working,
-                    layerIndex,
-                    featureId,
-                    normalizedLine,
-                    adapter,
-                  );
-                } catch (error) {
-                  if (!(error instanceof SplitGeometryValidationError)) throw error;
-                }
-                if (!shape) continue;
-                layer.shapes.splice(featureId, 1, shape);
-                changed.push({ source: sourceId, layer: layerId, id: featureId });
-              }
-            } else {
-              const ids = new Set<number>();
-              for (let featureId = 0; featureId < layer.shapes.length; featureId++) {
-                try {
-                  validatePolylineFeature(layer, featureId, workingArcs);
-                  ids.add(featureId);
-                } catch (error) {
-                  if (!(error instanceof SplitGeometryValidationError)) throw error;
-                }
-              }
-              const reshaped = reshapeSelectedPolylines(
-                working,
-                layerIndex,
-                ids,
-                normalizedLine,
-                adapter,
-              );
-              for (const { featureId, shape } of reshaped) {
-                layer.shapes.splice(featureId, 1, shape);
-                changed.push({ source: sourceId, layer: layerId, id: featureId });
-              }
-            }
-          }
-        } catch (error) {
-          if (error instanceof SplitGeometryValidationError)
-            return Err.validation(error.field, error.reason);
-          throw error;
-        }
-        if (changed.length === 0) return Err.validation('line', 'did not reshape any feature');
+      'Reshape features',
+      (planned, mutableSource) => {
+        if (planned !== dataset) return Err.staleOperation(sourceId, 'Reshape features');
+        const plan = planReshapeSource({
+          source: mutableSource,
+          sourceId,
+          dataset: planned,
+          line: normalizedLine,
+          adapter,
+          selection: ctx.host._selection,
+          publishSelection: (diff) => ctx.host._fireSelectionChange(diff),
+        });
+        if (plan === null) return Err.validation('line', 'did not reshape any feature');
+        if (plan === 'invalid') return Err.validation('geometry', 'path geometry is invalid');
         return {
-          value: { reshapedCount: changed.length },
-          selection: ctx.host._selection.getAll(),
+          value: { reshapedCount: plan.reshapedCount },
+          affectedSourceIds: [sourceId],
+          command: plan.command,
         };
       },
     );
