@@ -172,6 +172,51 @@ describe('PathGeometryPatchCommand', () => {
     expect(Array.from(state().yy)).toEqual([0, 1, 7, 8]);
   });
 
+  it('owns appended zz data and preserves null and undefined across redo', () => {
+    const { arcs } = makeArcs();
+    const source = makeSource(arcs);
+    const layer = { name: 'l', geometry_type: 'polygon', shapes: [[[0]]] } as any;
+    const selection = new Selection();
+    const zz = new Float64Array([9, 10]);
+    const receivedZz: (number[] | null | undefined)[][] = [];
+    const defaultAdapter = getDefaultMapshaperAdapter();
+    const appendArcs = defaultAdapter.appendArcs!.bind(defaultAdapter);
+    const truncateArcs = defaultAdapter.truncateArcs!.bind(defaultAdapter);
+    const adapter = {
+      appendArcs(targetArcs: typeof arcs, arcsToAppend: Parameters<typeof appendArcs>[1]) {
+        receivedZz.push(arcsToAppend.map((arc) => (arc.zz ? Array.from(arc.zz) : arc.zz)));
+        return appendArcs(targetArcs, arcsToAppend);
+      },
+      truncateArcs,
+    } satisfies Required<Pick<MapshaperAdapter, 'appendArcs' | 'truncateArcs'>>;
+    const command = new PathGeometryPatchCommand({
+      source,
+      shapePatches: [{ layer, featureId: 0, before: [[0]], after: [[0], [1]] }],
+      originalArcCount: 1,
+      appendedArcs: [
+        { xx: new Float64Array([5, 6]), yy: new Float64Array([7, 8]), zz },
+        { xx: new Float64Array([11]), yy: new Float64Array([12]), zz: null },
+        { xx: new Float64Array([13]), yy: new Float64Array([14]) },
+      ],
+      selection,
+      beforeSelection: selection.snapshot(),
+      afterSelection: [],
+      publishSelection: () => {},
+      label: 'Add rings',
+      adapter: adapter as unknown as MapshaperAdapter,
+    });
+    zz.fill(999);
+
+    command.do();
+    command.undo();
+    command.do();
+
+    expect(receivedZz).toEqual([
+      [[9, 10], null, undefined],
+      [[9, 10], null, undefined],
+    ]);
+  });
+
   it('falls back to legacy single-arc adapter methods across do, undo, and redo', () => {
     const { arcs, state } = makeArcs();
     const source = makeSource(arcs);
