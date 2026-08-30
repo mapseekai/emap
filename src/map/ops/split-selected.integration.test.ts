@@ -43,6 +43,10 @@ function polygonArea(coordinates: number[][][]): number {
   );
 }
 
+function unsignedArcId(signedArcId: number): number {
+  return signedArcId < 0 ? -signedArcId - 1 : signedArcId;
+}
+
 interface SplitHarness {
   source: { getDataset(): MapshaperDataset; fire: () => void };
   selection: Selection;
@@ -845,6 +849,192 @@ describe('MapshaperOps.splitSelected integration', () => {
       ],
     ]);
     expect(selection.getAll()).toEqual(result.ok ? result.value.resultFeatures : []);
+  });
+
+  it('keeps an untouched shared polygon boundary linked and restores its exact feature state on undo', async () => {
+    const dataset = await importDataset([
+      polygon(
+        [
+          [
+            [0, 0],
+            [10, 0],
+            [10, 10],
+            [0, 10],
+            [0, 0],
+          ],
+        ],
+        { name: 'selected' },
+      ),
+      polygon(
+        [
+          [
+            [10, 0],
+            [20, 0],
+            [20, 10],
+            [10, 10],
+            [10, 0],
+          ],
+        ],
+        { name: 'neighbor' },
+      ),
+    ]);
+    dataset.layers[0]!.name = 'split-selected';
+    const originalArcCount = dataset.arcs!.size();
+    const originalShapes = structuredClone(dataset.layers[0]!.shapes);
+    const originalRecords = structuredClone(dataset.layers[0]!.data!.getRecords!());
+    const state = harness(dataset, [0]);
+    const originalSelection = state.selection.getAll();
+    const originalTarget = originalShapes[0] as PathShape;
+    const originalNeighbor = originalShapes[1] as PathShape;
+    const sharedTargetArc = originalTarget
+      .flat()
+      .find((targetArc) => originalNeighbor.flat().includes(~targetArc));
+
+    expect(sharedTargetArc).toBeDefined();
+    const result = await state.ops.splitSelected({
+      cutter: {
+        type: 'polyline',
+        coordinates: [
+          [5, -1],
+          [5, 11],
+        ],
+      },
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        splitTargetCount: 1,
+        resultFeatures: [{ id: 0 }, { id: 2 }],
+      },
+    });
+
+    expect(state.source.getDataset()).toBe(dataset);
+    expect(dataset.layers).toHaveLength(1);
+
+    const liveShapes = dataset.layers[0]!.shapes!;
+    expect(liveShapes[1]).toEqual(originalNeighbor);
+    expect(
+      [liveShapes[0] as PathShape, liveShapes[2] as PathShape].some((shape) =>
+        shape.flat().includes(sharedTargetArc!),
+      ),
+    ).toBe(true);
+    expect(liveShapes[1]!.flat()).toContain(~sharedTargetArc!);
+    expect(state.selection.getAll()).toEqual(result.ok ? result.value.resultFeatures : []);
+    expect(state.history.entries).toHaveLength(1);
+
+    const [entry] = state.history.entries as Array<{ undo(): void }>;
+    entry!.undo();
+    expect(dataset.arcs!.size()).toBe(originalArcCount);
+    expect(dataset.layers[0]!.shapes).toEqual(originalShapes);
+    expect(dataset.layers[0]!.data!.getRecords!()).toEqual(originalRecords);
+    expect(state.selection.getAll()).toEqual(originalSelection);
+  });
+
+  it('appends the cutter-derived polygon boundary once and shares it with opposite signed references', async () => {
+    const dataset = await importDataset([
+      polygon([
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+      ]),
+    ]);
+    dataset.layers[0]!.name = 'split-selected';
+    const originalArcCount = dataset.arcs!.size();
+    const originalShapes = structuredClone(dataset.layers[0]!.shapes);
+    const originalRecords = structuredClone(dataset.layers[0]!.data!.getRecords!());
+    const state = harness(dataset, [0]);
+    const originalSelection = state.selection.getAll();
+
+    const result = await state.ops.splitSelected({
+      cutter: {
+        type: 'polyline',
+        coordinates: [
+          [5, -1],
+          [5, 11],
+        ],
+      },
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      value: { splitTargetCount: 1, resultFeatures: [{ id: 0 }, { id: 1 }] },
+    });
+
+    expect(state.source.getDataset()).toBe(dataset);
+    expect(dataset.layers).toHaveLength(1);
+
+    const [retained, appended] = dataset.layers[0]!.shapes as PathShape[];
+    const retainedRefs = retained!.flat();
+    const appendedRefs = appended!.flat();
+    const sharedCutRefs = retainedRefs.filter(
+      (reference) =>
+        unsignedArcId(reference) >= originalArcCount && appendedRefs.includes(~reference),
+    );
+    expect(sharedCutRefs).toHaveLength(1);
+    const cutReference = sharedCutRefs[0]!;
+    const cutArcId = unsignedArcId(cutReference);
+    expect(cutArcId).toBeGreaterThanOrEqual(originalArcCount);
+    expect(cutArcId).toBeLessThan(dataset.arcs!.size());
+    expect(
+      [retainedRefs, appendedRefs].flat().filter((reference) => unsignedArcId(reference) === cutArcId),
+    ).toEqual([cutReference, ~cutReference]);
+
+    const [entry] = state.history.entries as Array<{ undo(): void }>;
+    entry!.undo();
+    expect(dataset.arcs!.size()).toBe(originalArcCount);
+    expect(dataset.layers[0]!.shapes).toEqual(originalShapes);
+    expect(dataset.layers[0]!.data!.getRecords!()).toEqual(originalRecords);
+    expect(state.selection.getAll()).toEqual(originalSelection);
+  });
+
+  it('rejects coverage-defective polygon mosaics through the facade without live side effects', async () => {
+    const dataset = await importDataset([
+      polygon([
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+      ]),
+    ]);
+    dataset.layers[0]!.name = 'split-selected';
+    const state = harness(dataset, [0]);
+    const originalSelection = state.selection.getAll();
+    const adapter = getDefaultMapshaperAdapter();
+    const buildMosaic = adapter.buildPolygonMosaic.bind(adapter);
+    const mosaic = vi.spyOn(adapter, 'buildPolygonMosaic').mockImplementation((arcs, arcIds) => {
+      const tiles = buildMosaic(arcs, arcIds);
+      return tiles.length ? [...tiles, tiles[0]!] : tiles;
+    });
+
+    try {
+      await expect(
+        state.ops.splitSelected({
+          cutter: {
+            type: 'polyline',
+            coordinates: [
+              [5, -1],
+              [5, 11],
+            ],
+          },
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: {
+          kind: 'validation',
+          field: 'geometry',
+          reason: 'polygon split failed coverage validation',
+        },
+      });
+    } finally {
+      mosaic.mockRestore();
+    }
+    expectNoSplitSideEffects(state, dataset, originalSelection);
   });
 
   it('returns mapshaper errors from a splitter seam without committing split side effects', async () => {
