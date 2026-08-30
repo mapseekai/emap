@@ -88,6 +88,7 @@ function harness(
   const source = {
     getDataset: () => current,
     getLayers: () => current.layers,
+    getArcs: () => current.arcs,
     setDataset: (value: MapshaperDataset) => {
       current = value;
     },
@@ -159,6 +160,7 @@ describe('MapshaperOps.splitSelected integration', () => {
         ],
       },
     });
+    expect(source.getDataset()).toBe(dataset);
     const split = source.getDataset();
     const records = split.layers[0]!.data!.getRecords!();
     expect(records).toHaveLength(2);
@@ -182,7 +184,7 @@ describe('MapshaperOps.splitSelected integration', () => {
     expect(events.selection).toHaveBeenCalledTimes(1);
     expect(events.history).toHaveBeenCalledTimes(1);
     expect(source.fire).toHaveBeenCalledTimes(1);
-    expect(source.fire).toHaveBeenCalledWith('data', { reason: 'replace' });
+    expect(source.fire).toHaveBeenCalledWith('data', { reason: 'edit' });
     const entry = history.entries[0] as { label: string; undo(): void; do(): void };
     expect(entry.label).toBe('Split 1 feature');
     entry.undo();
@@ -190,6 +192,88 @@ describe('MapshaperOps.splitSelected integration', () => {
     expect(selection.getAll()).toEqual([{ source: 'source', layer: 'split-selected', id: 0 }]);
     entry.do();
     expect(selection.getAll()).toHaveLength(2);
+  });
+
+  it('keeps point splits direct through multi-level undo and redo with stable arcs, records, and selection', async () => {
+    const dataset = await importDataset([
+      line(
+        [
+          [0, 0],
+          [10, 0],
+        ],
+        { name: 'road' },
+      ),
+    ]);
+    dataset.layers[0]!.name = 'split-selected';
+    const originalArcs = dataset.arcs!.size();
+    const originalShapes = structuredClone(dataset.layers[0]!.shapes);
+    const originalRecords = structuredClone(dataset.layers[0]!.data!.getRecords!());
+    const state = harness(dataset, [0]);
+    const originalSelection = state.selection.getAll();
+
+    await expect(
+      state.ops.splitSelected({ cutter: { type: 'point', coordinates: [2, 0] } }),
+    ).resolves.toMatchObject({ ok: true, value: { splitTargetCount: 1 } });
+    await expect(
+      state.ops.splitSelected({ cutter: { type: 'point', coordinates: [6, 0] } }),
+    ).resolves.toMatchObject({ ok: true, value: { splitTargetCount: 1 } });
+    expect(state.source.getDataset()).toBe(dataset);
+    const splitShapes = structuredClone(dataset.layers[0]!.shapes);
+    const splitRecords = structuredClone(dataset.layers[0]!.data!.getRecords!());
+    const splitSelection = state.selection.getAll();
+    const splitArcs = dataset.arcs!.size();
+    expect(state.history.entries).toHaveLength(2);
+
+    const [first, second] = state.history.entries as Array<{ undo(): void; do(): void }>;
+    second!.undo();
+    first!.undo();
+    expect(dataset.arcs!.size()).toBe(originalArcs);
+    expect(dataset.layers[0]!.shapes).toEqual(originalShapes);
+    expect(dataset.layers[0]!.data!.getRecords!()).toEqual(originalRecords);
+    expect(state.selection.getAll()).toEqual(originalSelection);
+
+    first!.do();
+    second!.do();
+    expect(dataset.arcs!.size()).toBe(splitArcs);
+    expect(dataset.layers[0]!.shapes).toEqual(splitShapes);
+    expect(dataset.layers[0]!.data!.getRecords!()).toEqual(splitRecords);
+    expect(state.selection.getAll()).toEqual(splitSelection);
+  });
+
+  it('keeps polyline-cutter splits direct and patches a same-id neighbor layer independently', async () => {
+    const dataset = await importDataset([
+      line(
+        [
+          [0, 0],
+          [10, 0],
+        ],
+        { name: 'target' },
+      ),
+    ]);
+    dataset.layers[0]!.name = 'split-selected';
+    dataset.layers.push({
+      name: 'neighbor',
+      geometry_type: 'polyline',
+      shapes: [[[-1]]],
+    } as MapshaperLayer);
+    const state = harness(dataset, [0]);
+
+    await expect(
+      state.ops.splitSelected({
+        cutter: {
+          type: 'polyline',
+          coordinates: [
+            [5, -1],
+            [5, 1],
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({ ok: true, value: { splitTargetCount: 1 } });
+
+    expect(state.source.getDataset()).toBe(dataset);
+    expect(dataset.layers[0]!.shapes).toEqual([[[1]], [[2]]]);
+    expect(dataset.layers[1]!.shapes).toEqual([[[-3, -2]]]);
+    expect(state.history.entries).toHaveLength(1);
   });
 
   it('keeps unhit selected and unselected original ids while appending split results after every original feature', async () => {
@@ -548,7 +632,7 @@ describe('MapshaperOps.splitSelected integration', () => {
     expect(events.history).toHaveBeenCalledTimes(beforeHistoryEvents);
     expect(source.fire).toHaveBeenCalledTimes(beforeDataEvents);
   });
-  it('rolls split transactions back exactly and commits them as one undoable selection step', async () => {
+  it('rolls direct split transactions back exactly and commits them as one undoable selection step', async () => {
     const original = await importDataset([
       line(
         [
@@ -563,14 +647,20 @@ describe('MapshaperOps.splitSelected integration', () => {
     const rollbackHistory = new EditHistory();
     rollback.host._history = rollbackHistory;
     const beforeSelection = rollback.selection.getAll();
+    const beforeArcCount = original.arcs!.size();
+    const beforeShapes = structuredClone(original.layers[0]!.shapes);
+    const beforeRecords = structuredClone(original.layers[0]!.data!.getRecords!());
 
     const rollbackTx = new Transaction(rollback.host);
     await expect(
       rollback.ops.splitSelected({ cutter: { type: 'point', coordinates: [5, 0] } }),
     ).resolves.toMatchObject({ ok: true, value: { splitTargetCount: 1 } });
-    expect(rollback.source.getDataset()).not.toBe(original);
+    expect(rollback.source.getDataset()).toBe(original);
     rollbackTx.rollback();
     expect(rollback.source.getDataset()).toBe(original);
+    expect(original.arcs!.size()).toBe(beforeArcCount);
+    expect(original.layers[0]!.shapes).toEqual(beforeShapes);
+    expect(original.layers[0]!.data!.getRecords!()).toEqual(beforeRecords);
     expect(rollback.selection.getAll()).toEqual(beforeSelection);
     expect(rollbackHistory.size()).toBe(0);
 

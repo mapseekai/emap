@@ -3,12 +3,12 @@ import { splitSelected } from './split-selected';
 import { makeStubCtx } from './_test-helpers';
 
 describe('splitSelected', () => {
-  it('rejects an empty selection without dispatching a prepared mutation', async () => {
+  it('rejects an empty selection without dispatching a prepared edit', async () => {
     const { ctx } = makeStubCtx();
     let dispatched = false;
     // This stub only reaches the selection read boundary.
     ctx.host._selection = { getAll: () => [] } as unknown as typeof ctx.host._selection;
-    ctx.runPreparedDatasetMutation = async () => {
+    ctx.runPreparedEditCommand = async () => {
       dispatched = true;
       throw new Error('must not dispatch');
     };
@@ -22,7 +22,7 @@ describe('splitSelected', () => {
     expect(dispatched).toBe(false);
   });
 
-  it('rejects non-finite cutter coordinates without dispatching a prepared mutation', async () => {
+  it('rejects non-finite cutter coordinates without dispatching a prepared edit', async () => {
     const { ctx } = makeStubCtx();
     let dispatched = false;
     // These stubs only reach pre-dispatch validation boundaries.
@@ -32,7 +32,7 @@ describe('splitSelected', () => {
     ctx.host.layers = {
       resolve: () => ({ geometry_type: 'polyline', shapes: [[[0]]] }),
     } as unknown as typeof ctx.host.layers;
-    ctx.runPreparedDatasetMutation = async () => {
+    ctx.runPreparedEditCommand = async () => {
       dispatched = true;
       throw new Error('must not dispatch');
     };
