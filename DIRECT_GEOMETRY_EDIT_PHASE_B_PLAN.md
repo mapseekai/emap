@@ -185,6 +185,36 @@ describe('buildMiniDataset', () => {
       mini.dataset.layers[mini.dataset.layers.length - 1],
     );
   });
+
+  it('never aliases a no-candidate path layer; live layers survive a mini rebuild', () => {
+    // layer 0 holds the candidate (references arc 0); layer 1 has NO
+    // candidates and its shapes reference live arc ids that are OUT OF RANGE
+    // in the mini arc table (mini copies arc 0 only).
+    const arcs = new mapshaper.internal.ArcCollection(
+      new Int32Array([2, 2, 2]),
+      new Float64Array([0, 1, /**/ 1, 2, /**/ 5, 6]),
+      new Float64Array([0, 0, /**/ 0, 0, /**/ 5, 5]),
+    );
+    const layer0 = { geometry_type: 'polyline', shapes: [[[0]]] } as unknown as PathLayer;
+    const layer1 = { geometry_type: 'polyline', shapes: [[[1]], [[2]]] } as unknown as PathLayer;
+    const live = { arcs, layers: [layer0, layer1] } as unknown as MapshaperDataset;
+    const liveShapes1 = layer1.shapes;
+    const mini = buildMiniDataset({
+      dataset: live,
+      candidates: new Map([[0, new Set([0])]]),
+      adapter,
+    });
+    // No-candidate path layers are CLONED with live-length all-null shapes —
+    // addIntersectionCuts/remapDividedArcs/cleanShapes rewrite every path
+    // layer in place, so passing the live layer through would corrupt it.
+    const miniLayer1 = mini.dataset.layers[1] as PathLayer;
+    expect(miniLayer1).not.toBe(layer1);
+    expect(miniLayer1.shapes).toEqual([null, null]);
+    adapter.addIntersectionCuts(mini.dataset, { rebuild_topology: true });
+    expect(layer1.shapes).toBe(liveShapes1);
+    expect(layer1.shapes).toEqual([[[1]], [[2]]]);
+    expect((live.layers[0] as PathLayer).shapes).toEqual([[[0]]]);
+  });
 });
 ```
 
@@ -304,22 +334,27 @@ export function buildMiniDataset(opts: {
     }
   }
 
-  // 3. Layers: same length as live; path layers get candidate-only sparse
-  //    translated shapes (every mini shape references copied arcs only);
-  //    other layers pass through by reference (geometry fns skip them).
+  // 3. Layers: same length as live. EVERY path layer with a shapes array is
+  //    cloned with a live-length all-null shapes array, filling candidate
+  //    slots only — addIntersectionCuts/remapDividedArcs/cleanShapes rewrite
+  //    every path layer in place, so passing a live path layer through would
+  //    alias its real shapes into the mini (in-place corruption + out-of-range
+  //    refs nulled). Only non-path layers (or shapeless ones) pass through.
   const layers = dataset.layers.map((layer, layerIndex) => {
+    if (!isPathLayer(layer) || !layer.shapes) return layer;
     const ids = candidates.get(layerIndex);
-    if (!ids || !isPathLayer(layer) || !layer.shapes) return layer;
     const shapes: (PathShape | null)[] = new Array(layer.shapes.length).fill(null);
-    for (const featureId of ids) {
-      const shape = layer.shapes[featureId] as PathShape | null;
-      if (!shape) continue;
-      shapes[featureId] = shape.map((part) =>
-        part.map((ref) => {
-          const miniId = liveToMini.get(unsigned(ref))!;
-          return ref < 0 ? -miniId - 1 : miniId;
-        }),
-      );
+    if (ids) {
+      for (const featureId of ids) {
+        const shape = layer.shapes[featureId] as PathShape | null;
+        if (!shape) continue;
+        shapes[featureId] = shape.map((part) =>
+          part.map((ref) => {
+            const miniId = liveToMini.get(unsigned(ref))!;
+            return ref < 0 ? -miniId - 1 : miniId;
+          }),
+        );
+      }
     }
     return { ...layer, shapes, data: undefined };
   });
@@ -347,7 +382,7 @@ export function buildMiniDataset(opts: {
 - [ ] **Step 5: Run tests to verify pass**
 
 Run: `pnpm exec vitest run src/map/ops/_mini-dataset.test.ts`
-Expected: PASS (5 tests).
+Expected: PASS (6 tests).
 
 - [ ] **Step 6: Typecheck + commit**
 
