@@ -138,7 +138,6 @@ export interface AppendedArc {
   zz?: Float64Array | null;
 }
 
-
 /**
  * The mapshaper internal API surface the editor depends on. Methods are
  * grouped by purpose to make it obvious which mapshaper subsystem each one
@@ -784,7 +783,6 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     );
     arcs.setRetainedInterval?.(retained);
   }
-
 
   deleteLastArc(arcs: ArcCollection): void {
     this.truncateArcs(arcs, arcs.size() - 1);

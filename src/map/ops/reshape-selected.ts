@@ -55,7 +55,6 @@ export function validatePolylineFeatureShape(
   }
 }
 
-
 /**
  * Reshape every path feature contacted by a user-drawn line, QGIS-style: no
  * selection is required. Every eligible source is planned before a single

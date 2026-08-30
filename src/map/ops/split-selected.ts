@@ -134,127 +134,141 @@ export async function splitSelected(
   const callTimeEditVersion = callTimeDataset.editVersion ?? 0;
   const adapter = getDefaultMapshaperAdapter();
 
-  return ctx.runPreparedEditCommand(sourceId, 'Split selected features', (planned, mutableSource) => {
-    if (
-      planned !== callTimeDataset ||
-      (planned.editVersion ?? 0) !== callTimeEditVersion
-    ) {
-      return Err.staleOperation(sourceId, 'Split selected features');
-    }
-    const liveLayer = ctx.host.layers.resolveInLayers(planned.layers, layerId);
-    if (!liveLayer || !isPathLayer(liveLayer) || !liveLayer.shapes) {
-      return Err.staleOperation(sourceId, 'Split selected features');
-    }
-    const liveLayerIndex = planned.layers.indexOf(liveLayer);
-    if (liveLayerIndex === -1) return Err.staleOperation(sourceId, 'Split selected features');
-    const arcs = planned.arcs;
-    if (!arcs) return Err.validation('geometry', 'selected polyline geometry is invalid');
-
-    try {
-      if (liveLayer.geometry_type === 'polyline') {
-        validateSelectedPolylines(liveLayer, selectedIds, arcs);
+  return ctx.runPreparedEditCommand(
+    sourceId,
+    'Split selected features',
+    (planned, mutableSource) => {
+      if (planned !== callTimeDataset || (planned.editVersion ?? 0) !== callTimeEditVersion) {
+        return Err.staleOperation(sourceId, 'Split selected features');
       }
-      const mini = buildMiniDataset({
-        dataset: planned,
-        candidates: new Map([[liveLayerIndex, selectedIds]]),
-        adapter,
-      });
-      let pieces;
-      if (liveLayer.geometry_type === 'polygon') {
-        if (cutter.type !== 'polyline') {
-          return Err.validation('cutter', 'point cutters can only split polyline features');
+      const liveLayer = ctx.host.layers.resolveInLayers(planned.layers, layerId);
+      if (!liveLayer || !isPathLayer(liveLayer) || !liveLayer.shapes) {
+        return Err.staleOperation(sourceId, 'Split selected features');
+      }
+      const liveLayerIndex = planned.layers.indexOf(liveLayer);
+      if (liveLayerIndex === -1) return Err.staleOperation(sourceId, 'Split selected features');
+      const arcs = planned.arcs;
+      if (!arcs) return Err.validation('geometry', 'selected polyline geometry is invalid');
+
+      try {
+        if (liveLayer.geometry_type === 'polyline') {
+          validateSelectedPolylines(liveLayer, selectedIds, arcs);
         }
-        pieces = splitSelectedPolygons(mini.dataset, liveLayerIndex, selectedIds, cutter, adapter);
-      } else {
-        const outcome = splitSelectedPolylines(
-          mini.dataset,
-          liveLayerIndex,
-          selectedIds,
-          cutter,
+        const mini = buildMiniDataset({
+          dataset: planned,
+          candidates: new Map([[liveLayerIndex, selectedIds]]),
           adapter,
-        );
-        if (cutter.type === 'point' && !outcome.pointOnSelectedPath) {
-          throw new SplitGeometryValidationError('cutter', 'point is not on any selected line');
+        });
+        let pieces;
+        if (liveLayer.geometry_type === 'polygon') {
+          if (cutter.type !== 'polyline') {
+            return Err.validation('cutter', 'point cutters can only split polyline features');
+          }
+          pieces = splitSelectedPolygons(
+            mini.dataset,
+            liveLayerIndex,
+            selectedIds,
+            cutter,
+            adapter,
+          );
+        } else {
+          const outcome = splitSelectedPolylines(
+            mini.dataset,
+            liveLayerIndex,
+            selectedIds,
+            cutter,
+            adapter,
+          );
+          if (cutter.type === 'point' && !outcome.pointOnSelectedPath) {
+            throw new SplitGeometryValidationError('cutter', 'point is not on any selected line');
+          }
+          pieces = outcome.pieces;
         }
-        pieces = outcome.pieces;
-      }
-      if (pieces.length === 0) return Err.validation('cutter', 'did not split any selected feature');
-      const plan = planSplitPieces({
-        layer: mini.dataset.layers[liveLayerIndex] as PathLayer,
-        selectedIds,
-        piecesByFeature: pieces,
-        arcs: mini.arcs,
-        adapter,
-        sourceId,
-        layerId,
-      });
-      const translation = translateMiniDataset({
-        mini,
-        liveDataset: planned,
-        liveArcCount: arcs.size(),
-        liveLayers: planned.layers,
-        extraShapes: [...plan.targetAfterShapes.map((target) => target.shape), ...plan.appendedShapes],
-      });
-      if (!translation) return Err.validation('geometry', 'split result translation failed');
+        if (pieces.length === 0)
+          return Err.validation('cutter', 'did not split any selected feature');
+        const plan = planSplitPieces({
+          layer: mini.dataset.layers[liveLayerIndex] as PathLayer,
+          selectedIds,
+          piecesByFeature: pieces,
+          arcs: mini.arcs,
+          adapter,
+          sourceId,
+          layerId,
+        });
+        const translation = translateMiniDataset({
+          mini,
+          liveDataset: planned,
+          liveArcCount: arcs.size(),
+          liveLayers: planned.layers,
+          extraShapes: [
+            ...plan.targetAfterShapes.map((target) => target.shape),
+            ...plan.appendedShapes,
+          ],
+        });
+        if (!translation) return Err.validation('geometry', 'split result translation failed');
 
-      const patchByLocation = new Map<string, PathShapePatch>();
-      for (const patch of translation.shapePatches) {
-        const patchLayerIndex = planned.layers.indexOf(patch.layer);
-        if (patchLayerIndex === -1) return Err.validation('geometry', 'split result translation failed');
-        patchByLocation.set(`${patchLayerIndex}:${patch.featureId}`, patch);
-      }
-      for (const { featureId, shape } of plan.targetAfterShapes) {
-        let after: PathShape;
+        const patchByLocation = new Map<string, PathShapePatch>();
+        for (const patch of translation.shapePatches) {
+          const patchLayerIndex = planned.layers.indexOf(patch.layer);
+          if (patchLayerIndex === -1)
+            return Err.validation('geometry', 'split result translation failed');
+          patchByLocation.set(`${patchLayerIndex}:${patch.featureId}`, patch);
+        }
+        for (const { featureId, shape } of plan.targetAfterShapes) {
+          let after: PathShape;
+          try {
+            after = translateShapeFromMini(translation, shape);
+          } catch {
+            return Err.validation('geometry', 'split result translation failed');
+          }
+          const before = liveLayer.shapes[featureId] as PathShape | null;
+          if (!before) return Err.validation('geometry', 'split result translation failed');
+          patchByLocation.set(`${liveLayerIndex}:${featureId}`, {
+            layer: liveLayer,
+            featureId,
+            before: before.map((part) => part.slice()),
+            after,
+          });
+        }
+
+        let appendedShapes: PathShape[];
         try {
-          after = translateShapeFromMini(translation, shape);
+          appendedShapes = plan.appendedShapes.map((shape) =>
+            translateShapeFromMini(translation, shape),
+          );
         } catch {
           return Err.validation('geometry', 'split result translation failed');
         }
-        const before = liveLayer.shapes[featureId] as PathShape | null;
-        if (!before) return Err.validation('geometry', 'split result translation failed');
-        patchByLocation.set(`${liveLayerIndex}:${featureId}`, {
+        const liveRecords = liveLayer.data?.getRecords?.();
+        const appendedRecords = plan.appendedRecordSource.map((featureId) =>
+          liveRecords ? { ...(liveRecords[featureId] ?? {}) } : null,
+        );
+        const command = new SplitFeaturesCommand({
+          source: mutableSource,
+          shapePatches: [...patchByLocation.values()],
+          originalArcCount: arcs.size(),
+          appendedArcs: translation.appendedArcs,
           layer: liveLayer,
-          featureId,
-          before: before.map((part) => part.slice()),
-          after,
+          appendedShapes,
+          appendedRecords,
+          originalFeatureCount: liveLayer.shapes.length,
+          selection: ctx.host._selection,
+          beforeSelection: ctx.host._selection.snapshot(),
+          afterSelection: plan.resultFeatures,
+          publishSelection: (diff) => ctx.host._fireSelectionChange(diff),
+          label: `Split ${plan.splitTargetCount} feature${plan.splitTargetCount === 1 ? '' : 's'}`,
         });
+        return {
+          value: { splitTargetCount: plan.splitTargetCount, resultFeatures: plan.resultFeatures },
+          affectedSourceIds: [sourceId],
+          command,
+        };
+      } catch (error) {
+        if (error instanceof SplitGeometryValidationError) {
+          return Err.validation(error.field, error.reason);
+        }
+        throw error;
       }
-
-      let appendedShapes: PathShape[];
-      try {
-        appendedShapes = plan.appendedShapes.map((shape) => translateShapeFromMini(translation, shape));
-      } catch {
-        return Err.validation('geometry', 'split result translation failed');
-      }
-      const liveRecords = liveLayer.data?.getRecords?.();
-      const appendedRecords = plan.appendedRecordSource.map((featureId) =>
-        liveRecords ? { ...(liveRecords[featureId] ?? {}) } : null,
-      );
-      const command = new SplitFeaturesCommand({
-        source: mutableSource,
-        shapePatches: [...patchByLocation.values()],
-        originalArcCount: arcs.size(),
-        appendedArcs: translation.appendedArcs,
-        layer: liveLayer,
-        appendedShapes,
-        appendedRecords,
-        originalFeatureCount: liveLayer.shapes.length,
-        selection: ctx.host._selection,
-        beforeSelection: ctx.host._selection.snapshot(),
-        afterSelection: plan.resultFeatures,
-        publishSelection: (diff) => ctx.host._fireSelectionChange(diff),
-        label: `Split ${plan.splitTargetCount} feature${plan.splitTargetCount === 1 ? '' : 's'}`,
-      });
-      return {
-        value: { splitTargetCount: plan.splitTargetCount, resultFeatures: plan.resultFeatures },
-        affectedSourceIds: [sourceId],
-        command,
-      };
-    } catch (error) {
-      if (error instanceof SplitGeometryValidationError) {
-        return Err.validation(error.field, error.reason);
-      }
-      throw error;
-    }
-  });
+    },
+  );
 }

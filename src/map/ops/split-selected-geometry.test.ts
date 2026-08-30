@@ -22,11 +22,26 @@ function layer(shapes: PathShape[]): PathLayer {
 
 function plan(shapes: PathShape[], selectedIds: number[], piecesByFeature: SplitPieces[]) {
   const arcs = arcsFrom([
-    [[0, 0], [10, 0]],
-    [[0, 1], [4, 1]],
-    [[4, 1], [10, 1]],
-    [[0, 2], [3, 2]],
-    [[3, 2], [10, 2]],
+    [
+      [0, 0],
+      [10, 0],
+    ],
+    [
+      [0, 1],
+      [4, 1],
+    ],
+    [
+      [4, 1],
+      [10, 1],
+    ],
+    [
+      [0, 2],
+      [3, 2],
+    ],
+    [
+      [3, 2],
+      [10, 2],
+    ],
   ]);
   return planSplitPieces({
     layer: layer(shapes),
@@ -45,12 +60,21 @@ describe('planSplitPieces', () => {
     const records = [{ name: 'road' }];
     miniLayer.data = { getRecords: () => records } as PathLayer['data'];
     const arcs = arcsFrom([
-      [[0, 0], [10, 0]],
-      [[0, 1], [4, 1]],
-      [[4, 1], [10, 1]],
+      [
+        [0, 0],
+        [10, 0],
+      ],
+      [
+        [0, 1],
+        [4, 1],
+      ],
+      [
+        [4, 1],
+        [10, 1],
+      ],
     ]);
-    const beforeShapes = miniLayer.shapes!.map((shape) =>
-      shape?.map((part) => part.slice()) ?? null,
+    const beforeShapes = miniLayer.shapes!.map(
+      (shape) => shape?.map((part) => part.slice()) ?? null,
     );
     const beforeRecords = records.map((record) => ({ ...record }));
 
@@ -77,11 +101,7 @@ describe('planSplitPieces', () => {
   });
 
   it('preserves unsplit selected ids in resultFeatures', () => {
-    const result = plan(
-      [[[0]], [[0]]],
-      [0, 1],
-      [{ featureId: 0, pieces: [[[1]], [[2]]] }],
-    );
+    const result = plan([[[0]], [[0]]], [0, 1], [{ featureId: 0, pieces: [[[1]], [[2]]] }]);
 
     expect(result.resultFeatures).toEqual([
       { source: 'source', layer: 'lines', id: 0 },

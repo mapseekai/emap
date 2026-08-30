@@ -26,7 +26,6 @@ interface ReshapeStateSnapshot {
   selection: unknown;
 }
 
-
 async function importDataset(yOffset = 0): Promise<MapshaperDataset> {
   return getDefaultMapshaperAdapter().runImport(`-i "${FIXTURE_NAME}"`, {
     [FIXTURE_NAME]: JSON.stringify({
@@ -101,10 +100,7 @@ function snapshotState(dataset: MapshaperDataset, selection: Selection): Reshape
   };
 }
 
-function expectAppendOnlyArcGrowth(
-  prior: ReshapeStateSnapshot,
-  next: ReshapeStateSnapshot,
-): void {
+function expectAppendOnlyArcGrowth(prior: ReshapeStateSnapshot, next: ReshapeStateSnapshot): void {
   expect(next.arcs.count).toBeGreaterThan(prior.arcs.count);
   expect(next.arcs.ii.slice(0, prior.arcs.ii.length)).toEqual(prior.arcs.ii);
   expect(next.arcs.nn.slice(0, prior.arcs.nn.length)).toEqual(prior.arcs.nn);
@@ -300,7 +296,13 @@ describe('reshapeSelected', () => {
     for (const y of [2, -2, 4]) {
       const prior = stages.at(-1)!;
       await expect(
-        reshapeSelected(fixture.ctx, { line: [[3, 0], [5, y], [7, 0]] }),
+        reshapeSelected(fixture.ctx, {
+          line: [
+            [3, 0],
+            [5, y],
+            [7, 0],
+          ],
+        }),
       ).resolves.toEqual({ ok: true, value: { reshapedCount: 1 } });
       expect(fixture.dataset()).toBe(liveDataset);
       expect(exportCoordinates(liveDataset)[0]).toEqual([
@@ -354,7 +356,13 @@ describe('reshapeSelected', () => {
     ];
 
     await expect(
-      reshapeSelected(fixture.ctx, { line: [[3, 0], [5, 2], [7, 0]] }),
+      reshapeSelected(fixture.ctx, {
+        line: [
+          [3, 0],
+          [5, 2],
+          [7, 0],
+        ],
+      }),
     ).resolves.toEqual({ ok: true, value: { reshapedCount: 2 } });
     expect(exportCoordinates(fixture.dataset('a'))).toEqual(reshaped);
     expect(exportCoordinates(fixture.dataset('b'))).toEqual(reshaped);
@@ -378,7 +386,13 @@ describe('reshapeSelected', () => {
     const beforeB = exportCoordinates(fixture.dataset('b'));
 
     await expect(
-      reshapeSelected(fixture.ctx, { line: [[3, 0], [5, 2], [7, 0]] }),
+      reshapeSelected(fixture.ctx, {
+        line: [
+          [3, 0],
+          [5, 2],
+          [7, 0],
+        ],
+      }),
     ).resolves.toEqual({ ok: true, value: { reshapedCount: 1 } });
     expect(exportCoordinates(fixture.dataset('a'))).toEqual(beforeA);
     expect(exportCoordinates(fixture.dataset('b'))).toEqual([

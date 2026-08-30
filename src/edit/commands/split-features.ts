@@ -169,7 +169,11 @@ export class SplitFeaturesCommand implements EditCommand {
     for (const patch of this.opts.shapePatches) {
       const patchShapes = patch.layer.shapes;
       if (!patchShapes) throw new Error('SplitFeaturesCommand: patched layer has no shapes');
-      if (!Number.isInteger(patch.featureId) || patch.featureId < 0 || patch.featureId >= patchShapes.length) {
+      if (
+        !Number.isInteger(patch.featureId) ||
+        patch.featureId < 0 ||
+        patch.featureId >= patchShapes.length
+      ) {
         throw new Error(`SplitFeaturesCommand: patched feature ${patch.featureId} is unavailable`);
       }
     }

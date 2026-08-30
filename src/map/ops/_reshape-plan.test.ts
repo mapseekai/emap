@@ -62,25 +62,39 @@ function vertexData(arcs: ArcCollection) {
 
 describe('reshape planner bounds', () => {
   it('keeps a segment-crossing arc as a candidate when vertex bounds are unavailable', () => {
-    const arcs = arcsFrom([[
-      [-1, 0],
-      [1, 0],
-    ]]);
+    const arcs = arcsFrom([
+      [
+        [-1, 0],
+        [1, 0],
+      ],
+    ]);
     const getVertexData = arcs.getVertexData!;
     arcs.getVertexData = () => ({ ...getVertexData(), bb: undefined });
 
-    expect(shapeIntersectsBounds([[0]], arcs, reshapeLineBounds([[0, -0.5], [0, 0.5]]))).toBe(
-      true,
-    );
+    expect(
+      shapeIntersectsBounds(
+        [[0]],
+        arcs,
+        reshapeLineBounds([
+          [0, -0.5],
+          [0, 0.5],
+        ]),
+      ),
+    ).toBe(true);
   });
 
   it('keeps a near-endpoint contact accepted by legacy intersection tolerance', () => {
     const offset = Number.EPSILON * 128;
-    const arcs = arcsFrom([[
-      [1 + offset, -1],
-      [1 + offset, 1],
-    ]]);
-    const line: Point[] = [[0, 0], [1, 0]];
+    const arcs = arcsFrom([
+      [
+        [1 + offset, -1],
+        [1 + offset, 1],
+      ],
+    ]);
+    const line: Point[] = [
+      [0, 0],
+      [1, 0],
+    ];
 
     expect(collectLineContacts([0], arcs, line, adapter)).toHaveLength(1);
     expect(shapeIntersectsBounds([[0]], arcs, reshapeLineBounds(line))).toBe(true);
@@ -92,10 +106,12 @@ describe('reshape planner bounds', () => {
 
 describe('planReshapeSource', () => {
   it('plans a polyline reshape without mutating live arcs, then command do/undo restores exact data', () => {
-    const arcs = arcsFrom([[
-      [0, 0],
-      [10, 0],
-    ]]);
+    const arcs = arcsFrom([
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ]);
     const layer = {
       geometry_type: 'polyline',
       shapes: [[[0]]] as PathShape[],
@@ -127,10 +143,12 @@ describe('planReshapeSource', () => {
   });
 
   it('splices a non-candidate shared polyline owner after legacy cuts divide its arc', () => {
-    const arcs = arcsFrom([[
-      [0, 0],
-      [10, 0],
-    ]]);
+    const arcs = arcsFrom([
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ]);
     const layer = {
       geometry_type: 'polyline',
       shapes: [[[0]], [[-1], []]] as PathShape[],
@@ -160,19 +178,28 @@ describe('planReshapeSource', () => {
   });
 
   it('returns null when nothing contacts the source', () => {
-    const arcs = arcsFrom([[
-      [0, 0],
-      [10, 0],
-    ]]);
+    const arcs = arcsFrom([
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ]);
     const layer = { geometry_type: 'polyline', shapes: [[[0]]] as PathShape[] } as PathLayer;
-    expect(plan({ arcs, layers: [layer] } as MapshaperDataset, [[20, 0], [30, 0]])).toBeNull();
+    expect(
+      plan({ arcs, layers: [layer] } as MapshaperDataset, [
+        [20, 0],
+        [30, 0],
+      ]),
+    ).toBeNull();
   });
 
   it('rethrows an adapter failure while building the mini dataset', () => {
-    const arcs = arcsFrom([[
-      [0, 0],
-      [10, 0],
-    ]]);
+    const arcs = arcsFrom([
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ]);
     const layer = { geometry_type: 'polyline', shapes: [[[0]]] as PathShape[] } as PathLayer;
     const boom = new Error('adapter boom');
     const throwingAdapter = Object.create(adapter) as MapshaperAdapter;
@@ -181,19 +208,35 @@ describe('planReshapeSource', () => {
     };
 
     expect(() =>
-      plan({ arcs, layers: [layer] } as MapshaperDataset, [[3, 0], [5, 2], [7, 0]], throwingAdapter),
+      plan(
+        { arcs, layers: [layer] } as MapshaperDataset,
+        [
+          [3, 0],
+          [5, 2],
+          [7, 0],
+        ],
+        throwingAdapter,
+      ),
     ).toThrow(boom);
   });
 
   it('skips invalid polyline features and returns null when no valid feature is contacted', () => {
-    const arcs = arcsFrom([[
-      [0, 0],
-      [10, 0],
-    ]]);
+    const arcs = arcsFrom([
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ]);
     const layer = {
       geometry_type: 'polyline',
       shapes: [[[0], []]] as PathShape[],
     } as PathLayer;
-    expect(plan({ arcs, layers: [layer] } as MapshaperDataset, [[3, 0], [5, 2], [7, 0]])).toBeNull();
+    expect(
+      plan({ arcs, layers: [layer] } as MapshaperDataset, [
+        [3, 0],
+        [5, 2],
+        [7, 0],
+      ]),
+    ).toBeNull();
   });
 });

@@ -177,7 +177,11 @@ describe('SplitFeaturesCommand', () => {
     const { command, arcs, layer, records } = makeFixture();
     command.do();
     command.undo();
-    arcs.updateVertexData(new Int32Array([2, 1]), new Float64Array([0, 1, 9]), new Float64Array([0, 1, 9]));
+    arcs.updateVertexData(
+      new Int32Array([2, 1]),
+      new Float64Array([0, 1, 9]),
+      new Float64Array([0, 1, 9]),
+    );
 
     expect(() => command.do()).toThrow('expected 1 arcs before do(), found 2');
     expect(layer.shapes).toEqual([[[0]], [[0]]]);
@@ -227,8 +231,14 @@ describe('SplitFeaturesCommand', () => {
     expect(source.fire).toHaveBeenCalledTimes(3);
     expect(source.fire).toHaveBeenNthCalledWith(1, 'data', { reason: 'edit' });
     expect(publishSelection).toHaveBeenCalledTimes(2);
-    expect(publishSelection.mock.calls[0]![0]).toMatchObject({ added: [AFTER_REF], removed: [BEFORE_REF] });
-    expect(publishSelection.mock.calls[1]![0]).toMatchObject({ added: [BEFORE_REF], removed: [AFTER_REF] });
+    expect(publishSelection.mock.calls[0]![0]).toMatchObject({
+      added: [AFTER_REF],
+      removed: [BEFORE_REF],
+    });
+    expect(publishSelection.mock.calls[1]![0]).toMatchObject({
+      added: [BEFORE_REF],
+      removed: [AFTER_REF],
+    });
   });
 
   it('does not create records for a layer without a data table', () => {

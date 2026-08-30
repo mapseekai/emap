@@ -21,9 +21,18 @@ function arcsFrom(pointsPerArc: [number, number][][]): ArcCollection {
 
 function liveDataset(): MapshaperDataset {
   const arcs = arcsFrom([
-    [[0, 0], [1, 0]],
-    [[1, 0], [2, 0]],
-    [[9, 9], [9, 9]],
+    [
+      [0, 0],
+      [1, 0],
+    ],
+    [
+      [1, 0],
+      [2, 0],
+    ],
+    [
+      [9, 9],
+      [9, 9],
+    ],
   ]);
   const layer: PathLayer = {
     geometry_type: 'polyline',
@@ -61,8 +70,14 @@ describe('translateMiniDataset', () => {
       candidates: new Map([[0, new Set([0])]]),
       adapter,
     });
-    adapter.appendArc(mini.arcs, [[5, 5], [6, 6]]);
-    adapter.appendArc(mini.arcs, [[7, 7], [8, 8]]);
+    adapter.appendArc(mini.arcs, [
+      [5, 5],
+      [6, 6],
+    ]);
+    adapter.appendArc(mini.arcs, [
+      [7, 7],
+      [8, 8],
+    ]);
     const miniLayer = mini.dataset.layers[0] as PathLayer;
     miniLayer.shapes![0] = [[2, 1]];
     const translation = translateMiniDataset({
@@ -92,7 +107,10 @@ describe('translateMiniDataset', () => {
       candidates: new Map([[0, new Set([0])]]),
       adapter,
     });
-    adapter.appendArc(mini.arcs, [[5, 5], [6, 6]]);
+    adapter.appendArc(mini.arcs, [
+      [5, 5],
+      [6, 6],
+    ]);
     const translation = translateMiniDataset({
       mini,
       liveDataset: live,
@@ -138,7 +156,12 @@ describe('translateMiniDataset', () => {
   });
 
   it('leaves unreferenced split lineage pieces unmapped when no neighbor needs splicing', () => {
-    const arcs = arcsFrom([[[0, 0], [2, 0]]]);
+    const arcs = arcsFrom([
+      [
+        [0, 0],
+        [2, 0],
+      ],
+    ]);
     const layer: PathLayer = {
       geometry_type: 'polyline',
       shapes: [[[0]]] as PathShape[],
@@ -167,9 +190,18 @@ describe('translateMiniDataset', () => {
 
   it('merges deduped arcs into ONE appended arc per post id (signs preserved)', () => {
     const arcs = arcsFrom([
-      [[0, 0], [1, 0]],
-      [[0, 0], [1, 0]],
-      [[1, 0], [0, 0]],
+      [
+        [0, 0],
+        [1, 0],
+      ],
+      [
+        [0, 0],
+        [1, 0],
+      ],
+      [
+        [1, 0],
+        [0, 0],
+      ],
     ]);
     const layer: PathLayer = {
       geometry_type: 'polyline',
@@ -181,7 +213,10 @@ describe('translateMiniDataset', () => {
       candidates: new Map([[0, new Set([0, 1, 2])]]),
       adapter,
     });
-    adapter.appendArc(mini.arcs, [[0.5, -1], [0.5, 1]]);
+    adapter.appendArc(mini.arcs, [
+      [0.5, -1],
+      [0.5, 1],
+    ]);
     adapter.addIntersectionCuts(mini.dataset, { rebuild_topology: true });
     const translation = translateMiniDataset({
       mini,
@@ -194,16 +229,19 @@ describe('translateMiniDataset', () => {
     expect(translation!.appendedArcs).toHaveLength(2);
     expect(Array.from(translation!.appendedArcs[0]!.xx)).toEqual([0, 0.5]);
     expect(Array.from(translation!.appendedArcs[1]!.xx)).toEqual([0.5, 1]);
-    const afterByFeature = new Map(
-      translation!.shapePatches.map((p) => [p.featureId, p.after]),
-    );
+    const afterByFeature = new Map(translation!.shapePatches.map((p) => [p.featureId, p.after]));
     expect(afterByFeature.get(0)).toEqual([[3, 4]]);
     expect(afterByFeature.get(1)).toEqual([[3, 4]]);
     expect(afterByFeature.get(2)).toEqual([[-5, -4]]);
   });
 
   it('reuses the live id when dedup keeps the copied arc (positive singleton)', () => {
-    const arcs = arcsFrom([[[0, 0], [1, 0]]]);
+    const arcs = arcsFrom([
+      [
+        [0, 0],
+        [1, 0],
+      ],
+    ]);
     const layer: PathLayer = {
       geometry_type: 'polyline',
       shapes: [[[0]]] as PathShape[],
@@ -214,7 +252,10 @@ describe('translateMiniDataset', () => {
       candidates: new Map([[0, new Set([0])]]),
       adapter,
     });
-    adapter.appendArc(mini.arcs, [[1, 0], [0, 0]]);
+    adapter.appendArc(mini.arcs, [
+      [1, 0],
+      [0, 0],
+    ]);
     adapter.addIntersectionCuts(mini.dataset, { rebuild_topology: true });
     const translation = translateMiniDataset({
       mini,
@@ -229,7 +270,12 @@ describe('translateMiniDataset', () => {
   });
 
   it('never reuses a live id for a NEGATIVE singleton lineage (would invert geometry)', () => {
-    const arcs = arcsFrom([[[0, 0], [1, 0]]]);
+    const arcs = arcsFrom([
+      [
+        [0, 0],
+        [1, 0],
+      ],
+    ]);
     const layer: PathLayer = {
       geometry_type: 'polyline',
       shapes: [[[0]]] as PathShape[],
@@ -241,7 +287,10 @@ describe('translateMiniDataset', () => {
       adapter,
     });
     adapter.truncateArcs!(mini.arcs, 0);
-    adapter.appendArc(mini.arcs, [[1, 0], [0, 0]]);
+    adapter.appendArc(mini.arcs, [
+      [1, 0],
+      [0, 0],
+    ]);
     (mini.dataset.layers[mini.sentinelLayerIndex] as PathLayer).shapes![0] = [[-1]];
     const translation = translateMiniDataset({
       mini,

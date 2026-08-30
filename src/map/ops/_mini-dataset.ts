@@ -68,14 +68,12 @@ export function buildMiniDataset(opts: {
     }
     const layer = dataset.layers[layerIndex]!;
     if (!isPathLayer(layer) || !layer.shapes) {
-      throw new Error(`buildMiniDataset: candidate layer ${layerIndex} must be a shaped path layer`);
+      throw new Error(
+        `buildMiniDataset: candidate layer ${layerIndex} must be a shaped path layer`,
+      );
     }
     for (const featureId of ids) {
-      if (
-        !Number.isInteger(featureId) ||
-        featureId < 0 ||
-        featureId >= layer.shapes.length
-      ) {
+      if (!Number.isInteger(featureId) || featureId < 0 || featureId >= layer.shapes.length) {
         throw new Error(
           `buildMiniDataset: candidate feature id ${featureId} is out of range for layer ${layerIndex}`,
         );

@@ -9,18 +9,13 @@ import type {
   PathShape,
 } from '../../types/mapshaper-types';
 import { isPathLayer } from '../../types/mapshaper-types';
-import {
-  CONTACT_EPSILON,
-  normalizeConsecutiveCoordinates,
-  type Coordinate,
-} from './geometry-2d';
+import { CONTACT_EPSILON, normalizeConsecutiveCoordinates, type Coordinate } from './geometry-2d';
 import { buildMiniDataset } from './_mini-dataset';
 import { translateMiniDataset } from './_mini-translate';
 import { reshapeSelectedPolylines } from './reshape-selected-line';
 import { reshapeSelectedPolygon } from './reshape-selected-polygon';
 import { validatePolylineFeatureShape } from './reshape-selected';
 import { SplitGeometryValidationError } from './split-selected-error';
-
 
 type ReshapeBounds = {
   minX: number;
@@ -225,7 +220,6 @@ export function planReshapeSource(opts: {
   if (reshapedCount === 0) return null;
   if (reshapedPolygon)
     adapter.addIntersectionCuts(mini.dataset, { no_snap: true, rebuild_topology: true });
-
 
   const translation = translateMiniDataset({
     mini,

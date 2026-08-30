@@ -293,11 +293,16 @@ describe('_runPreparedEditCommand', () => {
     const source = { getDataset: () => dataset, fire: vi.fn(), markDisplayArcsDirty: vi.fn() };
     const host = makeHost(source);
     const command = { do: vi.fn(), undo: vi.fn(), publish: vi.fn(), label: 'X' };
-    const result = await _runPreparedEditCommand(host as any, 's', 'X', (planned, plannedSource) => {
-      expect(planned).toBe(dataset); // live, NOT a copy
-      expect(plannedSource).toBe(source);
-      return { value: 42, command, affectedSourceIds: ['s'] };
-    });
+    const result = await _runPreparedEditCommand(
+      host as any,
+      's',
+      'X',
+      (planned, plannedSource) => {
+        expect(planned).toBe(dataset); // live, NOT a copy
+        expect(plannedSource).toBe(source);
+        return { value: 42, command, affectedSourceIds: ['s'] };
+      },
+    );
     expect(result).toEqual({ ok: true, value: 42 });
     expect(command.do).toHaveBeenCalledTimes(1);
     expect(command.publish).toHaveBeenCalledTimes(1);
@@ -338,7 +343,9 @@ describe('_runPreparedEditCommand', () => {
     const source = { getDataset: () => dataset };
     const host = makeHost(source);
     const command = {
-      do: vi.fn(() => { throw new Error('boom'); }),
+      do: vi.fn(() => {
+        throw new Error('boom');
+      }),
       undo: vi.fn(),
     };
     const result = await _runPreparedEditCommand(host as any, 's', 'X', () => ({
@@ -431,15 +438,20 @@ describe('multi-source direct edit runner', () => {
     );
     const plannedIds: string[] = [];
 
-    const result = await _runPreparedEditCommandMany(host, ['a', 'b', 'a'], 'Reshape', (sourceId) => {
-      plannedIds.push(sourceId);
-      if (sourceId === 'b') datasetA.editVersion += 1;
-      return {
-        value: sourceId,
-        command: sourceId === 'a' ? commandA : commandB,
-        affectedSourceIds: [sourceId],
-      };
-    });
+    const result = await _runPreparedEditCommandMany(
+      host,
+      ['a', 'b', 'a'],
+      'Reshape',
+      (sourceId) => {
+        plannedIds.push(sourceId);
+        if (sourceId === 'b') datasetA.editVersion += 1;
+        return {
+          value: sourceId,
+          command: sourceId === 'a' ? commandA : commandB,
+          affectedSourceIds: [sourceId],
+        };
+      },
+    );
 
     expect(plannedIds).toEqual(['a', 'b']);
     expect(result).toMatchObject({ ok: false, error: { kind: 'stale-operation' } });

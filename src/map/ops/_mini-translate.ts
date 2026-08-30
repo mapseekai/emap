@@ -138,8 +138,7 @@ export function translateMiniDataset(opts: {
       spliceableLineages.add(k);
   }
   const required = new Set(referenced);
-  for (const k of spliceableLineages)
-    for (const ref of lineages[k]!) required.add(unsigned(ref));
+  for (const k of spliceableLineages) for (const ref of lineages[k]!) required.add(unsigned(ref));
   const pending = [...required]
     .filter((postId) => miniToLiveFinal[postId] === undefined)
     .sort((a, b) => a - b);
@@ -236,10 +235,7 @@ export function translateMiniDataset(opts: {
 }
 
 /** Translate one mini-space shape to live arc ids. Throws on unmappable refs. */
-export function translateShapeFromMini(
-  translation: MiniTranslation,
-  shape: PathShape,
-): PathShape {
+export function translateShapeFromMini(translation: MiniTranslation, shape: PathShape): PathShape {
   return shape.map((part) =>
     part.map((ref) => {
       const mapped = translation.miniToLiveFinal[unsigned(ref)];
