@@ -185,6 +185,7 @@ export function planReshapeSource(opts: {
 
   const mini = buildMiniDataset({ dataset, candidates, adapter });
 
+  let reshapedPolygon = false;
   let reshapedCount = 0;
   try {
     for (const [layerIndex, featureIds] of candidates) {
@@ -200,6 +201,7 @@ export function planReshapeSource(opts: {
           }
           if (!shape) continue;
           miniLayer.shapes![featureId] = shape;
+          reshapedPolygon = true;
           reshapedCount += 1;
         }
       } else {
@@ -221,6 +223,9 @@ export function planReshapeSource(opts: {
     throw error;
   }
   if (reshapedCount === 0) return null;
+  if (reshapedPolygon)
+    adapter.addIntersectionCuts(mini.dataset, { no_snap: true, rebuild_topology: true });
+
 
   const translation = translateMiniDataset({
     mini,

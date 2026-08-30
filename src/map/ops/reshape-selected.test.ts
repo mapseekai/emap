@@ -12,6 +12,21 @@ import { reshapeSelected } from './reshape-selected';
 
 const FIXTURE_NAME = 'reshape-selected.geojson';
 
+interface ReshapeStateSnapshot {
+  layers: unknown;
+  arcs: {
+    count: number;
+    ii: number[];
+    nn: number[];
+    xx: number[];
+    yy: number[];
+    zz: number[] | null;
+  };
+  referencedArcIds: number[];
+  selection: unknown;
+}
+
+
 async function importDataset(yOffset = 0): Promise<MapshaperDataset> {
   return getDefaultMapshaperAdapter().runImport(`-i "${FIXTURE_NAME}"`, {
     [FIXTURE_NAME]: JSON.stringify({
@@ -50,7 +65,19 @@ function exportCoordinates(dataset: MapshaperDataset): unknown[] {
   return collection.features.map((feature) => feature.geometry!.coordinates);
 }
 
-function snapshotState(dataset: MapshaperDataset, selection: Selection) {
+function referencedArcIds(dataset: MapshaperDataset): number[] {
+  const ids = new Set<number>();
+  for (const layer of dataset.layers) {
+    for (const shape of layer.shapes ?? []) {
+      if (!shape) continue;
+      for (const reference of (shape as number[][]).flat())
+        ids.add(reference < 0 ? ~reference : reference);
+    }
+  }
+  return [...ids].sort((left, right) => left - right);
+}
+
+function snapshotState(dataset: MapshaperDataset, selection: Selection): ReshapeStateSnapshot {
   const arcs = dataset.arcs!;
   const { ii, nn, xx, yy, zz } = arcs.getVertexData!();
   return {
@@ -69,8 +96,26 @@ function snapshotState(dataset: MapshaperDataset, selection: Selection) {
       yy: Array.from(yy),
       zz: zz ? Array.from(zz) : null,
     },
+    referencedArcIds: referencedArcIds(dataset),
     selection: structuredClone(selection.getAll()),
   };
+}
+
+function expectAppendOnlyArcGrowth(
+  prior: ReshapeStateSnapshot,
+  next: ReshapeStateSnapshot,
+): void {
+  expect(next.arcs.count).toBeGreaterThan(prior.arcs.count);
+  expect(next.arcs.ii.slice(0, prior.arcs.ii.length)).toEqual(prior.arcs.ii);
+  expect(next.arcs.nn.slice(0, prior.arcs.nn.length)).toEqual(prior.arcs.nn);
+  expect(next.arcs.xx.slice(0, prior.arcs.xx.length)).toEqual(prior.arcs.xx);
+  expect(next.arcs.yy.slice(0, prior.arcs.yy.length)).toEqual(prior.arcs.yy);
+  expect(next.arcs.zz?.slice(0, prior.arcs.zz?.length ?? 0) ?? null).toEqual(prior.arcs.zz);
+  expect(
+    prior.referencedArcIds.some(
+      (arcId) => arcId < prior.arcs.count && !next.referencedArcIds.includes(arcId),
+    ),
+  ).toBe(true);
 }
 
 async function createFixture(
@@ -249,42 +294,42 @@ describe('reshapeSelected', () => {
   it('keeps three direct reshapes as independent exact history stages', async () => {
     const refs = [{ source: 'source', layer: 'reshape-selected', id: 0 }];
     const fixture = await createFixture(refs);
-    const original = snapshotState(fixture.dataset(), fixture.ctx.host._selection);
-    const counts = [fixture.dataset().arcs!.size()];
-    const stages = [original];
+    const liveDataset = fixture.dataset();
+    const stages = [snapshotState(liveDataset, fixture.ctx.host._selection)];
 
     for (const y of [2, -2, 4]) {
+      const prior = stages.at(-1)!;
       await expect(
         reshapeSelected(fixture.ctx, { line: [[3, 0], [5, y], [7, 0]] }),
       ).resolves.toEqual({ ok: true, value: { reshapedCount: 1 } });
-      expect(fixture.dataset()).toBe(fixture.dataset());
-      expect(exportCoordinates(fixture.dataset())[0]).toEqual([
+      expect(fixture.dataset()).toBe(liveDataset);
+      expect(exportCoordinates(liveDataset)[0]).toEqual([
         [0, 0],
         [3, 0],
         [5, y],
         [7, 0],
         [10, 0],
       ]);
-      stages.push(snapshotState(fixture.dataset(), fixture.ctx.host._selection));
-      counts.push(fixture.dataset().arcs!.size());
+      const next = snapshotState(liveDataset, fixture.ctx.host._selection);
+      expectAppendOnlyArcGrowth(prior, next);
+      stages.push(next);
       expect(fixture.ctx.host._selection.getAll()).toEqual(refs);
     }
 
     expect(fixture.historyEntries()).toBe(3);
     expect(fixture.historyChanges()).toBe(3);
     expect(fixture.selectionChanges()).toBe(0);
-    expect(counts).toEqual([...counts].sort((a, b) => a - b));
 
     for (let index = 2; index >= 0; index--) {
       fixture.undo();
-      expect(snapshotState(fixture.dataset(), fixture.ctx.host._selection)).toEqual(stages[index]);
-      expect(fixture.dataset().arcs!.size()).toBe(counts[index]);
+      expect(fixture.dataset()).toBe(liveDataset);
+      expect(snapshotState(liveDataset, fixture.ctx.host._selection)).toEqual(stages[index]);
     }
 
     for (let index = 1; index <= 3; index++) {
       fixture.redo();
-      expect(snapshotState(fixture.dataset(), fixture.ctx.host._selection)).toEqual(stages[index]);
-      expect(fixture.dataset().arcs!.size()).toBe(counts[index]);
+      expect(fixture.dataset()).toBe(liveDataset);
+      expect(snapshotState(liveDataset, fixture.ctx.host._selection)).toEqual(stages[index]);
     }
   });
 

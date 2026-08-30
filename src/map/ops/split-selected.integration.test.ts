@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EditHistory } from '../../edit/edit-history';
 import { Transaction } from '../../edit/transaction';
+import { VertexMoveCommand } from '../../edit/commands/vertex-move';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import type { EmapHostInternal } from '../emap-host';
 import { MapshaperOps } from '../mapshaper-ops';
@@ -47,6 +48,52 @@ function unsignedArcId(signedArcId: number): number {
   return signedArcId < 0 ? -signedArcId - 1 : signedArcId;
 }
 
+interface ArcLifecycleSnapshot {
+  count: number;
+  ii: number[];
+  nn: number[];
+  xx: number[];
+  yy: number[];
+  zz: number[] | null;
+  referencedArcIds: number[];
+}
+
+function snapshotArcLifecycle(dataset: MapshaperDataset): ArcLifecycleSnapshot {
+  const arcs = dataset.arcs!;
+  const { ii, nn, xx, yy, zz } = arcs.getVertexData!();
+  const referenced = new Set<number>();
+  for (const layer of dataset.layers) {
+    for (const shape of layer.shapes ?? []) {
+      if (!shape) continue;
+      for (const reference of (shape as PathShape).flat())
+        referenced.add(unsignedArcId(reference));
+    }
+  }
+  return {
+    count: arcs.size(),
+    ii: Array.from(ii),
+    nn: Array.from(nn),
+    xx: Array.from(xx),
+    yy: Array.from(yy),
+    zz: zz ? Array.from(zz) : null,
+    referencedArcIds: [...referenced].sort((left, right) => left - right),
+  };
+}
+
+function expectAppendOnlyArcGrowth(prior: ArcLifecycleSnapshot, next: ArcLifecycleSnapshot): void {
+  expect(next.count).toBeGreaterThan(prior.count);
+  expect(next.ii.slice(0, prior.ii.length)).toEqual(prior.ii);
+  expect(next.nn.slice(0, prior.nn.length)).toEqual(prior.nn);
+  expect(next.xx.slice(0, prior.xx.length)).toEqual(prior.xx);
+  expect(next.yy.slice(0, prior.yy.length)).toEqual(prior.yy);
+  expect(next.zz?.slice(0, prior.zz?.length ?? 0) ?? null).toEqual(prior.zz);
+  expect(
+    prior.referencedArcIds.some(
+      (arcId) => arcId < prior.count && !next.referencedArcIds.includes(arcId),
+    ),
+  ).toBe(true);
+}
+
 function snapshotLiveGeometry(dataset: MapshaperDataset) {
   const arcs = dataset.arcs!;
   const { ii, nn, xx, yy, zz } = arcs.getVertexData!();
@@ -75,6 +122,10 @@ function snapshotSplitState(dataset: MapshaperDataset, selection: Selection) {
     geometry: snapshotLiveGeometry(dataset),
     selection: structuredClone(selection.getAll()),
   };
+}
+
+function hasComplementarySharedArc(left: PathShape, right: PathShape): boolean {
+  return left.flat().some((reference) => right.flat().includes(~reference));
 }
 
 interface SplitHarness {
@@ -253,9 +304,13 @@ describe('MapshaperOps.splitSelected integration', () => {
         const start = vertexData.ii[arcId]!;
         const length = vertexData.nn[arcId]!;
         return {
+          reference,
           arcId,
+          ii: vertexData.ii[arcId],
+          nn: vertexData.nn[arcId],
           xx: Array.from(vertexData.xx.slice(start, start + length)),
           yy: Array.from(vertexData.yy.slice(start, start + length)),
+          zz: vertexData.zz ? Array.from(vertexData.zz.slice(start, start + length)) : null,
         };
       });
 
@@ -274,13 +329,17 @@ describe('MapshaperOps.splitSelected integration', () => {
     expect(dataset.layers[0]!.shapes![1]).toEqual(unrelatedShape);
     const after = dataset.arcs!.getVertexData!();
     expect(
-      unrelatedArcBuffers.map(({ arcId }) => {
+      unrelatedArcBuffers.map(({ reference, arcId }) => {
         const start = after.ii[arcId]!;
         const length = after.nn[arcId]!;
         return {
+          reference,
           arcId,
+          ii: after.ii[arcId],
+          nn: after.nn[arcId],
           xx: Array.from(after.xx.slice(start, start + length)),
           yy: Array.from(after.yy.slice(start, start + length)),
+          zz: after.zz ? Array.from(after.zz.slice(start, start + length)) : null,
         };
       }),
     ).toEqual(unrelatedArcBuffers);
@@ -302,29 +361,29 @@ describe('MapshaperOps.splitSelected integration', () => {
     const history = new EditHistory();
     state.host._history = history;
     const stages = [snapshotSplitState(dataset, state.selection)];
-    const arcCounts = [dataset.arcs!.size()];
+    const arcStages = [snapshotArcLifecycle(dataset)];
 
     for (const x of [2, 6, 10]) {
+      const priorArcs = arcStages.at(-1)!;
       await expect(
         state.ops.splitSelected({ cutter: { type: 'point', coordinates: [x, 0] } }),
       ).resolves.toMatchObject({ ok: true, value: { splitTargetCount: 1 } });
       expect(state.source.getDataset()).toBe(dataset);
       stages.push(snapshotSplitState(dataset, state.selection));
-      arcCounts.push(dataset.arcs!.size());
-      expect(arcCounts.at(-1)!).toBeGreaterThanOrEqual(arcCounts.at(-2)!);
+      const nextArcs = snapshotArcLifecycle(dataset);
+      expectAppendOnlyArcGrowth(priorArcs, nextArcs);
+      arcStages.push(nextArcs);
     }
 
     expect(history.size()).toBe(3);
     for (let index = 2; index >= 0; index--) {
       history.undo();
       expect(snapshotSplitState(dataset, state.selection)).toEqual(stages[index]);
-      expect(dataset.arcs!.size()).toBe(arcCounts[index]);
     }
 
     for (let index = 1; index <= 3; index++) {
       history.redo();
       expect(snapshotSplitState(dataset, state.selection)).toEqual(stages[index]);
-      expect(dataset.arcs!.size()).toBe(arcCounts[index]);
     }
   });
 
@@ -757,6 +816,76 @@ describe('MapshaperOps.splitSelected integration', () => {
     expect(events.history).toHaveBeenCalledTimes(beforeHistoryEvents);
     expect(source.fire).toHaveBeenCalledTimes(beforeDataEvents);
   });
+  it('keeps an uncut adjacent boundary live while the reshaped polygon moves it', async () => {
+    const dataset = await importDataset([
+      polygon([[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]], { name: 'left' }),
+      polygon([[[10, 0], [20, 0], [20, 10], [10, 10], [10, 0]]], { name: 'right' }),
+    ]);
+    dataset.layers[0]!.name = 'split-selected';
+    const state = harness(dataset, [0]);
+    const before = snapshotSplitState(dataset, state.selection);
+    const beforeExport = exportFeatures(dataset).map((feature) => feature.geometry!.coordinates);
+    const shapes = dataset.layers[0]!.shapes as PathShape[];
+    expect(hasComplementarySharedArc(shapes[0]!, shapes[1]!)).toBe(true);
+
+    await expect(
+      state.ops.reshapeSelected({ line: [[10, 2], [5, 5], [0, 8]] }),
+    ).resolves.toMatchObject({ ok: true, value: { reshapedCount: 1 } });
+
+    const reshaped = snapshotSplitState(dataset, state.selection);
+    const reshapedExport = exportFeatures(dataset).map((feature) => feature.geometry!.coordinates);
+    expect(reshapedExport[0]).not.toEqual(beforeExport[0]);
+    expect(polygonArea(reshapedExport[1] as number[][][])).toBe(
+      polygonArea(beforeExport[1] as number[][][]),
+    );
+    const originalRightRing = (beforeExport[1] as number[][][])[0]!;
+    const nodedRightRing = (reshapedExport[1] as number[][][])[0]!;
+    for (const corner of originalRightRing) expect(nodedRightRing).toContainEqual(corner);
+    expect(
+      nodedRightRing.filter(
+        (point) => !originalRightRing.some((corner) => corner[0] === point[0] && corner[1] === point[1]),
+      ),
+    ).toEqual([[10, 2]]);
+    expect([
+      Math.min(...nodedRightRing.map(([x]) => x!)),
+      Math.min(...nodedRightRing.map(([, y]) => y!)),
+      Math.max(...nodedRightRing.map(([x]) => x!)),
+      Math.max(...nodedRightRing.map(([, y]) => y!)),
+    ]).toEqual([
+      Math.min(...originalRightRing.map(([x]) => x!)),
+      Math.min(...originalRightRing.map(([, y]) => y!)),
+      Math.max(...originalRightRing.map(([x]) => x!)),
+      Math.max(...originalRightRing.map(([, y]) => y!)),
+    ]);
+    const reshapedShapes = dataset.layers[0]!.shapes as PathShape[];
+    expect(hasComplementarySharedArc(reshapedShapes[0]!, reshapedShapes[1]!)).toBe(true);
+
+    const reshape = state.history.entries[0] as { undo(): void; do(): void };
+    reshape.undo();
+    expect(snapshotSplitState(dataset, state.selection)).toEqual(before);
+    reshape.do();
+    expect(snapshotSplitState(dataset, state.selection)).toEqual(reshaped);
+
+    const vertexIds = getDefaultMapshaperAdapter().findNearestVertices(
+      [10, 0],
+      reshapedShapes[0]!,
+      dataset.arcs!,
+    );
+    expect(vertexIds).not.toHaveLength(0);
+    const move = new VertexMoveCommand({
+      vertexIds,
+      from: [10, 0],
+      to: [11, 0],
+      arcs: dataset.arcs!,
+      source: state.source,
+    });
+    move.do();
+    const movedExport = exportFeatures(dataset).map((feature) => feature.geometry!.coordinates);
+    expect(movedExport[0]).not.toEqual(reshapedExport[0]);
+    expect(movedExport[1]).not.toEqual(reshapedExport[1]);
+    expect(hasComplementarySharedArc(reshapedShapes[0]!, reshapedShapes[1]!)).toBe(true);
+  });
+
   it('captures a direct reshape and split as one exact transaction, and rolls both back exactly', async () => {
     const original = await importDataset([
       line(
@@ -1166,7 +1295,12 @@ describe('MapshaperOps.splitSelected integration', () => {
         .map((reference) => unsignedArcId(reference as number))
         .filter((arcId) => arcId >= originalArcCount),
     );
-    expect(referencedNewArcIds.size).toBe(dataset.arcs!.size() - originalArcCount);
+    expect([...referencedNewArcIds].sort((left, right) => left - right)).toEqual(
+      Array.from(
+        { length: dataset.arcs!.size() - originalArcCount },
+        (_, index) => originalArcCount + index,
+      ),
+    );
 
     const [entry] = state.history.entries as Array<{ undo(): void }>;
     entry!.undo();
