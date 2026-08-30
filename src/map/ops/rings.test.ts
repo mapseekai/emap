@@ -1006,9 +1006,9 @@ it('barrier probe: direct → replacement → undo replacement restores captured
 
   realHistory.undo(); // undo replacement: re-attaches the exact pre-replace object
   expect(harness.source.getDataset()).toBe(liveBefore);
-  // Barrier semantics unchanged: the direct command below the placeholder is
-  // skipped, not replayed — the hole stays on the map. This pins CURRENT
-  // behavior; narrowing the barrier is Phase D (spec §16.6).
+  // Current global barrier semantics skip the direct command below the stale
+  // placeholder, so the hole stays on the map. MAP-182 tracks narrowing this
+  // barrier by source/identity where replacement can prove safety.
   realHistory.undo();
   expect(realHistory.snapshot().skippedStale).toBe(true);
   expect(exported(harness.source.getDataset()).coordinates).toHaveLength(2);

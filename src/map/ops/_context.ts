@@ -81,7 +81,7 @@ export interface PreparedDirectEdit<T> {
 /**
  * In-place edit runner: plans read-only against the LIVE dataset, then
  * commits the returned command (do → history push → publish). No dataset
- * copy, no replacement barrier. See DIRECT_GEOMETRY_EDIT_DESIGN.md §8.
+ * copy, no replacement barrier.
  */
 export type RunPreparedEditCommand = <T>(
   sourceId: string,
