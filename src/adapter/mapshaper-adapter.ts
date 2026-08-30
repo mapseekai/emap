@@ -216,6 +216,8 @@ export interface MapshaperAdapter {
    */
   truncateArcs?(arcs: ArcCollection, targetArcCount: number): void;
 
+  /** Create a standalone ArcCollection holding the supplied arcs (ids 0..n-1). */
+  createArcCollection(arcsToAppend: AppendedArc[]): ArcCollection;
 
   // -- Topology queries (used by VertexEditControl) ----------------------
 
@@ -748,6 +750,16 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
     arcs.updateVertexData!(newNn, newXx, newYy, newZz);
     arcs.setRetainedInterval?.(retained);
     return firstArcId;
+  }
+
+  createArcCollection(arcsToAppend: AppendedArc[]): ArcCollection {
+    const arcs = new mapshaper.internal.ArcCollection(
+      new Int32Array(0),
+      new Float64Array(0),
+      new Float64Array(0),
+    );
+    if (arcsToAppend.length > 0) this.appendArcs(arcs, arcsToAppend);
+    return arcs;
   }
 
   truncateArcs(arcs: ArcCollection, targetArcCount: number): void {

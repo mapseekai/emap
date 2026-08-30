@@ -174,6 +174,12 @@ declare module 'mapshaper' {
     // Direct dataset construction — used by the Arrow module
     // (GeoParquet / GeoArrow) to build datasets from coordinate buffers
     // without a GeoJSON intermediate.
+    ArcCollection: new (
+      nn: Int32Array,
+      xx: Float64Array,
+      yy: Float64Array,
+      zz?: Float64Array | null,
+    ) => ArcCollection;
     /** Streaming importer; the class mapshaper's own format readers feed. */
     PathImporter: new (
       opts: Record<string, unknown>,
