@@ -31,16 +31,15 @@ function isReshapeLine(value: unknown): value is Array<[number, number]> {
   );
 }
 
-function validatePolylineFeature(
-  layer: PathLayer,
-  featureId: number,
+/** Validate one polyline shape before passing it to legacy reshape geometry. */
+export function validatePolylineFeatureShape(
+  shape: PathShape | null | undefined,
   arcs: NonNullable<MapshaperDataset['arcs']>,
 ): void {
-  const shape = layer.shapes?.[featureId];
   if (!shape || shape.length === 0 || shape.some((part) => part.length === 0)) {
     throw new SplitGeometryValidationError('geometry', 'polyline geometry is invalid');
   }
-  for (const part of shape as PathShape) {
+  for (const part of shape) {
     for (const signedArcId of part) {
       const arcId = unsignedArcId(signedArcId);
       if (!Number.isSafeInteger(signedArcId) || arcId < 0 || arcId >= arcs.size()) {
@@ -58,6 +57,14 @@ function validatePolylineFeature(
         throw new SplitGeometryValidationError('geometry', 'polyline geometry is invalid');
     }
   }
+}
+
+function validatePolylineFeature(
+  layer: PathLayer,
+  featureId: number,
+  arcs: NonNullable<MapshaperDataset['arcs']>,
+): void {
+  validatePolylineFeatureShape(layer.shapes?.[featureId], arcs);
 }
 
 /**

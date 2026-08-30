@@ -4,6 +4,8 @@ import type { MapshaperDataset, PathShape } from '../../types/mapshaper-types';
 import { SplitGeometryValidationError } from './split-selected-error';
 
 const EPSILON = Number.EPSILON * 1024;
+/** Tolerance shared by reshape contact tests and conservative planner bounds. */
+export const CONTACT_EPSILON = EPSILON;
 
 export type Coordinate = readonly [number, number];
 
