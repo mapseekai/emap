@@ -383,6 +383,190 @@ describe('MapshaperOps.splitSelected integration', () => {
     }
   });
 
+  it('preserves hidden vertices when splitting simplified geometry', async () => {
+    const dataset = await importDataset([
+      line(
+        [
+          [0, 0],
+          [2, 0],
+          [4, 0],
+          [6, 0],
+          [8, 0],
+          [10, 0],
+        ],
+        { name: 'road' },
+      ),
+    ]);
+    dataset.layers[0]!.name = 'split-selected';
+    const adapter = getDefaultMapshaperAdapter();
+    await adapter.runOnDataset('-simplify 50%', dataset);
+    const retained = dataset.arcs!.getRetainedInterval!();
+    expect(retained).toBeGreaterThan(0);
+    expect(exportFeatures(dataset)[0]!.geometry!.coordinates).toEqual([
+      [0, 0],
+      [2, 0],
+      [6, 0],
+      [10, 0],
+    ]);
+    const state = harness(dataset, [0]);
+    const history = new EditHistory();
+    state.host._history = history;
+    const before = snapshotSplitState(dataset, state.selection);
+
+    await expect(
+      state.ops.splitSelected({ cutter: { type: 'point', coordinates: [5, 0] } }),
+    ).resolves.toMatchObject({ ok: true, value: { splitTargetCount: 1 } });
+
+    expect(exportFeatures(dataset).map((feature) => feature.geometry!.coordinates)).toEqual([
+      [
+        [5, 0],
+        [6, 0],
+        [10, 0],
+      ],
+      [
+        [0, 0],
+        [2, 0],
+        [5, 0],
+      ],
+    ]);
+    dataset.arcs!.setRetainedInterval!(0);
+    expect(exportFeatures(dataset).map((feature) => feature.geometry!.coordinates)).toEqual([
+      [
+        [5, 0],
+        [6, 0],
+        [10, 0],
+      ],
+      [
+        [0, 0],
+        [2, 0],
+        [5, 0],
+      ],
+    ]);
+    dataset.arcs!.setRetainedInterval!(retained);
+    expect(dataset.arcs!.getRetainedInterval!()).toBe(retained);
+    const after = snapshotSplitState(dataset, state.selection);
+
+    history.undo();
+    expect(snapshotSplitState(dataset, state.selection)).toEqual(before);
+    expect(dataset.arcs!.getRetainedInterval!()).toBe(retained);
+    history.redo();
+    expect(snapshotSplitState(dataset, state.selection)).toEqual(after);
+    expect(dataset.arcs!.getRetainedInterval!()).toBe(retained);
+  });
+
+  it('materializes simplified geometry before polyline-cutter intersection splitting', async () => {
+    const dataset = await importDataset([
+      line(
+        [
+          [0, 0],
+          [2, 0],
+          [4, 0],
+          [6, 0],
+          [8, 0],
+          [10, 0],
+        ],
+        { name: 'road' },
+      ),
+    ]);
+    dataset.layers[0]!.name = 'split-selected';
+    const adapter = getDefaultMapshaperAdapter();
+    await adapter.runOnDataset('-simplify 50%', dataset);
+    const retained = dataset.arcs!.getRetainedInterval!();
+    expect(retained).toBeGreaterThan(0);
+    const state = harness(dataset, [0]);
+
+    await expect(
+      state.ops.splitSelected({
+        cutter: {
+          type: 'polyline',
+          coordinates: [
+            [5, -1],
+            [5, 1],
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({ ok: true, value: { splitTargetCount: 1 } });
+
+    expect(dataset.arcs!.getRetainedInterval!()).toBe(retained);
+    dataset.arcs!.setRetainedInterval!(0);
+    expect(exportFeatures(dataset).map((feature) => feature.geometry!.coordinates)).toEqual([
+      [
+        [5, 0],
+        [6, 0],
+        [10, 0],
+      ],
+      [
+        [0, 0],
+        [2, 0],
+        [5, 0],
+      ],
+    ]);
+  });
+
+  it('keeps simplification state through polygon intersection splitting', async () => {
+    const dataset = await importDataset([
+      polygon(
+        [
+          [
+            [0, 0],
+            [2, 0],
+            [4, 0],
+            [6, 0],
+            [8, 0],
+            [10, 0],
+            [10, 2],
+            [10, 4],
+            [10, 6],
+            [10, 8],
+            [10, 10],
+            [8, 10],
+            [6, 10],
+            [4, 10],
+            [2, 10],
+            [0, 10],
+            [0, 8],
+            [0, 6],
+            [0, 4],
+            [0, 2],
+            [0, 0],
+          ],
+        ],
+        { name: 'parcel' },
+      ),
+    ]);
+    dataset.layers[0]!.name = 'split-selected';
+    const adapter = getDefaultMapshaperAdapter();
+    await adapter.runOnDataset('-simplify 50% keep-shapes', dataset);
+    const retained = dataset.arcs!.getRetainedInterval!();
+    const visibleBefore = exportFeatures(dataset)[0]!.geometry!.coordinates as number[][][];
+    expect(retained).toBeGreaterThan(0);
+    const state = harness(dataset, [0]);
+
+    await expect(
+      state.ops.splitSelected({
+        cutter: {
+          type: 'polyline',
+          coordinates: [
+            [5, -1],
+            [5, 11],
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({ ok: true, value: { splitTargetCount: 1 } });
+
+    expect(dataset.arcs!.getRetainedInterval!()).toBe(retained);
+    expect(dataset.arcs!.getVertexData!().zz).not.toBeNull();
+    dataset.arcs!.setRetainedInterval!(0);
+    const pieces = exportFeatures(dataset).map(
+      (feature) => feature.geometry!.coordinates as number[][][],
+    );
+    expect(pieces).toHaveLength(2);
+    expect(pieces.reduce((area, coordinates) => area + polygonArea(coordinates), 0)).toBeCloseTo(
+      polygonArea(visibleBefore),
+      10,
+    );
+  });
+
   it('rejects a queued direct split after an earlier direct split changed the live edit version', async () => {
     const dataset = await importDataset([
       line(

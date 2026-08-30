@@ -10,7 +10,7 @@ import type {
 } from '../../types/mapshaper-types';
 import { isPathLayer } from '../../types/mapshaper-types';
 import { CONTACT_EPSILON, normalizeConsecutiveCoordinates, type Coordinate } from './geometry-2d';
-import { buildMiniDataset } from './_mini-dataset';
+import { buildMiniDataset, materializeRetainedMiniArcs } from './_mini-dataset';
 import { translateMiniDataset } from './_mini-translate';
 import { reshapeSelectedPolylines } from './reshape-selected-line';
 import { reshapeSelectedPolygon } from './reshape-selected-polygon';
@@ -179,6 +179,7 @@ export function planReshapeSource(opts: {
   if (candidates.size === 0) return null;
 
   const mini = buildMiniDataset({ dataset, candidates, adapter });
+  materializeRetainedMiniArcs(mini);
 
   let reshapedPolygon = false;
   let reshapedCount = 0;

@@ -10,7 +10,7 @@ import { buildMiniDataset, type MiniDataset } from './_mini-dataset';
 import { translateMiniDataset, translateShapeFromMini } from './_mini-translate';
 
 function arcsFrom(pointsPerArc: [number, number][][]): ArcCollection {
-  return getDefaultMapshaperAdapter().createArcCollection(
+  return getDefaultMapshaperAdapter().createArcCollection!(
     pointsPerArc.map((pts) => ({
       xx: Float64Array.from(pts.map((p) => p[0])),
       yy: Float64Array.from(pts.map((p) => p[1])),
@@ -233,6 +233,43 @@ describe('translateMiniDataset', () => {
     expect(afterByFeature.get(0)).toEqual([[3, 4]]);
     expect(afterByFeature.get(1)).toEqual([[3, 4]]);
     expect(afterByFeature.get(2)).toEqual([[-5, -4]]);
+  });
+
+  it('does not reuse a live id for equal coordinates carried by a different post id', () => {
+    const arcs = arcsFrom([
+      [
+        [0, 0],
+        [1, 0],
+      ],
+    ]);
+    const layer: PathLayer = {
+      geometry_type: 'polyline',
+      shapes: [[[0]]] as PathShape[],
+    } as unknown as PathLayer;
+    const live = { arcs, layers: [layer] } as unknown as MapshaperDataset;
+    const mini = buildMiniDataset({
+      dataset: live,
+      candidates: new Map([[0, new Set([0])]]),
+      adapter,
+    });
+    adapter.appendArc(mini.arcs, [
+      [0, 0],
+      [1, 0],
+    ]);
+    (mini.dataset.layers[0] as PathLayer).shapes![0] = [[1]];
+    (mini.dataset.layers[mini.sentinelLayerIndex] as PathLayer).shapes![0] = [[1]];
+
+    const translation = translateMiniDataset({
+      mini,
+      liveDataset: live,
+      liveArcCount: live.arcs!.size(),
+      liveLayers: live.layers,
+    });
+
+    expect(translation).not.toBeNull();
+    expect(translation!.miniToLiveFinal).toEqual([undefined, 1]);
+    expect(translation!.appendedArcs).toHaveLength(1);
+    expect(translation!.shapePatches[0]?.after).toEqual([[1]]);
   });
 
   it('reuses the live id when dedup keeps the copied arc (positive singleton)', () => {

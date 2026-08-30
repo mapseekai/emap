@@ -1,4 +1,8 @@
-import type { AppendedArc, MapshaperAdapter } from '../../adapter/mapshaper-adapter';
+import {
+  createArcCollectionCompat,
+  type AppendedArc,
+  type MapshaperAdapter,
+} from '../../adapter/mapshaper-adapter';
 import type {
   ArcCollection,
   MapshaperDataset,
@@ -25,6 +29,22 @@ export interface MiniDataset {
   referencers: ReadonlyMap<number, readonly FeatureAt[]>;
   /** Index of the sentinel layer in dataset.layers (= live layers.length). */
   sentinelLayerIndex: number;
+}
+
+/**
+ * Materialize the currently retained geometry before legacy algorithms use
+ * visible-segment indexes as raw vertex indexes.
+ */
+export function materializeRetainedMiniArcs(mini: MiniDataset): void {
+  const retainedInterval = mini.arcs.getRetainedInterval?.() ?? 0;
+  if (retainedInterval <= 0) return;
+  const filteredArcs = mini.arcs.getFilteredCopy?.();
+  if (!filteredArcs) {
+    throw new Error('Direct geometry editing requires filtered ArcCollection copy support');
+  }
+  filteredArcs.setRetainedInterval?.(retainedInterval);
+  mini.arcs = filteredArcs;
+  mini.dataset.arcs = filteredArcs;
 }
 
 function unsigned(id: number): number {
@@ -94,7 +114,9 @@ export function buildMiniDataset(opts: {
     liveToMini.set(liveId, miniId);
     copies.push(snapshotLiveArc(liveArcs, liveId));
   });
-  const arcs = adapter.createArcCollection(copies);
+  const arcs = createArcCollectionCompat(adapter, copies);
+  const retainedInterval = liveArcs.getRetainedInterval?.();
+  if (retainedInterval !== undefined) arcs.setRetainedInterval?.(retainedInterval);
 
   const referencers = new Map<number, FeatureAt[]>();
   for (const liveId of sorted) referencers.set(liveId, []);

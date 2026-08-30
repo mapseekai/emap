@@ -27,7 +27,12 @@ function makeArcs(options?: { withZz?: boolean }) {
       }
       return { xx, yy, zz, nn, ii, bb: null };
     },
-    updateVertexData(newNn: Int32Array, newXx: Float64Array, newYy: Float64Array, newZz: Float64Array | null) {
+    updateVertexData(
+      newNn: Int32Array,
+      newXx: Float64Array,
+      newYy: Float64Array,
+      newZz: Float64Array | null,
+    ) {
       nn = newNn;
       xx = newXx;
       yy = newYy;
@@ -40,6 +45,46 @@ function makeArcs(options?: { withZz?: boolean }) {
     state: () => ({ nn, xx, yy, zz, retained }),
   };
 }
+
+describe('MapshaperAdapter.createArcCollection', () => {
+  const adapter = getDefaultMapshaperAdapter();
+
+  it('preserves supplied simplification thresholds and fills missing slices with Infinity', () => {
+    const arcs = adapter.createArcCollection!([
+      {
+        xx: new Float64Array([0, 1, 2]),
+        yy: new Float64Array([0, 1, 0]),
+        zz: new Float64Array([Infinity, 3, Infinity]),
+      },
+      {
+        xx: new Float64Array([2, 3]),
+        yy: new Float64Array([0, 0]),
+      },
+    ]);
+
+    expect(arcs.isFlat?.()).toBe(false);
+    expect(Array.from(arcs.getVertexData!().zz!)).toEqual([
+      Infinity,
+      3,
+      Infinity,
+      Infinity,
+      Infinity,
+    ]);
+  });
+
+  it('keeps threshold-free input flat', () => {
+    const arcs = adapter.createArcCollection!([
+      {
+        xx: new Float64Array([0, 1]),
+        yy: new Float64Array([0, 1]),
+        zz: null,
+      },
+    ]);
+
+    expect(arcs.isFlat?.()).toBe(true);
+    expect(arcs.getVertexData!().zz).toBeNull();
+  });
+});
 
 describe('MapshaperAdapter.appendArcs / truncateArcs', () => {
   it('appends multiple arcs in one call and returns the first new arc id', () => {
@@ -133,10 +178,9 @@ describe('MapshaperAdapter.appendArcs / truncateArcs', () => {
     expect(adapter.appendArc(arcs, [[2, 3]])).toBe(2);
 
     expect(appendArcs).toHaveBeenCalledOnce();
-    expect(appendArcs).toHaveBeenCalledWith(
-      arcs,
-      [{ xx: new Float64Array([2]), yy: new Float64Array([3]) }],
-    );
+    expect(appendArcs).toHaveBeenCalledWith(arcs, [
+      { xx: new Float64Array([2]), yy: new Float64Array([3]) },
+    ]);
   });
 
   it('delegates deleteLastArc to truncateArcs', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
+import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import type {
   ArcCollection,
   MapshaperDataset,
@@ -11,7 +11,7 @@ import { buildMiniDataset } from './_mini-dataset';
 // Fixtures build ArcCollection through the adapter — ops tests never import
 // mapshaper directly (AGENTS.md hard rule).
 function arcsFrom(pointsPerArc: [number, number][][]): ArcCollection {
-  return getDefaultMapshaperAdapter().createArcCollection(
+  return getDefaultMapshaperAdapter().createArcCollection!(
     pointsPerArc.map((pts) => ({
       xx: Float64Array.from(pts.map((p) => p[0])),
       yy: Float64Array.from(pts.map((p) => p[1])),
@@ -111,6 +111,52 @@ describe('buildMiniDataset', () => {
     const miniXx = mini.arcs.getVertexData().xx;
     expect(miniXx).not.toBe(liveXx);
     expect(Array.from(miniXx)).toEqual([0, 1]);
+  });
+
+  it('copies simplification thresholds and the retained interval', () => {
+    const arcs = arcsFrom([
+      [
+        [0, 0],
+        [1, 1],
+        [2, 0],
+      ],
+    ]);
+    const data = arcs.getVertexData!();
+    arcs.updateVertexData!(
+      data.nn.slice(),
+      data.xx.slice(),
+      data.yy.slice(),
+      new Float64Array([Infinity, 3, Infinity]),
+    );
+    arcs.setRetainedInterval!(5);
+    const layer = {
+      geometry_type: 'polyline',
+      shapes: [[[0]]],
+    } as unknown as PathLayer;
+    const live = { arcs, layers: [layer] } as unknown as MapshaperDataset;
+
+    const mini = buildMiniDataset({
+      dataset: live,
+      candidates: new Map([[0, new Set([0])]]),
+      adapter,
+    });
+
+    expect(Array.from(mini.arcs.getVertexData!().zz!)).toEqual([Infinity, 3, Infinity]);
+    expect(mini.arcs.getRetainedInterval!()).toBe(5);
+  });
+
+  it('supports a legacy adapter without the standalone collection capability', () => {
+    const legacyAdapter = Object.create(adapter) as MapshaperAdapter;
+    Object.defineProperty(legacyAdapter, 'createArcCollection', { value: undefined });
+
+    const mini = buildMiniDataset({
+      dataset: liveDataset(),
+      candidates: new Map([[0, new Set([2])]]),
+      adapter: legacyAdapter,
+    });
+
+    expect(mini.arcs.size()).toBe(1);
+    expect(mini.miniToLiveArc).toEqual([0]);
   });
 
   it('keeps legacy geometry functions away from the sentinel layer', () => {

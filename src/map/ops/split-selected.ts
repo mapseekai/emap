@@ -5,7 +5,7 @@ import type { MapshaperDataset, PathLayer, PathShape } from '../../types/mapshap
 import { isPathLayer } from '../../types/mapshaper-types';
 import { Err, type OpResult } from '../op-result';
 import type { SplitCutter, SplitSelectedOptions, SplitSelectedResult } from '../types';
-import { buildMiniDataset } from './_mini-dataset';
+import { buildMiniDataset, materializeRetainedMiniArcs } from './_mini-dataset';
 import { translateMiniDataset, translateShapeFromMini } from './_mini-translate';
 import { planSplitPieces } from './split-selected-geometry';
 import { SplitGeometryValidationError } from './split-selected-error';
@@ -159,6 +159,7 @@ export async function splitSelected(
           candidates: new Map([[liveLayerIndex, selectedIds]]),
           adapter,
         });
+        materializeRetainedMiniArcs(mini);
         let pieces;
         if (liveLayer.geometry_type === 'polygon') {
           if (cutter.type !== 'polyline') {

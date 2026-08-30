@@ -26,25 +26,6 @@ function flipRef(ref: number): number {
   return -ref - 1;
 }
 
-/** Forward coordinate equality (xy + zz-nullness + zz) between two arc snapshots. */
-function arcsEqualForward(a: AppendedArc, b: AppendedArc): boolean {
-  const n = a.xx.length;
-  if (n !== b.xx.length) return false;
-  for (let i = 0; i < n; i++) {
-    if (a.xx[i] !== b.xx[i] || a.yy[i] !== b.yy[i]) return false;
-  }
-  const az = a.zz ?? null;
-  const bz = b.zz ?? null;
-  if ((az === null) !== (bz === null)) return false;
-  if (az && bz) {
-    if (az.length !== bz.length) return false;
-    for (let i = 0; i < az.length; i++) {
-      if (az[i] !== bz[i]) return false;
-    }
-  }
-  return true;
-}
-
 function sameShape(a: PathShape, b: PathShape): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
@@ -66,8 +47,7 @@ export function translateMiniDataset(opts: {
   extraShapes?: readonly PathShape[];
 }): MiniTranslation | null {
   const { mini, liveDataset, liveArcCount, liveLayers, extraShapes } = opts;
-  const liveArcs = liveDataset.arcs;
-  if (!liveArcs) return null;
+  if (!liveDataset.arcs) return null;
   const sentinelLayer = mini.dataset.layers[mini.sentinelLayerIndex] as PathLayer;
   const sentinelShapes = sentinelLayer?.shapes;
   if (!sentinelShapes) return null;
@@ -121,11 +101,11 @@ export function translateMiniDataset(opts: {
     if (lineage.length !== 1 || lineage[0]! < 0) continue;
     const postId = unsigned(lineage[0]!);
     const liveId = mini.miniToLiveArc[k]!;
-    if (
-      ownerCount.get(postId) === 1 &&
-      arcsEqualForward(snapshotLiveArc(mini.arcs, postId), snapshotLiveArc(liveArcs, liveId))
-    )
-      miniToLiveFinal[postId] = liveId;
+    // Copied arcs start at ids 0..n-1 and runtime arcs only append. Reuse is
+    // therefore identity-safe only when the sentinel remains a positive,
+    // uniquely owned singleton at its original mini id. Equal coordinates at
+    // any other post id are geometry equality, never provenance.
+    if (ownerCount.get(postId) === 1 && postId === k) miniToLiveFinal[postId] = liveId;
   }
   const spliceableLineages = new Set<number>();
   for (let k = 0; k < mini.miniToLiveArc.length; k++) {

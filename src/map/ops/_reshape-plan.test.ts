@@ -16,7 +16,7 @@ const adapter = getDefaultMapshaperAdapter();
 type Point = [number, number];
 
 function arcsFrom(parts: Point[][]): ArcCollection {
-  return adapter.createArcCollection(
+  return adapter.createArcCollection!(
     parts.map((points) => ({
       xx: Float64Array.from(points.map(([x]) => x)),
       yy: Float64Array.from(points.map(([, y]) => y)),

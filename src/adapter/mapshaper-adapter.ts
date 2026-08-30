@@ -22,6 +22,7 @@
 
 import type {
   ArcCollection,
+  ArcVertexData,
   DataTable,
   MapshaperDataset,
   MapshaperLayer,
@@ -215,8 +216,12 @@ export interface MapshaperAdapter {
    */
   truncateArcs?(arcs: ArcCollection, targetArcCount: number): void;
 
-  /** Create a standalone ArcCollection holding the supplied arcs (ids 0..n-1). */
-  createArcCollection(arcsToAppend: AppendedArc[]): ArcCollection;
+  /**
+   * Optional standalone-collection factory. Legacy structural adapters can
+   * omit this; {@link createArcCollectionCompat} uses the canonical mapshaper
+   * constructor without routing through the injected process-wide adapter.
+   */
+  createArcCollection?(arcsToAppend: AppendedArc[]): ArcCollection;
 
   // -- Topology queries (used by VertexEditControl) ----------------------
 
@@ -671,6 +676,102 @@ export function resolveMapshaperCrsSignature(crs: string): string {
     .join(' ');
 }
 
+function createStandaloneArcCollection(arcsToAppend: AppendedArc[]): ArcCollection {
+  let pointCount = 0;
+  let hasThresholds = false;
+  for (let index = 0; index < arcsToAppend.length; index++) {
+    const arc = arcsToAppend[index]!;
+    if (arc.yy.length !== arc.xx.length || (arc.zz && arc.zz.length !== arc.xx.length)) {
+      throw new Error(
+        `appendArcs: arc at index ${index} has mismatched buffer lengths (xx=${arc.xx.length}, yy=${arc.yy.length}, zz=${arc.zz?.length ?? 'none'})`,
+      );
+    }
+    pointCount += arc.xx.length;
+    hasThresholds ||= arc.zz !== null && arc.zz !== undefined;
+  }
+
+  const nn = new Int32Array(arcsToAppend.length);
+  const xx = new Float64Array(pointCount);
+  const yy = new Float64Array(pointCount);
+  const zz = hasThresholds ? new Float64Array(pointCount).fill(Infinity) : null;
+  let cursor = 0;
+  for (let index = 0; index < arcsToAppend.length; index++) {
+    const arc = arcsToAppend[index]!;
+    nn[index] = arc.xx.length;
+    xx.set(arc.xx, cursor);
+    yy.set(arc.yy, cursor);
+    if (zz && arc.zz) zz.set(arc.zz, cursor);
+    cursor += arc.xx.length;
+  }
+  const arcs = new mapshaper.internal.ArcCollection(nn, xx, yy);
+  if (zz) arcs.setThresholds!(zz);
+  return arcs;
+}
+
+/**
+ * Restore simplification values after mapshaper divides known source arcs.
+ * The returned source-to-destination map proves arc lineage; coordinate checks
+ * only align vertices inside that lineage and never establish arc identity.
+ */
+function restoreCutPointThresholds(
+  arcs: ArcCollection,
+  before: ArcVertexData,
+  firstDestBySource: ArrayLike<number>,
+  retainedInterval: number,
+): void {
+  if (!before.zz) return;
+  const after = arcs.getVertexData!();
+  const thresholds = new Float64Array(after.xx.length).fill(Infinity);
+
+  for (let sourceArcId = 0; sourceArcId < firstDestBySource.length; sourceArcId++) {
+    const firstDestArcId = firstDestBySource[sourceArcId]!;
+    const destArcEnd =
+      sourceArcId + 1 < firstDestBySource.length
+        ? firstDestBySource[sourceArcId + 1]!
+        : after.nn.length;
+    let sourceVertexId = before.ii[sourceArcId]!;
+    const sourceVertexEnd = sourceVertexId + before.nn[sourceArcId]!;
+
+    for (let destArcId = firstDestArcId; destArcId < destArcEnd; destArcId++) {
+      const destStart = after.ii[destArcId]!;
+      const destLength = after.nn[destArcId]!;
+      for (let offset = 0; offset < destLength; offset++) {
+        // Every divided piece after the first repeats the inserted boundary.
+        if (destArcId > firstDestArcId && offset === 0) continue;
+        const destVertexId = destStart + offset;
+        if (
+          sourceVertexId < sourceVertexEnd &&
+          after.xx[destVertexId] === before.xx[sourceVertexId] &&
+          after.yy[destVertexId] === before.yy[sourceVertexId]
+        ) {
+          thresholds[destVertexId] = before.zz[sourceVertexId]!;
+          sourceVertexId++;
+        }
+      }
+    }
+
+    if (sourceVertexId !== sourceVertexEnd) {
+      throw new Error('insertCutPoints: could not preserve simplification thresholds');
+    }
+  }
+
+  arcs.setThresholds!(thresholds);
+  arcs.setRetainedInterval?.(retainedInterval);
+}
+
+/**
+ * Build an isolated ArcCollection while preserving compatibility with
+ * structural adapters created before the optional factory capability existed.
+ */
+export function createArcCollectionCompat(
+  adapter: MapshaperAdapter,
+  arcsToAppend: AppendedArc[],
+): ArcCollection {
+  return adapter.createArcCollection
+    ? adapter.createArcCollection(arcsToAppend)
+    : createStandaloneArcCollection(arcsToAppend);
+}
+
 export class DefaultMapshaperAdapter implements MapshaperAdapter {
   snapVertices(vertexIds: number[], to: [number, number], arcs: ArcCollection): void {
     mapshaper.internal.snapVerticesToPoint(vertexIds, to, arcs);
@@ -685,11 +786,15 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
   }
 
   appendEmptyArc(arcs: ArcCollection): void {
+    const retainedInterval = arcs.getRetainedInterval?.();
     mapshaper.internal.appendEmptyArc(arcs);
+    if (retainedInterval !== undefined) arcs.setRetainedInterval?.(retainedInterval);
   }
 
   appendVertex(arcs: ArcCollection, point: [number, number]): void {
+    const retainedInterval = arcs.getRetainedInterval?.();
     mapshaper.internal.appendVertex(arcs, point);
+    if (retainedInterval !== undefined) arcs.setRetainedInterval?.(retainedInterval);
   }
 
   appendArc(arcs: ArcCollection, points: readonly (readonly [number, number])[]): number {
@@ -752,13 +857,7 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
   }
 
   createArcCollection(arcsToAppend: AppendedArc[]): ArcCollection {
-    const arcs = new mapshaper.internal.ArcCollection(
-      new Int32Array(0),
-      new Float64Array(0),
-      new Float64Array(0),
-    );
-    if (arcsToAppend.length > 0) this.appendArcs(arcs, arcsToAppend);
-    return arcs;
+    return createStandaloneArcCollection(arcsToAppend);
   }
 
   truncateArcs(arcs: ArcCollection, targetArcCount: number): void {
@@ -821,7 +920,11 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
   }
 
   insertCutPoints(dataset: MapshaperDataset, points: ArcCutPoint[]): void {
-    const map = mapshaper.internal.insertCutPoints(points, dataset.arcs!);
+    const arcs = dataset.arcs!;
+    const before = arcs.getVertexData!();
+    const retainedInterval = arcs.getRetainedInterval?.() ?? 0;
+    const map = mapshaper.internal.insertCutPoints(points, arcs) as ArrayLike<number>;
+    restoreCutPointThresholds(arcs, before, map, retainedInterval);
     mapshaper.internal.remapDividedArcs(dataset, map);
   }
 

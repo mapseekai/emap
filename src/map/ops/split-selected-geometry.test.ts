@@ -7,7 +7,7 @@ import type { SplitPieces } from './split-selected-line';
 const adapter = getDefaultMapshaperAdapter();
 
 function arcsFrom(pointsPerArc: [number, number][][]): ArcCollection {
-  return adapter.createArcCollection(
+  return adapter.createArcCollection!(
     pointsPerArc.map((points) => ({
       xx: Float64Array.from(points.map(([x]) => x)),
       yy: Float64Array.from(points.map(([, y]) => y)),

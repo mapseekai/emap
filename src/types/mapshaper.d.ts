@@ -178,7 +178,6 @@ declare module 'mapshaper' {
       nn: Int32Array,
       xx: Float64Array,
       yy: Float64Array,
-      zz?: Float64Array | null,
     ) => ArcCollection;
     /** Streaming importer; the class mapshaper's own format readers feed. */
     PathImporter: new (

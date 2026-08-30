@@ -26,7 +26,13 @@ interface ReshapeStateSnapshot {
   selection: unknown;
 }
 
-async function importDataset(yOffset = 0): Promise<MapshaperDataset> {
+async function importDataset(
+  yOffset = 0,
+  selectedCoordinates: number[][] = [
+    [0, 0],
+    [10, 0],
+  ],
+): Promise<MapshaperDataset> {
   return getDefaultMapshaperAdapter().runImport(`-i "${FIXTURE_NAME}"`, {
     [FIXTURE_NAME]: JSON.stringify({
       type: 'FeatureCollection',
@@ -36,10 +42,7 @@ async function importDataset(yOffset = 0): Promise<MapshaperDataset> {
           properties: { name: 'selected' },
           geometry: {
             type: 'LineString',
-            coordinates: [
-              [0, yOffset],
-              [10, yOffset],
-            ],
+            coordinates: selectedCoordinates.map(([x, y]) => [x, y + yOffset]),
           },
         },
         {
@@ -116,8 +119,9 @@ function expectAppendOnlyArcGrowth(prior: ReshapeStateSnapshot, next: ReshapeSta
 
 async function createFixture(
   refs: FeatureRef[] = [{ source: 'source', layer: 'reshape-selected', id: 0 }],
+  selectedCoordinates?: number[][],
 ) {
-  let dataset = await importDataset();
+  let dataset = await importDataset(0, selectedCoordinates);
   let before: MapshaperDataset | undefined;
   const undone: EditCommand[] = [];
   const entries: EditCommand[] = [];
@@ -333,6 +337,60 @@ describe('reshapeSelected', () => {
       expect(fixture.dataset()).toBe(liveDataset);
       expect(snapshotState(liveDataset, fixture.ctx.host._selection)).toEqual(stages[index]);
     }
+  });
+
+  it('preserves simplification thresholds through direct reshape history', async () => {
+    const fixture = await createFixture(
+      [{ source: 'source', layer: 'reshape-selected', id: 0 }],
+      [
+        [0, 0],
+        [2, 0],
+        [4, 0],
+        [6, 0],
+        [8, 0],
+        [10, 0],
+      ],
+    );
+    const dataset = fixture.dataset();
+    const adapter = getDefaultMapshaperAdapter();
+    await adapter.runOnDataset('-simplify 50%', dataset);
+    const retained = dataset.arcs!.getRetainedInterval!();
+    const before = snapshotState(dataset, fixture.ctx.host._selection);
+    expect(retained).toBeGreaterThan(0);
+    expect(exportCoordinates(dataset)[0]).toEqual([
+      [0, 0],
+      [2, 0],
+      [6, 0],
+      [10, 0],
+    ]);
+
+    await expect(
+      reshapeSelected(fixture.ctx, {
+        line: [
+          [1, 0],
+          [5, 2],
+          [9, 0],
+        ],
+      }),
+    ).resolves.toEqual({ ok: true, value: { reshapedCount: 1 } });
+
+    expect(exportCoordinates(dataset)[0]).toEqual([
+      [0, 0],
+      [1, 0],
+      [5, 2],
+      [9, 0],
+      [10, 0],
+    ]);
+    expect(dataset.arcs!.getRetainedInterval!()).toBe(retained);
+    const after = snapshotState(dataset, fixture.ctx.host._selection);
+    expectAppendOnlyArcGrowth(before, after);
+
+    fixture.undo();
+    expect(snapshotState(dataset, fixture.ctx.host._selection)).toEqual(before);
+    expect(dataset.arcs!.getRetainedInterval!()).toBe(retained);
+    fixture.redo();
+    expect(snapshotState(dataset, fixture.ctx.host._selection)).toEqual(after);
+    expect(dataset.arcs!.getRetainedInterval!()).toBe(retained);
   });
 
   it('commits contacted sources as one entry and undoes/redoes both together', async () => {
