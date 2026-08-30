@@ -53,7 +53,8 @@ live dataset(只读规划)
 
 ### 3.1 切片规划器 `src/map/ops/_arc-slicer.ts`(纯函数)
 
-- 输入:live `ArcCollection` + 每弧切点集合。切点自带弧 id 与顶点位置(`collectLineContacts` 的 `targetSegments` 已计算 segment 的全局 `cutIndex`,`collectPointCutPoints` 同理)——legacy 将其压成 `{x,y,i}` 交给 mapshaper 重新定位,迁移后跳过该往返,直接使用已知位置。
+- 输入:live `ArcCollection` + 每弧切点集合。切点以**显式 provenance** 携带 `{ arcId, localSegmentIndex, point }`;亦接受 op 自有坐标数组(cutter)作为“虚拟弧”切片输入。
+  - **契约修正(评审核实)**:现有 `Contact` 只有 `{ point, targetDist, lineDist }`;`TargetSegment.cutIndex` 是 `ii[arcId] + localOffset` 的**扁平顶点索引**(`reshape-selected-line.ts:12-17,39-62,220-230`),legacy `ArcCutPoint.i` 即此索引。迁移时在 `TargetSegment` 构建处直接附加 `{ arcId, localSegmentIndex }`(构建循环本来就知道二者);反向引用(`signedArcId < 0`)在发射时换算回弧存储序的 local segment(现有 `points.length - index - 1` 换算逻辑不变),切片始终按存储序进行,方向由 shape 组合时的 signed piece id 表达。`collectPointCutPoints`、`properLineCutCoordinates`、`properCrossings` 同样扩展为显式 provenance 输出,不再依赖扁平索引反查。
 - 处理:每弧切点按顶点位置升序排序、去重(端点切点拒绝/规整与 legacy 一致);弧 i 的 k 个切点 → k+1 个 piece,每个 piece = 原弧坐标的切片(+插值切点);追加 id 按(弧 id 升序, 切点位置升序)确定分配。
 - zz 规则:原顶点继承原 zz 切片;插值切点 zz = Infinity(对齐现有 `appendArc` 行为)。
 - 输出:`{ pieces: AppendedArc[], pieceIdsBySourceArc: Map<number, number[]>, firstAppendedId }`。纯函数,无 dataset 依赖,独立单测。
@@ -99,12 +100,13 @@ reshape **不需要新命令类**:PathGeometryPatchCommand 天然适配(targets 
 
 - `collectPointCutPoints` 复用(已知弧 id + 位置)→ slicer → `partitionShape` 等价逻辑直接作用于 piece id 序列(闭 part 存储缝衔接规则保持)→ feature 追加语义复刻 `applySplitPieces`(最大块保留原 id、追加顺序、记录克隆、unsplit id 保留、resultFeatures 替换 selection)。
 
-### 4.3 split 线/面切割 — 子集草稿 + 翻译
+### 4.3 split 线/面切割 — 显式切分 + provenance 精确草稿
 
-- proper-crossing 分类(`properLineCutCoordinates` / `properCrossings`,纯几何)在 live 上跑。
-- noding + mosaic 在**子集草稿**执行:仅含选中 feature 的完整边界弧(含洞)+ cutter 弧;`addIntersectionCuts` / `buildPolygonMosaic` 现有代码原样复用;面切割面积守恒校验保持。
-- 翻译回 live 指令:草稿弧与某 live 弧字节等同且该弧未被切割 → 保留原 id;否则 → 追加(顺序 = 草稿弧索引序,确定性)。被切弧的所有引用方(含未选中邻居)统一 patch。
-- cutter 临时层只存在于草稿,永不触碰 live。
+- proper-crossing 分类(`properLineCutCoordinates` / `properCrossings`,纯几何)在 live 上跑;交点自带边界弧 id + 顶点位置与 cutter 参数位置。
+- **线切割无草稿**:slicer 直接在交点处切分目标弧(noding 的等价物),`partitionShape` 等价逻辑作用于 piece id 序列。`addIntersectionCuts` 不进入迁移后路径。
+- **面切割**:slicer 同样显式切分边界弧与 cutter 弧(cutter 为 op 自有坐标数组,按 cutter 参数位置切片);mosaic 草稿**仅由这些 piece + 未切边界弧的拷贝**组成,每条草稿弧按构造携带 `scratchArcId → liveArcId | cutter` provenance——**不做任何字节等同匹配**(坐标重复但拓扑身份不同的弧真实存在,字节匹配会错误合并身份)。
+- `buildPolygonMosaic` 原样运行于该草稿;tile 引用的弧经 provenance 直接翻译:未切弧 → 原 live id;一切派生 piece(含未被 crossing 命中但属于被切弧的分段)→ 一律追加。面切割面积守恒校验保持。
+- cutter 及其 piece 只存在于草稿与追加指令,永不触碰 live 已有弧。
 
 ### 4.4 唯一行为变更:删除 `cleanArcReferences`
 
@@ -150,8 +152,8 @@ reshape **不需要新命令类**:PathGeometryPatchCommand 天然适配(targets 
 | 风险 | 缓解 |
 |---|---|
 | mini-dataset id 双向翻译错误 | 进出各一次映射断言,失败即 OpResult failure(无副作用) |
-| 子集草稿遗漏 mosaic 上下文弧 | 现有面积守恒校验会抓住;子集包含选中 feature 全部边界弧(含洞) |
-| 切点位置自算与 mapshaper `insertCutPoints` 定位不一致 | slicer 单测对照 legacy 输出;op 级几何测试矩阵原样通过即证据 |
+| mosaic 草稿上下文弧遗漏 | 草稿仅由显式 provenance piece + 未切边界弧拷贝组成;现有面积守恒校验兜底 |
+| 切点位置自算与 mapshaper `insertCutPoints` / `addIntersectionCuts` 定位不一致 | slicer 单测对照 legacy 输出;op 级几何测试矩阵原样通过即证据 |
 | 邻居引用扫描遗漏(layer 遍历不全) | 扫描覆盖 source 全部 layers;联动证明测试 |
 | feature 追加后 FeatureQuery 索引失效遗漏 | §5 实现检查点;新增失效测试 |
 | 孤儿弧增长 | 已批准决策:导出副本压缩;live 单调增长属预期 |
