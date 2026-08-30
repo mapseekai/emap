@@ -218,7 +218,7 @@ export interface MapshaperAdapter {
 
   /**
    * Optional standalone-collection factory. Legacy structural adapters can
-   * omit this; {@link createArcCollectionCompat} uses the canonical mapshaper
+   * omit this; `createArcCollectionCompat` uses the canonical mapshaper
    * constructor without routing through the injected process-wide adapter.
    */
   createArcCollection?(arcsToAppend: AppendedArc[]): ArcCollection;
