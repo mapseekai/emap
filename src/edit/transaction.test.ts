@@ -348,7 +348,7 @@ describe('rollback with in-place (direct) commands', () => {
       expect(order).toEqual(['fails', 'succeeds']);
       expect(source.setDataset).toHaveBeenCalledWith(dataset);
       expect(errorSpy).toHaveBeenCalledOnce();
-      expect(errorSpy).toHaveBeenCalledWith(expect.any(String), failure);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('fails'), failure);
     } finally {
       errorSpy.mockRestore();
     }
