@@ -58,10 +58,8 @@ export function validatePolylineFeatureShape(
 
 /**
  * Reshape every path feature contacted by a user-drawn line, QGIS-style: no
- * selection is required. All polygon features whose boundary the line enters
- * and leaves, and all polyline features with at least two contacts, are
- * reshaped. Sources are scanned in registry order; each contacted source is
- * committed as its own undo step.
+ * selection is required. Every eligible source is planned before a single
+ * composite command commits the contacted sources.
  */
 export async function reshapeSelected(
   ctx: OpContext,
@@ -71,39 +69,36 @@ export async function reshapeSelected(
   if (!isReshapeLine(line)) return Err.validation('line', 'line coordinates are invalid');
   const normalizedLine = normalizeConsecutiveCoordinates(line as Coordinate[]);
   const adapter = getDefaultMapshaperAdapter();
-  let reshapedCount = 0;
-  for (const [sourceId, source] of ctx.host._sources) {
-    const dataset = source.getDataset();
-    if (!dataset?.arcs) continue;
-    const result = await ctx.runPreparedEditCommand(
-      sourceId,
-      'Reshape features',
-      (planned, mutableSource) => {
-        if (planned !== dataset) return Err.staleOperation(sourceId, 'Reshape features');
-        const plan = planReshapeSource({
-          source: mutableSource,
-          sourceId,
-          dataset: planned,
-          line: normalizedLine,
-          adapter,
-          selection: ctx.host._selection,
-          publishSelection: (diff) => ctx.host._fireSelectionChange(diff),
-        });
-        if (plan === null) return Err.validation('line', 'did not reshape any feature');
-        if (plan === 'invalid') return Err.validation('geometry', 'path geometry is invalid');
-        return {
-          value: { reshapedCount: plan.reshapedCount },
-          affectedSourceIds: [sourceId],
-          command: plan.command,
-        };
-      },
-    );
-    if (result.ok) {
-      reshapedCount += result.value.reshapedCount;
-      continue;
-    }
-    if (result.error.kind !== 'validation') return result;
-  }
-  if (reshapedCount === 0) return Err.validation('line', 'did not reshape any feature');
-  return okValue({ reshapedCount });
+  const sourceIds = [...ctx.host._sources]
+    .filter(([, source]) => !!source.getDataset()?.arcs)
+    .map(([sourceId]) => sourceId);
+  const result = await ctx.runPreparedEditCommandMany(
+    sourceIds,
+    (values: readonly ReshapeSelectedResult[]) => {
+      const reshapedCount = values.reduce((total, value) => total + value.reshapedCount, 0);
+      return `Reshape ${reshapedCount} feature${reshapedCount === 1 ? '' : 's'}`;
+    },
+    (sourceId, dataset, source) => {
+      const plan = planReshapeSource({
+        source,
+        sourceId,
+        dataset,
+        line: normalizedLine,
+        adapter,
+        selection: ctx.host._selection,
+        publishSelection: (diff) => ctx.host._fireSelectionChange(diff),
+      });
+      if (plan === null || plan === 'invalid') return null;
+      return {
+        value: { reshapedCount: plan.reshapedCount },
+        affectedSourceIds: [sourceId],
+        command: plan.command,
+      };
+    },
+  );
+  if (!result.ok) return result;
+  const reshapedCount = result.value.reduce((total, value) => total + value.reshapedCount, 0);
+  return reshapedCount === 0
+    ? Err.validation('line', 'did not reshape any feature')
+    : okValue({ reshapedCount });
 }

@@ -7,7 +7,7 @@ import { Selection } from '../selection';
 import type { FeatureRef } from '../types';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import type { OpContext } from './_context';
-import { _runPreparedEditCommand } from './_runner';
+import { _runPreparedEditCommand, _runPreparedEditCommandMany } from './_runner';
 import { reshapeSelected } from './reshape-selected';
 
 const FIXTURE_NAME = 'reshape-selected.geojson';
@@ -103,6 +103,8 @@ async function createFixture(
     },
     runPreparedEditCommand: (sourceId, label, plan) =>
       _runPreparedEditCommand(host, sourceId, label, plan),
+    runPreparedEditCommandMany: (sourceIds, label, plan) =>
+      _runPreparedEditCommandMany(host, sourceIds, label, plan),
   };
   return {
     ctx,
@@ -124,6 +126,7 @@ async function createFixture(
 
 async function createMultiSourceFixture(aOffset = 0, bOffset = 0) {
   const aDataset = await importDataset(aOffset);
+  let lastUndone: EditCommand | undefined;
   const bDataset = await importDataset(bOffset);
   const entries: EditCommand[] = [];
   const selection = new Selection();
@@ -180,6 +183,8 @@ async function createMultiSourceFixture(aOffset = 0, bOffset = 0) {
     runPreparedDatasetMutation: async <T>(): Promise<OpResult<T>> => okValue(undefined as T),
     runPreparedEditCommand: (sourceId, label, plan) =>
       _runPreparedEditCommand(host, sourceId, label, plan),
+    runPreparedEditCommandMany: (sourceIds, label, plan) =>
+      _runPreparedEditCommandMany(host, sourceIds, label, plan),
   };
   return {
     ctx,
@@ -189,10 +194,17 @@ async function createMultiSourceFixture(aOffset = 0, bOffset = 0) {
     selectionChanges: () => selectionChange.mock.calls.length,
     undo: () => {
       const command = entries.pop();
-      if (command) {
-        command.undo();
-        command.publish?.();
-      }
+      if (!command) return;
+      command.undo();
+      command.publish?.();
+      lastUndone = command;
+    },
+    redo: () => {
+      if (!lastUndone) return;
+      lastUndone.do();
+      lastUndone.publish?.();
+      entries.push(lastUndone);
+      lastUndone = undefined;
     },
   };
 }
@@ -256,7 +268,7 @@ describe('reshapeSelected', () => {
     expect(fixture.ctx.host._selection.getAll()).toEqual(refs);
   });
 
-  it('commits contacted sources independently and undoes them in registry LIFO order', async () => {
+  it('commits contacted sources as one entry and undoes/redoes both together', async () => {
     const fixture = await createMultiSourceFixture();
     const beforeA = exportCoordinates(fixture.dataset('a'));
     const beforeB = exportCoordinates(fixture.dataset('b'));
@@ -281,19 +293,18 @@ describe('reshapeSelected', () => {
     ).resolves.toEqual({ ok: true, value: { reshapedCount: 2 } });
     expect(exportCoordinates(fixture.dataset('a'))).toEqual(reshaped);
     expect(exportCoordinates(fixture.dataset('b'))).toEqual(reshaped);
-    expect(fixture.historyEntries()).toBe(2);
-    expect(fixture.historyChanges()).toBe(2);
+    expect(fixture.historyEntries()).toBe(1);
+    expect(fixture.historyChanges()).toBe(1);
     expect(fixture.selectionChanges()).toBe(0);
-
-    fixture.undo();
-    expect(exportCoordinates(fixture.dataset('a'))).toEqual(reshaped);
-    expect(exportCoordinates(fixture.dataset('b'))).toEqual(beforeB);
-    expect(fixture.dataset('b').arcs!.size()).toBe(originalArcCountB);
 
     fixture.undo();
     expect(exportCoordinates(fixture.dataset('a'))).toEqual(beforeA);
     expect(fixture.dataset('a').arcs!.size()).toBe(originalArcCountA);
     expect(exportCoordinates(fixture.dataset('b'))).toEqual(beforeB);
+    expect(fixture.dataset('b').arcs!.size()).toBe(originalArcCountB);
+    fixture.redo();
+    expect(exportCoordinates(fixture.dataset('a'))).toEqual(reshaped);
+    expect(exportCoordinates(fixture.dataset('b'))).toEqual(reshaped);
   });
 
   it('continues after an earlier source has no contact', async () => {
@@ -421,9 +432,9 @@ describe('reshapeSelected', () => {
   it('rejects a reshape whose prepared edit version becomes stale', async () => {
     const fixture = await createFixture();
     const before = exportCoordinates(fixture.dataset());
-    fixture.ctx.runPreparedEditCommand = <T>(sourceId, label, plan) =>
-      _runPreparedEditCommand(fixture.host, sourceId, label, (planned, source) => {
-        const outcome = plan(planned, source);
+    fixture.ctx.runPreparedEditCommandMany = <T>(sourceIds, label, plan) =>
+      _runPreparedEditCommandMany(fixture.host, sourceIds, label, (sourceId, planned, source) => {
+        const outcome = plan(sourceId, planned, source);
         planned.editVersion = (planned.editVersion ?? 0) + 1;
         return outcome;
       });

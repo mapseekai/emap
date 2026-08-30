@@ -93,6 +93,20 @@ export type RunPreparedEditCommand = <T>(
 ) => Promise<OpResult<T>>;
 
 /**
+ * Atomic multi-source in-place edit runner. It plans every unique source
+ * before executing any command, then records one composite history command.
+ */
+export type RunPreparedEditCommandMany = <T>(
+  sourceIds: readonly string[],
+  label: string | ((values: readonly T[]) => string),
+  plan: (
+    sourceId: string,
+    dataset: MapshaperDataset,
+    source: MutableTopologySource,
+  ) => PreparedDirectEdit<T> | OpResult<T> | null,
+) => Promise<OpResult<T[]>>;
+
+/**
  * Everything an op function needs from the host. Intentionally narrow —
  * adding new fields here is a deliberate signal that the op surface is
  * growing.
@@ -109,4 +123,6 @@ export interface OpContext {
   /** Prepared mutation runner that installs an explicit final selection. */
   runPreparedDatasetMutation: RunPreparedDatasetMutation;
   runPreparedEditCommand: RunPreparedEditCommand;
+  /** Atomic multi-source prepared edit runner; see {@link RunPreparedEditCommandMany}. */
+  runPreparedEditCommandMany: RunPreparedEditCommandMany;
 }

@@ -14,8 +14,10 @@
 // `workerjobstart` / `workerjobend` events around the round-trip.
 // Buffer transfer (PR-12) lives here too via `collectTransferables`.
 
+import { CompositeCommand } from '../../edit/commands/composite';
 import { DatasetReplaceCommand } from '../../edit/commands/dataset-replace';
 import { DatasetReplaceSelectionCommand } from '../../edit/commands/dataset-replace-selection';
+import type { EditCommand } from '../../edit/edit-command';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import type { EmapHostInternal } from '../emap-host';
 import type { MutableTopologySource } from '../../source/source';
@@ -171,29 +173,51 @@ type DatasetCommandRequest =
 
 const operationQueues = new WeakMap<EmapHostInternal, Map<string, Promise<void>>>();
 
-function enqueueSourceOperation<T>(
+function uniqueSourceIds(sourceIds: readonly string[]): string[] {
+  return [...new Set(sourceIds)];
+}
+
+/**
+ * Serializes operations that touch a common source while allowing independent
+ * source sets to proceed. Registering one shared gate for the whole set
+ * before awaiting predecessors avoids lock-order deadlocks.
+ */
+export function enqueueMultiSourceOperation<T>(
   host: EmapHostInternal,
-  sourceId: string,
+  sourceIds: readonly string[],
   run: () => Promise<T>,
 ): Promise<T> {
+  const ids = uniqueSourceIds(sourceIds);
+  if (ids.length === 0) return Promise.resolve().then(run);
+
   let queues = operationQueues.get(host);
   if (!queues) {
     queues = new Map();
     operationQueues.set(host, queues);
   }
-  const previous = queues.get(sourceId) ?? Promise.resolve();
+  const predecessors = ids.map((sourceId) => queues.get(sourceId) ?? Promise.resolve());
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
-  queues.set(sourceId, gate);
-  return previous
-    .catch(() => undefined)
+  for (const sourceId of ids) queues.set(sourceId, gate);
+
+  return Promise.all(predecessors.map((predecessor) => predecessor.catch(() => undefined)))
     .then(run)
     .finally(() => {
       release();
-      if (queues?.get(sourceId) === gate) queues.delete(sourceId);
+      for (const sourceId of ids) {
+        if (queues?.get(sourceId) === gate) queues.delete(sourceId);
+      }
     });
+}
+
+function enqueueSourceOperation<T>(
+  host: EmapHostInternal,
+  sourceId: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  return enqueueMultiSourceOperation(host, [sourceId], run);
 }
 
 export function _runDatasetCommand(
@@ -383,6 +407,131 @@ export function _runPreparedEditCommand<T>(
     (command as { publish?: () => void }).publish?.();
     if (!host._history.isCapturing()) host._fireHistoryChange();
     return okValue(planned.value);
+  });
+  transaction?._trackOperation(operation);
+  return operation;
+}
+
+/**
+ * A CompositeCommand that leaves no child effect behind when a later child
+ * fails. The inherited publish()/undo() retain normal composite semantics;
+ * overriding do() also makes history redo atomic.
+ */
+class AtomicCompositeCommand extends CompositeCommand {
+  constructor(
+    private readonly atomicChildren: readonly EditCommand[],
+    label: string,
+  ) {
+    super(atomicChildren, label);
+  }
+
+  override do(): void {
+    let completed = 0;
+    try {
+      for (; completed < this.atomicChildren.length; completed += 1) {
+        this.atomicChildren[completed]!.do();
+      }
+    } catch (error) {
+      try {
+        this.atomicChildren[completed]?.undo();
+      } catch {
+        // Keep unwinding already-completed children even if this child had
+        // a partial effect and cannot restore itself.
+      }
+      for (let index = completed - 1; index >= 0; index -= 1) {
+        try {
+          this.atomicChildren[index]!.undo();
+        } catch {
+          // Best effort; retain the original command failure for reporting.
+        }
+      }
+      throw error;
+    }
+  }
+}
+
+export function _runPreparedEditCommandMany<T>(
+  host: EmapHostInternal,
+  sourceIds: readonly string[],
+  label: string | ((values: readonly T[]) => string),
+  plan: (
+    sourceId: string,
+    dataset: MapshaperDataset,
+    source: MutableTopologySource,
+  ) => PreparedDirectEdit<T> | OpResult<T> | null,
+): Promise<OpResult<T[]>> {
+  const ids = uniqueSourceIds(sourceIds);
+  const transaction = host._activeTransaction ?? null;
+  const operation = enqueueMultiSourceOperation(host, ids, async () => {
+    if (host._removed) return Err.hostRemoved();
+    const targets: Array<{
+      sourceId: string;
+      source: MutableTopologySource;
+      dataset: MapshaperDataset;
+      editVersion: number;
+    }> = [];
+    for (const sourceId of ids) {
+      const source = host._sources.get(sourceId);
+      if (!source) return Err.notFound('source', sourceId);
+      const dataset = source.getDataset();
+      if (!dataset) return Err.notFound('source', sourceId);
+      targets.push({ sourceId, source, dataset, editVersion: dataset.editVersion ?? 0 });
+    }
+
+    const planned: PreparedDirectEdit<T>[] = [];
+    try {
+      for (const target of targets) {
+        const outcome = plan(target.sourceId, target.dataset, target.source);
+        if (outcome === null) continue;
+        if ('ok' in outcome) {
+          return outcome.ok ? okValue([outcome.value]) : outcome;
+        }
+        planned.push(outcome);
+      }
+    } catch (error) {
+      if (host._removed) return Err.hostRemoved();
+      host.fire('error', { error });
+      return Err.mapshaper(error, {
+        operation: typeof label === 'string' ? label : 'prepared multi-source edit',
+      });
+    }
+
+    if (host._removed) return Err.hostRemoved();
+    for (const target of targets) {
+      if (
+        host._sources.get(target.sourceId) !== target.source ||
+        target.source.getDataset() !== target.dataset ||
+        (target.dataset.editVersion ?? 0) !== target.editVersion ||
+        host._activeTransaction !== transaction ||
+        (transaction !== null && !transaction.isOpen)
+      ) {
+        return Err.staleOperation(
+          target.sourceId,
+          typeof label === 'string' ? label : 'prepared multi-source edit',
+        );
+      }
+    }
+
+    for (const target of targets) transaction?._captureFirstTouch(target.sourceId, target.dataset);
+    const values = planned.map((outcome) => outcome.value);
+    const command = new AtomicCompositeCommand(
+      planned.map((outcome) => outcome.command),
+      typeof label === 'string' ? label : label(values),
+    );
+    try {
+      command.do();
+    } catch (error) {
+      if (host._removed) return Err.hostRemoved();
+      host.fire('error', { error });
+      return Err.mapshaper(error, {
+        operation: typeof label === 'string' ? label : 'prepared multi-source edit',
+      });
+    }
+
+    host._history.push(command);
+    command.publish();
+    if (!host._history.isCapturing()) host._fireHistoryChange();
+    return okValue(values);
   });
   transaction?._trackOperation(operation);
   return operation;

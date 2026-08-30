@@ -5,7 +5,13 @@ import { DatasetReplaceSelectionCommand } from '../../edit/commands/dataset-repl
 import { EditHistory } from '../../edit/edit-history';
 import { Selection } from '../selection';
 import { Err } from '../op-result';
-import { _runPreparedDatasetMutation, _runPreparedEditCommand, inferEffect } from './_runner';
+import {
+  _runPreparedDatasetMutation,
+  _runPreparedEditCommand,
+  _runPreparedEditCommandMany,
+  enqueueMultiSourceOperation,
+  inferEffect,
+} from './_runner';
 import * as runnerModule from './_runner';
 
 describe('inferEffect (PR-10)', () => {
@@ -366,5 +372,112 @@ describe('_runPreparedEditCommand', () => {
     expect(host._history.endCapture()).toEqual([command]);
     expect(host._fireHistoryChange).not.toHaveBeenCalled();
     expect(host._activeTransaction._captureFirstTouch).toHaveBeenCalledWith('s', dataset);
+  });
+});
+
+describe('multi-source direct edit runner', () => {
+  function makeHost(sources: Map<string, unknown>) {
+    return {
+      _removed: false,
+      _sources: sources,
+      _selection: new Selection(),
+      _history: new EditHistory(),
+      _activeTransaction: null,
+      _scheduleRender: vi.fn(),
+      _fireHistoryChange: vi.fn(),
+      _fireSelectionChange: vi.fn(),
+      _invalidateShapeCachesForSources: vi.fn(),
+      _clearSpatialIndexesForSources: vi.fn(),
+      fire: vi.fn(),
+    } as any;
+  }
+
+  it('serializes intersecting source sets without blocking a disjoint operation', async () => {
+    const host = makeHost(new Map());
+    const releaseFirst = Promise.withResolvers<void>();
+    const startedFirst = Promise.withResolvers<void>();
+    const events: string[] = [];
+    const first = enqueueMultiSourceOperation(host, ['a', 'b'], async () => {
+      events.push('first:start');
+      startedFirst.resolve();
+      await releaseFirst.promise;
+      events.push('first:end');
+    });
+    await startedFirst.promise;
+    const overlapping = enqueueMultiSourceOperation(host, ['b', 'c'], async () => {
+      events.push('overlap:start');
+    });
+    const disjoint = enqueueMultiSourceOperation(host, ['d'], async () => {
+      events.push('disjoint:start');
+    });
+
+    await disjoint;
+    expect(events).toEqual(['first:start', 'disjoint:start']);
+    releaseFirst.resolve();
+    await Promise.all([first, overlapping]);
+    expect(events).toEqual(['first:start', 'disjoint:start', 'first:end', 'overlap:start']);
+  });
+
+  it('checks every unique source after planning before any child command runs', async () => {
+    const datasetA: any = { layers: [], arcs: null, editVersion: 0 };
+    const datasetB = { layers: [], arcs: null, editVersion: 0 };
+    const commandA = { do: vi.fn(), undo: vi.fn() };
+    const commandB = { do: vi.fn(), undo: vi.fn() };
+    const host = makeHost(
+      new Map([
+        ['a', { getDataset: () => datasetA }],
+        ['b', { getDataset: () => datasetB }],
+      ]),
+    );
+    const plannedIds: string[] = [];
+
+    const result = await _runPreparedEditCommandMany(host, ['a', 'b', 'a'], 'Reshape', (sourceId) => {
+      plannedIds.push(sourceId);
+      if (sourceId === 'b') datasetA.editVersion += 1;
+      return {
+        value: sourceId,
+        command: sourceId === 'a' ? commandA : commandB,
+        affectedSourceIds: [sourceId],
+      };
+    });
+
+    expect(plannedIds).toEqual(['a', 'b']);
+    expect(result).toMatchObject({ ok: false, error: { kind: 'stale-operation' } });
+    expect(commandA.do).not.toHaveBeenCalled();
+    expect(commandB.do).not.toHaveBeenCalled();
+    expect(host._history.size()).toBe(0);
+  });
+
+  it('restores completed children even when the failing child cannot undo', async () => {
+    const datasetA = { layers: [], arcs: null };
+    const datasetB = { layers: [], arcs: null };
+    const commandA = { do: vi.fn(), undo: vi.fn(), publish: vi.fn() };
+    const commandB = {
+      do: vi.fn(() => {
+        throw new Error('boom');
+      }),
+      undo: vi.fn(() => {
+        throw new Error('never ran');
+      }),
+      publish: vi.fn(),
+    };
+    const host = makeHost(
+      new Map([
+        ['a', { getDataset: () => datasetA }],
+        ['b', { getDataset: () => datasetB }],
+      ]),
+    );
+
+    const result = await _runPreparedEditCommandMany(host, ['a', 'b'], 'Reshape', (sourceId) => ({
+      value: sourceId,
+      command: sourceId === 'a' ? commandA : commandB,
+      affectedSourceIds: [sourceId],
+    }));
+
+    expect(result).toMatchObject({ ok: false, error: { kind: 'mapshaper' } });
+    expect(commandA.undo).toHaveBeenCalledTimes(1);
+    expect(commandB.undo).toHaveBeenCalledTimes(1);
+    expect(host._history.size()).toBe(0);
+    expect(host._fireHistoryChange).not.toHaveBeenCalled();
   });
 });
