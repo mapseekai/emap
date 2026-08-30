@@ -95,26 +95,6 @@ export function translateMiniDataset(opts: {
     miniToLiveFinal[postId] = liveArcCount + appendedArcs.length;
     appendedArcs.push(snapshotLiveArc(mini.arcs, postId));
   };
-  for (let k = 0; k < lineages.length; k++) {
-    const lineage = lineages[k]!;
-    for (const ref of lineage) {
-      const postId = unsigned(ref);
-      if (miniToLiveFinal[postId] !== undefined) continue;
-      if (ownerCount.get(postId) === 1 && lineage.length === 1 && ref >= 0) {
-        const liveId = mini.miniToLiveArc[k]!;
-        if (
-          arcsEqualForward(
-            snapshotLiveArc(mini.arcs, postId),
-            snapshotLiveArc(liveArcs, liveId),
-          )
-        ) {
-          miniToLiveFinal[postId] = liveId;
-          continue;
-        }
-      }
-      assignAppend(postId);
-    }
-  }
 
   const referenced = new Set<number>();
   const collectRefs = (shape: PathShape): boolean => {
@@ -136,7 +116,31 @@ export function translateMiniDataset(opts: {
   for (const shape of extraShapes ?? []) {
     if (!collectRefs(shape)) return null;
   }
-  const pending = [...referenced]
+  for (let k = 0; k < lineages.length; k++) {
+    const lineage = lineages[k]!;
+    if (lineage.length !== 1 || lineage[0]! < 0) continue;
+    const postId = unsigned(lineage[0]!);
+    const liveId = mini.miniToLiveArc[k]!;
+    if (
+      ownerCount.get(postId) === 1 &&
+      arcsEqualForward(snapshotLiveArc(mini.arcs, postId), snapshotLiveArc(liveArcs, liveId))
+    )
+      miniToLiveFinal[postId] = liveId;
+  }
+  const spliceableLineages = new Set<number>();
+  for (let k = 0; k < mini.miniToLiveArc.length; k++) {
+    const liveId = mini.miniToLiveArc[k]!;
+    if (
+      (mini.referencers.get(liveId) ?? []).some(
+        (at) => !mini.candidates.get(at.layerIndex)?.has(at.featureId),
+      )
+    )
+      spliceableLineages.add(k);
+  }
+  const required = new Set(referenced);
+  for (const k of spliceableLineages)
+    for (const ref of lineages[k]!) required.add(unsigned(ref));
+  const pending = [...required]
     .filter((postId) => miniToLiveFinal[postId] === undefined)
     .sort((a, b) => a - b);
   for (const postId of pending) assignAppend(postId);
@@ -167,18 +171,20 @@ export function translateMiniDataset(opts: {
     }
   }
 
-  const translatedLineages = lineages.map((lineage) =>
-    lineage.map((ref) => {
+  const translatedLineages = lineages.map((lineage, k) => {
+    if (!spliceableLineages.has(k)) return undefined;
+    return lineage.map((ref) => {
       const mapped = miniToLiveFinal[unsigned(ref)];
       if (mapped === undefined) throw new Error(`unmappable lineage ref ${ref}`);
       return ref < 0 ? flipRef(mapped) : mapped;
-    }),
-  );
+    });
+  });
   const spliceByFeature = new Map<
     string,
     { layerIndex: number; featureId: number; after: PathShape }
   >();
   for (let k = 0; k < mini.miniToLiveArc.length; k++) {
+    if (!spliceableLineages.has(k)) continue;
     const liveId = mini.miniToLiveArc[k]!;
     const seq = translatedLineages[k]!;
     if (seq.length === 1 && seq[0] === liveId) continue;

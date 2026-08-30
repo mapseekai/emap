@@ -137,6 +137,34 @@ describe('translateMiniDataset', () => {
     expect(byFeature.has(2)).toBe(false);
   });
 
+  it('leaves unreferenced split lineage pieces unmapped when no neighbor needs splicing', () => {
+    const arcs = arcsFrom([[[0, 0], [2, 0]]]);
+    const layer: PathLayer = {
+      geometry_type: 'polyline',
+      shapes: [[[0]]] as PathShape[],
+    } as unknown as PathLayer;
+    const live = { arcs, layers: [layer] } as unknown as MapshaperDataset;
+    const mini = buildMiniDataset({
+      dataset: live,
+      candidates: new Map([[0, new Set([0])]]),
+      adapter,
+    });
+    adapter.insertCutPoints(mini.dataset, [{ x: 1, y: 0, i: 0 }]);
+    (mini.dataset.layers[0] as PathLayer).shapes![0] = [[0]];
+
+    const translation = translateMiniDataset({
+      mini,
+      liveDataset: live,
+      liveArcCount: live.arcs!.size(),
+      liveLayers: live.layers,
+    });
+
+    expect(translation).not.toBeNull();
+    expect(translation!.appendedArcs).toHaveLength(1);
+    expect(translation!.miniToLiveFinal).toEqual([1, undefined]);
+    expect(translation!.shapePatches[0]?.after).toEqual([[1]]);
+  });
+
   it('merges deduped arcs into ONE appended arc per post id (signs preserved)', () => {
     const arcs = arcsFrom([
       [[0, 0], [1, 0]],

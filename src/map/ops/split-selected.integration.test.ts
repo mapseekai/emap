@@ -822,6 +822,7 @@ describe('MapshaperOps.splitSelected integration', () => {
       polygon([[[10, 0], [20, 0], [20, 10], [10, 10], [10, 0]]], { name: 'right' }),
     ]);
     dataset.layers[0]!.name = 'split-selected';
+    const originalArcCount = dataset.arcs!.size();
     const state = harness(dataset, [0]);
     const before = snapshotSplitState(dataset, state.selection);
     const beforeExport = exportFeatures(dataset).map((feature) => feature.geometry!.coordinates);
@@ -859,6 +860,18 @@ describe('MapshaperOps.splitSelected integration', () => {
     ]);
     const reshapedShapes = dataset.layers[0]!.shapes as PathShape[];
     expect(hasComplementarySharedArc(reshapedShapes[0]!, reshapedShapes[1]!)).toBe(true);
+    const referencedNewArcIds = new Set(
+      reshapedShapes
+        .flat(2)
+        .map((reference) => unsignedArcId(reference as number))
+        .filter((arcId) => arcId >= originalArcCount),
+    );
+    expect([...referencedNewArcIds].sort((left, right) => left - right)).toEqual(
+      Array.from(
+        { length: dataset.arcs!.size() - originalArcCount },
+        (_, index) => originalArcCount + index,
+      ),
+    );
 
     const reshape = state.history.entries[0] as { undo(): void; do(): void };
     reshape.undo();
@@ -871,7 +884,12 @@ describe('MapshaperOps.splitSelected integration', () => {
       reshapedShapes[0]!,
       dataset.arcs!,
     );
-    expect(vertexIds).not.toHaveLength(0);
+    const vertexData = dataset.arcs!.getVertexData!();
+    const expectedVertexIds: number[] = [];
+    for (let index = 0; index < vertexData.xx.length; index++) {
+      if (vertexData.xx[index] === 10 && vertexData.yy[index] === 0) expectedVertexIds.push(index);
+    }
+    expect([...vertexIds].sort((left, right) => left - right)).toEqual(expectedVertexIds);
     const move = new VertexMoveCommand({
       vertexIds,
       from: [10, 0],
@@ -879,11 +897,17 @@ describe('MapshaperOps.splitSelected integration', () => {
       arcs: dataset.arcs!,
       source: state.source,
     });
+    const beforeMove = snapshotLiveGeometry(dataset);
     move.do();
+    const afterMove = snapshotLiveGeometry(dataset);
     const movedExport = exportFeatures(dataset).map((feature) => feature.geometry!.coordinates);
     expect(movedExport[0]).not.toEqual(reshapedExport[0]);
     expect(movedExport[1]).not.toEqual(reshapedExport[1]);
     expect(hasComplementarySharedArc(reshapedShapes[0]!, reshapedShapes[1]!)).toBe(true);
+    move.undo();
+    expect(snapshotLiveGeometry(dataset)).toEqual(beforeMove);
+    move.do();
+    expect(snapshotLiveGeometry(dataset)).toEqual(afterMove);
   });
 
   it('captures a direct reshape and split as one exact transaction, and rolls both back exactly', async () => {
