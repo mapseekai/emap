@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Ring/part editing ops (`addRing`, `deleteRing`, `addPart`, `deletePart`) now commit in-place reversible commands instead of whole-dataset replacement: consecutive local edits support multi-level undo/redo, no per-op dataset clone, and deleting a ring/part no longer compacts the arc collection. MSX snapshot export serializes a compacted copy so orphan arcs never bloat the file.
+- `map.ops.reshapeSelected()` and `map.ops.splitSelected()` now use reversible in-place commands: they preserve the live dataset identity, support multi-level undo/redo, and avoid cloning the dataset for each operation.
 
 ### Fixed
 

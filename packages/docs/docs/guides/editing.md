@@ -3,7 +3,7 @@ id: editing
 slug: /guides/editing
 title: 编辑
 api: ["AffineMatrix","AppendedArc","BulkFeatureDeleteCommand","BulkFeatureDeleteCommandOptions","composeMatrix","CompositeCommand","DatasetReplaceCommand","DatasetReplaceCommandOptions","EditCommand","EditHistory","EditHistoryOptions","Emap","FeatureAffineCommand","FeatureAffineCommandOptions","FeatureCreateCommand","FeatureDeleteCommand","FeatureDeleteCommandOptions","FeaturePropertyChangeCommand","FeaturePropertyChangeCommandOptions","FeatureTranslateCommand","FeatureTranslateCommandOptions","FieldAddCommand","FieldAddCommandOptions","FieldRemoveCommand","FieldRemoveCommandOptions","FieldRenameCommand","FieldRenameCommandOptions","HistoryStateSnapshot","IDENTITY_MATRIX","invertMatrix","planSharedArcSplit","planSharedNodeSplit","rotateMatrix","scaleMatrix","SplitSharedArcsCommand","SplitSharedArcsCommandOptions","SplitSharedArcsRemap","SplitSharedNodeCommand","SplitSharedNodePlan","TopologySource.fromBytes","Transaction","TranslatedPointFeature","VertexDeleteCommand","VertexInsertCommand","VertexMoveCommand","AddPartOptions","AddRingOptions","DeletePartOptions","DeleteRingOptions","PartEditHandler","PartEditOptions","ReshapeFeatureHandler","ReshapeFeatureOptions","ReshapeSelectedOptions","ReshapeSelectedResult","RingEditHandler","RingEditOptions"]
-examples: ["attribute-editing","china-editing","draw-snap-clear","draw-snap-edge","export-roundtrip","feature-rotate-scale","feature-translate","rebuild-topology","reshape-ring-part","snapshot","transaction","undo-redo","vertex-editing"]
+examples: ["attribute-editing","china-editing","draw-snap-clear","draw-snap-edge","export-roundtrip","feature-rotate-scale","feature-translate","rebuild-topology","reshape-ring-part","snapshot","split-features","transaction","undo-redo","vertex-editing"]
 stability: stable
 verifiedVersion: 0.8.0
 ---
@@ -76,6 +76,9 @@ map.addControl(new DrawFeatureControl(), 'top-left');
 `map.ops.reshapeSelected()`。与 QGIS 一致，无需先选择：整形线会作用于它接触到的
 每一个线和面要素（面需要线进入并离开边界，线需要至少两个接触点）。
 
+整形直接在当前 dataset 中增量写入可逆命令，不会为每次操作复制 dataset。每次完成的整形
+都是独立历史项，可用多级撤销和重做恢复。
+
 ```ts
 const result = await map.ops.reshapeSelected({
   line: [
@@ -98,6 +101,31 @@ map.reshapeFeature.enable();
 `{ kind, field, reason }`：草图至少要有两个有限坐标且不能只重复同一点（`line`）；没有
 整形任何要素时同样以 `line` 报错。面整形还会拒绝自交或无效的结果（`geometry`）。并发修改
 使预备 mutation 过期时为 `{ kind: 'stale-operation', sourceId, operation }`，没有 `field`。
+
+## 拆分
+
+`splitFeature` 把交互式 cutter 提交给 `map.ops.splitSelected()`。先在同一 source 和 layer
+中选择要素：线要素可用点或折线 cutter，面要素使用折线 cutter。拆分后保留原要素并追加
+其余结果，属性会随各个结果复制，选择会更新为拆分结果。
+
+```ts
+const result = await map.ops.splitSelected({
+  cutter: { type: 'point', coordinates: [116.39, 39.90] },
+});
+
+if (!result.ok) showError(result.error);
+else console.log(result.value.resultFeatures);
+
+map.splitFeature.setOptions({ cutterType: 'polyline', snapThreshold: 12 });
+map.splitFeature.enable();
+```
+
+点 cutter 在线内部单击完成；折线 cutter 左键放置顶点、右键完成，Esc 放弃草图。
+`splitFeature` 进入 `'split'` 编辑模式。
+
+整形和拆分在活跃编辑会话中采用 append-only 的 arc 存储；撤销时才截回追加的尾部。因此，
+中间或孤立 arc 可能暂时保留在 live dataset 中。导出会压缩一个副本，不会改变 live
+历史或状态。
 
 ## 顶点批量操作
 
@@ -308,6 +336,7 @@ map.on('validationfailed', ({ results, label }) => {
 - [综合编辑](/mapseekai/emap/examples/china-editing/)
 - [顶点编辑](/mapseekai/emap/examples/vertex-editing/)
 - [整形、批量顶点、洞和 part 编辑](/mapseekai/emap/examples/reshape-ring-part/)
+- [拆分要素](/mapseekai/emap/examples/split-features/)
 - [要素平移](/mapseekai/emap/examples/feature-translate/)
 - [旋转与缩放](/mapseekai/emap/examples/feature-rotate-scale/)
 - [事务](/mapseekai/emap/examples/transaction/)

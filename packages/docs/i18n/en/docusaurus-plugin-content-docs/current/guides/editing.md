@@ -3,7 +3,7 @@ id: editing
 slug: /guides/editing
 title: Editing
 api: ["AffineMatrix","AppendedArc","BulkFeatureDeleteCommand","BulkFeatureDeleteCommandOptions","composeMatrix","CompositeCommand","DatasetReplaceCommand","DatasetReplaceCommandOptions","EditCommand","EditHistory","EditHistoryOptions","Emap","FeatureAffineCommand","FeatureAffineCommandOptions","FeatureCreateCommand","FeatureDeleteCommand","FeatureDeleteCommandOptions","FeaturePropertyChangeCommand","FeaturePropertyChangeCommandOptions","FeatureTranslateCommand","FeatureTranslateCommandOptions","FieldAddCommand","FieldAddCommandOptions","FieldRemoveCommand","FieldRemoveCommandOptions","FieldRenameCommand","FieldRenameCommandOptions","HistoryStateSnapshot","IDENTITY_MATRIX","invertMatrix","planSharedArcSplit","planSharedNodeSplit","rotateMatrix","scaleMatrix","SplitSharedArcsCommand","SplitSharedArcsCommandOptions","SplitSharedArcsRemap","SplitSharedNodeCommand","SplitSharedNodePlan","TopologySource.fromBytes","Transaction","TranslatedPointFeature","VertexDeleteCommand","VertexInsertCommand","VertexMoveCommand","AddPartOptions","AddRingOptions","DeletePartOptions","DeleteRingOptions","PartEditHandler","PartEditOptions","ReshapeFeatureHandler","ReshapeFeatureOptions","ReshapeSelectedOptions","ReshapeSelectedResult","RingEditHandler","RingEditOptions"]
-examples: ["attribute-editing","china-editing","draw-snap-clear","draw-snap-edge","export-roundtrip","feature-rotate-scale","feature-translate","rebuild-topology","reshape-ring-part","snapshot","transaction","undo-redo","vertex-editing"]
+examples: ["attribute-editing","china-editing","draw-snap-clear","draw-snap-edge","export-roundtrip","feature-rotate-scale","feature-translate","rebuild-topology","reshape-ring-part","snapshot","split-features","transaction","undo-redo","vertex-editing"]
 stability: stable
 verifiedVersion: 0.8.0
 ---
@@ -79,6 +79,10 @@ selection is required: the line reshapes every line and polygon feature it
 contacts (a polygon needs the line to enter and leave its boundary, a
 polyline needs at least two contacts).
 
+Reshape writes a reversible command incrementally into the current dataset; it
+does not clone the dataset for each operation. Each completed reshape is an
+independent history entry and supports multi-level undo and redo.
+
 ```ts
 const result = await map.ops.reshapeSelected({
   line: [
@@ -106,6 +110,35 @@ a sketch that reshapes nothing also fails with `line`. Polygon reshapes
 reject self-intersecting or invalid results (`geometry`). A prepared mutation
 made stale by a concurrent edit has shape
 `{ kind: 'stale-operation', sourceId, operation }`, without `field`.
+
+## Split
+
+`splitFeature` submits an interactive cutter to `map.ops.splitSelected()`.
+First select features in one source and layer: line features accept point or
+polyline cutters, while polygon features use polyline cutters. A split keeps
+the original feature, appends the remaining results, copies attributes to
+every result, and selects the split results.
+
+```ts
+const result = await map.ops.splitSelected({
+  cutter: { type: 'point', coordinates: [116.39, 39.90] },
+});
+
+if (!result.ok) showError(result.error);
+else console.log(result.value.resultFeatures);
+
+map.splitFeature.setOptions({ cutterType: 'polyline', snapThreshold: 12 });
+map.splitFeature.enable();
+```
+
+Click inside a line for a point cutter. For a polyline cutter, left-click to
+place vertices, right-click to finish, and press Esc to discard the sketch.
+`splitFeature` enters `'split'` edit mode.
+
+Reshape and split use append-only arc storage during a live editing session;
+undo truncates only the appended tail. Intermediate or orphan arcs can
+therefore remain in the live dataset temporarily. Export compacts a copy and
+does not mutate live history or state.
 
 ## Batch vertex operations
 
@@ -328,6 +361,7 @@ The application chooses whether to warn, continue, or invoke undo.
 - [Editing overview](/mapseekai/emap/examples/china-editing/)
 - [Vertex editing](/mapseekai/emap/examples/vertex-editing/)
 - [Reshape, batch vertex, ring, and part editing](/mapseekai/emap/examples/reshape-ring-part/)
+- [Split features](/mapseekai/emap/examples/split-features/)
 - [Feature translation](/mapseekai/emap/examples/feature-translate/)
 - [Rotate and scale](/mapseekai/emap/examples/feature-rotate-scale/)
 - [Transactions](/mapseekai/emap/examples/transaction/)
