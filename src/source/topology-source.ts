@@ -765,10 +765,11 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
       }
       // mapshaper's `.msx` snapshot format is special-cased: exportFileContent
       // does not handle it, so we go through the Pack pipeline directly.
-      // MSX packs the raw arc table; `compact: true` only gzip-compresses
-      // vertex buffers and does NOT drop orphan arcs left behind by direct
-      // edits. Serialize a compacted copy so history lifetime never forces
-      // live-dataset arc compaction (which would invalidate captured ids).
+      // MSX packs the raw arc table; `compact: true` gzip-compresses vertex
+      // buffers and bakes simplification thresholds via `flattenArcs`, but does
+      // NOT drop orphan arcs left behind by direct edits. Serialize a compacted
+      // copy so history lifetime never forces live-dataset arc compaction
+      // (which would invalidate captured ids).
       const adapter = this._adapter;
       let files;
       if (options.format === 'msx') {
