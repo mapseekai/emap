@@ -71,7 +71,7 @@ mini 上跑完 legacy 函数后,把产出翻译为 live 指令:
 
 - **弧映射**:按 mini 弧 id 升序扫描。mini 弧 j 携 provenance live 弧 i 且与构建时拷贝**逐槽位坐标一致**(未被 `insertCutPoints` 分裂/未被 noding 改动)→ 复用 live id i;否则(被分裂的基弧与派生 piece、新追加的替换/cutter 弧)→ 分配 live 追加 id,顺序 = mini id 升序,确定性。逐槽位对比是 1:1 provenance 校验,不是跨弧身份推断,无合并风险(满足评审意见一)。
 - **shape 翻译**:legacy 产出的 after-shape(mini id)经弧映射翻回 live id;与 live before 比对,不同则生成 `PathShapePatch`。signed 方向在 mini 内已被 legacy 正确处理,翻译仅做无符号 id 映射 + 符号保持。
-- **邻居 patch**:live 侧扫描全部 layer 的 shape,凡引用"被分裂 live 弧"且不在候选集内的 feature,生成仅替换该引用为 piece 序列的 patch(signed 序列,方向保持)。这保证拓扑联动:未切割共享段在目标与邻居间仍是同一批弧 id。
+- **共享者收录(邻居 patch 的实现机制)**:候选集在构建 mini 前扩="几何候选 ∪ 与候选共享任一弧的 feature"(live 侧一次 arc→features 扫描)。共享者以完整 feature(全部弧 + 翻译 shape)进入 mini,但不传给几何函数(不参与 reshape/split 判定);mini 内的 `insertCutPoints`/`remapDividedArcs` 会顺带把它们的 shape 重写到正确 piece 序列——翻译器对 mini 内**所有在场 shape** 统一做"翻译 + 与 live 比对,diff 即 patch",目标与邻居一套机制,无需单独的邻居替换逻辑,也无需事后重建 piece 顺序。这保证拓扑联动:未切割共享段在目标与邻居间仍是同一批弧 id。
 - **断言**:任何 mini id 无映射或映射冲突 → 规划失败返回 OpResult failure,无副作用(满足评审意见二的"显式 provenance"诉求:provenance 由构建期拷贝关系携带,不经扁平索引反推)。
 
 ### 3.3 `SplitFeaturesCommand`(`src/edit/commands/split-features.ts`,新命令类)
@@ -163,7 +163,7 @@ reshape **不需要新命令类**:PathGeometryPatchCommand 天然适配(targets 
 | mini id ↔ live id 翻译错误 | 翻译器双向断言,失败即 OpResult failure(无副作用);构建/翻译单测 |
 | mini 缺上下文弧(面切割 mosaic、面 reshape 的洞分组) | 候选集按整个 feature(含洞与多 part)收录;面积守恒等现有校验兜底 |
 | bbox 预筛误排接触 feature | margin 外扩 + 预筛开/关等价测试;几何测试矩阵原样通过 |
-| 邻居引用扫描遗漏(layer 遍历不全) | 扫描覆盖 source 全部 layers;联动证明测试 |
+| 共享者收录遗漏(arc→features 索引不全) | 索引构建覆盖 source 全部 path layers;联动证明测试(reshape 后顶点编辑共享段,邻居跟随) |
 | feature 追加后 FeatureQuery 索引失效遗漏 | §5 实现检查点;新增失效测试 |
 | 孤儿弧增长 | 已批准决策:导出副本压缩;live 单调增长属预期 |
 | mini 上 legacy 函数的内部 append/deleteLastArc 序列产生非确定性最终弧表 | 最终弧表只含保留弧且连续(rollback 截断到 feature 起点,`reshape-selected-line.ts:444-446`);翻译按最终 mini id 升序分配,确定性 |
