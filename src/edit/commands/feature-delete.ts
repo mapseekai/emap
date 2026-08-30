@@ -36,8 +36,15 @@ export interface FeatureDeleteCommandOptions {
  */
 export class FeatureDeleteCommand implements EditCommand {
   readonly label = 'Delete feature';
+  private readonly opts: FeatureDeleteCommandOptions;
 
-  constructor(private readonly opts: FeatureDeleteCommandOptions) {}
+  constructor(opts: FeatureDeleteCommandOptions) {
+    this.opts = {
+      ...opts,
+      shape: cloneFeatureShape(opts.shape),
+      record: opts.record ? { ...opts.record } : opts.record,
+    };
+  }
 
   do(): void {
     const { layer, featureId } = this.opts;
@@ -56,6 +63,11 @@ export class FeatureDeleteCommand implements EditCommand {
       records?.splice(featureId, 0, record);
     }
   }
+}
+
+function cloneFeatureShape(shape: FeatureShape | null): FeatureShape | null {
+  if (!shape) return shape;
+  return shape.map((part) => (Array.isArray(part) ? part.slice() : part)) as FeatureShape;
 }
 
 export interface BulkFeatureDeleteCommandOptions {

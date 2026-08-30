@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Selection } from '../../map/selection';
+import type { MapshaperLayer } from '../../types/mapshaper-types';
 import {
   BulkFeatureDeleteCommand,
   FeatureDeleteCommand,
@@ -39,7 +40,7 @@ describe('FeatureDeleteCommand', () => {
       record: originalRecord,
     });
     cmd.undo();
-    expect(layer.shapes[1]).toBe(originalShape);
+    expect(layer.shapes[1]).toEqual(originalShape);
     expect(records[1]).toEqual({ a: 1 });
   });
 
@@ -59,6 +60,30 @@ describe('FeatureDeleteCommand', () => {
     cmd.undo();
     expect(layer.shapes).toEqual([['s0'], ['s1'], ['s2']]);
     expect(records).toEqual([{ a: 0 }, { a: 1 }, { a: 2 }]);
+  });
+
+  it('owns shape and record snapshots when callers mutate them after construction', () => {
+    const originalShape: [number, number][] = [[0, 1]];
+    const originalRecord: Record<string, unknown> = { a: 1 };
+    const records = [originalRecord];
+    const layer = {
+      shapes: [originalShape],
+      data: { getRecords: () => records },
+    };
+    const cmd = new FeatureDeleteCommand({
+      layer: layer as unknown as MapshaperLayer,
+      featureId: 0,
+      shape: originalShape,
+      record: originalRecord,
+    });
+    originalShape[0]![0] = 999;
+    originalRecord.a = 999;
+
+    cmd.do();
+    cmd.undo();
+
+    expect(layer.shapes).toEqual([[[0, 1]]]);
+    expect(records).toEqual([{ a: 1 }]);
   });
 
   it('layers without a data table are handled', () => {
