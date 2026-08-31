@@ -5,7 +5,7 @@ title: Undo and redo
 api: ["Emap"]
 examples: ["attribute-editing","undo-redo"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # Undo and redo

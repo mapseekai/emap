@@ -617,7 +617,7 @@ export const examples: readonly ExampleDefinition[] = [
     '几何转点',
     'Geometry to points',
     [docsSourceLayer, docsOperations, docsFileUpload],
-    'Emap.ops.pointsLayer',
+    'PointsOptions',
     task7Fixture,
     'A polygon or line layer is converted into a point layer using the selected extraction mode.',
   ),

@@ -97,8 +97,7 @@
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-        // is ready), then addSource (order-independent) + setExtent.
+        // Load initial data before registration: await setData, then addSource and setExtent.
         try {
           await source.setData({ filename: file.name, content });
           await map.addSource(SOURCE_ID, source);
@@ -119,8 +118,8 @@
       status.textContent = field ? `正在按 ${field} 融合 ${target}...` : `正在整层融合 ${target}...`;
       dissolveBtn.disabled = true;
       try {
-        const ok = await map.ops.dissolveLayer({ source: SOURCE_ID, target, field });
-        status.textContent = ok
+        const result = await map.ops.dissolveLayer({ source: SOURCE_ID, target, field });
+        status.textContent = result.ok
           ? `已完成 ${target}${field ? ` 按 ${field}` : ''} 的融合,Ctrl+Z 撤销。`
           : '融合失败 (请检查图层名称)。';
         const src = map.getSource(SOURCE_ID);

@@ -2,10 +2,10 @@
 id: formats
 slug: /data/formats
 title: 数据格式
-api: ["buildGeoMetadata","crsStringToProjjson","decodeWkb","detectGeometryColumn","Emap","exportGeoArrow","ExportGeoArrowOptions","exportGeoParquet","ExportGeoParquetOptions","fromArrowTable","FromArrowTableOptions","GeoColumnMetadata","GeoEncoding","GeoMetadata","GeometryColumnInfo","importGeoArrow","ImportGeoArrowOptions","importGeoParquet","ImportGeoParquetOptions","initParquetWasm","InitParquetWasmOptions","ParquetWasmModule","ParquetWasmTable","parseGeoMetadata","projjsonToCrsString","registerArrowFormats","setArrowTable","setParquetWasm","toArrowTable","toArrowTableFromSource","ToArrowTableOptions","TopologySource.fromBytes","WkbGeometry","WkbWriter"]
-examples: ["duckdb-geoparquet-query","export-geoparquet","export-roundtrip","geoparquet-viewer"]
+api: ["buildGeoMetadata","crsStringToProjjson","DatasetFormatPlugin","decodeWkb","detectGeometryColumn","Emap","ExportedFormatFile","exportGeoArrow","ExportGeoArrowOptions","exportGeoParquet","ExportGeoParquetOptions","fromArrowTable","FromArrowTableOptions","GeoColumnMetadata","GeoEncoding","GeoMetadata","GeometryColumnInfo","importGeoArrow","ImportGeoArrowOptions","importGeoParquet","ImportGeoParquetOptions","initParquetWasm","InitParquetWasmOptions","ParquetWasmModule","ParquetWasmTable","parseGeoMetadata","projjsonToCrsString","registerArrowFormats","registerFormat","setArrowTable","setParquetWasm","toArrowTable","toArrowTableFromSource","ToArrowTableOptions","TopologySource.export","TopologySource.fromBytes","TopologySource.fromUrl","WkbGeometry","WkbWriter"]
+examples: ["duckdb-geoparquet-query","export-formats","flatgeobuf-viewer","geoparquet-viewer"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # 数据格式
@@ -24,6 +24,7 @@ Emap 把核心格式和可选格式分开，避免只加载 GeoJSON 的应用承
 | mapshaper snapshot | `.msx` | 是 | 是 | core |
 | GeoParquet | `.parquet`、`.geoparquet` | 是 | 是 | `@mapseekai/emap/arrow` |
 | GeoArrow | `.arrow`、`.arrows`、`.feather` | 是 | 是 | `@mapseekai/emap/arrow` |
+| FlatGeobuf | `.fgb` | 注册后 | 注册后 | 应用本地插件（`flatgeobuf`），不属于 core 或 `@mapseekai/emap/arrow` |
 
 ## 从 URL 加载
 
@@ -106,6 +107,39 @@ setParquetWasm(parquetModule);
 旧示例中的 `initParquetWasm({ module })` 不符合当前签名；选项名是 `wasmInput`，
 或使用 `setParquetWasm(module)` 注入。
 
+## 启用 FlatGeobuf
+
+FlatGeobuf 不是 core 格式，也不是 `@mapseekai/emap/arrow` 的一部分。先安装单独的依赖：
+
+```bash
+pnpm add flatgeobuf
+```
+
+将示例中的
+[`installFlatGeobufFormat`](https://github.com/mapseekai/emap/blob/master/packages/examples/src/flatgeobuf-format.ts)
+适配或复制到应用本地模块，再在首次 `.fgb` 导入或导出之前导入并调用它：
+
+```ts
+import * as emap from '@mapseekai/emap';
+import { installFlatGeobufFormat } from './flatgeobuf-format';
+
+installFlatGeobufFormat(emap);
+```
+
+这里传入的是 `@mapseekai/emap` 模块命名空间，因为 helper 会调用模块级的
+`registerFormat` 和 `getDefaultMapshaperAdapter`；不要传入 `new Emap(...)` 实例。
+不存在 `@mapseekai/emap/flatgeobuf` 导出。当前示例 helper 会缓冲整个文件，不支持流式
+或范围读取。它从 FlatGeobuf header 读取 EPSG code；导出时仅当 dataset CRS 是
+`EPSG:<数字>` 时才把该 code 写入 header。
+
+注册后可按 `.fgb` 文件名加载，并导出：
+
+```ts
+const blob = await source.export({ format: 'flatgeobuf' });
+```
+
+完整集成见 [FlatGeobuf 查看器](/mapseekai/emap/examples/flatgeobuf-viewer/)。
+
 ## Arrow Table 互操作
 
 ```ts
@@ -180,9 +214,13 @@ URL.revokeObjectURL(url);
 - [initParquetWasm](/mapseekai/emap/api/functions/arrow.initParquetWasm.html)
 - [setParquetWasm](/mapseekai/emap/api/functions/arrow.setParquetWasm.html)
 - [toArrowTable](/mapseekai/emap/api/functions/arrow.toArrowTable.html)
+- [registerFormat](/mapseekai/emap/api/functions/emap.registerFormat.html)
+- [DatasetFormatPlugin](/mapseekai/emap/api/interfaces/emap.DatasetFormatPlugin.html)
+- [ExportedFormatFile](/mapseekai/emap/api/interfaces/emap.ExportedFormatFile.html)
 
 ## 可运行示例
 
+- [DuckDB GeoParquet 查询](/mapseekai/emap/examples/duckdb-geoparquet-query/)
+- [导出格式](/mapseekai/emap/examples/export-formats/)
+- [FlatGeobuf 查看器](/mapseekai/emap/examples/flatgeobuf-viewer/)
 - [GeoParquet 查看器](/mapseekai/emap/examples/geoparquet-viewer/)
-- [导出 GeoParquet](/mapseekai/emap/examples/export-geoparquet/)
-- [导出往返](/mapseekai/emap/examples/export-roundtrip/)

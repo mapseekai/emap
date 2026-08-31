@@ -5,7 +5,7 @@ title: 错误参考
 api: ["Emap","Err","OK","okValue","OpError","OpResult","topologyValidator","TopologyValidatorOptions","ValidationChange","ValidationIssue","ValidationReport","Validator","ValidatorPhase","ValidatorRegistry","ValidatorResult"]
 examples: ["check-geometry","transaction"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # 错误参考

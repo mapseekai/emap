@@ -5,7 +5,7 @@ title: Emap map instance
 api: ["Emap","Feature","FeatureAccessor","FeatureQuery","findInvalidFieldName","HighlightManager","isValidFieldName","isValidLayerName","quoteCliArg","VisibleLayerLookup"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # Emap map instance
@@ -50,9 +50,11 @@ await map.addSource('main', source);
 map.setExtent(source.getExtent());
 ```
 
-A source can be loaded before registration, or an empty `TopologySource` can be
-registered before an asynchronous `setData(...)` call. The map listens for the
-source `data` event, so either order works.
+A `TopologySource` must have initial data before `map.addSource`: complete its
+initial `setData(...)` or load first. Alternatively, use `preflightSource` /
+`confirmSource` to validate and initialize the source before registration. A
+registered, populated source still supports later `setData(...)` calls; the map
+normalizes the new data to the map CRS.
 
 The map-level source ID must match the `source` used by render layers and
 `map.ops`.

@@ -5,7 +5,7 @@ title: 适配范围
 api: ["Emap"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # 适配范围

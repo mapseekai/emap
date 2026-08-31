@@ -118,8 +118,7 @@
       const entries = Array.from(uploaded, ([filename, content]) => ({ filename, content }));
       const source = new TopologySource(SOURCE_ID);
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-      // is ready), then addSource (order-independent) + setExtent.
+      // Load initial data before registration: await setData, then addSource and setExtent.
       // 数组形式 → 调用扩展后的 setData,内部走 mapshaper `-i FILE1 FILE2 ...` 多文件导入
       try {
         await source.setData(entries);
@@ -167,10 +166,10 @@
       clipBtn.disabled = true;
       eraseBtn.disabled = true;
       try {
-        const ok = op === 'clip'
+        const result = op === 'clip'
           ? await map.ops.clipLayer({ source: SOURCE_ID, target, mask })
           : await map.ops.eraseLayer({ source: SOURCE_ID, target, mask });
-        status.textContent = ok
+        status.textContent = result.ok
           ? `${op === 'clip' ? '裁剪' : '擦除'} "${target}" 完成,Ctrl+Z 撤销。`
           : `${op === 'clip' ? '裁剪' : '擦除'} 失败 (请检查图层名称)。`;
         const src = map.getSource(SOURCE_ID);

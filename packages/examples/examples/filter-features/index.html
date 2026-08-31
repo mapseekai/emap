@@ -84,8 +84,7 @@
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-        // is ready), then addSource (order-independent) + setExtent.
+        // Load initial data before registration: await setData, then addSource and setExtent.
         try {
           await source.setData({ filename: file.name, content });
           await map.addSource(SOURCE_ID, source);
@@ -110,8 +109,8 @@
       status.textContent = `正在过滤 ${target}...`;
       btn.disabled = true;
       try {
-        const ok = await map.ops.filterFeatures(opts);
-        status.textContent = ok ? `已过滤 ${target},Ctrl+Z 撤销。` : '过滤失败 (需要表达式或勾选 "同时移除空几何")。';
+        const result = await map.ops.filterFeatures(opts);
+        status.textContent = result.ok ? `已过滤 ${target},Ctrl+Z 撤销。` : '过滤失败 (需要表达式或勾选 "同时移除空几何")。';
       } finally {
         btn.disabled = false;
       }

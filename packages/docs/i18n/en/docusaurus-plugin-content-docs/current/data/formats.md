@@ -2,10 +2,10 @@
 id: formats
 slug: /data/formats
 title: Data formats
-api: ["buildGeoMetadata","crsStringToProjjson","decodeWkb","detectGeometryColumn","Emap","exportGeoArrow","ExportGeoArrowOptions","exportGeoParquet","ExportGeoParquetOptions","fromArrowTable","FromArrowTableOptions","GeoColumnMetadata","GeoEncoding","GeoMetadata","GeometryColumnInfo","importGeoArrow","ImportGeoArrowOptions","importGeoParquet","ImportGeoParquetOptions","initParquetWasm","InitParquetWasmOptions","ParquetWasmModule","ParquetWasmTable","parseGeoMetadata","projjsonToCrsString","registerArrowFormats","setArrowTable","setParquetWasm","toArrowTable","toArrowTableFromSource","ToArrowTableOptions","TopologySource.fromBytes","WkbGeometry","WkbWriter"]
-examples: ["duckdb-geoparquet-query","export-geoparquet","export-roundtrip","geoparquet-viewer"]
+api: ["buildGeoMetadata","crsStringToProjjson","DatasetFormatPlugin","decodeWkb","detectGeometryColumn","Emap","ExportedFormatFile","exportGeoArrow","ExportGeoArrowOptions","exportGeoParquet","ExportGeoParquetOptions","fromArrowTable","FromArrowTableOptions","GeoColumnMetadata","GeoEncoding","GeoMetadata","GeometryColumnInfo","importGeoArrow","ImportGeoArrowOptions","importGeoParquet","ImportGeoParquetOptions","initParquetWasm","InitParquetWasmOptions","ParquetWasmModule","ParquetWasmTable","parseGeoMetadata","projjsonToCrsString","registerArrowFormats","registerFormat","setArrowTable","setParquetWasm","toArrowTable","toArrowTableFromSource","ToArrowTableOptions","TopologySource.export","TopologySource.fromBytes","TopologySource.fromUrl","WkbGeometry","WkbWriter"]
+examples: ["duckdb-geoparquet-query","export-formats","flatgeobuf-viewer","geoparquet-viewer"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # Data formats
@@ -24,6 +24,7 @@ application does not pay for Arrow, Parquet, or WASM.
 | mapshaper snapshot | `.msx` | yes | yes | core |
 | GeoParquet | `.parquet`, `.geoparquet` | yes | yes | `@mapseekai/emap/arrow` |
 | GeoArrow | `.arrow`, `.arrows`, `.feather` | yes | yes | `@mapseekai/emap/arrow` |
+| FlatGeobuf | `.fgb` | after registration | after registration | application-local plugin (`flatgeobuf`); not core or `@mapseekai/emap/arrow` |
 
 ## Load URLs and bytes
 
@@ -103,6 +104,42 @@ setParquetWasm(parquetModule);
 `initParquetWasm({ module })` is not a current signature. Use `wasmInput`, or
 inject through `setParquetWasm(module)`.
 
+## Enable FlatGeobuf
+
+FlatGeobuf is not a core format and is not part of `@mapseekai/emap/arrow`.
+Install its separate dependency:
+
+```bash
+pnpm add flatgeobuf
+```
+
+Adapt or copy
+[`installFlatGeobufFormat`](https://github.com/mapseekai/emap/blob/master/packages/examples/src/flatgeobuf-format.ts)
+into an application-local module, then import and call it before the first
+`.fgb` import or export:
+
+```ts
+import * as emap from '@mapseekai/emap';
+import { installFlatGeobufFormat } from './flatgeobuf-format';
+
+installFlatGeobufFormat(emap);
+```
+
+Pass the `@mapseekai/emap` module namespace: the helper calls the module-level
+`registerFormat` and `getDefaultMapshaperAdapter` APIs, so an `Emap` instance is
+not valid. There is no `@mapseekai/emap/flatgeobuf` export. The current example
+helper buffers the whole file and has no streaming or range reads. It reads an
+EPSG code from the FlatGeobuf header; on export, it writes that code only when
+the dataset CRS is an `EPSG:<number>` identifier.
+
+After registration, load with an `.fgb` filename and export with:
+
+```ts
+const blob = await source.export({ format: 'flatgeobuf' });
+```
+
+See the complete integration in the [FlatGeobuf viewer](/mapseekai/emap/examples/flatgeobuf-viewer/).
+
 ## Arrow table interoperability
 
 ```ts
@@ -171,9 +208,13 @@ URL.revokeObjectURL(url);
 - [initParquetWasm](/mapseekai/emap/api/functions/arrow.initParquetWasm.html)
 - [setParquetWasm](/mapseekai/emap/api/functions/arrow.setParquetWasm.html)
 - [toArrowTable](/mapseekai/emap/api/functions/arrow.toArrowTable.html)
+- [registerFormat](/mapseekai/emap/api/functions/emap.registerFormat.html)
+- [DatasetFormatPlugin](/mapseekai/emap/api/interfaces/emap.DatasetFormatPlugin.html)
+- [ExportedFormatFile](/mapseekai/emap/api/interfaces/emap.ExportedFormatFile.html)
 
 ## Runnable examples
 
+- [DuckDB GeoParquet query](/mapseekai/emap/examples/duckdb-geoparquet-query/)
+- [Export formats](/mapseekai/emap/examples/export-formats/)
+- [FlatGeobuf viewer](/mapseekai/emap/examples/flatgeobuf-viewer/)
 - [GeoParquet viewer](/mapseekai/emap/examples/geoparquet-viewer/)
-- [Export GeoParquet](/mapseekai/emap/examples/export-geoparquet/)
-- [Export round trip](/mapseekai/emap/examples/export-roundtrip/)

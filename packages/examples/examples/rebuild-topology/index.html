@@ -117,8 +117,7 @@
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-        // is ready), then addSource (order-independent) + setExtent.
+        // Load initial data before registration: await setData, then addSource and setExtent.
         try {
           await source.setData({ filename: file.name, content });
           await map.addSource(SOURCE_ID, source);
@@ -181,10 +180,10 @@
       status.textContent = '正在重建拓扑...';
       rebuildBtn.disabled = true;
       try {
-        const ok = await map.ops.rebuildTopology(opts);
+        const result = await map.ops.rebuildTopology(opts);
         refreshStats();
         const after = stats.textContent;
-        status.textContent = ok
+        status.textContent = result.ok
           ? `已重建。${before} → ${after}。Ctrl+Z 撤销。`
           : '重建失败。';
       } catch (err) {

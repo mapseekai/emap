@@ -5,7 +5,7 @@ title: 错误处理
 api: ["Emap"]
 examples: ["duckdb-buffer","duckdb-query"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # 错误处理

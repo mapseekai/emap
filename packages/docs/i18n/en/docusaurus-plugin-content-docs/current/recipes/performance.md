@@ -5,7 +5,7 @@ title: Performance
 api: ["Emap"]
 examples: ["simplify","simplify-control","web-worker"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # Performance

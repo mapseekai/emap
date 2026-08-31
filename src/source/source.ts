@@ -17,10 +17,10 @@ export interface Source extends EventDispatcher {
 }
 
 /**
- * File formats emap can serialize a dataset to. Mirrors the import format
- * set. `geoparquet` / `geoarrow` require the optional Arrow module
- * (`@mapseekai/emap/arrow`) to be imported first; `flatgeobuf` requires a
- * registered format plugin.
+ * File formats emap can serialize a dataset to. KML is import-only and is
+ * therefore absent from this union. `geoparquet` / `geoarrow` require the
+ * optional Arrow module (`@mapseekai/emap/arrow`) to be imported first;
+ * `flatgeobuf` requires a registered format plugin.
  */
 export type ExportFormat =
   | 'geojson'

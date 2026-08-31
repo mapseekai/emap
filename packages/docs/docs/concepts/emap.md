@@ -5,7 +5,7 @@ title: Emap 地图实例
 api: ["Emap","Feature","FeatureAccessor","FeatureQuery","findInvalidFieldName","HighlightManager","isValidFieldName","isValidLayerName","quoteCliArg","VisibleLayerLookup"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # Emap 地图实例
@@ -48,8 +48,9 @@ await map.addSource('main', source);
 map.setExtent(source.getExtent());
 ```
 
-数据源可以先加载后添加，也可以先添加空的 `TopologySource`，再异步调用
-`setData(...)`。地图会响应数据源的 `data` 事件，因此这两种顺序都可用。
+`TopologySource` 必须先拥有初始数据，才能调用 `map.addSource`：先完成 `setData(...)`
+或加载流程。也可以先用 `preflightSource` / `confirmSource` 完成校验和初始化，再注册 source。
+已注册的已填充 source 仍支持后续 `setData(...)`；地图会把新数据归一化到地图 CRS。
 
 地图级 source ID 必须与渲染图层和 `map.ops` 中使用的 `source` 一致。
 

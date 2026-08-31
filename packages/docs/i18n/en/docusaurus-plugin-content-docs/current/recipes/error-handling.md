@@ -5,7 +5,7 @@ title: Error handling
 api: ["Emap"]
 examples: ["duckdb-buffer","duckdb-query"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # Error handling

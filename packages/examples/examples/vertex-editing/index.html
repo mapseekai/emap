@@ -104,8 +104,7 @@
             map.removeSource("test-source");
           }
 
-          // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-          // is ready), then addSource (order-independent) + setExtent.
+          // Load initial data before registration: await setData, then addSource and setExtent.
           try {
             await source.setData({ filename: file.name, content });
             await map.addSource("test-source", source);

@@ -5,7 +5,7 @@ title: 安装
 api: []
 examples: []
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # 安装与第一张地图
@@ -191,8 +191,10 @@ await map.addSource('districts', source);
 map.setExtent(source.getExtent());
 ```
 
-`filename` 很重要：导入器会使用扩展名区分 GeoJSON、TopoJSON、ZIP、
-GeoParquet 等格式。`setData(...)` 会在 dataset 已填充且 `data` 事件已触发后 resolve。
+`filename` 很重要：导入器会使用扩展名区分 GeoJSON、TopoJSON、KML、ZIP、
+GeoParquet 等格式。`.fgb` 仅在应用已按[数据格式](../data/formats.md)注册本地 FlatGeobuf
+插件后可用；请参见[FlatGeobuf 查看器](/mapseekai/emap/examples/flatgeobuf-viewer/)。`setData(...)`
+会在 dataset 已填充且 `data` 事件已触发后 resolve。
 
 ## 使用显式样式图层
 

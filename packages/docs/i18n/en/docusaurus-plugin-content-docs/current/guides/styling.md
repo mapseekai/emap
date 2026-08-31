@@ -2,10 +2,10 @@
 id: styling
 slug: /guides/styling
 title: Styling layers
-api: ["FillPaint","LayerSpecification","LineDashStyle","LinePaint","PointMarkerShape"]
+api: ["Emap.setPaintProperty","FillPaint","LayerSpecification","LineDashStyle","LinePaint","PointMarkerShape"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # Styling layers

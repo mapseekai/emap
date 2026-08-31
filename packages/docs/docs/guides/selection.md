@@ -5,7 +5,7 @@ title: 选择
 api: ["BoxSelectHandler","BoxSelectHandlerOptions","BoxSelectStyle","ClickSelectHandler","DragPanHandler","DragPanOptions","DrawFeatureHandler","DrawFeatureOptions","DrawGeometryType","Emap","featureMatchesLasso","LassoSelectHandler","LassoSelectHandlerOptions","LassoSelectStyle","LassoStyle","MergeSelectedOptions","ModifierCombo","pointInPolygon","resolveMode","ScrollZoomHandler","ScrollZoomOptions","SelectHandlerOptions","Selection","SelectionDiff","SelectionSnapshot","SelectMode","TransformFeatureHandler","TransformFeatureOptions","VertexEditHandler","VertexEditOptions"]
 examples: ["box-select","feature-rotate-scale","feature-selection","feature-translate","lasso-select","merge-selected"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # 选择
@@ -85,11 +85,12 @@ map.on('selectionchange', ({ selected, added, removed }) => {
 
 ## 点击选择
 
-点击选择 Handler 默认关闭：
+点击选择 Handler 默认关闭。下面的示例还覆盖了默认修饰键映射：
 
 ```ts
 map.clickSelect.setOptions({
   layers: ['district-fill'],
+  modifiers: { replace: 'none', add: 'ctrl', toggle: 'alt' },
 });
 map.clickSelect.enable();
 ```
@@ -104,13 +105,24 @@ if (map.clickSelect.isEnabled()) {
 
 应用工具栏应直接切换 Handler，不要额外注册一套 Canvas click 逻辑。
 
-## 拉框与套索
+## 点击、拉框与套索选择
 
-可直接使用 Handler：
+默认修饰键如下：
+
+| Handler | 无修饰键 | Shift | Shift+Alt |
+|---|---|---|---|
+| `clickSelect`、`boxSelect` | `replace` | `add` | `toggle` |
+| `lassoSelect` | — | `replace`（拖拽） | `toggle` |
+
+对 `lassoSelect`，Shift 会激活套索，因此 Shift+Ctrl/Cmd 拖拽为 `add`。各选择 Handler
+的 `modifiers` 映射都可配置；上面的示例把点击选择的 `add` 改为 Ctrl/Cmd，把
+`toggle` 改为 Alt。
+
+拉框和套索互斥。切换到拉框前必须先禁用套索：
 
 ```ts
-map.boxSelect.enable();
 map.lassoSelect.disable();
+map.boxSelect.enable();
 ```
 
 也可以使用内置控件：
@@ -147,7 +159,7 @@ const result = await map.ops.mergeSelected({
 });
 
 if (!result.ok) {
-  console.error(result.error.message);
+  console.error(result.error);
 }
 ```
 

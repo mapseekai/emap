@@ -177,7 +177,7 @@
         if (!isCurrent()) return undefined;
         const source = new TopologySource(OUTPUT_SOURCE_ID);
         removeSourceWithLayers(OUTPUT_SOURCE_ID);
-        source.setDataset(dataset);
+        await source.replaceDataset(dataset);
         if (!isCurrent()) return undefined;
         await map.addSource(OUTPUT_SOURCE_ID, source);
         const cleanup = () => {

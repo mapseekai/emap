@@ -2,10 +2,10 @@
 id: styling
 slug: /guides/styling
 title: 样式图层
-api: ["FillPaint","LayerSpecification","LineDashStyle","LinePaint","PointMarkerShape"]
+api: ["Emap.setPaintProperty","FillPaint","LayerSpecification","LineDashStyle","LinePaint","PointMarkerShape"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # 样式图层

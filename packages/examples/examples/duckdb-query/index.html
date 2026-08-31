@@ -137,7 +137,7 @@
       async function addDatasetSource(id, dataset, prefix, colors) {
         const source = new TopologySource(id);
         removeSourceWithLayers(id);
-        source.setDataset(dataset);
+        await source.replaceDataset(dataset);
         await map.addSource(id, source);
         addDisplayLayers(id, source, prefix, colors);
         return source;

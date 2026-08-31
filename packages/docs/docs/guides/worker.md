@@ -5,7 +5,7 @@ title: Web Worker
 api: ["Emap"]
 examples: ["web-worker"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # Web Worker

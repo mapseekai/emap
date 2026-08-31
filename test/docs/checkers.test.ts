@@ -335,7 +335,7 @@ describe('documentation quality checkers', () => {
     expect(outputOf(result)).toContain('missing parameter runnable example association');
   });
 
-  it('parses recipe catalog entries with explicit docs, API, and fixture metadata', async () => {
+  it('parses seed and recipe calls from the exported examples catalog', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/guides/selection.md', {
       id: 'guides/selection',
@@ -366,18 +366,22 @@ describe('documentation quality checkers', () => {
         },
       ],
     });
-    await mkdir(join(root, 'packages/examples/examples/feature-selection'), {
-      recursive: true,
-    });
-    await writeFile(
-      join(root, 'packages/examples/examples/feature-selection/index.html'),
-      '<script type="module" src="/src/main.ts"></script>',
-    );
+    for (const id of ['feature-selection', 'seed-selection']) {
+      await mkdir(join(root, 'packages/examples/examples', id), { recursive: true });
+      await writeFile(
+        join(root, 'packages/examples/examples', id, 'index.html'),
+        '<script type="module" src="/src/main.ts"></script>',
+      );
+    }
 
     const result = runChecker('scripts/check-examples.mjs', root);
 
-    expect(result.status).toBe(1);
     expect(outputOf(result)).toContain('missing fixture missing.geojson');
+    expect(outputOf(result)).toContain('missing fixture missing-seed.geojson');
+    expect(outputOf(result)).toContain('missing docs ID /docs/missing-recipe');
+    expect(outputOf(result)).toContain('missing docs ID /docs/missing-seed');
+    expect(outputOf(result)).toContain('missing API reflection MissingRecipeApi');
+    expect(outputOf(result)).toContain('missing API reflection MissingSeedApi');
   });
 
   it('fails when @example is the only public TypeDoc comment prose', async () => {
@@ -562,6 +566,48 @@ describe('documentation quality checkers', () => {
     expect(result.status).toBe(0);
   });
 
+  it('fails when an English document references an uncataloged example', async () => {
+    const root = await fixtureRoot();
+    await writeDoc(root, 'packages/docs/docs/intro.md', {
+      id: 'intro',
+      slug: '/',
+      title: '中文简介',
+    });
+    await writeDoc(root, 'packages/docs/i18n/en/docusaurus-plugin-content-docs/current/intro.md', {
+      id: 'intro',
+      slug: '/',
+      title: 'Intro',
+      examples: ['missing-example'],
+    });
+    await writeCatalog(root, {
+      docs: ['/docs/'],
+      api: ['Emap'],
+      fixtures: ['inline:tiny.geojson'],
+    });
+    await writeReflections(root, {
+      children: [
+        {
+          name: 'Emap',
+          variant: 'declaration',
+          kind: 128,
+          sources: [{ fileName: 'src/index.ts' }],
+        },
+      ],
+    });
+    await mkdir(join(root, 'packages/examples/examples/getting-started/fixture'), {
+      recursive: true,
+    });
+    await writeFile(
+      join(root, 'packages/examples/examples/getting-started/fixture/index.html'),
+      '<script type="module" src="/src/main.ts"></script>',
+    );
+
+    const result = runChecker('scripts/check-examples.mjs', root);
+
+    expect(result.status).toBe(1);
+    expect(outputOf(result)).toContain('missing example catalog entry missing-example');
+  });
+
   it('fails when a catalog item references a missing fixture', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/intro.md', {
@@ -676,11 +722,15 @@ async function writeRecipesCatalog(root: string): Promise<void> {
   await writeFile(
     filePath,
     `const selectionDocs = '/docs/guides/selection';
-const recipes = [
-  recipe('feature-selection', 'interaction', '选择', 'Selection', [selectionDocs], 'Emap', ['selection'], ['missing.geojson'], 'select-source', async () => {}),
+export const examples = [
+  seed('seed-selection', 'interaction', '种子', 'Seed', [selectionDocs, '/docs/missing-seed'], 'MissingSeedApi', 'missing-seed.geojson', 'It works.'),
+  recipe('feature-selection', 'interaction', '选择', 'Selection', [selectionDocs, '/docs/missing-recipe'], 'MissingRecipeApi', ['selection'], ['missing.geojson']),
 ];
-function recipe(id, category, zh, en, docs, api, featureFlags, fixtures, sourceId, load) {
-  return { id, category, title: { zh, en }, docs, api: [api], featureFlags, fixtures, sourceId, load };
+function seed(id, category, zh, en, docs, api, fixture, success) {
+  return { id, category, title: { zh, en }, docs, api: [api], fixtures: [fixture], success };
+}
+function recipe(id, category, zh, en, docs, api, featureFlags, fixtures) {
+  return { id, category, title: { zh, en }, docs, api: [api], featureFlags, fixtures };
 }
 `,
   );

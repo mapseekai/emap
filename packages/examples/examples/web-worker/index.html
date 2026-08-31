@@ -196,8 +196,7 @@
       }
       const source = new TopologySource(SOURCE_ID);
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-      // is ready), then addSource (order-independent) + setExtent.
+      // Load initial data before registration: await setData, then addSource and setExtent.
       try {
         await source.setData({ filename: lastFile.name, content: lastFileBytes });
         await map.addSource(SOURCE_ID, source);
@@ -241,30 +240,30 @@
       const t = pickPolygonLayer();
       if (!t) { alert('未找到多边形图层'); return; }
       const t0 = performance.now();
-      const ok = await map.ops.dissolveLayer({ source: SOURCE_ID, target: t });
-      logEvent(`Dissolve(${t}) → ${ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
+      const result = await map.ops.dissolveLayer({ source: SOURCE_ID, target: t });
+      logEvent(`Dissolve(${t}) → ${result.ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
       refreshStats();
     });
     simplifyBtn.addEventListener('click', async () => {
       const t = pickPolygonLayer();
       const t0 = performance.now();
-      const ok = await map.ops.simplifyLayer({ source: SOURCE_ID, target: t, percentage: 5 });
-      logEvent(`Simplify(${t}, 5%) → ${ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
+      const result = await map.ops.simplifyLayer({ source: SOURCE_ID, target: t, percentage: 5 });
+      logEvent(`Simplify(${t}, 5%) → ${result.ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
       refreshStats();
     });
     unionBtn.addEventListener('click', async () => {
       const ts = pickAllPolygonLayers();
       if (ts.length < 2) { alert('需要至少 2 个多边形图层'); return; }
       const t0 = performance.now();
-      const ok = await map.ops.unionLayers({ source: SOURCE_ID, targets: ts });
-      logEvent(`Union(${ts.length} layers) → ${ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
+      const result = await map.ops.unionLayers({ source: SOURCE_ID, targets: ts });
+      logEvent(`Union(${ts.length} layers) → ${result.ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
       refreshStats();
     });
     cleanBtn.addEventListener('click', async () => {
       const t = pickPolygonLayer();
       const t0 = performance.now();
-      const ok = await map.ops.cleanLayer({ source: SOURCE_ID, target: t });
-      logEvent(`Clean(${t}) → ${ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
+      const result = await map.ops.cleanLayer({ source: SOURCE_ID, target: t });
+      logEvent(`Clean(${t}) → ${result.ok ? 'ok' : 'failed'}, total ${(performance.now() - t0).toFixed(0)}ms`);
       refreshStats();
     });
 

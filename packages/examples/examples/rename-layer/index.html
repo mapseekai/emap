@@ -75,8 +75,7 @@
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-        // is ready), then addSource (order-independent) + setExtent.
+        // Load initial data before registration: await setData, then addSource and setExtent.
         try {
           await source.setData({ filename: file.name, content });
           await map.addSource(SOURCE_ID, source);
@@ -98,8 +97,8 @@
       status.textContent = `正在把 "${target}" 重命名为 "${name}"...`;
       btn.disabled = true;
       try {
-        const ok = await map.ops.renameLayer({ source: SOURCE_ID, target, name });
-        status.textContent = ok
+        const result = await map.ops.renameLayer({ source: SOURCE_ID, target, name });
+        status.textContent = result.ok
           ? `已重命名 ${target} → ${name},Ctrl+Z 撤销。`
           : '重命名失败 (可能与已有图层重名)。';
         const src = map.getSource(SOURCE_ID);

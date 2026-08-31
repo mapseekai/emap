@@ -5,7 +5,7 @@ title: Emap 简介
 api: []
 examples: []
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # Emap
@@ -19,8 +19,9 @@ Emap 不依赖后端地图服务。数据可以来自 URL、用户上传的文�
 
 ## 适合哪些场景
 
-- GIS 数据查看器：显示 GeoJSON、TopoJSON、Shapefile ZIP 等本地或远程数据。
-- 浏览器编辑器：选择要素、修改属性、移动或缩放要素、编辑顶点，并支持撤销与重做。
+- GIS 数据查看器：显示 GeoJSON、TopoJSON、KML、Shapefile ZIP 等本地或远程数据。
+- 浏览器编辑器：选择要素、修改属性、移动或缩放要素、编辑顶点，以及拆分、重塑和
+  环/部件编辑，并支持撤销与重做。
 - 数据处理工具：在前端执行简化、缓冲区、裁剪、融合、投影和拓扑修复等操作。
 - 业务地图组件：只使用引擎和交互处理器，自行构建工具栏、属性面板和状态区域。
 - 原型与内部工具：在不部署后端 GIS 服务的情况下快速验证处理流程。
@@ -36,7 +37,7 @@ Emap 不依赖后端地图服务。数据可以来自 URL、用户上传的文�
 | `TopologySource` | 导入文件或字节数据，并保存 mapshaper topology dataset |
 | `LayerSpecification` | 选择 source layer，声明 `fill`、`line` 或 `circle` 渲染方式 |
 | `map.ops` | 执行带类型、错误结果和历史记录的数据操作 |
-| Handler | 实现平移、缩放、选择、绘制、顶点编辑和要素变换 |
+| Handler | 实现导航、选择、绘制、拓扑编辑、测量和要素变换 |
 | Control | 为内置能力提供可选的 DOM 界面 |
 
 一个典型流程如下：
@@ -53,9 +54,9 @@ Emap 不依赖后端地图服务。数据可以来自 URL、用户上传的文�
 
 ### 数据输入与输出
 
-- 核心包支持 GeoJSON、TopoJSON、Shapefile ZIP 和 mapshaper snapshot。
-- `@mapseekai/emap/arrow` 提供 GeoParquet 与 GeoArrow 支持。
-- `@mapseekai/emap/duckdb` 提供可选的 DuckDB-Wasm 查询和空间处理能力。
+- 核心包支持 GeoJSON、TopoJSON、KML（仅导入）、Shapefile ZIP 和 mapshaper snapshot。
+- `@mapseekai/emap/arrow` 提供 GeoParquet 与 GeoArrow 支持；`@mapseekai/emap/duckdb` 提供可选的 DuckDB-Wasm 查询和空间处理能力。
+- FlatGeobuf 可由应用安装 `flatgeobuf` 并注册本地格式插件后导入和导出，详见[数据格式](./data/formats.md)。
 
 ### 渲染与相机
 
@@ -65,9 +66,9 @@ Emap 不依赖后端地图服务。数据可以来自 URL、用户上传的文�
 
 ### 交互与编辑
 
-- 内置点击、拉框和套索选择。
-- 支持要素平移、旋转、缩放、绘制和顶点编辑。
-- 编辑命令进入同一历史记录，可通过事务合并成一次用户操作。
+- 内置点击、拉框和套索选择，以及平移、缩放、绘制、顶点、拆分、重塑、环和部件编辑处理器。
+- 支持要素平移、旋转、缩放与长度或面积测量。
+- `map.ops` 提供 40 多项数据操作；编辑命令进入同一历史记录，可通过事务合并成一次用户操作。
 - 公开要素点击、悬停、相机、历史、验证和 Worker 状态事件。
 
 ## 包入口与静态资源
@@ -99,5 +100,5 @@ const duckdb = await import('@mapseekai/emap/duckdb');
 
 ## 项目状态
 
-当前文档对应 `@mapseekai/emap` 0.5.0。项目仍在快速演进，适合原型、演示、
+当前文档对应 `@mapseekai/emap` 0.8.1。项目仍在快速演进，适合原型、演示、
 研究工具和受控的内部应用；升级版本时应同时查看迁移说明和 API 参考。

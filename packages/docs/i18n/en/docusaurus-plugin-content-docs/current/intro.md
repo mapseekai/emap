@@ -5,7 +5,7 @@ title: Emap Introduction
 api: []
 examples: []
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # Emap
@@ -21,9 +21,9 @@ export can all happen in the browser.
 
 ## When to use Emap
 
-- Build a GIS data viewer for GeoJSON, TopoJSON, or Shapefile ZIP files.
+- Build a GIS data viewer for GeoJSON, TopoJSON, KML, or Shapefile ZIP files.
 - Build a browser editor with feature selection, attribute changes, transforms,
-  vertex editing, undo, and redo.
+  vertex editing, split, reshape, ring, and part editing, undo, and redo.
 - Run simplify, buffer, clip, dissolve, projection, and topology repair
   workflows on the client.
 - Use the engine and handlers under an application-specific toolbar, property
@@ -42,7 +42,7 @@ be loaded and edited as a complete client-side dataset.
 | `TopologySource` | Imports files or bytes and stores a mapshaper topology dataset |
 | `LayerSpecification` | Selects a source layer and describes `fill`, `line`, or `circle` rendering |
 | `map.ops` | Runs typed data operations with error results and history integration |
-| Handler | Implements navigation, selection, drawing, vertex editing, and feature transforms |
+| Handler | Implements navigation, selection, drawing, topology editing, measurement, and transforms |
 | Control | Provides an optional DOM surface for a built-in capability |
 
 A typical application follows this sequence:
@@ -61,11 +61,12 @@ A typical application follows this sequence:
 
 ### Data input and output
 
-- The core package supports GeoJSON, TopoJSON, Shapefile ZIP, and mapshaper
-  snapshots.
-- `@mapseekai/emap/arrow` adds GeoParquet and GeoArrow.
-- `@mapseekai/emap/duckdb` adds optional DuckDB-Wasm queries and spatial
-  processing.
+- The core package supports GeoJSON, TopoJSON, KML (import-only), Shapefile ZIP,
+  and mapshaper snapshots.
+- `@mapseekai/emap/arrow` adds GeoParquet and GeoArrow; `@mapseekai/emap/duckdb`
+  adds optional DuckDB-Wasm queries and spatial processing.
+- FlatGeobuf import and export are available after an application installs
+  `flatgeobuf` and registers a local format plugin; see [Data formats](./data/formats.md).
 
 ### Rendering and camera
 
@@ -77,9 +78,11 @@ A typical application follows this sequence:
 
 ### Interaction and editing
 
-- Click, box, and lasso selection.
-- Feature translation, rotation, scaling, drawing, and vertex editing.
-- One history for editing commands and transactions.
+- Click, box, and lasso selection; pan, zoom, drawing, vertex, split, reshape,
+  ring, and part editing handlers.
+- Feature translation, rotation, scaling, and length or area measurement.
+- More than 40 `map.ops` data operations, with one history for editing commands
+  and transactions.
 - Public feature, camera, history, validation, and worker events.
 
 ## Package entries and static assets
@@ -118,7 +121,7 @@ deployment layout.
 
 ## Project status
 
-These docs describe `@mapseekai/emap` 0.5.0. The project is still evolving
+These docs describe `@mapseekai/emap` 0.8.1. The project is still evolving
 quickly and is best suited to prototypes, demos, research tools, and controlled
 internal applications. Review the migration notes and API reference when
 upgrading.

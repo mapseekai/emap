@@ -112,8 +112,7 @@
       const entries = Array.from(uploaded, ([filename, content]) => ({ filename, content }));
       const source = new TopologySource(SOURCE_ID);
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-      // is ready), then addSource (order-independent) + setExtent.
+      // Load initial data before registration: await setData, then addSource and setExtent.
       try {
         await source.setData(entries);
         await map.addSource(SOURCE_ID, source);
@@ -156,8 +155,8 @@
       status.textContent = `正在用 "${divider}" 切分 "${target}"...`;
       btn.disabled = true;
       try {
-        const ok = await map.ops.divideLayer(opts);
-        status.textContent = ok ? `"${target}" 已按 "${divider}" 切分,Ctrl+Z 撤销。` : '切分失败 (检查图层类型与名称)。';
+        const result = await map.ops.divideLayer(opts);
+        status.textContent = result.ok ? `"${target}" 已按 "${divider}" 切分,Ctrl+Z 撤销。` : '切分失败 (检查图层类型与名称)。';
         const src = map.getSource(SOURCE_ID);
         if (src) populateLayerOptions(src);
       } catch (err) {

@@ -5,7 +5,7 @@ title: Data operations
 api: ["AffineLayerOptions","ApplyExpressionOptions","BufferOptions","CheckGeometryOptions","CleanOptions","ClipEraseOptions","DataFillOptions","DissolveOptions","DivideOptions","DragSessionOptions","DropLayerOptions","Emap","ExplodeOptions","ExportSnapshotOptions","ExpressionEvaluationPolicy","FeatureAffineSession","FeatureRef","FeatureTranslateSession","FilterFieldsOptions","FilterGeomOptions","FilterIslandsOptions","FilterOptions","FilterSliversOptions","GeometryCheckReport","HighlightFeatureRef","HighlightStyle","InnerlinesOptions","IntersectionPointsLayerOptions","JoinTableData","JoinTableOptions","LinesOptions","LoadSnapshotOptions","MapOptions","MergeLayersOptions","MosaicOptions","PointsMode","PointsOptions","PolygonsOptions","ProjectLayerExport","ProjectLayerOutputOptions","ProjectOptions","QueriedFeature","QueryFeaturesOptions","RebuildTopologyOptions","RenameFieldsOptions","RenameLayerOptions","SimplifyMethod","SimplifyOptions","SnapOptions","SortFeaturesOptions","SplitCutter","SplitFeatureHandler","SplitFeatureOptions","SplitLayerOptions","SplitSelectedOptions","SplitSelectedResult","UnionOptions","UniqueFeaturesOptions"]
 examples: ["buffer","check-geometry","clip-erase","data-engineering","dissolve","divide","duckdb-overlay","duckdb-spatial-aggregate-join","explode","filter-features","innerlines","merge-layers","merge-selected","mosaic","project","rebuild-topology","rename-layer","simplify","simplify-control","snap-layer","split-features","split-layer","union"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # Data operations
@@ -66,6 +66,24 @@ if (result.ok) {
 
 `OpError` is a discriminated union and has no universal `message` property.
 Narrow through `kind`.
+
+## MapshaperOps methods
+
+The public `map.ops` methods are grouped below. Refer to the API reference for
+their detailed signatures and options.
+
+- Geometry and topology: `clipLayer`, `eraseLayer`, `dissolveLayer`,
+  `bufferLayer`, `simplifyLayer`, `projectLayer`, `affineLayer`, `cleanLayer`,
+  `snapLayer`, `mosaicLayer`, `unionLayers`, `divideLayer`
+- Feature geometry: `filterIslands`, `filterSlivers`, `filterGeom`,
+  `explodeLayer`, `innerlinesLayer`, `pointsLayer`, `linesLayer`,
+  `polygonsLayer`, `intersectionPointsLayer`
+- Layers: `renameLayer`, `mergeLayers`, `splitLayer`, `dropLayer`
+- Attributes and filtering: `applyExpression`, `filterFeatures`, `sortFeatures`,
+  `uniqueFeatures`, `filterFields`, `renameFields`, `joinTable`, `dataFill`
+- Topology maintenance: `rebuildTopology`, `checkGeometry`
+- Selection and editing: `mergeSelected`, `splitSelected`, `reshapeSelected`,
+  `addRing`, `deleteRing`, `addPart`, `deletePart`
 
 ## Common geometry operations
 

@@ -5,7 +5,7 @@ title: 事件参考
 api: []
 examples: []
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # 事件参考

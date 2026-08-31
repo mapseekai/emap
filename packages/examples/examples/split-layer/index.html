@@ -80,8 +80,7 @@
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-        // is ready), then addSource (order-independent) + setExtent.
+        // Load initial data before registration: await setData, then addSource and setExtent.
         try {
           await source.setData({ filename: file.name, content });
           await map.addSource(SOURCE_ID, source);
@@ -105,8 +104,8 @@
       status.textContent = `正在按 "${expression}" 拆分 "${target}"...`;
       btn.disabled = true;
       try {
-        const ok = await map.ops.splitLayer(opts);
-        status.textContent = ok ? `已按 "${expression}" 拆分 "${target}",Ctrl+Z 撤销。` : '拆分失败。';
+        const result = await map.ops.splitLayer(opts);
+        status.textContent = result.ok ? `已按 "${expression}" 拆分 "${target}",Ctrl+Z 撤销。` : '拆分失败。';
         const src = map.getSource(SOURCE_ID);
         if (src) populate(src);
       } catch (err) {

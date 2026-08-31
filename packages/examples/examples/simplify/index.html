@@ -124,8 +124,7 @@
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-        // is ready), then addSource (order-independent) + setExtent.
+        // Load initial data before registration: await setData, then addSource and setExtent.
         try {
           await source.setData({ filename: file.name, content });
           await map.addSource(SOURCE_ID, source);
@@ -170,8 +169,8 @@
       status.textContent = `正在简化 ${label}...`;
       btn.disabled = true;
       try {
-        const ok = await map.ops.simplifyLayer(opts);
-        if (ok) {
+        const result = await map.ops.simplifyLayer(opts);
+        if (result.ok) {
           // Render-LOD verification: floor is what `-simplify` baked into
           // the arcs; filtered count is how many vertices survive at that
           // floor. Both are independent of the current zoom level.

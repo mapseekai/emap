@@ -199,8 +199,7 @@
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-        // is ready), then addSource (order-independent) + setExtent.
+        // Load initial data before registration: await setData, then addSource and setExtent.
         try {
           await source.setData({ filename: file.name, content });
           await map.addSource(SOURCE_ID, source);
@@ -224,8 +223,8 @@
       status.textContent = '正在执行表达式...';
       applyBtn.disabled = true;
       try {
-        const ok = await map.ops.applyExpression(opts);
-        status.textContent = ok
+        const result = await map.ops.applyExpression(opts);
+        status.textContent = result.ok
           ? `已执行,点击要素查看新属性。Ctrl+Z 撤销。`
           : '执行失败,请检查表达式。';
       } catch (err) {

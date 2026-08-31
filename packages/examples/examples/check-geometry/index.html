@@ -80,8 +80,7 @@
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-        // is ready), then addSource (order-independent) + setExtent.
+        // Load initial data before registration: await setData, then addSource and setExtent.
         try {
           await source.setData({ filename: file.name, content });
           await map.addSource(SOURCE_ID, source);
@@ -103,17 +102,17 @@
       status.textContent = '检查中...';
       checkBtn.disabled = true;
       try {
-        const r = await map.ops.checkGeometry(opts);
-        if (!r) {
+        const result = await map.ops.checkGeometry(opts);
+        if (!result.ok) {
           report.innerHTML = '<span class="bad">无法检查 (检查源/图层)</span>';
           status.textContent = '检查失败。';
-        } else if (r.ok) {
+        } else if (result.value.ok) {
           report.innerHTML = '<span class="ok">✓ 拓扑干净 — 0 个相交</span>';
           status.textContent = '检查完成,数据无问题。';
         } else {
-          const sample = r.intersections.slice(0, 5)
+          const sample = result.value.intersections.slice(0, 5)
             .map((p) => `(${p.x.toFixed(3)}, ${p.y.toFixed(3)})`).join(', ');
-          report.innerHTML = `<span class="bad">✗ 发现 ${r.intersectionCount} 个相交</span> — 前 5 个: ${sample}${r.intersectionCount > 5 ? '...' : ''}`;
+          report.innerHTML = `<span class="bad">✗ 发现 ${result.value.intersectionCount} 个相交</span> — 前 5 个: ${sample}${result.value.intersectionCount > 5 ? '...' : ''}`;
           status.textContent = '检查到自相交 —— 点击 "重建拓扑" 修复。';
         }
       } catch (err) {
@@ -128,8 +127,8 @@
       status.textContent = '正在重建拓扑...';
       rebuildBtn.disabled = true;
       try {
-        const ok = await map.ops.rebuildTopology({ source: SOURCE_ID });
-        status.textContent = ok ? '已重建。再次检查几何确认结果。' : '重建失败。';
+        const result = await map.ops.rebuildTopology({ source: SOURCE_ID });
+        status.textContent = result.ok ? '已重建。再次检查几何确认结果。' : '重建失败。';
       } catch (err) {
         status.textContent = `错误: ${err?.message ?? err}`;
         console.error(err);

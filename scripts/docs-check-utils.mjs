@@ -156,8 +156,7 @@ function parseExamples(source) {
   if (literalArray) {
     examples.push(
       ...literalArray.elements
-        .filter(ts.isObjectLiteralExpression)
-        .map((node) => parseExample(node, constants))
+        .map((node) => parseCatalogEntry(node, constants))
         .filter((example) => example.id),
     );
   }
@@ -166,7 +165,7 @@ function parseExamples(source) {
   if (recipes) {
     examples.push(
       ...recipes.elements
-        .map((node) => parseRecipeCall(node, constants))
+        .map((node) => parseCatalogEntry(node, constants))
         .filter((example) => example.id),
     );
   }
@@ -197,18 +196,30 @@ function readStringArrayProperty(node, key, constants) {
   return value.elements.map((element) => readStringExpression(element, constants)).filter(Boolean);
 }
 
-function parseRecipeCall(node, constants) {
-  if (!ts.isCallExpression(node)) return { id: '', docs: [], api: [], fixtures: [] };
-  if (!ts.isIdentifier(node.expression) || node.expression.text !== 'recipe') {
+function parseCatalogEntry(node, constants) {
+  if (ts.isObjectLiteralExpression(node)) return parseExample(node, constants);
+  if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
     return { id: '', docs: [], api: [], fixtures: [] };
   }
 
-  return {
-    id: readStringExpression(node.arguments[0], constants),
-    docs: readStringArrayExpression(node.arguments[4], constants),
-    api: [readStringExpression(node.arguments[5], constants)].filter(Boolean),
-    fixtures: readStringArrayExpression(node.arguments[7], constants),
-  };
+  const args = node.arguments;
+  if (node.expression.text === 'seed') {
+    return {
+      id: readStringExpression(args[0], constants),
+      docs: readStringArrayExpression(args[4], constants),
+      api: [readStringExpression(args[5], constants)].filter(Boolean),
+      fixtures: [readStringExpression(args[6], constants)].filter(Boolean),
+    };
+  }
+  if (node.expression.text === 'recipe') {
+    return {
+      id: readStringExpression(args[0], constants),
+      docs: readStringArrayExpression(args[4], constants),
+      api: [readStringExpression(args[5], constants)].filter(Boolean),
+      fixtures: readStringArrayExpression(args[7], constants),
+    };
+  }
+  return { id: '', docs: [], api: [], fixtures: [] };
 }
 
 function readStringArrayExpression(node, constants) {

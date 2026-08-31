@@ -5,7 +5,7 @@ title: 数据操作
 api: ["AffineLayerOptions","ApplyExpressionOptions","BufferOptions","CheckGeometryOptions","CleanOptions","ClipEraseOptions","DataFillOptions","DissolveOptions","DivideOptions","DragSessionOptions","DropLayerOptions","Emap","ExplodeOptions","ExportSnapshotOptions","ExpressionEvaluationPolicy","FeatureAffineSession","FeatureRef","FeatureTranslateSession","FilterFieldsOptions","FilterGeomOptions","FilterIslandsOptions","FilterOptions","FilterSliversOptions","GeometryCheckReport","HighlightFeatureRef","HighlightStyle","InnerlinesOptions","IntersectionPointsLayerOptions","JoinTableData","JoinTableOptions","LinesOptions","LoadSnapshotOptions","MapOptions","MergeLayersOptions","MosaicOptions","PointsMode","PointsOptions","PolygonsOptions","ProjectLayerExport","ProjectLayerOutputOptions","ProjectOptions","QueriedFeature","QueryFeaturesOptions","RebuildTopologyOptions","RenameFieldsOptions","RenameLayerOptions","SimplifyMethod","SimplifyOptions","SnapOptions","SortFeaturesOptions","SplitCutter","SplitFeatureHandler","SplitFeatureOptions","SplitLayerOptions","SplitSelectedOptions","SplitSelectedResult","UnionOptions","UniqueFeaturesOptions"]
 examples: ["buffer","check-geometry","clip-erase","data-engineering","dissolve","divide","duckdb-overlay","duckdb-spatial-aggregate-join","explode","filter-features","innerlines","merge-layers","merge-selected","mosaic","project","rebuild-topology","rename-layer","simplify","simplify-control","snap-layer","split-features","split-layer","union"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # 数据操作
@@ -64,6 +64,23 @@ if (result.ok) {
 ```
 
 `OpError` 是判别联合，不保证存在通用 `message` 字段。应先按 `kind` 收窄。
+
+## MapshaperOps 方法
+
+`map.ops` 的公开方法按用途分组如下；详细签名和各自的 option 请查 API reference。
+
+- 几何与拓扑：`clipLayer`、`eraseLayer`、`dissolveLayer`、`bufferLayer`、`simplifyLayer`、
+  `projectLayer`、`affineLayer`、`cleanLayer`、`snapLayer`、`mosaicLayer`、`unionLayers`、
+  `divideLayer`
+- 要素几何：`filterIslands`、`filterSlivers`、`filterGeom`、`explodeLayer`、
+  `innerlinesLayer`、`pointsLayer`、`linesLayer`、`polygonsLayer`、
+  `intersectionPointsLayer`
+- 图层：`renameLayer`、`mergeLayers`、`splitLayer`、`dropLayer`
+- 属性与筛选：`applyExpression`、`filterFeatures`、`sortFeatures`、`uniqueFeatures`、
+  `filterFields`、`renameFields`、`joinTable`、`dataFill`
+- 拓扑维护：`rebuildTopology`、`checkGeometry`
+- 选择与编辑：`mergeSelected`、`splitSelected`、`reshapeSelected`、`addRing`、`deleteRing`、
+  `addPart`、`deletePart`
 
 ## 常用几何操作
 

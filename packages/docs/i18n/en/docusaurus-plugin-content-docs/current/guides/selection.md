@@ -5,7 +5,7 @@ title: Selection
 api: ["BoxSelectHandler","BoxSelectHandlerOptions","BoxSelectStyle","ClickSelectHandler","DragPanHandler","DragPanOptions","DrawFeatureHandler","DrawFeatureOptions","DrawGeometryType","Emap","featureMatchesLasso","LassoSelectHandler","LassoSelectHandlerOptions","LassoSelectStyle","LassoStyle","MergeSelectedOptions","ModifierCombo","pointInPolygon","resolveMode","ScrollZoomHandler","ScrollZoomOptions","SelectHandlerOptions","Selection","SelectionDiff","SelectionSnapshot","SelectMode","TransformFeatureHandler","TransformFeatureOptions","VertexEditHandler","VertexEditOptions"]
 examples: ["box-select","feature-rotate-scale","feature-selection","feature-translate","lasso-select","merge-selected"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # Selection
@@ -91,11 +91,13 @@ feature does not produce a redundant notification.
 
 ## Click, box, and lasso selection
 
-Click selection is disabled by default:
+Click selection is disabled by default. This example also overrides the default
+modifier mapping:
 
 ```ts
 map.clickSelect.setOptions({
   layers: ['district-fill'],
+  modifiers: { replace: 'none', add: 'ctrl', toggle: 'alt' },
 });
 map.clickSelect.enable();
 ```
@@ -108,11 +110,23 @@ if (map.clickSelect.isEnabled()) {
 }
 ```
 
-Switch box and lasso handlers explicitly:
+The default modifiers are:
+
+| Handler | None | Shift | Shift+Alt |
+|---|---|---|---|
+| `clickSelect`, `boxSelect` | `replace` | `add` | `toggle` |
+| `lassoSelect` | — | `replace` (drag) | `toggle` |
+
+For `lassoSelect`, Shift activates the lasso, so Shift+Ctrl/Cmd drag is `add`.
+Every selection handler has a configurable `modifiers` mapping. The example
+above changes click selection to Ctrl/Cmd for `add` and Alt for `toggle`.
+
+Box and lasso are mutually exclusive. Disable the old tool before enabling the
+new one:
 
 ```ts
-map.boxSelect.enable();
 map.lassoSelect.disable();
+map.boxSelect.enable();
 ```
 
 Or add the built-in controls:
@@ -150,7 +164,7 @@ const result = await map.ops.mergeSelected({
 });
 
 if (!result.ok) {
-  console.error(result.error.message);
+  console.error(result.error);
 }
 ```
 

@@ -5,7 +5,7 @@ title: Installation
 api: []
 examples: []
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # Installation and your first map
@@ -197,8 +197,11 @@ map.setExtent(source.getExtent());
 ```
 
 `filename` matters because the importer uses the extension to distinguish
-GeoJSON, TopoJSON, ZIP, and GeoParquet inputs. `setData(...)` resolves after the
-dataset has been populated and the `data` event has fired.
+GeoJSON, TopoJSON, KML, ZIP, and GeoParquet inputs. `.fgb` works only after
+the application has registered its local FlatGeobuf plugin; see [Data formats](../data/formats.md)
+and the [FlatGeobuf viewer](/mapseekai/emap/examples/flatgeobuf-viewer/).
+`setData(...)` resolves after the dataset has been populated and the `data`
+event has fired.
 
 ## Add explicit style layers
 

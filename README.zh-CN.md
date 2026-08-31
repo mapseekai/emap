@@ -20,16 +20,20 @@ GIS 应用，提供客户端数据加载、渲染、选择、拓扑感知编辑�
 ## 主要能力
 
 - 面向 Mapshaper 数据集的拓扑优先渲染，复用共享弧段并支持 LOD。
-- 支持 GeoJSON、TopoJSON、ZIP Shapefile 与 Mapshaper 快照加载。
+- 支持 GeoJSON、TopoJSON、KML（仅导入）、ZIP Shapefile 与 Mapshaper 快照加载。
+- FlatGeobuf 导入与导出通过应用注册的可选格式插件提供；请参阅
+  [数据格式](https://mapseekai.github.io/mapseekai/emap/data/formats/)与
+  [FlatGeobuf 查看器](https://mapseekai.github.io/mapseekai/emap/examples/flatgeobuf-viewer/)。
 - 使用 MapLibre 风格的 `fill`、`line` 与 `circle` 图层规范。
 - 内置 `dragPan`、`scrollZoom`、`clickSelect`、`boxSelect`、`lassoSelect`、
-  `vertexEdit`、`drawFeature` 和 `transformFeature` 等命名交互处理器。
+  `vertexEdit`、`drawFeature`、`splitFeature`、`reshapeFeature`、`ringEdit`、
+  `partEdit`、`measure` 和 `transformFeature` 等命名交互处理器。
 - 可只使用交互处理器、不使用内置 UI 控件，也可围绕相同处理器构建自己的工具栏。
 - 支持 `feature:click`、`feature:hover`、`feature:enter` 和 `feature:leave`
   等委托要素事件。
 - 提供 `jumpTo`、`easeTo`、`flyTo`、`fitBounds`、`panBy`、`panTo`、`zoomTo`
   和 `stop` 等相机方法。
-- 提供 30 多个由 Mapshaper 命令驱动的 `map.ops.*` 数据操作。
+- 提供 40 多个由 Mapshaper 命令驱动的 `map.ops.*` 数据操作；完整清单见[数据操作文档](https://mapseekai.github.io/mapseekai/emap/data/operations/)。
 - 支持撤销/重做、事务、校验器、要素访问、高亮与完整会话快照。
 - 可选 Web Worker，用于开销较大的数据集替换操作。
 - 可选 `@mapseekai/emap/duckdb` 模块，提供 DuckDB-Wasm 空间处理和 GeoParquet 查询。
@@ -161,9 +165,13 @@ if (result.status === 'ready') {
 支持的输入包括：
 
 - GeoJSON 和 TopoJSON。
+- KML（`.kml`，仅导入）。
 - 包含 `.shp`、`.dbf`、`.shx` 及可选 `.prj` 的 ZIP Shapefile。
 - 通过 `map.loadSnapshot()` 读取的 Mapshaper `.msx` 快照。
 - 导入可选 Arrow 模块后的 GeoParquet 与 GeoArrow。
+- FlatGeobuf 导入与导出通过应用注册的可选格式插件提供；请参阅
+  [数据格式](https://mapseekai.github.io/mapseekai/emap/data/formats/)与
+  [FlatGeobuf 查看器](https://mapseekai.github.io/mapseekai/emap/examples/flatgeobuf-viewer/)。
 
 ### 可选 Arrow 与 DuckDB 模块
 
@@ -296,6 +304,8 @@ MapLibre 画布始终位于所有 Emap 图层下方，且同一时间最多只�
 |---|---|
 | `NavigationControl` | 放大、缩小和重置视图 |
 | `StatusControl` | 显示指针坐标与 CRS |
+| `ScaleControl` | 显示本地椭球距离、标称 `1:N` 与 Web Mercator 缩放级别 |
+| `MeasureControl` | 交互式距离与面积测量 |
 | `BasemapControl` | 在已注册的 MapLibre 底图中单选 |
 | `LayerControl` | 切换 Emap 业务图层与 MapLibre 在线叠加层 |
 | `HistoryControl` | 撤销与重做 |

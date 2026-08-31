@@ -115,8 +115,7 @@
         const content = new Uint8Array(ev.target.result);
         const source = new TopologySource(SOURCE_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-        // is ready), then addSource (order-independent) + setExtent.
+        // Load initial data before registration: await setData, then addSource and setExtent.
         try {
           await source.setData({ filename: file.name, content });
           await map.addSource(SOURCE_ID, source);
@@ -158,7 +157,7 @@
         const result = await map.ops.mergeSelected({ attributeSource });
         status.textContent = result.ok
           ? `已合并 ${selected.length} 个要素，属性来自 ${attributeSourceLabel}，Ctrl+Z 撤销。`
-          : `合并失败: ${result.error.message}`;
+          : `合并失败: ${result.error.kind}`;
       } catch (error) {
         status.textContent = `错误: ${error instanceof Error ? error.message : String(error)}`;
         console.error(error);

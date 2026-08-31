@@ -5,7 +5,7 @@ title: 状态控件
 api: ["Emap"]
 examples: ["duckdb-geoparquet-query","duckdb-query"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # 状态控件

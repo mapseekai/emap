@@ -5,7 +5,7 @@ title: 撤销与重做
 api: ["Emap"]
 examples: ["attribute-editing","undo-redo"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # 撤销与重做

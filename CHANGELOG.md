@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Aligned root and bilingual format, operation, interaction, control, selection,
+  and error-handling guidance with the current API, including KML import-only
+  support and the application-registered FlatGeobuf plugin. Documentation
+  checks now parse the complete `seed()` / `recipe()` catalog and reject unknown
+  frontmatter example IDs; runnable examples now branch on `OpResult.ok` and use
+  public `TopologySource.replaceDataset()` instead of internal mutation hooks.
+
 ### Changed
 
 - Ring/part editing ops (`addRing`, `deleteRing`, `addPart`, `deletePart`) now commit in-place reversible commands instead of whole-dataset replacement: consecutive local edits support multi-level undo/redo, no per-op dataset clone, and deleting a ring/part no longer compacts the arc collection. MSX snapshot export serializes a compacted copy so orphan arcs never bloat the file.

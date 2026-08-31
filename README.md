@@ -23,18 +23,21 @@ or controlled internal workflows first.
 ## Highlights
 
 - Topology-first rendering for Mapshaper datasets, with shared-arc reuse and LOD.
-- GeoJSON, TopoJSON, ZIP Shapefile, and Mapshaper snapshot loading.
+- GeoJSON, TopoJSON, KML (import only), ZIP Shapefile, and Mapshaper snapshot loading.
+- FlatGeobuf import/export through an optional application-registered format
+  plugin; see the [formats guide](https://mapseekai.github.io/mapseekai/emap/en/data/formats/)
+  and [FlatGeobuf viewer](https://mapseekai.github.io/mapseekai/emap/examples/flatgeobuf-viewer/).
 - MapLibre-style layer specs: `fill`, `line`, and `circle`.
 - Named interaction handlers: `dragPan`, `scrollZoom`, `clickSelect`,
-  `boxSelect`, `lassoSelect`, `vertexEdit`, `drawFeature`, and
-  `transformFeature`.
+  `boxSelect`, `lassoSelect`, `vertexEdit`, `drawFeature`, `splitFeature`,
+  `reshapeFeature`, `ringEdit`, `partEdit`, `measure`, and `transformFeature`.
 - Handler-driven customization: use built-in interactions without the bundled UI
   controls, or build your own toolbar around the same handlers.
 - Delegated feature events: `feature:click`, `feature:hover`, `feature:enter`,
   and `feature:leave`.
 - MapLibre-parity camera methods: `jumpTo`, `easeTo`, `flyTo`, `fitBounds`,
   `panBy`, `panTo`, `zoomTo`, and `stop`.
-- 30+ `map.ops.*` data operations backed by Mapshaper commands.
+- 40+ `map.ops.*` data operations backed by Mapshaper commands.
 - Undo/redo, transactions, validators, feature accessors, highlighting, and
   full-session snapshots.
 - Optional Web Worker offloading for expensive dataset-replace operations.
@@ -212,9 +215,13 @@ load them first, then call `addSource()` or `preflightSource()`.
 Supported inputs:
 
 - GeoJSON and TopoJSON.
+- KML (`.kml`, import only).
 - ZIP Shapefile archives containing `.shp`, `.dbf`, `.shx`, and optional `.prj`.
 - Mapshaper `.msx` snapshots via `map.loadSnapshot()`.
 - GeoParquet and GeoArrow, with the optional Arrow module (below).
+- FlatGeobuf import/export through an optional application-registered format
+  plugin; see the [formats guide](https://mapseekai.github.io/mapseekai/emap/en/data/formats/)
+  and [FlatGeobuf viewer](https://mapseekai.github.io/mapseekai/emap/examples/flatgeobuf-viewer/).
 
 ### GeoParquet / GeoArrow (optional module)
 
@@ -630,8 +637,12 @@ map.boxSelect.setOptions({
 });
 map.boxSelect.enable();
 
+map.boxSelect.disable();
 map.lassoSelect.setOptions({ layers: ['district-fill'] });
 map.lassoSelect.enable();
+
+// Disable the current gesture-owning tool before enabling the next one.
+map.lassoSelect.disable();
 
 map.drawFeature.setOptions({
   source: 'editing',
@@ -640,8 +651,10 @@ map.drawFeature.setOptions({
   snapSources: ['editing', 'reference'],
 });
 map.drawFeature.enable();
+map.drawFeature.disable();
 
 map.vertexEdit.enable();
+map.vertexEdit.disable();
 
 map.clickSelect.enable();
 map.transformFeature.setOptions({ mode: 'translate' });
@@ -669,6 +682,11 @@ Available named handlers:
 | `map.lassoSelect` | Free-form lasso selection |
 | `map.vertexEdit` | Topology-aware vertex editing |
 | `map.drawFeature` | Point, polyline, and polygon drawing |
+| `map.splitFeature` | Split features with an interactive cutter |
+| `map.reshapeFeature` | Reshape features along an interactive line |
+| `map.ringEdit` | Add or remove interior polygon rings |
+| `map.partEdit` | Add or remove line or polygon parts |
+| `map.measure` | Interactive distance and area measurement |
 | `map.transformFeature` | Translate, rotate, or scale selected features |
 
 ## Building Your Own UI
@@ -728,6 +746,11 @@ function activateBoxSelect() {
   map.lassoSelect.disable();
   map.vertexEdit.disable();
   map.drawFeature.disable();
+  map.splitFeature.disable();
+  map.reshapeFeature.disable();
+  map.ringEdit.disable();
+  map.partEdit.disable();
+  map.measure.disable();
   map.transformFeature.disable();
   map.boxSelect.enable();
   boxButton.dataset.active = 'true';
@@ -791,23 +814,25 @@ const result = await map.ops.bufferLayer({
 });
 
 if (!result.ok) {
-  console.error(result.error.kind, result.error.message);
+  console.error(result.error);
 }
 ```
 
 Common operation groups:
 
-- Geometry operations: `clipLayer`, `eraseLayer`, `dissolveLayer`,
-  `bufferLayer`, `simplifyLayer`, `projectLayer`, `cleanLayer`, `snapLayer`.
-- Conversion operations: `pointsLayer`, `linesLayer`, `polygonsLayer`,
-  `innerlinesLayer`, `explodeLayer`.
+- Geometry and overlay operations: `clipLayer`, `eraseLayer`, `dissolveLayer`,
+  `bufferLayer`, `filterIslands`, `filterSlivers`, `filterGeom`, `explodeLayer`,
+  `innerlinesLayer`, `snapLayer`, `cleanLayer`, `mosaicLayer`, `unionLayers`,
+  `divideLayer`, `pointsLayer`, `linesLayer`, `polygonsLayer`, `simplifyLayer`,
+  `projectLayer`, `affineLayer`.
 - Layer operations: `renameLayer`, `mergeLayers`, `splitLayer`, `dropLayer`.
-- Attribute operations: `applyExpression`, `filterFeatures`, `joinTable`,
-  `sortFeatures`, `uniqueFeatures`, `filterFields`, `renameFields`,
+- Attribute and feature operations: `applyExpression`, `filterFeatures`,
+  `sortFeatures`, `uniqueFeatures`, `filterFields`, `renameFields`, `joinTable`,
   `dataFill`.
-- Inspection and repair: `checkGeometry`, `rebuildTopology`,
+- Inspection and topology: `rebuildTopology`, `checkGeometry`,
   `intersectionPointsLayer`.
-- Selection-driven operation: `mergeSelected`.
+- Selection and edit operations: `mergeSelected`, `splitSelected`,
+  `reshapeSelected`, `addRing`, `deleteRing`, `addPart`, `deletePart`.
 
 Expression-bearing APIs are disabled by default for safety:
 
@@ -958,6 +983,7 @@ basemap can be active at a time; online overlays share that lower canvas.
 | `NavigationControl` | Zoom in, zoom out, reset |
 | `StatusControl` | Pointer coordinates and CRS |
 | `ScaleControl` | Local ellipsoidal distance bar, nominal `1:N`, and Web Mercator zoom |
+| `MeasureControl` | Interactive distance and area measurement |
 | `BasemapControl` | Select one registered MapLibre basemap |
 | `LayerControl` | Toggle Emap business layers and MapLibre online overlays |
 | `HistoryControl` | Undo/redo buttons |
@@ -1043,7 +1069,7 @@ packages/examples/examples/ # Canonical runnable HTML examples
 - **Effect-aware dataset replace** — each dataset op must classify its effect in `COMMAND_EFFECTS` (`src/map/ops/_runner.ts`) as `shape-count` / `topology-only` / `attribute-only` / `crs-only` / `unknown`. Selection preservation depends on this table.
 - **Memento commands + EditHistory** — every edit command captures enough state to `do()` and `undo()` without depending on later live dataset state. Dataset-replace commands mark older commands as stale barriers rather than clearing history.
 - **Transaction** (`src/edit/transaction.ts`) — `commit(label)` collapses staged commands into one `CompositeCommand`; `rollback()` restores first-touch snapshots and selection. Nesting is not supported.
-- **Handler architecture** — all interactions (`dragPan`, `scrollZoom`, `clickSelect`, `boxSelect`, `lassoSelect`, `vertexEdit`, `drawFeature`, `transformFeature`) implement the `Handler` contract. `HandlerManager` owns pointer normalization, priority, exclusive gesture locking, pointer sinks, and cursor arbitration. UI controls forward to handlers rather than duplicating pointer logic.
+- **Handler architecture** — all interactions (`dragPan`, `scrollZoom`, `clickSelect`, `boxSelect`, `lassoSelect`, `vertexEdit`, `drawFeature`, `splitFeature`, `reshapeFeature`, `ringEdit`, `partEdit`, `measure`, `transformFeature`) implement the `Handler` contract. `HandlerManager` owns pointer normalization, priority, exclusive gesture locking, pointer sinks, and cursor arbitration. UI controls forward to handlers rather than duplicating pointer logic.
 - **EventDispatcher** — `on()` / `fire()` for engine-level signals. Raw DOM events live only at browser input boundaries, control DOM, and the handler manager.
 - **Rendering loop** — `Emap.render()` is the driver; defer DOM updates / state changes via `requestAnimationFrame`, event callbacks, or tween callbacks.
 - **AffineTransform** — all coordinate math goes through `AffineTransform` and viewport projection helpers; no ad-hoc matrices.

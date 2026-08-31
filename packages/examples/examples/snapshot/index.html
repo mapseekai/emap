@@ -134,8 +134,7 @@
           const id = uniqueSourceId(baseId);
           status.textContent = `加载 ${file.name} 为源 "${id}"...`;
           const source = new TopologySource(id);
-          // Canonical 0.2.0 recipe: await setData (resolves once the dataset
-          // is ready), then addSource (order-independent).
+          // Load initial data before registration: await setData, then addSource.
           await source.setData({ filename: file.name, content });
           await map.addSource(id, source);
           sourceIds.add(id);

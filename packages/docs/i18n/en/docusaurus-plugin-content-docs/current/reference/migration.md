@@ -5,7 +5,7 @@ title: Migration
 api: ["Emap"]
 examples: ["attribute-expressions"]
 stability: stable
-verifiedVersion: 0.5.0
+verifiedVersion: 0.8.1
 ---
 
 # Migration
