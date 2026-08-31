@@ -10,7 +10,8 @@ verifiedVersion: 0.5.0
 
 # Migration
 
-The current docs assume typed imports from `@mapseekai/emap`, optional subpath imports for `formats` and `duckdb`, and `expressionPolicy: "disabled"` by default.
+The current docs assume typed imports from `@mapseekai/emap`, optional subpath imports for `arrow` and `duckdb`, [modern TypeScript resolver settings](../getting-started/installation.md), and `expressionPolicy: "disabled"` by default.
+
 
 ## Behavior notes
 

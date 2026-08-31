@@ -27,6 +27,10 @@ pnpm add @duckdb/duckdb-wasm
 const duckdb = await import('@mapseekai/emap/duckdb');
 ```
 
+`duckdb` 是 `package.json` 的 `exports` 子路径；Vite 等浏览器打包器以及原生 Node ESM
+的 TypeScript 设置，请参见[安装中的模块解析配置](../getting-started/installation.md#typescript-模块解析)。
+
+
 ## 初始化运行时
 
 使用 jsDelivr bundle：

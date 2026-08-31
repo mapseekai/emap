@@ -1,11 +1,14 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "baseUrl": ".",
+    "moduleResolution": "bundler",
     "noEmit": true,
     "types": ["vite/client"],
     "paths": {
       "@mapseekai/emap": ["../../src/index.ts"],
       "@mapseekai/emap/arrow": ["../../src/arrow/index.ts"],
+      "@mapseekai/emap/duckdb": ["../../src/duckdb/index.ts"],
       "@mapseekai/emap/style.css": ["../../src/types/style.css.d.ts"]
     }
   },

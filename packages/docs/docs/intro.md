@@ -81,6 +81,10 @@ import '@mapseekai/emap/arrow';
 const duckdb = await import('@mapseekai/emap/duckdb');
 ```
 
+`arrow` 和 `duckdb` 都是 `package.json` 的 `exports` 子路径；Vite 等浏览器打包器
+以及原生 Node ESM 的 TypeScript 设置，请参见[安装中的模块解析配置](./getting-started/installation.md#typescript-模块解析)。
+
+
 启用 Worker 时，宿主应用还需要提供 `emap-worker.js` 和
 `mapshaper-vendor.js`。具体部署方式见 [Web Worker 指南](./guides/worker.md)。
 

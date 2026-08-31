@@ -48,6 +48,26 @@ Or:
 npm install @mapseekai/emap
 ```
 
+## TypeScript resolution for optional modules
+
+`@mapseekai/emap/arrow` and `@mapseekai/emap/duckdb` are `package.json`
+export subpaths. For Vite and other browser bundlers, ensure the application
+TypeScript config—usually `tsconfig.app.json` in current Vite templates—contains:
+
+```json
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler"
+  }
+}
+```
+
+Native Node ESM must instead use matching `Node16` or `NodeNext` settings for
+both `module` and `moduleResolution`. Legacy `node` or `node10` resolution
+cannot resolve these subpaths, even when their declaration files exist.
+
+
 ## Prepare the map container
 
 Replace the body of `index.html` with:

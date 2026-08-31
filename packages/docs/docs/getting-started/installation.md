@@ -47,6 +47,27 @@ pnpm add @mapseekai/emap
 npm install @mapseekai/emap
 ```
 
+## TypeScript 模块解析
+
+`@mapseekai/emap/arrow` 和 `@mapseekai/emap/duckdb` 是包的 `package.json`
+`exports` 子路径。Vite 等浏览器打包器应在应用的 TypeScript 配置中确保以下选项；
+新版 Vite 模板通常使用 `tsconfig.app.json`：
+
+```json
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler"
+  }
+}
+```
+
+原生 Node ESM 项目则必须配对使用 `"module": "Node16"` 与
+`"moduleResolution": "Node16"`，或配对使用 `"module": "NodeNext"` 与
+`"moduleResolution": "NodeNext"`。旧版 `"node"`/`"node10"` 解析不支持 package
+exports，因而即使声明文件存在，也无法解析这些可选子路径。
+
+
 ## 准备地图容器
 
 将 `index.html` 的主体改为：

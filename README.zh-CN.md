@@ -53,6 +53,24 @@ npm install @mapseekai/emap
 pnpm add @mapseekai/emap
 ```
 
+对于 Vite 等浏览器打包器，TypeScript 必须使用 ES module 和 bundler 解析，才能解析
+`@mapseekai/emap/arrow` 与 `@mapseekai/emap/duckdb` 这两个 `package.json`
+`exports` 子路径：
+
+```json
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler"
+  }
+}
+```
+
+原生 Node ESM 要配对使用 `Node16` 或 `NodeNext` 的 `module` 与
+`moduleResolution`；旧版 `node`/`node10` 解析即使找到声明文件也不能解析这些子路径。
+完整配置见[安装文档](packages/docs/docs/getting-started/installation.md#typescript-模块解析)。
+
+
 ## 快速开始
 
 ### 打包工具
@@ -146,6 +164,24 @@ if (result.status === 'ready') {
 - 包含 `.shp`、`.dbf`、`.shx` 及可选 `.prj` 的 ZIP Shapefile。
 - 通过 `map.loadSnapshot()` 读取的 Mapshaper `.msx` 快照。
 - 导入可选 Arrow 模块后的 GeoParquet 与 GeoArrow。
+
+### 可选 Arrow 与 DuckDB 模块
+
+GeoParquet 和 GeoArrow 需要显式导入 Arrow 子路径：
+
+```ts
+import '@mapseekai/emap/arrow';
+```
+
+需要浏览器内的 DuckDB-Wasm 查询或空间处理时，再按需动态导入 DuckDB 子路径：
+
+```ts
+const duckdb = await import('@mapseekai/emap/duckdb');
+```
+
+`@duckdb/duckdb-wasm` 是可选依赖；包管理器没有安装它时，请显式执行
+`pnpm add @duckdb/duckdb-wasm`。
+
 
 ## 图层与渲染
 

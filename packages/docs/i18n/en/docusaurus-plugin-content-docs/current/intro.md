@@ -93,6 +93,12 @@ import '@mapseekai/emap/arrow';
 const duckdb = await import('@mapseekai/emap/duckdb');
 ```
 
+Arrow and DuckDB are `package.json` export subpaths. Configure a modern
+TypeScript resolver before importing them; see
+[Installation](./getting-started/installation.md) for browser-bundler, native
+Node ESM, and legacy-resolver requirements.
+
+
 Worker deployments must also serve `emap-worker.js` and
 `mapshaper-vendor.js`. See the [Web Worker guide](./guides/worker.md) for the
 deployment layout.

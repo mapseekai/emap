@@ -10,7 +10,10 @@ verifiedVersion: 0.5.0
 
 # 迁移
 
-当前文档默认使用 `@mapseekai/emap` 的类型化导入、`formats` 和 `duckdb` 可选子路径，以及默认 `expressionPolicy: "disabled"`。
+当前文档默认使用 `@mapseekai/emap` 的类型化导入、`arrow` 和 `duckdb` 可选子路径，
+以及默认 `expressionPolicy: "disabled"`。这些子路径通过 `package.json` 的 `exports`
+提供；请按[安装中的模块解析配置](../getting-started/installation.md#typescript-模块解析)
+选择 TypeScript 解析器。
 
 ## 行为说明
 

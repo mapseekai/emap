@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The examples TypeScript configuration now uses package-local source aliases and bundler module resolution, so the optional `@mapseekai/emap/arrow` and `@mapseekai/emap/duckdb` subpaths resolve without legacy Node `TS2307` errors; consumer setup docs now explain the modern resolver requirement.
 - Transaction rollback now reverse-undoes captured commands, so in-place edits staged inside a transaction are actually reverted (previously only dataset-replacing ops rolled back correctly).
 
 ## [0.8.1] - 2026-08-29

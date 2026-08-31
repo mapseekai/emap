@@ -72,6 +72,12 @@ Before parquet/arrow import or export:
 import '@mapseekai/emap/arrow';
 ```
 
+`@mapseekai/emap/arrow` is a `package.json` export subpath. Configure a modern
+TypeScript resolver before importing it; see
+[Installation](../getting-started/installation.md) for browser-bundler, native
+Node ESM, and legacy-resolver requirements.
+
+
 This side-effect import registers format plugins. GeoArrow does not need WASM.
 GeoParquet lazily imports `parquet-wasm` on first use. Bundlers such as Vite and
 webpack 5 normally emit the WASM asset automatically.

@@ -92,6 +92,25 @@ The ESM build is browser-ready. Mapshaper is shipped as a sibling ES module
 resolved from `node_modules/@mapseekai/emap/dist/`, so Vite, webpack, esbuild,
 and Bun consumers should not need a `Buffer` polyfill or a custom alias.
 
+#### TypeScript resolver for optional modules
+
+`@mapseekai/emap/arrow` and `@mapseekai/emap/duckdb` are `package.json` export
+subpaths. For Vite and other browser bundlers, use:
+
+```json
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler"
+  }
+}
+```
+
+Native Node ESM must instead use matching `Node16` or `NodeNext` settings for
+both `module` and `moduleResolution`. Legacy `node` or `node10` resolution
+cannot resolve these subpaths, even when their declaration files exist.
+
+
 ### Static Assets
 
 Some runtime files are loaded by URL instead of being inlined into your
@@ -109,7 +128,8 @@ For bundlers, prefer:
 import '@mapseekai/emap/style.css';
 ```
 
-TypeScript resolves this CSS import to the bundled declaration file under both modern conditional exports and legacy Node-style module resolution.
+Unlike the optional JavaScript subpaths, TypeScript resolves this CSS import to the bundled declaration file under both modern conditional exports and legacy Node-style module resolution.
+
 
 For script-tag or static-host deployments, copy the files from
 `node_modules/@mapseekai/emap/dist/` into your public assets directory. When
@@ -212,6 +232,10 @@ const blob = await source.export({ format: 'geoparquet' }); // WKB encoding defa
 const arrow = await source.export({ format: 'geoarrow' }); // native encoding default
 ```
 
+Use the modern resolver configuration in [Bundlers](#bundlers) above for every
+`@mapseekai/emap/arrow` import.
+
+
 In-memory Arrow tables work without files — this is the duckdb-wasm bridge
 (query results with an `ST_AsWKB(geometry)` column convert directly):
 
@@ -264,6 +288,9 @@ import {
   setDuckDbRuntime,
 } from '@mapseekai/emap/duckdb';
 ```
+
+Use the modern resolver configuration in [Bundlers](#bundlers) above for every
+`@mapseekai/emap/duckdb` import.
 
 The package declares `@duckdb/duckdb-wasm` as an optional dependency. If your
 package manager does not install optional dependencies by default, install it

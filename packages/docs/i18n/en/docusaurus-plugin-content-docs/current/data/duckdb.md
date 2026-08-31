@@ -29,6 +29,12 @@ Load lazily:
 const duckdb = await import('@mapseekai/emap/duckdb');
 ```
 
+`@mapseekai/emap/duckdb` is a `package.json` export subpath. Configure a modern
+TypeScript resolver before importing it; see
+[Installation](../getting-started/installation.md) for browser-bundler, native
+Node ESM, and legacy-resolver requirements.
+
+
 ## Initialize the runtime
 
 ```ts

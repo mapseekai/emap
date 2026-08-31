@@ -78,6 +78,10 @@ Emap 对 ZIP 设置 entry 数量、总解压大小和压缩比限制，避免浏
 import '@mapseekai/emap/arrow';
 ```
 
+`arrow` 是 `package.json` 的 `exports` 子路径；Vite 等浏览器打包器以及原生 Node ESM
+的 TypeScript 设置，请参见[安装中的模块解析配置](../getting-started/installation.md#typescript-模块解析)。
+
+
 该导入注册格式插件。GeoArrow 不需要 WASM；GeoParquet 第一次使用时会懒加载
 `parquet-wasm`。Vite 和 webpack 5 等能输出 WASM asset 的 bundler 通常无需额外配置。
 
