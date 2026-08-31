@@ -71,9 +71,21 @@ export interface TopologySource extends Source {
    * Always emits full-detail geometry; the source's render-time LOD interval
    * is restored before the promise resolves.
    *
-   * - `geojson` / `topojson` — single-file output, returned as `application/json`
-   * - `shapefile` — multi-file output (.shp/.shx/.dbf/.prj), returned as a
-   *   single `application/zip` Blob packed via fflate
+   * Supported `format` values:
+   *
+   * - `geojson` — single-file `application/geo+json`
+   * - `topojson` — single-file `application/json`
+   * - `shapefile` — `.shp`, `.shx`, `.dbf`, and optional `.prj` files packed
+   *   into one `application/zip` Blob
+   * - `msx` — compact mapshaper snapshot as `application/octet-stream`
+   * - `geoparquet` — requires importing `@mapseekai/emap/arrow`; returns
+   *   `application/vnd.apache.parquet`
+   * - `geoarrow` — requires importing `@mapseekai/emap/arrow`; returns
+   *   `application/vnd.apache.arrow.file`
+   * - `flatgeobuf` — requires a registered FlatGeobuf format plugin; returns
+   *   `application/x-flatgeobuf`
+   *
+   * KML is import-only and cannot be exported.
    */
   export(options: ExportOptions): Promise<Blob>;
   getCRS?(): string;

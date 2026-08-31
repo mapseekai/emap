@@ -724,10 +724,13 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   }
 
   /**
-   * Serialize the current dataset to a browser Blob via mapshaper's exporter.
+   * Serialize the current dataset to one browser `Blob`.
    *
-   * Multi-file shapefile output is packed into a single zip Blob using fflate
-   * so callers always receive one Blob per call.
+   * Mapshaper handles `geojson`, `topojson`, `shapefile`, and `msx`.
+   * Registered format plugins handle `geoparquet`, `geoarrow`, and
+   * `flatgeobuf`; import `@mapseekai/emap/arrow` for the Arrow formats and
+   * register a FlatGeobuf plugin before exporting that format. Multi-file
+   * shapefile output is packed into one ZIP Blob using fflate.
    */
   public async export(options: ExportOptions): Promise<Blob> {
     if (!this._dataset) {

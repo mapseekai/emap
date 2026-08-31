@@ -85,11 +85,21 @@
 <div class="tsd-comment tsd-typography"><p>Serialize the current in-memory dataset to a browser <code>Blob</code>.</p>
 <p>Always emits full-detail geometry; the source's render-time LOD interval
 is restored before the promise resolves.</p>
+<p>Supported <code>format</code> values:</p>
 <ul>
-<li><code>geojson</code> / <code>topojson</code> — single-file output, returned as <code>application/json</code></li>
-<li><code>shapefile</code> — multi-file output (.shp/.shx/.dbf/.prj), returned as a
-single <code>application/zip</code> Blob packed via fflate</li>
+<li><code>geojson</code> — single-file <code>application/geo+json</code></li>
+<li><code>topojson</code> — single-file <code>application/json</code></li>
+<li><code>shapefile</code> — <code>.shp</code>, <code>.shx</code>, <code>.dbf</code>, and optional <code>.prj</code> files packed
+into one <code>application/zip</code> Blob</li>
+<li><code>msx</code> — compact mapshaper snapshot as <code>application/octet-stream</code></li>
+<li><code>geoparquet</code> — requires importing <code>@mapseekai/emap/arrow</code>; returns
+<code>application/vnd.apache.parquet</code></li>
+<li><code>geoarrow</code> — requires importing <code>@mapseekai/emap/arrow</code>; returns
+<code>application/vnd.apache.arrow.file</code></li>
+<li><code>flatgeobuf</code> — requires a registered FlatGeobuf format plugin; returns
+<code>application/x-flatgeobuf</code></li>
 </ul>
+<p>KML is import-only and cannot be exported.</p>
 </div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
@@ -99,7 +109,7 @@ single <code>application/zip</code> Blob packed via fflate</li>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Blob</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L78">src/source/source.ts:78</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L90">src/source/source.ts:90</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="fire"><span>fire</span><a href="#fire" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures tsd-is-inherited">
@@ -140,7 +150,7 @@ single <code>application/zip</code> Blob packed via fflate</li>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L79">src/source/source.ts:79</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L91">src/source/source.ts:91</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="getdataset"><span>get<wbr/>Dataset</span><a href="#getdataset" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">

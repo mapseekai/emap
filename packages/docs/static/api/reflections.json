@@ -80151,9 +80151,9 @@
 							"sources": [
 								{
 									"fileName": "src/source/topology-source.ts",
-									"line": 732,
+									"line": 735,
 									"character": 15,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L732"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L735"
 								}
 							],
 							"signatures": [
@@ -80167,16 +80167,88 @@
 										"summary": [
 											{
 												"kind": "text",
-												"text": "Serialize the current dataset to a browser Blob via mapshaper's exporter.\n\nMulti-file shapefile output is packed into a single zip Blob using fflate\nso callers always receive one Blob per call."
+												"text": "Serialize the current dataset to one browser "
+											},
+											{
+												"kind": "code",
+												"text": "`Blob`"
+											},
+											{
+												"kind": "text",
+												"text": ".\n\nMapshaper handles "
+											},
+											{
+												"kind": "code",
+												"text": "`geojson`"
+											},
+											{
+												"kind": "text",
+												"text": ", "
+											},
+											{
+												"kind": "code",
+												"text": "`topojson`"
+											},
+											{
+												"kind": "text",
+												"text": ", "
+											},
+											{
+												"kind": "code",
+												"text": "`shapefile`"
+											},
+											{
+												"kind": "text",
+												"text": ", and "
+											},
+											{
+												"kind": "code",
+												"text": "`msx`"
+											},
+											{
+												"kind": "text",
+												"text": ".\nRegistered format plugins handle "
+											},
+											{
+												"kind": "code",
+												"text": "`geoparquet`"
+											},
+											{
+												"kind": "text",
+												"text": ", "
+											},
+											{
+												"kind": "code",
+												"text": "`geoarrow`"
+											},
+											{
+												"kind": "text",
+												"text": ", and\n"
+											},
+											{
+												"kind": "code",
+												"text": "`flatgeobuf`"
+											},
+											{
+												"kind": "text",
+												"text": "; import "
+											},
+											{
+												"kind": "code",
+												"text": "`@mapseekai/emap/arrow`"
+											},
+											{
+												"kind": "text",
+												"text": " for the Arrow formats and\nregister a FlatGeobuf plugin before exporting that format. Multi-file\nshapefile output is packed into one ZIP Blob using fflate."
 											}
 										]
 									},
 									"sources": [
 										{
 											"fileName": "src/source/topology-source.ts",
-											"line": 732,
+											"line": 735,
 											"character": 15,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L732"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L735"
 										}
 									],
 									"parameters": [
@@ -80666,9 +80738,9 @@
 							"sources": [
 								{
 									"fileName": "src/source/topology-source.ts",
-									"line": 822,
+									"line": 825,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L822"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L825"
 								}
 							],
 							"signatures": [
@@ -80731,9 +80803,9 @@
 									"sources": [
 										{
 											"fileName": "src/source/topology-source.ts",
-											"line": 822,
+											"line": 825,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L822"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L825"
 										}
 									],
 									"type": {
@@ -108418,9 +108490,9 @@
 							"sources": [
 								{
 									"fileName": "src/source/source.ts",
-									"line": 78,
+									"line": 90,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L78"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L90"
 								}
 							],
 							"signatures": [
@@ -108442,7 +108514,15 @@
 											},
 											{
 												"kind": "text",
-												"text": ".\n\nAlways emits full-detail geometry; the source's render-time LOD interval\nis restored before the promise resolves.\n\n- "
+												"text": ".\n\nAlways emits full-detail geometry; the source's render-time LOD interval\nis restored before the promise resolves.\n\nSupported "
+											},
+											{
+												"kind": "code",
+												"text": "`format`"
+											},
+											{
+												"kind": "text",
+												"text": " values:\n\n- "
 											},
 											{
 												"kind": "code",
@@ -108450,7 +108530,15 @@
 											},
 											{
 												"kind": "text",
-												"text": " / "
+												"text": " — single-file "
+											},
+											{
+												"kind": "code",
+												"text": "`application/geo+json`"
+											},
+											{
+												"kind": "text",
+												"text": "\n- "
 											},
 											{
 												"kind": "code",
@@ -108458,7 +108546,7 @@
 											},
 											{
 												"kind": "text",
-												"text": " — single-file output, returned as "
+												"text": " — single-file "
 											},
 											{
 												"kind": "code",
@@ -108474,7 +108562,39 @@
 											},
 											{
 												"kind": "text",
-												"text": " — multi-file output (.shp/.shx/.dbf/.prj), returned as a\n  single "
+												"text": " — "
+											},
+											{
+												"kind": "code",
+												"text": "`.shp`"
+											},
+											{
+												"kind": "text",
+												"text": ", "
+											},
+											{
+												"kind": "code",
+												"text": "`.shx`"
+											},
+											{
+												"kind": "text",
+												"text": ", "
+											},
+											{
+												"kind": "code",
+												"text": "`.dbf`"
+											},
+											{
+												"kind": "text",
+												"text": ", and optional "
+											},
+											{
+												"kind": "code",
+												"text": "`.prj`"
+											},
+											{
+												"kind": "text",
+												"text": " files packed\n  into one "
 											},
 											{
 												"kind": "code",
@@ -108482,16 +108602,96 @@
 											},
 											{
 												"kind": "text",
-												"text": " Blob packed via fflate"
+												"text": " Blob\n- "
+											},
+											{
+												"kind": "code",
+												"text": "`msx`"
+											},
+											{
+												"kind": "text",
+												"text": " — compact mapshaper snapshot as "
+											},
+											{
+												"kind": "code",
+												"text": "`application/octet-stream`"
+											},
+											{
+												"kind": "text",
+												"text": "\n- "
+											},
+											{
+												"kind": "code",
+												"text": "`geoparquet`"
+											},
+											{
+												"kind": "text",
+												"text": " — requires importing "
+											},
+											{
+												"kind": "code",
+												"text": "`@mapseekai/emap/arrow`"
+											},
+											{
+												"kind": "text",
+												"text": "; returns\n  "
+											},
+											{
+												"kind": "code",
+												"text": "`application/vnd.apache.parquet`"
+											},
+											{
+												"kind": "text",
+												"text": "\n- "
+											},
+											{
+												"kind": "code",
+												"text": "`geoarrow`"
+											},
+											{
+												"kind": "text",
+												"text": " — requires importing "
+											},
+											{
+												"kind": "code",
+												"text": "`@mapseekai/emap/arrow`"
+											},
+											{
+												"kind": "text",
+												"text": "; returns\n  "
+											},
+											{
+												"kind": "code",
+												"text": "`application/vnd.apache.arrow.file`"
+											},
+											{
+												"kind": "text",
+												"text": "\n- "
+											},
+											{
+												"kind": "code",
+												"text": "`flatgeobuf`"
+											},
+											{
+												"kind": "text",
+												"text": " — requires a registered FlatGeobuf format plugin; returns\n  "
+											},
+											{
+												"kind": "code",
+												"text": "`application/x-flatgeobuf`"
+											},
+											{
+												"kind": "text",
+												"text": "\n\nKML is import-only and cannot be exported."
 											}
 										]
 									},
 									"sources": [
 										{
 											"fileName": "src/source/source.ts",
-											"line": 78,
+											"line": 90,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L78"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L90"
 										}
 									],
 									"parameters": [
@@ -108726,9 +108926,9 @@
 							"sources": [
 								{
 									"fileName": "src/source/source.ts",
-									"line": 79,
+									"line": 91,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L79"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L91"
 								}
 							],
 							"signatures": [
@@ -108749,9 +108949,9 @@
 									"sources": [
 										{
 											"fileName": "src/source/source.ts",
-											"line": 79,
+											"line": 91,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L79"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L91"
 										}
 									],
 									"type": {
@@ -129806,9 +130006,9 @@
 							"sources": [
 								{
 									"fileName": "src/source/source.ts",
-									"line": 78,
+									"line": 90,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L78"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L90"
 								}
 							],
 							"signatures": [
@@ -129832,7 +130032,15 @@
 											},
 											{
 												"kind": "text",
-												"text": ".\n\nAlways emits full-detail geometry; the source's render-time LOD interval\nis restored before the promise resolves.\n\n- "
+												"text": ".\n\nAlways emits full-detail geometry; the source's render-time LOD interval\nis restored before the promise resolves.\n\nSupported "
+											},
+											{
+												"kind": "code",
+												"text": "`format`"
+											},
+											{
+												"kind": "text",
+												"text": " values:\n\n- "
 											},
 											{
 												"kind": "code",
@@ -129840,7 +130048,15 @@
 											},
 											{
 												"kind": "text",
-												"text": " / "
+												"text": " — single-file "
+											},
+											{
+												"kind": "code",
+												"text": "`application/geo+json`"
+											},
+											{
+												"kind": "text",
+												"text": "\n- "
 											},
 											{
 												"kind": "code",
@@ -129848,7 +130064,7 @@
 											},
 											{
 												"kind": "text",
-												"text": " — single-file output, returned as "
+												"text": " — single-file "
 											},
 											{
 												"kind": "code",
@@ -129864,7 +130080,39 @@
 											},
 											{
 												"kind": "text",
-												"text": " — multi-file output (.shp/.shx/.dbf/.prj), returned as a\n  single "
+												"text": " — "
+											},
+											{
+												"kind": "code",
+												"text": "`.shp`"
+											},
+											{
+												"kind": "text",
+												"text": ", "
+											},
+											{
+												"kind": "code",
+												"text": "`.shx`"
+											},
+											{
+												"kind": "text",
+												"text": ", "
+											},
+											{
+												"kind": "code",
+												"text": "`.dbf`"
+											},
+											{
+												"kind": "text",
+												"text": ", and optional "
+											},
+											{
+												"kind": "code",
+												"text": "`.prj`"
+											},
+											{
+												"kind": "text",
+												"text": " files packed\n  into one "
 											},
 											{
 												"kind": "code",
@@ -129872,16 +130120,96 @@
 											},
 											{
 												"kind": "text",
-												"text": " Blob packed via fflate"
+												"text": " Blob\n- "
+											},
+											{
+												"kind": "code",
+												"text": "`msx`"
+											},
+											{
+												"kind": "text",
+												"text": " — compact mapshaper snapshot as "
+											},
+											{
+												"kind": "code",
+												"text": "`application/octet-stream`"
+											},
+											{
+												"kind": "text",
+												"text": "\n- "
+											},
+											{
+												"kind": "code",
+												"text": "`geoparquet`"
+											},
+											{
+												"kind": "text",
+												"text": " — requires importing "
+											},
+											{
+												"kind": "code",
+												"text": "`@mapseekai/emap/arrow`"
+											},
+											{
+												"kind": "text",
+												"text": "; returns\n  "
+											},
+											{
+												"kind": "code",
+												"text": "`application/vnd.apache.parquet`"
+											},
+											{
+												"kind": "text",
+												"text": "\n- "
+											},
+											{
+												"kind": "code",
+												"text": "`geoarrow`"
+											},
+											{
+												"kind": "text",
+												"text": " — requires importing "
+											},
+											{
+												"kind": "code",
+												"text": "`@mapseekai/emap/arrow`"
+											},
+											{
+												"kind": "text",
+												"text": "; returns\n  "
+											},
+											{
+												"kind": "code",
+												"text": "`application/vnd.apache.arrow.file`"
+											},
+											{
+												"kind": "text",
+												"text": "\n- "
+											},
+											{
+												"kind": "code",
+												"text": "`flatgeobuf`"
+											},
+											{
+												"kind": "text",
+												"text": " — requires a registered FlatGeobuf format plugin; returns\n  "
+											},
+											{
+												"kind": "code",
+												"text": "`application/x-flatgeobuf`"
+											},
+											{
+												"kind": "text",
+												"text": "\n\nKML is import-only and cannot be exported."
 											}
 										]
 									},
 									"sources": [
 										{
 											"fileName": "src/source/source.ts",
-											"line": 78,
+											"line": 90,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L78"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L90"
 										}
 									],
 									"parameters": [
@@ -130123,9 +130451,9 @@
 							"sources": [
 								{
 									"fileName": "src/source/source.ts",
-									"line": 79,
+									"line": 91,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L79"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L91"
 								}
 							],
 							"signatures": [
@@ -130140,9 +130468,9 @@
 									"sources": [
 										{
 											"fileName": "src/source/source.ts",
-											"line": 79,
+											"line": 91,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L79"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L91"
 										}
 									],
 									"type": {
@@ -130757,9 +131085,9 @@
 							"sources": [
 								{
 									"fileName": "src/source/source.ts",
-									"line": 91,
+									"line": 103,
 									"character": 2,
-									"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L91"
+									"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L103"
 								}
 							],
 							"signatures": [
@@ -130780,9 +131108,9 @@
 									"sources": [
 										{
 											"fileName": "src/source/source.ts",
-											"line": 91,
+											"line": 103,
 											"character": 2,
-											"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L91"
+											"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L103"
 										}
 									],
 									"parameters": [
@@ -130856,9 +131184,9 @@
 					"sources": [
 						{
 							"fileName": "src/source/source.ts",
-							"line": 90,
+							"line": 102,
 							"character": 17,
-							"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L90"
+							"url": "https://github.com/mapseekai/emap/blob/master/src/source/source.ts#L102"
 						}
 					],
 					"extendedTypes": [
