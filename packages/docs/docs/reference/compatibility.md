@@ -10,7 +10,16 @@ verifiedVersion: 0.5.0
 
 # 兼容性
 
-Emap 面向浏览器，需要有尺寸的 DOM 容器、Canvas 和现代模块工具链。可选 formats 与 DuckDB 功能需要对应 WASM 依赖。
+Emap 面向浏览器，需要有尺寸的 DOM 容器、Canvas 和现代模块工具链。可选 `arrow` 与 `duckdb` 子路径还需要对应的 WASM 依赖。
+
+## TypeScript 模块解析
+
+`@mapseekai/emap/arrow` 与 `@mapseekai/emap/duckdb` 通过 `package.json` 的 `exports` 提供：
+
+- Vite 等浏览器打包器使用 `"module": "ESNext"` 与 `"moduleResolution": "bundler"`。
+- 原生 Node ESM 对 `module` 和 `moduleResolution` 配对使用 `Node16` 或 `NodeNext`。
+
+旧版 `node`/`node10` 解析不支持这些子路径，即使声明文件已经存在也无法解析。完整配置参见[安装与第一张地图](../getting-started/installation.md#typescript-模块解析)。
 
 ## 行为说明
 

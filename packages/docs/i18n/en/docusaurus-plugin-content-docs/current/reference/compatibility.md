@@ -10,7 +10,16 @@ verifiedVersion: 0.5.0
 
 # Compatibility
 
-Emap is browser-first and requires a sized DOM container, Canvas, and modern module tooling. Optional formats and DuckDB features require their WASM dependencies.
+Emap is browser-first and requires a sized DOM container, Canvas, and modern module tooling. The optional `arrow` and `duckdb` subpaths also require their corresponding WASM dependencies.
+
+## TypeScript module resolution
+
+`@mapseekai/emap/arrow` and `@mapseekai/emap/duckdb` are exposed through `package.json` `exports`:
+
+- Vite and other browser bundlers use `"module": "ESNext"` with `"moduleResolution": "bundler"`.
+- Native Node ESM pairs `Node16` or `NodeNext` for both `module` and `moduleResolution`.
+
+Legacy `node`/`node10` resolution cannot resolve these subpaths even when their declaration files exist. See [Installation and your first map](../getting-started/installation.md#typescript-resolution-for-optional-modules) for the complete setup.
 
 ## Behavior notes
 
