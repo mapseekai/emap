@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # Compatibility
 
-Emap is browser-first and requires a sized DOM container, Canvas, and modern module tooling. The optional `arrow` and `duckdb` subpaths also require their corresponding WASM dependencies.
+Emap is browser-first and requires a sized DOM container, Canvas, and modern module tooling. The optional `duckdb` subpath requires DuckDB-Wasm. The `arrow` subpath's in-memory Arrow and GeoArrow APIs use `apache-arrow` without WASM; only GeoParquet import and export lazily load `parquet-wasm`.
 
 ## TypeScript module resolution
 

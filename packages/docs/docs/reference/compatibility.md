@@ -10,7 +10,7 @@ verifiedVersion: 0.5.0
 
 # 兼容性
 
-Emap 面向浏览器，需要有尺寸的 DOM 容器、Canvas 和现代模块工具链。可选 `arrow` 与 `duckdb` 子路径还需要对应的 WASM 依赖。
+Emap 面向浏览器，需要有尺寸的 DOM 容器、Canvas 和现代模块工具链。可选 `duckdb` 子路径需要 DuckDB-Wasm；`arrow` 子路径的内存 Arrow 与 GeoArrow API 使用 `apache-arrow`，不需要 WASM，只有 GeoParquet 导入和导出会懒加载 `parquet-wasm`。
 
 ## TypeScript 模块解析
 
