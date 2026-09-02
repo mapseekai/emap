@@ -18,7 +18,7 @@
 <div class="tsd-tag-example">
 <h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer, getting-started/lines, getting-started/points.</p>
 </div></div></section>
-<section class="tsd-panel tsd-hierarchy" data-refl="3023">
+<section class="tsd-panel tsd-hierarchy" data-refl="3031">
 <h4>Hierarchy (<a href="../hierarchy.html#emap.TopologySource">View Summary</a>)</h4>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><a href="emap.EventDispatcher.html" class="tsd-signature-type tsd-kind-class">EventDispatcher</a>
@@ -112,9 +112,12 @@
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="export-1"><span class="tsd-kind-call-signature">export</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/emap.ExportOptions.html" class="tsd-signature-type tsd-kind-interface">ExportOptions</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Blob</span><span class="tsd-signature-symbol">&gt;</span><a href="#export-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<div class="tsd-comment tsd-typography"><p>Serialize the current dataset to a browser Blob via mapshaper's exporter.</p>
-<p>Multi-file shapefile output is packed into a single zip Blob using fflate
-so callers always receive one Blob per call.</p>
+<div class="tsd-comment tsd-typography"><p>Serialize the current dataset to one browser <code>Blob</code>.</p>
+<p>Mapshaper handles <code>geojson</code>, <code>topojson</code>, <code>shapefile</code>, and <code>msx</code>.
+Registered format plugins handle <code>geoparquet</code>, <code>geoarrow</code>, and
+<code>flatgeobuf</code>; import <code>@mapseekai/emap/arrow</code> for the Arrow formats and
+register a FlatGeobuf plugin before exporting that format. Multi-file
+shapefile output is packed into one ZIP Blob using fflate.</p>
 </div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
@@ -125,7 +128,7 @@ so callers always receive one Blob per call.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Blob</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.ITopologySource.html">ITopologySource</a>.<a href="../interfaces/emap.ITopologySource.html#export">export</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L732">src/source/topology-source.ts:732</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L735">src/source/topology-source.ts:735</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="fire"><span>fire</span><a href="#fire" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures tsd-is-inherited">
@@ -215,7 +218,7 @@ Each entry is a <a href="../interfaces/emap.MapshaperLayer.html" class="tsd-kind
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-keyword">readonly</span> <a href="../interfaces/emap.ReadonlyMapshaperLayer.html" class="tsd-signature-type tsd-kind-interface">ReadonlyMapshaperLayer</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <p>Implementation of <a href="../interfaces/emap.ITopologySource.html">ITopologySource</a>.<a href="../interfaces/emap.ITopologySource.html#getlayers">getLayers</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L822">src/source/topology-source.ts:822</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L825">src/source/topology-source.ts:825</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="off"><span>off</span><a href="#off" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures tsd-is-inherited">
