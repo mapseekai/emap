@@ -42,6 +42,7 @@ import type {
   DropLayerOptions,
   DeletePartOptions,
   DeleteRingOptions,
+  FillRingOptions,
   ExplodeOptions,
   DissolveOptions,
   FilterFieldsOptions,
@@ -111,7 +112,7 @@ import { affineLayer } from './ops/affine';
 import { dataFill } from './ops/data-fill';
 import { splitSelected } from './ops/split-selected';
 import { reshapeSelected } from './ops/reshape-selected';
-import { addRing, deleteRing } from './ops/rings';
+import { addRing, deleteRing, fillRing } from './ops/rings';
 import { addPart, deletePart } from './ops/parts';
 
 /**
@@ -287,6 +288,9 @@ export class MapshaperOps {
   }
   deleteRing(options: DeleteRingOptions): Promise<OpResult<void>> {
     return deleteRing(this._ctx, options);
+  }
+  fillRing(options: FillRingOptions): Promise<OpResult<void>> {
+    return fillRing(this._ctx, options);
   }
   addPart(options: AddPartOptions): Promise<OpResult<void>> {
     return addPart(this._ctx, options);

@@ -51,7 +51,11 @@ function createMap(options: { selection?: (typeof selected)[] } = {}) {
     fire: vi.fn(),
     on: vi.fn(),
     off: vi.fn(),
-    ops: { addRing: vi.fn(async () => OK), deleteRing: vi.fn(async () => OK) },
+    ops: {
+      addRing: vi.fn(async () => OK),
+      deleteRing: vi.fn(async () => OK),
+      fillRing: vi.fn(async () => OK),
+    },
   };
 }
 
@@ -86,6 +90,14 @@ describe('RingEditHandler', () => {
     handler.enable();
     handler.handlePointer(event('click', 1, 2));
     await vi.waitFor(() => expect(map.ops.deleteRing).toHaveBeenCalledWith({ point: [101, 202] }));
+    expect(map.setEditDrawState).not.toHaveBeenCalled();
+  });
+
+  it('fills the ring at the clicked unprojected point without creating a sketch', async () => {
+    const handler = new RingEditHandler(map as unknown as EditHandlerHost, { mode: 'fill' });
+    handler.enable();
+    handler.handlePointer(event('click', 1, 2));
+    await vi.waitFor(() => expect(map.ops.fillRing).toHaveBeenCalledWith({ point: [101, 202] }));
     expect(map.setEditDrawState).not.toHaveBeenCalled();
   });
 

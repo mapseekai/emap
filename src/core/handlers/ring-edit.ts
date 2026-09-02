@@ -12,7 +12,7 @@ import { isPathLayer } from '../../types/mapshaper-types';
 import { SketchSession, type SketchSnapTarget } from './sketch-session';
 
 export interface RingEditOptions {
-  mode?: 'add' | 'delete';
+  mode?: 'add' | 'delete' | 'fill';
   snapThreshold?: number;
 }
 
@@ -111,6 +111,13 @@ export class RingEditHandler implements Handler<RingEditOptions> {
       if (event.kind !== 'click') return 'passthrough';
       void this._submit(() =>
         this._map.ops.deleteRing({ point: this._map.unproject(event.point.x, event.point.y) }),
+      );
+      return 'consumed';
+    }
+    if (this._opts.mode === 'fill') {
+      if (event.kind !== 'click') return 'passthrough';
+      void this._submit(() =>
+        this._map.ops.fillRing({ point: this._map.unproject(event.point.x, event.point.y) }),
       );
       return 'consumed';
     }

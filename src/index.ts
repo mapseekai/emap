@@ -39,6 +39,7 @@ export type {
   ReshapeSelectedResult,
   AddRingOptions,
   DeleteRingOptions,
+  FillRingOptions,
   AddPartOptions,
   DeletePartOptions,
   CleanOptions,
