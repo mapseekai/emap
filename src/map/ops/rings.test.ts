@@ -884,47 +884,52 @@ describe('fillRing', () => {
   });
 
   it('reverses a multi-arc hole part arc-by-arc (shared-boundary fixture)', async () => {
-    // Neighbour polygon shares the hole's right edge (x=10, y∈[2,8]); topology
-    // import splits the hole boundary into multiple arcs there.
+    // Neighbour polygon lies inside the hole and shares only part of its right
+    // edge; topology import splits that hole boundary into multiple arcs.
     const multi: Array<GeoJSON.Polygon> = [
       {
         type: 'Polygon',
         coordinates: [
           [
             [0, 0],
-            [12, 0],
-            [12, 10],
+            [10, 0],
+            [10, 10],
             [0, 10],
             [0, 0],
           ],
           [
+            [2, 2],
             [8, 2],
-            [10, 2],
-            [10, 8],
+            [8, 3],
+            [8, 7],
             [8, 8],
-            [8, 2],
-          ], // hole shares its right edge with the neighbour
+            [2, 8],
+            [2, 2],
+          ],
         ],
       },
       {
         type: 'Polygon',
         coordinates: [
           [
-            [10, 2],
-            [14, 2],
-            [14, 8],
-            [10, 8],
-            [10, 2],
+            [8, 3],
+            [9, 3],
+            [9, 7],
+            [8, 7],
+            [8, 3],
           ],
         ],
       },
     ];
     const fixture = await createFixture(undefined, undefined, multi);
     const layer = fixture.dataset().layers[0]!;
-    await expect(fillRing(fixture.ctx, { point: [9, 5] })).resolves.toMatchObject({ ok: true });
+    await expect(fillRing(fixture.ctx, { point: [5, 5] })).resolves.toMatchObject({ ok: true });
     // 3 features now: host (hole kept), neighbour, filling feature.
     expect(layer.shapes).toHaveLength(3);
     const holePart = (layer.shapes[0] as PathShape)[1]!;
+    const neighbourPart = (layer.shapes[1] as PathShape)[0]!;
+    const holeArcIds = new Set(holePart.map((id) => (id < 0 ? ~id : id)));
+    expect(neighbourPart.some((id) => holeArcIds.has(id < 0 ? ~id : id))).toBe(true);
     expect(holePart.length).toBeGreaterThan(1); // fixture must actually split arcs
     expect(layer.shapes[2]).toEqual([holePart.slice().reverse().map((id) => ~id)]);
   });
