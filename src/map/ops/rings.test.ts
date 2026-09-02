@@ -886,6 +886,34 @@ describe('fillRing', () => {
     expect(records[1]).toEqual({});
   });
 
+  it('fills a hole created by addRing (draw-then-fill workflow)', async () => {
+    const fixture = await createFixture(); // single shell, no holes
+    await expect(
+      addRing(fixture.ctx, {
+        ring: [
+          [2, 2],
+          [4, 2],
+          [4, 4],
+          [2, 4],
+          [2, 2],
+        ],
+      }),
+    ).resolves.toEqual({ ok: true, value: undefined });
+    expect(fixture.dataset().layers[0]!.shapes![0]).toHaveLength(2);
+
+    await expect(fillRing(fixture.ctx, { point: [3, 3] })).resolves.toEqual({
+      ok: true,
+      value: undefined,
+    });
+    const layer = fixture.dataset().layers[0]!;
+    expect(layer.shapes).toHaveLength(2);
+    expect(layer.shapes![1]).toHaveLength(1);
+
+    fixture.entries[1]!.undo();
+    expect(layer.shapes).toHaveLength(1);
+    expect(layer.shapes![0]).toHaveLength(2); // addRing's hole survives fill undo
+  });
+
   it('fills the hole of the correct part in a multi-part feature', async () => {
     const fixture = await createFixture(undefined, undefined, MULTIPART_HOLED);
     const layer = fixture.dataset().layers[0]!;
