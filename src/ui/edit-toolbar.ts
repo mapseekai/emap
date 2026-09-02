@@ -3,12 +3,13 @@ import type { Control } from './control';
 import { VertexEditControl } from './vertex-edit-control';
 import { DrawFeatureControl } from './draw-feature-control';
 
-type AdvancedTool = 'reshape' | 'ring-add' | 'ring-delete' | 'part-add' | 'part-delete';
+type AdvancedTool = 'reshape' | 'ring-add' | 'ring-delete' | 'ring-fill' | 'part-add' | 'part-delete';
 
 const ADVANCED_TOOL_TITLES: Record<AdvancedTool, string> = {
   reshape: 'Reshape Feature',
   'ring-add': 'Add Hole',
   'ring-delete': 'Delete Hole',
+  'ring-fill': 'Fill Hole',
   'part-add': 'Add Part',
   'part-delete': 'Delete Part',
 };
@@ -94,7 +95,8 @@ class AdvancedEditControl implements Control {
     return handler.isEnabled() && handler.getOptions().mode === this._mode();
   }
 
-  private _mode(): 'add' | 'delete' {
+  private _mode(): 'add' | 'delete' | 'fill' {
+    if (this._tool === 'ring-fill') return 'fill';
     return this._tool.endsWith('add') ? 'add' : 'delete';
   }
 
@@ -155,6 +157,7 @@ export class EditToolbar implements Control {
           new AdvancedEditControl('reshape'),
           new AdvancedEditControl('ring-add'),
           new AdvancedEditControl('ring-delete'),
+          new AdvancedEditControl('ring-fill'),
           new AdvancedEditControl('part-add'),
           new AdvancedEditControl('part-delete'),
         );

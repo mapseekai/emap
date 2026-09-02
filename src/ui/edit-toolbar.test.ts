@@ -125,7 +125,7 @@ describe('EditToolbar', () => {
     const root = toolbar.onAdd(map as unknown as Emap);
     const buttons = root.querySelectorAll('button');
 
-    expect(buttons).toHaveLength(6);
+    expect(buttons).toHaveLength(7);
     buttons[1]?.click();
     expect(map.reshapeFeature.enable).toHaveBeenCalledTimes(1);
     buttons[2]?.click();
@@ -135,6 +135,10 @@ describe('EditToolbar', () => {
     expect(map.ringEdit.setOptions).toHaveBeenLastCalledWith({ mode: 'delete' });
     expect(map.ringEdit.disable).toHaveBeenCalledTimes(1);
     expect(map.ringEdit.enable).toHaveBeenCalledTimes(2);
+    expect(buttons[4]?.textContent).toBe('Fill Hole');
+    buttons[4]?.click();
+    expect(map.ringEdit.setOptions).toHaveBeenLastCalledWith({ mode: 'fill' });
+    expect(map.ringEdit.enable).toHaveBeenCalledTimes(3);
   });
   it('resets pressed state when an external editmodechange reports none', () => {
     const map = fakeMap();
