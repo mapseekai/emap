@@ -28,6 +28,7 @@ describe('inferEffect (PR-10)', () => {
     ['-target X -mosaic', 'shape-count'],
     ['-target X,Y -union', 'shape-count'],
     ['-split-selected', 'shape-count'],
+    ['-fill-ring', 'shape-count'],
 
     // topology-only: arc storage rebuilt, feature ids stable
     ['-target X -clean', 'topology-only'],

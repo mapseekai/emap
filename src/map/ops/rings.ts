@@ -2,8 +2,9 @@ import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../../adapter
 import type { MapshaperDataset, PathShape } from '../../types/mapshaper-types';
 import { isPathLayer } from '../../types/mapshaper-types';
 import { PathGeometryPatchCommand } from '../../edit/commands/path-geometry-patch';
+import { FeatureAppendCommand } from '../../edit/commands/feature-append';
 import { Err, type OpResult } from '../op-result';
-import type { AddRingOptions, DeleteRingOptions } from '../types';
+import type { AddRingOptions, DeleteRingOptions, FillRingOptions } from '../types';
 import type { OpContext } from './_context';
 import {
   type Coordinate,
@@ -253,6 +254,69 @@ export async function deleteRing(
                 afterSelection: ctx.host._selection.getAll(),
                 publishSelection: (diff) => ctx.host._fireSelectionChange(diff),
                 label: 'Delete ring',
+              }),
+            };
+          }
+        }
+      }
+      return Err.validation('ring', 'no ring contains the point');
+    });
+    if (result.ok) return result;
+    if (result.error.kind !== 'validation') return result;
+  }
+  return Err.validation('ring', 'no ring contains the point');
+}
+
+/**
+ * Fills the interior ring containing the supplied point with a new polygon
+ * feature, QGIS Fill-Ring-style: the ring is preserved on the host feature
+ * and the new feature shares the ring's arcs (reversed), so the two boundaries
+ * stay coincident under later edits. No selection is required — clicking
+ * inside a hole fills that hole.
+ */
+export async function fillRing(
+  ctx: OpContext,
+  options: FillRingOptions,
+): Promise<OpResult<void>> {
+  if (!isCoordinate(options.point)) return Err.validation('ring', 'point coordinates are invalid');
+  const adapter = getDefaultMapshaperAdapter();
+  const [px, py] = options.point;
+  for (const [sourceId, source] of ctx.host._sources) {
+    const dataset = source.getDataset();
+    if (!dataset?.arcs) continue;
+    const result = await ctx.runPreparedEditCommand(sourceId, 'Fill ring', (planned) => {
+      if (planned !== dataset) return Err.staleOperation(sourceId, 'Fill ring');
+      const arcs = planned.arcs!;
+      for (const layer of planned.layers) {
+        if (!isPathLayer(layer) || layer.geometry_type !== 'polygon' || !layer.shapes) continue;
+        for (let featureId = 0; featureId < layer.shapes.length; featureId++) {
+          const shape = layer.shapes[featureId] as PathShape | null;
+          if (!shape?.length) continue;
+          // Cheap prefilter (same as deleteRing).
+          if (!shape.some((part) => adapter.testPointInPolygon(px, py, [part], arcs))) continue;
+          for (const group of collectPolygonExteriors(shape, arcs, adapter)) {
+            if (!adapter.testPointInPolygon(px, py, [shape[group.exteriorIndex]!], arcs)) continue;
+            const ringIndex = group.holeIndexes.find((holeIndex) =>
+              adapter.testPointInPolygon(px, py, [shape[holeIndex]!], arcs),
+            );
+            if (ringIndex === undefined) continue;
+            const shapeError = validateTargetShape(shape, arcs, adapter);
+            if (shapeError) return shapeError;
+            // Share the hole's arcs: reverse traversal order and complement
+            // each arc id so the new exterior ring winds like an exterior.
+            const appendedShape: PathShape = [
+              shape[ringIndex]!.slice().reverse().map((arcId) => ~arcId),
+            ];
+            const appendedRecord = layer.data?.getRecords?.() ? {} : null;
+            return {
+              value: undefined,
+              affectedSourceIds: [sourceId],
+              command: new FeatureAppendCommand({
+                layer,
+                source,
+                appendedShape,
+                appendedRecord,
+                label: 'Fill ring',
               }),
             };
           }

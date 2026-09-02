@@ -267,6 +267,12 @@ export interface DeleteRingOptions {
   point: [number, number];
 }
 
+/** Point inside the interior ring to fill with a new polygon feature. The
+ * ring itself is preserved on the host feature; no selection is required. */
+export interface FillRingOptions {
+  point: [number, number];
+}
+
 /** Coordinates for a new independent path part on the selected feature. */
 export interface AddPartOptions {
   coordinates: [number, number][];

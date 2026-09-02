@@ -5,12 +5,11 @@ import { EditHistory } from '../../edit/edit-history';
 import type { EmapHostInternal } from '../emap-host';
 import { Err, okValue, type OpResult } from '../op-result';
 import type { FeatureRef } from '../types';
-import type { MapshaperDataset } from '../../types/mapshaper-types';
-import type { MapshaperLayer } from '../../types/mapshaper-types';
+import type { MapshaperDataset, MapshaperLayer, PathShape } from '../../types/mapshaper-types';
 import type { OpContext } from './_context';
 import { MapshaperOps } from '../mapshaper-ops';
 import { Selection } from '../selection';
-import { addRing, deleteRing } from './rings';
+import { addRing, deleteRing, fillRing } from './rings';
 import { collectPolygonExteriors } from './reshape-selected-polygon';
 import { _runPreparedDatasetMutation } from './_runner';
 
@@ -803,6 +802,131 @@ describe('deleteRing', () => {
   it('rejects deletion from a polygon with no holes', async () => {
     const fixture = await createFixture();
     expectRingValidation(await deleteRing(fixture.ctx, { point: [5, 5] }));
+  });
+});
+
+describe('fillRing', () => {
+  const HOLED: GeoJSON.Polygon = {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+        [0, 0],
+      ],
+      [
+        [3, 3],
+        [7, 3],
+        [7, 7],
+        [3, 7],
+        [3, 3],
+      ], // hole — click target [5, 5]
+    ],
+  };
+
+  it('fills the hole containing the point, keeping the hole on the host', async () => {
+    const fixture = await createFixture(undefined, undefined, HOLED);
+    const arcs = fixture.dataset().arcs!;
+    const arcCount = arcs.size();
+    const layer = fixture.dataset().layers[0]!;
+    await expect(fillRing(fixture.ctx, { point: [5, 5] })).resolves.toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(layer.shapes).toHaveLength(2);
+    // Host keeps its hole.
+    expect(exported(fixture.dataset()).coordinates).toHaveLength(2);
+    // New shape references the hole part's arcs in reverse — no arc appended.
+    expect(arcs.size()).toBe(arcCount);
+    const holePart = (layer.shapes[0] as PathShape)[1]!;
+    expect(layer.shapes[1]).toEqual([holePart.slice().reverse().map((id) => ~id)]);
+    // Empty attribute record appended.
+    const records = layer.data!.getRecords();
+    expect(records).toHaveLength(2);
+    expect(records[1]).toEqual({});
+  });
+
+  it('undo/redo round-trips exactly without touching arcs', async () => {
+    const fixture = await createFixture(undefined, undefined, HOLED);
+    const arcs = fixture.dataset().arcs!;
+    const arcCount = arcs.size();
+    await fillRing(fixture.ctx, { point: [5, 5] });
+    fixture.entries[0]!.undo();
+    expect(fixture.dataset().layers[0]!.shapes).toHaveLength(1);
+    expect(fixture.dataset().layers[0]!.data!.getRecords()).toHaveLength(1);
+    expect(arcs.size()).toBe(arcCount);
+    fixture.entries[0]!.do();
+    expect(fixture.dataset().layers[0]!.shapes).toHaveLength(2);
+    expect(arcs.size()).toBe(arcCount);
+  });
+
+  it('keeps the current selection unchanged', async () => {
+    const fixture = await createFixture(undefined, undefined, HOLED);
+    await fillRing(fixture.ctx, { point: [5, 5] });
+    expect(fixture.ctx.host._selection.getAll()).toEqual([
+      { source: 'source', layer: 'rings', id: 0 },
+    ]);
+  });
+
+  it('rejects a polygon with no holes and a point outside every ring', async () => {
+    const noHole = await createFixture();
+    expectRingValidation(await fillRing(noHole.ctx, { point: [5, 5] }));
+    const holed = await createFixture(undefined, undefined, HOLED);
+    expectRingValidation(await fillRing(holed.ctx, { point: [50, 50] }));
+    expect(holed.dataset().layers[0]!.shapes).toHaveLength(1);
+  });
+
+  it('rejects invalid point coordinates', async () => {
+    const fixture = await createFixture(undefined, undefined, HOLED);
+    expectRingValidation(await fillRing(fixture.ctx, { point: [Number.NaN, 5] as any }));
+  });
+
+  it('reverses a multi-arc hole part arc-by-arc (shared-boundary fixture)', async () => {
+    // Neighbour polygon shares the hole's right edge (x=10, y∈[2,8]); topology
+    // import splits the hole boundary into multiple arcs there.
+    const multi: Array<GeoJSON.Polygon> = [
+      {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 0],
+            [12, 0],
+            [12, 10],
+            [0, 10],
+            [0, 0],
+          ],
+          [
+            [8, 2],
+            [10, 2],
+            [10, 8],
+            [8, 8],
+            [8, 2],
+          ], // hole shares its right edge with the neighbour
+        ],
+      },
+      {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [10, 2],
+            [14, 2],
+            [14, 8],
+            [10, 8],
+            [10, 2],
+          ],
+        ],
+      },
+    ];
+    const fixture = await createFixture(undefined, undefined, multi);
+    const layer = fixture.dataset().layers[0]!;
+    await expect(fillRing(fixture.ctx, { point: [9, 5] })).resolves.toMatchObject({ ok: true });
+    // 3 features now: host (hole kept), neighbour, filling feature.
+    expect(layer.shapes).toHaveLength(3);
+    const holePart = (layer.shapes[0] as PathShape)[1]!;
+    expect(holePart.length).toBeGreaterThan(1); // fixture must actually split arcs
+    expect(layer.shapes[2]).toEqual([holePart.slice().reverse().map((id) => ~id)]);
   });
 });
 

@@ -100,6 +100,10 @@ const COMMAND_EFFECTS: Readonly<Record<string, OpEffect>> = {
   drop: 'shape-count',
   'intersection-points': 'shape-count',
   'split-selected': 'shape-count',
+  'fill-ring': 'shape-count',
+  // ↑ declared per AGENTS.md new-op rule; the prepared-edit runner path
+  // (fillRing op) does not consult this table — selection is preserved by
+  // the command itself (append at end, no feature-id shift).
   // topology-only: rebuild arcs but feature ids stay
   clean: 'topology-only',
   snap: 'topology-only',
