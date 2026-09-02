@@ -826,6 +826,44 @@ describe('fillRing', () => {
     ],
   };
 
+  const MULTIPART_HOLED: GeoJSON.MultiPolygon = {
+    type: 'MultiPolygon',
+    coordinates: [
+      [
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+        [
+          [2, 2],
+          [4, 2],
+          [4, 4],
+          [2, 4],
+          [2, 2],
+        ],
+      ],
+      [
+        [
+          [20, 20],
+          [30, 20],
+          [30, 30],
+          [20, 30],
+          [20, 20],
+        ],
+        [
+          [22, 22],
+          [24, 22],
+          [24, 24],
+          [22, 24],
+          [22, 22],
+        ],
+      ],
+    ],
+  };
+
   it('fills the hole containing the point, keeping the hole on the host', async () => {
     const fixture = await createFixture(undefined, undefined, HOLED);
     const arcs = fixture.dataset().arcs!;
@@ -846,6 +884,39 @@ describe('fillRing', () => {
     const records = layer.data!.getRecords();
     expect(records).toHaveLength(2);
     expect(records[1]).toEqual({});
+  });
+
+  it('fills the hole of the correct part in a multi-part feature', async () => {
+    const fixture = await createFixture(undefined, undefined, MULTIPART_HOLED);
+    const layer = fixture.dataset().layers[0]!;
+    await expect(fillRing(fixture.ctx, { point: [23, 23] })).resolves.toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(layer.shapes).toHaveLength(2);
+    const collection = JSON.parse(
+      String(adapter.exportFileContent(fixture.dataset(), { format: 'geojson' })[0]!.content),
+    ) as GeoJSON.FeatureCollection;
+    const host = collection.features[0]!.geometry as GeoJSON.MultiPolygon;
+    const filled = collection.features[1]!.geometry as GeoJSON.Polygon;
+    expect(filled.coordinates[0]).toEqual(
+      expect.arrayContaining([
+        [22, 22],
+        [24, 22],
+        [24, 24],
+        [22, 24],
+      ]),
+    );
+    expect(Math.abs(area(filled.coordinates[0]!))).toBe(4);
+    // Filling adds a feature; it preserves both host holes.
+    expect(host.coordinates).toHaveLength(2);
+    expect(host.coordinates[0]).toHaveLength(2);
+    expect(host.coordinates[1]).toHaveLength(2);
+    fixture.entries[0]!.undo();
+    expect(layer.shapes).toHaveLength(1);
+    const restored = exported(fixture.dataset()) as unknown as GeoJSON.MultiPolygon;
+    expect(restored.coordinates[0]).toHaveLength(2);
+    expect(restored.coordinates[1]).toHaveLength(2);
   });
 
   it('creates no record when the layer has no data table', async () => {
