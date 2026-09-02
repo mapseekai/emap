@@ -848,6 +848,16 @@ describe('fillRing', () => {
     expect(records[1]).toEqual({});
   });
 
+  it('creates no record when the layer has no data table', async () => {
+    const fixture = await createFixture(undefined, undefined, HOLED);
+    const layer = fixture.dataset().layers[0]!;
+    delete layer.data; // strip the data table the GeoJSON import created
+    await expect(fillRing(fixture.ctx, { point: [5, 5] })).resolves.toEqual({ ok: true, value: undefined });
+    expect(layer.shapes).toHaveLength(2);
+    fixture.entries[0]!.undo();
+    expect(layer.shapes).toHaveLength(1);
+  });
+
   it('undo/redo round-trips exactly without touching arcs', async () => {
     const fixture = await createFixture(undefined, undefined, HOLED);
     const arcs = fixture.dataset().arcs!;
