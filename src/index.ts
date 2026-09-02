@@ -336,6 +336,7 @@ export { VertexDeleteCommand } from './edit/commands/vertex-delete';
 
 // feature-level
 export { FeatureCreateCommand } from './edit/commands/feature-create';
+export { FeatureAppendCommand } from './edit/commands/feature-append';
 export { FeatureDeleteCommand, BulkFeatureDeleteCommand } from './edit/commands/feature-delete';
 export type {
   FeatureDeleteCommandOptions,
