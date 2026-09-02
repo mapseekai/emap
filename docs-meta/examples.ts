@@ -67,6 +67,7 @@ const task6CsvFixture = 'fixtures/task-6-join.csv';
 const task6MergeFixture = 'fixtures/task-6-polygons-alt.geojson';
 const task7Fixture = 'fixtures/task-7-polygons.geojson';
 const task7LineFixture = 'fixtures/task-7-lines.geojson';
+const task7HoledFixture = 'fixtures/task-7-polygons-holed.geojson';
 const task7MaskFixture = 'fixtures/task-7-mask.geojson';
 const duckDbSpatialAggregatePointsFixture = 'fixtures/duckdb-spatial-aggregate-points.geojson';
 
@@ -602,7 +603,7 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('data-engineering', 'data-editing', '数据工程批次', 'Data engineering batch', [docsOperations, docsAttributes], 'Emap', ['expressions', 'layer-ops', 'history'], [task6Fixture]),
   recipe('merge-selected', 'data-editing', '合并选中要素', 'Merge selected features', [docsSelection, docsOperations], 'Emap', ['selection', 'layer-ops', 'history'], [task6Fixture]),
   recipe('split-features', 'data-editing', '拆分选中要素', 'Split selected features', [docsSelection, docsOperations, docsUndoRedo], 'Emap', ['selection', 'split', 'history'], [task7LineFixture, task7Fixture]),
-  recipe('reshape-ring-part', 'data-editing', '整形、洞与部分编辑', 'Reshape, hole, and part editing', [docsEditing, docsSelection, docsUndoRedo], 'Emap', ['editing', 'reshape', 'ring', 'part', 'history'], [task7LineFixture, task7Fixture]),
+  recipe('reshape-ring-part', 'data-editing', '整形、洞与部分编辑', 'Reshape, hole, and part editing', [docsEditing, docsSelection, docsUndoRedo], 'Emap', ['editing', 'reshape', 'ring', 'part', 'history'], [task7LineFixture, task7HoledFixture]),
   recipe('vertex-editing', 'data-editing', '顶点编辑', 'Vertex editing', [docsEditing, docsControls], 'Emap', ['editing', 'vertex', 'basemap'], [task6Fixture]),
   recipe('feature-translate', 'data-editing', '平移选中要素', 'Translate selected feature', [docsEditing, docsSelection], 'Emap', ['selection', 'transform', 'history'], [task6Fixture]),
   recipe('feature-rotate-scale', 'data-editing', '旋转 / 缩放选中要素', 'Rotate and scale selected feature', [docsEditing, docsSelection], 'Emap', ['selection', 'transform', 'history'], [task6Fixture]),
