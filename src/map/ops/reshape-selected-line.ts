@@ -11,6 +11,7 @@ import {
   unsignedArcId,
   type Coordinate,
 } from './geometry-2d';
+import { SplitGeometryValidationError } from './split-selected-error';
 
 export interface Contact {
   point: [number, number];
@@ -455,4 +456,32 @@ export function reshapeSelectedPolylines(
     results.push({ featureId, shape: reshaped });
   }
   return results;
+}
+
+/** Validate one polyline shape before passing it to legacy reshape geometry. */
+export function validatePolylineFeatureShape(
+  shape: PathShape | null | undefined,
+  arcs: NonNullable<MapshaperDataset['arcs']>,
+): void {
+  if (!shape || shape.length === 0 || shape.some((part) => part.length === 0)) {
+    throw new SplitGeometryValidationError('geometry', 'polyline geometry is invalid');
+  }
+  for (const part of shape) {
+    for (const signedArcId of part) {
+      const arcId = unsignedArcId(signedArcId);
+      if (!Number.isSafeInteger(signedArcId) || arcId < 0 || arcId >= arcs.size()) {
+        throw new SplitGeometryValidationError('geometry', 'polyline geometry is invalid');
+      }
+      const iterator = arcs.getArcIter(arcId);
+      let vertices = 0;
+      while (iterator.hasNext()) {
+        if (!Number.isFinite(iterator.x) || !Number.isFinite(iterator.y)) {
+          throw new SplitGeometryValidationError('geometry', 'polyline geometry is invalid');
+        }
+        vertices += 1;
+      }
+      if (vertices < 2)
+        throw new SplitGeometryValidationError('geometry', 'polyline geometry is invalid');
+    }
+  }
 }

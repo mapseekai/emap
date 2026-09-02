@@ -12,9 +12,8 @@ import { isPathLayer } from '../../types/mapshaper-types';
 import { CONTACT_EPSILON, normalizeConsecutiveCoordinates, type Coordinate } from './geometry-2d';
 import { buildMiniDataset, materializeRetainedMiniArcs } from './_mini-dataset';
 import { translateMiniDataset } from './_mini-translate';
-import { reshapeSelectedPolylines } from './reshape-selected-line';
+import { reshapeSelectedPolylines, validatePolylineFeatureShape } from './reshape-selected-line';
 import { reshapeSelectedPolygon } from './reshape-selected-polygon';
-import { validatePolylineFeatureShape } from './reshape-selected';
 import { SplitGeometryValidationError } from './split-selected-error';
 
 type ReshapeBounds = {
