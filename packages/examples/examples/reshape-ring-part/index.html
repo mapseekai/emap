@@ -18,7 +18,7 @@
     <summary><h1>整形、洞与部分编辑</h1></summary>
     <div class="emap-example-workbench-body">
       <section class="emap-example-section">
-        <p class="emap-example-hint">无需先选择：整形线直接替换其接触的要素边界；在面内画闭合环即挖洞；点击洞内区域删洞；点击部件即删除（仅剩一个部件时删除整个要素）。只有“加部分”需要先选中目标要素。</p>
+        <p class="emap-example-hint">无需先选择：整形线直接替换其接触的要素边界；在面内画闭合环即挖洞；点击洞内区域删洞；点击洞内区域填洞（生成与洞边界一致的新面要素，洞保留）；点击部件即删除（仅剩一个部件时删除整个要素）。只有“加部分”需要先选中目标要素。</p>
         <div class="emap-example-field">
           <label for="file-input">数据文件</label>
           <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" multiple />
@@ -27,6 +27,7 @@
           <button id="reshape" type="button" class="emap-example-primary-button">整形</button>
           <button id="add-ring" type="button">挖洞</button>
           <button id="delete-ring" type="button">删洞</button>
+          <button id="fill-ring" type="button">填洞</button>
           <button id="add-part" type="button">加部分</button>
           <button id="delete-part" type="button">删部分</button>
         </div>
@@ -52,6 +53,7 @@
     const reshape = document.getElementById('reshape');
     const addRing = document.getElementById('add-ring');
     const deleteRing = document.getElementById('delete-ring');
+    const fillRing = document.getElementById('fill-ring');
     const addPart = document.getElementById('add-part');
     const deletePart = document.getElementById('delete-part');
     const status = document.getElementById('status');
@@ -60,6 +62,7 @@
       { button: reshape, handler: map.reshapeFeature, mode: 'reshape' },
       { button: addRing, handler: map.ringEdit, mode: 'ring', operation: 'add' },
       { button: deleteRing, handler: map.ringEdit, mode: 'ring', operation: 'delete' },
+      { button: fillRing, handler: map.ringEdit, mode: 'ring', operation: 'fill' },
       { button: addPart, handler: map.partEdit, mode: 'part', operation: 'add' },
       { button: deletePart, handler: map.partEdit, mode: 'part', operation: 'delete' },
     ];
