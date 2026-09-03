@@ -2,7 +2,7 @@
 id: styling
 slug: /guides/styling
 title: 样式图层
-api: ["Emap.setPaintProperty","FillPaint","LayerSpecification","LineDashStyle","LinePaint","PointMarkerShape"]
+api: ["ClassificationResult","ClassifyFeaturesOptions","Emap.setPaintProperty","FillPaint","LayerSpecification","LineDashStyle","LinePaint","PointMarkerShape","StyleExpression"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons"]
 stability: stable
 verifiedVersion: 0.8.1
@@ -11,7 +11,8 @@ verifiedVersion: 0.8.1
 # 样式图层
 
 Emap 的样式模型直接对应 Canvas 绘制基元，只有 `fill`、`line` 和 `circle`
-三种图层类型。它不包含复杂的样式表达式系统；数据样式和属性计算应分别处理。
+三种图层类型。`fill-color` 支持下文列出的受限 `StyleExpression` 子集，但不追求
+完整 MapLibre 样式表达式系统；数据计算和呈现仍保持分离。
 
 ## 图层结构
 
@@ -63,7 +64,7 @@ map.addLayer({
 
 | 属性 | 类型 | 说明 |
 |---|---|---|
-| `fill-color` | `string` | Canvas 可识别的颜色字符串 |
+| `fill-color` | `string \| StyleExpression` | Canvas 可识别的颜色字符串，或受支持的属性表达式 |
 | `fill-opacity` | `number` | 透明度，通常使用 `0` 到 `1` |
 
 需要单独控制面边界时，再添加一个引用同一 source layer 的 `line` 图层。

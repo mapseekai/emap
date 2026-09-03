@@ -2,7 +2,7 @@
 id: styling
 slug: /guides/styling
 title: Styling layers
-api: ["Emap.setPaintProperty","FillPaint","LayerSpecification","LineDashStyle","LinePaint","PointMarkerShape"]
+api: ["ClassificationResult","ClassifyFeaturesOptions","Emap.setPaintProperty","FillPaint","LayerSpecification","LineDashStyle","LinePaint","PointMarkerShape","StyleExpression"]
 examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons"]
 stability: stable
 verifiedVersion: 0.8.1
@@ -11,8 +11,9 @@ verifiedVersion: 0.8.1
 # Styling layers
 
 Emap styling maps directly to canvas drawing primitives. It has three render
-layer types: `fill`, `line`, and `circle`. It intentionally does not include a
-large style-expression system; data calculation and presentation remain
+layer types: `fill`, `line`, and `circle`. `fill-color` accepts the documented
+restricted `StyleExpression` subset, but Emap does not attempt to implement the
+complete MapLibre expression system; data calculation and presentation remain
 separate concerns.
 
 ## Layer structure
@@ -63,7 +64,7 @@ map.addLayer({
 
 | Property | Type | Meaning |
 |---|---|---|
-| `fill-color` | `string` | Any color string accepted by canvas |
+| `fill-color` | `string \| StyleExpression` | A canvas color string or supported data expression |
 | `fill-opacity` | `number` | Opacity, normally from `0` to `1` |
 
 Add a separate `line` layer that references the same source layer when the

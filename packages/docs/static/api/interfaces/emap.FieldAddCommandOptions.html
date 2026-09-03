@@ -18,9 +18,9 @@
 <div class="tsd-tag-example">
 <h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: attribute-editing, china-editing, draw-snap-clear.</p>
 </div></div></section>
-<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">FieldAddCommandOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#defaultvalue">defaultValue</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#field">field</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#layer">layer</a><span class="tsd-signature-symbol">:</span> <a href="emap.MapshaperLayer.html" class="tsd-signature-type tsd-kind-interface">MapshaperLayer</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">FieldAddCommandOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#dataset">dataset</a><span class="tsd-signature-symbol">:</span> <a href="emap.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#defaultvalue">defaultValue</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#field">field</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#layer">layer</a><span class="tsd-signature-symbol">:</span> <a href="emap.MapshaperLayer.html" class="tsd-signature-type tsd-kind-interface">MapshaperLayer</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/field-add.ts#L4">src/edit/commands/field-add.ts:4</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/field-add.ts#L8">src/edit/commands/field-add.ts:8</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -28,7 +28,8 @@
 <div class="tsd-accordion-details">
 <section class="tsd-index-section">
 <h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<div class="tsd-index-list"><a href="#defaultvalue" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>default<wbr/>Value?</span></a>
+<div class="tsd-index-list"><a href="#dataset" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>dataset</span></a>
+<a href="#defaultvalue" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>default<wbr/>Value?</span></a>
 <a href="#field" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>field</span></a>
 <a href="#layer" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>layer</span></a>
 </div></section></div></details></section></section>
@@ -36,26 +37,33 @@
 <h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
 <section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="dataset"><span>dataset</span><a href="#dataset" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">dataset</span><span class="tsd-signature-symbol">:</span> <a href="emap.MapshaperDataset.html" class="tsd-signature-type tsd-kind-interface">MapshaperDataset</a></div>
+<div class="tsd-comment tsd-typography"><p>dataset is a public emap API documented for package consumers.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/field-add.ts#L14">src/edit/commands/field-add.ts:14</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="defaultvalue"><code class="tsd-tag">Optional</code><span>default<wbr/>Value</span><a href="#defaultvalue" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">defaultValue</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">unknown</span></div>
 <div class="tsd-comment tsd-typography"><p>Default value to assign. Defaults to <code>null</code> when omitted.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/field-add.ts#L9">src/edit/commands/field-add.ts:9</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/field-add.ts#L13">src/edit/commands/field-add.ts:13</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="field"><span>field</span><a href="#field" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">field</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Field name to add to every record that does not already have it.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/field-add.ts#L7">src/edit/commands/field-add.ts:7</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/field-add.ts#L11">src/edit/commands/field-add.ts:11</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="layer"><span>layer</span><a href="#layer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">layer</span><span class="tsd-signature-symbol">:</span> <a href="emap.MapshaperLayer.html" class="tsd-signature-type tsd-kind-interface">MapshaperLayer</a></div>
 <div class="tsd-comment tsd-typography"><p>layer is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/field-add.ts#L5">src/edit/commands/field-add.ts:5</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/field-add.ts#L9">src/edit/commands/field-add.ts:9</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -72,7 +80,7 @@
 <h3>On This Page</h3></summary>
 <div class="tsd-accordion-details">
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
-<div><a href="#defaultvalue"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>default<wbr/>Value</span></a><a href="#field"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>field</span></a><a href="#layer"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>layer</span></a></div></details></div></details></div>
+<div><a href="#dataset"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>dataset</span></a><a href="#defaultvalue"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>default<wbr/>Value</span></a><a href="#field"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>field</span></a><a href="#layer"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>layer</span></a></div></details></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="../index.html">@mapseekai/emap</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">

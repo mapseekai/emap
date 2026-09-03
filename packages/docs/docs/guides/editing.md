@@ -2,7 +2,7 @@
 id: editing
 slug: /guides/editing
 title: 编辑
-api: ["AffineMatrix","AppendedArc","BulkFeatureDeleteCommand","BulkFeatureDeleteCommandOptions","composeMatrix","CompositeCommand","DatasetReplaceCommand","DatasetReplaceCommandOptions","EditCommand","EditHistory","EditHistoryOptions","Emap","FeatureAffineCommand","FeatureAffineCommandOptions","FeatureCreateCommand","FeatureDeleteCommand","FeatureDeleteCommandOptions","FeaturePropertyChangeCommand","FeaturePropertyChangeCommandOptions","FeatureTranslateCommand","FeatureTranslateCommandOptions","FieldAddCommand","FieldAddCommandOptions","FieldRemoveCommand","FieldRemoveCommandOptions","FieldRenameCommand","FieldRenameCommandOptions","HistoryStateSnapshot","IDENTITY_MATRIX","invertMatrix","planSharedArcSplit","planSharedNodeSplit","rotateMatrix","scaleMatrix","SplitSharedArcsCommand","SplitSharedArcsCommandOptions","SplitSharedArcsRemap","SplitSharedNodeCommand","SplitSharedNodePlan","TopologySource.fromBytes","Transaction","TranslatedPointFeature","VertexDeleteCommand","VertexInsertCommand","VertexMoveCommand","AddPartOptions","AddRingOptions","DeletePartOptions","DeleteRingOptions","PartEditHandler","PartEditOptions","ReshapeFeatureHandler","ReshapeFeatureOptions","ReshapeSelectedOptions","ReshapeSelectedResult","RingEditHandler","RingEditOptions"]
+api: ["AffineMatrix","AppendedArc","BulkFeatureDeleteCommand","BulkFeatureDeleteCommandOptions","composeMatrix","CompositeCommand","DatasetReplaceCommand","DatasetReplaceCommandOptions","EditCommand","EditHistory","EditHistoryOptions","Emap","FeatureAffineCommand","FeatureAffineCommandOptions","FeatureAppendCommand","FeatureAppendCommandOptions","FeatureCreateCommand","FeatureDeleteCommand","FeatureDeleteCommandOptions","FeaturePropertyChangeCommand","FeaturePropertyChangeCommandOptions","FeatureTranslateCommand","FeatureTranslateCommandOptions","FieldAddCommand","FieldAddCommandOptions","FieldRemoveCommand","FieldRemoveCommandOptions","FieldRenameCommand","FieldRenameCommandOptions","HistoryStateSnapshot","IDENTITY_MATRIX","invertMatrix","planSharedArcSplit","planSharedNodeSplit","rotateMatrix","scaleMatrix","SplitSharedArcsCommand","SplitSharedArcsCommandOptions","SplitSharedArcsRemap","SplitSharedNodeCommand","SplitSharedNodePlan","TopologySource.fromBytes","Transaction","TranslatedPointFeature","VertexDeleteCommand","VertexInsertCommand","VertexMoveCommand","AddPartOptions","AddRingOptions","DeletePartOptions","DeleteRingOptions","FillRingOptions","PartEditHandler","PartEditOptions","ReshapeFeatureHandler","ReshapeFeatureOptions","ReshapeSelectedOptions","ReshapeSelectedResult","RingEditHandler","RingEditOptions"]
 examples: ["attribute-editing","china-editing","draw-snap-clear","draw-snap-edge","feature-rotate-scale","feature-translate","rebuild-topology","reshape-ring-part","snapshot","split-features","transaction","undo-redo","vertex-editing"]
 stability: stable
 verifiedVersion: 0.8.1
@@ -153,8 +153,9 @@ map.vertexEdit.enable();
 ## 挖洞和删洞
 
 `ringEdit` 为面要素添加或删除内环（洞），底层 API 是
-`map.ops.addRing()` 和 `map.ops.deleteRing()`。与 QGIS 一致，无需先选择：洞会加到
-包含草图的面要素上；删洞时点击洞内任一点即删除该洞。
+`map.ops.addRing()` 和 `map.ops.deleteRing()`；`map.ops.fillRing()` 则在洞内新增一个
+共享该边界的面要素，同时保留原要素上的洞。与 QGIS 一致，这三种操作都无需先选择：
+洞会加到包含草图的面要素上，删洞或填洞时点击洞内任一点即可定位目标洞。
 
 ```ts
 const added = await map.ops.addRing({
@@ -167,6 +168,7 @@ const added = await map.ops.addRing({
 });
 
 const removed = await map.ops.deleteRing({ point: [116.395, 39.905] });
+const filled = await map.ops.fillRing({ point: [116.395, 39.905] });
 
 map.ringEdit.setOptions({ mode: 'add', snapThreshold: 12 });
 map.ringEdit.enable();
@@ -175,7 +177,8 @@ map.ringEdit.enable();
 `mode: 'add'` 时左键画洞、右键完成、Esc 取消；`mode: 'delete'` 时点击洞内任一点删除
 该洞。它使用 `'ring'` 编辑模式，切换到其他编辑模式会自动退出。
 
-`map.ops.addRing()` 和 `map.ops.deleteRing()` 的校验失败（`kind: 'validation'`）形状为
+`map.ops.addRing()`、`map.ops.deleteRing()` 和 `map.ops.fillRing()` 的校验失败
+（`kind: 'validation'`）形状为
 `{ kind, field, reason }`，`field` 为 `ring`：洞必须闭合并围成面积，不能自交、接触或
 穿过面边界，且必须严格位于某个面外环内；没有任何面包含草图或点击未落在洞内也会被拒绝。
 预备 mutation 因并发修改过期时为 `{ kind: 'stale-operation', sourceId, operation }`，

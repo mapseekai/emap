@@ -2,7 +2,7 @@
 id: emap
 slug: /concepts/emap
 title: Emap 地图实例
-api: ["Emap","Feature","FeatureAccessor","FeatureQuery","findInvalidFieldName","HighlightManager","isValidFieldName","isValidLayerName","quoteCliArg","VisibleLayerLookup"]
+api: ["Emap","Feature","FeatureAccessor","FeatureQuery","findInvalidFieldName","HighlightManager","isValidFieldName","VisibleLayerLookup"]
 examples: ["getting-started/geojson-viewer"]
 stability: stable
 verifiedVersion: 0.8.1

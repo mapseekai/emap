@@ -2,7 +2,7 @@
 id: editing
 slug: /guides/editing
 title: Editing
-api: ["AffineMatrix","AppendedArc","BulkFeatureDeleteCommand","BulkFeatureDeleteCommandOptions","composeMatrix","CompositeCommand","DatasetReplaceCommand","DatasetReplaceCommandOptions","EditCommand","EditHistory","EditHistoryOptions","Emap","FeatureAffineCommand","FeatureAffineCommandOptions","FeatureCreateCommand","FeatureDeleteCommand","FeatureDeleteCommandOptions","FeaturePropertyChangeCommand","FeaturePropertyChangeCommandOptions","FeatureTranslateCommand","FeatureTranslateCommandOptions","FieldAddCommand","FieldAddCommandOptions","FieldRemoveCommand","FieldRemoveCommandOptions","FieldRenameCommand","FieldRenameCommandOptions","HistoryStateSnapshot","IDENTITY_MATRIX","invertMatrix","planSharedArcSplit","planSharedNodeSplit","rotateMatrix","scaleMatrix","SplitSharedArcsCommand","SplitSharedArcsCommandOptions","SplitSharedArcsRemap","SplitSharedNodeCommand","SplitSharedNodePlan","TopologySource.fromBytes","Transaction","TranslatedPointFeature","VertexDeleteCommand","VertexInsertCommand","VertexMoveCommand","AddPartOptions","AddRingOptions","DeletePartOptions","DeleteRingOptions","PartEditHandler","PartEditOptions","ReshapeFeatureHandler","ReshapeFeatureOptions","ReshapeSelectedOptions","ReshapeSelectedResult","RingEditHandler","RingEditOptions"]
+api: ["AffineMatrix","AppendedArc","BulkFeatureDeleteCommand","BulkFeatureDeleteCommandOptions","composeMatrix","CompositeCommand","DatasetReplaceCommand","DatasetReplaceCommandOptions","EditCommand","EditHistory","EditHistoryOptions","Emap","FeatureAffineCommand","FeatureAffineCommandOptions","FeatureAppendCommand","FeatureAppendCommandOptions","FeatureCreateCommand","FeatureDeleteCommand","FeatureDeleteCommandOptions","FeaturePropertyChangeCommand","FeaturePropertyChangeCommandOptions","FeatureTranslateCommand","FeatureTranslateCommandOptions","FieldAddCommand","FieldAddCommandOptions","FieldRemoveCommand","FieldRemoveCommandOptions","FieldRenameCommand","FieldRenameCommandOptions","HistoryStateSnapshot","IDENTITY_MATRIX","invertMatrix","planSharedArcSplit","planSharedNodeSplit","rotateMatrix","scaleMatrix","SplitSharedArcsCommand","SplitSharedArcsCommandOptions","SplitSharedArcsRemap","SplitSharedNodeCommand","SplitSharedNodePlan","TopologySource.fromBytes","Transaction","TranslatedPointFeature","VertexDeleteCommand","VertexInsertCommand","VertexMoveCommand","AddPartOptions","AddRingOptions","DeletePartOptions","DeleteRingOptions","FillRingOptions","PartEditHandler","PartEditOptions","ReshapeFeatureHandler","ReshapeFeatureOptions","ReshapeSelectedOptions","ReshapeSelectedResult","RingEditHandler","RingEditOptions"]
 examples: ["attribute-editing","china-editing","draw-snap-clear","draw-snap-edge","feature-rotate-scale","feature-translate","rebuild-topology","reshape-ring-part","snapshot","split-features","transaction","undo-redo","vertex-editing"]
 stability: stable
 verifiedVersion: 0.8.1
@@ -170,9 +170,11 @@ unit, and an invalid deletion commits no partial change.
 ## Add and delete holes
 
 `ringEdit` adds or removes an interior ring (hole) on polygon features. Its
-underlying APIs are `map.ops.addRing()` and `map.ops.deleteRing()`. Like
-QGIS, no selection is required: the hole is added to the polygon containing
-the sketch, and clicking any point inside a hole removes that hole.
+underlying APIs are `map.ops.addRing()` and `map.ops.deleteRing()`;
+`map.ops.fillRing()` creates a polygon feature that shares the hole boundary
+while preserving the hole on the host feature. Like QGIS, none of these
+operations requires a selection: a sketch locates the containing polygon, and
+a point inside a hole locates the hole to delete or fill.
 
 ```ts
 const added = await map.ops.addRing({
@@ -185,6 +187,7 @@ const added = await map.ops.addRing({
 });
 
 const removed = await map.ops.deleteRing({ point: [116.395, 39.905] });
+const filled = await map.ops.fillRing({ point: [116.395, 39.905] });
 
 map.ringEdit.setOptions({ mode: 'add', snapThreshold: 12 });
 map.ringEdit.enable();
@@ -194,7 +197,8 @@ With `mode: 'add'`, left-click to draw the hole, right-click to finish, and
 Esc to cancel. With `mode: 'delete'`, click any point inside a hole to remove
 it. It uses `'ring'` edit mode and exits when another edit mode is selected.
 
-Validation failures from `map.ops.addRing()` and `map.ops.deleteRing()` have
+Validation failures from `map.ops.addRing()`, `map.ops.deleteRing()`, and
+`map.ops.fillRing()` have
 `kind: 'validation'` and shape `{ kind, field, reason }`; `field` is `ring`.
 The hole must be closed and enclose area, must not self-intersect, touch, or
 cross a polygon boundary, and must be strictly inside a polygon exterior; a

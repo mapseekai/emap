@@ -19,14 +19,14 @@
 <h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: attribute-editing, china-editing, draw-snap-clear.</p>
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">SplitSharedArcsCommandOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#appendedarcs">appendedArcs</a><span class="tsd-signature-symbol">:</span> <a href="emap.AppendedArc.html" class="tsd-signature-type tsd-kind-interface">AppendedArc</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#originalarccount">originalArcCount</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#remaps">remaps</a><span class="tsd-signature-symbol">:</span> <a href="emap.SplitSharedArcsRemap.html" class="tsd-signature-type tsd-kind-interface">SplitSharedArcsRemap</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#source">source</a><span class="tsd-signature-symbol">:</span> <a href="emap.ITopologySource.html" class="tsd-signature-type tsd-kind-interface">ITopologySource</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
-<section class="tsd-panel tsd-hierarchy" data-refl="5372">
+<section class="tsd-panel tsd-hierarchy" data-refl="5419">
 <h4>Hierarchy (<a href="../hierarchy.html#emap.SplitSharedArcsCommandOptions">View Summary</a>)</h4>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><span class="tsd-hierarchy-target">SplitSharedArcsCommandOptions</span>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><a href="emap.SplitSharedNodePlan.html" class="tsd-signature-type tsd-kind-interface">SplitSharedNodePlan</a></li></ul></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/split-shared-arcs.ts#L33">src/edit/commands/split-shared-arcs.ts:33</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/split-shared-arcs.ts#L28">src/edit/commands/split-shared-arcs.ts:28</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -49,28 +49,28 @@
 assigned (first appended arc id = <code>originalArcCount</code>, second = +1, …).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/split-shared-arcs.ts#L41">src/edit/commands/split-shared-arcs.ts:41</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/split-shared-arcs.ts#L36">src/edit/commands/split-shared-arcs.ts:36</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="originalarccount"><span>original<wbr/>Arc<wbr/>Count</span><a href="#originalarccount" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">originalArcCount</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Arc count BEFORE the split. Used by undo to truncate.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/split-shared-arcs.ts#L43">src/edit/commands/split-shared-arcs.ts:43</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/split-shared-arcs.ts#L38">src/edit/commands/split-shared-arcs.ts:38</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="remaps"><span>remaps</span><a href="#remaps" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">remaps</span><span class="tsd-signature-symbol">:</span> <a href="emap.SplitSharedArcsRemap.html" class="tsd-signature-type tsd-kind-interface">SplitSharedArcsRemap</a><span class="tsd-signature-symbol">[]</span></div>
 <div class="tsd-comment tsd-typography"><p>Pre-computed shape rewrites — one entry per affected feature.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/split-shared-arcs.ts#L36">src/edit/commands/split-shared-arcs.ts:36</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/split-shared-arcs.ts#L31">src/edit/commands/split-shared-arcs.ts:31</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="source"><span>source</span><a href="#source" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">source</span><span class="tsd-signature-symbol">:</span> <a href="emap.ITopologySource.html" class="tsd-signature-type tsd-kind-interface">ITopologySource</a></div>
 <div class="tsd-comment tsd-typography"><p>source is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/split-shared-arcs.ts#L34">src/edit/commands/split-shared-arcs.ts:34</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/split-shared-arcs.ts#L29">src/edit/commands/split-shared-arcs.ts:29</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

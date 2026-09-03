@@ -115,6 +115,7 @@ export type {
   CirclePaint,
 } from './map/layer';
 export { resolveStrokeStyle, resolvePointStyle } from './map/layer';
+export type { StyleExpression } from './map/style-expression';
 export { HighlightManager } from './map/highlight-manager';
 export { Selection } from './map/selection';
 export type { SelectMode, SelectionDiff, SelectionSnapshot } from './map/selection';

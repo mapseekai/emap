@@ -21,7 +21,7 @@ should lower them.</p>
 <div class="tsd-tag-example">
 <h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Runnable example association: getting-started/geojson-viewer, getting-started/lines, getting-started/points.</p>
 </div></div></section>
-<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">ZipExtractionLimits</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#maxbytes">maxBytes</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#maxentries">maxEntries</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#maxratio">maxRatio</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">ZipExtractionLimits</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#maxbytes">maxBytes</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#maxcompressedbytes">maxCompressedBytes</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#maxentries">maxEntries</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#maxratio">maxRatio</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
 <li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L103">src/source/topology-source.ts:103</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
@@ -32,6 +32,7 @@ should lower them.</p>
 <section class="tsd-index-section">
 <h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-index-list"><a href="#maxbytes" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>max<wbr/>Bytes?</span></a>
+<a href="#maxcompressedbytes" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>max<wbr/>Compressed<wbr/>Bytes?</span></a>
 <a href="#maxentries" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>max<wbr/>Entries?</span></a>
 <a href="#maxratio" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>max<wbr/>Ratio?</span></a>
 </div></section></div></details></section></section>
@@ -44,6 +45,13 @@ should lower them.</p>
 <div class="tsd-comment tsd-typography"><p>Max summed uncompressed size of all kept entries, in bytes. Default 500 MiB.</p>
 </div><aside class="tsd-sources">
 <ul>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L107">src/source/topology-source.ts:107</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="maxcompressedbytes"><code class="tsd-tag">Optional</code><span>max<wbr/>Compressed<wbr/>Bytes</span><a href="#maxcompressedbytes" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">maxCompressedBytes</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
+<div class="tsd-comment tsd-typography"><p>Max compressed ZIP input size, in bytes. Default 500 MiB.</p>
+</div><aside class="tsd-sources">
+<ul>
 <li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L105">src/source/topology-source.ts:105</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="maxentries"><code class="tsd-tag">Optional</code><span>max<wbr/>Entries</span><a href="#maxentries" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
@@ -51,14 +59,14 @@ should lower them.</p>
 <div class="tsd-comment tsd-typography"><p>Max entry count fflate may yield. Default 5000.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L107">src/source/topology-source.ts:107</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L109">src/source/topology-source.ts:109</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="maxratio"><code class="tsd-tag">Optional</code><span>max<wbr/>Ratio</span><a href="#maxratio" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">maxRatio</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Max <code>uncompressedTotal / compressedInput</code> ratio. Default 100.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L109">src/source/topology-source.ts:109</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/source/topology-source.ts#L111">src/source/topology-source.ts:111</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -75,7 +83,7 @@ should lower them.</p>
 <h3>On This Page</h3></summary>
 <div class="tsd-accordion-details">
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
-<div><a href="#maxbytes"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>max<wbr/>Bytes</span></a><a href="#maxentries"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>max<wbr/>Entries</span></a><a href="#maxratio"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>max<wbr/>Ratio</span></a></div></details></div></details></div>
+<div><a href="#maxbytes"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>max<wbr/>Bytes</span></a><a href="#maxcompressedbytes"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>max<wbr/>Compressed<wbr/>Bytes</span></a><a href="#maxentries"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>max<wbr/>Entries</span></a><a href="#maxratio"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>max<wbr/>Ratio</span></a></div></details></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="../index.html">@mapseekai/emap</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">

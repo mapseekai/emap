@@ -2,6 +2,7 @@
 // 支持原子：get / match / step / interpolate(linear) / == != < <= > >= / ! / all / any。
 // 编译期结构校验（非法即抛 StyleExpressionError），运行期零分配闭包。
 
+/** MapLibre-style expression array accepted by supported dynamic paint properties. */
 export type StyleExpression = readonly unknown[];
 export type CompiledExpression = (record: Record<string, unknown> | null | undefined) => unknown;
 
