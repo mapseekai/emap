@@ -131,7 +131,7 @@
   "dependencies": {
     "@zwishing/epsg-index": "^3.0.0",
     "apache-arrow": "^21.1.0",
-    "fflate": "^0.8.2",
+    "fflate": "^0.8.3",
     "flatbush": "^4.5.0",
     "geographiclib-geodesic": "^2.2.0",
     "kdbush": "^4.0.2",
