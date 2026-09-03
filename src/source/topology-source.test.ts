@@ -816,6 +816,29 @@ describe('TopologySource.setData multi-file', () => {
     expect(source.getDataset()?.info?._injected['data.geojson']).toEqual(bytes);
   });
 
+  it('rejects an oversized URL ZIP before buffering the response body', async () => {
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(0));
+    const fetchSpy = vi.fn(async () => ({
+      ok: true,
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === 'content-length' ? '2048' : 'application/zip',
+      },
+      arrayBuffer,
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const source = new TopologySource('zip-source', {
+      zipLimits: { maxCompressedBytes: 1024 },
+    });
+
+    await expect(source.setData('https://example.test/data.zip')).rejects.toThrow(
+      /maxCompressedBytes/,
+    );
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
   it('fromBytes resolves after loading an in-memory dataset', async () => {
     const content = new Uint8Array([9, 8, 7]);
 
@@ -914,6 +937,34 @@ describe('TopologySource._extractZip — resource limits', () => {
     const source = new TopologySource('t');
     const out = await callExtract(source, buf);
     expect(Object.keys(out).sort()).toEqual(['a.dbf', 'a.prj', 'a.shp']);
+  });
+
+  it('rejects duplicate basenames from different ZIP directories', async () => {
+    const buf = zipSync({
+      'a/roads.shp': new Uint8Array([1]),
+      'b/ROADS.SHP': new Uint8Array([2]),
+    });
+    const source = new TopologySource('t');
+
+    await expect(callExtract(source, buf)).rejects.toThrow(/duplicate basename.*roads\.shp/i);
+  });
+
+  it('rejects a ZIP whose compressed input exceeds maxCompressedBytes', async () => {
+    const buf = zipSync({ 'a.shp': new Uint8Array([1, 2, 3]) });
+    const source = new TopologySource('t', {
+      zipLimits: { maxCompressedBytes: buf.byteLength - 1 },
+    });
+
+    await expect(callExtract(source, buf)).rejects.toThrow(/maxCompressedBytes/);
+  });
+
+  it('accepts a ZIP at the configured compressed-input boundary', async () => {
+    const buf = zipSync({ 'a.shp': new Uint8Array([1, 2, 3]) });
+    const source = new TopologySource('t', {
+      zipLimits: { maxCompressedBytes: buf.byteLength },
+    });
+
+    await expect(callExtract(source, buf)).resolves.toHaveProperty('a.shp');
   });
 
   it('accepts a 201 MiB archive with the default maxBytes limit', async () => {

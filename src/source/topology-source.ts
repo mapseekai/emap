@@ -101,6 +101,8 @@ function isNormalizedDatasetCommit(
  * should lower them.
  */
 export interface ZipExtractionLimits {
+  /** Max compressed ZIP input size, in bytes. Default 500 MiB. */
+  maxCompressedBytes?: number;
   /** Max summed uncompressed size of all kept entries, in bytes. Default 500 MiB. */
   maxBytes?: number;
   /** Max entry count fflate may yield. Default 5000. */
@@ -110,10 +112,23 @@ export interface ZipExtractionLimits {
 }
 
 const DEFAULT_ZIP_LIMITS: Required<ZipExtractionLimits> = {
-  maxBytes: 2048 * 1024 * 1024,
+  maxCompressedBytes: 500 * 1024 * 1024,
+  maxBytes: 500 * 1024 * 1024,
   maxEntries: 5000,
   maxRatio: 100,
 };
+
+function resolveZipLimits(limits: ZipExtractionLimits | undefined): Required<ZipExtractionLimits> {
+  return { ...DEFAULT_ZIP_LIMITS, ...limits };
+}
+
+function assertCompressedZipSize(byteLength: number, limits: Required<ZipExtractionLimits>): void {
+  if (byteLength > limits.maxCompressedBytes) {
+    throw new Error(
+      `ZIP extraction limit exceeded: compressed input ${byteLength} > maxCompressedBytes ${limits.maxCompressedBytes}`,
+    );
+  }
+}
 
 export interface TopologySourceOptions {
   data?: TopologySourceInput;
@@ -352,9 +367,6 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
             throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
           }
 
-          const buf = await response.arrayBuffer();
-          const content = new Uint8Array(buf);
-
           const urlPath = this._pathnameFromUrl(url);
           let filename = urlPath.split('/').pop() || '';
 
@@ -367,6 +379,18 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
             filename = 'data.json';
           }
 
+          if (this._isZipFile(filename)) {
+            const contentLengthHeader = response.headers.get('Content-Length');
+            if (contentLengthHeader !== null) {
+              const contentLength = Number(contentLengthHeader);
+              if (Number.isFinite(contentLength) && contentLength >= 0) {
+                assertCompressedZipSize(contentLength, resolveZipLimits(this._options.zipLimits));
+              }
+            }
+          }
+
+          const buf = await response.arrayBuffer();
+          const content = new Uint8Array(buf);
           input = { filename, content };
         } else {
           input = data;
@@ -831,7 +855,8 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
   }
 
   private async _extractZip(data: Uint8Array): Promise<Record<string, Uint8Array | string>> {
-    const limits = { ...DEFAULT_ZIP_LIMITS, ...this._options.zipLimits };
+    const limits = resolveZipLimits(this._options.zipLimits);
+    assertCompressedZipSize(data.byteLength, limits);
     let uncompressedTotal = 0;
     let entryCount = 0;
 
@@ -883,10 +908,19 @@ export class TopologySource extends EventDispatcher implements ITopologySource {
     });
 
     const result: Record<string, Uint8Array | string> = {};
+    const pathsByBasename = new Map<string, string>();
 
     for (const path of Object.keys(unzipped)) {
       const content = unzipped[path];
       const filename = path.split('/').pop() || path;
+      const basenameKey = filename.toLowerCase();
+      const previousPath = pathsByBasename.get(basenameKey);
+      if (previousPath !== undefined && previousPath !== path) {
+        throw new Error(
+          `ZIP archive contains duplicate basename "${filename}" in "${previousPath}" and "${path}"`,
+        );
+      }
+      pathsByBasename.set(basenameKey, path);
 
       // Convert text files to strings
       if (this._isTextFile(filename)) {

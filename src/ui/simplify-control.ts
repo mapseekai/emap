@@ -101,50 +101,95 @@ export class SimplifyControl implements Control {
     popup.style.display = 'none';
     popup.onclick = (e) => e.stopPropagation();
 
-    const percentage = this._opts.initialPercentage ?? 10;
-    const method = this._opts.initialMethod ?? '';
+    const configuredPercentage = this._opts.initialPercentage;
+    const percentage =
+      typeof configuredPercentage === 'number' && Number.isFinite(configuredPercentage)
+        ? Math.min(100, Math.max(0, configuredPercentage))
+        : 10;
+    const configuredMethod = this._opts.initialMethod;
+    const method = METHODS.some((option) => option.value === configuredMethod)
+      ? (configuredMethod ?? '')
+      : '';
 
-    popup.innerHTML = `
-      <div class="emap-simplify-field">
-        <label class="emap-simplify-label">
-          <span>Percentage:</span>
-          <input class="emap-simplify-range" type="range" min="0" max="100" step="0.1" value="${percentage}" />
-          <span class="emap-simplify-value value">${percentage}%</span>
-        </label>
-      </div>
-      <div class="emap-simplify-field">
-        <label class="emap-simplify-label">
-          <span>Method:</span>
-          <select class="emap-simplify-select">
-            ${METHODS.map((m) => `<option value="${m.value}"${m.value === method ? ' selected' : ''}>${m.label}</option>`).join('')}
-          </select>
-        </label>
-      </div>
-      <div class="emap-simplify-flags">
-        <label><input type="checkbox" data-flag="keep-shapes" checked /> keep-shapes</label>
-        <label><input type="checkbox" data-flag="planar" /> planar</label>
-      </div>
-      <div class="emap-simplify-actions">
-        <button type="button" class="emap-simplify-apply apply">Apply</button>
-        <span class="emap-simplify-status status"></span>
-      </div>
-    `;
+    const percentageField = document.createElement('div');
+    percentageField.className = 'emap-simplify-field';
+    const percentageControl = document.createElement('label');
+    percentageControl.className = 'emap-simplify-label';
+    const percentageTitle = document.createElement('span');
+    percentageTitle.textContent = 'Percentage:';
+    const percentageInput = document.createElement('input');
+    percentageInput.className = 'emap-simplify-range';
+    percentageInput.type = 'range';
+    percentageInput.min = '0';
+    percentageInput.max = '100';
+    percentageInput.step = '0.1';
+    percentageInput.value = String(percentage);
+    const percentageLabel = document.createElement('span');
+    percentageLabel.className = 'emap-simplify-value value';
+    percentageLabel.textContent = `${percentage}%`;
+    percentageControl.append(percentageTitle, percentageInput, percentageLabel);
+    percentageField.appendChild(percentageControl);
 
-    this._percentageInput = popup.querySelector('input[type=range]') as HTMLInputElement;
-    this._percentageLabel = popup.querySelector('.value') as HTMLElement;
-    this._methodSel = popup.querySelector('select') as HTMLSelectElement;
-    this._keepShapes = popup.querySelector('input[data-flag=keep-shapes]') as HTMLInputElement;
-    this._planar = popup.querySelector('input[data-flag=planar]') as HTMLInputElement;
-    this._applyBtn = popup.querySelector('button.apply') as HTMLButtonElement;
-    this._statusEl = popup.querySelector('.status') as HTMLElement;
+    const methodField = document.createElement('div');
+    methodField.className = 'emap-simplify-field';
+    const methodControl = document.createElement('label');
+    methodControl.className = 'emap-simplify-label';
+    const methodTitle = document.createElement('span');
+    methodTitle.textContent = 'Method:';
+    const methodSelect = document.createElement('select');
+    methodSelect.className = 'emap-simplify-select';
+    for (const optionDefinition of METHODS) {
+      const option = document.createElement('option');
+      option.value = optionDefinition.value;
+      option.textContent = optionDefinition.label;
+      option.selected = optionDefinition.value === method;
+      methodSelect.appendChild(option);
+    }
+    methodControl.append(methodTitle, methodSelect);
+    methodField.appendChild(methodControl);
 
-    this._percentageInput.oninput = () => {
+    const flags = document.createElement('div');
+    flags.className = 'emap-simplify-flags';
+    const keepShapesLabel = document.createElement('label');
+    const keepShapes = document.createElement('input');
+    keepShapes.type = 'checkbox';
+    keepShapes.dataset.flag = 'keep-shapes';
+    keepShapes.checked = true;
+    keepShapesLabel.append(keepShapes, document.createTextNode(' keep-shapes'));
+    const planarLabel = document.createElement('label');
+    const planar = document.createElement('input');
+    planar.type = 'checkbox';
+    planar.dataset.flag = 'planar';
+    planarLabel.append(planar, document.createTextNode(' planar'));
+    flags.append(keepShapesLabel, planarLabel);
+
+    const actions = document.createElement('div');
+    actions.className = 'emap-simplify-actions';
+    const applyButton = document.createElement('button');
+    applyButton.type = 'button';
+    applyButton.className = 'emap-simplify-apply apply';
+    applyButton.textContent = 'Apply';
+    const status = document.createElement('span');
+    status.className = 'emap-simplify-status status';
+    actions.append(applyButton, status);
+
+    popup.append(percentageField, methodField, flags, actions);
+
+    this._percentageInput = percentageInput;
+    this._percentageLabel = percentageLabel;
+    this._methodSel = methodSelect;
+    this._keepShapes = keepShapes;
+    this._planar = planar;
+    this._applyBtn = applyButton;
+    this._statusEl = status;
+
+    percentageInput.oninput = () => {
       if (this._percentageLabel && this._percentageInput) {
         this._percentageLabel.textContent = `${this._percentageInput.value}%`;
       }
     };
 
-    this._applyBtn.onclick = () => this._apply();
+    applyButton.onclick = () => this._apply();
 
     return popup;
   }

@@ -172,6 +172,22 @@ describe('SimplifyControl', () => {
     expect(methodSel.value).toBe('visvalingam');
   });
 
+  it('treats runtime-invalid initial options as data instead of markup', () => {
+    ctrl.onRemove();
+    ctrl = new SimplifyControl({
+      source: 's1',
+      initialPercentage: '10" autofocus onfocus="globalThis.__emapInjected=1' as never,
+      initialMethod: '"><img src=x onerror=globalThis.__emapInjected=1>' as never,
+    });
+    el = ctrl.onAdd(map as any);
+
+    const slider = el.querySelector('input[type=range]') as HTMLInputElement;
+    const methodSel = el.querySelector('select') as HTMLSelectElement;
+    expect(slider.value).toBe('10');
+    expect(methodSel.value).toBe('');
+    expect(el.querySelector('[onfocus], [onerror], img')).toBeNull();
+  });
+
   it('cleans up DOM and listeners on remove', () => {
     document.body.appendChild(el);
     expect(document.body.contains(el)).toBe(true);
