@@ -267,6 +267,13 @@ export interface MapshaperDataset {
    * `0` when first observed via {@link bumpEditVersion}.
    */
   editVersion?: number;
+  /**
+   * Monotonic counter for attribute/record mutations that don't touch
+   * geometry. Owns style-resolution cache invalidation; spatial-index
+   * caches key on `editVersion` and are NOT rebuilt for pure attribute
+   * edits. emap-owned; mapshaper never sets it.
+   */
+  attributeVersion?: number;
 }
 
 /** Deep read-only view of the live dataset owned by a TopologySource. */
@@ -296,6 +303,12 @@ export interface ReadonlyMapshaperDataset {
 export function bumpEditVersion(dataset: MapshaperDataset | null | undefined): void {
   if (!dataset) return;
   dataset.editVersion = (dataset.editVersion ?? 0) + 1;
+}
+
+/** Bump the attribute/record revision. See {@link bumpEditVersion}. */
+export function bumpAttributeVersion(dataset: MapshaperDataset | null | undefined): void {
+  if (!dataset) return;
+  dataset.attributeVersion = (dataset.attributeVersion ?? 0) + 1;
 }
 
 // ---------------------------------------------------------------------------

@@ -62,11 +62,14 @@ export class AttributeOps {
       return Err.validation('props', 'no-op: every requested value already matches the record');
     }
 
+    const dataset = this._emap._sources.get(ref.source)?.getDataset();
+    if (!dataset) return Err.notFound('source', ref.source);
     const cmd = new FeaturePropertyChangeCommand({
       layer,
       featureId: ref.id,
       prev,
       next,
+      dataset,
     });
     cmd.do();
     this._emap._history.push(cmd);
@@ -90,10 +93,13 @@ export class AttributeOps {
     const layer = this._emap.layers.resolve(opts.source, opts.target);
     if (!layer) return Err.notFound('layer', opts.target);
     if (!layer.data) return Err.validation('target', 'layer has no data table');
+    const dataset = this._emap._sources.get(opts.source)?.getDataset();
+    if (!dataset) return Err.notFound('source', opts.source);
     const cmd = new FieldAddCommand({
       layer,
       field: opts.field,
       defaultValue: opts.defaultValue,
+      dataset,
     });
     cmd.do();
     this._emap._history.push(cmd);
@@ -110,7 +116,9 @@ export class AttributeOps {
     const layer = this._emap.layers.resolve(opts.source, opts.target);
     if (!layer) return Err.notFound('layer', opts.target);
     if (!layer.data) return Err.validation('target', 'layer has no data table');
-    const cmd = new FieldRemoveCommand({ layer, field: opts.field });
+    const dataset = this._emap._sources.get(opts.source)?.getDataset();
+    if (!dataset) return Err.notFound('source', opts.source);
+    const cmd = new FieldRemoveCommand({ layer, field: opts.field, dataset });
     cmd.do();
     this._emap._history.push(cmd);
     this._emap._fireHistoryChange();
@@ -136,7 +144,9 @@ export class AttributeOps {
         return Err.validation('to', `would overwrite existing '${opts.to}' on at least one record`);
       }
     }
-    const cmd = new FieldRenameCommand({ layer, from: opts.from, to: opts.to });
+    const dataset = this._emap._sources.get(opts.source)?.getDataset();
+    if (!dataset) return Err.notFound('source', opts.source);
+    const cmd = new FieldRenameCommand({ layer, from: opts.from, to: opts.to, dataset });
     cmd.do();
     this._emap._history.push(cmd);
     this._emap._fireHistoryChange();

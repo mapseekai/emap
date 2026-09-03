@@ -5,6 +5,7 @@ import type {
   StrokeStyle,
 } from '../types/mapshaper-types';
 import { EMAP_THEME_COLORS } from '../theme/colors';
+import type { StyleExpression } from './style-expression';
 
 /**
  * Paint options for polygon fills.
@@ -13,7 +14,7 @@ import { EMAP_THEME_COLORS } from '../theme/colors';
  * const paint: FillPaint = { 'fill-color': '#2f6f73', 'fill-opacity': 0.32 };
  */
 export interface FillPaint {
-  'fill-color'?: string;
+  'fill-color'?: string | StyleExpression;
   'fill-opacity'?: number;
 }
 
@@ -56,6 +57,8 @@ interface LayerSpecificationBase {
   source: string;
   'source-layer'?: string;
   layout?: LayerLayout;
+  /** 显式 opt-in：读取 mapshaper 兼容烘焙样式字段（fill/stroke/stroke-width/r）。 */
+  styleSource?: 'mapshaper';
 }
 
 export interface FillLayerSpecification extends LayerSpecificationBase {

@@ -12,7 +12,8 @@ describe('FieldRemoveCommand', () => {
       { name: 'B', pop: 200 },
     ];
     const layer = makeLayer(records);
-    const cmd = new FieldRemoveCommand({ layer, field: 'pop' });
+    const dataset = { layers: [] };
+    const cmd = new FieldRemoveCommand({ layer, field: 'pop', dataset });
     cmd.do();
     expect(records).toEqual([{ name: 'A' }, { name: 'B' }]);
   });
@@ -20,7 +21,8 @@ describe('FieldRemoveCommand', () => {
   it('leaves records that never had the field untouched', () => {
     const records = [{ name: 'A', pop: 100 }, { name: 'B' }];
     const layer = makeLayer(records);
-    const cmd = new FieldRemoveCommand({ layer, field: 'pop' });
+    const dataset = { layers: [] };
+    const cmd = new FieldRemoveCommand({ layer, field: 'pop', dataset });
     cmd.do();
     cmd.undo();
     // Record 1 never had `pop`; undo must not add it back.
@@ -31,7 +33,8 @@ describe('FieldRemoveCommand', () => {
     const records = [{ name: 'A', pop: 100, density: 5.5 }, { name: 'B', pop: 200 }, { name: 'C' }];
     const original = JSON.parse(JSON.stringify(records));
     const layer = makeLayer(records);
-    const cmd = new FieldRemoveCommand({ layer, field: 'pop' });
+    const dataset = { layers: [] };
+    const cmd = new FieldRemoveCommand({ layer, field: 'pop', dataset });
     cmd.do();
     cmd.undo();
     expect(records).toEqual(original);

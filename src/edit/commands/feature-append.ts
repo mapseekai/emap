@@ -1,7 +1,7 @@
 import type { EditCommand } from '../edit-command';
 import type { FeatureShape, MapshaperLayer } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
-import { markSourceChanged } from './_shared';
+import { markShapeCountChanged } from './_shared';
 
 export interface FeatureAppendCommandOptions {
   /** Layer the feature was appended to. */
@@ -39,7 +39,7 @@ export class FeatureAppendCommand implements EditCommand {
       const records = o.layer.data?.getRecords?.();
       records?.push(o.appendedRecord);
     }
-    markSourceChanged(o.source);
+    markShapeCountChanged(o.source);
   }
 
   undo(): void {
@@ -49,7 +49,7 @@ export class FeatureAppendCommand implements EditCommand {
       const records = o.layer.data?.getRecords?.();
       records?.pop();
     }
-    markSourceChanged(o.source);
+    markShapeCountChanged(o.source);
   }
 
   publish(): void {

@@ -67,6 +67,8 @@ export interface EmapEventMap {
   historychange: Partial<HistoryStateSnapshot>;
   selectionchange: { selected: FeatureRef[]; added: FeatureRef[]; removed: FeatureRef[] };
   validationfailed: { results: ValidatorResult[]; label: string };
+  // 样式解析诊断：桶数超阈值 / 表达式重建失败（stale 渲染保留）。
+  warning: { layerId: string; buckets?: number; error?: unknown };
 
   // Delegated pointer / feature events (P3/P8). These are routed through
   // Emap.on/off/once overloads rather than EventDispatcher.fire(), but they

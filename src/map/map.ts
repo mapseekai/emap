@@ -87,7 +87,14 @@ import { ReprojectMapCommand } from '../edit/commands/reproject-map';
 // via the `ops` / `editSession` / `attributes` getters below.
 import type { Control, ControlPosition } from '../ui/control';
 import { getLayerId } from '../source/layer-utils';
-import { cloneLayerSpecification, DEFAULT_LAYER_COLOR, type LayerSpecification } from './layer';
+import {
+  cloneLayerSpecification,
+  DEFAULT_LAYER_COLOR,
+  type LayerPaint,
+  type LayerSpecification,
+} from './layer';
+import { compileStyleExpression, isStyleExpression } from './style-expression';
+import { StyleResolver } from './style-resolver';
 import type {
   ArcCollection,
   MapshaperDataset,
@@ -216,6 +223,28 @@ function captureScaleView(viewport: Viewport, crs: string): ScaleViewSnapshot | 
   };
 }
 
+/** paint 值中的样式表达式同步校验；非法表达式拒绝落地（不进入渲染期）。 */
+function assertValidPaint(
+  id: string,
+  paint: LayerPaint | Record<string, unknown> | undefined,
+): void {
+  if (!paint) return;
+  for (const [key, value] of Object.entries(paint)) {
+    if (isStyleExpression(value)) {
+      try {
+        compileStyleExpression(value);
+      } catch (err) {
+        if (err instanceof Error) {
+          throw new Error(`Layer "${id}" paint "${key}": ${err.name}: ${err.message}`, {
+            cause: err,
+          });
+        }
+        throw err;
+      }
+    }
+  }
+}
+
 function isScaleViewCurrent(viewport: Viewport, crs: string, snapshot: ScaleViewSnapshot): boolean {
   if (
     crs !== snapshot.view.crs ||
@@ -276,6 +305,9 @@ export class Emap extends EventDispatcher {
   private _pendingSourceCommits = new globalThis.Map<string, symbol>();
   private _crsEstablished = false;
   private _layers: LayerSpecification[] = [];
+  private _styleResolver = new StyleResolver({
+    onWarn: (w) => this.fire('warning', w),
+  });
   private _effectiveLayersCache: LayerSpecification[] = [];
   private _defaultLayersDirty = true;
   private _layerArcIdsCache: globalThis.Map<string, globalThis.Map<MapshaperLayer, Uint32Array>> =
@@ -1538,6 +1570,7 @@ export class Emap extends EventDispatcher {
     if (this._layers.some((l) => l.id === layer.id)) {
       throw new Error(`Layer "${layer.id}" already exists`);
     }
+    assertValidPaint(layer.id, layer.paint);
     if (before) {
       const idx = this._layers.findIndex((l) => l.id === before);
       if (idx === -1) {
@@ -1595,6 +1628,7 @@ export class Emap extends EventDispatcher {
   public setPaintProperty(id: string, name: string, value: unknown): void {
     const layer = this._layers.find((l) => l.id === id);
     if (layer) {
+      assertValidPaint(id, { [name]: value });
       if (!layer.paint) layer.paint = {};
       (layer.paint as Record<string, unknown>)[name] = value;
       this._scheduleRender();
@@ -2149,6 +2183,7 @@ export class Emap extends EventDispatcher {
         sources: this._sources,
         viewport: this._viewport,
         painter: this._painter,
+        styleResolver: this._styleResolver,
         resolveSourceLayer: (sourceId, sourceLayerName) =>
           this.layers.resolve(sourceId, sourceLayerName),
         getLayerArcIds: (sourceId, ml, arcs) => this._getLayerArcIds(sourceId, ml, arcs),
@@ -2386,7 +2421,8 @@ export class Emap extends EventDispatcher {
 
   _clearHighlightsForLayer(sourceId: string, layerKeys: readonly string[]): void {
     let removed = false;
-    for (const key of layerKeys) removed = this._highlightManager.removeLayer(sourceId, key) || removed;
+    for (const key of layerKeys)
+      removed = this._highlightManager.removeLayer(sourceId, key) || removed;
     if (removed) this._scheduleRender();
   }
 

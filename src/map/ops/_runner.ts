@@ -116,6 +116,7 @@ const COMMAND_EFFECTS: Readonly<Record<string, OpEffect>> = {
   'rename-layers': 'layer-identity',
   'filter-fields': 'attribute-only',
   'data-fill': 'attribute-only',
+  classify: 'attribute-only',
   sort: 'feature-order',
   // crs-only: project + reproject + whole-layer affine (coords change,
   // shape / arc / feature ids unchanged)
@@ -274,6 +275,7 @@ export function _runPreparedDatasetMutation<T>(
     if (!original) return Err.notFound('source', sourceId);
 
     const originalEditVersion = original.editVersion ?? 0;
+    const originalAttrVersion = original.attributeVersion ?? 0;
     let outcome: PreparedDatasetMutationResult<T> | OpResult<T>;
     try {
       const working = getDefaultMapshaperAdapter().copyDataset(original);
@@ -284,6 +286,7 @@ export function _runPreparedDatasetMutation<T>(
         host._sources.get(sourceId) !== source ||
         source.getDataset() !== original ||
         (original.editVersion ?? 0) !== originalEditVersion ||
+        (original.attributeVersion ?? 0) !== originalAttrVersion ||
         host._activeTransaction !== transaction ||
         (transaction !== null && !transaction.isOpen)
       ) {
@@ -337,6 +340,7 @@ export function _runPreparedEditCommand<T>(
     if (!dataset) return Err.notFound('source', sourceId);
 
     const plannedEditVersion = dataset.editVersion ?? 0;
+    const plannedAttrVersion = dataset.attributeVersion ?? 0;
     let planned: PreparedDirectEdit<T> | OpResult<T>;
     try {
       planned = plan(dataset, source);
@@ -352,6 +356,7 @@ export function _runPreparedEditCommand<T>(
       host._sources.get(sourceId) !== source ||
       source.getDataset() !== dataset ||
       (dataset.editVersion ?? 0) !== plannedEditVersion ||
+      (dataset.attributeVersion ?? 0) !== plannedAttrVersion ||
       host._activeTransaction !== transaction ||
       (transaction !== null && !transaction.isOpen)
     ) {
@@ -470,13 +475,20 @@ export function _runPreparedEditCommandMany<T>(
       source: MutableTopologySource;
       dataset: MapshaperDataset;
       editVersion: number;
+      attributeVersion: number;
     }> = [];
     for (const sourceId of ids) {
       const source = host._sources.get(sourceId);
       if (!source) return Err.notFound('source', sourceId);
       const dataset = source.getDataset();
       if (!dataset) return Err.notFound('source', sourceId);
-      targets.push({ sourceId, source, dataset, editVersion: dataset.editVersion ?? 0 });
+      targets.push({
+        sourceId,
+        source,
+        dataset,
+        editVersion: dataset.editVersion ?? 0,
+        attributeVersion: dataset.attributeVersion ?? 0,
+      });
     }
 
     const planned: Array<{
@@ -515,6 +527,7 @@ export function _runPreparedEditCommandMany<T>(
         host._sources.get(target.sourceId) !== target.source ||
         target.source.getDataset() !== target.dataset ||
         (target.dataset.editVersion ?? 0) !== target.editVersion ||
+        (target.dataset.attributeVersion ?? 0) !== target.attributeVersion ||
         host._activeTransaction !== transaction ||
         (transaction !== null && !transaction.isOpen)
       ) {
@@ -578,11 +591,16 @@ function runDatasetCommand(
       prepare?.(working, original);
       const adapter = getDefaultMapshaperAdapter();
       const vertexCount = working.arcs?.getPointCount?.() ?? 0;
+      const recordCount = working.layers.reduce(
+        (n, l) => n + (l.data?.getRecords?.()?.length ?? 0),
+        0,
+      );
       const defaultDecision = shouldUseWorkerForHeads(
         request.heads,
         vertexCount,
         host._workerMode,
         host._workerThreshold,
+        recordCount,
       );
       const useWorker =
         !!host._workerPool &&
@@ -591,6 +609,7 @@ function runDatasetCommand(
               cmd: request.cmd,
               heads: request.heads,
               vertexCount,
+              recordCount,
               mode: host._workerMode,
               threshold: host._workerThreshold,
               defaultDecision,
@@ -624,6 +643,7 @@ function runDatasetMutation(
     if (!original) return Err.notFound('source', sourceId);
 
     const originalEditVersion = original.editVersion ?? 0;
+    const originalAttrVersion = original.attributeVersion ?? 0;
     let after: MapshaperDataset;
     try {
       const working = getDefaultMapshaperAdapter().copyDataset(original);
@@ -641,6 +661,7 @@ function runDatasetMutation(
       host._sources.get(sourceId) !== source ||
       source.getDataset() !== original ||
       (original.editVersion ?? 0) !== originalEditVersion ||
+      (original.attributeVersion ?? 0) !== originalAttrVersion ||
       host._activeTransaction !== transaction ||
       (transaction !== null && !transaction.isOpen)
     ) {
@@ -802,6 +823,8 @@ function commitDatasetReplace(
 ): OpResult {
   reuseUnchangedDatasetState(before, after, effect);
   transaction?._captureFirstTouch(sourceId, before);
+  if (before.editVersion !== undefined) after.editVersion = before.editVersion;
+  if (before.attributeVersion !== undefined) after.attributeVersion = before.attributeVersion;
   source.setDataset(after, false);
   const command = new DatasetReplaceCommand({ source, before, after, label });
   host._history.push(command);
@@ -826,6 +849,8 @@ function commitDatasetReplaceSelection(
   transaction: TransactionInternal | null,
 ): void {
   transaction?._captureFirstTouch(sourceId, before);
+  if (before.editVersion !== undefined) after.editVersion = before.editVersion;
+  if (before.attributeVersion !== undefined) after.attributeVersion = before.attributeVersion;
   const command = new DatasetReplaceSelectionCommand({
     source,
     before,

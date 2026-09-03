@@ -74,6 +74,8 @@ export type {
   UniqueFeaturesOptions,
   FilterFieldsOptions,
   RenameFieldsOptions,
+  ClassifyFeaturesOptions,
+  ClassificationResult,
   JoinTableOptions,
   JoinTableData,
   CheckGeometryOptions,
@@ -167,7 +169,12 @@ export type {
   StrokeStyle,
   VertexDotStyle,
 } from './types/mapshaper-types';
-export { isPathLayer, isPointLayer, bumpEditVersion } from './types/mapshaper-types';
+export {
+  isPathLayer,
+  isPointLayer,
+  bumpEditVersion,
+  bumpAttributeVersion,
+} from './types/mapshaper-types';
 
 // ===========================================================================
 // Adapter + worker pool (low-level mapshaper bridges; advanced users only)

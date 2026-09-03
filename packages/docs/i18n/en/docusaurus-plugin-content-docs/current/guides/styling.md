@@ -186,6 +186,88 @@ map.removeLayer('district-outline');
 These methods schedule rendering. Do not mutate the object returned by
 `map.getLayer(...)` as a way to refresh the map.
 
+## Attribute-driven styling
+
+Since 0.9.0, fill layers support two attribute-driven fill paths. Both are
+**explicit opt-ins** and never change the behavior of layers that do not
+declare them.
+
+### classifyFeatures: classified baking
+
+`classifyFeatures` computes breaks for a field with a method (`quantile` /
+`equal-interval` / `nice` / `categorical`, among others) and **bakes** the
+color into each record's `fill` field:
+
+```ts
+const result = await map.ops.classifyFeatures({
+  source: 'cities',
+  target: 'cities',
+  field: 'pop',
+  method: 'equal-interval',
+  classes: 4,
+  colors: ['#eff3ff', '#bdd7e7', '#6baed6', '#2171b5'],
+  nullValue: '#eeeeee', // optional: fill color for null/missing records
+});
+if (result.ok) {
+  // Discriminated union: explicit-break and automatic-method calls return
+  // different shapes; counts and class counts satisfy
+  // classes === colors.length === breaks.length + 1.
+  console.log(result.value.breaks, result.value.counts);
+}
+```
+
+Field names are mapshaper-compatible (`fill` / `stroke` / `stroke-width` /
+`r`). Baking is an ordinary undoable op: undo restores every record's
+previous value.
+
+### styleSource opt-in: render baked fields
+
+When a fill layer declares `styleSource: 'mapshaper'`, the renderer reads
+each record's baked `fill` color and fills per bucket; layers without
+`styleSource` never read record fields:
+
+```ts
+map.addLayer({
+  id: 'cities-fill',
+  type: 'fill',
+  source: 'cities',
+  'source-layer': 'cities',
+  styleSource: 'mapshaper',
+});
+```
+
+Precedence: an explicit scalar `fill-color` paint always wins (a layer with a
+declared static color is never hijacked by `styleSource`); baked fields are
+read only when no scalar paint is present.
+
+### Paint expression subset
+
+`fill-color` also accepts an expression subset (no baking required):
+
+```ts
+map.addLayer({
+  id: 'cities-choropleth',
+  type: 'fill',
+  source: 'cities',
+  paint: {
+    'fill-color': ['match', ['get', 'level'], 'a', '#111111', '#999999'],
+    // or continuous: ['interpolate', 'linear', ['get', 'pop'], 0, '#000000', 100, '#ffffff']
+    // or stepped:   ['step', ['get', 'pop'], '#eff3ff', 25, '#bdd7e7', 50, '#6baed6']
+  },
+});
+```
+
+Supported operators: `get`, `match`, `step`, `interpolate` (`linear`).
+Expressions are validated synchronously by `addLayer` / `setPaintProperty`
+and invalid ones throw immediately; a per-record evaluation error is isolated
+into the theme-colored null bucket without affecting other features. More
+than 256 classes still render and fire a `warning` event.
+
+Performance: expression results are cached by (expression, dataset reference,
+attributeVersion); vertex-level geometry edits do not trigger recomputation.
+Measured: cold build for 100k records is about 4ms; cache hits are
+effectively free.
+
 ## Defaults and troubleshooting
 
 The fallback color is `#1e88e5`. Production applications should set colors
@@ -199,9 +281,11 @@ For an invisible layer, check:
 4. The camera is over the data extent.
 5. An opaque layer above it is not covering it.
 
-Paint values are layer-level constants. For attribute-driven categories,
-prepare multiple source layers or use data operations to create classified
-output, then assign separate paint to each render layer.
+For fill layers, `fill-color` already supports the expression subset and the
+baked-field opt-in; see "Attribute-driven styling" above. Line and circle
+paint values are still layer-level constants — for attribute-driven
+categories, prepare multiple source layers or classify first, then assign
+separate paint to each render layer.
 
 ## API
 

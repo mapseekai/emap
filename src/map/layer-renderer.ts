@@ -3,6 +3,7 @@ import type { CorePainter } from '../renderer/painter';
 import type { MutableTopologySource } from '../source/source';
 import type {
   ArcCollection,
+  MapshaperDataset,
   MapshaperLayer,
   PathShape,
   StrokeStyle,
@@ -10,12 +11,15 @@ import type {
 import { resolvePointStyle, resolveStrokeStyle } from './layer';
 import type { FillLayerSpecification, LayerSpecification, LineLayerSpecification } from './layer';
 import { EMAP_THEME_COLORS } from '../theme/colors';
+import type { StyleResolver } from './style-resolver';
 
 export interface LayerRendererContext {
   layers: readonly LayerSpecification[];
   sources: ReadonlyMap<string, MutableTopologySource>;
   viewport: Viewport;
   painter: CorePainter;
+  /** 可选：缺省时表达式/烘焙样式不解析（静态路径）。 */
+  styleResolver?: StyleResolver;
   resolveSourceLayer(sourceId: string, sourceLayerName?: string): MapshaperLayer | null;
   getLayerArcIds(sourceId: string, ml: MapshaperLayer, arcs: ArcCollection): Uint32Array | null;
 }
@@ -43,7 +47,15 @@ export function renderLayers(
     if (layer.type === 'line' && arcs) {
       renderLineLayer(ctx, layer, ml, arcs, source.getDataset?.()?.editVersion ?? 0, lineScale);
     } else if (layer.type === 'fill' && arcs && ml?.shapes) {
-      renderFillLayer(ctx, layer, ml, arcs, source.getDataset?.()?.editVersion ?? 0, lineScale);
+      renderFillLayer(
+        ctx,
+        layer,
+        ml,
+        arcs,
+        source.getDataset?.()?.editVersion ?? 0,
+        lineScale,
+        source.getDataset?.(),
+      );
     } else if (layer.type === 'circle' && ml?.shapes) {
       const style = resolvePointStyle(layer.paint);
       ctx.painter.drawPoints(ml.shapes, style);
@@ -96,9 +108,11 @@ function renderFillLayer(
   arcs: ArcCollection,
   geometryRevision: number,
   lineScale: number,
+  dataset?: MapshaperDataset,
 ): void {
   const fillPaint = layer.paint;
-  const fillColor = fillPaint?.['fill-color'] || EMAP_THEME_COLORS.muted;
+  const fillSpec = fillPaint?.['fill-color'];
+  const fillColor = typeof fillSpec === 'string' ? fillSpec : EMAP_THEME_COLORS.muted;
   const fillOpacity = fillPaint?.['fill-opacity'];
   const viewportFilter = ctx.viewport.getArcFilter(arcs);
   // Near full extent every part is visible anyway, so per-part bbox culling
@@ -106,13 +120,33 @@ function renderFillLayer(
   // actual drawing cheap. Mapshaper's getShapeFilter applies the same
   // skip-below-1.1 rule.
   const cullParts = ctx.viewport.getMapScale() > 1.1;
+  const resolution =
+    ctx.styleResolver && dataset
+      ? ctx.styleResolver.resolveFill({
+          layerId: layer.id,
+          paint: fillPaint,
+          styleSource: layer.styleSource,
+          dataset,
+          layer: ml,
+        })
+      : null;
   ctx.painter.drawPolygonFill(
     ml.shapes!,
     arcs,
     fillColor,
     cullParts ? viewportFilter : undefined,
     fillOpacity,
-    { viewBBox: cullParts ? ctx.viewport.getViewBounds() : null },
+    {
+      viewBBox: cullParts ? ctx.viewport.getViewBounds() : null,
+      ...(resolution
+        ? {
+            styleBuckets: {
+              buckets: resolution.fillBuckets,
+              colors: resolution.styles.map((s) => s.color),
+            },
+          }
+        : {}),
+    },
   );
   const style = resolveStrokeStyle(layer.paint, lineScale);
   if ((style.width ?? 0) > 0) {

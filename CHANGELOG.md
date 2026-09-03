@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Attribute-driven fill styling (Phase 1): `map.ops.classifyFeatures()` bakes
+  mapshaper-compatible style fields (`fill` / `stroke` / `stroke-width` / `r`)
+  per record with quantile / equal-interval / nice / categorical methods and
+  explicit null colors, as an undoable op returning a discriminated
+  `ClassificationResult`. Fill layers opt in to rendering baked fields via
+  `styleSource: 'mapshaper'`, and `fill-color` accepts a validated expression
+  subset (`get` / `match` / `step` / `interpolate` linear). Results are cached
+  by (expression, dataset reference, attributeVersion) and rendered through
+  per-bucket `styleBuckets` fills; more than 256 classes still render and fire
+  a `warning` event. Worker routing now keys `classify`/`style` commands on
+  record count so attribute-heavy ops offload even at near-zero vertex counts.
+
 ### Documentation
 
 - Aligned root and bilingual format, operation, interaction, control, selection,

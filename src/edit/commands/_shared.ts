@@ -1,4 +1,9 @@
-import { bumpEditVersion, type ArcCollection, type ArcVertexData } from '../../types/mapshaper-types';
+import {
+  bumpAttributeVersion,
+  bumpEditVersion,
+  type ArcCollection,
+  type ArcVertexData,
+} from '../../types/mapshaper-types';
 import type { MapshaperLayer } from '../../types/mapshaper-types';
 import { asMutableTopologySource, type TopologySource } from '../../source/source';
 import { normalizePointShape } from '../../source/layer-utils';
@@ -25,6 +30,16 @@ export function markSourceChanged(source: TopologySource): void {
   bumpEditVersion(mutableSource.getDataset?.());
 }
 
+/** Records-only change: invalidates style resolution, not spatial indexes. */
+export function markAttributesChanged(source: TopologySource): void {
+  bumpAttributeVersion(asMutableTopologySource(source).getDataset?.());
+}
+
+/** Feature count/membership change: geometry AND attribute invalidation. */
+export function markShapeCountChanged(source: TopologySource): void {
+  markSourceChanged(source);
+  markAttributesChanged(source);
+}
 
 /** Time window (ms) during which two consecutive merges still coalesce. */
 export const MERGE_WINDOW_MS = 500;

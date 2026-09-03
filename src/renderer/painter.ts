@@ -56,9 +56,18 @@ export interface MeasurementSegmentLabel {
   coord: MeasurementPoint;
 }
 
+export interface FillStyleBuckets {
+  /** styleId → 该桶的 shape 索引（升序、去重）。 */
+  buckets: readonly Uint32Array[];
+  /** styleId → 颜色，与 buckets 等长。 */
+  colors: readonly string[];
+}
+
 export interface PolygonFillOptions {
   /** Current viewport bbox in data coordinates, used to reject offscreen parts before path iteration. */
   viewBBox?: readonly [number, number, number, number] | number[] | null;
+  /** 存在时逐桶填充（每桶一次样式切换）；缺省走原单样式路径。 */
+  styleBuckets?: FillStyleBuckets;
 }
 
 export interface ArrowDotPathOptions {

@@ -1,11 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Selection } from '../../map/selection';
 import type { MapshaperLayer } from '../../types/mapshaper-types';
+import type { TopologySource } from '../../source/source';
 import {
   BulkFeatureDeleteCommand,
   FeatureDeleteCommand,
   FeatureDeleteWithSelectionCommand,
 } from './feature-delete';
+
+function makeSource(): TopologySource {
+  const dataset = { layers: [] };
+  const source = {
+    getDataset: () => dataset,
+    markDisplayArcsDirty: () => {},
+  };
+  // The command only consumes this tested TopologySource surface.
+  return source as unknown as TopologySource;
+}
 
 describe('FeatureDeleteCommand', () => {
   it('do() splices out the shape and data record', () => {
@@ -19,6 +30,7 @@ describe('FeatureDeleteCommand', () => {
       featureId: 1,
       shape: layer.shapes[1],
       record: records[1],
+      source: makeSource(),
     });
     cmd.do();
     expect(layer.shapes).toEqual([['s0'], ['s2']]);
@@ -38,6 +50,7 @@ describe('FeatureDeleteCommand', () => {
       featureId: 1,
       shape: originalShape,
       record: originalRecord,
+      source: makeSource(),
     });
     cmd.undo();
     expect(layer.shapes[1]).toEqual(originalShape);
@@ -55,6 +68,7 @@ describe('FeatureDeleteCommand', () => {
       featureId: 1,
       shape: layer.shapes[1],
       record: records[1],
+      source: makeSource(),
     });
     cmd.do();
     cmd.undo();
@@ -75,6 +89,7 @@ describe('FeatureDeleteCommand', () => {
       featureId: 0,
       shape: originalShape,
       record: originalRecord,
+      source: makeSource(),
     });
     originalShape[0]![0] = 999;
     originalRecord.a = 999;
@@ -96,6 +111,7 @@ describe('FeatureDeleteCommand', () => {
       featureId: 0,
       shape: layer.shapes[0],
       record: null,
+      source: makeSource(),
     });
     expect(() => cmd.do()).not.toThrow();
     expect(layer.shapes).toEqual([['s1']]);
@@ -122,6 +138,7 @@ describe('BulkFeatureDeleteCommand', () => {
         { id: 1, shape: layer.shapes[1], record: records[1] },
         { id: 3, shape: layer.shapes[3], record: records[3] },
       ],
+      source: makeSource(),
     });
     cmd.do();
     expect(layer.shapes).toEqual([['s0'], ['s2'], ['s4']]);
@@ -137,6 +154,7 @@ describe('BulkFeatureDeleteCommand', () => {
         { id: 0, shape: layer.shapes[0], record: records[0] },
         { id: 2, shape: layer.shapes[2], record: records[2] },
       ],
+      source: makeSource(),
     });
     cmd.do();
     expect(layer.shapes).toEqual([['s1'], ['s3']]);
@@ -149,6 +167,7 @@ describe('BulkFeatureDeleteCommand', () => {
     const cmd = new BulkFeatureDeleteCommand({
       layer: layer as any,
       snapshots: [{ id: 0, shape: layer.shapes[0], record: records[0] }],
+      source: makeSource(),
     });
     cmd.do();
     expect(layer.data.getRecords()).toBe(beforeRef);
@@ -162,7 +181,11 @@ describe('BulkFeatureDeleteCommand', () => {
       { id: 2, shape: layer.shapes[2], record: { ...records[2] } },
       { id: 4, shape: layer.shapes[4], record: { ...records[4] } },
     ];
-    const cmd = new BulkFeatureDeleteCommand({ layer: layer as any, snapshots: snap });
+    const cmd = new BulkFeatureDeleteCommand({
+      layer: layer as any,
+      snapshots: snap,
+      source: makeSource(),
+    });
     cmd.do();
     expect(layer.shapes).toEqual([['s1'], ['s3']]);
     cmd.undo();
@@ -181,6 +204,7 @@ describe('BulkFeatureDeleteCommand', () => {
         { id: 0, shape: layer.shapes[0], record: null },
         { id: 2, shape: layer.shapes[2], record: null },
       ],
+      source: makeSource(),
     });
     expect(() => cmd.do()).not.toThrow();
     expect(layer.shapes).toEqual([['s1']]);
@@ -192,6 +216,7 @@ describe('BulkFeatureDeleteCommand', () => {
     const single = new BulkFeatureDeleteCommand({
       layer: { shapes: [['x']] } as any,
       snapshots: [{ id: 0, shape: ['x'], record: null }],
+      source: makeSource(),
     });
     expect(single.label).toBe('Delete 1 feature');
     const many = new BulkFeatureDeleteCommand({
@@ -201,6 +226,7 @@ describe('BulkFeatureDeleteCommand', () => {
         { id: 1, shape: ['b'], record: null },
         { id: 2, shape: ['c'], record: null },
       ],
+      source: makeSource(),
     });
     expect(many.label).toBe('Delete 3 features');
   });
@@ -208,7 +234,11 @@ describe('BulkFeatureDeleteCommand', () => {
   it('empty snapshot list is a safe no-op', () => {
     const { layer } = makeLayer(3);
     const before = [...layer.shapes];
-    const cmd = new BulkFeatureDeleteCommand({ layer: layer as any, snapshots: [] });
+    const cmd = new BulkFeatureDeleteCommand({
+      layer: layer as any,
+      snapshots: [],
+      source: makeSource(),
+    });
     cmd.do();
     expect(layer.shapes).toEqual(before);
   });
@@ -223,9 +253,10 @@ describe('FeatureDeleteWithSelectionCommand', () => {
       data: { getRecords: () => records },
     } as any;
     const records = [{ name: 'a' }, { name: 'b' }];
+    const dataset = { layers: [layer], arcs: null, editVersion: 0, attributeVersion: 0 };
     const source = {
       getArcs: () => null,
-      getDataset: () => ({ layers: [layer], arcs: null }),
+      getDataset: () => dataset,
       markDisplayArcsDirty: vi.fn(),
       fire: vi.fn(),
     } as any;
@@ -268,6 +299,17 @@ describe('FeatureDeleteWithSelectionCommand', () => {
     expect(layer.shapes).toEqual([[[0]], [[1]]]);
     expect(records).toEqual([{ name: 'a' }, { name: 'b' }]);
     expect(selection.getAll()).toHaveLength(2);
+  });
+
+  it('bumps both revisions once per do and undo', () => {
+    const { source, command } = makeSetup();
+    const dataset = source.getDataset();
+    command.do();
+    expect(dataset.editVersion).toBe(1);
+    expect(dataset.attributeVersion).toBe(1);
+    command.undo();
+    expect(dataset.editVersion).toBe(2);
+    expect(dataset.attributeVersion).toBe(2);
   });
 
   it('publish fires data(edit) and the selection diff once', () => {

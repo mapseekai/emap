@@ -1,9 +1,9 @@
 import type { EditCommand } from '../edit-command';
 import type { FeatureShape, MapshaperLayer } from '../../types/mapshaper-types';
-import { asMutableTopologySource, type TopologySource } from '../../source/source';
+import type { TopologySource } from '../../source/source';
 import type { FeatureRef } from '../../map/types';
 import type { Selection, SelectionDiff, SelectionSnapshot } from '../../map/selection';
-import { markSourceChanged, SelectionDiffTracker } from './_shared';
+import { markShapeCountChanged, SelectionDiffTracker } from './_shared';
 
 export interface FeatureDeleteCommandOptions {
   /** The layer object that owns the feature. */
@@ -17,6 +17,8 @@ export interface FeatureDeleteCommandOptions {
    * layer has no data table.
    */
   record: Record<string, unknown> | null;
+  /** Owning source; bumps revisions on do/undo. */
+  source: TopologySource;
 }
 
 /**
@@ -52,6 +54,7 @@ export class FeatureDeleteCommand implements EditCommand {
     layer.shapes.splice(featureId, 1);
     const records = layer.data?.getRecords?.();
     records?.splice(featureId, 1);
+    markShapeCountChanged(this.opts.source);
   }
 
   undo(): void {
@@ -62,6 +65,7 @@ export class FeatureDeleteCommand implements EditCommand {
       const records = layer.data?.getRecords?.();
       records?.splice(featureId, 0, record);
     }
+    markShapeCountChanged(this.opts.source);
   }
 }
 
@@ -83,6 +87,8 @@ export interface BulkFeatureDeleteCommandOptions {
     shape: FeatureShape | null;
     record: Record<string, unknown> | null;
   }>;
+  /** Owning source; bumps revisions on do/undo. */
+  source: TopologySource;
 }
 
 /**
@@ -133,6 +139,7 @@ export class BulkFeatureDeleteCommand implements EditCommand {
       }
       records.length = rdst;
     }
+    markShapeCountChanged(this.opts.source);
   }
 
   undo(): void {
@@ -157,7 +164,10 @@ export class BulkFeatureDeleteCommand implements EditCommand {
     layer.shapes = shapes;
 
     const records = layer.data?.getRecords?.();
-    if (!records) return;
+    if (!records) {
+      markShapeCountChanged(this.opts.source);
+      return;
+    }
     const compactedRecordCount = records.length;
     records.length = compactedRecordCount + snapshots.length;
     let recordSource = compactedRecordCount - 1;
@@ -171,6 +181,7 @@ export class BulkFeatureDeleteCommand implements EditCommand {
         records[dst] = records[recordSource--];
       }
     }
+    markShapeCountChanged(this.opts.source);
   }
 }
 
@@ -186,17 +197,16 @@ export interface FeatureDeleteWithSelectionCommandOptions extends FeatureDeleteC
 /**
  * Source-aware wrapper around {@link FeatureDeleteCommand} for op-driven
  * deletions (e.g. `deletePart` removing a feature's last part). Adds the
- * three things the plain command deliberately does not own: selection
- * snapshot/remap, `markSourceChanged`, and the publish contract
- * (`data` + one selection diff). Cache invalidation / render / history
- * events stay with the runner.
+ * selection snapshot/remap and publish contract (`data` + one selection diff)
+ * around the inner command. Cache invalidation / render / history events stay
+ * with the runner.
  */
 export class FeatureDeleteWithSelectionCommand implements EditCommand {
   readonly label: string;
   private readonly inner: FeatureDeleteCommand;
   private readonly _selectionTracker: SelectionDiffTracker;
 
-  constructor(private readonly opts: FeatureDeleteWithSelectionCommandOptions) {
+  constructor(opts: FeatureDeleteWithSelectionCommandOptions) {
     this.inner = new FeatureDeleteCommand(opts);
     this.label = opts.label;
     this._selectionTracker = new SelectionDiffTracker(opts);
@@ -205,13 +215,11 @@ export class FeatureDeleteWithSelectionCommand implements EditCommand {
   do(): void {
     this.inner.do();
     this._selectionTracker.applyAfter();
-    markSourceChanged(asMutableTopologySource(this.opts.source));
   }
 
   undo(): void {
     this.inner.undo();
     this._selectionTracker.restoreBefore();
-    markSourceChanged(asMutableTopologySource(this.opts.source));
   }
 
   publish(): void {

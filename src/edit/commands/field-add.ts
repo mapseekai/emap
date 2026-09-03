@@ -1,5 +1,9 @@
 import type { EditCommand } from '../edit-command';
-import type { MapshaperLayer } from '../../types/mapshaper-types';
+import {
+  bumpAttributeVersion,
+  type MapshaperDataset,
+  type MapshaperLayer,
+} from '../../types/mapshaper-types';
 
 export interface FieldAddCommandOptions {
   layer: MapshaperLayer;
@@ -7,6 +11,7 @@ export interface FieldAddCommandOptions {
   field: string;
   /** Default value to assign. Defaults to `null` when omitted. */
   defaultValue?: unknown;
+  dataset: MapshaperDataset;
 }
 
 /**
@@ -35,6 +40,7 @@ export class FieldAddCommand implements EditCommand {
         this._addedIndices.push(i);
       }
     }
+    bumpAttributeVersion(this.opts.dataset);
   }
 
   undo(): void {
@@ -44,5 +50,6 @@ export class FieldAddCommand implements EditCommand {
       delete records[i]?.[this.opts.field];
     }
     this._addedIndices = [];
+    bumpAttributeVersion(this.opts.dataset);
   }
 }

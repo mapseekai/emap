@@ -828,7 +828,6 @@ export class CanvasPainter implements EditPainter {
 
     const ctx = this._ctx;
 
-    ctx.fillStyle = this._resolveColor(fillColor, 'muted');
     const overrideAlpha = typeof opacity === 'number' && opacity !== 1;
     const prevAlpha = ctx.globalAlpha;
     if (overrideAlpha) {
@@ -838,13 +837,42 @@ export class CanvasPainter implements EditPainter {
       ctx.globalAlpha = prevAlpha * Math.max(0, Math.min(1, opacity!));
     }
 
+    const viewBBox = options.viewBBox ?? null;
+    const buckets = options.styleBuckets;
+    if (buckets) {
+      for (let b = 0; b < buckets.buckets.length; b++) {
+        if (buckets.buckets[b].length === 0) continue;
+        ctx.fillStyle = this._resolveColor(buckets.colors[b], 'muted');
+        this._fillShapeIndices(shapes, arcs, buckets.buckets[b], filter, viewBBox);
+      }
+    } else {
+      ctx.fillStyle = this._resolveColor(fillColor, 'muted');
+      this._fillShapeIndices(shapes, arcs, null, filter, viewBBox);
+    }
+
+    if (overrideAlpha) ctx.globalAlpha = prevAlpha;
+  }
+
+  /**
+   * Fill the shapes addressed by `indices` (`null` = 0..length-1) as one
+   * batched evenodd fill sequence. Carries the batching/culling logic;
+   * style switching is the caller's job.
+   */
+  private _fillShapeIndices(
+    shapes: readonly (FeatureShape | null | undefined)[],
+    arcs: ArcCollection,
+    indices: Uint32Array | null,
+    filter: ((i: number) => boolean) | undefined,
+    viewBBox: readonly [number, number, number, number] | number[] | null,
+  ): void {
+    const ctx = this._ctx;
+
     // Smaller batches keep each `fill('evenodd')` call's path object
     // bounded because Canvas2D engines slow superlinearly with subpath count.
     // Keep mapshaper's same-style batching idea, but also cap by vertex
     // budget because a few huge features can be much more expensive than
     // hundreds of tiny polygons. Do not split a single shape across flushes:
     // polygon holes have to stay in the same evenodd path as their shell.
-    const viewBBox = options.viewBBox ?? null;
     const vertexCounts = arcs.getVertexData?.().nn ?? null;
     const getSimpleShapeBbox = viewBBox ? arcs.getSimpleShapeBbox : undefined;
     const bbox = [0, 0, 0, 0];
@@ -852,7 +880,9 @@ export class CanvasPainter implements EditPainter {
     let vertexCount = 0;
 
     ctx.beginPath();
-    for (let sIdx = 0; sIdx < shapes.length; sIdx++) {
+    const indexCount = indices ? indices.length : shapes.length;
+    for (let k = 0; k < indexCount; k++) {
+      const sIdx = indices ? indices[k] : k;
       const shape = shapes[sIdx];
       if (!shape) continue;
 
@@ -905,7 +935,6 @@ export class CanvasPainter implements EditPainter {
     if (shapeCount > 0) {
       ctx.fill('evenodd');
     }
-    if (overrideAlpha) ctx.globalAlpha = prevAlpha;
   }
 
   /**

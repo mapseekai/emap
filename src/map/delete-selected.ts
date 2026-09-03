@@ -35,7 +35,7 @@ export function deleteSelectedFeatures(
       const snapshots = collectDeleteSnapshots(target, ids);
       if (snapshots.length === 0) continue;
 
-      const bulk = new BulkFeatureDeleteCommand({ layer: target, snapshots });
+      const bulk = new BulkFeatureDeleteCommand({ layer: target, snapshots, source });
       bulk.do();
       children.push(bulk);
       totalDeleted += snapshots.length;

@@ -152,7 +152,7 @@ export function planTopologyNodeDeletion(
     }
 
     if (snapshots.length > 0) {
-      children.push(new BulkFeatureDeleteCommand({ layer, snapshots }));
+      children.push(new BulkFeatureDeleteCommand({ layer, snapshots, source }));
       deletedFeatureCount += snapshots.length;
     }
   }

@@ -1,10 +1,15 @@
 import type { EditCommand } from '../edit-command';
-import type { MapshaperLayer } from '../../types/mapshaper-types';
+import {
+  bumpAttributeVersion,
+  type MapshaperDataset,
+  type MapshaperLayer,
+} from '../../types/mapshaper-types';
 
 export interface FieldRemoveCommandOptions {
   layer: MapshaperLayer;
   /** Field name to drop from every record in the layer. */
   field: string;
+  dataset: MapshaperDataset;
 }
 
 /**
@@ -31,6 +36,7 @@ export class FieldRemoveCommand implements EditCommand {
         delete r[this.opts.field];
       }
     }
+    bumpAttributeVersion(this.opts.dataset);
   }
 
   undo(): void {
@@ -40,5 +46,6 @@ export class FieldRemoveCommand implements EditCommand {
       const r = records[i];
       if (r) r[this.opts.field] = value;
     }
+    bumpAttributeVersion(this.opts.dataset);
   }
 }

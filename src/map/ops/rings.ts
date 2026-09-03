@@ -164,10 +164,9 @@ export async function addRing(ctx: OpContext, options: AddRingOptions): Promise<
           }
           const shapeError = validateTargetShape(shape, arcs, adapter);
           if (shapeError) return shapeError;
-          const exteriorCoordinates = shapeSegments(
-            [shape[target.exteriorIndex]!],
-            arcs,
-          ).map(([start]) => start);
+          const exteriorCoordinates = shapeSegments([shape[target.exteriorIndex]!], arcs).map(
+            ([start]) => start,
+          );
           const hole =
             shoelaceArea(ring) * shoelaceArea(exteriorCoordinates) > 0 ? [...ring].reverse() : ring;
           // Build the after shape WITHOUT touching the live one: the new ring

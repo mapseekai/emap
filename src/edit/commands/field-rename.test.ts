@@ -9,14 +9,16 @@ describe('FieldRenameCommand', () => {
   it('moves the value to the new key on every record', () => {
     const records = [{ a: 1 }, { a: 2 }];
     const layer = makeLayer(records);
-    new FieldRenameCommand({ layer, from: 'a', to: 'b' }).do();
+    const dataset = { layers: [] };
+    new FieldRenameCommand({ layer, from: 'a', to: 'b', dataset }).do();
     expect(records).toEqual([{ b: 1 }, { b: 2 }]);
   });
 
   it('leaves records without the from-key untouched', () => {
     const records = [{ a: 1 }, { name: 'no-a' }];
     const layer = makeLayer(records);
-    new FieldRenameCommand({ layer, from: 'a', to: 'b' }).do();
+    const dataset = { layers: [] };
+    new FieldRenameCommand({ layer, from: 'a', to: 'b', dataset }).do();
     expect(records[1]).toEqual({ name: 'no-a' });
   });
 
@@ -24,7 +26,8 @@ describe('FieldRenameCommand', () => {
     const records = [{ a: 1, name: 'x' }, { a: 2 }];
     const original = JSON.parse(JSON.stringify(records));
     const layer = makeLayer(records);
-    const cmd = new FieldRenameCommand({ layer, from: 'a', to: 'b' });
+    const dataset = { layers: [] };
+    const cmd = new FieldRenameCommand({ layer, from: 'a', to: 'b', dataset });
     cmd.do();
     cmd.undo();
     expect(records).toEqual(original);

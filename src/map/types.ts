@@ -1262,3 +1262,73 @@ export interface EditVertexState {
 
 /** Default vertex-count threshold for `useWorker: 'auto'`. */
 export const DEFAULT_WORKER_THRESHOLD = 50_000;
+
+/**
+ * Options for `Emap.ops.classifyFeatures` — 属性分级烘焙。断点/类别与计数在 emap 侧计算（权威），mapshaper
+ * `-classify` 只收显式 breaks/categories/colors 做逐记录映射（spec §4.1 断点权威在 emap）。
+ *
+ * @example
+ * ```ts
+ * const res = await map.ops.classifyFeatures({
+ *   source: 'census', target: 'tracts', field: 'pop', method: 'quantile', classes: 5,
+ *   colors: ['#eff3ff', '#bdd7e7', '#6baed6', '#2171b5', '#08306b'],
+ * });
+ * ```
+ */
+export interface ClassifyFeaturesOptions {
+  /** Source id. */
+  source: string;
+  /** Target layer name. */
+  target: string;
+  /** Attribute field to classify on. */
+  field: string;
+  /** Break method. */
+  method: 'quantile' | 'equal-interval' | 'nice' | 'categorical';
+  /** Number of classes for sequential methods (default 4). */
+  classes?: number;
+  /** Explicit interior breaks (overrides method-computed breaks). */
+  breaks?: number[];
+  /** Category list for categorical method (default: distinct values in order of appearance). */
+  categories?: (string | number)[];
+  /** Class colors; length must equal classes (sequential) or categories.length (categorical). */
+  colors: string[];
+  /** Field to bake into; default 'fill'. */
+  saveAs?: string;
+  /** Null fill color (default: theme muted). */
+  nullValue?: string;
+  /** Unlisted-category color for categorical (default: nullValue). */
+  otherColor?: string;
+  /** Reverse color ramp order. */
+  invert?: boolean;
+}
+
+/** Result of `Emap.ops.classifyFeatures` — 判别联合，回显 effective null/other 色（spec §4.1）。 */
+export type ClassificationResult =
+  | {
+      kind: 'sequential';
+      method: 'quantile' | 'equal-interval' | 'nice';
+      /** Interior breaks actually used (length classes-1). */
+      breaks: number[];
+      colors: string[];
+      /** Per-class feature counts; counts 和 + nullCount === featureCount。 */
+      counts: number[];
+      /** Effective null color echoed back. */
+      nullColor: string;
+      nullCount: number;
+      saveAs: string;
+      featureCount: number;
+    }
+  | {
+      kind: 'categorical';
+      categories: (string | number)[];
+      colors: string[];
+      /** Per-category counts; counts 和 + otherCount + nullCount === featureCount。 */
+      counts: number[];
+      /** Effective other color echoed back. */
+      otherColor: string;
+      otherCount: number;
+      nullColor: string;
+      nullCount: number;
+      saveAs: string;
+      featureCount: number;
+    };

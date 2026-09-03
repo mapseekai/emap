@@ -6,6 +6,7 @@ import type { MapshaperLayer, ArcCollection } from '../../types/mapshaper-types'
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import type { EditHandlerHost } from './edit-handler-host';
 import { EMAP_THEME_COLORS } from '../../theme/colors';
+import { markShapeCountChanged } from '../../edit/commands/_shared';
 
 export type DrawGeometryType = 'polygon' | 'polyline' | 'point';
 
@@ -370,6 +371,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
       }
     }
 
+    markShapeCountChanged(source);
     // Re-initialize display arcs for LOD so the filtered copy includes the new arc
     source.refreshDisplayArcs();
 

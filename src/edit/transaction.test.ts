@@ -299,13 +299,23 @@ describe('rollback with in-place (direct) commands', () => {
     const order: string[] = [];
     const directA = {
       label: 'A',
-      do: () => { dataset.marker = 1; },
-      undo: () => { order.push('undoA'); dataset.marker = 0; },
+      do: () => {
+        dataset.marker = 1;
+      },
+      undo: () => {
+        order.push('undoA');
+        dataset.marker = 0;
+      },
     };
     const directB = {
       label: 'B',
-      do: () => { dataset.marker = 2; },
-      undo: () => { order.push('undoB'); dataset.marker = 1; },
+      do: () => {
+        dataset.marker = 2;
+      },
+      undo: () => {
+        order.push('undoB');
+        dataset.marker = 1;
+      },
     };
     host._history.push(directA); // diverted to capture buffer
     host._history.push(directB);
@@ -331,7 +341,9 @@ describe('rollback with in-place (direct) commands', () => {
     host._history.push({
       label: 'succeeds',
       do: () => undefined,
-      undo: () => { order.push('succeeds'); },
+      undo: () => {
+        order.push('succeeds');
+      },
     });
     host._history.push({
       label: 'fails',
@@ -358,7 +370,12 @@ describe('rollback with in-place (direct) commands', () => {
     const before: any = { layers: [], marker: 'before' };
     const after: any = { layers: [], marker: 'after' };
     let live = before;
-    const source = { getDataset: () => live, setDataset: vi.fn((d: any) => { live = d; }) };
+    const source = {
+      getDataset: () => live,
+      setDataset: vi.fn((d: any) => {
+        live = d;
+      }),
+    };
     const host = makeRollbackHost(source);
     const t = new Transaction(host);
     host._activeTransaction = t;
@@ -366,8 +383,12 @@ describe('rollback with in-place (direct) commands', () => {
     const replacement = {
       label: 'R',
       invalidatesPriorCommands: true,
-      do: () => { live = after; },
-      undo: () => { live = before; },
+      do: () => {
+        live = after;
+      },
+      undo: () => {
+        live = before;
+      },
     };
     replacement.do();
     host._history.push(replacement);

@@ -55,6 +55,9 @@ const EXPENSIVE_COMMANDS: ReadonlySet<string> = new Set([
 /** Multiplier applied to the user's `workerThreshold` for expensive cmds. */
 const EXPENSIVE_THRESHOLD_RATIO = 0.5;
 
+/** Commands whose cost scales with record count, not vertex count. */
+const RECORD_SCALE_COMMANDS: ReadonlySet<string> = new Set(['classify', 'style']);
+
 /**
  * Routing decision over pre-extracted command heads. Used by the PR-4b
  * parsed-command path
@@ -66,6 +69,7 @@ export function shouldUseWorkerForHeads(
   vertexCount: number,
   mode: boolean | 'auto',
   threshold: number,
+  recordCount = 0,
 ): boolean {
   if (mode === false) return false;
   if (mode === true) return true;
@@ -78,6 +82,10 @@ export function shouldUseWorkerForHeads(
   const effectiveThreshold = anyExpensive
     ? Math.floor(threshold * EXPENSIVE_THRESHOLD_RATIO)
     : threshold;
+  // 记录数主键：classify/style 成本随 records 线性，vertexCount≈0 不得排除卸载。
+  if (heads.some((h) => RECORD_SCALE_COMMANDS.has(h))) {
+    return recordCount >= effectiveThreshold;
+  }
   return vertexCount >= effectiveThreshold;
 }
 
@@ -86,6 +94,8 @@ export type WorkerRoutingFn = (info: {
   cmd: string;
   heads: string[];
   vertexCount: number;
+  /** Layer record total; primary key for record-scale commands (classify/style). */
+  recordCount: number;
   mode: boolean | 'auto';
   threshold: number;
   /** Default decision the engine would have made; user may return it as-is. */

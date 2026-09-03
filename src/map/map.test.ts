@@ -7,6 +7,7 @@ import type { MapshaperDataset } from '../types/mapshaper-types';
 import { Selection } from './selection';
 import { Projection } from '../geo/projection';
 import { Viewport } from '../geo/viewport';
+import { StyleResolver } from './style-resolver';
 import { Bounds } from '../geo/bounds';
 import { AffineTransform } from '../geo/transform';
 import { EditHistory } from '../edit/edit-history';
@@ -824,6 +825,27 @@ describe('Emap layer management', () => {
       map.addLayer({ id: 'l1', type: 'line', source: 'src1' });
       expect(() => map.addLayer({ id: 'l1', type: 'line', source: 'src1' })).toThrow(
         'Layer "l1" already exists',
+      );
+    });
+    it('rejects invalid style expressions synchronously', () => {
+      const source = createMockSource();
+      registerMockSource(map, 'src1', source);
+      expect(() =>
+        map.addLayer({
+          id: 'x',
+          type: 'fill',
+          source: 'src1',
+          paint: { 'fill-color': ['bogus', 1] },
+        }),
+      ).toThrow(/StyleExpression/);
+    });
+
+    it('setPaintProperty rejects invalid style expressions', () => {
+      const source = createMockSource();
+      registerMockSource(map, 'src1', source);
+      map.addLayer({ id: 'l1', type: 'line', source: 'src1' });
+      expect(() => map.setPaintProperty('l1', 'line-color', ['bogus', 1])).toThrow(
+        /StyleExpression/,
       );
     });
 
@@ -2111,10 +2133,12 @@ describe('Emap attribute editing', () => {
       shapes: [['s0'], ['s1'], ['s2']],
       data: { getRecords: () => records },
     };
+    const datasetStub = { layers: [layer] };
     const source = {
       id: 'src1',
       type: 'topology',
       getLayers: () => [layer],
+      getDataset: () => datasetStub,
     } as any;
     (map as any)._sources.set('src1', source);
   });
@@ -8947,5 +8971,209 @@ describe('Emap edit-mode drag pan', () => {
     syncEditModeDragPan.call(map, 'none');
     expect(dragPan.enable).toHaveBeenCalledTimes(1);
     expect(map._dragPanSuspendedByEdit).toBe(false);
+  });
+});
+describe('attribute-driven fill render (e2e)', () => {
+  it('classifyFeatures then styleSource fill layer renders via styleBuckets', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await adapter.runImport('-i "d.geojson"', {
+      'd.geojson': JSON.stringify({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: { pop: 10 },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+          {
+            type: 'Feature',
+            properties: { pop: 90 },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [2, 2],
+                  [3, 2],
+                  [3, 3],
+                  [2, 3],
+                  [2, 2],
+                ],
+              ],
+            },
+          },
+          {
+            type: 'Feature',
+            properties: { pop: null },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [4, 4],
+                  [5, 4],
+                  [5, 5],
+                  [4, 5],
+                  [4, 4],
+                ],
+              ],
+            },
+          },
+        ],
+      }),
+    });
+    const map = createBareMap();
+    // copy+replace 契约：引用可变 stub，断言一律读 current。
+    let current = dataset;
+    const sources = new Map<string, unknown>();
+    sources.set('src1', {
+      id: 'src1',
+      type: 'topology',
+      getDataset: () => current,
+      getLayers: () => current.layers,
+      getArcs: () => current.arcs,
+      getDisplayArcs: () => null,
+      getSimplifyFloor: () => 0,
+      setDataset: (next: MapshaperDataset) => {
+        current = next;
+      },
+      refreshDisplayArcs: () => undefined,
+      fire: () => undefined,
+    });
+    setPrivate(map, '_sources', sources);
+    // Object.create 绕过构造器：字段初始化器不运行，显式注入（createBareMap 模式）。
+    setPrivate(map, '_styleResolver', new StyleResolver());
+    setPrivate(map, '_viewport', new Viewport());
+    await map.ops.classifyFeatures({
+      source: 'src1',
+      target: 'd',
+      field: 'pop',
+      method: 'equal-interval',
+      classes: 2,
+      colors: ['#111111', '#999999'],
+      nullValue: '#eeeeee',
+    });
+    map.addLayer({
+      id: 'L',
+      type: 'fill',
+      source: 'src1',
+      'source-layer': 'd',
+      styleSource: 'mapshaper',
+    });
+    const painter = { drawPolygonFill: vi.fn(), drawArcs: vi.fn(), drawPoints: vi.fn() };
+    setPrivate(map, '_painter', painter);
+    const renderLayersFn = Reflect.get(map, '_renderLayers') as (p: number, l: number) => void;
+    renderLayersFn.call(map, 1, 1);
+    const calls = painter.drawPolygonFill.mock.calls as unknown[][];
+    const opts = calls[0][5] as { styleBuckets: { buckets: Uint32Array[]; colors: string[] } };
+    // 第三桶 = 显式 nullValue '#eeeeee'（烘焙为真实颜色，非主题 null 桶）
+    expect(opts.styleBuckets.colors.slice(0, 2)).toEqual(['#111111', '#999999']);
+    expect(opts.styleBuckets.colors).toHaveLength(3);
+    expect([...opts.styleBuckets.buckets[0]]).toEqual([0]);
+    expect([...opts.styleBuckets.buckets[1]]).toEqual([1]);
+    expect([...opts.styleBuckets.buckets[2]]).toEqual([2]);
+  });
+});
+
+describe('Emap classifyFeatures (real baking + undo)', () => {
+  it('bakes explicit fill colors incl. effective null; undo restores records', async () => {
+    const adapter = getDefaultMapshaperAdapter();
+    const dataset = await adapter.runImport('-i "d.geojson"', {
+      'd.geojson': JSON.stringify({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: { pop: 10 },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+          {
+            type: 'Feature',
+            properties: { pop: 90 },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [2, 2],
+                  [3, 2],
+                  [3, 3],
+                  [2, 3],
+                  [2, 2],
+                ],
+              ],
+            },
+          },
+          {
+            type: 'Feature',
+            properties: { pop: null },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [4, 4],
+                  [5, 4],
+                  [5, 5],
+                  [4, 5],
+                  [4, 4],
+                ],
+              ],
+            },
+          },
+        ],
+      }),
+    });
+    const map = createBareMap();
+    // runner 的 dataset 命令是 copy+replace 契约（setDataset(after)）：
+    // stub 必须让引用可变，断言一律读 current。
+    let current = dataset;
+    const sources = new Map<string, unknown>();
+    sources.set('src1', {
+      id: 'src1',
+      type: 'topology',
+      getDataset: () => current,
+      getLayers: () => current.layers,
+      setDataset: (next: MapshaperDataset) => {
+        current = next;
+      },
+      refreshDisplayArcs: () => undefined,
+      fire: () => undefined,
+    });
+    setPrivate(map, '_sources', sources);
+    const res = await map.ops.classifyFeatures({
+      source: 'src1',
+      target: 'd',
+      field: 'pop',
+      method: 'equal-interval',
+      classes: 2,
+      colors: ['#111111', '#999999'],
+      nullValue: '#eeeeee',
+    });
+    expect(res.ok).toBe(true);
+    let records = current.layers[0].data?.getRecords() ?? [];
+    expect(records.map((r) => r.fill)).toEqual(['#111111', '#999999', '#eeeeee']);
+    expect(current.attributeVersion ?? 0).toBeGreaterThanOrEqual(1);
+    expect(map.undo()).toBe(true); // replace 撤销 → current 指回 before
+    records = current.layers[0].data?.getRecords() ?? [];
+    expect(records.map((r) => r.fill)).toEqual([undefined, undefined, undefined]);
   });
 });

@@ -615,11 +615,7 @@ describe('source-scan error flow', () => {
           ['other', { getDataset: () => other.dataset() }],
         ]),
       } as unknown as EmapHostInternal,
-      runPreparedEditCommand: async <T>(
-        sourceId,
-        _label,
-        plan,
-      ): Promise<OpResult<T>> => {
+      runPreparedEditCommand: async <T>(sourceId, _label, plan): Promise<OpResult<T>> => {
         const dataset = (sourceId === 'conflict' ? conflict : other).dataset();
         const outcome = plan(dataset, { getDataset: () => dataset });
         return 'ok' in outcome ? outcome : okValue(outcome.value);
@@ -1226,7 +1222,14 @@ it('barrier probe: direct → replacement → undo replacement restores captured
 
   const liveBefore = harness.source.getDataset();
   await expect(
-    harness.ops.addRing({ ring: [[3, 3], [7, 3], [7, 7], [3, 7]] }),
+    harness.ops.addRing({
+      ring: [
+        [3, 3],
+        [7, 3],
+        [7, 7],
+        [3, 7],
+      ],
+    }),
   ).resolves.toMatchObject({ ok: true });
   expect(harness.source.getDataset()).toBe(liveBefore); // in-place: same identity
   expect(realHistory.size()).toBe(1);

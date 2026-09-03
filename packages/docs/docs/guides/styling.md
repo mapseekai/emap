@@ -181,6 +181,79 @@ map.removeLayer('district-outline');
 
 这些方法会安排下一次渲染。不要直接修改 `map.getLayer(...)` 返回对象来刷新界面。
 
+## 属性驱动样式
+
+自 0.9.0 起，fill 图层支持两种属性驱动填色路径，均为**显式 opt-in**，不改变
+未声明图层的任何行为。
+
+### classifyFeatures：分级烘焙
+
+`classifyFeatures` 按字段与方法（`quantile` / `equal-interval` / `nice` /
+`categorical` 等）计算断点，把颜色**烘焙**到每条记录的 `fill` 字段：
+
+```ts
+const result = await map.ops.classifyFeatures({
+  source: 'cities',
+  target: 'cities',
+  field: 'pop',
+  method: 'equal-interval',
+  classes: 4,
+  colors: ['#eff3ff', '#bdd7e7', '#6baed6', '#2171b5'],
+  nullValue: '#eeeeee', // 可选：null/缺失记录的填充色
+});
+if (result.ok) {
+  // 判别联合：显式断点（breaks）与自动方法（breaks）返回不同形态，
+  // 计数与类别数满足 classes === colors.length === breaks.length + 1。
+  console.log(result.value.breaks, result.value.counts);
+}
+```
+
+字段命名与 mapshaper 兼容（`fill` / `stroke` / `stroke-width` / `r`）。烘焙是
+普通的可撤回 op：undo 恢复全部记录原值。
+
+### styleSource opt-in：渲染烘焙字段
+
+fill 图层加 `styleSource: 'mapshaper'` 后，渲染器读取每条记录烘焙的 `fill`
+颜色并逐桶填充；未声明 `styleSource` 的图层完全不读记录字段：
+
+```ts
+map.addLayer({
+  id: 'cities-fill',
+  type: 'fill',
+  source: 'cities',
+  'source-layer': 'cities',
+  styleSource: 'mapshaper',
+});
+```
+
+优先序：显式标量 `fill-color` paint 永远胜出（声明了静态色的图层不会被
+`styleSource` 劫持）；无标量 paint 时才读烘焙字段。
+
+### paint 表达式子集
+
+`fill-color` 也接受表达式子集（无需预先烘焙）：
+
+```ts
+map.addLayer({
+  id: 'cities-choropleth',
+  type: 'fill',
+  source: 'cities',
+  paint: {
+    'fill-color': ['match', ['get', 'level'], 'a', '#111111', '#999999'],
+    // 或连续：['interpolate', 'linear', ['get', 'pop'], 0, '#000000', 100, '#ffffff']
+    // 或分档：['step', ['get', 'pop'], '#eff3ff', 25, '#bdd7e7', 50, '#6baed6']
+  },
+});
+```
+
+支持的算子：`get`、`match`、`step`、`interpolate`（`linear`）。表达式在
+`addLayer` / `setPaintProperty` 时同步校验，非法表达式直接抛错；单条记录求值
+异常隔离到主题色 null 桶，不影响其余要素渲染。类别数超过 256 时照常渲染并
+触发 `warning` 事件。
+
+性能：表达式结果按 （表达式, 数据集引用, attributeVersion) 缓存，几何编辑
+（顶点级）不触发重算。实测 10 万记录冷构建约 4ms，缓存命中接近 0。
+
 ## 默认颜色
 
 未设置颜色时使用 `#1e88e5`。生产应用应显式设置颜色，避免不同几何类型因为共享默认值
@@ -198,8 +271,9 @@ map.removeLayer('district-outline');
 
 ### 属性驱动样式
 
-当前 paint 是图层级常量，不直接接受表达式。需要按属性分组显示时，可以准备多个
-source layers，或先通过数据操作生成分类字段和目标图层，再分别配置 paint。
+fill 图层的 `fill-color` 已支持表达式子集与烘焙字段 opt-in，见上文
+「属性驱动样式」。line/circle 图层的 paint 仍是图层级常量；需要按属性分组时，
+可准备多个 source layers，或先生成分类字段再分别配置 paint。
 
 ## API
 

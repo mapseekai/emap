@@ -7,6 +7,7 @@ import { Selection } from '../selection';
 import { Err } from '../op-result';
 import {
   _runPreparedDatasetMutation,
+  _runDatasetCommandParsed,
   _runPreparedEditCommand,
   _runPreparedEditCommandMany,
   enqueueMultiSourceOperation,
@@ -272,6 +273,71 @@ describe('prepared parsed-command runner', () => {
   });
 });
 
+describe('worker dataset command runner', () => {
+  it('rejects stale worker results after an attributeVersion change', async () => {
+    const original = { layers: [], editVersion: 0, attributeVersion: 0 } as MapshaperDataset;
+    const working = { layers: [] } as MapshaperDataset;
+    const after = { layers: [] } as MapshaperDataset;
+    const source = {
+      getDataset: () => original,
+      setDataset: vi.fn(),
+    };
+    const workerStarted = Promise.withResolvers<void>();
+    const workerResult = Promise.withResolvers<unknown>();
+    const host = {
+      _activeTransaction: null,
+      _removed: false,
+      _sources: new Map([['s', source]]),
+      _workerPool: {
+        reserveId: () => 1,
+        dispatchWithId: vi.fn(() => {
+          workerStarted.resolve();
+          return workerResult.promise;
+        }),
+      },
+      _workerMode: true,
+      _workerThreshold: 0,
+      _history: { push: vi.fn(), isCapturing: () => false },
+      _selection: { clear: () => null },
+      _invalidateShapeCachesForSources: vi.fn(),
+      _scheduleRender: vi.fn(),
+      _fireHistoryChange: vi.fn(),
+      _fireSelectionChange: vi.fn(),
+      fire: vi.fn(),
+    };
+    const adapter = getDefaultMapshaperAdapter();
+    const copyDataset = vi.spyOn(adapter, 'copyDataset').mockReturnValue(working);
+    const exportDatasetsToPack = vi
+      .spyOn(adapter, 'exportDatasetsToPack')
+      .mockResolvedValue({ datasets: [] } as never);
+    const restoreSessionData = vi
+      .spyOn(adapter, 'restoreSessionData')
+      .mockResolvedValue({ datasets: [after] } as never);
+
+    try {
+      const pending = _runDatasetCommandParsed(
+        host as never,
+        's',
+        [{ name: 'dissolve', options: {} }],
+        'Dissolve',
+      );
+      await workerStarted.promise;
+      original.attributeVersion += 1;
+      workerResult.resolve({});
+
+      await expect(pending).resolves.toMatchObject({
+        ok: false,
+        error: { kind: 'stale-operation' },
+      });
+      expect(source.setDataset).not.toHaveBeenCalled();
+    } finally {
+      copyDataset.mockRestore();
+      exportDatasetsToPack.mockRestore();
+      restoreSessionData.mockRestore();
+    }
+  });
+});
+
 describe('_runPreparedEditCommand', () => {
   function makeHost(source: any) {
     return {
@@ -337,6 +403,18 @@ describe('_runPreparedEditCommand', () => {
     expect(result).toMatchObject({ ok: false, error: { kind: 'stale-operation' } });
     expect(command.do).not.toHaveBeenCalled();
     expect(host._history.size()).toBe(0);
+  });
+
+  it('rejects with stale-operation when attributeVersion changed during planning', async () => {
+    const dataset = { layers: [], arcs: null, editVersion: 0, attributeVersion: 0 };
+    const source = { getDataset: () => dataset };
+    const host = makeHost(source);
+    const command = { do: vi.fn(), undo: vi.fn() };
+    const result = await _runPreparedEditCommand(host, 's', 'X', () => {
+      dataset.attributeVersion = 1; // direct attribute edit slipped in
+      return { value: undefined, command, affectedSourceIds: ['s'] };
+    });
+    expect(result).toMatchObject({ ok: false, error: { kind: 'stale-operation' } });
   });
 
   it('undoes a throwing do() and reports a mapshaper error without pushing history', async () => {
@@ -651,5 +729,101 @@ describe('multi-source direct edit runner', () => {
     expect(result).toMatchObject({ ok: false, error: { kind: 'validation', field: 'source' } });
     expect(command.do).not.toHaveBeenCalled();
     expect(host._history.size()).toBe(0);
+  });
+});
+describe('recordCount routing (runner)', () => {
+  function makeRecordHost(recordTotal: number, infos: unknown[]) {
+    const layer = {
+      name: 'l',
+      geometry_type: 'polygon',
+      shapes: [],
+      data: { getRecords: () => Array.from({ length: recordTotal }, () => ({})) },
+    };
+    const original = { layers: [layer] } as unknown as MapshaperDataset;
+    const source = { getDataset: () => original, setDataset: vi.fn() };
+    const host = {
+      _activeTransaction: null,
+      _removed: false,
+      _sources: new Map([['s', source]]),
+      _workerPool: {
+        reserveId: () => 1,
+        dispatchWithId: vi.fn(() => Promise.resolve({})),
+      },
+      _workerMode: 'auto' as const,
+      _workerThreshold: 100,
+      _workerRouting: (info: { defaultDecision: boolean }) => {
+        infos.push(info);
+        return info.defaultDecision;
+      },
+      _history: { push: vi.fn(), isCapturing: () => false },
+      _selection: { clear: () => null },
+      _invalidateShapeCachesForSources: vi.fn(),
+      _scheduleRender: vi.fn(),
+      _fireHistoryChange: vi.fn(),
+      _fireSelectionChange: vi.fn(),
+      fire: vi.fn(),
+    };
+    return { host, original, source };
+  }
+
+  it('classify offloads by recordCount and WorkerRoutingFn receives it', async () => {
+    const infos: unknown[] = [];
+    const { host, original, source } = makeRecordHost(10_000, infos);
+    const working = { layers: [...original.layers] } as MapshaperDataset;
+    const after = { layers: [] } as unknown as MapshaperDataset;
+    const adapter = getDefaultMapshaperAdapter();
+    const copyDataset = vi.spyOn(adapter, 'copyDataset').mockReturnValue(working);
+    const exportDatasetsToPack = vi
+      .spyOn(adapter, 'exportDatasetsToPack')
+      .mockResolvedValue({ datasets: [] } as never);
+    const restoreSessionData = vi
+      .spyOn(adapter, 'restoreSessionData')
+      .mockResolvedValue({ datasets: [after] } as never);
+    try {
+      const res = await _runDatasetCommandParsed(
+        host as never,
+        's',
+        [{ name: 'classify', options: { field: 'pop', breaks: '1,2', save_as: 'fill' } }],
+        'Classify',
+      );
+      expect(res.ok).toBe(true);
+      expect(host._workerPool.dispatchWithId).toHaveBeenCalledTimes(1);
+      expect(infos[0]).toMatchObject({
+        recordCount: 10_000,
+        vertexCount: 0,
+        defaultDecision: true,
+      });
+      expect(source.setDataset).toHaveBeenCalledWith(after, false);
+    } finally {
+      copyDataset.mockRestore();
+      exportDatasetsToPack.mockRestore();
+      restoreSessionData.mockRestore();
+    }
+  });
+
+  it('simplify stays vertex-driven (recordCount does not offload)', async () => {
+    const infos: unknown[] = [];
+    const { host, original, source } = makeRecordHost(10_000, infos);
+    const working = { layers: [...original.layers] } as MapshaperDataset;
+    const after = { layers: [] } as unknown as MapshaperDataset;
+    const adapter = getDefaultMapshaperAdapter();
+    const copyDataset = vi.spyOn(adapter, 'copyDataset').mockReturnValue(working);
+    const runOnDataset = vi.spyOn(adapter, 'runOnDatasetParsed').mockResolvedValue(after);
+    try {
+      const res = await _runDatasetCommandParsed(
+        host as never,
+        's',
+        [{ name: 'simplify', options: { percentage: '10%' } }],
+        'Simplify',
+      );
+      expect(res.ok).toBe(true);
+      expect(host._workerPool.dispatchWithId).not.toHaveBeenCalled();
+      expect(runOnDataset).toHaveBeenCalledTimes(1);
+      expect(infos[0]).toMatchObject({ recordCount: 10_000, defaultDecision: false });
+      expect(source.setDataset).toHaveBeenCalledWith(after, false);
+    } finally {
+      copyDataset.mockRestore();
+      runOnDataset.mockRestore();
+    }
   });
 });

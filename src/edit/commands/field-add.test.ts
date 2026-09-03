@@ -9,7 +9,8 @@ describe('FieldAddCommand', () => {
   it('adds the key to records that did not have it', () => {
     const records = [{ name: 'A' }, { name: 'B' }];
     const layer = makeLayer(records);
-    const cmd = new FieldAddCommand({ layer, field: 'pop', defaultValue: 0 });
+    const dataset = { layers: [] };
+    const cmd = new FieldAddCommand({ layer, field: 'pop', defaultValue: 0, dataset });
     cmd.do();
     expect(records).toEqual([
       { name: 'A', pop: 0 },
@@ -20,7 +21,8 @@ describe('FieldAddCommand', () => {
   it('skips records that already had the key', () => {
     const records = [{ name: 'A', pop: 100 }, { name: 'B' }];
     const layer = makeLayer(records);
-    const cmd = new FieldAddCommand({ layer, field: 'pop', defaultValue: 0 });
+    const dataset = { layers: [] };
+    const cmd = new FieldAddCommand({ layer, field: 'pop', defaultValue: 0, dataset });
     cmd.do();
     expect(records[0]).toEqual({ name: 'A', pop: 100 });
     expect(records[1]).toEqual({ name: 'B', pop: 0 });
@@ -32,7 +34,8 @@ describe('FieldAddCommand', () => {
       { name: 'B' }, // newly added
     ];
     const layer = makeLayer(records);
-    const cmd = new FieldAddCommand({ layer, field: 'pop' });
+    const dataset = { layers: [] };
+    const cmd = new FieldAddCommand({ layer, field: 'pop', dataset });
     cmd.do();
     cmd.undo();
     expect(records[0]).toEqual({ name: 'A', pop: 100 });
@@ -42,7 +45,8 @@ describe('FieldAddCommand', () => {
   it('defaults to null when no defaultValue is given', () => {
     const records: Record<string, unknown>[] = [{ name: 'A' }];
     const layer = makeLayer(records);
-    const cmd = new FieldAddCommand({ layer, field: 'tmp' });
+    const dataset = { layers: [] };
+    const cmd = new FieldAddCommand({ layer, field: 'tmp', dataset });
     cmd.do();
     expect(records[0].tmp).toBeNull();
   });

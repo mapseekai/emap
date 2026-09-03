@@ -8,7 +8,7 @@ import {
   type AppendedArc,
   type MapshaperAdapter,
 } from '../../adapter/mapshaper-adapter';
-import { assertArcCount, markSourceChanged, SelectionDiffTracker } from './_shared';
+import { assertArcCount, markShapeCountChanged, SelectionDiffTracker } from './_shared';
 import type { PathShapePatch } from './path-geometry-patch';
 
 type MutableRecords = Array<Record<string, unknown> | null>;
@@ -98,7 +98,7 @@ export class SplitFeaturesCommand implements EditCommand {
     this.writePatches('after');
     this.appendFeatures();
     this._selectionTracker.applyAfter();
-    markSourceChanged(source);
+    markShapeCountChanged(source);
   }
 
   undo(): void {
@@ -122,13 +122,12 @@ export class SplitFeaturesCommand implements EditCommand {
     this.writePatches('before');
     this.truncateFeatures();
     this._selectionTracker.restoreBefore();
-    markSourceChanged(source);
+    markShapeCountChanged(source);
   }
 
   publish(): void {
     this._selectionTracker.publish('edit');
   }
-
 
   private preflightFeatures(expectedShapeCount: number, expectedRecordCount: number | null): void {
     if (this.opts.appendedRecords.length !== this.opts.appendedShapes.length) {

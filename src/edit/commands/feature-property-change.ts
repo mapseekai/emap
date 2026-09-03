@@ -1,5 +1,9 @@
 import type { EditCommand } from '../edit-command';
-import type { MapshaperLayer } from '../../types/mapshaper-types';
+import {
+  bumpAttributeVersion,
+  type MapshaperDataset,
+  type MapshaperLayer,
+} from '../../types/mapshaper-types';
 
 export interface FeaturePropertyChangeCommandOptions {
   /** Layer that owns the feature. */
@@ -20,6 +24,7 @@ export interface FeaturePropertyChangeCommandOptions {
   next: Record<string, unknown>;
   /** Optional human-readable label for `historychange`. */
   label?: string;
+  dataset: MapshaperDataset;
 }
 
 /**
@@ -36,10 +41,12 @@ export class FeaturePropertyChangeCommand implements EditCommand {
 
   do(): void {
     applyPatch(this.opts.layer, this.opts.featureId, this.opts.prev, this.opts.next);
+    bumpAttributeVersion(this.opts.dataset);
   }
 
   undo(): void {
     applyPatch(this.opts.layer, this.opts.featureId, this.opts.next, this.opts.prev);
+    bumpAttributeVersion(this.opts.dataset);
   }
 }
 

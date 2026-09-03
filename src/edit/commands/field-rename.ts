@@ -1,10 +1,15 @@
 import type { EditCommand } from '../edit-command';
-import type { MapshaperLayer } from '../../types/mapshaper-types';
+import {
+  bumpAttributeVersion,
+  type MapshaperDataset,
+  type MapshaperLayer,
+} from '../../types/mapshaper-types';
 
 export interface FieldRenameCommandOptions {
   layer: MapshaperLayer;
   from: string;
   to: string;
+  dataset: MapshaperDataset;
 }
 
 /**
@@ -21,10 +26,12 @@ export class FieldRenameCommand implements EditCommand {
 
   do(): void {
     rename(this.opts.layer, this.opts.from, this.opts.to);
+    bumpAttributeVersion(this.opts.dataset);
   }
 
   undo(): void {
     rename(this.opts.layer, this.opts.to, this.opts.from);
+    bumpAttributeVersion(this.opts.dataset);
   }
 }
 

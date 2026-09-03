@@ -63,6 +63,8 @@ import type {
   ProjectOptions,
   RebuildTopologyOptions,
   RenameFieldsOptions,
+  ClassifyFeaturesOptions,
+  ClassificationResult,
   RenameLayerOptions,
   SimplifyOptions,
   SnapOptions,
@@ -101,6 +103,7 @@ import { sortFeatures } from './ops/sort-features';
 import { uniqueFeatures } from './ops/unique-features';
 import { filterFields } from './ops/filter-fields';
 import { renameFields } from './ops/rename-fields';
+import { classifyFeatures } from './ops/classify-features';
 import { checkGeometry } from './ops/check-geometry';
 import { intersectionPointsLayer } from './ops/intersection-points';
 import { joinTable } from './ops/join-table';
@@ -249,6 +252,9 @@ export class MapshaperOps {
   }
   renameFields(opts: RenameFieldsOptions): Promise<OpResult> {
     return renameFields(this._ctx, opts);
+  }
+  classifyFeatures(opts: ClassifyFeaturesOptions): Promise<OpResult<ClassificationResult>> {
+    return classifyFeatures(this._ctx, opts);
   }
   joinTable(opts: JoinTableOptions): Promise<OpResult> {
     return joinTable(this._ctx, opts);

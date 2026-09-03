@@ -9,11 +9,13 @@ describe('FeaturePropertyChangeCommand', () => {
   it('sets a new key on do() and removes it on undo()', () => {
     const records = [{ name: 'A' }];
     const layer = makeLayer(records);
+    const dataset = { layers: [] };
     const cmd = new FeaturePropertyChangeCommand({
       layer,
       featureId: 0,
       prev: {},
       next: { pop: 100 },
+      dataset,
     });
     cmd.do();
     expect(records[0]).toEqual({ name: 'A', pop: 100 });
@@ -24,11 +26,13 @@ describe('FeaturePropertyChangeCommand', () => {
   it('overwrites an existing key and restores it on undo()', () => {
     const records = [{ name: 'A' }];
     const layer = makeLayer(records);
+    const dataset = { layers: [] };
     const cmd = new FeaturePropertyChangeCommand({
       layer,
       featureId: 0,
       prev: { name: 'A' },
       next: { name: 'B' },
+      dataset,
     });
     cmd.do();
     expect(records[0]).toEqual({ name: 'B' });
@@ -39,11 +43,13 @@ describe('FeaturePropertyChangeCommand', () => {
   it('deletes a key when next omits one that prev had', () => {
     const records = [{ name: 'A', tmp: true }];
     const layer = makeLayer(records);
+    const dataset = { layers: [] };
     const cmd = new FeaturePropertyChangeCommand({
       layer,
       featureId: 0,
       prev: { tmp: true },
       next: {},
+      dataset,
     });
     cmd.do();
     expect('tmp' in records[0]).toBe(false);
@@ -55,11 +61,13 @@ describe('FeaturePropertyChangeCommand', () => {
   it('handles multi-key patches in one round-trip', () => {
     const records = [{ name: 'A', pop: 1, tmp: true }];
     const layer = makeLayer(records);
+    const dataset = { layers: [] };
     const cmd = new FeaturePropertyChangeCommand({
       layer,
       featureId: 0,
       prev: { name: 'A', pop: 1, tmp: true },
       next: { name: 'B', pop: 2 },
+      dataset,
     });
     cmd.do();
     expect(records[0]).toEqual({ name: 'B', pop: 2 });
@@ -70,11 +78,13 @@ describe('FeaturePropertyChangeCommand', () => {
   it('is a no-op when both patches are empty', () => {
     const records = [{ name: 'A' }];
     const layer = makeLayer(records);
+    const dataset = { layers: [] };
     const cmd = new FeaturePropertyChangeCommand({
       layer,
       featureId: 0,
       prev: {},
       next: {},
+      dataset,
     });
     cmd.do();
     cmd.undo();
@@ -82,11 +92,13 @@ describe('FeaturePropertyChangeCommand', () => {
   });
 
   it('exposes a default label and accepts a custom one', () => {
+    const dataset = { layers: [] };
     const cmd = new FeaturePropertyChangeCommand({
       layer: makeLayer([]),
       featureId: 0,
       prev: {},
       next: {},
+      dataset,
     });
     expect(cmd.label).toBe('Edit properties');
     const cmd2 = new FeaturePropertyChangeCommand({
@@ -95,6 +107,7 @@ describe('FeaturePropertyChangeCommand', () => {
       prev: {},
       next: {},
       label: 'Set name',
+      dataset,
     });
     expect(cmd2.label).toBe('Set name');
   });

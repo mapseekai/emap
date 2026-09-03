@@ -39,3 +39,16 @@ describe('shouldUseWorkerForHeads', () => {
     });
   });
 });
+describe('recordCount routing', () => {
+  it('classify routes by recordCount even at vertexCount=0', () => {
+    expect(shouldUseWorkerForHeads(['classify'], 0, 'auto', 100, 10_000)).toBe(true);
+    expect(shouldUseWorkerForHeads(['classify'], 0, 'auto', 100, 50)).toBe(false);
+  });
+  it('non-record commands ignore recordCount', () => {
+    expect(shouldUseWorkerForHeads(['simplify'], 0, 'auto', 100, 10_000)).toBe(false);
+  });
+  it('mode overrides still win', () => {
+    expect(shouldUseWorkerForHeads(['classify'], 0, false, 100, 10_000)).toBe(false);
+    expect(shouldUseWorkerForHeads(['classify'], 0, true, 100, 0)).toBe(true);
+  });
+});

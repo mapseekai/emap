@@ -1,8 +1,5 @@
 import type { EditCommand } from '../edit-command';
-import {
-  getDefaultMapshaperAdapter,
-  type AppendedArc,
-} from '../../adapter/mapshaper-adapter';
+import { getDefaultMapshaperAdapter, type AppendedArc } from '../../adapter/mapshaper-adapter';
 import {
   absArcId,
   isPathLayer,
@@ -14,7 +11,6 @@ import { markSourceChanged } from './_shared';
 // Re-exported so the public `@/edit/commands/split-shared-arcs` import path
 // (and `src/index.ts`) keep working after the type moved to the adapter.
 export type { AppendedArc };
-
 
 /**
  * One feature whose shape was rewritten to point at duplicated arc ids.
@@ -28,7 +24,6 @@ export interface SplitSharedArcsRemap {
   /** The post-split shape that uses the new arc ids. */
   newShape: PathShape;
 }
-
 
 export interface SplitSharedArcsCommandOptions {
   source: TopologySource;
@@ -232,4 +227,3 @@ export function planSharedArcSplit(
 function cloneShape(shape: PathShape): PathShape {
   return shape.map((part) => part.slice());
 }
-

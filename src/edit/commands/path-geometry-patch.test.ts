@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PathGeometryPatchCommand } from './path-geometry-patch';
 import { Selection } from '../../map/selection';
-import {
-  getDefaultMapshaperAdapter,
-  type MapshaperAdapter,
-} from '../../adapter/mapshaper-adapter';
+import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
 
 function makeArcs() {
   let nn = new Int32Array([2]);

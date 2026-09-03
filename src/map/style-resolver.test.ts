@@ -1,0 +1,165 @@
+import { describe, expect, it } from 'vitest';
+import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
+import { StyleResolver } from './style-resolver';
+
+function makeLayer(records: Array<Record<string, unknown>>, shapes: unknown[] | null = null) {
+  // 形状与记录一一对应的最小层夹具：resolver 只读 shapes.length 与 getRecords。
+  return {
+    geometry_type: 'polygon',
+    shapes: shapes ?? records.map((_, i) => [[i]]),
+    data: { getRecords: () => records },
+  } as unknown as MapshaperLayer;
+}
+const dataset = {
+  layers: [],
+  arcs: null,
+  editVersion: 0,
+  attributeVersion: 0,
+} as unknown as MapshaperDataset;
+
+describe('StyleResolver.resolveFill', () => {
+  it('returns null for static layers (no expression, no opt-in)', () => {
+    const r = new StyleResolver();
+    expect(
+      r.resolveFill({
+        layerId: 'a',
+        paint: { 'fill-color': '#fff' },
+        styleSource: undefined,
+        dataset,
+        layer: makeLayer([{}]),
+      }),
+    ).toBeNull();
+  });
+
+  it('evaluates match expression into LUT + buckets', () => {
+    const r = new StyleResolver();
+    const layer = makeLayer([{ t: 'a' }, { t: 'b' }, { t: 'a' }]);
+    const res = r.resolveFill({
+      layerId: 'a',
+      paint: { 'fill-color': ['match', ['get', 't'], 'a', '#111111', '#999999'] },
+      styleSource: undefined,
+      dataset,
+      layer,
+    })!;
+    expect(res.styles.map((s) => s.color)).toEqual(['#111111', '#999999']);
+    expect([...res.styleIds]).toEqual([0, 1, 0]);
+    expect([...res.fillBuckets[0]]).toEqual([0, 2]);
+    expect([...res.fillBuckets[1]]).toEqual([1]);
+  });
+
+  it('declared static fill-color wins over styleSource opt-in', () => {
+    const r = new StyleResolver();
+    const layer = makeLayer([{ fill: '#123456' }]);
+    expect(
+      r.resolveFill({
+        layerId: 'a',
+        paint: { 'fill-color': '#ffffff' },
+        styleSource: 'mapshaper',
+        dataset,
+        layer,
+      }),
+    ).toBeNull();
+  });
+
+  it('opt-in reads baked fill field; eval/type errors land in null bucket (theme)', () => {
+    const r = new StyleResolver();
+    const layer = makeLayer([{ fill: '#123456' }, { fill: 42 }, {}]);
+    const res = r.resolveFill({
+      layerId: 'a',
+      paint: undefined,
+      styleSource: 'mapshaper',
+      dataset,
+      layer,
+    })!;
+    expect(res.styles[0].color).toBe('#123456');
+    // 42 与缺失 → null 桶（最后一个 style，主题色）
+    const nullStyle = res.styles.length - 1;
+    expect([...res.styleIds]).toEqual([0, nullStyle, nullStyle]);
+  });
+
+  it('continuous interpolate stays bucket-bounded (≤ 257 + null)', () => {
+    const r = new StyleResolver();
+    const records = Array.from({ length: 1000 }, (_, i) => ({ v: i / 10 }));
+    const layer = makeLayer(records);
+    const res = r.resolveFill({
+      layerId: 'a',
+      paint: {
+        'fill-color': ['interpolate', 'linear', ['get', 'v'], 0, '#000000', 100, '#ffffff'],
+      },
+      styleSource: undefined,
+      dataset,
+      layer,
+    })!;
+    expect(res.styles.length).toBeLessThanOrEqual(258);
+  });
+
+  it('K above threshold fires onWarn and still renders', () => {
+    const warns: Array<{ layerId: string; buckets?: number }> = [];
+    const r = new StyleResolver({ onWarn: (w) => warns.push(w) });
+    const records = Array.from({ length: 300 }, (_, i) => ({ t: `c${i}` }));
+    const layer = makeLayer(records);
+    // match 300 个不同类别全部命中 → K=300（无 null 桶），超 256 阈值
+    const matchExpr: unknown[] = ['match', ['get', 't']];
+    records.forEach((_, i) => matchExpr.push(`c${i}`, `#000${String(i).padStart(3, '0')}`));
+    matchExpr.push('#ffffff');
+    const res = r.resolveFill({
+      layerId: 'L9',
+      paint: { 'fill-color': matchExpr },
+      styleSource: undefined,
+      dataset,
+      layer,
+    });
+    expect(res).not.toBeNull();
+    expect(warns).toEqual([{ layerId: 'L9', buckets: 300 }]);
+  });
+
+  it('rebuild failure keeps stale cache and warns (no blank frame)', () => {
+    const warns: unknown[] = [];
+    const r = new StyleResolver({ onWarn: (w) => warns.push(w) });
+    const layer = makeLayer([{ t: 'a' }]);
+    const good = { 'fill-color': ['get', 't'] };
+    const first = r.resolveFill({
+      layerId: 'a',
+      paint: good,
+      styleSource: undefined,
+      dataset,
+      layer,
+    });
+    // 指纹变化 + 求值器抛错（非法结构绕过 addLayer 校验直达 resolver 的场景）
+    const bad = { 'fill-color': ['bogus-op', 1] };
+    const second = r.resolveFill({
+      layerId: 'a',
+      paint: bad,
+      styleSource: undefined,
+      dataset,
+      layer,
+    });
+    expect(second).toBe(first);
+    expect(warns.length).toBe(1);
+  });
+
+  it('cache: same key returns identical reference; attributeVersion bump rebuilds', () => {
+    const r = new StyleResolver();
+    const layer = makeLayer([{ t: 'a' }]);
+    const paint = { 'fill-color': ['get', 't'] };
+    const a1 = r.resolveFill({ layerId: 'a', paint, styleSource: undefined, dataset, layer });
+    const a2 = r.resolveFill({ layerId: 'a', paint, styleSource: undefined, dataset, layer });
+    expect(a2).toBe(a1);
+    // 夹具 dataset 可变：模拟 bumpAttributeVersion。
+    (dataset as { attributeVersion: number }).attributeVersion = 1;
+    const a3 = r.resolveFill({ layerId: 'a', paint, styleSource: undefined, dataset, layer });
+    expect(a3).not.toBe(a1);
+    (dataset as { attributeVersion: number }).attributeVersion = 0;
+  });
+
+  it('dataset reference swap invalidates', () => {
+    const r = new StyleResolver();
+    const layer = makeLayer([{ t: 'a' }]);
+    const paint = { 'fill-color': ['get', 't'] };
+    const a1 = r.resolveFill({ layerId: 'a', paint, styleSource: undefined, dataset, layer });
+    const other = { ...dataset };
+    expect(
+      r.resolveFill({ layerId: 'a', paint, styleSource: undefined, dataset: other, layer }),
+    ).not.toBe(a1);
+  });
+});

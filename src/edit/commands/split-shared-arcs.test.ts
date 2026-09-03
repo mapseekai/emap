@@ -119,7 +119,11 @@ describe('SplitSharedArcsCommand', () => {
     const { source, arcs, layerA, layerB } = buildFixture();
     const plan = planSharedArcSplit(source, [{ layer: layerA, featureId: 0 }], [layerA, layerB])!;
     // Simulate a bypassing append between planning and command construction.
-    arcs.updateVertexData(new Int32Array([2, 2, 2, 2, 2, 3]), new Float64Array(13), new Float64Array(13));
+    arcs.updateVertexData(
+      new Int32Array([2, 2, 2, 2, 2, 3]),
+      new Float64Array(13),
+      new Float64Array(13),
+    );
     const command = new SplitSharedArcsCommand(plan);
 
     expect(() => command.do()).toThrow(
