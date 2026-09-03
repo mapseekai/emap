@@ -44,7 +44,6 @@ export function materializeRetainedMiniArcs(mini: MiniDataset): void {
   mini.dataset.arcs = filteredArcs;
 }
 
-
 function validateArcId(arcId: number, arcCount: number, label: string): number {
   if (!Number.isInteger(arcId)) throw new Error(`${label} ${arcId} must be an integer`);
   const unsignedId = unsignedArcId(arcId);

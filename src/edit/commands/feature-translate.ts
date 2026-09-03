@@ -28,7 +28,6 @@ export interface FeatureTranslateCommandOptions {
   pointFeatures: TranslatedPointFeature[];
 }
 
-
 /**
  * Translate a fixed set of arcs and point shapes by `(dx, dy)` in source-data
  * coordinates. Reverses by negating the offset.

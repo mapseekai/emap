@@ -6,7 +6,12 @@ import type { FeatureShape, MapshaperDataset, MapshaperLayer } from '../types/ma
 import { DuckDbOperationError } from './errors';
 import { getDuckDbRuntime, type DuckDbRuntime } from './runtime';
 import { validateDuckDbSelectSql } from './query-sql';
-import { nextDuckDbTableName, quoteIdentifier, resolveUniqueColumnName, tableFieldNames } from './pipeline';
+import {
+  nextDuckDbTableName,
+  quoteIdentifier,
+  resolveUniqueColumnName,
+  tableFieldNames,
+} from './pipeline';
 
 export interface DuckDbQueryOptions {
   geometryColumn?: string;
@@ -15,7 +20,6 @@ export interface DuckDbQueryOptions {
   rowIdColumn?: string;
   sql: string;
 }
-
 
 function resolveInputLayer(dataset: MapshaperDataset, selector?: string | number): MapshaperLayer {
   const layers = dataset.layers ?? [];
@@ -51,7 +55,6 @@ function resolveInputLayer(dataset: MapshaperDataset, selector?: string | number
   return layer;
 }
 
-
 function collectExistingColumnNames(layer: MapshaperLayer, geometryColumn: string): Set<string> {
   const names = new Set<string>([geometryColumn]);
   const records = layer.data?.getRecords?.() ?? [];
@@ -84,7 +87,6 @@ function createInputDataset(
     ],
   };
 }
-
 
 function resultRowIds(table: Table, rowIdColumn: string, rowCount: number): number[] {
   const vector = table.getChild(rowIdColumn);
@@ -141,7 +143,10 @@ export async function queryDatasetWithDuckDb(
   const geometryColumn = opts.geometryColumn ?? 'geometry';
   const requestedRowIdColumn = opts.rowIdColumn ?? '__emap_rowid';
   const inputLayer = resolveInputLayer(dataset, opts.inputLayer);
-  const rowIdColumn = resolveUniqueColumnName(requestedRowIdColumn, collectExistingColumnNames(inputLayer, geometryColumn));
+  const rowIdColumn = resolveUniqueColumnName(
+    requestedRowIdColumn,
+    collectExistingColumnNames(inputLayer, geometryColumn),
+  );
 
   let input: Table;
   try {

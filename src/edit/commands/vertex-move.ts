@@ -20,7 +20,6 @@ export interface VertexMoveCommandOptions {
   adapter?: MapshaperAdapter;
 }
 
-
 /**
  * Reverse a vertex drag (including topologically shared vertices) by
  * re-running mapshaper's snapVertices with the captured `from` /

@@ -332,7 +332,10 @@ const RELATION_FILTER_RUNNERS: Record<string, BinaryDatasetRunner<DuckDbRelation
   distanceWithin: distanceWithinDatasetWithDuckDb,
 };
 
-const RELATION_ATTRIBUTE_RUNNERS: Record<string, BinaryDatasetRunner<DuckDbRelationHelperOptions>> = {
+const RELATION_ATTRIBUTE_RUNNERS: Record<
+  string,
+  BinaryDatasetRunner<DuckDbRelationHelperOptions>
+> = {
   intersects: intersectsAttributeDatasetWithDuckDb,
   contains: containsAttributeDatasetWithDuckDb,
   within: withinAttributeDatasetWithDuckDb,

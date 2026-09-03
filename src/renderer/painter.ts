@@ -124,4 +124,3 @@ export interface EditPainter extends CorePainter {
   drawDrawingOverlay(state: DrawOverlayState): void;
   drawMeasurementOverlay(state: MeasurementOverlayState): void;
 }
-

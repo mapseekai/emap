@@ -61,7 +61,6 @@ const PREDICATE_FUNCTIONS = {
   SpatialAggregateJoinDuckDbFunction
 >;
 
-
 interface NormalizedAggregation {
   operation: DuckDbSpatialAggregateOperation;
   outputColumn: string;
@@ -72,7 +71,6 @@ interface ResolvedLayer {
   layer: MapshaperLayer;
   index: number;
 }
-
 
 function validation(message: string, field?: string): DuckDbOperationError {
   return new DuckDbOperationError('validation', `DuckDB spatial aggregate join ${message}`, {
@@ -178,7 +176,6 @@ function normalizeAggregations(
     return { operation, field: aggregation.field, outputColumn };
   });
 }
-
 
 function validateOptions(rawOptions: unknown): {
   options: Partial<DuckDbSpatialAggregateJoinOptions>;

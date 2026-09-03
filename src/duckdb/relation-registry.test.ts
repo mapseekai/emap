@@ -386,7 +386,7 @@ describe('named DuckDB relation helpers', () => {
       outputColumn: 'duckdb_distance_within',
       output: 'predicate',
     });
-});
+  });
 
   it.each(ADDITIONAL_RELATION_CASES)('returns the additional $id operation spec', ({
     id,

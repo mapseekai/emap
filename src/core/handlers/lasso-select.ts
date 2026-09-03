@@ -29,7 +29,6 @@ export interface LassoSelectHandlerOptions extends SelectHandlerOptions {
 const LASSO_DEFAULT_MODS = { replace: 'none', add: 'ctrl', toggle: 'alt' } as const;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-
 /**
  * Named `lassoSelect` handler. Disabled by default. `dragActivator`+down →
  * `'exclusive'`; each move appends to a pixel-space path drawn as an SVG

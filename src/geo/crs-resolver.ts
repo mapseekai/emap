@@ -178,7 +178,6 @@ function formatEpsgCode(code: string): string {
   return `EPSG:${code}`;
 }
 
-
 function isLongLatProj4(proj4: string): boolean {
   return /(?:^|\s)\+proj=(?:longlat|latlong)(?:\s|$)/i.test(proj4);
 }

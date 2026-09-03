@@ -79,5 +79,4 @@ export class HistoryControl implements Control {
     if (this._undoBtn) this._undoBtn.disabled = !canUndo;
     if (this._redoBtn) this._redoBtn.disabled = !canRedo;
   }
-
 }

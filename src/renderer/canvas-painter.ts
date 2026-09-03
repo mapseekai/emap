@@ -149,7 +149,6 @@ function addPointMarkerPath(
   }
 }
 
-
 const CLIP_LEFT = 1;
 const CLIP_RIGHT = 2;
 const CLIP_TOP = 4;

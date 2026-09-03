@@ -7,7 +7,6 @@ import type { AffineMatrix } from '../edit/commands/feature-affine';
 import type { ExportFormat } from '../source/source';
 import type { MapLibreIntegrationOptions } from './maplibre-service';
 
-
 export type ExpressionEvaluationPolicy = 'trusted' | 'disabled';
 
 export type RenderAction = 'redraw' | 'nav';
@@ -283,7 +282,6 @@ export interface MergeSelectedOptions {
    */
   attributeSource?: FeatureRef;
 }
-
 
 /**
  * Options for the `Emap.clipLayer` / `Emap.eraseLayer` polygon operations.

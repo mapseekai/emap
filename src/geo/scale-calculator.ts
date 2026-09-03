@@ -193,5 +193,4 @@ export class ScaleCalculator {
       return null;
     }
   }
-
 }

@@ -3,7 +3,13 @@ import type { Control } from './control';
 import { VertexEditControl } from './vertex-edit-control';
 import { DrawFeatureControl } from './draw-feature-control';
 
-type AdvancedTool = 'reshape' | 'ring-add' | 'ring-delete' | 'ring-fill' | 'part-add' | 'part-delete';
+type AdvancedTool =
+  | 'reshape'
+  | 'ring-add'
+  | 'ring-delete'
+  | 'ring-fill'
+  | 'part-add'
+  | 'part-delete';
 
 const ADVANCED_TOOL_TITLES: Record<AdvancedTool, string> = {
   reshape: 'Reshape Feature',

@@ -11,7 +11,13 @@ export interface EditHandlerHost extends SelectionHandlerHost {
   readonly editSession: EditSessions;
   readonly ops: Pick<
     MapshaperOps,
-    'splitSelected' | 'reshapeSelected' | 'addRing' | 'deleteRing' | 'fillRing' | 'addPart' | 'deletePart'
+    | 'splitSelected'
+    | 'reshapeSelected'
+    | 'addRing'
+    | 'deleteRing'
+    | 'fillRing'
+    | 'addPart'
+    | 'deletePart'
   >;
   readonly on: EventDispatcher['on'];
   readonly off: EventDispatcher['off'];

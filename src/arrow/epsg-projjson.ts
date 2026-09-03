@@ -18,7 +18,6 @@ class EpsgProjjsonError extends Error {
   }
 }
 
-
 export function findEpsgProjjsonPath(code: string): string | undefined {
   const normalized = code.trim();
   if (!/^\d+$/.test(normalized)) return undefined;

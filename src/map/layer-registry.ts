@@ -64,5 +64,4 @@ export class LayerRegistry {
     const layers = source.getLayers() as MapshaperLayer[];
     return layerId === undefined ? (layers[0] ?? null) : resolveLayerInList(layers, layerId);
   }
-
 }

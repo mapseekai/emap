@@ -16,7 +16,6 @@ export interface PointerEventMapHost {
   unproject(x: number, y: number): [number, number];
 }
 
-
 /**
  * Delegated pointer-move event registry. Fed normalized pointer events by
  * `HandlerManager`'s sink (non-gesture move) via `Emap._syncPointerSink`.

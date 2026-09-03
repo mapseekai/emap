@@ -59,7 +59,6 @@ export class NavigationControl implements Control {
     return this._container;
   }
 
-
   onRemove(): void {
     if (this._container && this._container.parentNode) {
       this._container.parentNode.removeChild(this._container);

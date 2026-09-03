@@ -18,7 +18,6 @@ export interface MiniTranslation {
   miniToLiveFinal: readonly (number | undefined)[];
 }
 
-
 /** Bitwise-complement a mapshaper arc reference (flip traversal direction). */
 function flipRef(ref: number): number {
   return -ref - 1;
@@ -116,7 +115,8 @@ export function translateMiniDataset(opts: {
       spliceableLineages.add(k);
   }
   const required = new Set(referenced);
-  for (const k of spliceableLineages) for (const ref of lineages[k]!) required.add(unsignedArcId(ref));
+  for (const k of spliceableLineages)
+    for (const ref of lineages[k]!) required.add(unsignedArcId(ref));
   const pending = [...required]
     .filter((postId) => miniToLiveFinal[postId] === undefined)
     .sort((a, b) => a - b);

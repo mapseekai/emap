@@ -273,10 +273,7 @@ export async function deleteRing(
  * stay coincident under later edits. No selection is required — clicking
  * inside a hole fills that hole.
  */
-export async function fillRing(
-  ctx: OpContext,
-  options: FillRingOptions,
-): Promise<OpResult<void>> {
+export async function fillRing(ctx: OpContext, options: FillRingOptions): Promise<OpResult<void>> {
   if (!isCoordinate(options.point)) return Err.validation('ring', 'point coordinates are invalid');
   const adapter = getDefaultMapshaperAdapter();
   const [px, py] = options.point;
@@ -304,7 +301,9 @@ export async function fillRing(
             // Share the hole's arcs: reverse traversal order and complement
             // each arc id so the new exterior ring winds like an exterior.
             const appendedShape: PathShape = [
-              shape[ringIndex]!.slice().reverse().map((arcId) => ~arcId),
+              shape[ringIndex]!.slice()
+                .reverse()
+                .map((arcId) => ~arcId),
             ];
             const appendedRecord = layer.data?.getRecords?.() ? {} : null;
             return {

@@ -214,7 +214,6 @@ describe('PathGeometryPatchCommand', () => {
     ]);
   });
 
-
   it('publish fires data(edit) and the pending selection diff exactly once', () => {
     const { arcs } = makeArcs();
     const source = makeSource(arcs);

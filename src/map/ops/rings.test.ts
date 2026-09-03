@@ -874,7 +874,12 @@ describe('fillRing', () => {
     // New shape references the hole part's arcs in reverse — no arc appended.
     expect(arcs.size()).toBe(arcCount);
     const holePart = (layer.shapes[0] as PathShape)[1]!;
-    expect(layer.shapes[1]).toEqual([holePart.slice().reverse().map((id) => ~id)]);
+    expect(layer.shapes[1]).toEqual([
+      holePart
+        .slice()
+        .reverse()
+        .map((id) => ~id),
+    ]);
     // Empty attribute record appended.
     const records = layer.data!.getRecords();
     expect(records).toHaveLength(2);
@@ -946,7 +951,10 @@ describe('fillRing', () => {
     const fixture = await createFixture(undefined, undefined, HOLED);
     const layer = fixture.dataset().layers[0]!;
     delete layer.data; // strip the data table the GeoJSON import created
-    await expect(fillRing(fixture.ctx, { point: [5, 5] })).resolves.toEqual({ ok: true, value: undefined });
+    await expect(fillRing(fixture.ctx, { point: [5, 5] })).resolves.toEqual({
+      ok: true,
+      value: undefined,
+    });
     const command = fixture.entries[0] as unknown as { opts: { appendedRecord: unknown } };
     expect(command.opts.appendedRecord).toBeNull();
     expect(layer.shapes).toHaveLength(2);
@@ -1037,7 +1045,12 @@ describe('fillRing', () => {
     const holeArcIds = new Set(holePart.map((id) => (id < 0 ? ~id : id)));
     expect(neighbourPart.some((id) => holeArcIds.has(id < 0 ? ~id : id))).toBe(true);
     expect(holePart.length).toBeGreaterThan(1); // fixture must actually split arcs
-    expect(layer.shapes[2]).toEqual([holePart.slice().reverse().map((id) => ~id)]);
+    expect(layer.shapes[2]).toEqual([
+      holePart
+        .slice()
+        .reverse()
+        .map((id) => ~id),
+    ]);
   });
 });
 

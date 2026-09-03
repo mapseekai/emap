@@ -269,7 +269,6 @@ export class MapshaperWorkerPool {
     this._terminateAll(new Error('MapshaperWorkerPool: cancelled'));
   }
 
-
   /** Number of worker slots configured (NOT the count of currently-spawned workers). */
   get poolSize(): number {
     return this._slots.length;

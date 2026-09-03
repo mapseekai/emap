@@ -139,7 +139,6 @@ const MAP_DEFAULTS = {
 
 const SOURCE_OPTIONAL_LAYER_TYPES = new Set(['background', 'custom', 'sky']);
 
-
 function isStyleOverlayService(
   service: MapLibreOverlayService,
 ): service is MapLibreOverlayStyleService {

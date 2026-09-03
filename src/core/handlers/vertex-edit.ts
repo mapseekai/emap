@@ -7,7 +7,12 @@ import {
   type TopologyNodeDeletion,
 } from '../../edit/commands/vertex-delete';
 import { CompositeCommand } from '../../edit/commands/composite';
-import { absArcId, bumpEditVersion, isPathLayer, type ArcCollection } from '../../types/mapshaper-types';
+import {
+  absArcId,
+  bumpEditVersion,
+  isPathLayer,
+  type ArcCollection,
+} from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import { getLayerId } from '../../source/layer-utils';

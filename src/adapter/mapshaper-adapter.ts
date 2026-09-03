@@ -751,7 +751,6 @@ function restoreCutPointThresholds(
   arcs.setRetainedInterval?.(retainedInterval);
 }
 
-
 export class DefaultMapshaperAdapter implements MapshaperAdapter {
   snapVertices(vertexIds: number[], to: [number, number], arcs: ArcCollection): void {
     mapshaper.internal.snapVerticesToPoint(vertexIds, to, arcs);

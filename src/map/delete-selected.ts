@@ -70,7 +70,6 @@ function groupSelectedFeatureIds(
   return grouped;
 }
 
-
 function collectDeleteSnapshots(
   layer: MapshaperLayer,
   ids: readonly number[],

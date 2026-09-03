@@ -16,7 +16,6 @@ export interface PartEditOptions {
 const DEFAULT_OPTIONS: Required<Pick<PartEditOptions, 'mode'>> = { mode: 'add' };
 const DEFAULT_SNAP_THRESHOLD = 10;
 
-
 /**
  * Interactive path-part editor delegated to `ops.addPart` and
  * `ops.deletePart`. Add mode requires exactly one selected path feature;

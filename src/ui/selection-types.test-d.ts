@@ -10,7 +10,12 @@ const a: SelectMode = 'replace' as SelectModeHandler;
 const b: SelectModeHandler = a;
 const c: BoxSelectStyle = {} as BoxSelectStyleHandler;
 const d: BoxSelectStyleHandler = c;
-const e: LassoSelectStyleHandler = { stroke: '#000', strokeWidth: 2, fill: 'red', strokeDasharray: '4 3' };
+const e: LassoSelectStyleHandler = {
+  stroke: '#000',
+  strokeWidth: 2,
+  fill: 'red',
+  strokeDasharray: '4 3',
+};
 const f: LassoSelectStyle = e;
 const g: LassoSelectStyleHandler = f;
 void a;

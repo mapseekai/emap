@@ -145,7 +145,6 @@ describe('buildMiniDataset', () => {
     expect(mini.arcs.getRetainedInterval!()).toBe(5);
   });
 
-
   it('keeps legacy geometry functions away from the sentinel layer', () => {
     // Sentinel layer is only reachable by explicit index; the path-layer loops
     // in reshape/split receive candidate ids and never target it. This test

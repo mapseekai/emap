@@ -101,5 +101,4 @@ describe('LayerRegistry.resolve', () => {
     sources.set('src1', makeSource([makeLayer({ name: 'parks' })]));
     expect(reg.resolve('src1', 'parks')).not.toBeNull();
   });
-
 });

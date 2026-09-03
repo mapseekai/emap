@@ -154,4 +154,3 @@ function isGeographicPoint(point: MeasurementPoint): boolean {
     Number.isFinite(point[0]) && Number.isFinite(point[1]) && point[1] >= -90 && point[1] <= 90
   );
 }
-

@@ -125,7 +125,6 @@ const COMMAND_EFFECTS: Readonly<Record<string, OpEffect>> = {
   affine: 'crs-only',
 };
 
-
 /**
  * Infer the effect category from a pre-extracted heads array, so the
  * parsed-command runner doesn't reconstruct then re-parse a CLI string
