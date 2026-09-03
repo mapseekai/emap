@@ -1,4 +1,4 @@
-// StyleResolver — paint 表达式/烘焙字段 → 每 shape 样式 LUT 与填充桶。
+// StyleResolver — paint 表达式/烘焙字段 → 样式表与填充桶。
 // 缓存键 (表达式指纹, dataset 引用, attributeVersion, layerId)；
 // editVersion 不在键中（顶点级编辑不影响样式）。桶构建立在主线程。
 
@@ -12,13 +12,8 @@ import {
   type StyleExpression,
 } from './style-expression';
 
-export interface ResolvedFillStyle {
-  color: string;
-}
-
 export interface StyleResolution {
-  styleIds: Uint32Array;
-  styles: readonly ResolvedFillStyle[];
+  styles: readonly string[];
   fillBuckets: Uint32Array[];
 }
 
@@ -86,10 +81,10 @@ export class StyleResolver {
     const shapes = args.layer.shapes ?? [];
     const compiled: CompiledExpression | null = expr ? compileStyleExpression(expr) : null;
 
-    const styles: ResolvedFillStyle[] = [];
+    const styles: string[] = [];
     const styleIndex = new Map<string, number>();
     const nullColor = EMAP_THEME_COLORS.muted;
-    const styleIds = new Uint32Array(shapes.length);
+    const bucketLists: number[][] = [];
 
     for (let i = 0; i < shapes.length; i++) {
       let value: unknown = null;
@@ -104,18 +99,15 @@ export class StyleResolver {
       if (idx === undefined) {
         idx = styles.length;
         styleIndex.set(color, idx);
-        styles.push({ color });
+        styles.push(color);
       }
-      styleIds[i] = idx;
+      (bucketLists[idx] ??= []).push(i);
     }
 
     if (styles.length > 256) {
       this._opts.onWarn?.({ layerId: args.layerId, buckets: styles.length });
     }
-    const bucketLists: number[][] = styles.map(() => []);
-    for (let i = 0; i < styleIds.length; i++) bucketLists[styleIds[i]].push(i);
     const resolution: StyleResolution = {
-      styleIds,
       styles,
       fillBuckets: bucketLists.map((list) => Uint32Array.from(list)),
     };

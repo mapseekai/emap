@@ -15,6 +15,7 @@ import {
   quantileBreaks,
   summarizeCategorical,
   summarizeSequential,
+  isNullish,
 } from './_classify-breaks';
 
 export async function classifyFeatures(
@@ -49,11 +50,7 @@ export async function classifyFeatures(
 
   if (opts.method === 'categorical') {
     const categories =
-      opts.categories ??
-      ([...new Set(values.filter((v) => v !== null && v !== undefined && !Number.isNaN(v)))] as (
-        | string
-        | number
-      )[]);
+      opts.categories ?? ([...new Set(values.filter((v) => !isNullish(v)))] as (string | number)[]);
     if (categories.length !== opts.colors.length) {
       return Err.validation(
         'colors',
@@ -81,9 +78,7 @@ export async function classifyFeatures(
     if (numeric.length === 0) {
       return Err.validation('field', `field "${opts.field}" has no numeric values`);
     }
-    const nullish = values.filter(
-      (v) => v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v)),
-    ).length;
+    const nullish = values.filter(isNullish).length;
     if (numeric.length !== values.length - nullish) {
       return Err.validation('field', `field "${opts.field}" is not numeric`);
     }
@@ -91,7 +86,7 @@ export async function classifyFeatures(
     if (opts.breaks === undefined && (!Number.isInteger(classes) || classes < 2)) {
       return Err.validation('classes', 'classes must be an integer >= 2');
     }
-    const sorted = [...numeric].sort((a, b) => a - b);
+    const sorted = numeric.sort((a, b) => a - b);
     const breaks =
       opts.breaks ??
       (opts.method === 'quantile'
@@ -110,7 +105,7 @@ export async function classifyFeatures(
     result = {
       kind: 'sequential',
       method: opts.method,
-      breaks,
+      breaks: [...breaks],
       colors: [...opts.colors],
       counts,
       nullColor,

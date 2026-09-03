@@ -41,8 +41,7 @@ describe('StyleResolver.resolveFill', () => {
       dataset,
       layer,
     })!;
-    expect(res.styles.map((s) => s.color)).toEqual(['#111111', '#999999']);
-    expect([...res.styleIds]).toEqual([0, 1, 0]);
+    expect(res.styles).toEqual(['#111111', '#999999']);
     expect([...res.fillBuckets[0]]).toEqual([0, 2]);
     expect([...res.fillBuckets[1]]).toEqual([1]);
   });
@@ -71,10 +70,9 @@ describe('StyleResolver.resolveFill', () => {
       dataset,
       layer,
     })!;
-    expect(res.styles[0].color).toBe('#123456');
-    // 42 与缺失 → null 桶（最后一个 style，主题色）
-    const nullStyle = res.styles.length - 1;
-    expect([...res.styleIds]).toEqual([0, nullStyle, nullStyle]);
+    expect(res.styles[0]).toBe('#123456');
+    // 42 与缺失 → null 桶（最后一个桶，主题色）
+    expect([...res.fillBuckets[1]]).toEqual([1, 2]);
   });
 
   it('continuous interpolate stays bucket-bounded (≤ 257 + null)', () => {

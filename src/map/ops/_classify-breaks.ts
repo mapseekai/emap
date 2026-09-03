@@ -37,7 +37,7 @@ export function classIndexOf(value: number, breaks: readonly number[]): number {
   return idx;
 }
 
-function isNullish(v: unknown): boolean {
+export function isNullish(v: unknown): boolean {
   return v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v));
 }
 

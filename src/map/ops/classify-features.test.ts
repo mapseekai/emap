@@ -129,4 +129,25 @@ describe('classifyFeatures validation', () => {
       },
     });
   });
+
+  it('returns defensive copies of caller-owned classification arrays', async () => {
+    const { ctx } = ctxWithLayer([{ t: 'a' }, { t: 'b' }]);
+    const categories = ['a', 'b'];
+    const colors = ['#111111', '#999999'];
+    const res = await classifyFeatures(ctx, {
+      source: 's1',
+      target: 'l',
+      field: 't',
+      method: 'categorical',
+      categories,
+      colors,
+    });
+    if (!res.ok) throw new Error('classification unexpectedly failed');
+
+    categories[0] = 'changed';
+    colors[0] = '#ffffff';
+
+    expect(res.value.categories).toEqual(['a', 'b']);
+    expect(res.value.colors).toEqual(['#111111', '#999999']);
+  });
 });

@@ -142,7 +142,7 @@ function renderFillLayer(
         ? {
             styleBuckets: {
               buckets: resolution.fillBuckets,
-              colors: resolution.styles.map((s) => s.color),
+              colors: resolution.styles,
             },
           }
         : {}),
