@@ -6,7 +6,7 @@ import type { FeatureShape, MapshaperDataset, MapshaperLayer } from '../types/ma
 import { DuckDbOperationError } from './errors';
 import { getDuckDbRuntime, type DuckDbRuntime } from './runtime';
 import { validateDuckDbSelectSql } from './query-sql';
-import { quoteIdentifier } from './pipeline';
+import { nextDuckDbTableName, quoteIdentifier, resolveUniqueColumnName, tableFieldNames } from './pipeline';
 
 export interface DuckDbQueryOptions {
   geometryColumn?: string;
@@ -16,12 +16,6 @@ export interface DuckDbQueryOptions {
   sql: string;
 }
 
-let duckDbQueryInputTableSequence = 0;
-
-function nextDuckDbQueryInputTableName(): string {
-  duckDbQueryInputTableSequence += 1;
-  return `emap_duckdb_query_input_${duckDbQueryInputTableSequence}`;
-}
 
 function resolveInputLayer(dataset: MapshaperDataset, selector?: string | number): MapshaperLayer {
   const layers = dataset.layers ?? [];
@@ -57,17 +51,6 @@ function resolveInputLayer(dataset: MapshaperDataset, selector?: string | number
   return layer;
 }
 
-function uniqueColumnName(requestedName: string, existingColumns: ReadonlySet<string>): string {
-  if (!existingColumns.has(requestedName)) return requestedName;
-
-  let suffix = 1;
-  let candidate = `${requestedName}_${suffix}`;
-  while (existingColumns.has(candidate)) {
-    suffix += 1;
-    candidate = `${requestedName}_${suffix}`;
-  }
-  return candidate;
-}
 
 function collectExistingColumnNames(layer: MapshaperLayer, geometryColumn: string): Set<string> {
   const names = new Set<string>([geometryColumn]);
@@ -102,9 +85,6 @@ function createInputDataset(
   };
 }
 
-function tableFieldNames(table: Table): string[] {
-  return table.schema.fields.map((field) => field.name);
-}
 
 function resultRowIds(table: Table, rowIdColumn: string, rowCount: number): number[] {
   const vector = table.getChild(rowIdColumn);
@@ -161,10 +141,7 @@ export async function queryDatasetWithDuckDb(
   const geometryColumn = opts.geometryColumn ?? 'geometry';
   const requestedRowIdColumn = opts.rowIdColumn ?? '__emap_rowid';
   const inputLayer = resolveInputLayer(dataset, opts.inputLayer);
-  const rowIdColumn = uniqueColumnName(
-    requestedRowIdColumn,
-    collectExistingColumnNames(inputLayer, geometryColumn),
-  );
+  const rowIdColumn = resolveUniqueColumnName(requestedRowIdColumn, collectExistingColumnNames(inputLayer, geometryColumn));
 
   let input: Table;
   try {
@@ -183,7 +160,7 @@ export async function queryDatasetWithDuckDb(
     );
   }
 
-  const inputTableName = nextDuckDbQueryInputTableName();
+  const inputTableName = nextDuckDbTableName('emap_duckdb_query_input');
   const validated = validateDuckDbSelectSql(opts.sql, {
     availableColumns: tableFieldNames(input),
     geometryColumn,

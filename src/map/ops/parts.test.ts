@@ -61,7 +61,6 @@ async function createFixture(
   } as unknown as EmapHostInternal;
   const ctx = {
     host,
-    runDatasetCommand: async () => okValue(undefined),
     runDatasetCommandParsed: async () => okValue(undefined),
     runPreparedDatasetCommandParsed: async () => okValue(undefined),
     runPreparedEditCommand: async <T>(

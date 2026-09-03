@@ -1,6 +1,7 @@
 import { createWgs84CoordinateTransformer } from '../adapter/mapshaper-adapter';
 import type { GeographicCoordinateTransformer } from '../adapter/mapshaper-adapter';
 import { Geodesic } from 'geographiclib-geodesic';
+import { geodesicDistanceMeters, type GeodesicInstance } from './geodesic';
 import { resolveProjectCrsDefinition } from './crs-resolver';
 
 const DEGREES_TO_RADIANS = Math.PI / 180;
@@ -92,9 +93,9 @@ export function formatMeasurement(mode: MeasurementMode, value: number | null): 
   if (value === null || !Number.isFinite(value) || value < 0) return null;
 
   if (mode === 'length') {
-    return value < 1_000 ? `${formatNumber(value)} m` : `${formatNumber(value / 1_000)} km`;
+    return value < 1_000 ? `${value.toFixed(2)} m` : `${(value / 1_000).toFixed(2)} km`;
   }
-  return value < 1_000_000 ? `${formatNumber(value)} m²` : `${formatNumber(value / 1_000_000)} km²`;
+  return value < 1_000_000 ? `${value.toFixed(2)} m²` : `${(value / 1_000_000).toFixed(2)} km²`;
 }
 
 function toGeographicPoints(
@@ -112,7 +113,7 @@ function toGeographicPoints(
 
 function calculateGeodesicLength(
   points: readonly MeasurementPoint[],
-  geodesic: InstanceType<typeof Geodesic.Geodesic>,
+  geodesic: GeodesicInstance,
 ): number | null {
   if (points.length < 2) return null;
 
@@ -124,9 +125,9 @@ function calculateGeodesicLength(
     if (!isGeographicPoint(point)) return null;
     if (point[0] === previous[0] && point[1] === previous[1]) continue;
 
-    const segment = geodesic.Inverse(previous[1], previous[0], point[1], point[0]).s12;
-    if (segment === undefined || !Number.isFinite(segment)) return null;
-    total += Math.abs(segment);
+    const segment = geodesicDistanceMeters(geodesic, previous, point);
+    if (segment === null) return null;
+    total += segment;
     previous = point;
   }
   return Number.isFinite(total) ? total : null;
@@ -154,6 +155,3 @@ function isGeographicPoint(point: MeasurementPoint): boolean {
   );
 }
 
-function formatNumber(value: number): string {
-  return value.toFixed(2);
-}

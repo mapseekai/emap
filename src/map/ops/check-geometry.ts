@@ -9,7 +9,6 @@
 // destructive) and complementary to `rebuildTopology` (which fixes
 // what this command finds).
 
-import { resolveLayerInList } from '../layer-registry';
 import { Err, okValue, type OpResult } from '../op-result';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import type { CheckGeometryOptions, GeometryCheckReport } from '../types';
@@ -23,9 +22,6 @@ export async function checkGeometry(
   if (!source) return Err.notFound('source', opts.source);
   const dataset = source.getDataset();
   if (!dataset) return Err.notFound('source', opts.source);
-  if (opts.target !== undefined) {
-    if (!resolveLayerInList(dataset.layers, opts.target)) return Err.notFound('layer', opts.target);
-  }
   if (!dataset.arcs) {
     return okValue({ ok: true, intersections: [], intersectionCount: 0 });
   }

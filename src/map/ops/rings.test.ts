@@ -78,7 +78,6 @@ async function createFixture(
   } as unknown as EmapHostInternal;
   const ctx: OpContext = {
     host,
-    runDatasetCommand: async () => ({ ok: true, value: undefined }),
     runDatasetCommandParsed: async () => ({ ok: true, value: undefined }),
     runPreparedDatasetCommandParsed: async () => ({ ok: true, value: undefined }),
     runPreparedDatasetMutation: async <T>(_sourceId, _label, mutate): Promise<OpResult<T>> => {

@@ -60,9 +60,8 @@ describe('MapshaperWorkerPool', () => {
 
   it('lazy-spawns the worker on first run()', () => {
     const pool = makePool();
-    expect(pool.isWorkerSpawned()).toBe(false);
+    expect(MockWorker.instances).toHaveLength(0);
     void pool.run('-clip', { datasets: [] });
-    expect(pool.isWorkerSpawned()).toBe(true);
     expect(MockWorker.instances).toHaveLength(1);
     expect(MockWorker.instances[0].url).toBe('fake-worker.js');
   });
@@ -221,7 +220,7 @@ describe('MapshaperWorkerPool', () => {
   it('cancelAll() on an unspawned pool is a no-op', () => {
     const pool = makePool();
     expect(() => pool.cancelAll()).not.toThrow();
-    expect(pool.isWorkerSpawned()).toBe(false);
+    expect(MockWorker.instances).toHaveLength(0);
   });
 
   it('run() after cancelAll() spawns a fresh worker', () => {
@@ -388,7 +387,6 @@ describe('MapshaperWorkerPool — poolSize > 1', () => {
   it('reports configured poolSize without spawning anything', () => {
     const pool = makePool(4);
     expect(pool.poolSize).toBe(4);
-    expect(pool.isWorkerSpawned()).toBe(false);
     expect(MockWorker.instances).toHaveLength(0);
   });
 

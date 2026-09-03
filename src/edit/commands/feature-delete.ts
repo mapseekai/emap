@@ -3,7 +3,7 @@ import type { FeatureShape, MapshaperLayer } from '../../types/mapshaper-types';
 import { asMutableTopologySource, type TopologySource } from '../../source/source';
 import type { FeatureRef } from '../../map/types';
 import type { Selection, SelectionDiff, SelectionSnapshot } from '../../map/selection';
-import { markSourceChanged } from './_shared';
+import { markSourceChanged, SelectionDiffTracker } from './_shared';
 
 export interface FeatureDeleteCommandOptions {
   /** The layer object that owns the feature. */
@@ -194,28 +194,27 @@ export interface FeatureDeleteWithSelectionCommandOptions extends FeatureDeleteC
 export class FeatureDeleteWithSelectionCommand implements EditCommand {
   readonly label: string;
   private readonly inner: FeatureDeleteCommand;
-  private pendingSelectionDiff: SelectionDiff | null = null;
+  private readonly _selectionTracker: SelectionDiffTracker;
 
   constructor(private readonly opts: FeatureDeleteWithSelectionCommandOptions) {
     this.inner = new FeatureDeleteCommand(opts);
     this.label = opts.label;
+    this._selectionTracker = new SelectionDiffTracker(opts);
   }
 
   do(): void {
     this.inner.do();
-    this.pendingSelectionDiff = this.opts.selection.apply(this.opts.afterSelection, 'replace');
+    this._selectionTracker.applyAfter();
     markSourceChanged(asMutableTopologySource(this.opts.source));
   }
 
   undo(): void {
     this.inner.undo();
-    this.pendingSelectionDiff = this.opts.selection.restore(this.opts.beforeSelection);
+    this._selectionTracker.restoreBefore();
     markSourceChanged(asMutableTopologySource(this.opts.source));
   }
 
   publish(): void {
-    this.opts.source.fire?.('data', { reason: 'edit' });
-    if (this.pendingSelectionDiff?.changed) this.opts.publishSelection(this.pendingSelectionDiff);
-    this.pendingSelectionDiff = null;
+    this._selectionTracker.publish('edit');
   }
 }

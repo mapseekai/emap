@@ -9,6 +9,7 @@ import {
   type PathShape,
 } from '../../types/mapshaper-types';
 import { Err, type OpResult } from '../op-result';
+import { resolveLayerInList } from '../layer-registry';
 import type { AddPartOptions, DeletePartOptions, FeatureRef } from '../types';
 import type { OpContext } from './_context';
 import {
@@ -225,7 +226,7 @@ export async function addPart(ctx: OpContext, options: AddPartOptions): Promise<
     if (planned !== selected.dataset) return Err.staleOperation(selected.sourceId, 'Add part');
     const arcs = planned.arcs;
     // Planned dataset IS the live one: resolve the layer in-place.
-    const layer = ctx.host.layers.resolveInLayers(planned.layers, selected.layerId);
+    const layer = resolveLayerInList(planned.layers, selected.layerId);
     if (
       !layer ||
       !isPathLayer(layer) ||

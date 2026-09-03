@@ -20,13 +20,14 @@
 // resolves a singleton via {@link getDefaultMapshaperAdapter} when no explicit
 // adapter is supplied.
 
-import type {
-  ArcCollection,
-  ArcVertexData,
-  DataTable,
-  MapshaperDataset,
-  MapshaperLayer,
-  PathShape,
+import {
+  absArcId,
+  type ArcCollection,
+  type ArcVertexData,
+  type DataTable,
+  type MapshaperDataset,
+  type MapshaperLayer,
+  type PathShape,
 } from '../types/mapshaper-types';
 
 // -- Pack / snapshot serialisation ------------------------------------------
@@ -194,34 +195,25 @@ export interface MapshaperAdapter {
   /** Pop the most recently appended arc. Used by FeatureCreateCommand.undo. */
   deleteLastArc(arcs: ArcCollection): void;
   /**
-   * Optional batch fast-path. Legacy structural adapter implementations can
-   * omit this; command helpers fall back to `appendArc`.
-   *
-   * Returns the id of the first appended arc (`arcs.size()` at call time).
-   * Preserves the retained interval (`updateVertexData` resets it to 0 —
-   * saved and restored here). When the collection keeps simplification
-   * thresholds (`zz`), appended arcs missing `zz` are filled with `Infinity`
-   * (always retained), mirroring `appendArc`.
+   * Batch arc append. Returns the id of the first appended arc
+   * (`arcs.size()` at call time). Preserves the retained interval
+   * (`updateVertexData` resets it to 0 — saved and restored here). When
+   * the collection keeps simplification thresholds (`zz`), appended arcs
+   * missing `zz` are filled with `Infinity` (always retained), mirroring
+   * `appendArc`.
    */
-  appendArcs?(arcs: ArcCollection, arcsToAppend: AppendedArc[]): number;
+  appendArcs(arcs: ArcCollection, arcsToAppend: AppendedArc[]): number;
 
   /**
-   * Optional batch fast-path. Legacy structural adapter implementations can
-   * omit this; command helpers fall back to `deleteLastArc`.
-   *
-   * Truncates back to `targetArcCount` arcs, dropping tail vertex data in one
-   * pass. Preserves the retained interval. Throws when the target exceeds the
-   * current arc count — silently dropping arcs appended by someone else would
-   * corrupt history invariants.
+   * Truncates back to `targetArcCount` arcs, dropping tail vertex data in
+   * one pass. Preserves the retained interval. Throws when the target
+   * exceeds the current arc count — silently dropping arcs appended by
+   * someone else would corrupt history invariants.
    */
-  truncateArcs?(arcs: ArcCollection, targetArcCount: number): void;
+  truncateArcs(arcs: ArcCollection, targetArcCount: number): void;
 
-  /**
-   * Optional standalone-collection factory. Legacy structural adapters can
-   * omit this; `createArcCollectionCompat` uses the canonical mapshaper
-   * constructor without routing through the injected process-wide adapter.
-   */
-  createArcCollection?(arcsToAppend: AppendedArc[]): ArcCollection;
+  /** Standalone-collection factory (canonical mapshaper constructor). */
+  createArcCollection(arcsToAppend: AppendedArc[]): ArcCollection;
 
   // -- Topology queries (used by VertexEditControl) ----------------------
 
@@ -759,18 +751,6 @@ function restoreCutPointThresholds(
   arcs.setRetainedInterval?.(retainedInterval);
 }
 
-/**
- * Build an isolated ArcCollection while preserving compatibility with
- * structural adapters created before the optional factory capability existed.
- */
-export function createArcCollectionCompat(
-  adapter: MapshaperAdapter,
-  arcsToAppend: AppendedArc[],
-): ArcCollection {
-  return adapter.createArcCollection
-    ? adapter.createArcCollection(arcsToAppend)
-    : createStandaloneArcCollection(arcsToAppend);
-}
 
 export class DefaultMapshaperAdapter implements MapshaperAdapter {
   snapVertices(vertexIds: number[], to: [number, number], arcs: ArcCollection): void {
@@ -1047,7 +1027,7 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
         const path = shape as PathShape;
         paths.push(path);
         for (const part of path) {
-          for (const arcId of part) used[arcId < 0 ? ~arcId : arcId] = 1;
+          for (const arcId of part) used[absArcId(arcId)] = 1;
         }
       }
     }
@@ -1058,7 +1038,7 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
       for (const part of path) {
         for (let i = 0; i < part.length; i++) {
           const arcId = part[i]!;
-          const remapped = map[arcId < 0 ? ~arcId : arcId]!;
+          const remapped = map[absArcId(arcId)]!;
           part[i] = arcId < 0 ? ~remapped : remapped;
         }
       }

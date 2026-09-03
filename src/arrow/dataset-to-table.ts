@@ -102,7 +102,7 @@ export function toArrowTable(dataset: MapshaperDataset, opts: ToArrowTableOption
   }
 
   const bboxColumn = opts.bboxColumn
-    ? uniqueColumnName(opts.bboxColumn, new Set([...fieldNames, geometryColumn]))
+    ? resolveUniqueColumnName(opts.bboxColumn, new Set([...fieldNames, geometryColumn]))
     : null;
   if (bboxColumn) {
     const { field, data } = buildBBoxColumn(bboxColumn, outputGeometry);
@@ -627,12 +627,24 @@ function collectFieldNames(records: Array<Record<string, unknown>>, rowCount: nu
   return names;
 }
 
-function uniqueColumnName(name: string, reserved: Set<string>): string {
-  if (!reserved.has(name)) return name;
-  for (let i = 1; ; i++) {
-    const candidate = `${name}_${i}`;
-    if (!reserved.has(candidate)) return candidate;
+/** First `name`/`name_1`/`name_2`… variant not present in `reserved`. */
+export function resolveUniqueColumnName(requested: string, existing: ReadonlySet<string>): string {
+  if (!existing.has(requested)) return requested;
+  let suffix = 1;
+  let candidate = `${requested}_${suffix}`;
+  while (existing.has(candidate)) {
+    suffix += 1;
+    candidate = `${requested}_${suffix}`;
   }
+  return candidate;
+}
+
+/** Unique variant of `requested` against the table's existing field names. */
+export function resolveTableColumnName(table: Table, requested: string): string {
+  return resolveUniqueColumnName(
+    requested,
+    new Set(table.schema.fields.map((field) => field.name)),
+  );
 }
 
 function buildAttributeColumn(

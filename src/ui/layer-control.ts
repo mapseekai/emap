@@ -7,7 +7,7 @@ import type {
   MapLibreServiceManager,
 } from '../map/maplibre-service';
 import type { Control } from './control';
-import { createControlIcon } from './control-icons';
+import { createControlButton, createControlIcon } from './control-icons';
 
 let layerControlSequence = 0;
 
@@ -115,19 +115,18 @@ export class LayerControl implements Control {
     this._container = document.createElement('div');
     this._container.className = 'emap-ctrl emap-panel-control emap-layer-control';
 
-    this._trigger = document.createElement('button');
-    this._trigger.type = 'button';
-    this._trigger.className = 'emap-panel-trigger emap-layer-trigger';
-    this._trigger.title = 'Layers';
-    this._trigger.setAttribute('aria-label', 'Layers');
-    const icon = document.createElement('span');
-    icon.className = 'emap-ctrl-icon';
-    icon.appendChild(createControlIcon('layers'));
-    this._trigger.appendChild(icon);
-    this._trigger.setAttribute('aria-haspopup', 'dialog');
-    this._trigger.setAttribute('aria-expanded', 'false');
-    this._trigger.setAttribute('aria-controls', panelId);
-    this._trigger.addEventListener('click', this._handleTriggerClick);
+    this._trigger = createControlButton({
+      className: 'emap-panel-trigger emap-layer-trigger',
+      title: 'Layers',
+      icon: createControlIcon('layers'),
+      onClick: this._handleTriggerClick,
+      aria: {
+        'aria-label': 'Layers',
+        'aria-haspopup': 'dialog',
+        'aria-expanded': 'false',
+        'aria-controls': panelId,
+      },
+    });
 
     this._panel = document.createElement('div');
     this._panel.id = panelId;

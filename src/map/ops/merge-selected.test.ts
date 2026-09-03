@@ -50,7 +50,6 @@ function createFixture(
   } as unknown as EmapHostInternal;
   const ctx: OpContext = {
     host,
-    runDatasetCommand: async () => OK,
     runDatasetCommandParsed,
     runPreparedDatasetCommandParsed: async (sourceId, commands, label, prepare) => {
       preparedCall = { sourceId, commands, label, prepare };
@@ -275,7 +274,6 @@ async function runRealMerge(
   } as unknown as EmapHostInternal;
   const ctx: OpContext = {
     host,
-    runDatasetCommand: async () => OK,
     runDatasetCommandParsed: async (_sourceId, commands) => {
       current = await adapter.runOnDatasetParsed(commands, adapter.copyDataset(current));
       return OK;

@@ -1,6 +1,7 @@
 import { createGeographicCoordinateTransformer } from '../adapter/mapshaper-adapter';
 import type { GeographicCoordinateTransformer } from '../adapter/mapshaper-adapter';
 import { Geodesic } from 'geographiclib-geodesic';
+import { geodesicDistanceMeters, type GeodesicInstance } from './geodesic';
 import { resolveProjectCrsDefinition } from './crs-resolver';
 
 export type ScaleCalculationMethod = 'top' | 'center' | 'bottom' | 'average' | 'equator';
@@ -148,7 +149,7 @@ export class ScaleCalculator {
   private _measure(
     view: ScaleView,
     transformer: GeographicCoordinateTransformer,
-    geodesic: InstanceType<typeof Geodesic.Geodesic>,
+    geodesic: GeodesicInstance,
     method: ScaleCalculationMethod,
   ): number | null {
     if (method === 'average') {
@@ -164,18 +165,18 @@ export class ScaleCalculator {
     if (!sample) return null;
     const [first, second] = sample;
     if (method === 'equator')
-      return this._geodesicDistance(geodesic, [first[0], 0], [second[0], 0]);
-    return this._geodesicDistance(geodesic, first, second);
+      return geodesicDistanceMeters(geodesic, [first[0], 0], [second[0], 0]);
+    return geodesicDistanceMeters(geodesic, first, second);
   }
 
   private _sample(
     view: ScaleView,
     transformer: GeographicCoordinateTransformer,
-    geodesic: InstanceType<typeof Geodesic.Geodesic>,
+    geodesic: GeodesicInstance,
     row: number,
   ): number | null {
     const sample = this._coordinatesAt(view, transformer, row);
-    return sample ? this._geodesicDistance(geodesic, sample[0], sample[1]) : null;
+    return sample ? geodesicDistanceMeters(geodesic, sample[0], sample[1]) : null;
   }
 
   private _coordinatesAt(
@@ -193,12 +194,4 @@ export class ScaleCalculator {
     }
   }
 
-  private _geodesicDistance(
-    geodesic: InstanceType<typeof Geodesic.Geodesic>,
-    first: [number, number],
-    second: [number, number],
-  ): number | null {
-    const distance = geodesic.Inverse(first[1], first[0], second[1], second[0]).s12;
-    return distance !== undefined && Number.isFinite(distance) ? Math.abs(distance) : null;
-  }
 }

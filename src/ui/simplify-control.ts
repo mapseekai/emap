@@ -12,7 +12,7 @@
 import { Control } from './control';
 import type { Emap } from '../map/map';
 import type { SimplifyMethod } from '../map/types';
-import { createControlIcon } from './control-icons';
+import { createControlButton, createControlIcon } from './control-icons';
 
 export interface SimplifyControlOptions {
   /** Source ID to simplify. Required. */
@@ -59,19 +59,16 @@ export class SimplifyControl implements Control {
     this._container = document.createElement('div');
     this._container.className = 'emap-ctrl emap-ctrl-group emap-ctrl-simplify-wrap';
 
-    this._btn = document.createElement('button');
-    this._btn.type = 'button';
-    this._btn.className = 'emap-ctrl-simplify';
-    const icon = document.createElement('span');
-    icon.className = 'emap-ctrl-icon';
-    icon.appendChild(createControlIcon('simplify'));
-    this._btn.appendChild(icon);
-    this._btn.title = this._opts.title ?? 'Simplify geometry';
-    this._btn.setAttribute('aria-expanded', 'false');
-    this._btn.onclick = (e) => {
-      e.stopPropagation();
-      this._togglePopup();
-    };
+    this._btn = createControlButton({
+      className: 'emap-ctrl-simplify',
+      title: this._opts.title ?? 'Simplify geometry',
+      icon: createControlIcon('simplify'),
+      onClick: (e) => {
+        e.stopPropagation();
+        this._togglePopup();
+      },
+      aria: { 'aria-expanded': 'false' },
+    });
     this._container.appendChild(this._btn);
 
     this._popup = this._buildPopup();

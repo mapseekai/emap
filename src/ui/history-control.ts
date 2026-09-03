@@ -1,7 +1,7 @@
 import { Control } from './control';
 import { Emap } from '../map/map';
 import type { HistoryStateSnapshot } from '../edit/edit-history';
-import { createControlIcon } from './control-icons';
+import { createControlButton, createControlIcon } from './control-icons';
 
 export interface HistoryControlOptions {
   /** Tooltip text for the undo button. Default: "Undo (Ctrl+Z)". */
@@ -35,22 +35,22 @@ export class HistoryControl implements Control {
     this._container = document.createElement('div');
     this._container.className = `emap-ctrl emap-ctrl-group ${this._options.className || ''}`.trim();
 
-    this._undoBtn = this._createButton(
-      'undo',
-      createControlIcon('undo'),
-      this._options.undoTitle ?? 'Undo (Ctrl+Z)',
-      () => {
-        this._map?.undo();
-      },
-    );
-    this._redoBtn = this._createButton(
-      'redo',
-      createControlIcon('redo'),
-      this._options.redoTitle ?? 'Redo (Ctrl+Shift+Z)',
-      () => {
-        this._map?.redo();
-      },
-    );
+    this._undoBtn = createControlButton({
+      className: 'emap-ctrl-undo',
+      title: this._options.undoTitle ?? 'Undo (Ctrl+Z)',
+      icon: createControlIcon('undo'),
+      onClick: () => this._map?.undo(),
+      disabled: true,
+    });
+    this._container.appendChild(this._undoBtn);
+    this._redoBtn = createControlButton({
+      className: 'emap-ctrl-redo',
+      title: this._options.redoTitle ?? 'Redo (Ctrl+Shift+Z)',
+      icon: createControlIcon('redo'),
+      onClick: () => this._map?.redo(),
+      disabled: true,
+    });
+    this._container.appendChild(this._redoBtn);
 
     // Initial enabled state — drives off the current map state, not just future events.
     this._setEnabled(map.canUndo(), map.canRedo());
@@ -80,23 +80,4 @@ export class HistoryControl implements Control {
     if (this._redoBtn) this._redoBtn.disabled = !canRedo;
   }
 
-  private _createButton(
-    id: string,
-    iconNode: Node,
-    title: string,
-    onClick: () => void,
-  ): HTMLButtonElement {
-    const btn = document.createElement('button');
-    btn.className = `emap-ctrl-${id}`;
-    btn.type = 'button';
-    btn.title = title;
-    btn.disabled = true;
-    const icon = document.createElement('span');
-    icon.className = 'emap-ctrl-icon';
-    icon.appendChild(iconNode);
-    btn.appendChild(icon);
-    btn.addEventListener('click', onClick);
-    this._container?.appendChild(btn);
-    return btn;
-  }
 }

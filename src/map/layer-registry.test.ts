@@ -102,10 +102,4 @@ describe('LayerRegistry.resolve', () => {
     expect(reg.resolve('src1', 'parks')).not.toBeNull();
   });
 
-  it('resolveInLayers delegates to resolveLayerInList', () => {
-    const a = makeLayer({ name: 'parks' });
-    const reg = new LayerRegistry(new globalThis.Map());
-    expect(reg.resolveInLayers([a], 'parks')).toBe(a);
-    expect(reg.resolveInLayers([a], 'roads')).toBeNull();
-  });
 });

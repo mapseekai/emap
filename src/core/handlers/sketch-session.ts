@@ -1,11 +1,11 @@
 import type { HandlerResult, NormalizedPointerEvent } from '../handler';
-import type { SnapKind } from '../../map/types';
+import type { DrawOverlaySnapKind } from '../../renderer/painter';
 import { EMAP_THEME_COLORS } from '../../theme/colors';
 import type { EditHandlerHost } from './edit-handler-host';
 
 export interface SketchSnapTarget {
   coord: [number, number];
-  kind: SnapKind;
+  kind: DrawOverlaySnapKind;
 }
 
 export interface SketchSessionOptions {
@@ -21,7 +21,7 @@ export class SketchSession {
   private _vertices: [number, number][] = [];
   private _cursorCoord: [number, number] | null = null;
   private _snapCoord: [number, number] | null = null;
-  private _snapKind: SnapKind = null;
+  private _snapKind: DrawOverlaySnapKind = null;
   private _overlayPublished = false;
 
   constructor(

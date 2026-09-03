@@ -10,7 +10,7 @@
 import type { MutableTopologySource } from '../source/source';
 import type { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import type { EditHistory } from '../edit/edit-history';
-import type { TransactionInternal } from '../edit/transaction-internal';
+import type { TransactionInternal } from '../edit/transaction';
 import type { Selection } from './selection';
 import type { LayerRegistry } from './layer-registry';
 

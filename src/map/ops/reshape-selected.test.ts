@@ -161,7 +161,6 @@ async function createFixture(
   } as unknown as EmapHostInternal;
   const ctx: OpContext = {
     host,
-    runDatasetCommand: async () => ({ ok: true, value: undefined }),
     runDatasetCommandParsed: async () => ({ ok: true, value: undefined }),
     runPreparedDatasetCommandParsed: async () => ({ ok: true, value: undefined }),
     runPreparedDatasetMutation: async <T>(_sourceId, _label, mutate): Promise<OpResult<T>> => {
@@ -258,7 +257,6 @@ async function createMultiSourceFixture(aOffset = 0, bOffset = 0) {
   } as unknown as EmapHostInternal;
   const ctx: OpContext = {
     host,
-    runDatasetCommand: async () => okValue(undefined),
     runDatasetCommandParsed: async () => okValue(undefined),
     runPreparedDatasetCommandParsed: async () => okValue(undefined),
     runPreparedDatasetMutation: async <T>(): Promise<OpResult<T>> => okValue(undefined as T),

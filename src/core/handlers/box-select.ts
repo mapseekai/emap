@@ -1,6 +1,6 @@
 import { EventDispatcher } from '../events';
-import type { Handler, HandlerResult, NormalizedPointerEvent, PointerModifiers } from '../handler';
-import { resolveMode, type ModifierCombo } from './select-mode';
+import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
+import { comboHeld, resolveMode, type ModifierCombo } from './select-mode';
 import { dedupeRefs } from './select-geometry';
 import type { SelectHandlerOptions } from './click-select';
 import type { SelectionHandlerHost } from './selection-handler-host';
@@ -23,12 +23,6 @@ export interface BoxSelectHandlerOptions extends SelectHandlerOptions {
 }
 
 const BOX_DEFAULT_MODS = { replace: 'none', add: 'shift', toggle: 'shift+alt' } as const;
-
-/** True iff every key of `combo` is held (extra held keys allowed). */
-function comboHeld(m: PointerModifiers, combo: ModifierCombo): boolean {
-  if (combo === 'none') return true;
-  return combo.split('+').every((k) => (m as any)[k] === true);
-}
 
 /**
  * Named `boxSelect` handler. Disabled by default. On `dragActivator`+down

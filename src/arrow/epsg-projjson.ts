@@ -1,4 +1,5 @@
 import { EPSG_PROJJSON_PATH_TABLE } from '../geo/epsg-projjson-data';
+import { lookupEpsgTsv } from '../geo/epsg-table';
 
 const DEFAULT_EPSG_PROJJSON_BASE_URL = 'https://cdn.jsdelivr.net/npm/@zwishing/epsg-index@3.0.0/';
 
@@ -17,20 +18,6 @@ class EpsgProjjsonError extends Error {
   }
 }
 
-function findTableRow(code: string): string | null {
-  const firstNeedle = `${code}\t`;
-  let start = EPSG_PROJJSON_PATH_TABLE.startsWith(firstNeedle) ? 0 : -1;
-  if (start === -1) {
-    const needle = `\n${firstNeedle}`;
-    const index = EPSG_PROJJSON_PATH_TABLE.indexOf(needle);
-    if (index === -1) return null;
-    start = index + 1;
-  }
-
-  const valueStart = start + firstNeedle.length;
-  const valueEnd = EPSG_PROJJSON_PATH_TABLE.indexOf('\n', valueStart);
-  return EPSG_PROJJSON_PATH_TABLE.slice(valueStart, valueEnd === -1 ? undefined : valueEnd);
-}
 
 export function findEpsgProjjsonPath(code: string): string | undefined {
   const normalized = code.trim();
@@ -39,7 +26,7 @@ export function findEpsgProjjsonPath(code: string): string | undefined {
   const cached = pathCache.get(normalized);
   if (cached !== undefined) return cached ?? undefined;
 
-  const path = findTableRow(normalized);
+  const path = lookupEpsgTsv(EPSG_PROJJSON_PATH_TABLE, normalized);
   pathCache.set(normalized, path);
   return path ?? undefined;
 }

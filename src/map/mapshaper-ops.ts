@@ -21,7 +21,6 @@ import type { EmapHostInternal } from './emap-host';
 import type { OpResult } from './op-result';
 import type { OpContext } from './ops/_context';
 import {
-  _runDatasetCommand as _runDatasetCommandShared,
   _runDatasetCommandParsed as _runDatasetCommandParsedShared,
   _runPreparedDatasetCommandParsed as _runPreparedDatasetCommandParsedShared,
   _runPreparedDatasetMutation as _runPreparedDatasetMutationShared,
@@ -133,8 +132,6 @@ export class MapshaperOps {
   private get _ctx(): OpContext {
     return {
       host: this._emap,
-      runDatasetCommand: (sourceId, cmd, label, inputFiles) =>
-        _runDatasetCommandShared(this._emap, sourceId, cmd, label, inputFiles),
       runDatasetCommandParsed: (sourceId, commands, label, inputFiles) =>
         _runDatasetCommandParsedShared(this._emap, sourceId, commands, label, inputFiles),
       runPreparedDatasetCommandParsed: (sourceId, commands, label, prepare, inputFiles) =>

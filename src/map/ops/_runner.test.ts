@@ -10,56 +10,56 @@ import {
   _runPreparedEditCommand,
   _runPreparedEditCommandMany,
   enqueueMultiSourceOperation,
-  inferEffect,
+  inferEffectForHeads,
 } from './_runner';
 import * as runnerModule from './_runner';
 
-describe('inferEffect (PR-10)', () => {
+describe('inferEffectForHeads (PR-10)', () => {
   it.each([
     // shape-count: feature added / removed / reordered
-    ['-target X -clip source=Y', 'shape-count'],
-    ['-target X -erase source=Y', 'shape-count'],
-    ['-target X -dissolve foo', 'shape-count'],
-    ['-target X -dissolve2', 'shape-count'],
-    ['-target X -explode', 'shape-count'],
-    ['-target X -filter "this.pop > 100"', 'shape-count'],
-    ['-target X -drop', 'shape-count'],
-    ['-target X -buffer 5', 'shape-count'],
-    ['-target X -mosaic', 'shape-count'],
-    ['-target X,Y -union', 'shape-count'],
-    ['-split-selected', 'shape-count'],
-    ['-fill-ring', 'shape-count'],
+    [['target', 'clip'], 'shape-count'],
+    [['target', 'erase'], 'shape-count'],
+    [['target', 'dissolve'], 'shape-count'],
+    [['target', 'dissolve2'], 'shape-count'],
+    [['target', 'explode'], 'shape-count'],
+    [['target', 'filter'], 'shape-count'],
+    [['target', 'drop'], 'shape-count'],
+    [['target', 'buffer'], 'shape-count'],
+    [['target', 'mosaic'], 'shape-count'],
+    [['target', 'union'], 'shape-count'],
+    [['split-selected'], 'shape-count'],
+    [['fill-ring'], 'shape-count'],
 
     // topology-only: arc storage rebuilt, feature ids stable
-    ['-target X -clean', 'topology-only'],
-    ['-target X -snap', 'topology-only'],
-    ['-target X -simplify 10%', 'topology-only'],
+    [['target', 'clean'], 'topology-only'],
+    [['target', 'snap'], 'topology-only'],
+    [['target', 'simplify'], 'topology-only'],
 
     // attribute-only: only data table changes
-    ['-target X -each "this.x = 1"', 'attribute-only'],
-    ['-target X -join data.csv keys=k,s', 'attribute-only'],
-    ['-target X -rename-fields A=B', 'attribute-only'],
-    ['-target X -filter-fields a,b', 'attribute-only'],
-    ['-target X -sort foo', 'feature-order'],
+    [['target', 'each'], 'attribute-only'],
+    [['target', 'join'], 'attribute-only'],
+    [['target', 'rename-fields'], 'attribute-only'],
+    [['target', 'filter-fields'], 'attribute-only'],
+    [['target', 'sort'], 'feature-order'],
 
     // crs-only: coords reprojected
-    ['-target X -proj EPSG:3857', 'crs-only'],
-    ['-target X -project EPSG:3857', 'crs-only'],
+    [['target', 'proj'], 'crs-only'],
+    [['target', 'project'], 'crs-only'],
 
     // strongest-effect rule: shape-count wins over the rest
-    ['-target X -each "this.x = 1" -dissolve foo', 'shape-count'],
-    ['-target X -sort foo -clean', 'feature-order'],
+    [['target', 'each', 'dissolve'], 'shape-count'],
+    [['target', 'sort', 'clean'], 'feature-order'],
 
     // unknown command falls through to `unknown` (clear selection)
-    ['-target X -wat', 'unknown'],
-    ['-target X -fancy-new-op foo', 'unknown'],
+    [['target', 'wat'], 'unknown'],
+    [['target', 'fancy-new-op'], 'unknown'],
 
     // empty / target-only ⇒ unknown (the runner won't invoke this with no
     // action anyway, but exercise the path)
-    ['', 'unknown'],
-    ['-target X', 'unknown'],
-  ])('infers effect for %p as %p', (cmd, expected) => {
-    expect(inferEffect(cmd)).toBe(expected);
+    [[], 'unknown'],
+    [['target'], 'unknown'],
+  ])('infers effect for %p as %p', (heads, expected) => {
+    expect(inferEffectForHeads(heads)).toBe(expected);
   });
 });
 

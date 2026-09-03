@@ -2,7 +2,7 @@ import type { MeasureOptions } from '../core/handlers/measure';
 import type { MeasurementMode } from '../geo/measurement';
 import type { Emap } from '../map/map';
 import type { Control } from './control';
-import { createControlIcon, type ControlIconName } from './control-icons';
+import { createControlButton, createControlIcon, type ControlIconName } from './control-icons';
 
 const DEFAULT_ICON_NAMES: Record<MeasurementMode, ControlIconName> = {
   length: 'measure-length',
@@ -41,19 +41,14 @@ export class MeasureControl implements Control {
     this._container = document.createElement('div');
     this._container.className = 'emap-ctrl emap-ctrl-group';
 
-    this._button = document.createElement('button');
-    this._button.className = 'emap-ctrl-measure';
-    this._button.type = 'button';
-    this._button.title = DEFAULT_TITLES[this._opts.mode];
-    this._button.setAttribute('aria-label', this._button.title);
-    this._button.setAttribute('aria-pressed', 'false');
-    const iconSpan = document.createElement('span');
-    iconSpan.className = 'emap-ctrl-icon';
-    const icon = this._opts.icon ?? createControlIcon(DEFAULT_ICON_NAMES[this._opts.mode]);
-    if (typeof icon === 'string') iconSpan.textContent = icon;
-    else iconSpan.appendChild(icon);
-    this._button.replaceChildren(iconSpan);
-    this._button.addEventListener('click', () => this._toggle());
+    this._button = createControlButton({
+      className: 'emap-ctrl-measure',
+      title: DEFAULT_TITLES[this._opts.mode],
+      icon: this._opts.icon ?? createControlIcon(DEFAULT_ICON_NAMES[this._opts.mode]),
+      onClick: () => this._toggle(),
+      pressed: false,
+      aria: { 'aria-label': DEFAULT_TITLES[this._opts.mode] },
+    });
     this._container.appendChild(this._button);
 
     map.on('editmodechange', this._onEditModeChange);

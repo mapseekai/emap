@@ -12,6 +12,7 @@
 
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import { EPSG_CODES_WITHOUT_PROJ4, EPSG_PROJ4_TABLE } from './epsg-proj4-data';
+import { lookupEpsgTsv } from './epsg-table';
 import { resolveMapshaperCrsSignature } from '../adapter/mapshaper-adapter';
 
 /** Default fallback when no metadata identifies a CRS. */
@@ -177,19 +178,6 @@ function formatEpsgCode(code: string): string {
   return `EPSG:${code}`;
 }
 
-function findEpsgProj4(code: string): string | null {
-  const firstNeedle = `${code}\t`;
-  let start = EPSG_PROJ4_TABLE.startsWith(firstNeedle) ? 0 : -1;
-  if (start === -1) {
-    const needle = `\n${firstNeedle}`;
-    const index = EPSG_PROJ4_TABLE.indexOf(needle);
-    if (index === -1) return null;
-    start = index + 1;
-  }
-  const valueStart = start + firstNeedle.length;
-  const valueEnd = EPSG_PROJ4_TABLE.indexOf('\n', valueStart);
-  return EPSG_PROJ4_TABLE.slice(valueStart, valueEnd === -1 ? undefined : valueEnd);
-}
 
 function isLongLatProj4(proj4: string): boolean {
   return /(?:^|\s)\+proj=(?:longlat|latlong)(?:\s|$)/i.test(proj4);
@@ -197,7 +185,7 @@ function isLongLatProj4(proj4: string): boolean {
 
 function isGeographicEpsgCode(code: string): boolean {
   if (code === '4326') return true;
-  const proj4 = findEpsgProj4(code);
+  const proj4 = lookupEpsgTsv(EPSG_PROJ4_TABLE, code);
   return proj4 ? isLongLatProj4(proj4) : false;
 }
 
@@ -253,7 +241,7 @@ export async function resolveProjectCrs(crs: string): Promise<string> {
   if (code === '4326') return 'wgs84';
   if (WEB_MERCATOR_CODES.has(code)) return 'webmercator';
 
-  const proj4 = findEpsgProj4(code);
+  const proj4 = lookupEpsgTsv(EPSG_PROJ4_TABLE, code);
   if (proj4) return proj4;
 
   if (!EPSG_CODES_WITHOUT_PROJ4.includes(`|${code}|`)) {

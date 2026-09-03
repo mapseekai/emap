@@ -4,20 +4,9 @@
 
 import type { MapshaperWorkerPool } from '../core/mapshaper-worker-pool';
 import type { AffineMatrix } from '../edit/commands/feature-affine';
-import type {
-  DrawOverlayState,
-  DrawOverlaySnapKind,
-  MeasurementOverlayState,
-} from '../renderer/painter';
 import type { ExportFormat } from '../source/source';
 import type { MapLibreIntegrationOptions } from './maplibre-service';
 
-// `EditDrawState` originally lived here; the canonical definition now sits in
-// `src/renderer/painter.ts` (it is the input to `Painter.drawDrawingOverlay`).
-// Re-export under the legacy names so existing imports keep resolving.
-export type EditDrawState = DrawOverlayState;
-export type SnapKind = DrawOverlaySnapKind;
-export type EditMeasurementState = MeasurementOverlayState;
 
 export type ExpressionEvaluationPolicy = 'trusted' | 'disabled';
 
@@ -91,11 +80,6 @@ export interface MapOptions {
    * overhead.
    */
   useWorker?: boolean | 'auto';
-  /**
-   * Compatibility alias for {@link useWorker}. If both are supplied,
-   * `useWorker` wins.
-   */
-  workerMode?: boolean | 'auto';
   /**
    * Vertex-count threshold for `useWorker: 'auto'`. Datasets whose
    * `arcs.getPointCount()` is at least this large route through the
@@ -300,8 +284,6 @@ export interface MergeSelectedOptions {
   attributeSource?: FeatureRef;
 }
 
-/** @deprecated Use {@link FeatureRef}. Kept as an alias for back-compat. */
-export type HighlightFeatureRef = FeatureRef;
 
 /**
  * Options for the `Emap.clipLayer` / `Emap.eraseLayer` polygon operations.
@@ -780,12 +762,6 @@ export interface DataFillOptions {
 export interface CheckGeometryOptions {
   /** Source ID whose dataset will be inspected. */
   source: string;
-  /**
-   * Optional layer name. Reserved for future per-layer scoping; v1 always
-   * scans the whole dataset's arcs regardless. The name is still validated
-   * up-front so a typo shows up immediately as a `null` return.
-   */
-  target?: string;
   /**
    * Override the auto-derived intersection-tolerance epsilon. Forwarded to
    * `findSegmentIntersections.tolerance`. Source-CRS units.

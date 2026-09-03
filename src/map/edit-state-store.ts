@@ -3,7 +3,8 @@
 // can no longer leave one stale when another changes — the store enforces
 // the invariant that each overlay belongs to its active mode automatically.
 
-import type { EditMeasurementState, EditVertexState, EditDrawState } from './types';
+import type { DrawOverlayState, MeasurementOverlayState } from '../renderer/painter';
+import type { EditVertexState } from './types';
 
 export type EditMode =
   | 'none'
@@ -19,8 +20,8 @@ export type EditMode =
 export interface EditStateSnapshot {
   mode: EditMode;
   vertex: EditVertexState | null;
-  draw: EditDrawState | null;
-  measurement: EditMeasurementState | null;
+  draw: DrawOverlayState | null;
+  measurement: MeasurementOverlayState | null;
 }
 
 export interface EditStateChange {
@@ -45,8 +46,8 @@ export interface EditStateChange {
 export class EditStateStore {
   private _mode: EditMode = 'none';
   private _vertex: EditVertexState | null = null;
-  private _draw: EditDrawState | null = null;
-  private _measurement: EditMeasurementState | null = null;
+  private _draw: DrawOverlayState | null = null;
+  private _measurement: MeasurementOverlayState | null = null;
 
   constructor(private _onChange: (change: EditStateChange) => void) {}
 
@@ -56,10 +57,10 @@ export class EditStateStore {
   get vertex(): EditVertexState | null {
     return this._vertex;
   }
-  get draw(): EditDrawState | null {
+  get draw(): DrawOverlayState | null {
     return this._draw;
   }
-  get measurement(): EditMeasurementState | null {
+  get measurement(): MeasurementOverlayState | null {
     return this._measurement;
   }
 
@@ -82,33 +83,27 @@ export class EditStateStore {
   }
 
   clearVertex(): void {
-    if (this._vertex === null) return;
-    this._vertex = null;
-    this._fire(this._mode);
+    this.setVertex(null);
   }
 
-  setDraw(state: EditDrawState | null): void {
+  setDraw(state: DrawOverlayState | null): void {
     if (this._draw === state) return;
     this._draw = state;
     this._fire(this._mode);
   }
 
   clearDraw(): void {
-    if (this._draw === null) return;
-    this._draw = null;
-    this._fire(this._mode);
+    this.setDraw(null);
   }
 
-  setMeasurement(state: EditMeasurementState | null): void {
+  setMeasurement(state: MeasurementOverlayState | null): void {
     if (this._measurement === state) return;
     this._measurement = state;
     this._fire(this._mode);
   }
 
   clearMeasurement(): void {
-    if (this._measurement === null) return;
-    this._measurement = null;
-    this._fire(this._mode);
+    this.setMeasurement(null);
   }
 
   private _fire(previousMode: EditMode): void {

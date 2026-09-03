@@ -17,9 +17,9 @@ export type DrawOverlayGeometryType = 'polygon' | 'polyline' | 'point';
 export type DrawOverlaySnapKind = 'vertex' | 'edge' | null;
 
 /**
- * Render-domain state for {@link Painter.drawDrawingOverlay}.
+ * Render-domain state for {@link EditPainter.drawDrawingOverlay}.
  * Owned by the renderer so painters do not back-reference `map/`.
- * The map module re-exports this as `EditDrawState` for back-compat.
+ * Input to {@link EditPainter.drawDrawingOverlay}.
  */
 export interface DrawOverlayState {
   vertices: [number, number][];
@@ -116,13 +116,3 @@ export interface EditPainter extends CorePainter {
   drawMeasurementOverlay(state: MeasurementOverlayState): void;
 }
 
-/**
- * Legacy alias preserved for callers that already import `Painter`.
- * The full painter interface is the edit-aware one because every
- * existing concrete painter (`CanvasPainter`) implements both halves.
- */
-export type Painter = EditPainter;
-
-export interface RenderOptions {
-  antialias?: boolean;
-}

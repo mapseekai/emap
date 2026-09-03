@@ -5,7 +5,7 @@ import type {
   MapLibreServiceManager,
 } from '../map/maplibre-service';
 import type { Control } from './control';
-import { createControlIcon } from './control-icons';
+import { createControlButton, createControlIcon } from './control-icons';
 
 export interface BasemapStyle {
   name: string;
@@ -220,19 +220,18 @@ export class BasemapControl implements Control {
     this._container = document.createElement('div');
     this._container.className = 'emap-ctrl emap-panel-control emap-basemap-ctrl';
 
-    this._trigger = document.createElement('button');
-    this._trigger.type = 'button';
-    this._trigger.className = 'emap-panel-trigger emap-basemap-trigger';
-    this._trigger.title = 'Basemap';
-    this._trigger.setAttribute('aria-label', 'Basemap');
-    const icon = document.createElement('span');
-    icon.className = 'emap-ctrl-icon';
-    icon.appendChild(createControlIcon('basemap'));
-    this._trigger.appendChild(icon);
-    this._trigger.setAttribute('aria-haspopup', 'true');
-    this._trigger.setAttribute('aria-expanded', 'false');
-    this._trigger.setAttribute('aria-controls', panelId);
-    this._trigger.addEventListener('click', this._handleTriggerClick);
+    this._trigger = createControlButton({
+      className: 'emap-panel-trigger emap-basemap-trigger',
+      title: 'Basemap',
+      icon: createControlIcon('basemap'),
+      onClick: this._handleTriggerClick,
+      aria: {
+        'aria-label': 'Basemap',
+        'aria-haspopup': 'true',
+        'aria-expanded': 'false',
+        'aria-controls': panelId,
+      },
+    });
 
     this._panel = document.createElement('div');
     this._panel.id = panelId;

@@ -65,12 +65,4 @@ export class LayerRegistry {
     return layerId === undefined ? (layers[0] ?? null) : resolveLayerInList(layers, layerId);
   }
 
-  /**
-   * Resolve a layer id against an ad-hoc layer list — used by ops that
-   * snapshot the dataset before a mapshaper command runs (the source's
-   * registered dataset has already advanced).
-   */
-  resolveInLayers(layers: ReadonlyArray<MapshaperLayer>, layerId: string): MapshaperLayer | null {
-    return resolveLayerInList(layers, layerId);
-  }
 }

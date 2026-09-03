@@ -3,9 +3,9 @@ import { detectGeometryColumn } from '../arrow/geometry-column';
 import { fromArrowTable, type FromArrowTableOptions } from '../arrow/table-to-dataset';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import { DuckDbOperationError } from './errors';
-import { getDuckDbRuntime, type DuckDbRuntime } from './runtime';
+import { getDuckDbRuntime, quoteSqlString, type DuckDbRuntime } from './runtime';
 import { validateDuckDbSelectSql } from './query-sql';
-import { quoteIdentifier } from './pipeline';
+import { quoteIdentifier, tableFieldNames } from './pipeline';
 
 export interface DuckDbGeoParquetQueryOptions extends FromArrowTableOptions {
   sql: string;
@@ -30,13 +30,6 @@ function normalizeBytes(data: Uint8Array | ArrayBuffer): Uint8Array {
   return data instanceof Uint8Array ? data : new Uint8Array(data);
 }
 
-function quoteSqlString(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
-}
-
-function tableFieldNames(table: Table): string[] {
-  return table.schema.fields.map((field) => field.name);
-}
 
 async function cleanupGeoParquetQuerySource(
   runtime: DuckDbRuntime,

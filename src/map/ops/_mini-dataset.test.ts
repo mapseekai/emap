@@ -145,19 +145,6 @@ describe('buildMiniDataset', () => {
     expect(mini.arcs.getRetainedInterval!()).toBe(5);
   });
 
-  it('supports a legacy adapter without the standalone collection capability', () => {
-    const legacyAdapter = Object.create(adapter) as MapshaperAdapter;
-    Object.defineProperty(legacyAdapter, 'createArcCollection', { value: undefined });
-
-    const mini = buildMiniDataset({
-      dataset: liveDataset(),
-      candidates: new Map([[0, new Set([2])]]),
-      adapter: legacyAdapter,
-    });
-
-    expect(mini.arcs.size()).toBe(1);
-    expect(mini.miniToLiveArc).toEqual([0]);
-  });
 
   it('keeps legacy geometry functions away from the sentinel layer', () => {
     // Sentinel layer is only reachable by explicit index; the path-layer loops

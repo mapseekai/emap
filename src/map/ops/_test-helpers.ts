@@ -60,7 +60,6 @@ export function makeStubCtx(layers: StubLayerSpec[] = [{ name: 'parks' }]): Stub
       _allowExpressionEvaluation: () => true,
       fire: () => undefined,
     } as any,
-    runDatasetCommand: (() => Promise.resolve(OK)) as any,
     runDatasetCommandParsed: (sourceId, cmds, label) => {
       calls.push({ sourceId, cmds, label });
       return Promise.resolve(OK);

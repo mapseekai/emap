@@ -6,7 +6,7 @@ import {
   type BulkFeatureDeleteCommandOptions,
 } from '../edit/commands/feature-delete';
 import type { MapshaperLayer } from '../types/mapshaper-types';
-import { getLayerId } from '../source/layer-utils';
+import { resolveLayerInList } from './layer-registry';
 import type { FeatureRef } from './types';
 
 export interface SelectedFeatureDeletion {
@@ -29,7 +29,7 @@ export function deleteSelectedFeatures(
     if (!source) continue;
     const layers = source.getLayers();
     for (const [layerId, ids] of byLayer) {
-      const target = resolveLayerById(layers, layerId);
+      const target = resolveLayerInList(layers, layerId);
       if (!target?.shapes) continue;
 
       const snapshots = collectDeleteSnapshots(target, ids);
@@ -70,15 +70,6 @@ function groupSelectedFeatureIds(
   return grouped;
 }
 
-function resolveLayerById(
-  layers: readonly MapshaperLayer[],
-  layerId: string,
-): MapshaperLayer | null {
-  for (let i = 0; i < layers.length; i++) {
-    if (getLayerId(layers[i], i) === layerId) return layers[i] as MapshaperLayer;
-  }
-  return null;
-}
 
 function collectDeleteSnapshots(
   layer: MapshaperLayer,

@@ -82,7 +82,7 @@ async function loadDuckDbWasm(): Promise<DuckDbWasmModule> {
   return import('@duckdb/duckdb-wasm');
 }
 
-function quoteSqlString(value: string): string {
+export function quoteSqlString(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 

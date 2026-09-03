@@ -2,7 +2,7 @@
 // / …). Extracted from `mapshaper-ops.ts` so per-op modules don't have to
 // import the facade class.
 //
-// Three phases per call (`_runDatasetCommand`):
+// Three phases per call (`_runDatasetCommandParsed`):
 //   A. Pre-flight bail (host removed → host-removed error).
 //   B. Decide worker vs main thread via `shouldUseWorker` + optional
 //      caller-supplied `workerRouting` hook.
@@ -21,7 +21,7 @@ import type { EditCommand } from '../../edit/edit-command';
 import type { MapshaperDataset } from '../../types/mapshaper-types';
 import type { EmapHostInternal } from '../emap-host';
 import type { MutableTopologySource } from '../../source/source';
-import type { TransactionInternal } from '../../edit/transaction-internal';
+import type { TransactionInternal } from '../../edit/transaction';
 import { Err, OK, okValue, type OpResult } from '../op-result';
 import {
   getDefaultMapshaperAdapter,
@@ -30,7 +30,7 @@ import {
   type ParsedCommand,
 } from '../../adapter/mapshaper-adapter';
 import { resolveProjectCrs } from '../../geo/crs-resolver';
-import { parseCommandHeads, shouldUseWorkerForHeads } from '../worker-routing';
+import { shouldUseWorkerForHeads } from '../worker-routing';
 import { collectTransferables } from '../../worker/transferables';
 import type {
   PrepareDatasetCommand,
@@ -124,22 +124,13 @@ const COMMAND_EFFECTS: Readonly<Record<string, OpEffect>> = {
   affine: 'crs-only',
 };
 
-/**
- * Infer the effect category of a CLI command. Considers every `-NAME`
- * head in the command string and returns the **strongest** effect (in
- * the order `shape-count` > `topology-only` > `crs-only` > `attribute-only`).
- * `target` (a no-op selector head) is ignored.
- */
-export function inferEffect(cmd: string): OpEffect {
-  return inferEffectForHeads(parseCommandHeads(cmd));
-}
 
 /**
- * Same as {@link inferEffect} but consuming a pre-extracted heads array.
- * Used by the parsed-command runner so we don't reconstruct then re-parse
- * a CLI string just to classify the effect.
+ * Infer the effect category from a pre-extracted heads array, so the
+ * parsed-command runner doesn't reconstruct then re-parse a CLI string
+ * just to classify the effect.
  */
-function inferEffectForHeads(heads: string[]): OpEffect {
+export function inferEffectForHeads(heads: string[]): OpEffect {
   let strongest: OpEffect = 'attribute-only';
   let sawAny = false;
   for (const head of heads) {
@@ -171,9 +162,11 @@ function effectInvalidatesSelection(effect: OpEffect): boolean {
   return effect !== 'attribute-only' && effect !== 'crs-only';
 }
 
-type DatasetCommandRequest =
-  | { kind: 'string'; cmd: string; heads: string[] }
-  | { kind: 'parsed'; cmd: string; heads: string[]; commands: ParsedCommand[] };
+interface DatasetCommandRequest {
+  cmd: string;
+  heads: string[];
+  commands: ParsedCommand[];
+}
 
 const operationQueues = new WeakMap<EmapHostInternal, Map<string, Promise<void>>>();
 
@@ -224,22 +217,6 @@ function enqueueSourceOperation<T>(
   return enqueueMultiSourceOperation(host, [sourceId], run);
 }
 
-export function _runDatasetCommand(
-  host: EmapHostInternal,
-  sourceId: string,
-  cmd: string,
-  label: string,
-  inputFiles?: Record<string, Uint8Array | string>,
-): Promise<OpResult> {
-  return runDatasetCommand(
-    host,
-    sourceId,
-    { kind: 'string', cmd, heads: parseCommandHeads(cmd) },
-    label,
-    inputFiles,
-  );
-}
-
 export function _runDatasetCommandParsed(
   host: EmapHostInternal,
   sourceId: string,
@@ -251,7 +228,7 @@ export function _runDatasetCommandParsed(
   return runDatasetCommand(
     host,
     sourceId,
-    { kind: 'parsed', commands, heads, cmd: heads.map((head) => `-${head}`).join(' ') },
+    { commands, heads, cmd: heads.map((head) => `-${head}`).join(' ') },
     label,
     inputFiles,
   );
@@ -269,7 +246,7 @@ export function _runPreparedDatasetCommandParsed(
   return runDatasetCommand(
     host,
     sourceId,
-    { kind: 'parsed', commands, heads, cmd: heads.map((head) => `-${head}`).join(' ') },
+    { commands, heads, cmd: heads.map((head) => `-${head}`).join(' ') },
     label,
     inputFiles,
     prepare,
@@ -623,12 +600,8 @@ function runDatasetCommand(
       if (useWorker) {
         return _runViaWorker(host, working, request, label, inputFiles);
       }
-      if (request.kind === 'string') {
-        return adapter.runOnDataset(request.cmd, working, inputFiles);
-      }
       return adapter.runOnDatasetParsed(request.commands, working, inputFiles);
     },
-    request.kind === 'string' ? { cmd: request.cmd } : undefined,
   );
 }
 
@@ -641,7 +614,6 @@ function runDatasetMutation(
     working: MapshaperDataset,
     original: MapshaperDataset,
   ) => MapshaperDataset | OpResult | void | Promise<MapshaperDataset | OpResult | void>,
-  mapshaperOptions?: { cmd?: string },
 ): Promise<OpResult> {
   const transaction = host._activeTransaction ?? null;
   const operation = enqueueSourceOperation(host, sourceId, async () => {
@@ -661,7 +633,7 @@ function runDatasetMutation(
     } catch (err) {
       if (host._removed) return Err.hostRemoved();
       host.fire('error', { error: err });
-      return Err.mapshaper(err, { ...mapshaperOptions, operation: label });
+      return Err.mapshaper(err, { operation: label });
     }
 
     if (host._removed) return Err.hostRemoved();
@@ -751,7 +723,7 @@ async function _runViaWorker(
     const packed = await adapter.exportDatasetsToPack([dataset], { compact: false });
     const crsLabel = await sanitizePackedSessionCrs(packed);
     const transferList = collectTransferables(packed);
-    const command = request.kind === 'string' ? request.cmd : request.commands;
+    const command = request.commands;
     const resultPacked = await host._workerPool.dispatchWithId(
       id,
       command,

@@ -139,18 +139,6 @@ const MAP_DEFAULTS = {
 
 const SOURCE_OPTIONAL_LAYER_TYPES = new Set(['background', 'custom', 'sky']);
 
-function cloneValue<T>(value: T): T {
-  if (Array.isArray(value)) return value.map((item) => cloneValue(item)) as T;
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
-        key,
-        cloneValue(item),
-      ]),
-    ) as T;
-  }
-  return value;
-}
 
 function isStyleOverlayService(
   service: MapLibreOverlayService,
@@ -168,13 +156,13 @@ function cloneService(service: MapLibreService): MapLibreService {
   if (service.role === 'basemap' || isStyleOverlayService(service)) {
     return {
       ...service,
-      style: typeof service.style === 'string' ? service.style : cloneValue(service.style),
+      style: typeof service.style === 'string' ? service.style : structuredClone(service.style),
     };
   }
   return {
     ...service,
-    sources: cloneValue(service.sources),
-    layers: cloneValue(service.layers),
+    sources: structuredClone(service.sources),
+    layers: structuredClone(service.layers),
   };
 }
 
@@ -731,7 +719,7 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       basemapId,
       preparedOverlays: [],
       definitionRevision,
-      style: typeof style === 'string' ? style : cloneValue(style),
+      style: typeof style === 'string' ? style : structuredClone(style),
       phase,
       promise,
       resolve: resolvePromise,
@@ -1612,8 +1600,8 @@ export class MapLibreServiceManagerImpl extends EventDispatcher implements MapLi
       }
       record.installedDefinition = {
         ...definition,
-        sources: cloneValue(definition.sources),
-        layers: cloneValue(definition.layers),
+        sources: structuredClone(definition.sources),
+        layers: structuredClone(definition.layers),
       };
     } catch (error) {
       try {

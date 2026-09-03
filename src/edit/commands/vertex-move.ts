@@ -2,7 +2,7 @@ import type { EditCommand } from '../edit-command';
 import type { ArcCollection } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
 import { getDefaultMapshaperAdapter, type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
-import { markSourceChanged } from './_shared';
+import { markSourceChanged, MERGE_WINDOW_MS } from './_shared';
 
 export interface VertexMoveCommandOptions {
   /**
@@ -20,8 +20,6 @@ export interface VertexMoveCommandOptions {
   adapter?: MapshaperAdapter;
 }
 
-/** Time window (ms) during which two consecutive merges still coalesce. */
-const MERGE_WINDOW_MS = 500;
 
 /**
  * Reverse a vertex drag (including topologically shared vertices) by

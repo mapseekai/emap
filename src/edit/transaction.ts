@@ -45,9 +45,12 @@ import { Err, OK, type OpResult } from '../map/op-result';
 import type { EmapHostInternal } from '../map/emap-host';
 import type { MapshaperDataset } from '../types/mapshaper-types';
 import type { SelectionSnapshot } from '../map/selection';
-import type { TransactionInternal } from './transaction-internal';
-
-export type { TransactionInternal } from './transaction-internal';
+/** Internal surface of a Transaction consumed by the host and op runner. */
+export interface TransactionInternal {
+  readonly isOpen: boolean;
+  _captureFirstTouch(sourceId: string, before: MapshaperDataset): void;
+  _trackOperation(operation: Promise<unknown>): void;
+}
 
 /**
  * Atomic multi-step edit unit. Stages every command pushed during its

@@ -26,7 +26,7 @@ import {
   resolveProjectCrsDefinition,
   setDatasetCrsMetadata,
 } from '../geo/crs-resolver';
-import { Painter } from '../renderer/painter';
+import { type EditPainter } from '../renderer/painter';
 import { CanvasPainter } from '../renderer/canvas-painter';
 import { EditOverlayRenderer } from '../renderer/edit-overlay-renderer';
 import { RenderScheduler, type RenderSnapshot } from '../renderer/render-scheduler';
@@ -85,7 +85,7 @@ import { Transaction, type TransactionInternal } from '../edit/transaction';
 import { ReprojectMapCommand } from '../edit/commands/reproject-map';
 // `MapshaperOps`, `EditSessions`, `AttributeOps` are composed onto `Emap`
 // via the `ops` / `editSession` / `attributes` getters below.
-import type { ControlContract, ControlPosition } from '../ui/control-contract';
+import type { Control, ControlPosition } from '../ui/control';
 import { getLayerId } from '../source/layer-utils';
 import { cloneLayerSpecification, DEFAULT_LAYER_COLOR, type LayerSpecification } from './layer';
 import type {
@@ -131,17 +131,15 @@ import {
   type QueryFeaturesOptions,
   type QueriedFeature,
   type FeatureRef,
-  type HighlightFeatureRef,
   type ExportSnapshotOptions,
   type LoadSnapshotOptions,
   type HighlightStyle,
-  type EditMeasurementState,
   type EditVertexState,
-  type EditDrawState,
   type RenderRequest,
   type RenderAction,
   type AffineDelta,
 } from './types';
+import type { DrawOverlayState, MeasurementOverlayState } from '../renderer/painter';
 import type { MapLibreIntegrationOptions, MapLibreServiceManager } from './maplibre-service';
 import { createMapLibreServiceManager } from './maplibre-service-manager';
 
@@ -249,7 +247,7 @@ export class Emap extends EventDispatcher {
   private _container: HTMLElement;
   private _canvasContainer: HTMLElement;
   private _canvas: HTMLCanvasElement;
-  private _painter: Painter;
+  private _painter: EditPainter;
   private _editOverlay: EditOverlayRenderer;
   private _scheduler!: RenderScheduler;
   private _viewport: Viewport = new Viewport();
@@ -319,7 +317,7 @@ export class Emap extends EventDispatcher {
   // `onRemove()` on each. We intentionally don't drop entries on
   // `removeControl()` — that would require both an Array and a Set —
   // and the array is short-lived so the duplicate is harmless.
-  private _controls: ControlContract<Emap>[] = [];
+  private _controls: Control[] = [];
 
   private _mapLibreOptions?: MapLibreIntegrationOptions;
   private _mapLibreServices?: ReturnType<typeof createMapLibreServiceManager>;
@@ -576,7 +574,7 @@ export class Emap extends EventDispatcher {
     // When worker mode is disabled, worker options are ignored and ownership
     // remains with the caller.
     this._expressionPolicy = options.expressionPolicy ?? 'disabled';
-    this._workerMode = options.useWorker ?? options.workerMode ?? false;
+    this._workerMode = options.useWorker ?? false;
     if (typeof options.workerThreshold === 'number' && options.workerThreshold >= 0) {
       this._workerThreshold = options.workerThreshold;
     }
@@ -804,7 +802,7 @@ export class Emap extends EventDispatcher {
     this._editState.clearVertex();
   }
 
-  public setEditDrawState(state: EditDrawState): void {
+  public setEditDrawState(state: DrawOverlayState): void {
     this._editState.setDraw(state);
   }
 
@@ -812,7 +810,7 @@ export class Emap extends EventDispatcher {
     this._editState.clearDraw();
   }
 
-  public setEditMeasurementState(state: EditMeasurementState): void {
+  public setEditMeasurementState(state: MeasurementOverlayState): void {
     this._editState.setMeasurement(state);
   }
 
@@ -1968,14 +1966,14 @@ export class Emap extends EventDispatcher {
     this.fire('move');
   }
 
-  public addControl(control: ControlContract<Emap>, position: ControlPosition = 'top-left'): void {
+  public addControl(control: Control, position: ControlPosition = 'top-left'): void {
     const el = control.onAdd(this);
     el.style.pointerEvents = 'auto';
     this._controlContainers.get(position)?.appendChild(el);
     this._controls.push(control);
   }
 
-  public removeControl(control: ControlContract<Emap>): void {
+  public removeControl(control: Control): void {
     control.onRemove(this);
     const idx = this._controls.indexOf(control);
     if (idx !== -1) this._controls.splice(idx, 1);
@@ -2270,7 +2268,7 @@ export class Emap extends EventDispatcher {
   }
 
   public setHighlightedFeatures(
-    features: Array<QueriedFeature | HighlightFeatureRef>,
+    features: Array<QueriedFeature | FeatureRef>,
     style?: HighlightStyle,
   ): void {
     this._highlightManager.setHighlightedFeatures(features, style);

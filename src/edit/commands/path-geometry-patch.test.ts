@@ -217,38 +217,6 @@ describe('PathGeometryPatchCommand', () => {
     ]);
   });
 
-  it('falls back to legacy single-arc adapter methods across do, undo, and redo', () => {
-    const { arcs, state } = makeArcs();
-    const source = makeSource(arcs);
-    const layer = { name: 'l', geometry_type: 'polygon', shapes: [[[0]]] } as any;
-    const selection = new Selection();
-    const defaultAdapter = getDefaultMapshaperAdapter();
-    const legacyAdapter = {
-      appendArc: defaultAdapter.appendArc.bind(defaultAdapter),
-      deleteLastArc: defaultAdapter.deleteLastArc.bind(defaultAdapter),
-    } satisfies Pick<MapshaperAdapter, 'appendArc' | 'deleteLastArc'>;
-    const command = new PathGeometryPatchCommand({
-      source,
-      shapePatches: [{ layer, featureId: 0, before: [[0]], after: [[0], [1]] }],
-      originalArcCount: 1,
-      appendedArcs: [{ xx: new Float64Array([5, 6]), yy: new Float64Array([7, 8]) }],
-      selection,
-      beforeSelection: selection.snapshot(),
-      afterSelection: [],
-      publishSelection: () => {},
-      label: 'Add ring',
-      // Deliberately minimal implementation installed by a legacy consumer.
-      adapter: legacyAdapter as unknown as MapshaperAdapter,
-    });
-
-    command.do();
-    const firstGeometry = { xx: Array.from(state().xx), yy: Array.from(state().yy) };
-    command.undo();
-    command.do();
-
-    expect(state().nn.length).toBe(2);
-    expect({ xx: Array.from(state().xx), yy: Array.from(state().yy) }).toEqual(firstGeometry);
-  });
 
   it('publish fires data(edit) and the pending selection diff exactly once', () => {
     const { arcs } = makeArcs();

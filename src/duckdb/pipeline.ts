@@ -35,31 +35,22 @@ export function nextDuckDbTableName(prefix: string): string {
   return `${prefix}_${next}`;
 }
 
-// -- SQL identifier quoting -------------------------------------------------
+// -- SQL quoting ------------------------------------------------------------
 
 export function quoteIdentifier(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
 
+/** Field names of an Arrow table, in schema order. */
+export function tableFieldNames(table: Table): string[] {
+  return table.schema.fields.map((field) => field.name);
+}
+
 // -- Unique output-column names ---------------------------------------------
+// Owned by the Arrow leaf so arrow/ never imports duckdb/ (pipeline already
+// depends on dataset-to-table, not vice versa).
 
-export function resolveUniqueColumnName(requested: string, existing: ReadonlySet<string>): string {
-  if (!existing.has(requested)) return requested;
-  let suffix = 1;
-  let candidate = `${requested}_${suffix}`;
-  while (existing.has(candidate)) {
-    suffix += 1;
-    candidate = `${requested}_${suffix}`;
-  }
-  return candidate;
-}
-
-export function resolveTableColumnName(table: Table, requested: string): string {
-  return resolveUniqueColumnName(
-    requested,
-    new Set(table.schema.fields.map((field) => field.name)),
-  );
-}
+export { resolveUniqueColumnName, resolveTableColumnName } from '../arrow/dataset-to-table';
 
 // -- Error-message templates ------------------------------------------------
 

@@ -8,7 +8,7 @@ import {
   type AppendedArc,
   type MapshaperAdapter,
 } from '../../adapter/mapshaper-adapter';
-import { appendArcsCompat, markSourceChanged, truncateArcsCompat } from './_shared';
+import { assertArcCount, markSourceChanged, SelectionDiffTracker } from './_shared';
 import type { PathShapePatch } from './path-geometry-patch';
 
 type MutableRecords = Array<Record<string, unknown> | null>;
@@ -61,9 +61,10 @@ export class SplitFeaturesCommand implements EditCommand {
   private readonly opts: SplitFeaturesCommandOptions;
   private readonly adapter: MapshaperAdapter;
   private readonly originalRecordCount: number | null;
-  private pendingSelectionDiff: SelectionDiff | null = null;
+  private readonly _selectionTracker: SelectionDiffTracker;
 
   constructor(opts: SplitFeaturesCommandOptions) {
+    this._selectionTracker = new SelectionDiffTracker(opts);
     this.opts = {
       ...opts,
       shapePatches: opts.shapePatches.map((patch) => ({
@@ -90,12 +91,13 @@ export class SplitFeaturesCommand implements EditCommand {
     const source = asMutableTopologySource(this.opts.source);
     const arcs = source.getArcs();
     if (!arcs) throw new Error('SplitFeaturesCommand: source has no arcs');
-    this.preflightDo(arcs.size());
+    assertArcCount('SplitFeaturesCommand', arcs, this.opts.originalArcCount, 'do');
+    this.preflightFeatures(this.opts.originalFeatureCount, this.originalRecordCount);
 
-    appendArcsCompat(this.adapter, arcs, this.opts.appendedArcs);
+    this.adapter.appendArcs(arcs, this.opts.appendedArcs);
     this.writePatches('after');
     this.appendFeatures();
-    this.pendingSelectionDiff = this.opts.selection.apply(this.opts.afterSelection, 'replace');
+    this._selectionTracker.applyAfter();
     markSourceChanged(source);
   }
 
@@ -103,44 +105,30 @@ export class SplitFeaturesCommand implements EditCommand {
     const source = asMutableTopologySource(this.opts.source);
     const arcs = source.getArcs();
     if (!arcs) throw new Error('SplitFeaturesCommand: source has no arcs');
-    this.preflightUndo(arcs.size());
-
-    truncateArcsCompat(this.adapter, arcs, this.opts.originalArcCount);
-    this.writePatches('before');
-    this.truncateFeatures();
-    this.pendingSelectionDiff = this.opts.selection.restore(this.opts.beforeSelection);
-    markSourceChanged(source);
-  }
-
-  publish(): void {
-    this.opts.source.fire?.('data', { reason: 'edit' });
-    if (this.pendingSelectionDiff?.changed) this.opts.publishSelection(this.pendingSelectionDiff);
-    this.pendingSelectionDiff = null;
-  }
-
-  private preflightDo(arcCount: number): void {
-    if (arcCount !== this.opts.originalArcCount) {
-      throw new Error(
-        `SplitFeaturesCommand: expected ${this.opts.originalArcCount} arcs before do(), found ${arcCount}`,
-      );
-    }
-    this.preflightFeatures(this.opts.originalFeatureCount, this.originalRecordCount);
-  }
-
-  private preflightUndo(arcCount: number): void {
-    const expectedArcCount = this.opts.originalArcCount + this.opts.appendedArcs.length;
-    if (arcCount !== expectedArcCount) {
-      throw new Error(
-        `SplitFeaturesCommand: expected ${expectedArcCount} arcs before undo(), found ${arcCount}`,
-      );
-    }
+    assertArcCount(
+      'SplitFeaturesCommand',
+      arcs,
+      this.opts.originalArcCount + this.opts.appendedArcs.length,
+      'undo',
+    );
     this.preflightFeatures(
       this.opts.originalFeatureCount + this.opts.appendedShapes.length,
       this.originalRecordCount === null
         ? null
         : this.originalRecordCount + this.opts.appendedRecords.length,
     );
+
+    this.adapter.truncateArcs(arcs, this.opts.originalArcCount);
+    this.writePatches('before');
+    this.truncateFeatures();
+    this._selectionTracker.restoreBefore();
+    markSourceChanged(source);
   }
+
+  publish(): void {
+    this._selectionTracker.publish('edit');
+  }
+
 
   private preflightFeatures(expectedShapeCount: number, expectedRecordCount: number | null): void {
     if (this.opts.appendedRecords.length !== this.opts.appendedShapes.length) {

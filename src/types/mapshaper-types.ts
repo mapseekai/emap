@@ -152,6 +152,11 @@ export type PathGeometryType = 'polyline' | 'polygon';
  * positional alignment between `shapes` and `data.records`).
  */
 export type SignedArcId = number;
+
+/** Absolute arc id — strips the sign/`~` direction encoding of a {@link SignedArcId}. */
+export function absArcId(arcId: SignedArcId): number {
+  return arcId >= 0 ? arcId : ~arcId;
+}
 export type PathPart = SignedArcId[];
 export type PathShape = PathPart[];
 export type Coord2 = [number, number];

@@ -1,6 +1,6 @@
-import type { EditPainter } from './painter';
+import type { DrawOverlayState, EditPainter, MeasurementOverlayState } from './painter';
 import type { ArcCollection } from '../types/mapshaper-types';
-import type { EditDrawState, EditMeasurementState, EditVertexState } from '../map/types';
+import type { EditVertexState } from '../map/types';
 import type { EditMode } from '../map/edit-state-store';
 import { EMAP_THEME_COLORS } from '../theme/colors';
 
@@ -28,8 +28,8 @@ export class EditOverlayRenderer {
   render(
     editMode: EditMode,
     vertexState: EditVertexState | null,
-    drawState: EditDrawState | null,
-    measurementState: EditMeasurementState | null,
+    drawState: DrawOverlayState | null,
+    measurementState: MeasurementOverlayState | null,
     vertexArcFilter?: (arcId: number) => boolean,
   ): void {
     if (editMode === 'vertex' && vertexState) {

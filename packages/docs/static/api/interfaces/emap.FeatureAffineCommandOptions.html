@@ -20,7 +20,7 @@
 </div></div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">FeatureAffineCommandOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#arcids">arcIds</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#arcs">arcs</a><span class="tsd-signature-symbol">?:</span> <a href="emap.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#label">label</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#matrix">matrix</a><span class="tsd-signature-symbol">:</span> <a href="emap.AffineMatrix.html" class="tsd-signature-type tsd-kind-interface">AffineMatrix</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#pointfeatures">pointFeatures</a><span class="tsd-signature-symbol">:</span> <a href="emap.TranslatedPointFeature.html" class="tsd-signature-type tsd-kind-interface">TranslatedPointFeature</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#source">source</a><span class="tsd-signature-symbol">:</span> <a href="emap.ITopologySource.html" class="tsd-signature-type tsd-kind-interface">ITopologySource</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/feature-affine.ts#L23">src/edit/commands/feature-affine.ts:23</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/feature-affine.ts#L22">src/edit/commands/feature-affine.ts:22</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -44,42 +44,42 @@
 <div class="tsd-comment tsd-typography"><p>Unique abs-arc-ids referenced by selected path features.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/feature-affine.ts#L30">src/edit/commands/feature-affine.ts:30</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/feature-affine.ts#L29">src/edit/commands/feature-affine.ts:29</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="arcs"><code class="tsd-tag">Optional</code><span>arcs</span><a href="#arcs" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">arcs</span><span class="tsd-signature-symbol">?:</span> <a href="emap.ArcCollection.html" class="tsd-signature-type tsd-kind-interface">ArcCollection</a></div>
 <div class="tsd-comment tsd-typography"><p>Shared ArcCollection for path features. Omit for point-only commands.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/feature-affine.ts#L26">src/edit/commands/feature-affine.ts:26</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/feature-affine.ts#L25">src/edit/commands/feature-affine.ts:25</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="label"><code class="tsd-tag">Optional</code><span>label</span><a href="#label" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">label</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Optional human-readable label (defaults to <code>Transform N features</code>).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/feature-affine.ts#L34">src/edit/commands/feature-affine.ts:34</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/feature-affine.ts#L33">src/edit/commands/feature-affine.ts:33</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="matrix"><span>matrix</span><a href="#matrix" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">matrix</span><span class="tsd-signature-symbol">:</span> <a href="emap.AffineMatrix.html" class="tsd-signature-type tsd-kind-interface">AffineMatrix</a></div>
 <div class="tsd-comment tsd-typography"><p>Forward matrix. <code>do()</code> applies it; <code>undo()</code> applies its inverse.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/feature-affine.ts#L28">src/edit/commands/feature-affine.ts:28</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/feature-affine.ts#L27">src/edit/commands/feature-affine.ts:27</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="pointfeatures"><span>point<wbr/>Features</span><a href="#pointfeatures" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">pointFeatures</span><span class="tsd-signature-symbol">:</span> <a href="emap.TranslatedPointFeature.html" class="tsd-signature-type tsd-kind-interface">TranslatedPointFeature</a><span class="tsd-signature-symbol">[]</span></div>
 <div class="tsd-comment tsd-typography"><p>Selected point features.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/feature-affine.ts#L32">src/edit/commands/feature-affine.ts:32</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/feature-affine.ts#L31">src/edit/commands/feature-affine.ts:31</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="source"><span>source</span><a href="#source" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">source</span><span class="tsd-signature-symbol">:</span> <a href="emap.ITopologySource.html" class="tsd-signature-type tsd-kind-interface">ITopologySource</a></div>
 <div class="tsd-comment tsd-typography"><p>source is a public emap API documented for package consumers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/feature-affine.ts#L24">src/edit/commands/feature-affine.ts:24</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/mapseekai/emap/blob/master/src/edit/commands/feature-affine.ts#L23">src/edit/commands/feature-affine.ts:23</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

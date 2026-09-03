@@ -1,5 +1,5 @@
 import {
-  Painter,
+  EditPainter,
   DrawOverlayState,
   type ArrowDotPathOptions,
   type MeasurementOverlayState,
@@ -13,15 +13,16 @@ import {
   resolveThemeColor,
   type ThemeColorRole,
 } from '../theme/colors';
-import type {
-  ArcCollection,
-  ArcIterator,
-  FeatureShape,
-  PathShape,
-  PointMarkerShape,
-  StrokeStyle,
-  PointStyle,
-  VertexDotStyle,
+import {
+  absArcId,
+  type ArcCollection,
+  type ArcIterator,
+  type FeatureShape,
+  type PathShape,
+  type PointMarkerShape,
+  type StrokeStyle,
+  type PointStyle,
+  type VertexDotStyle,
 } from '../types/mapshaper-types';
 
 const POLYGON_FILL_BATCH_SHAPE_LIMIT = 100;
@@ -148,9 +149,6 @@ function addPointMarkerPath(
   }
 }
 
-function absArcId(arcId: number): number {
-  return arcId >= 0 ? arcId : ~arcId;
-}
 
 const CLIP_LEFT = 1;
 const CLIP_RIGHT = 2;
@@ -253,7 +251,7 @@ function partPassesArcFilter(part: readonly number[], filter?: (i: number) => bo
   return false;
 }
 
-export class CanvasPainter implements Painter {
+export class CanvasPainter implements EditPainter {
   private _ctx: CanvasRenderingContext2D;
   private _transform: AffineTransform = new AffineTransform();
   private _pixelRatio: number = window.devicePixelRatio || 1;
@@ -742,7 +740,7 @@ export class CanvasPainter implements Painter {
       if (!shape) return;
       (shape as PathShape).forEach((part) => {
         part.forEach((arcId) => {
-          const absId = arcId >= 0 ? arcId : ~arcId;
+          const absId = absArcId(arcId);
           if (arcFilter && !arcFilter(absId)) return;
           const iter = arcs.getArcIter(absId);
           while (iter.hasNext()) {

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EditStateStore, type EditStateChange } from './edit-state-store';
-import type { EditDrawState, EditMeasurementState, EditVertexState } from './types';
+import type { DrawOverlayState, MeasurementOverlayState } from '../renderer/painter';
+import type { EditVertexState } from './types';
 
 function makeStore() {
   const onChange = vi.fn<[EditStateChange], void>();
@@ -14,7 +15,7 @@ const dummyVertex: EditVertexState = {
   hoverVertex: null,
 };
 
-const dummyDraw: EditDrawState = {
+const dummyDraw: DrawOverlayState = {
   vertices: [],
   cursorCoord: null,
   snapCoord: null,
@@ -23,7 +24,7 @@ const dummyDraw: EditDrawState = {
   drawColor: '#000',
 };
 
-const dummyMeasurement: EditMeasurementState = {
+const dummyMeasurement: MeasurementOverlayState = {
   mode: 'area',
   vertices: [],
   committedPath: [],

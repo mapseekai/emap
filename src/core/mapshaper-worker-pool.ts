@@ -269,10 +269,6 @@ export class MapshaperWorkerPool {
     this._terminateAll(new Error('MapshaperWorkerPool: cancelled'));
   }
 
-  /** True iff at least one worker has been spawned. Test/diagnostics aid. */
-  isWorkerSpawned(): boolean {
-    return this._slots.some((s) => s.worker !== null);
-  }
 
   /** Number of worker slots configured (NOT the count of currently-spawned workers). */
   get poolSize(): number {

@@ -1,8 +1,9 @@
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
-import type { SnapKind } from '../../map/types';
+import type { DrawOverlaySnapKind } from '../../renderer/painter';
 import { getLayerId } from '../../source/layer-utils';
 import { FeatureCreateCommand } from '../../edit/commands/feature-create';
 import type { MapshaperLayer, ArcCollection } from '../../types/mapshaper-types';
+import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import type { EditHandlerHost } from './edit-handler-host';
 import { EMAP_THEME_COLORS } from '../../theme/colors';
 
@@ -53,7 +54,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
   private _vertices: [number, number][] = [];
   private _cursorCoord: [number, number] | null = null;
   private _snapCoord: [number, number] | null = null;
-  private _snapKind: SnapKind = null;
+  private _snapKind: DrawOverlaySnapKind = null;
   private _snapThreshold: number;
 
   private _onMapMoveBound = () => this._onMapMove();
@@ -217,7 +218,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
   private _findSnapTarget(
     px: number,
     py: number,
-  ): { coord: [number, number]; kind: SnapKind } | null {
+  ): { coord: [number, number]; kind: DrawOverlaySnapKind } | null {
     const map = this._map;
     const sources = this._opts.snapSources ?? [this._opts.source];
     const snapToVertex = this._opts.snapToVertex !== false; // default true
@@ -227,7 +228,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
     // strict-`<` keeps the earlier match — vertex loop runs before edge.
     let bestDist = this._snapThreshold;
     let bestCoord: [number, number] | null = null;
-    let bestKind: SnapKind = null;
+    let bestKind: DrawOverlaySnapKind = null;
 
     // Build a world-space bbox of size +/-snapThreshold around the cursor so the
     // inner loops can reject the 99% of vertices/segments that can't possibly
@@ -428,42 +429,7 @@ export class DrawFeatureHandler implements Handler<DrawFeatureOptions> {
   }
 
   private _appendArc(arcs: ArcCollection, vertices: [number, number][]): number {
-    const vd = (arcs as any).getVertexData();
-    const oldXX: Float64Array = vd.xx;
-    const oldYY: Float64Array = vd.yy;
-    const oldNN: Uint32Array | Int32Array = vd.nn;
-    const oldZZ: Float64Array | null = vd.zz;
-    const oldPointCount = oldXX.length;
-    const oldArcCount = oldNN.length;
-    const newPointCount = vertices.length;
-
-    const newXX = new Float64Array(oldPointCount + newPointCount);
-    const newYY = new Float64Array(oldPointCount + newPointCount);
-    const newNN = new Int32Array(oldArcCount + 1);
-
-    newXX.set(oldXX);
-    newYY.set(oldYY);
-    newNN.set(oldNN);
-
-    for (let i = 0; i < newPointCount; i++) {
-      newXX[oldPointCount + i] = vertices[i][0];
-      newYY[oldPointCount + i] = vertices[i][1];
-    }
-    newNN[oldArcCount] = newPointCount;
-
-    // zz array (simplification thresholds) — fill with Infinity (always visible)
-    let newZZ: Float64Array | null = null;
-    if (oldZZ) {
-      newZZ = new Float64Array(oldPointCount + newPointCount);
-      newZZ.set(oldZZ);
-      for (let i = 0; i < newPointCount; i++) {
-        newZZ[oldPointCount + i] = Infinity;
-      }
-    }
-
-    (arcs as any).updateVertexData(newNN, newXX, newYY, newZZ);
-
-    return oldArcCount;
+    return getDefaultMapshaperAdapter().appendArc(arcs, vertices);
   }
 
   // ---------------------------------------------------------------------------

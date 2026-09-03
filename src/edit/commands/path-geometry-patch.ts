@@ -8,7 +8,7 @@ import {
   type AppendedArc,
   type MapshaperAdapter,
 } from '../../adapter/mapshaper-adapter';
-import { appendArcsCompat, markSourceChanged, truncateArcsCompat } from './_shared';
+import { assertArcCount, markSourceChanged, SelectionDiffTracker } from './_shared';
 
 /** One feature's path shape replaced wholesale (before/after snapshots). */
 export interface PathShapePatch {
@@ -55,9 +55,9 @@ function cloneShape(shape: PathShape): PathShape {
  * so consecutive local edits stack into multi-level undo/redo.
  */
 export class PathGeometryPatchCommand implements EditCommand {
+  private readonly _selectionTracker: SelectionDiffTracker;
   readonly label: string;
   private readonly opts: PathGeometryPatchCommandOptions;
-  private pendingSelectionDiff: SelectionDiff | null = null;
 
   constructor(opts: PathGeometryPatchCommandOptions) {
     // Clone snapshots: caller arrays may be reused/mutated after construction.
@@ -75,6 +75,7 @@ export class PathGeometryPatchCommand implements EditCommand {
       })),
     };
     this.label = opts.label;
+    this._selectionTracker = new SelectionDiffTracker(opts);
   }
 
   do(): void {
@@ -83,17 +84,13 @@ export class PathGeometryPatchCommand implements EditCommand {
     if (!arcs) return;
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     if (this.opts.appendedArcs.length > 0) {
-      if (arcs.size() !== this.opts.originalArcCount) {
-        throw new Error(
-          `PathGeometryPatchCommand: expected ${this.opts.originalArcCount} arcs before do(), found ${arcs.size()}`,
-        );
-      }
-      appendArcsCompat(adapter, arcs, this.opts.appendedArcs);
+      assertArcCount('PathGeometryPatchCommand', arcs, this.opts.originalArcCount, 'do');
+      adapter.appendArcs(arcs, this.opts.appendedArcs);
     }
     for (const patch of this.opts.shapePatches) {
       patch.layer.shapes![patch.featureId] = cloneShape(patch.after);
     }
-    this.pendingSelectionDiff = this.opts.selection.apply(this.opts.afterSelection, 'replace');
+    this._selectionTracker.applyAfter();
     markSourceChanged(source);
   }
 
@@ -103,24 +100,22 @@ export class PathGeometryPatchCommand implements EditCommand {
     if (!arcs) return;
     const adapter = this.opts.adapter ?? getDefaultMapshaperAdapter();
     if (this.opts.appendedArcs.length > 0) {
-      const expected = this.opts.originalArcCount + this.opts.appendedArcs.length;
-      if (arcs.size() !== expected) {
-        throw new Error(
-          `PathGeometryPatchCommand: expected ${expected} arcs before undo(), found ${arcs.size()}`,
-        );
-      }
-      truncateArcsCompat(adapter, arcs, this.opts.originalArcCount);
+      assertArcCount(
+        'PathGeometryPatchCommand',
+        arcs,
+        this.opts.originalArcCount + this.opts.appendedArcs.length,
+        'undo',
+      );
+      adapter.truncateArcs(arcs, this.opts.originalArcCount);
     }
     for (const patch of this.opts.shapePatches) {
       patch.layer.shapes![patch.featureId] = cloneShape(patch.before);
     }
-    this.pendingSelectionDiff = this.opts.selection.restore(this.opts.beforeSelection);
+    this._selectionTracker.restoreBefore();
     markSourceChanged(source);
   }
 
   publish(): void {
-    this.opts.source.fire?.('data', { reason: 'edit' });
-    if (this.pendingSelectionDiff?.changed) this.opts.publishSelection(this.pendingSelectionDiff);
-    this.pendingSelectionDiff = null;
+    this._selectionTracker.publish('edit');
   }
 }

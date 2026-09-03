@@ -1,7 +1,7 @@
 import type { DrawFeatureOptions, DrawGeometryType } from '../core/handlers/draw-feature';
 import type { Control } from './control';
 import type { Emap } from '../map/map';
-import { createControlIcon, type ControlIconName } from './control-icons';
+import { createControlButton, createControlIcon, type ControlIconName } from './control-icons';
 
 export type { DrawGeometryType } from '../core/handlers/draw-feature';
 
@@ -42,21 +42,13 @@ export class DrawFeatureControl implements Control {
     this._container = document.createElement('div');
     this._container.className = 'emap-ctrl emap-ctrl-group';
 
-    this._btn = document.createElement('button');
-    this._btn.className = 'emap-ctrl-draw';
-    this._btn.type = 'button';
-    this._btn.title = DEFAULT_TITLES[this._opts.type];
-    this._btn.setAttribute('aria-pressed', 'false');
-    const iconSpan = document.createElement('span');
-    iconSpan.className = 'emap-ctrl-icon';
-    const icon = this._opts.icon ?? createControlIcon(DEFAULT_ICON_NAMES[this._opts.type]);
-    if (typeof icon === 'string') {
-      iconSpan.textContent = icon;
-    } else {
-      iconSpan.appendChild(icon);
-    }
-    this._btn.replaceChildren(iconSpan);
-    this._btn.addEventListener('click', () => this._toggle());
+    this._btn = createControlButton({
+      className: 'emap-ctrl-draw',
+      title: DEFAULT_TITLES[this._opts.type],
+      icon: this._opts.icon ?? createControlIcon(DEFAULT_ICON_NAMES[this._opts.type]),
+      onClick: () => this._toggle(),
+      pressed: false,
+    });
     this._container.appendChild(this._btn);
 
     this._applyOptions();

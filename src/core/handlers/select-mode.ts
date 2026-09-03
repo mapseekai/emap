@@ -67,3 +67,9 @@ export function resolveMode(
   }
   return 'replace';
 }
+
+/** True iff every key of `combo` is held (extra held keys allowed). */
+export function comboHeld(m: PointerModifiers, combo: ModifierCombo): boolean {
+  if (combo === 'none') return true;
+  return combo.split('+').every((k) => (m as unknown as Record<string, unknown>)[k] === true);
+}

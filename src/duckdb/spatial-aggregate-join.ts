@@ -6,7 +6,7 @@ import { resolveLayerInList } from '../map/layer-registry';
 import type { FeatureShape, MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
 import { alignSecondaryDatasetCrs } from './dataset-crs';
 import { DuckDbOperationError } from './errors';
-import { quoteIdentifier } from './pipeline';
+import { resolveUniqueColumnName, runDuckDbPipeline } from './pipeline';
 import { getDuckDbRuntime, type DuckDbRuntime } from './runtime';
 import { buildSpatialAggregateJoinSql, type SpatialAggregateJoinDuckDbFunction } from './sql';
 
@@ -61,8 +61,6 @@ const PREDICATE_FUNCTIONS = {
   SpatialAggregateJoinDuckDbFunction
 >;
 
-let targetTableSequence = 0;
-let joinTableSequence = 0;
 
 interface NormalizedAggregation {
   operation: DuckDbSpatialAggregateOperation;
@@ -75,15 +73,6 @@ interface ResolvedLayer {
   index: number;
 }
 
-function nextTargetTableName(): string {
-  targetTableSequence += 1;
-  return `emap_duckdb_spatial_aggregate_target_${targetTableSequence}`;
-}
-
-function nextJoinTableName(): string {
-  joinTableSequence += 1;
-  return `emap_duckdb_spatial_aggregate_join_${joinTableSequence}`;
-}
 
 function validation(message: string, field?: string): DuckDbOperationError {
   return new DuckDbOperationError('validation', `DuckDB spatial aggregate join ${message}`, {
@@ -190,15 +179,6 @@ function normalizeAggregations(
   });
 }
 
-function uniqueInternalRowIdName(reserved: ReadonlySet<string>): string {
-  let suffix = 0;
-  let candidate = '__emap_rowid';
-  while (reserved.has(candidate)) {
-    suffix += 1;
-    candidate = `__emap_rowid_${suffix}`;
-  }
-  return candidate;
-}
 
 function validateOptions(rawOptions: unknown): {
   options: Partial<DuckDbSpatialAggregateJoinOptions>;
@@ -459,7 +439,7 @@ export async function spatialAggregateJoinDatasetWithDuckDb(
   const reserved = new Set(targetFields);
   reserved.add(targetGeometryColumn);
   for (const aggregation of aggregations) reserved.add(aggregation.outputColumn);
-  const rowIdColumn = uniqueInternalRowIdName(reserved);
+  const rowIdColumn = resolveUniqueColumnName('__emap_rowid', reserved);
 
   let alignedJoinDataset: MapshaperDataset;
   let targetTable: Table | undefined;
@@ -523,101 +503,52 @@ export async function spatialAggregateJoinDatasetWithDuckDb(
     );
   }
 
-  try {
-    await runtime.ensureSpatial();
-  } catch (err) {
-    throw new DuckDbOperationError(
-      'spatial-extension-unavailable',
-      'DuckDB spatial aggregate join spatial extension is unavailable',
-      { cause: err },
-    );
-  }
-
-  let conn: Awaited<ReturnType<DuckDbRuntime['connect']>> | undefined;
-  let targetTableName: string | undefined;
-  let joinTableName: string | undefined;
-  let primaryError: unknown;
-  try {
-    conn = await runtime.connect();
-    targetTableName = nextTargetTableName();
-    joinTableName = nextJoinTableName();
-    await conn.insertArrowTable(targetTable!, { name: targetTableName });
-    await conn.insertArrowTable(joinTable, { name: joinTableName });
-    const resultTable = await conn.query(
+  return runDuckDbPipeline({
+    label: 'spatial aggregate join',
+    runtime,
+    messages: {
+      spatialUnavailable: 'DuckDB spatial aggregate join spatial extension is unavailable',
+    },
+    inputs: [
+      { table: targetTable!, prefix: 'emap_duckdb_spatial_aggregate_target' },
+      { table: joinTable, prefix: 'emap_duckdb_spatial_aggregate_join' },
+    ],
+    buildSql: ([targetTableName, joinTableName]) =>
       buildSpatialAggregateJoinSql({
-        targetTableName,
-        joinTableName,
+        targetTableName: targetTableName!,
+        joinTableName: joinTableName!,
         targetGeometryColumn,
         joinGeometryColumn,
         targetRowIdColumn: rowIdColumn,
         duckDbFunction: PREDICATE_FUNCTIONS[predicate],
         aggregations,
       }),
-    );
-    try {
-      const aggregateRows = aggregateRowsByTargetId(
-        resultTable,
-        rowIdColumn,
-        aggregations,
-        rowCount,
-      );
-      const rowIds = Array.from({ length: rowCount }, (_, index) => index).filter(
-        (rowId) => joinType === 'left' || aggregateRows.has(rowId),
-      );
-      return rebuildDataset(
-        targetDataset,
-        target.layer,
-        rowIds,
-        aggregateRows,
-        aggregations,
-        options.outputLayer,
-      );
-    } catch (err) {
-      throw new DuckDbOperationError(
-        'conversion-failed',
-        'DuckDB spatial aggregate join result could not be converted to a dataset',
-        { cause: err },
-      );
-    }
-  } catch (err) {
-    if (err instanceof DuckDbOperationError) {
-      primaryError = err;
-      throw err;
-    }
-    const wrapped = new DuckDbOperationError(
-      'query-failed',
-      'DuckDB spatial aggregate join query failed',
-      { cause: err },
-    );
-    primaryError = wrapped;
-    throw wrapped;
-  } finally {
-    let cleanupError: unknown;
-    if (conn && targetTableName) {
+    convertResult: (resultTable) => {
       try {
-        await conn.query(`DROP TABLE IF EXISTS ${quoteIdentifier(targetTableName)}`);
+        const aggregateRows = aggregateRowsByTargetId(
+          resultTable,
+          rowIdColumn,
+          aggregations,
+          rowCount,
+        );
+        const rowIds = Array.from({ length: rowCount }, (_, index) => index).filter(
+          (rowId) => joinType === 'left' || aggregateRows.has(rowId),
+        );
+        return rebuildDataset(
+          targetDataset,
+          target.layer,
+          rowIds,
+          aggregateRows,
+          aggregations,
+          options.outputLayer,
+        );
       } catch (err) {
-        cleanupError = err;
+        throw new DuckDbOperationError(
+          'conversion-failed',
+          'DuckDB spatial aggregate join result could not be converted to a dataset',
+          { cause: err },
+        );
       }
-    }
-    if (conn && joinTableName) {
-      try {
-        await conn.query(`DROP TABLE IF EXISTS ${quoteIdentifier(joinTableName)}`);
-      } catch (err) {
-        cleanupError ??= err;
-      }
-    }
-    try {
-      await conn?.close?.();
-    } catch (err) {
-      cleanupError ??= err;
-    }
-    if (cleanupError && !primaryError) {
-      throw new DuckDbOperationError(
-        'query-failed',
-        'DuckDB spatial aggregate join cleanup failed',
-        { cause: cleanupError },
-      );
-    }
-  }
+    },
+  });
 }

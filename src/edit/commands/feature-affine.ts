@@ -2,8 +2,7 @@ import type { EditCommand } from '../edit-command';
 import type { ArcCollection } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
 import type { TranslatedPointFeature } from './feature-translate';
-import { normalizePointShape } from '../../source/layer-utils';
-import { markSourceChanged } from './_shared';
+import { applyAffineToFeatures } from './_shared';
 
 /**
  * 2x3 affine matrix in SVG/Canvas convention.
@@ -59,42 +58,7 @@ export class FeatureAffineCommand implements EditCommand {
   }
 
   private _apply(m: AffineMatrix): void {
-    const { arcs, arcIds, pointFeatures, source } = this.opts;
-
-    if (arcs && arcIds.length > 0) {
-      const data = arcs.getVertexData?.();
-      if (data) {
-        const { xx, yy, ii, nn } = data;
-        for (const arcId of arcIds) {
-          const start = ii[arcId];
-          const len = nn[arcId];
-          for (let i = start; i < start + len; i++) {
-            const x = xx[i];
-            const y = yy[i];
-            xx[i] = m.a * x + m.c * y + m.tx;
-            yy[i] = m.b * x + m.d * y + m.ty;
-          }
-          arcs.updateArcBounds?.(arcId);
-        }
-      }
-    }
-
-    for (const pf of pointFeatures) {
-      const shape = pf.layer.shapes?.[pf.featureId];
-      if (!shape) continue;
-      // See `feature-translate.ts` for why `normalizePointShape` preserves
-      // mutability across the legacy single-coord shape.
-      for (const coord of normalizePointShape(shape)) {
-        if (coord && coord.length >= 2) {
-          const x = coord[0];
-          const y = coord[1];
-          coord[0] = m.a * x + m.c * y + m.tx;
-          coord[1] = m.b * x + m.d * y + m.ty;
-        }
-      }
-    }
-
-    markSourceChanged(source);
+    applyAffineToFeatures(this.opts, m);
   }
 }
 

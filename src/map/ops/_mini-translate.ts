@@ -7,6 +7,7 @@ import type {
 } from '../../types/mapshaper-types';
 import type { PathShapePatch } from '../../edit/commands/path-geometry-patch';
 import { snapshotLiveArc, type MiniDataset } from './_mini-dataset';
+import { unsignedArcId } from './geometry-2d';
 
 export interface MiniTranslation {
   /** Arcs to append onto the live collection, in live id order. */
@@ -17,9 +18,6 @@ export interface MiniTranslation {
   miniToLiveFinal: readonly (number | undefined)[];
 }
 
-function unsigned(id: number): number {
-  return id < 0 ? -id - 1 : id;
-}
 
 /** Bitwise-complement a mapshaper arc reference (flip traversal direction). */
 function flipRef(ref: number): number {
@@ -53,7 +51,7 @@ export function translateMiniDataset(opts: {
   if (!sentinelShapes) return null;
   const miniArcCount = mini.arcs.size();
   const isValidMiniRef = (ref: number): boolean =>
-    Number.isInteger(ref) && unsigned(ref) < miniArcCount;
+    Number.isInteger(ref) && unsignedArcId(ref) < miniArcCount;
 
   const lineages: (readonly number[])[] = [];
   const ownerCount = new Map<number, number>();
@@ -64,7 +62,7 @@ export function translateMiniDataset(opts: {
     lineages.push(lineage);
     for (const ref of lineage) {
       if (!isValidMiniRef(ref)) return null;
-      const postId = unsigned(ref);
+      const postId = unsignedArcId(ref);
       ownerCount.set(postId, (ownerCount.get(postId) ?? 0) + 1);
     }
   }
@@ -81,7 +79,7 @@ export function translateMiniDataset(opts: {
     for (const part of shape) {
       for (const ref of part) {
         if (!isValidMiniRef(ref)) return false;
-        referenced.add(unsigned(ref));
+        referenced.add(unsignedArcId(ref));
       }
     }
     return true;
@@ -99,7 +97,7 @@ export function translateMiniDataset(opts: {
   for (let k = 0; k < lineages.length; k++) {
     const lineage = lineages[k]!;
     if (lineage.length !== 1 || lineage[0]! < 0) continue;
-    const postId = unsigned(lineage[0]!);
+    const postId = unsignedArcId(lineage[0]!);
     const liveId = mini.miniToLiveArc[k]!;
     // Copied arcs start at ids 0..n-1 and runtime arcs only append. Reuse is
     // therefore identity-safe only when the sentinel remains a positive,
@@ -118,7 +116,7 @@ export function translateMiniDataset(opts: {
       spliceableLineages.add(k);
   }
   const required = new Set(referenced);
-  for (const k of spliceableLineages) for (const ref of lineages[k]!) required.add(unsigned(ref));
+  for (const k of spliceableLineages) for (const ref of lineages[k]!) required.add(unsignedArcId(ref));
   const pending = [...required]
     .filter((postId) => miniToLiveFinal[postId] === undefined)
     .sort((a, b) => a - b);
@@ -153,7 +151,7 @@ export function translateMiniDataset(opts: {
   const translatedLineages = lineages.map((lineage, k) => {
     if (!spliceableLineages.has(k)) return undefined;
     return lineage.map((ref) => {
-      const mapped = miniToLiveFinal[unsigned(ref)];
+      const mapped = miniToLiveFinal[unsignedArcId(ref)];
       if (mapped === undefined) throw new Error(`unmappable lineage ref ${ref}`);
       return ref < 0 ? flipRef(mapped) : mapped;
     });
@@ -185,7 +183,7 @@ export function translateMiniDataset(opts: {
       entry.after = entry.after.map((part) => {
         const out: number[] = [];
         for (const ref of part) {
-          if (unsigned(ref) !== liveId) {
+          if (unsignedArcId(ref) !== liveId) {
             out.push(ref);
           } else if (ref >= 0) {
             out.push(...seq);
@@ -218,7 +216,7 @@ export function translateMiniDataset(opts: {
 export function translateShapeFromMini(translation: MiniTranslation, shape: PathShape): PathShape {
   return shape.map((part) =>
     part.map((ref) => {
-      const mapped = translation.miniToLiveFinal[unsigned(ref)];
+      const mapped = translation.miniToLiveFinal[unsignedArcId(ref)];
       if (mapped === undefined) throw new Error(`unmappable mini arc ref ${ref}`);
       return ref < 0 ? flipRef(mapped) : mapped;
     }),

@@ -56,51 +56,8 @@ const EXPENSIVE_COMMANDS: ReadonlySet<string> = new Set([
 const EXPENSIVE_THRESHOLD_RATIO = 0.5;
 
 /**
- * Pull every leading `-NAME` token out of a CLI command string. Used by
- * the router to decide on the basis of the command FAMILY rather than a
- * single hard-coded keyword.
- *
- * Returns names in source order; e.g. `'-target X -dissolve foo'` →
- * `['target', 'dissolve']`.
- */
-export function parseCommandHeads(cmd: string): string[] {
-  const heads: string[] = [];
-  // Match `-NAME` where NAME is hyphenated identifier (`-rename-fields`).
-  // Quoted arguments containing `-` won't match because the regex is
-  // anchored on whitespace + `-`.
-  const re = /(?:^|\s)-([a-z][a-z0-9-]*)/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(cmd)) !== null) heads.push(m[1].toLowerCase());
-  return heads;
-}
-
-/**
- * Decide whether `cmd` should run on a worker.
- *
- * Routing precedence:
- *   - `mode === false` → always main thread.
- *   - `mode === true`  → always worker (assuming a pool exists).
- *   - `mode === 'auto'`:
- *     - command is entirely cheap (every `-X` head in CHEAP_COMMANDS)
- *       → main thread regardless of vertex count.
- *     - any expensive head present → worker when
- *       `vertexCount >= threshold * EXPENSIVE_THRESHOLD_RATIO`.
- *     - otherwise → worker when `vertexCount >= threshold`.
- */
-export function shouldUseWorker(
-  cmd: string,
-  vertexCount: number,
-  mode: boolean | 'auto',
-  threshold: number,
-): boolean {
-  if (mode === false) return false;
-  if (mode === true) return true;
-  return shouldUseWorkerForHeads(parseCommandHeads(cmd), vertexCount, mode, threshold);
-}
-
-/**
- * Same routing decision as {@link shouldUseWorker} but consuming a
- * pre-extracted heads array. Used by the PR-4b parsed-command path
+ * Routing decision over pre-extracted command heads. Used by the PR-4b
+ * parsed-command path
  * (`commands.map(c => c.name)`) so it doesn't have to round-trip through
  * a CLI string just to make a routing call.
  */

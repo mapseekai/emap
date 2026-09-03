@@ -28,15 +28,6 @@ function overlayPrefix(serviceId: string): string {
   return `emap-overlay:${encodeURIComponent(serviceId)}`;
 }
 
-function cloneValue<T>(value: T): T {
-  if (Array.isArray(value)) return value.map((item) => cloneValue(item)) as T;
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as StyleObject).map(([key, item]) => [key, cloneValue(item)]),
-    ) as T;
-  }
-  return value;
-}
 function resolveUrl(url: string, baseUrl: string | undefined): string {
   if (/^[A-Za-z][A-Za-z\d+.-]*:/.test(url) || !baseUrl) return url;
   try {
@@ -61,7 +52,7 @@ function normalizeSprite(
   if (!sprite) return { sprites: [] };
 
   const input: SpriteEntry[] =
-    typeof sprite === 'string' ? [{ id: 'default', url: sprite }] : cloneValue(sprite);
+    typeof sprite === 'string' ? [{ id: 'default', url: sprite }] : structuredClone(sprite);
   const sprites = input.map(({ id, url }) => {
     const normalizedUrl = resolveUrl(url, baseUrl);
     resourceUrls.add(normalizedUrl);
@@ -154,7 +145,7 @@ export function normalizeMapLibreStyleUrls(
   const input = style as unknown as StyleObject;
   const sources: Record<string, maplibregl.SourceSpecification> = {};
   for (const [sourceId, source] of Object.entries(input.sources as StyleObject)) {
-    const normalizedSource = cloneValue(source) as StyleObject;
+    const normalizedSource = structuredClone(source) as StyleObject;
     normalizeSourceUrls(normalizedSource, baseUrl, new Set());
     sources[sourceId] = normalizedSource as maplibregl.SourceSpecification;
   }
@@ -300,7 +291,7 @@ export function prepareMapLibreOverlayStyle(
   const sourceIds = Object.keys(input.sources as StyleObject).map((id) => `${prefix}:${id}`);
   assertUnique(sourceIds);
   for (const [sourceId, source] of Object.entries(input.sources as StyleObject)) {
-    const clonedSource = cloneValue(source) as StyleObject;
+    const clonedSource = structuredClone(source) as StyleObject;
     normalizeSourceUrls(clonedSource, baseUrl, resourceUrls);
     sources[`${prefix}:${sourceId}`] = clonedSource as maplibregl.SourceSpecification;
   }
@@ -318,7 +309,7 @@ export function prepareMapLibreOverlayStyle(
   const layers = (input.layers as unknown[])
     .filter((layer) => (layer as StyleObject).type !== 'background')
     .map((layer) => {
-      const clonedLayer = cloneValue(layer) as StyleObject;
+      const clonedLayer = structuredClone(layer) as StyleObject;
       const originalId = clonedLayer.id;
       if (typeof originalId !== 'string')
         throw new Error('MapLibre overlay style layers require string IDs');
@@ -341,7 +332,7 @@ export function prepareMapLibreOverlayStyle(
   return {
     serviceId,
     style: {
-      ...cloneValue(input),
+      ...structuredClone(input),
       sources,
       layers,
       ...(sprite.sprites.length > 0 ? { sprite: sprite.sprites } : { sprite: undefined }),
@@ -358,14 +349,14 @@ export function prepareMapLibreOverlayStyle(
 
 function asSpriteArray(sprite: maplibregl.StyleSpecification['sprite']): SpriteEntry[] {
   if (!sprite) return [];
-  return typeof sprite === 'string' ? [{ id: 'default', url: sprite }] : cloneValue(sprite);
+  return typeof sprite === 'string' ? [{ id: 'default', url: sprite }] : structuredClone(sprite);
 }
 
 export function composeMapLibreStyle(
   baseStyle: maplibregl.StyleSpecification,
   overlays: readonly { prepared: PreparedMapLibreOverlayStyle; visible: boolean }[],
 ): maplibregl.StyleSpecification {
-  const composed = cloneValue(baseStyle);
+  const composed = structuredClone(baseStyle);
   const glyphUrls = new Set<string>();
   if (typeof composed.glyphs === 'string' && composed.glyphs) glyphUrls.add(composed.glyphs);
   for (const { prepared } of overlays) {
@@ -388,13 +379,13 @@ export function composeMapLibreStyle(
       if (sourceIds.includes(sourceId))
         throw new Error('MapLibre overlay style generated IDs must be unique');
       sourceIds.push(sourceId);
-      sources[sourceId] = cloneValue(prepared.style.sources[sourceId]);
+      sources[sourceId] = structuredClone(prepared.style.sources[sourceId]);
     }
     for (const layer of prepared.style.layers) {
       if (layerIds.includes(layer.id))
         throw new Error('MapLibre overlay style generated IDs must be unique');
       layerIds.push(layer.id);
-      const clonedLayer = cloneValue(layer) as StyleObject;
+      const clonedLayer = structuredClone(layer) as StyleObject;
       if (!visible) {
         clonedLayer.layout = {
           ...(clonedLayer.layout as StyleObject | undefined),

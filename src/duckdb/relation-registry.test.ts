@@ -373,28 +373,20 @@ describe('named DuckDB relation helpers', () => {
       duckDbFunction: 'ST_Intersects',
       outputColumn: 'duckdb_intersects',
       output: 'predicate',
-      supportsFilter: true,
-      supportsAttribute: true,
-      requiresDistance: false,
-      rejectGeographicCrs: false,
     });
-    expect(getDuckDbRelationOperationSpec('distance')).toMatchObject({
+    expect(getDuckDbRelationOperationSpec('distance')).toEqual({
       id: 'distance',
       duckDbFunction: 'ST_Distance',
       outputColumn: 'duckdb_distance',
       output: 'distance',
-      supportsFilter: false,
-      supportsAttribute: true,
-      rejectGeographicCrs: true,
     });
-    expect(getDuckDbRelationOperationSpec('distanceWithin')).toMatchObject({
+    expect(getDuckDbRelationOperationSpec('distanceWithin')).toEqual({
       id: 'distanceWithin',
+      duckDbFunction: 'ST_Distance',
       outputColumn: 'duckdb_distance_within',
-      requiresDistance: true,
-      supportsFilter: true,
-      supportsAttribute: true,
+      output: 'predicate',
     });
-  });
+});
 
   it.each(ADDITIONAL_RELATION_CASES)('returns the additional $id operation spec', ({
     id,
@@ -406,10 +398,6 @@ describe('named DuckDB relation helpers', () => {
       duckDbFunction,
       outputColumn,
       output: 'predicate',
-      supportsFilter: true,
-      supportsAttribute: true,
-      requiresDistance: false,
-      rejectGeographicCrs: false,
     });
   });
 

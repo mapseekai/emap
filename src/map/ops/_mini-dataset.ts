@@ -1,8 +1,4 @@
-import {
-  createArcCollectionCompat,
-  type AppendedArc,
-  type MapshaperAdapter,
-} from '../../adapter/mapshaper-adapter';
+import { type AppendedArc, type MapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import type {
   ArcCollection,
   MapshaperDataset,
@@ -10,6 +6,7 @@ import type {
   PathShape,
 } from '../../types/mapshaper-types';
 import { isPathLayer } from '../../types/mapshaper-types';
+import { unsignedArcId } from './geometry-2d';
 
 export interface FeatureAt {
   layerIndex: number;
@@ -47,13 +44,10 @@ export function materializeRetainedMiniArcs(mini: MiniDataset): void {
   mini.dataset.arcs = filteredArcs;
 }
 
-function unsigned(id: number): number {
-  return id < 0 ? -id - 1 : id;
-}
 
 function validateArcId(arcId: number, arcCount: number, label: string): number {
   if (!Number.isInteger(arcId)) throw new Error(`${label} ${arcId} must be an integer`);
-  const unsignedId = unsigned(arcId);
+  const unsignedId = unsignedArcId(arcId);
   if (unsignedId >= arcCount) throw new Error(`${label} ${arcId} is out of range`);
   return unsignedId;
 }
@@ -114,7 +108,7 @@ export function buildMiniDataset(opts: {
     liveToMini.set(liveId, miniId);
     copies.push(snapshotLiveArc(liveArcs, liveId));
   });
-  const arcs = createArcCollectionCompat(adapter, copies);
+  const arcs = adapter.createArcCollection(copies);
   const retainedInterval = liveArcs.getRetainedInterval?.();
   if (retainedInterval !== undefined) arcs.setRetainedInterval?.(retainedInterval);
 
@@ -148,7 +142,7 @@ export function buildMiniDataset(opts: {
         if (!shape) continue;
         shapes[featureId] = shape.map((part) =>
           part.map((ref) => {
-            const miniId = liveToMini.get(unsigned(ref))!;
+            const miniId = liveToMini.get(unsignedArcId(ref))!;
             return ref < 0 ? -miniId - 1 : miniId;
           }),
         );

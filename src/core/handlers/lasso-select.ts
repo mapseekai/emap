@@ -1,6 +1,6 @@
 import { EventDispatcher } from '../events';
-import type { Handler, HandlerResult, NormalizedPointerEvent, PointerModifiers } from '../handler';
-import { resolveMode, type ModifierCombo } from './select-mode';
+import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
+import { comboHeld, resolveMode, type ModifierCombo } from './select-mode';
 import { featureMatchesLasso, pathBBox } from './select-geometry';
 import type { SelectHandlerOptions } from './click-select';
 import type { FeatureRef } from '../../map/types';
@@ -18,8 +18,6 @@ export interface LassoSelectStyle {
   /** SVG `stroke-dasharray`. Default `'4 3'` (subtly dashed). */
   strokeDasharray?: string;
 }
-/** Back-compat alias — historically the handler-side name. */
-export type LassoStyle = LassoSelectStyle;
 export interface LassoSelectHandlerOptions extends SelectHandlerOptions {
   dragThreshold?: number;
   dragActivator?: ModifierCombo;
@@ -31,10 +29,6 @@ export interface LassoSelectHandlerOptions extends SelectHandlerOptions {
 const LASSO_DEFAULT_MODS = { replace: 'none', add: 'ctrl', toggle: 'alt' } as const;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-function comboHeld(m: PointerModifiers, combo: ModifierCombo): boolean {
-  if (combo === 'none') return true;
-  return combo.split('+').every((k) => (m as any)[k] === true);
-}
 
 /**
  * Named `lassoSelect` handler. Disabled by default. `dragActivator`+down →

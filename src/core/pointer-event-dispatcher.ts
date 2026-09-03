@@ -16,12 +16,6 @@ export interface PointerEventMapHost {
   unproject(x: number, y: number): [number, number];
 }
 
-const TYPES = ['mousemove'] as const;
-type PType = (typeof TYPES)[number];
-
-function isPointerType(t: string): t is PType {
-  return (TYPES as readonly string[]).includes(t);
-}
 
 /**
  * Delegated pointer-move event registry. Fed normalized pointer events by
@@ -31,7 +25,7 @@ function isPointerType(t: string): t is PType {
  * consumer. No hit-test, no filter (it is not feature-scoped).
  */
 export class PointerEventDispatcher {
-  private _reg: Record<PType, Cb[]> = { mousemove: [] };
+  private _cbs: Cb[] = [];
   /** Maps user cb → its once-wrapper so `off(type, userCb)` resolves the wrap. */
   private _onceWrap = new Map<Cb, Cb>();
   private _onChange?: () => void;
@@ -44,31 +38,31 @@ export class PointerEventDispatcher {
   }
 
   hasListeners(): boolean {
-    return TYPES.some((t) => this._reg[t].length > 0);
+    return this._cbs.length > 0;
   }
 
   on(type: string, cb: Cb): void {
-    if (!isPointerType(type)) return;
-    this._reg[type].push(cb);
+    if (type !== 'mousemove') return;
+    this._cbs.push(cb);
     this._onChange?.();
   }
 
   once(type: string, cb: Cb): void {
-    if (!isPointerType(type)) return;
+    if (type !== 'mousemove') return;
     const wrap: Cb = (e) => {
       this.off(type, cb);
       cb(e);
       // onChange already fired inside off(); no second call needed.
     };
     this._onceWrap.set(cb, wrap);
-    this._reg[type].push(wrap);
+    this._cbs.push(wrap);
     this._onChange?.();
   }
 
   off(type: string, cb: Cb): void {
-    if (!isPointerType(type)) return;
+    if (type !== 'mousemove') return;
     const wrap = this._onceWrap.get(cb);
-    this._reg[type] = this._reg[type].filter((c) => c !== cb && (wrap === undefined || c !== wrap));
+    this._cbs = this._cbs.filter((c) => c !== cb && (wrap === undefined || c !== wrap));
     this._onceWrap.delete(cb);
     this._onChange?.();
   }
@@ -76,7 +70,7 @@ export class PointerEventDispatcher {
   dispatch(ev: NormalizedPointerEvent): void {
     if (!this.hasListeners()) return;
     if (ev.kind !== 'move') return;
-    const entries = this._reg.mousemove;
+    const entries = this._cbs;
     const e: PointerMoveEvent = {
       point: { x: ev.point.x, y: ev.point.y },
       mapCoord: this._host.unproject(ev.point.x, ev.point.y),

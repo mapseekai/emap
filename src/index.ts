@@ -21,7 +21,6 @@ export type {
   QueryFeaturesOptions,
   QueriedFeature,
   FeatureRef,
-  HighlightFeatureRef,
   HighlightStyle,
   // edit sessions
   FeatureTranslateSession,
@@ -126,12 +125,7 @@ export type { Feature } from './map/feature-accessor';
 // ===========================================================================
 export { Err, OK, okValue } from './map/op-result';
 export type { OpError, OpResult } from './map/op-result';
-export {
-  quoteCliArg,
-  isValidLayerName,
-  isValidFieldName,
-  findInvalidFieldName,
-} from './map/command-args';
+export { isValidFieldName, findInvalidFieldName } from './map/command-args';
 
 // ===========================================================================
 // Mapshaper / topology types (path / point shape vocabulary, ArcCollection,
@@ -286,7 +280,7 @@ export type { SelectHandlerOptions } from './core/handlers/click-select';
 export { BoxSelectHandler } from './core/handlers/box-select';
 export type { BoxSelectHandlerOptions } from './core/handlers/box-select';
 export { LassoSelectHandler } from './core/handlers/lasso-select';
-export type { LassoSelectHandlerOptions, LassoStyle } from './core/handlers/lasso-select';
+export type { LassoSelectHandlerOptions } from './core/handlers/lasso-select';
 export { resolveMode } from './core/handlers/select-mode';
 export type { ModifierCombo } from './core/handlers/select-mode';
 export type { FeatureEvent, FeatureEventFilter } from './core/feature-event-dispatcher';

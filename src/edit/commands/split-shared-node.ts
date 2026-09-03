@@ -1,5 +1,6 @@
 import type { EditCommand } from '../edit-command';
 import {
+  absArcId,
   isPathLayer,
   type ArcCollection,
   type ArcVertexData,
@@ -94,7 +95,7 @@ export function planSharedNodeSplit(
     const originalShape = shape.map((part) => part.slice());
     const newShape: PathShape = originalShape.map((part) =>
       part.map((rawArcId) => {
-        const arcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
+        const arcId = absArcId(rawArcId);
         const replacement = oldToNew.get(arcId);
         if (replacement === undefined) return rawArcId;
         return rawArcId >= 0 ? replacement : ~replacement;
@@ -185,7 +186,7 @@ function analyzeSharedNode(
       if (!candidateShape) continue;
       for (const part of candidateShape) {
         for (const rawArcId of part) {
-          const arcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
+          const arcId = absArcId(rawArcId);
           if (arcId >= 0 && arcId < referencedElsewhere.length) referencedElsewhere[arcId] = 1;
           if (
             !coordinateReferencedElsewhere &&
@@ -259,7 +260,7 @@ function collectAnchoredIncidentArcIds(
       index = (index + part.length) % part.length;
     }
     const rawArcId = part[index];
-    const arcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
+    const arcId = absArcId(rawArcId);
     const start = data.ii[arcId];
     const end = start + data.nn[arcId] - 1;
     const endpointVertexId =
@@ -270,7 +271,7 @@ function collectAnchoredIncidentArcIds(
   for (const part of shape) {
     for (let index = 0; index < part.length; index++) {
       const rawArcId = part[index];
-      const arcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
+      const arcId = absArcId(rawArcId);
       if (arcId !== anchorArcId) continue;
 
       addArc(arcId);

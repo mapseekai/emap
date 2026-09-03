@@ -5972,12 +5972,6 @@ describe('Emap checkGeometry (mocked mapshaper)', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('returns a not-found error on unresolved target', async () => {
-    const result = await map.ops.checkGeometry({ source: 'src1', target: 'missing' });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.kind).toBe('not-found');
-    expect(findSegmentIntersectionsSpy).not.toHaveBeenCalled();
-  });
 
   it('returns the empty/clean report for arc-less datasets without invoking mapshaper', async () => {
     const pointSource = {

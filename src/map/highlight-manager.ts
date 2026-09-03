@@ -2,7 +2,7 @@ import type { CorePainter } from '../renderer/painter';
 import { AffineTransform } from '../geo/transform';
 import type { MutableTopologySource } from '../source/source';
 import { getLayerId } from '../source/layer-utils';
-import type { HighlightStyle, HighlightFeatureRef, QueriedFeature } from './types';
+import type { HighlightStyle, FeatureRef, QueriedFeature } from './types';
 import type { FeatureShape } from '../types/mapshaper-types';
 import { hasLayerKey, type VisibleLayerLookup } from './structured-keys';
 import { EMAP_THEME_COLORS } from '../theme/colors';
@@ -27,7 +27,7 @@ export class HighlightManager {
   }
 
   setHighlightedFeatures(
-    features: Array<QueriedFeature | HighlightFeatureRef>,
+    features: Array<QueriedFeature | FeatureRef>,
     style?: HighlightStyle,
   ): void {
     this._highlighted.clear();

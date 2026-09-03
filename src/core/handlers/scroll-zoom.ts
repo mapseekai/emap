@@ -2,8 +2,7 @@ import { EventDispatcher } from '../events';
 import { MouseWheel } from '../interactions';
 import type { Handler, HandlerResult, NormalizedPointerEvent } from '../handler';
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface ScrollZoomOptions {}
+export type ScrollZoomOptions = Record<string, never>;
 
 interface WheelPayload {
   direction: number;

@@ -3,6 +3,7 @@ import type { MapshaperDataset } from '../../types/mapshaper-types';
 import { asMutableTopologySource, type TopologySource } from '../../source/source';
 import type { FeatureRef } from '../../map/types';
 import type { Selection, SelectionDiff, SelectionSnapshot } from '../../map/selection';
+import { SelectionDiffTracker } from './_shared';
 
 export interface DatasetReplaceSelectionCommandOptions {
   source: TopologySource;
@@ -18,25 +19,24 @@ export interface DatasetReplaceSelectionCommandOptions {
 export class DatasetReplaceSelectionCommand implements EditCommand {
   readonly invalidatesPriorCommands = true;
   readonly label: string;
-  private pendingSelectionDiff: SelectionDiff | null = null;
+  private readonly _selection: SelectionDiffTracker;
 
   constructor(private readonly opts: DatasetReplaceSelectionCommandOptions) {
     this.label = opts.label;
+    this._selection = new SelectionDiffTracker(opts);
   }
 
   do(): void {
     asMutableTopologySource(this.opts.source).setDataset(this.opts.after, false);
-    this.pendingSelectionDiff = this.opts.selection.apply(this.opts.afterSelection, 'replace');
+    this._selection.applyAfter();
   }
 
   undo(): void {
     asMutableTopologySource(this.opts.source).setDataset(this.opts.before, false);
-    this.pendingSelectionDiff = this.opts.selection.restore(this.opts.beforeSelection);
+    this._selection.restoreBefore();
   }
 
   publish(): void {
-    this.opts.source.fire?.('data', { reason: 'replace' });
-    if (this.pendingSelectionDiff?.changed) this.opts.publishSelection(this.pendingSelectionDiff);
-    this.pendingSelectionDiff = null;
+    this._selection.publish('replace');
   }
 }

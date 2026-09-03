@@ -1,6 +1,6 @@
 // Shared context handed to every op function. Decouples the bodies from
 // the `MapshaperOps` class so each op can be unit-tested in isolation
-// (just hand it a stub `host` and a stub `runDatasetCommand`).
+// (just hand it a stub `host` and stub runners).
 //
 // Rationale: PR-7 splits the 1700-line `mapshaper-ops.ts` into one file
 // per op family. Each op imports only this module + `op-result` +
@@ -15,18 +15,6 @@ import type { FeatureRef } from '../types';
 import type { EditCommand } from '../../edit/edit-command';
 import type { MutableTopologySource } from '../../source/source';
 
-/**
- * Run a CLI-style mapshaper command against a source's dataset, snapshotting
- * for undo and pushing a `DatasetReplaceCommand`. Provided to ops via the
- * `OpContext` rather than as a method on a class so unit tests can mock the
- * whole pipeline by injecting a stub function.
- */
-export type RunDatasetCommand = (
-  sourceId: string,
-  cmd: string,
-  label: string,
-  inputFiles?: Record<string, Uint8Array | string>,
-) => Promise<OpResult>;
 
 /**
  * PR-4b parsed-command runner. Same dataset-replace pipeline as
@@ -114,8 +102,6 @@ export type RunPreparedEditCommandMany = <T>(
 export interface OpContext {
   /** Internal host surface (sources, history, selection, worker config…). */
   host: EmapHostInternal;
-  /** Shared CLI-command runner; see {@link RunDatasetCommand}. */
-  runDatasetCommand: RunDatasetCommand;
   /** Parsed-command runner (PR-4b); see {@link RunDatasetCommandParsed}. */
   runDatasetCommandParsed: RunDatasetCommandParsed;
   /** Prepared parsed-command runner; see {@link RunPreparedDatasetCommandParsed}. */

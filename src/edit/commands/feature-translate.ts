@@ -1,8 +1,7 @@
 import type { EditCommand } from '../edit-command';
 import { type ArcCollection, type MapshaperLayer } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
-import { normalizePointShape } from '../../source/layer-utils';
-import { markSourceChanged } from './_shared';
+import { applyAffineToFeatures, MERGE_WINDOW_MS } from './_shared';
 
 /** Point-feature reference within a single source. */
 export interface TranslatedPointFeature {
@@ -29,8 +28,6 @@ export interface FeatureTranslateCommandOptions {
   pointFeatures: TranslatedPointFeature[];
 }
 
-/** Time window (ms) for consecutive translate merges. */
-const MERGE_WINDOW_MS = 500;
 
 /**
  * Translate a fixed set of arcs and point shapes by `(dx, dy)` in source-data
@@ -97,40 +94,6 @@ export class FeatureTranslateCommand implements EditCommand {
   }
 
   private _apply(dx: number, dy: number): void {
-    const { arcs, arcIds, pointFeatures, source } = this.opts;
-
-    // Path features: walk each arc's vertex range and offset xx/yy in place.
-    if (arcs && arcIds.length > 0) {
-      const data = arcs.getVertexData?.();
-      if (data) {
-        const { xx, yy, ii, nn } = data;
-        for (const arcId of arcIds) {
-          const start = ii[arcId];
-          const len = nn[arcId];
-          for (let i = start; i < start + len; i++) {
-            xx[i] += dx;
-            yy[i] += dy;
-          }
-          arcs.updateArcBounds?.(arcId);
-        }
-      }
-    }
-
-    // Point features: mutate every coordinate pair in the shape array.
-    // `normalizePointShape` wraps a legacy bare `[x, y]` in a one-element
-    // array, but the inner array is the SAME reference, so the in-place
-    // mutation still writes through to the layer's shape storage.
-    for (const pf of pointFeatures) {
-      const shape = pf.layer.shapes?.[pf.featureId];
-      if (!shape) continue;
-      for (const coord of normalizePointShape(shape)) {
-        if (coord && coord.length >= 2) {
-          coord[0] += dx;
-          coord[1] += dy;
-        }
-      }
-    }
-
-    markSourceChanged(source);
+    applyAffineToFeatures(this.opts, { a: 1, b: 0, c: 0, d: 1, tx: dx, ty: dy });
   }
 }

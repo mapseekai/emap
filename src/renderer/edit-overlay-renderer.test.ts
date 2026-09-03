@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EditOverlayRenderer } from './edit-overlay-renderer';
-import type { EditPainter } from './painter';
-import type { EditMeasurementState, EditVertexState } from '../map/types';
+import type { EditPainter, MeasurementOverlayState } from './painter';
+import type { EditVertexState } from '../map/types';
 import { EMAP_THEME_COLORS } from '../theme/colors';
 
 function makePainter(): EditPainter {
@@ -20,7 +20,7 @@ function makePainter(): EditPainter {
   } as unknown as EditPainter;
 }
 
-const measurementState: EditMeasurementState = {
+const measurementState: MeasurementOverlayState = {
   mode: 'area',
   vertices: [
     [0, 0],

@@ -602,6 +602,7 @@ describe('DrawFeatureHandler', () => {
           bb: new Float64Array([0, 0, 10, 10]),
         }),
         updateVertexData,
+        size: () => 1,
         transformPoints: vi.fn(),
       };
 
@@ -641,6 +642,7 @@ describe('DrawFeatureHandler', () => {
           bb: new Float64Array([0, 0, 0, 0]),
         }),
         updateVertexData,
+        size: () => 1,
         transformPoints: vi.fn(),
       };
 

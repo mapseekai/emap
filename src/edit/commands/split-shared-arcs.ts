@@ -4,12 +4,13 @@ import {
   type AppendedArc,
 } from '../../adapter/mapshaper-adapter';
 import {
+  absArcId,
   isPathLayer,
   type MapshaperLayer,
   type PathShape,
 } from '../../types/mapshaper-types';
 import { asMutableTopologySource, type TopologySource } from '../../source/source';
-import { appendArcsCompat, markSourceChanged, truncateArcsCompat } from './_shared';
+import { markSourceChanged } from './_shared';
 // Re-exported so the public `@/edit/commands/split-shared-arcs` import path
 // (and `src/index.ts`) keep working after the type moved to the adapter.
 export type { AppendedArc };
@@ -72,7 +73,7 @@ export class SplitSharedArcsCommand implements EditCommand {
           `SplitSharedArcsCommand: expected ${this.opts.originalArcCount} arcs before do(), found ${arcs.size()}`,
         );
       }
-      appendArcsCompat(getDefaultMapshaperAdapter(), arcs, this.opts.appendedArcs);
+      getDefaultMapshaperAdapter().appendArcs(arcs, this.opts.appendedArcs);
     }
     for (const r of this.opts.remaps) {
       r.layer.shapes![r.featureId] = cloneShape(r.newShape);
@@ -91,7 +92,7 @@ export class SplitSharedArcsCommand implements EditCommand {
           `SplitSharedArcsCommand: expected ${expected} arcs before undo(), found ${arcs.size()}`,
         );
       }
-      truncateArcsCompat(getDefaultMapshaperAdapter(), arcs, this.opts.originalArcCount);
+      getDefaultMapshaperAdapter().truncateArcs(arcs, this.opts.originalArcCount);
     }
     for (const r of this.opts.remaps) {
       r.layer.shapes![r.featureId] = cloneShape(r.originalShape);
@@ -151,7 +152,7 @@ export function planSharedArcSplit(
         if (!Array.isArray(part)) continue;
         for (const raw of part) {
           if (typeof raw !== 'number') continue;
-          const abs = raw >= 0 ? raw : ~raw;
+          const abs = absArcId(raw);
           if (abs < 0 || abs >= arcCount) continue;
           if (isSelected) selectedRefs[abs]++;
           else unselectedRefs[abs]++;
@@ -198,7 +199,7 @@ export function planSharedArcSplit(
     let touched = false;
     const newShape: PathShape = oldShape.map((part) =>
       part.map((raw) => {
-        const abs = raw >= 0 ? raw : ~raw;
+        const abs = absArcId(raw);
         const replacement = oldToNew.get(abs);
         if (replacement === undefined) return raw;
         touched = true;

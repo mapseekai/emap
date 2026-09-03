@@ -4,6 +4,7 @@ import type { PathShapePatch } from '../../edit/commands/path-geometry-patch';
 import type { MapshaperDataset, PathLayer, PathShape } from '../../types/mapshaper-types';
 import { isPathLayer } from '../../types/mapshaper-types';
 import { Err, type OpResult } from '../op-result';
+import { resolveLayerInList } from '../layer-registry';
 import type { SplitCutter, SplitSelectedOptions, SplitSelectedResult } from '../types';
 import { buildMiniDataset, materializeRetainedMiniArcs } from './_mini-dataset';
 import { translateMiniDataset, translateShapeFromMini } from './_mini-translate';
@@ -141,7 +142,7 @@ export async function splitSelected(
       if (planned !== callTimeDataset || (planned.editVersion ?? 0) !== callTimeEditVersion) {
         return Err.staleOperation(sourceId, 'Split selected features');
       }
-      const liveLayer = ctx.host.layers.resolveInLayers(planned.layers, layerId);
+      const liveLayer = resolveLayerInList(planned.layers, layerId);
       if (!liveLayer || !isPathLayer(liveLayer) || !liveLayer.shapes) {
         return Err.staleOperation(sourceId, 'Split selected features');
       }

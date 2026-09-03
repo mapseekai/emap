@@ -7,7 +7,7 @@ import {
   type TopologyNodeDeletion,
 } from '../../edit/commands/vertex-delete';
 import { CompositeCommand } from '../../edit/commands/composite';
-import { bumpEditVersion, isPathLayer, type ArcCollection } from '../../types/mapshaper-types';
+import { absArcId, bumpEditVersion, isPathLayer, type ArcCollection } from '../../types/mapshaper-types';
 import type { TopologySource } from '../../source/source';
 import { getDefaultMapshaperAdapter } from '../../adapter/mapshaper-adapter';
 import { getLayerId } from '../../source/layer-utils';
@@ -19,7 +19,6 @@ interface EditableArcs extends EditVertexArcs {
   getVertex2(vertexId: number): [number, number] | null;
   getShapeIter?(part: number[]): { x: number; y: number; hasNext(): boolean };
   getSimpleShapeBbox?(shapeIds: number[], bbox: number[]): void;
-  transformPoints?: (cb: (x: number, y: number) => void) => void;
   getVertexData(): { xx: Float64Array; yy: Float64Array; nn: Int32Array; ii: Int32Array };
 }
 
@@ -850,8 +849,7 @@ export class VertexEditHandler implements Handler<VertexEditOptions> {
         let found = false;
         for (const part of shape) {
           for (const rawArcId of part) {
-            const absArcId = rawArcId >= 0 ? rawArcId : ~rawArcId;
-            if (arcIdSet.has(absArcId)) {
+            if (arcIdSet.has(absArcId(rawArcId))) {
               found = true;
               break;
             }
