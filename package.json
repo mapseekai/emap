@@ -75,11 +75,13 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:bundle": "vitest run src/build/bundle-self-contained.test.ts src/build/package-exports.test.ts",
     "test:duckdb": "DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/buffer.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/attribute.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/relation.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/query.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/geoparquet-query.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/overlay.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/spatial-aggregate-join.integration.test.ts",
+    "security:audit": "pnpm --filter @mapseekai/emap audit --prod --audit-level high",
     "docs:clean": "node -e \"require('node:fs').rmSync('packages/docs/.docusaurus',{recursive:true,force:true})\"",
-    "docs:dev": "pnpm run docs:clean && pnpm --filter @mapseekai/emap-docs start",
-    "docs:preview": "pnpm run build && pnpm run api:build && pnpm run examples:build && pnpm run docs:build && pnpm run docs:compose-examples && node scripts/preview-docs.mjs",
-    "docs:build": "pnpm --filter @mapseekai/emap-docs build",
+    "docs:dev": "pnpm run docs:clean && pnpm run api:build && pnpm --filter @mapseekai/emap-docs start",
+    "docs:preview": "pnpm run build && pnpm run examples:build && pnpm run docs:build && pnpm run docs:compose-examples && node scripts/preview-docs.mjs",
+    "docs:build": "pnpm run api:build && pnpm --filter @mapseekai/emap-docs build",
     "api:build": "typedoc --options typedoc.json",
     "examples:dev": "pnpm --filter @mapseekai/emap-examples dev",
     "examples:build": "pnpm --filter @mapseekai/emap-examples build",
@@ -88,7 +90,7 @@
     "docs:check-i18n": "node scripts/check-docs-i18n.mjs",
     "docs:check-api": "node scripts/check-docs-api.mjs",
     "examples:check": "node scripts/check-examples.mjs",
-    "docs:verify": "npm run typecheck && npm run api:build && npm run examples:build && npm run docs:build && npm run docs:compose-examples && npm run docs:check-i18n && npm run docs:check-api && npm run examples:check",
+    "docs:verify": "npm run typecheck && npm run examples:build && npm run docs:build && npm run docs:compose-examples && npm run docs:check-i18n && npm run docs:check-api && npm run examples:check",
     "prepublishOnly": "npm run format:check && npm run typecheck && npm run build && npm run test:run && npm run test:duckdb"
   },
   "keywords": [
@@ -113,6 +115,7 @@
   "homepage": "https://github.com/mapseekai/emap#readme",
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",
+    "@zwishing/epsg-index": "^3.0.0",
     "@rollup/plugin-alias": "^6.0.0",
     "@rollup/plugin-commonjs": "^25.0.0",
     "@rollup/plugin-json": "^6.1.0",
@@ -129,7 +132,6 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
-    "@zwishing/epsg-index": "^3.0.0",
     "apache-arrow": "^21.1.0",
     "fflate": "^0.8.3",
     "flatbush": "^4.5.0",

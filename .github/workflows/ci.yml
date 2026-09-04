@@ -5,32 +5,95 @@ on:
     branches: [master]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '11.15.1'
+
 jobs:
-  build-and-test:
+  core:
+    name: Core quality and build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
         with:
-          version: 11.15.1
-
+          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+      - run: pnpm install --frozen-lockfile
+      - name: Format
+        run: pnpm run format:check
       - name: Typecheck
         run: pnpm run typecheck
-
+      - name: Unit tests
+        run: pnpm run test:run
       - name: Build
         run: pnpm run build
+      - name: Browser bundle smoke test
+        run: pnpm run bundle:smoke
 
-      - name: Test
-        run: pnpm run test:run
+  duckdb:
+    name: DuckDB-Wasm integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run test:duckdb
 
-      - name: Verify publish contents
-        run: npx --yes npm@latest pack --dry-run
+  docs:
+    name: Documentation and examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build API reference
+        run: pnpm run api:build
+      - name: Check translations
+        run: pnpm run docs:check-i18n
+      - name: Check public API catalog
+        run: pnpm run docs:check-api
+      - name: Check examples manifest
+        run: pnpm run examples:check
+
+  package-security:
+    name: Package and production security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build publishable files
+        run: pnpm run build
+      - name: Verify package contents
+        run: pnpm pack --dry-run
+      - name: Audit production dependency graph
+        run: pnpm run audit:prod
