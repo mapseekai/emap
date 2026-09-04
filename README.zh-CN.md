@@ -110,7 +110,7 @@ const source = await TopologySource.fromBytes('upload', await file.arrayBuffer()
 });
 ```
 
-ZIP 中存在重复 basename 时会明确报错，不会再静默拼接不同目录下的 Shapefile 与 sidecar。接收公网上传时应根据部署资源设置更严格的限制。
+ZIP 内置默认限制为压缩输入最大 2 GiB、解压后内容总量最大 2 GiB；上面的示例针对公网上传主动设置了更严格的限制。ZIP 中存在重复 basename 时会明确报错，不会再静默拼接不同目录下的 Shapefile 与 sidecar。
 
 ## 编辑、历史与事务
 

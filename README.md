@@ -112,7 +112,7 @@ const source = await TopologySource.fromBytes('upload', await file.arrayBuffer()
 });
 ```
 
-ZIP imports reject duplicate basenames instead of silently pairing files from different directories. Applications accepting public uploads should set limits appropriate for their deployment.
+The built-in ZIP defaults allow up to 2 GiB of compressed input and 2 GiB total uncompressed content. The example above deliberately applies stricter limits for public uploads. ZIP imports also reject duplicate basenames instead of silently pairing files from different directories.
 
 ## Editing and History
 

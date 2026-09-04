@@ -101,9 +101,9 @@ function isNormalizedDatasetCommit(
  * should lower them.
  */
 export interface ZipExtractionLimits {
-  /** Max compressed ZIP input size, in bytes. Default 500 MiB. */
+  /** Max compressed ZIP input size, in bytes. Default 2 GiB. */
   maxCompressedBytes?: number;
-  /** Max summed uncompressed size of all kept entries, in bytes. Default 500 MiB. */
+  /** Max summed uncompressed size of all kept entries, in bytes. Default 2 GiB. */
   maxBytes?: number;
   /** Max entry count fflate may yield. Default 5000. */
   maxEntries?: number;
@@ -111,9 +111,11 @@ export interface ZipExtractionLimits {
   maxRatio?: number;
 }
 
+const DEFAULT_ZIP_BYTE_LIMIT = 2 * 1024 * 1024 * 1024;
+
 const DEFAULT_ZIP_LIMITS: Required<ZipExtractionLimits> = {
-  maxCompressedBytes: 500 * 1024 * 1024,
-  maxBytes: 500 * 1024 * 1024,
+  maxCompressedBytes: DEFAULT_ZIP_BYTE_LIMIT,
+  maxBytes: DEFAULT_ZIP_BYTE_LIMIT,
   maxEntries: 5000,
   maxRatio: 100,
 };

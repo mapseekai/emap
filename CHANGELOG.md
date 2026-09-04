@@ -118,8 +118,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the attribute-injection path available to untyped JavaScript callers.
 - Hardened ZIP imports by upgrading `fflate` to `0.8.3`, rejecting
   case-insensitive duplicate basenames instead of silently overwriting
-  Shapefile sidecars, and enforcing separate 500 MiB compressed and uncompressed
-  limits before download, allocation, and extraction.
+  Shapefile sidecars, and enforcing separate configurable 2 GiB compressed and
+  uncompressed defaults before download, allocation, and extraction.
 - Patched vulnerable runtime dependency chains for XML, ZIP, multipart form,
   protobuf schema, and query-string handling. Production auditing now fails
   closed for new, expired, non-documentation, critical, or unclassified findings;

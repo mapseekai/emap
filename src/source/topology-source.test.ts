@@ -10,6 +10,8 @@ function setPrivate(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
 }
 
+const TWO_GIB = 2 * 1024 * 1024 * 1024;
+
 const FAKE_DATASET = {
   layers: [{ name: 'lyr', geometry_type: 'polygon', shapes: [[[0]]], data: null }],
   arcs: undefined,
@@ -839,6 +841,49 @@ describe('TopologySource.setData multi-file', () => {
     expect(parseCommandsSpy).not.toHaveBeenCalled();
   });
 
+  it('rejects a URL ZIP above the default 2 GiB compressed limit before buffering', async () => {
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(0));
+    const fetchSpy = vi.fn(async () => ({
+      ok: true,
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === 'content-length' ? String(TWO_GIB + 1) : 'application/zip',
+      },
+      arrayBuffer,
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const source = new TopologySource('zip-source');
+
+    await expect(source.setData('https://example.test/data.zip')).rejects.toThrow(
+      `maxCompressedBytes ${TWO_GIB}`,
+    );
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(parseCommandsSpy).not.toHaveBeenCalled();
+  });
+
+  it('accepts a URL ZIP at the default 2 GiB compressed boundary', async () => {
+    const zip = zipSync({ 'a.shp': new Uint8Array([1, 2, 3]) });
+    const arrayBuffer = vi.fn(async () =>
+      zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength),
+    );
+    const fetchSpy = vi.fn(async () => ({
+      ok: true,
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === 'content-length' ? String(TWO_GIB) : 'application/zip',
+      },
+      arrayBuffer,
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const source = new TopologySource('zip-source');
+
+    await expect(source.setData('https://example.test/data.zip')).resolves.toBe(source);
+    expect(arrayBuffer).toHaveBeenCalledOnce();
+    expect(parseCommandsSpy).toHaveBeenCalledOnce();
+  });
+
   it('fromBytes resolves after loading an in-memory dataset', async () => {
     const content = new Uint8Array([9, 8, 7]);
 
@@ -928,6 +973,17 @@ describe('TopologySource._extractZip — resource limits', () => {
     return Reflect.get(source, '_extractZip').call(source, data);
   }
 
+  function withDeclaredUncompressedSize(data: Uint8Array, byteLength: number): Uint8Array {
+    const patched = data.slice();
+    const view = new DataView(patched.buffer, patched.byteOffset, patched.byteLength);
+    for (let offset = 0; offset + 4 <= patched.byteLength; offset++) {
+      const signature = view.getUint32(offset, true);
+      if (signature === 0x04034b50) view.setUint32(offset + 22, byteLength, true);
+      if (signature === 0x02014b50) view.setUint32(offset + 24, byteLength, true);
+    }
+    return patched;
+  }
+
   it('accepts a normal multi-file shapefile zip with default limits', async () => {
     const buf = zipSync({
       'a.shp': new Uint8Array([1, 2, 3]),
@@ -981,6 +1037,18 @@ describe('TopologySource._extractZip — resource limits', () => {
     const buf = zipSync(entries);
     const source = new TopologySource('t', { zipLimits: { maxEntries: 5 } });
     await expect(callExtract(source, buf)).rejects.toThrow(/maxEntries/);
+  });
+
+  it('rejects a declared uncompressed total above the default 2 GiB maxBytes', async () => {
+    const buf = withDeclaredUncompressedSize(
+      zipSync({ 'large.shp': new Uint8Array([1]) }),
+      TWO_GIB + 1,
+    );
+    const source = new TopologySource('t', {
+      zipLimits: { maxRatio: Number.POSITIVE_INFINITY },
+    });
+
+    await expect(callExtract(source, buf)).rejects.toThrow(`maxBytes ${TWO_GIB}`);
   });
 
   it('throws when uncompressed total exceeds maxBytes', async () => {
