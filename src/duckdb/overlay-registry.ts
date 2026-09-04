@@ -31,23 +31,25 @@ export function getDuckDbOverlayOperationSpec(operation: string): DuckDbOverlayO
       throw new DuckDbOperationError(
         'validation',
         `Unsupported DuckDB overlay operation: ${operation}`,
+        { field: 'operation' },
       );
   }
 }
 
-function runOverlayHelper(
-  operation: DuckDbOverlayOperationId,
+/** @internal Execute a descriptor-backed overlay operation by id. */
+export async function runNamedDuckDbOverlayOperation(
+  operation: string,
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
-  opts: DuckDbOverlayHelperOptions,
-  runtime: DuckDbRuntime | null,
+  opts: DuckDbOverlayHelperOptions = {},
+  runtime: DuckDbRuntime | null | undefined = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
   return processOverlayWithDuckDb(
     inputDataset,
     maskDataset,
     opts,
     getDuckDbOverlayOperationSpec(operation),
-    runtime,
+    runtime === undefined ? getDuckDbRuntime() : runtime,
   );
 }
 
@@ -57,7 +59,7 @@ export function intersectionDatasetWithDuckDb(
   opts: DuckDbOverlayHelperOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return runOverlayHelper('intersection', inputDataset, maskDataset, opts, runtime);
+  return runNamedDuckDbOverlayOperation('intersection', inputDataset, maskDataset, opts, runtime);
 }
 
 export function differenceDatasetWithDuckDb(
@@ -66,5 +68,5 @@ export function differenceDatasetWithDuckDb(
   opts: DuckDbOverlayHelperOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return runOverlayHelper('difference', inputDataset, maskDataset, opts, runtime);
+  return runNamedDuckDbOverlayOperation('difference', inputDataset, maskDataset, opts, runtime);
 }

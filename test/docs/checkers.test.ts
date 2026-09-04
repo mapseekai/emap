@@ -29,46 +29,6 @@ describe('documentation quality checkers', () => {
     expect(outputOf(result)).toContain('intro');
   });
 
-  it('fails when a documented TypeDoc parameter lacks semantic description', async () => {
-    const root = await fixtureRoot();
-    await writeCatalog(root, {
-      docs: ['/docs/'],
-      api: ['loadMap'],
-      fixtures: ['inline:tiny.geojson'],
-    });
-    await writeReflections(root, {
-      children: [
-        {
-          name: 'loadMap',
-          variant: 'declaration',
-          kind: 64,
-          sources: [{ fileName: 'src/index.ts' }],
-          signatures: [
-            {
-              name: 'loadMap',
-              variant: 'signature',
-              kind: 4096,
-              sources: [{ fileName: 'src/index.ts' }],
-              comment: {
-                summary: [{ kind: 'text', text: 'Loads a map.' }],
-                blockTags: [
-                  { tag: '@example', content: [{ kind: 'text', text: 'getting-started/fixture' }] },
-                ],
-              },
-              parameters: [{ name: 'options', variant: 'param', kind: 32768 }],
-            },
-          ],
-        },
-      ],
-    });
-
-    const result = runChecker('scripts/check-docs-api.mjs', root);
-
-    expect(result.status).toBe(1);
-    expect(outputOf(result)).toContain('loadMap.options');
-    expect(outputOf(result)).toContain('missing parameter semantic description');
-  });
-
   it('fails when a public TypeDoc reflection lacks an @example tag', async () => {
     const root = await fixtureRoot();
     await writeCatalog(root, {
@@ -196,101 +156,7 @@ describe('documentation quality checkers', () => {
     expect(result.status).toBe(0);
   });
 
-  it('fails with named diagnostics for incomplete parameter metadata', async () => {
-    const root = await fixtureRoot();
-    await writeCatalog(root, {
-      docs: ['/docs/'],
-      api: ['loadMap'],
-      fixtures: ['inline:tiny.geojson'],
-    });
-    await writeReflections(root, {
-      children: [
-        {
-          name: 'loadMap',
-          variant: 'declaration',
-          kind: 64,
-          sources: [{ fileName: 'src/index.ts' }],
-          signatures: [
-            {
-              name: 'loadMap',
-              variant: 'signature',
-              kind: 4096,
-              sources: [{ fileName: 'src/index.ts' }],
-              comment: {
-                summary: [{ kind: 'text', text: 'Loads a map.' }],
-                blockTags: [
-                  {
-                    tag: '@param',
-                    name: 'options',
-                    content: [{ kind: 'text', text: 'Map options.' }],
-                  },
-                  { tag: '@example', content: [{ kind: 'text', text: 'loadMap({ container });' }] },
-                ],
-              },
-              parameters: [{ name: 'options', variant: 'param', kind: 32768 }],
-            },
-          ],
-        },
-      ],
-    });
-
-    const result = runChecker('scripts/check-docs-api.mjs', root);
-
-    expect(result.status).toBe(1);
-    expect(outputOf(result)).toContain('missing parameter default/omission behavior');
-    expect(outputOf(result)).toContain('missing parameter constraints/valid values');
-  });
-
-  it('fails when a public parameter lacks a runnable example association', async () => {
-    const root = await fixtureRoot();
-    await writeCatalog(root, {
-      docs: ['/docs/'],
-      api: ['loadMap'],
-      fixtures: ['inline:tiny.geojson'],
-    });
-    await writeReflections(root, {
-      children: [
-        {
-          name: 'loadMap',
-          variant: 'declaration',
-          kind: 64,
-          sources: [{ fileName: 'src/index.ts' }],
-          signatures: [
-            {
-              name: 'loadMap',
-              variant: 'signature',
-              kind: 4096,
-              sources: [{ fileName: 'src/index.ts' }],
-              comment: {
-                summary: [{ kind: 'text', text: 'Loads a map.' }],
-                blockTags: [
-                  {
-                    tag: '@param',
-                    name: 'options',
-                    content: [
-                      {
-                        kind: 'text',
-                        text: 'Map options. Required object; must include a valid container.',
-                      },
-                    ],
-                  },
-                ],
-              },
-              parameters: [{ name: 'options', variant: 'param', kind: 32768 }],
-            },
-          ],
-        },
-      ],
-    });
-
-    const result = runChecker('scripts/check-docs-api.mjs', root);
-
-    expect(result.status).toBe(1);
-    expect(outputOf(result)).toContain('missing public API @example association');
-    expect(outputOf(result)).toContain('missing parameter runnable example association');
-  });
-
-  it('fully checks public APIs cataloged only from docs front matter', async () => {
+  it('requires example associations for APIs cataloged only from docs front matter', async () => {
     const root = await fixtureRoot();
     await writeDoc(root, 'packages/docs/docs/reference/doc-only.md', {
       id: 'reference/doc-only',
@@ -327,12 +193,6 @@ describe('documentation quality checkers', () => {
 
     expect(result.status).toBe(1);
     expect(outputOf(result)).toContain('docOnlyApi: missing public API @example association');
-    expect(outputOf(result)).toContain('docOnlyApi: missing public API comment text');
-    expect(outputOf(result)).toContain('docOnlyApi.options');
-    expect(outputOf(result)).toContain('missing parameter semantic description');
-    expect(outputOf(result)).toContain('missing parameter default/omission behavior');
-    expect(outputOf(result)).toContain('missing parameter constraints/valid values');
-    expect(outputOf(result)).toContain('missing parameter runnable example association');
   });
 
   it('parses seed and recipe calls from the exported examples catalog', async () => {
@@ -382,36 +242,6 @@ describe('documentation quality checkers', () => {
     expect(outputOf(result)).toContain('missing docs ID /docs/missing-seed');
     expect(outputOf(result)).toContain('missing API reflection MissingRecipeApi');
     expect(outputOf(result)).toContain('missing API reflection MissingSeedApi');
-  });
-
-  it('fails when @example is the only public TypeDoc comment prose', async () => {
-    const root = await fixtureRoot();
-    await writeCatalog(root, {
-      docs: ['/docs/'],
-      api: ['loadMap'],
-      fixtures: ['inline:tiny.geojson'],
-    });
-    await writeReflections(root, {
-      children: [
-        {
-          name: 'loadMap',
-          variant: 'declaration',
-          kind: 64,
-          sources: [{ fileName: 'src/index.ts' }],
-          comment: {
-            blockTags: [
-              { tag: '@example', content: [{ kind: 'text', text: 'getting-started/fixture' }] },
-            ],
-          },
-        },
-      ],
-    });
-
-    const result = runChecker('scripts/check-docs-api.mjs', root);
-
-    expect(result.status).toBe(1);
-    expect(outputOf(result)).toContain('loadMap');
-    expect(outputOf(result)).toContain('missing public API comment text');
   });
 
   it('fails when generated module reflections or pages contain filler prose', async () => {

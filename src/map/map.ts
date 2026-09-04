@@ -283,8 +283,11 @@ export class Emap extends EventDispatcher {
   private _scaleCalculator?: ScaleCalculator;
   private _projection: Projection = new Projection();
   private _camera!: Camera;
-  // Accessed by composed managers via `EmapHostInternal`. Treat as
-  // read-only outside this class.
+  /**
+   * Accessed by composed managers via `EmapHostInternal`. Treat as read-only
+   * outside this class.
+   * @internal
+   */
   _sources: globalThis.Map<string, MutableTopologySource> = new globalThis.Map();
   /**
    * Single resolution surface for `(sourceId, layerId) → MapshaperLayer`.
@@ -367,7 +370,9 @@ export class Emap extends EventDispatcher {
    * they wire up the host.
    */
   public features!: FeatureAccessor;
+  /** @internal */
   _selection: Selection = new Selection();
+  /** @internal */
   _history: EditHistory = new EditHistory();
   /**
    * Currently active transaction, or `null`. Mutated by
@@ -375,6 +380,7 @@ export class Emap extends EventDispatcher {
    * `EmapHostInternal` contract so the runner can record per-source
    * snapshots without threading a transaction param through every op
    * signature.
+   * @internal
    */
   _activeTransaction: TransactionInternal | null = null;
   /**
@@ -383,6 +389,7 @@ export class Emap extends EventDispatcher {
    * `validationfailed` (no auto-undo — apps decide how to react).
    *
    * Public-facing alias is `engine.validators` (see initialiser below).
+   * @internal
    */
   readonly _validators: ValidatorRegistry = new ValidatorRegistry();
   /** Public alias for the validator registry. */
@@ -431,22 +438,27 @@ export class Emap extends EventDispatcher {
     this._scheduleRender();
   });
 
-  // Worker pool / mode / threshold are read by `MapshaperOps` via
-  // `EmapHostInternal`. null when the option is off (or until the first
-  // dataset-replace runs).
+  /**
+   * Worker pool used by `MapshaperOps`; null when worker execution is disabled.
+   * @internal
+   */
   _workerPool: MapshaperWorkerPool | null = null;
-  // Resolved `useWorker` mode: false (off), true (always), or 'auto'
-  // (per-call decision based on dataset vertex count).
+  /**
+   * Resolved worker mode: disabled, always, or automatic routing.
+   * @internal
+   */
   _workerMode: boolean | 'auto' = false;
-  // Vertex-count threshold for the 'auto' mode. Defaults to
-  // `DEFAULT_WORKER_THRESHOLD` (50_000). Read by `MapshaperOps`; the `_`
-  // prefix still signals internal-only.
+  /**
+   * Vertex or record threshold used by automatic worker routing.
+   * @internal
+   */
   _workerThreshold: number = DEFAULT_WORKER_THRESHOLD;
   /**
    * Optional caller-supplied routing decision. When set, `_runDatasetCommand`
    * forwards every command-info bundle to it and uses the boolean result
    * verbatim. Pass `MapOptions.workerRouting` to install one. Read by
    * `MapshaperOps` via the host.
+   * @internal
    */
   _workerRouting?: import('./worker-routing').WorkerRoutingFn;
   // Default to `disabled` so apps don't accidentally execute arbitrary
@@ -659,7 +671,7 @@ export class Emap extends EventDispatcher {
     return this._expressionPolicy ?? 'disabled';
   }
 
-  // Called by `MapshaperOps` via `this._emap._allowExpressionEvaluation`.
+  /** @internal Called by `MapshaperOps` before forwarding expression payloads. */
   _allowExpressionEvaluation(values: Array<string | undefined>, operation: string): boolean {
     const hasExpression = values.some(
       (value) => typeof value === 'string' && value.trim().length > 0,
@@ -2073,6 +2085,7 @@ export class Emap extends EventDispatcher {
     return this;
   }
 
+  /** @internal Schedule a coalesced renderer update. */
   _scheduleRender(
     action: RenderAction = 'redraw',
     navDelta?: AffineDelta,
@@ -2295,7 +2308,7 @@ export class Emap extends EventDispatcher {
     this._featureQuery.clear(sourceId);
   }
 
-  // Called by `EditSessions` via `this._emap._clearSpatialIndexesForSources`.
+  /** @internal Clear spatial indexes after an in-place edit. */
   _clearSpatialIndexesForSources(sourceIds: Iterable<string>): void {
     for (const sourceId of sourceIds) {
       this._featureQuery?.clear(sourceId);
@@ -2366,6 +2379,7 @@ export class Emap extends EventDispatcher {
     return this._selection.has(feature);
   }
 
+  /** @internal Publish a committed selection change. */
   _fireSelectionChange(diff: SelectionDiff): void {
     if (!diff.changed) return;
     this.fire('selectionchange', {
@@ -2411,6 +2425,7 @@ export class Emap extends EventDispatcher {
    * Drop derived caches (line-layer arc flags + spatial index) for the given
    * sources. Call after any edit that mutates `layer.shapes` so subsequent
    * frames and `queryFeatures` calls don't reference stale features.
+   * @internal
    */
   _invalidateShapeCachesForSources(sourceIds: Iterable<string>): void {
     for (const sourceId of sourceIds) {
@@ -2419,6 +2434,7 @@ export class Emap extends EventDispatcher {
     }
   }
 
+  /** @internal Clear highlight references after feature IDs shift. */
   _clearHighlightsForLayer(sourceId: string, layerKeys: readonly string[]): void {
     let removed = false;
     for (const key of layerKeys)
@@ -2556,6 +2572,7 @@ export class Emap extends EventDispatcher {
     return unbind;
   }
 
+  /** @internal Publish the current history snapshot. */
   _fireHistoryChange(): void {
     const snap: HistoryStateSnapshot = this._history.snapshot();
     this.fire('historychange', snap);
@@ -2620,8 +2637,8 @@ export class Emap extends EventDispatcher {
    *
    * After `remove()` the instance must not be reused. Public methods that
    * touch DOM / timers are left in place for now (they will fail naturally
-   * when the underlying resources are gone), but `_scheduleRender` is
-   * guarded so post-teardown event firings don't queue another frame.
+   * when the underlying resources are gone), but render scheduling is guarded
+   * so post-teardown event firings don't queue another frame.
    */
   public remove(): void {
     if (this._removed) return;
@@ -2713,6 +2730,6 @@ export class Emap extends EventDispatcher {
 
     if (mapLibreDestroyFailure) throw mapLibreDestroyFailure.error;
   }
-  /** Read by composed managers via `EmapHostInternal._removed`. */
+  /** @internal Read by composed managers to reject post-removal work. */
   _removed = false;
 }

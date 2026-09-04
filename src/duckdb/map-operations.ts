@@ -3,63 +3,21 @@ import { Err, okValue, type OpResult } from '../map/op-result';
 import { DuckDbOperationError } from './errors';
 import { bufferDatasetWithDuckDb, type DuckDbBufferOptions } from './buffer';
 import {
-  boundaryDatasetWithDuckDb,
-  centroidDatasetWithDuckDb,
-  convexHullDatasetWithDuckDb,
-  envelopeDatasetWithDuckDb,
-  makeValidDatasetWithDuckDb,
-  simplifyDatasetWithDuckDb,
-  simplifyPreserveTopologyDatasetWithDuckDb,
-  type DuckDbSimplifyOptions,
+  runNamedDuckDbGeometryOperation,
   type DuckDbUnaryGeometryOperationId,
 } from './geometry-registry';
 import {
-  areaDatasetWithDuckDb,
-  centroidXDatasetWithDuckDb,
-  centroidYDatasetWithDuckDb,
-  geometryTypeDatasetWithDuckDb,
-  isEmptyDatasetWithDuckDb,
-  isSimpleDatasetWithDuckDb,
-  isValidDatasetWithDuckDb,
-  lengthDatasetWithDuckDb,
-  perimeterDatasetWithDuckDb,
-  xDatasetWithDuckDb,
-  yDatasetWithDuckDb,
+  runNamedDuckDbAttributeOperation,
   type DuckDbAttributeOperationId,
   type DuckDbAttributeOperationOptions,
 } from './attribute-registry';
 import {
-  containsAttributeDatasetWithDuckDb,
-  containsProperlyAttributeDatasetWithDuckDb,
-  containsProperlyDatasetWithDuckDb,
-  containsDatasetWithDuckDb,
-  coveredByAttributeDatasetWithDuckDb,
-  coveredByDatasetWithDuckDb,
-  coversAttributeDatasetWithDuckDb,
-  coversDatasetWithDuckDb,
-  crossesAttributeDatasetWithDuckDb,
-  crossesDatasetWithDuckDb,
-  disjointAttributeDatasetWithDuckDb,
-  disjointDatasetWithDuckDb,
-  distanceDatasetWithDuckDb,
-  distanceWithinAttributeDatasetWithDuckDb,
-  distanceWithinDatasetWithDuckDb,
-  equalsAttributeDatasetWithDuckDb,
-  equalsDatasetWithDuckDb,
-  intersectsAttributeDatasetWithDuckDb,
-  intersectsDatasetWithDuckDb,
-  overlapsAttributeDatasetWithDuckDb,
-  overlapsDatasetWithDuckDb,
-  touchesAttributeDatasetWithDuckDb,
-  touchesDatasetWithDuckDb,
-  withinAttributeDatasetWithDuckDb,
-  withinDatasetWithDuckDb,
+  runNamedDuckDbRelationOperation,
   type DuckDbRelationHelperOptions,
   type DuckDbRelationOperationId,
 } from './relation-registry';
 import {
-  differenceDatasetWithDuckDb,
-  intersectionDatasetWithDuckDb,
+  runNamedDuckDbOverlayOperation,
   type DuckDbOverlayHelperOptions,
   type DuckDbOverlayOperationId,
 } from './overlay-registry';
@@ -153,8 +111,8 @@ export type DuckDbGeoParquetQueryLayerResult = OpResult<DuckDbLayerSuccess>;
 function duckDbErrorToOpResult(err: unknown, operation: string): OpResult<never> {
   if (err instanceof DuckDbOperationError) {
     return Err.duckdb(operation, err.kind, err.message, {
-      field: err.field,
-      cause: err.cause,
+      ...(err.field === undefined ? {} : { field: err.field }),
+      ...(err.cause === undefined ? {} : { cause: err.cause }),
     });
   }
   return Err.mapshaper(err, { operation });
@@ -282,147 +240,47 @@ function relationOptions(opts: DuckDbRelationLayerOptions): DuckDbRelationHelper
   };
 }
 
-type DatasetRunner<O> = (
-  dataset: MapshaperDataset,
-  opts: O,
-  runtime: DuckDbRuntime | null | undefined,
-) => Promise<MapshaperDataset>;
-
-type BinaryDatasetRunner<O> = (
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: O,
-  runtime: DuckDbRuntime | null | undefined,
-) => Promise<MapshaperDataset>;
-
-const GEOMETRY_RUNNERS: Record<string, DatasetRunner<DuckDbUnaryGeometryOptions>> = {
-  centroid: centroidDatasetWithDuckDb,
-  envelope: envelopeDatasetWithDuckDb,
-  convexHull: convexHullDatasetWithDuckDb,
-  boundary: boundaryDatasetWithDuckDb,
-  makeValid: makeValidDatasetWithDuckDb,
-};
-
-const ATTRIBUTE_RUNNERS: Record<string, DatasetRunner<DuckDbAttributeOperationOptions>> = {
-  area: areaDatasetWithDuckDb,
-  length: lengthDatasetWithDuckDb,
-  perimeter: perimeterDatasetWithDuckDb,
-  geometryType: geometryTypeDatasetWithDuckDb,
-  isValid: isValidDatasetWithDuckDb,
-  isEmpty: isEmptyDatasetWithDuckDb,
-  isSimple: isSimpleDatasetWithDuckDb,
-  x: xDatasetWithDuckDb,
-  y: yDatasetWithDuckDb,
-  centroidX: centroidXDatasetWithDuckDb,
-  centroidY: centroidYDatasetWithDuckDb,
-};
-
-const RELATION_FILTER_RUNNERS: Record<string, BinaryDatasetRunner<DuckDbRelationHelperOptions>> = {
-  intersects: intersectsDatasetWithDuckDb,
-  contains: containsDatasetWithDuckDb,
-  within: withinDatasetWithDuckDb,
-  touches: touchesDatasetWithDuckDb,
-  disjoint: disjointDatasetWithDuckDb,
-  overlaps: overlapsDatasetWithDuckDb,
-  equals: equalsDatasetWithDuckDb,
-  crosses: crossesDatasetWithDuckDb,
-  covers: coversDatasetWithDuckDb,
-  coveredBy: coveredByDatasetWithDuckDb,
-  containsProperly: containsProperlyDatasetWithDuckDb,
-  distanceWithin: distanceWithinDatasetWithDuckDb,
-};
-
-const RELATION_ATTRIBUTE_RUNNERS: Record<
-  string,
-  BinaryDatasetRunner<DuckDbRelationHelperOptions>
-> = {
-  intersects: intersectsAttributeDatasetWithDuckDb,
-  contains: containsAttributeDatasetWithDuckDb,
-  within: withinAttributeDatasetWithDuckDb,
-  touches: touchesAttributeDatasetWithDuckDb,
-  disjoint: disjointAttributeDatasetWithDuckDb,
-  overlaps: overlapsAttributeDatasetWithDuckDb,
-  equals: equalsAttributeDatasetWithDuckDb,
-  crosses: crossesAttributeDatasetWithDuckDb,
-  covers: coversAttributeDatasetWithDuckDb,
-  coveredBy: coveredByAttributeDatasetWithDuckDb,
-  containsProperly: containsProperlyAttributeDatasetWithDuckDb,
-  distance: distanceDatasetWithDuckDb,
-  distanceWithin: distanceWithinAttributeDatasetWithDuckDb,
-};
-
-async function runGeometryOperation(
+function runGeometryOperation(
   dataset: MapshaperDataset,
   opts: DuckDbGeometryLayerOptions,
 ): Promise<MapshaperDataset> {
-  if (opts.operation === 'simplify' || opts.operation === 'simplifyPreserveTopology') {
-    const simplifyOpts = {
+  return runNamedDuckDbGeometryOperation(
+    dataset,
+    opts.operation,
+    {
       ...geometryOptions(opts),
-      tolerance: opts.tolerance as number,
+      tolerance: opts.tolerance,
       failOnGeographicCrs: opts.failOnGeographicCrs,
-    } satisfies DuckDbSimplifyOptions;
-    return opts.operation === 'simplify'
-      ? simplifyDatasetWithDuckDb(dataset, simplifyOpts, opts.runtime)
-      : simplifyPreserveTopologyDatasetWithDuckDb(dataset, simplifyOpts, opts.runtime);
-  }
-  const run = GEOMETRY_RUNNERS[opts.operation];
-  if (!run) {
-    throw new DuckDbOperationError(
-      'validation',
-      `Unknown DuckDB geometry operation '${opts.operation}'`,
-      { field: 'operation' },
-    );
-  }
-  return run(dataset, geometryOptions(opts), opts.runtime);
+    },
+    opts.runtime,
+  );
 }
 
-async function runAttributeOperation(
+function runAttributeOperation(
   dataset: MapshaperDataset,
   opts: DuckDbAttributeLayerOptions,
 ): Promise<MapshaperDataset> {
-  const run = ATTRIBUTE_RUNNERS[opts.operation];
-  if (!run) {
-    throw new DuckDbOperationError(
-      'validation',
-      `Unknown DuckDB attribute operation '${opts.operation}'`,
-      { field: 'operation' },
-    );
-  }
-  return run(dataset, attributeOptions(opts), opts.runtime);
+  return runNamedDuckDbAttributeOperation(
+    dataset,
+    opts.operation,
+    attributeOptions(opts),
+    opts.runtime,
+  );
 }
 
-export async function runRelationOperation(
+export function runRelationOperation(
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
   opts: DuckDbRelationLayerOptions,
 ): Promise<MapshaperDataset> {
-  if (opts.mode === 'filter' && opts.operation === 'distance') {
-    throw new DuckDbOperationError(
-      'validation',
-      "DuckDB relation operation 'distance' only supports attribute mode",
-      { field: 'operation' },
-    );
-  }
-  const table =
-    opts.mode === 'filter'
-      ? RELATION_FILTER_RUNNERS
-      : opts.mode === 'attribute'
-        ? RELATION_ATTRIBUTE_RUNNERS
-        : undefined;
-  if (!table) {
-    throw new DuckDbOperationError('validation', `Unknown DuckDB relation mode '${opts.mode}'`, {
-      field: 'mode',
-    });
-  }
-  const run = table[opts.operation];
-  if (!run) {
-    throw new DuckDbOperationError(
-      'validation',
-      `Unknown DuckDB relation operation '${opts.operation}'`,
-      { field: 'operation' },
-    );
-  }
-  return run(inputDataset, maskDataset, relationOptions(opts), opts.runtime);
+  return runNamedDuckDbRelationOperation(
+    opts.mode,
+    opts.operation,
+    inputDataset,
+    maskDataset,
+    relationOptions(opts),
+    opts.runtime,
+  );
 }
 
 export function duckDbGeometryLayer(
@@ -540,25 +398,18 @@ function overlayOptions(opts: DuckDbOverlayLayerOptions): DuckDbOverlayHelperOpt
   };
 }
 
-async function runOverlayOperation(
+function runOverlayOperation(
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
   opts: DuckDbOverlayLayerOptions,
 ): Promise<MapshaperDataset> {
-  const helperOptions = overlayOptions(opts);
-
-  switch (opts.operation) {
-    case 'intersection':
-      return intersectionDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
-    case 'difference':
-      return differenceDatasetWithDuckDb(inputDataset, maskDataset, helperOptions, opts.runtime);
-    default:
-      throw new DuckDbOperationError(
-        'validation',
-        `Unsupported DuckDB overlay operation: ${String(opts.operation)}`,
-        { field: 'operation' },
-      );
-  }
+  return runNamedDuckDbOverlayOperation(
+    opts.operation,
+    inputDataset,
+    maskDataset,
+    overlayOptions(opts),
+    opts.runtime,
+  );
 }
 
 export function duckDbOverlayLayer(

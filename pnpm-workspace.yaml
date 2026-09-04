@@ -10,7 +10,6 @@ overrides:
   qs: '6.16.0'
 
 allowBuilds:
-  better-sqlite3: set this to true or false
   core-js: true
   esbuild: true
   msgpackr-extract: true

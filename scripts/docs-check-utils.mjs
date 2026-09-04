@@ -327,10 +327,6 @@ function isSourceFile(fileName) {
   return typeof fileName === 'string' && (fileName.startsWith('src/') || fileName.includes('/src/'));
 }
 
-export function hasCommentText(node) {
-  return reflectionCommentText(node).trim().length > 0;
-}
-
 export function hasExampleTag(node) {
   return (
     Array.isArray(node.comment?.blockTags) &&
@@ -339,68 +335,6 @@ export function hasExampleTag(node) {
     Array.isArray(node.signatures) &&
     node.signatures.some((signature) => hasExampleTag(signature))
   );
-}
-
-export function hasParameterComment(signature, parameterName) {
-  return parameterCommentText(signature, parameterName).trim().length > 0;
-}
-
-export function hasParameterDefaultBehavior(node, parameterName) {
-  return /\b(defaults?|omits?|omitted|omission|optional|required|undefined|unset|absent|when not provided)\b/i.test(
-    parameterCommentText(node, parameterName),
-  );
-}
-
-export function hasParameterConstraints(node, parameterName) {
-  return /\b(valid|allowed|one of|must|requires?|constraint|range|positive|negative|non-negative|units?|epsg|crs|geojson|topojson|csv|parquet|arrow|boolean|number|string|array)\b/i.test(
-    parameterCommentText(node, parameterName),
-  );
-}
-
-export function hasParameterRunnableExample(node) {
-  return hasExampleTag(node);
-}
-
-export function getPublicParameterNames(node) {
-  const names = new Set();
-  for (const signature of reflectionAndSignatures(node)) {
-    for (const parameter of Array.isArray(signature.parameters) ? signature.parameters : []) {
-      if (typeof parameter.name === 'string') names.add(parameter.name);
-    }
-  }
-  return [...names];
-}
-
-function parameterCommentText(node, parameterName) {
-  const chunks = [];
-  for (const signature of reflectionAndSignatures(node)) {
-    const parameter = Array.isArray(signature.parameters)
-      ? signature.parameters.find((item) => item.name === parameterName)
-      : undefined;
-    if (parameter) chunks.push(reflectionCommentText(parameter));
-
-    if (Array.isArray(signature.comment?.blockTags)) {
-      chunks.push(
-        ...signature.comment.blockTags
-          .filter((tag) => tag.tag === '@param' && tag.name === parameterName)
-          .map((tag) => commentSummaryContentText(tag)),
-      );
-    }
-  }
-
-  return chunks.join(' ');
-}
-
-function reflectionAndSignatures(node) {
-  return [node, ...(Array.isArray(node.signatures) ? node.signatures : [])];
-}
-
-function reflectionCommentText(node) {
-  const chunks = [commentSummaryContentText(node.comment)];
-  for (const signature of Array.isArray(node.signatures) ? node.signatures : []) {
-    chunks.push(commentSummaryContentText(signature.comment));
-  }
-  return chunks.join(' ');
 }
 
 function commentSummaryContentText(comment) {

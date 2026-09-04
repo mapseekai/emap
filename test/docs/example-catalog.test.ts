@@ -2,111 +2,14 @@
 import { access, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { examples, type ExampleDefinition } from '../../docs-meta/examples';
+import { examples, exampleTopics, type ExampleDefinition } from '../../docs-meta/examples';
 import { examplePublicHref, renderCatalog } from '../../packages/examples/src/catalog';
 
-const expectedIds = [
-  'getting-started/geojson-viewer',
-  'getting-started/shapefile-viewer',
-  'getting-started/topojson-viewer',
-  'flatgeobuf-viewer',
-  'geoparquet-viewer',
-  'export-formats',
-  'online-map-services',
-  'crs-switch',
-  'project',
-  'rename-layer',
-  'split-layer',
-  'merge-layers',
-  'getting-started/point-style',
-  'getting-started/lines',
-  'getting-started/polygon-fill',
-  'interaction-handlers',
-  'measurement',
-  'feature-attributes',
-  'feature-selection',
-  'box-select',
-  'lasso-select',
-  'attribute-editing',
-  'undo-redo',
-  'attribute-expressions',
-  'filter-features',
-  'data-engineering',
-  'merge-selected',
-  'split-features',
-  'reshape-ring-part',
-  'vertex-editing',
-  'feature-translate',
-  'feature-rotate-scale',
-  'draw-snap-clear',
-  'draw-snap-edge',
-  'china-editing',
-  'transaction',
-  'snapshot',
-  'getting-started/points',
-  'getting-started/polygons',
-  'join',
-  'web-worker',
-  'explode',
-  'buffer',
-  'simplify',
-  'simplify-control',
-  'dissolve',
-  'innerlines',
-  'union',
-  'clip-erase',
-  'divide',
-  'snap-layer',
-  'mosaic',
-  'check-geometry',
-  'rebuild-topology',
-  'duckdb-query',
-  'duckdb-geoparquet-query',
-  'duckdb-buffer',
-  'duckdb-overlay',
-  'duckdb-spatial-aggregate-join',
-  'duckdb/geometry/centroid',
-  'duckdb/geometry/envelope',
-  'duckdb/geometry/convex-hull',
-  'duckdb/geometry/boundary',
-  'duckdb/geometry/simplify',
-  'duckdb/geometry/simplify-preserve-topology',
-  'duckdb/geometry/make-valid',
-  'duckdb/attribute/area',
-  'duckdb/attribute/length',
-  'duckdb/attribute/perimeter',
-  'duckdb/attribute/geometry-type',
-  'duckdb/attribute/is-valid',
-  'duckdb/attribute/is-empty',
-  'duckdb/attribute/is-simple',
-  'duckdb/attribute/x',
-  'duckdb/attribute/y',
-  'duckdb/attribute/centroid-x',
-  'duckdb/attribute/centroid-y',
-  'duckdb/relation/intersects',
-  'duckdb/relation/contains',
-  'duckdb/relation/within',
-  'duckdb/relation/touches',
-  'duckdb/relation/disjoint',
-  'duckdb/relation/overlaps',
-  'duckdb/relation/equals',
-  'duckdb/relation/crosses',
-  'duckdb/relation/covers',
-  'duckdb/relation/covered-by',
-  'duckdb/relation/contains-properly',
-  'duckdb/relation/distance',
-  'duckdb/relation/distance-within',
-] as const;
 const expectedModules = [
-  { key: 'map-data', zh: '地图与数据', en: 'Map & Data', count: 12 },
-  {
-    key: 'style-interaction',
-    zh: '样式与交互',
-    en: 'Styling & Interaction',
-    count: 9,
-  },
-  { key: 'data-editing', zh: '数据编辑', en: 'Data Editing', count: 16 },
-  { key: 'data-analysis', zh: '数据分析', en: 'Data Analysis', count: 53 },
+  { key: 'map-data', zh: '地图与数据' },
+  { key: 'style-interaction', zh: '样式与交互' },
+  { key: 'data-editing', zh: '数据编辑' },
+  { key: 'data-analysis', zh: '数据分析' },
 ] as const;
 
 function createTopicFixture(
@@ -347,13 +250,17 @@ async function executeOnlineMapServicesExample(
 }
 
 describe('example catalog metadata', () => {
-  it('declares one directly ordered metadata array', async () => {
+  it('uses the exported manifest as the only route inventory', async () => {
     const source = await readFile(resolve('docs-meta/examples.ts'), 'utf8');
+    const viteConfig = await readFile(resolve('packages/examples/vite.config.ts'), 'utf8');
 
     expect(source).not.toContain('const seeds:');
     expect(source).not.toContain('const recipes:');
     expect(source).not.toContain('function module(');
     expect(source).not.toContain('recipes[');
+    expect(viteConfig).toContain("import { examples } from '../../docs-meta/examples';");
+    expect(viteConfig).toContain('const routeIds = examples.map(({ id }) => id);');
+    expect(viteConfig).not.toContain("'getting-started/geojson-viewer'");
   });
 
   it('builds stable public hrefs for flat and nested IDs', () => {
@@ -365,16 +272,14 @@ describe('example catalog metadata', () => {
   });
 
   it('defines the complete metadata-only catalog', () => {
-    expect(examples).toHaveLength(90);
-    expect(examples.map(({ id }) => id)).toEqual(expectedIds);
     expect(Array.from(new Set(examples.map(({ category }) => category)))).toEqual(
       expectedModules.map(({ key }) => key),
     );
-    for (const { key, count } of expectedModules) {
+    for (const { key } of expectedModules) {
       expect(
-        examples.filter(({ category }) => category === key),
+        examples.some(({ category }) => category === key),
         key,
-      ).toHaveLength(count);
+      ).toBe(true);
     }
 
     const ids = new Set<string>();
@@ -515,43 +420,48 @@ describe('example catalog metadata', () => {
     const root = document.createElement('div');
     renderCatalog(root, examples);
 
-    expect(root.querySelectorAll('.catalog-category-button')).toHaveLength(5);
-    expect(root.querySelectorAll('.catalog-group')).toHaveLength(4);
+    expect(root.querySelectorAll('.catalog-category-button')).toHaveLength(
+      expectedModules.length + 1,
+    );
+    expect(root.querySelectorAll('.catalog-group')).toHaveLength(expectedModules.length);
     expect(
       Array.from(root.querySelectorAll('.catalog-group-title'), ({ textContent }) => textContent),
     ).toEqual(expectedModules.map(({ zh }) => zh));
 
+    const mapDataCount = examples.filter(({ category }) => category === 'map-data').length;
     root.querySelector<HTMLButtonElement>('[data-category="map-data"]')?.click();
 
     expect(root.querySelector('.catalog-group-title')?.textContent).toBe('地图与数据');
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(12);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(mapDataCount);
     expect(root.querySelector('[data-category="map-data"]')?.getAttribute('aria-pressed')).toBe(
       'true',
     );
-    expect(root.querySelector('.catalog-results-summary')?.textContent).toContain('12');
+    expect(root.querySelector('.catalog-results-summary')?.textContent).toContain(
+      String(mapDataCount),
+    );
   });
 
-  it('groups the final thirty-six DuckDB examples by section after ordinary data-analysis cards', () => {
+  it('groups DuckDB examples by section after ordinary data-analysis cards', () => {
     const root = document.createElement('div');
     renderCatalog(root, examples);
 
     const topic = root.querySelector('.catalog-topic');
     if (!topic) throw new Error('DuckDB topic was not rendered');
-    expect(topic.querySelectorAll('a.example-card')).toHaveLength(36);
+    const duckDbExamples = examples.filter((example) => example.topic?.id === 'duckdb');
+    expect(topic.querySelectorAll('a.example-card')).toHaveLength(duckDbExamples.length);
     expect(
       Array.from(topic.querySelectorAll('.catalog-topic-section'), (section) => ({
         title: section.querySelector('.catalog-topic-section-title')?.textContent,
         count: section.querySelectorAll('a.example-card').length,
       })),
-    ).toEqual([
-      { title: '查询与数据接入', count: 2 },
-      { title: '专项分析流程', count: 3 },
-      { title: '几何处理', count: 7 },
-      { title: '属性派生', count: 11 },
-      { title: '空间关系', count: 13 },
-    ]);
+    ).toEqual(
+      exampleTopics.duckdb.sections.map((section) => ({
+        title: section.title.zh,
+        count: duckDbExamples.filter((example) => example.topic?.section === section.id).length,
+      })),
+    );
     expect(root.querySelectorAll('.catalog-direct-examples a.example-card')).toHaveLength(
-      examples.length - 36,
+      examples.length - duckDbExamples.length,
     );
     expect(root.querySelectorAll('.catalog-direct-examples .catalog-topic')).toHaveLength(0);
   });
@@ -692,7 +602,9 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-empty')).not.toBeNull();
 
     root.querySelector<HTMLButtonElement>('.catalog-empty-clear')?.click();
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(12);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(
+      examples.filter(({ category }) => category === 'map-data').length,
+    );
     expect(root.querySelector<HTMLInputElement>('.catalog-search-input')?.value).toBe('');
   });
 
@@ -739,7 +651,9 @@ describe('example catalog metadata', () => {
     expect(root.querySelector('.catalog-brand img')?.getAttribute('src')).toBe(
       '/mapseekai/emap/examples/emap.svg',
     );
-    expect(root.querySelector('.catalog-total-count')?.textContent).toContain('90');
+    expect(root.querySelector('.catalog-total-count')?.textContent).toContain(
+      String(examples.length),
+    );
 
     const firstCard = root.querySelector<HTMLAnchorElement>(
       'a.example-card[href="/mapseekai/emap/examples/getting-started/geojson-viewer/"]',
@@ -754,7 +668,9 @@ describe('example catalog metadata', () => {
     if (!mobileCategory) throw new Error('Mobile category selector was not rendered');
     mobileCategory.value = 'data-analysis';
     mobileCategory.dispatchEvent(new Event('change'));
-    expect(root.querySelectorAll('a.example-card')).toHaveLength(53);
+    expect(root.querySelectorAll('a.example-card')).toHaveLength(
+      examples.filter(({ category }) => category === 'data-analysis').length,
+    );
   });
 
   it('defaults to Chinese and switches the complete catalog to English', () => {

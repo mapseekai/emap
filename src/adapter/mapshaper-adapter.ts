@@ -232,13 +232,6 @@ export interface MapshaperAdapter {
   findArcIdFromVertexId(vertexId: number, ii: Int32Array | Uint32Array): number;
 
   /**
-   * `true` iff the vertex at `idx` is the start- or end-vertex of its
-   * arc — those endpoints are shared topological nodes and cannot be
-   * deleted without breaking adjacency.
-   */
-  vertexIsArcEndpoint(idx: number, arcs: ArcCollection): boolean;
-
-  /**
    * Walk every segment of every arc referenced by `shape`, invoking `cb`
    * with the (i, j) global-vertex pair plus the shared `xx` / `yy`
    * arrays. Used by VertexEditControl to find the closest edge under
@@ -872,10 +865,6 @@ export class DefaultMapshaperAdapter implements MapshaperAdapter {
 
   findArcIdFromVertexId(vertexId: number, ii: Int32Array | Uint32Array): number {
     return mapshaper.internal.findArcIdFromVertexId(vertexId, ii);
-  }
-
-  vertexIsArcEndpoint(idx: number, arcs: ArcCollection): boolean {
-    return mapshaper.internal.vertexIsArcEndpoint(idx, arcs);
   }
 
   forEachSegmentInShape(

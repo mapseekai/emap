@@ -1,274 +1,217 @@
-# Emap
+# emap
 
-<p align="center">
-  <img src="packages/examples/public/emap.svg" alt="Emap 标志" width="160" />
-</p>
+`@mapseekai/emap` 是面向浏览器的 TypeScript 矢量地图渲染、查询、分析与拓扑编辑引擎。它以 mapshaper 数据结构为基础，使用 Canvas2D 绘制可编辑业务图层，并可按需同步 MapLibre 底图和在线叠加服务。
 
-[English](README.md)
-
-`Emap` 是一个仅在浏览器中运行的 TypeScript 地图渲染与编辑引擎，基于
-Mapshaper 的拓扑数据结构和 HTML5 Canvas 2D。它面向不依赖框架、无需后端服务的
-GIS 应用，提供客户端数据加载、渲染、选择、拓扑感知编辑、数据操作、撤销/重做和
-自定义界面集成能力。
-
-## 项目状态
-
-`Emap` 仍在快速演进，API、行为和实现细节可能在未提供成熟 GIS 引擎兼容性承诺的
-情况下发生变化。暂不建议直接用于生产环境；请先在原型、演示、研究工具或受控的
-内部工作流中评估。
+> 项目尚未达到 1.0，接口仍在快速演进。用于生产关键编辑流程时，应锁定版本并在升级前完成回归验证。
 
 ## 主要能力
 
-- 面向 Mapshaper 数据集的拓扑优先渲染，复用共享弧段并支持 LOD。
-- 支持 GeoJSON、TopoJSON、KML（仅导入）、ZIP Shapefile 与 Mapshaper 快照加载。
-- FlatGeobuf 导入与导出通过应用注册的可选格式插件提供；请参阅
-  [数据格式](https://mapseekai.github.io/mapseekai/emap/data/formats/)与
-  [FlatGeobuf 查看器](https://mapseekai.github.io/mapseekai/emap/examples/flatgeobuf-viewer/)。
-- 使用 MapLibre 风格的 `fill`、`line` 与 `circle` 图层规范。
-- 内置 `dragPan`、`scrollZoom`、`clickSelect`、`boxSelect`、`lassoSelect`、
-  `vertexEdit`、`drawFeature`、`splitFeature`、`reshapeFeature`、`ringEdit`、
-  `partEdit`、`measure` 和 `transformFeature` 等命名交互处理器。
-- 可只使用交互处理器、不使用内置 UI 控件，也可围绕相同处理器构建自己的工具栏。
-- 支持 `feature:click`、`feature:hover`、`feature:enter` 和 `feature:leave`
-  等委托要素事件。
-- 提供 `jumpTo`、`easeTo`、`flyTo`、`fitBounds`、`panBy`、`panTo`、`zoomTo`
-  和 `stop` 等相机方法。
-- 提供 40 多个由 Mapshaper 命令驱动的 `map.ops.*` 数据操作；完整清单见[数据操作文档](https://mapseekai.github.io/mapseekai/emap/data/operations/)。
-- 支持撤销/重做、事务、校验器、要素访问、高亮与完整会话快照。
-- 可选 Web Worker，用于开销较大的数据集替换操作。
-- 可选 `@mapseekai/emap/duckdb` 模块，提供 DuckDB-Wasm 空间处理和 GeoParquet 查询。
-- 使用 CSS 设计令牌定制内置 UI 的主题。
-
-## 文档与示例
-
-- 简体中文文档：<https://mapseekai.github.io/mapseekai/emap/>
-- 英文文档：<https://mapseekai.github.io/mapseekai/emap/en/>
-- API 参考：<https://mapseekai.github.io/mapseekai/emap/api/>
-- 可运行示例：<https://mapseekai.github.io/mapseekai/emap/examples/>
-- 发布核对清单：[docs/release-checklist.md](docs/release-checklist.md)
-
-站点文档和 API 参考涵盖完整公开接口、数据格式、编辑、选择、相机、主题和部署细节。
+- 加载 GeoJSON、TopoJSON、Shapefile ZIP、KML、MSX 快照，以及可选的 GeoArrow、GeoParquet。
+- 使用 Canvas2D 渲染点、线、面，支持视域裁剪、简化级别和属性驱动分桶填色。
+- 支持选择、绘制、平移、旋转、缩放、拆分、合并、整形、节点、洞和多部件编辑。
+- 通过可撤销命令实现撤销、重做、事务、校验和选择状态恢复。
+- 将数据集操作卸载到 Web Worker，并在提交前检查异步结果是否过期。
+- 通过受限且类型化的接口运行可选 DuckDB-Wasm SQL 与空间分析。
+- 使用可选 MapLibre 服务管理底图、瓦片和在线叠加图层。
 
 ## 安装
 
 ```bash
-npm install @mapseekai/emap
-# 或
 pnpm add @mapseekai/emap
 ```
 
-对于 Vite 等浏览器打包器，TypeScript 必须使用 ES module 和 bundler 解析，才能解析
-`@mapseekai/emap/arrow` 与 `@mapseekai/emap/duckdb` 这两个 `package.json`
-`exports` 子路径：
+```ts
+import { Emap, TopologySource } from '@mapseekai/emap';
+import '@mapseekai/emap/style.css';
+```
+
+TypeScript 建议使用浏览器打包器解析方式：
 
 ```json
 {
   "compilerOptions": {
     "module": "ESNext",
-    "moduleResolution": "bundler"
+    "moduleResolution": "Bundler"
   }
 }
 ```
 
-原生 Node ESM 要配对使用 `Node16` 或 `NodeNext` 的 `module` 与
-`moduleResolution`；旧版 `node`/`node10` 解析即使找到声明文件也不能解析这些子路径。
-完整配置见[安装文档](packages/docs/docs/getting-started/installation.md#typescript-模块解析)。
-
-
 ## 快速开始
 
-### 打包工具
+地图容器必须具有明确尺寸：
+
+```html
+<div id="map" style="width: 100%; height: 480px"></div>
+```
 
 ```ts
-import {
-  Emap,
-  TopologySource,
-  NavigationControl,
-  HistoryControl,
-} from '@mapseekai/emap';
+import { Emap, TopologySource } from '@mapseekai/emap';
 import '@mapseekai/emap/style.css';
 
-const map = new Emap({ container: 'map' });
-map.addControl(new NavigationControl(), 'top-left');
-map.addControl(new HistoryControl(), 'top-left');
-
-const source = await TopologySource.fromUrl(
-  'china',
-  'https://geojson.cn/api/china/1.6.3/china.topo.json',
-);
-
-await map.addSource('china', source);
-map.setExtent(source.getExtent());
-```
-
-ESM 构建可直接在浏览器中使用。Mapshaper 作为同级 ES 模块随包分发，Vite、webpack、
-esbuild 和 Bun 通常不需要额外配置 `Buffer` polyfill 或别名。
-
-### 静态资源
-
-部分运行时文件通过 URL 加载，而不是内联到应用包中：
-
-| 资源 | 使用场景 |
-|---|---|
-| `dist/emap.css` | 内置控件、上下文菜单与默认 UI 样式 |
-| `dist/mapshaper-vendor.js` | IIFE 脚本用法与 Worker 启动 |
-| `dist/emap-worker.js` | `useWorker: true` 或 `useWorker: 'auto'` |
-
-使用打包工具时，优先直接导入样式：
-
-```ts
-import '@mapseekai/emap/style.css';
-```
-
-对于 script 标签或静态托管部署，请将
-`node_modules/@mapseekai/emap/dist/` 下的文件复制到公开资源目录。使用 Worker 时，
-除非自行打包 Worker，否则 `emap-worker.js` 与 `mapshaper-vendor.js` 必须在同一目录，
-因为 Worker 会通过相对路径 `importScripts('mapshaper-vendor.js')` 导入后者。
-
-## 加载数据
-
-```ts
-const source = await TopologySource.fromUrl('roads', '/data/roads.geojson');
-await map.addSource('roads', source);
-map.setExtent(source.getExtent());
-
-const local = new TopologySource('local');
-await local.setData({ filename: 'upload.zip', content: bytes });
-await map.addSource('local', local);
-```
-
-`TopologySource.setData()` 在数据集填充完成且 `data` 事件触发后才会完成。始终
-先在地图外加载 source，再 `await map.addSource()`。它是 source 预检与确认流程的
-便捷包装，可能在注册前重投影 detached dataset。dataset 没有 CRS 元数据时，应显式
-提供数据 CRS：
-
-```ts
-await map.addSource('local', local, { sourceCrs: 'EPSG:3857' });
-```
-
-需要由 UI 补充 CRS 时，使用两阶段 API；复用 `draft` 不会重新读取输入：
-
-```ts
-let result = await map.preflightSource({ id: 'local', source: local });
-if (result.status === 'needs-input') {
-  result = await map.preflightSource(result.draft, { sourceCrs: selectedCrs });
-}
-if (result.status === 'ready') {
-  await map.confirmSource(result.plan);
-}
-```
-
-显式 `sourceCrs` 优先于 dataset 元数据；两者都没有时，预检返回
-`needs-input`，不会猜测。空 source 不能先注册：应先加载，再调用
-`addSource()` 或 `preflightSource()`。
-
-支持的输入包括：
-
-- GeoJSON 和 TopoJSON。
-- KML（`.kml`，仅导入）。
-- 包含 `.shp`、`.dbf`、`.shx` 及可选 `.prj` 的 ZIP Shapefile。
-- 通过 `map.loadSnapshot()` 读取的 Mapshaper `.msx` 快照。
-- 导入可选 Arrow 模块后的 GeoParquet 与 GeoArrow。
-- FlatGeobuf 导入与导出通过应用注册的可选格式插件提供；请参阅
-  [数据格式](https://mapseekai.github.io/mapseekai/emap/data/formats/)与
-  [FlatGeobuf 查看器](https://mapseekai.github.io/mapseekai/emap/examples/flatgeobuf-viewer/)。
-
-### 可选 Arrow 与 DuckDB 模块
-
-GeoParquet 和 GeoArrow 需要显式导入 Arrow 子路径：
-
-```ts
-import '@mapseekai/emap/arrow';
-```
-
-需要浏览器内的 DuckDB-Wasm 查询或空间处理时，再按需动态导入 DuckDB 子路径：
-
-```ts
-const duckdb = await import('@mapseekai/emap/duckdb');
-```
-
-`@duckdb/duckdb-wasm` 是可选依赖；包管理器没有安装它时，请显式执行
-`pnpm add @duckdb/duckdb-wasm`。
-
-
-## 图层与渲染
-
-```ts
-map.addLayer({
-  id: 'roads-line',
-  source: 'roads',
-  type: 'line',
-  paint: {
-    'line-color': '#4a5568',
-    'line-width': 1,
-    'line-dashstyle': 'dash',
-  },
+const map = new Emap({
+  container: 'map',
+  expressionPolicy: 'disabled',
 });
+
+const source = await TopologySource.fromUrl('districts', '/data/districts.geojson');
+await map.addSource('districts', source);
 
 map.addLayer({
   id: 'district-fill',
-  source: 'districts',
   type: 'fill',
+  source: 'districts',
   paint: {
-    'fill-color': 'rgba(66, 153, 225, 0.25)',
-    'line-width': 0,
+    'fill-color': '#60a5fa',
+    'fill-opacity': 0.45,
   },
 });
 
-### 线样式补充
+map.addLayer({
+  id: 'district-outline',
+  type: 'line',
+  source: 'districts',
+  paint: {
+    'line-color': '#1e3a8a',
+    'line-width': 1.5,
+  },
+});
 
-对 `line`（以及 `fill` 的边框）可选：
-
-- `'line-dashstyle': 'solid' | 'dash' | 'dot' | 'dash-dot' | 'arrow-dot'`
-- `'line-arrow-spacing'`：箭头点画线中箭头的屏幕像素间距
-- `'line-arrow-size'`：箭头尺寸（像素）
-
-现有的 `line-dasharray` 行为保持不变；若同时配置了 `line-dasharray` 与
-`line-dashstyle`，将按 `line-dashstyle` 生效。
-
-`arrow-dot` 在一个批量 Canvas path 中同时绘制短划段和箭头翼，按每条可见
-polyline/环的坐标顺序定向，并缓存屏幕空间命令，直到几何、视图、像素比或
-箭头布局样式变化。
+map.setExtent(source.getExtent());
 ```
 
-未添加自定义图层时，`Emap` 会按源数据几何类型创建默认显示图层。为便于大数据浏览，
-多边形默认仅绘制边线；需要填充时请显式添加 `fill` 图层。
-
-## 交互与自定义 UI
-
-大多数编辑和选择工具以命名处理器的形式提供，可直接接入自己的 UI：
+宿主页面销毁时同步释放地图：
 
 ```ts
-map.boxSelect.setOptions({
-  layers: ['district-fill'],
-  dragThreshold: 4,
-});
-map.boxSelect.enable();
+map.remove();
+```
 
-map.drawFeature.setOptions({
-  source: 'editing',
-  sourceLayer: 'areas',
-  type: 'polygon',
-  snapSources: ['editing', 'reference'],
-});
-map.drawFeature.enable();
+## 本地数据与 ZIP 边界
 
+浏览器文件通过 `TopologySource.fromBytes()` 加载：
+
+```ts
+const file = input.files?.[0];
+if (!file) throw new Error('请先选择文件');
+
+const source = await TopologySource.fromBytes('upload', await file.arrayBuffer(), {
+  filename: file.name,
+  zipLimits: {
+    maxCompressedBytes: 100 * 1024 * 1024,
+    maxBytes: 500 * 1024 * 1024,
+    maxEntries: 2_000,
+    maxRatio: 100,
+  },
+});
+```
+
+ZIP 中存在重复 basename 时会明确报错，不会再静默拼接不同目录下的 Shapefile 与 sidecar。接收公网上传时应根据部署资源设置更严格的限制。
+
+## 编辑、历史与事务
+
+交互 Handler 管理手势状态，EditCommand 负责可逆的数据修改：
+
+```ts
 map.vertexEdit.enable();
+
+if (map.canUndo()) map.undo();
+if (map.canRedo()) map.redo();
 ```
 
-所有处理器都提供以下基础接口：
+需要整体提交或回滚的操作使用事务：
 
 ```ts
-handler.enable();
-handler.disable();
-handler.isEnabled();
-handler.setOptions({...});
-handler.getOptions();
+const transaction = map.beginTransaction();
+try {
+  await map.ops.cleanLayer({ source: 'districts' });
+  await map.ops.simplifyLayer({ source: 'districts', percentage: 20 });
+  await transaction.commit();
+} catch (error) {
+  await transaction.rollback();
+  throw error;
+}
 ```
 
-## 在线地图服务与内置控件
+传递给 mapshaper 的字符串表达式默认关闭。只有配置和数据完全可信时，才设置 `expressionPolicy: 'trusted'`。
 
-可在创建地图时注册原生 MapLibre 底图和在线叠加层：
+## 属性驱动填色
+
+先计算并烘焙分级结果，再让填色图层读取该字段：
+
+```ts
+await map.ops.classifyFeatures({
+  source: 'districts',
+  target: 'districts',
+  field: 'population',
+  method: 'quantile',
+  classes: 4,
+  colors: ['#eff3ff', '#bdd7e7', '#6baed6', '#2171b5'],
+});
+
+map.addLayer({
+  id: 'population-fill',
+  type: 'fill',
+  source: 'districts',
+  styleSource: 'mapshaper',
+});
+```
+
+`fill-color` 也支持文档中定义的受限表达式子集。表达式不使用 `eval`，并按照数据集属性版本缓存。
+
+## Worker 卸载
+
+将 Worker 和 vendor 文件部署到页面可访问路径：
+
+```ts
+const map = new Emap({
+  container: 'map',
+  useWorker: 'auto',
+  workerUrl: '/assets/emap-worker.js',
+});
+```
+
+发布包中的资源：
+
+```text
+@mapseekai/emap/dist/emap-worker.js
+@mapseekai/emap/dist/mapshaper-vendor.js
+@mapseekai/emap/dist/mapshaper-vendor.mjs
+```
+
+主线程在提交 Worker 结果前会检查 Source 身份、几何版本和属性版本，避免旧结果覆盖新编辑。
+
+## 可选 Arrow 与 GeoParquet
+
+导入 Arrow 子路径会注册 GeoArrow、GeoParquet 格式：
+
+```ts
+import '@mapseekai/emap/arrow';
+import { fromArrowTable, toArrowTable } from '@mapseekai/emap/arrow';
+```
+
+只有实际使用 GeoParquet 时才会加载 `parquet-wasm`。
+
+## 可选 DuckDB-Wasm
+
+```ts
+import {
+  createDuckDbRuntimeFromJsDelivr,
+  queryDatasetWithDuckDb,
+  setDuckDbRuntime,
+} from '@mapseekai/emap/duckdb';
+
+const runtime = await createDuckDbRuntimeFromJsDelivr();
+setDuckDbRuntime(runtime);
+
+const result = await queryDatasetWithDuckDb(source.getDataset()!, {
+  sql: 'SELECT geometry, name FROM input WHERE active = true',
+});
+```
+
+查询接口只接受受限的单条 `SELECT`。距离类操作在需要平面单位时默认拒绝地理坐标系，避免把角度误当作长度。
+
+## 可选 MapLibre 服务
+
+需要在线底图或叠加服务时，通过 `MapOptions.mapLibre` 或 `map.mapLibre` 注册：
 
 ```ts
 const map = new Emap({
@@ -276,127 +219,97 @@ const map = new Emap({
   mapLibre: {
     services: [
       {
-        id: 'osm',
-        name: 'OpenStreetMap',
+        id: 'basemap',
+        name: '底图',
         role: 'basemap',
-        style: {
-          version: 8,
-          sources: {
-            osm: {
-              type: 'raster',
-              tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-              tileSize: 256,
-            },
-          },
-          layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
-        },
+        style: '/styles/basemap.json',
       },
     ],
-    defaultBasemap: 'osm',
+    defaultBasemap: 'basemap',
   },
 });
 ```
 
-MapLibre 画布始终位于所有 Emap 图层下方，且同一时间最多只能激活一个已注册底图；
-在线叠加层也绘制在这个下层画布中。
+该集成负责 MapLibre source/layer 资源所有权、请求版本、失败回滚和视图同步；可编辑 Canvas 图层仍由 emap 管理。
 
-| 控件 | 用途 |
-|---|---|
-| `NavigationControl` | 放大、缩小和重置视图 |
-| `StatusControl` | 显示指针坐标与 CRS |
-| `ScaleControl` | 显示本地椭球距离、标称 `1:N` 与 Web Mercator 缩放级别 |
-| `MeasureControl` | 交互式距离与面积测量 |
-| `BasemapControl` | 在已注册的 MapLibre 底图中单选 |
-| `LayerControl` | 切换 Emap 业务图层与 MapLibre 在线叠加层 |
-| `HistoryControl` | 撤销与重做 |
-| `EditToolbar` | 组合编辑工具栏 |
-| `VertexEditControl` | 切换 `map.vertexEdit` |
-| `DrawFeatureControl` | 切换 `map.drawFeature` |
-| `BoxSelectControl` | 切换 `map.boxSelect` |
-| `LassoSelectControl` | 切换 `map.lassoSelect` |
-| `SimplifyControl` | 简化操作界面 |
+## 文档
 
-## 数据操作、事务与校验
+- [安装与第一张地图](packages/docs/docs/getting-started/installation.md)
+- [Emap 核心概念](packages/docs/docs/concepts/emap.md)
+- [编辑指南](packages/docs/docs/guides/editing.md)
+- [样式指南](packages/docs/docs/guides/styling.md)
+- [Worker 指南](packages/docs/docs/guides/worker.md)
+- [DuckDB 指南](packages/docs/docs/data/duckdb.md)
+- [兼容性](packages/docs/docs/reference/compatibility.md)
+- [可运行示例](packages/examples/examples)
+- [架构决策记录](docs/decisions/README.md)
 
-`map.ops.*` 提供基于 Mapshaper 的数据转换操作。使用事务可将多步编辑组合成一条
-可撤销的历史记录：
+## 架构
 
-```ts
-const tx = map.beginTransaction();
+公共 `Emap` 类是统一门面，内部按照状态所有权和失败语义划分：
 
-const clipped = await map.ops.clipLayer({
-  source: 's',
-  target: 'parcels',
-  mask: 'clip',
-});
-
-if (!clipped.ok) {
-  tx.rollback();
-} else {
-  await tx.commit('Clip parcels');
-}
-
-map.undo();
-map.redo();
+```text
+DOM 指针输入
+  → HandlerManager 与编辑 Handler
+  → 已校验编辑计划或数据集操作
+  → EditCommand / operation runner
+  → Source 版本、历史、事务、选择状态
+  → source data 事件
+  → RenderScheduler
+  → layer renderer 与 CanvasPainter
 ```
 
-提交后可注册校验器；校验失败会触发 `validationfailed` 事件，而不会自动撤销。
+主要边界：
 
-## Worker 与主题
+- `src/source/`：导入导出、ZIP 限制、CRS 元数据和 DisplayArcs 生命周期。
+- `src/adapter/mapshaper-adapter.ts`：业务代码访问 `mapshaper.internal.*` 的统一边界。
+- `src/map/ops/`：可独立测试的数据和选择操作。
+- `src/edit/commands/`：可撤销的原地修改。
+- `src/renderer/`：Canvas 绘制与编辑覆盖层。
+- `src/core/handlers/`：浏览器交互状态。
+- `src/arrow/`、`src/duckdb/`：可选数据与分析入口。
+- `src/map/maplibre-service-manager.ts`：可选在线服务资源和异步回滚。
 
-对于裁剪、融合、并集、简化、投影等数据集替换型操作，可以启用 Worker：
-
-```ts
-const map = new Emap({
-  container: 'map',
-  useWorker: 'auto',
-  workerThreshold: 200_000,
-  workerUrl: '/vendor/emap/emap-worker.js',
-  workerPoolSize: 2,
-});
-```
-
-导入默认样式后，可在 `:root` 或应用容器中覆盖 CSS 令牌，例如
-`--emap-accent`、`--emap-surface-bg`、`--emap-font` 和 `--emap-radius`。
+几何修改与属性修改分别使用单调版本计数器；所有异步操作提交前都必须比较这两个版本。
 
 ## 开发
 
-安装前请启用 Corepack：
+开发环境：
 
-```bash
-corepack enable
-corepack prepare pnpm@11.15.1 --activate
-pnpm install
+```text
+Node.js 24
+pnpm 11.15.1
 ```
 
-常用命令：
+主要门禁：
 
 ```bash
-pnpm run dev            # Rollup 监听构建
-pnpm run dev-build      # 一次性开发构建
-pnpm run examples:dev   # 启动可运行示例
-pnpm run docs:dev       # 启动文档开发服务器
-pnpm run docs:preview   # 预览文档、API 与示例
-pnpm run format:check   # 检查 Biome 格式
-pnpm run typecheck      # 运行 TypeScript 类型检查
-pnpm run test:run       # 运行 Vitest
-pnpm run build          # 生产构建到 dist/
+pnpm install --frozen-lockfile
+pnpm run format:check
+pnpm run typecheck
+pnpm run test:run
+pnpm run test:duckdb
+pnpm run build
+pnpm run bundle:smoke
+pnpm run docs:verify
+pnpm run audit:prod
+pnpm pack --dry-run
 ```
 
-详细的架构、公开 API、数据格式与发布步骤请参阅 [English README](README.md) 和
-文档站点。
+本地启动：
 
-## 已知限制
+```bash
+pnpm run examples:dev
+pnpm run docs:dev
+```
 
-- Emap 业务图层使用 Canvas 2D 渲染；原生 MapLibre 服务使用独立的下层画布。Emap
-  本身不提供 WebGL 渲染、符号排布、矢量瓦片数据源或服务端瓦片管线。
-- 大型多边形数据的填充渲染比线条渲染开销更高；大数据浏览建议优先显示边线，并在适当
-  比例尺或过滤条件下启用填充。
-- 坐标参考系支持依赖于内置 Mapshaper/投影路径；构建面向最终用户的编辑流程前，请验证
-  项目所需的 CRS 定义。
-- 表达式类操作默认禁用。仅对第一方表达式和可信数据设置 `expressionPolicy: 'trusted'`。
-- Worker 需要宿主应用正确部署 `emap-worker.js` 与 `mapshaper-vendor.js`，并不会让所有
-  交互都异步执行。
+`packages/docs/static/api/` 是按需生成的 TypeDoc 产物，不进入 Git。`api:build`、`docs:build` 和 `docs:verify` 会自动生成。
+
+修改 mapshaper 操作时，应同步更新 `src/map/ops/_runner.ts` 中的 effect 分类，并验证历史、选择、Worker 和 stale-operation 行为。完整协作规则见 [AGENTS.md](AGENTS.md)。
+
+## 安全
+
+漏洞报告方式见 [SECURITY.md](SECURITY.md)。不要为不可信配置开启 mapshaper 表达式；接收公网文件时应设置保守的数据源和 ZIP 上限。
 
 ## 许可证
 

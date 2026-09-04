@@ -138,17 +138,35 @@ export function getDuckDbAttributeOperationSpec(
   return DUCKDB_ATTRIBUTE_OPERATION_SPECS[operation];
 }
 
+/** @internal Execute a descriptor-backed attribute operation by id. */
+export async function runNamedDuckDbAttributeOperation(
+  dataset: MapshaperDataset,
+  operation: string,
+  opts: DuckDbAttributeOperationOptions = {},
+  runtime: DuckDbRuntime | null | undefined = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  const spec = DUCKDB_ATTRIBUTE_OPERATION_SPECS[operation as DuckDbAttributeOperationId];
+  if (!spec) {
+    throw new DuckDbOperationError(
+      'validation',
+      `Unknown DuckDB attribute operation '${operation}'`,
+      { field: 'operation' },
+    );
+  }
+  return processNamedAttributeOperation(
+    dataset,
+    opts,
+    spec,
+    runtime === undefined ? getDuckDbRuntime() : runtime,
+  );
+}
+
 export function areaDatasetWithDuckDb(
   dataset: MapshaperDataset,
   opts: DuckDbAttributeOperationOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedAttributeOperation(
-    dataset,
-    opts,
-    DUCKDB_ATTRIBUTE_OPERATION_SPECS.area,
-    runtime,
-  );
+  return runNamedDuckDbAttributeOperation(dataset, 'area', opts, runtime);
 }
 
 export function lengthDatasetWithDuckDb(
@@ -156,12 +174,7 @@ export function lengthDatasetWithDuckDb(
   opts: DuckDbAttributeOperationOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedAttributeOperation(
-    dataset,
-    opts,
-    DUCKDB_ATTRIBUTE_OPERATION_SPECS.length,
-    runtime,
-  );
+  return runNamedDuckDbAttributeOperation(dataset, 'length', opts, runtime);
 }
 
 export function perimeterDatasetWithDuckDb(
@@ -169,12 +182,7 @@ export function perimeterDatasetWithDuckDb(
   opts: DuckDbAttributeOperationOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedAttributeOperation(
-    dataset,
-    opts,
-    DUCKDB_ATTRIBUTE_OPERATION_SPECS.perimeter,
-    runtime,
-  );
+  return runNamedDuckDbAttributeOperation(dataset, 'perimeter', opts, runtime);
 }
 
 export function geometryTypeDatasetWithDuckDb(
@@ -182,12 +190,7 @@ export function geometryTypeDatasetWithDuckDb(
   opts: DuckDbAttributeOperationOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedAttributeOperation(
-    dataset,
-    opts,
-    DUCKDB_ATTRIBUTE_OPERATION_SPECS.geometryType,
-    runtime,
-  );
+  return runNamedDuckDbAttributeOperation(dataset, 'geometryType', opts, runtime);
 }
 
 export function isValidDatasetWithDuckDb(
@@ -195,12 +198,7 @@ export function isValidDatasetWithDuckDb(
   opts: DuckDbAttributeOperationOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedAttributeOperation(
-    dataset,
-    opts,
-    DUCKDB_ATTRIBUTE_OPERATION_SPECS.isValid,
-    runtime,
-  );
+  return runNamedDuckDbAttributeOperation(dataset, 'isValid', opts, runtime);
 }
 
 export function isEmptyDatasetWithDuckDb(
@@ -208,12 +206,7 @@ export function isEmptyDatasetWithDuckDb(
   opts: DuckDbAttributeOperationOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedAttributeOperation(
-    dataset,
-    opts,
-    DUCKDB_ATTRIBUTE_OPERATION_SPECS.isEmpty,
-    runtime,
-  );
+  return runNamedDuckDbAttributeOperation(dataset, 'isEmpty', opts, runtime);
 }
 
 export function isSimpleDatasetWithDuckDb(
@@ -221,12 +214,7 @@ export function isSimpleDatasetWithDuckDb(
   opts: DuckDbAttributeOperationOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedAttributeOperation(
-    dataset,
-    opts,
-    DUCKDB_ATTRIBUTE_OPERATION_SPECS.isSimple,
-    runtime,
-  );
+  return runNamedDuckDbAttributeOperation(dataset, 'isSimple', opts, runtime);
 }
 
 export function xDatasetWithDuckDb(
@@ -234,7 +222,7 @@ export function xDatasetWithDuckDb(
   opts: DuckDbAttributeOperationOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedAttributeOperation(dataset, opts, DUCKDB_ATTRIBUTE_OPERATION_SPECS.x, runtime);
+  return runNamedDuckDbAttributeOperation(dataset, 'x', opts, runtime);
 }
 
 export function yDatasetWithDuckDb(
@@ -242,7 +230,7 @@ export function yDatasetWithDuckDb(
   opts: DuckDbAttributeOperationOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedAttributeOperation(dataset, opts, DUCKDB_ATTRIBUTE_OPERATION_SPECS.y, runtime);
+  return runNamedDuckDbAttributeOperation(dataset, 'y', opts, runtime);
 }
 
 export function centroidXDatasetWithDuckDb(
@@ -250,12 +238,7 @@ export function centroidXDatasetWithDuckDb(
   opts: DuckDbAttributeOperationOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedAttributeOperation(
-    dataset,
-    opts,
-    DUCKDB_ATTRIBUTE_OPERATION_SPECS.centroidX,
-    runtime,
-  );
+  return runNamedDuckDbAttributeOperation(dataset, 'centroidX', opts, runtime);
 }
 
 export function centroidYDatasetWithDuckDb(
@@ -263,10 +246,5 @@ export function centroidYDatasetWithDuckDb(
   opts: DuckDbAttributeOperationOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedAttributeOperation(
-    dataset,
-    opts,
-    DUCKDB_ATTRIBUTE_OPERATION_SPECS.centroidY,
-    runtime,
-  );
+  return runNamedDuckDbAttributeOperation(dataset, 'centroidY', opts, runtime);
 }

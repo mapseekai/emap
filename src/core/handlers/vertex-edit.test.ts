@@ -938,15 +938,6 @@ describe('VertexEditHandler', () => {
 describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
   it('allows deleting a non-shared arc endpoint', () => {
     document.getElementById('emap-ctx-menu')?.remove();
-    const originalVertexIsArcEndpoint = Reflect.get(
-      mapshaper.internal as object,
-      'vertexIsArcEndpoint',
-    );
-    Reflect.set(
-      mapshaper.internal as object,
-      'vertexIsArcEndpoint',
-      vi.fn(() => true),
-    );
     const handler = new VertexEditHandler({} as any);
     const deleteSpy = vi.fn();
     const hoveredFeature = { arcs: {} };
@@ -955,23 +946,19 @@ describe('VertexEditHandler context-menu CSS-token migration (DX P4)', () => {
     setPrivate(handler, '_hoveredFeature', hoveredFeature);
     setPrivate(handler, '_deleteHoveredVertex', deleteSpy);
 
-    try {
-      callPrivate(
-        handler,
-        '_onContextMenu',
-        new MouseEvent('contextmenu', { clientX: 10, clientY: 20 }),
-      );
-      const item = document.querySelector('#emap-ctx-menu > div') as HTMLDivElement;
-      expect(item.textContent).toBe('删除节点');
-      expect(item.getAttribute('aria-disabled')).toBeNull();
-      setPrivate(handler, '_hoverVertexIds', []);
-      setPrivate(handler, '_hoveredFeature', null);
-      item.click();
-      expect(deleteSpy).toHaveBeenCalledWith(hoveredFeature, [4]);
-    } finally {
-      Reflect.set(mapshaper.internal as object, 'vertexIsArcEndpoint', originalVertexIsArcEndpoint);
-      document.getElementById('emap-ctx-menu')?.remove();
-    }
+    callPrivate(
+      handler,
+      '_onContextMenu',
+      new MouseEvent('contextmenu', { clientX: 10, clientY: 20 }),
+    );
+    const item = document.querySelector('#emap-ctx-menu > div') as HTMLDivElement;
+    expect(item.textContent).toBe('删除节点');
+    expect(item.getAttribute('aria-disabled')).toBeNull();
+    setPrivate(handler, '_hoverVertexIds', []);
+    setPrivate(handler, '_hoveredFeature', null);
+    item.click();
+    expect(deleteSpy).toHaveBeenCalledWith(hoveredFeature, [4]);
+    document.getElementById('emap-ctx-menu')?.remove();
   });
 
   it('allows deleting a shared topology node and keeps split available', () => {

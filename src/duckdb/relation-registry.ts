@@ -9,7 +9,7 @@ import {
 } from './relation-executor';
 import type { RelationDuckDbFunction } from './sql';
 
-const DUCKDB_RELATION_OPERATION_SPECS = {
+const RELATION_DESCRIPTORS = {
   intersects: {
     id: 'intersects',
     duckDbFunction: 'ST_Intersects',
@@ -90,10 +90,9 @@ const DUCKDB_RELATION_OPERATION_SPECS = {
   },
 } as const;
 
-export type DuckDbRelationOperationId = keyof typeof DUCKDB_RELATION_OPERATION_SPECS;
-
+export type DuckDbRelationOperationId = keyof typeof RELATION_DESCRIPTORS;
 export type DuckDbNamedRelationOperationSpec =
-  (typeof DUCKDB_RELATION_OPERATION_SPECS)[DuckDbRelationOperationId];
+  (typeof RELATION_DESCRIPTORS)[DuckDbRelationOperationId];
 
 export interface DuckDbRelationHelperOptions extends DuckDbRelationOptions {
   distance?: number;
@@ -104,20 +103,24 @@ type TopologicalRelationOperationId = Exclude<
   DuckDbRelationOperationId,
   'distance' | 'distanceWithin'
 >;
-
 type PredicateDuckDbFunction = Exclude<RelationDuckDbFunction, 'ST_Distance'>;
+type RelationMode = 'filter' | 'attribute';
+type RelationRunnerArgs = [
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts?: DuckDbRelationHelperOptions,
+  runtime?: DuckDbRuntime | null,
+];
 
 export function getDuckDbRelationOperationSpec(
   operation: string,
 ): DuckDbNamedRelationOperationSpec {
-  const spec = DUCKDB_RELATION_OPERATION_SPECS[operation as DuckDbRelationOperationId];
+  const spec = RELATION_DESCRIPTORS[operation as DuckDbRelationOperationId];
   if (!spec) {
     throw new DuckDbOperationError(
       'validation',
       `Unsupported DuckDB relation operation: ${operation}`,
-      {
-        field: 'op',
-      },
+      { field: 'op' },
     );
   }
   return { ...spec };
@@ -134,27 +137,22 @@ function assertProjectedCrsForDistance(
   throw new DuckDbOperationError(
     'validation',
     'DuckDB distance relation operations require a projected CRS',
-    {
-      field: 'crs',
-    },
+    { field: 'crs' },
   );
 }
 
-function requireDistanceWithinDistance(distance: number | undefined): number {
+function requireDistance(distance: number | undefined): number {
   if (typeof distance === 'number' && Number.isFinite(distance) && distance > 0) {
     return distance;
   }
-
   throw new DuckDbOperationError(
     'validation',
     'DuckDB distanceWithin relation requires a finite positive distance',
-    {
-      field: 'distance',
-    },
+    { field: 'distance' },
   );
 }
 
-function runRelationHelper(
+function runRelation(
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
   opts: DuckDbRelationHelperOptions,
@@ -164,25 +162,53 @@ function runRelationHelper(
   return processRelationWithDuckDb(inputDataset, maskDataset, opts, spec, runtime);
 }
 
-function runDistanceWithinHelper(
-  mode: 'filter' | 'attribute',
+function runTopologicalOperation(
+  operation: TopologicalRelationOperationId,
+  mode: RelationMode,
   inputDataset: MapshaperDataset,
   maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions,
-  runtime: DuckDbRuntime | null,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  const distance = requireDistanceWithinDistance(opts.distance);
-  assertProjectedCrsForDistance(inputDataset, maskDataset, opts);
-  return runRelationHelper(
+  const descriptor = RELATION_DESCRIPTORS[operation];
+  return runRelation(
     inputDataset,
     maskDataset,
     opts,
-    mode === 'attribute'
+    mode === 'filter'
+      ? {
+          id: descriptor.id,
+          mode,
+          duckDbFunction: descriptor.duckDbFunction as PredicateDuckDbFunction,
+        }
+      : {
+          id: descriptor.id,
+          mode,
+          duckDbFunction: descriptor.duckDbFunction as PredicateDuckDbFunction,
+          outputColumn: opts.outputColumn ?? descriptor.outputColumn,
+        },
+    runtime,
+  );
+}
+
+function runDistanceWithinOperation(
+  mode: RelationMode,
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  assertProjectedCrsForDistance(inputDataset, maskDataset, opts);
+  const distance = requireDistance(opts.distance);
+  return runRelation(
+    inputDataset,
+    maskDataset,
+    opts,
+    mode === 'filter'
       ? {
           id: 'distanceWithin',
           mode,
           duckDbFunction: 'ST_Distance',
-          outputColumn: opts.outputColumn ?? 'duckdb_distance_within',
           distance,
         }
       : {
@@ -190,265 +216,130 @@ function runDistanceWithinHelper(
           mode,
           duckDbFunction: 'ST_Distance',
           distance,
+          outputColumn: opts.outputColumn ?? RELATION_DESCRIPTORS.distanceWithin.outputColumn,
         },
     runtime,
   );
 }
 
-function runTopologicalFilterHelper(
-  operation: TopologicalRelationOperationId,
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions,
-  runtime: DuckDbRuntime | null,
-): Promise<MapshaperDataset> {
-  const spec = getDuckDbRelationOperationSpec(operation);
-  return runRelationHelper(
-    inputDataset,
-    maskDataset,
-    opts,
-    {
-      id: spec.id,
-      mode: 'filter',
-      duckDbFunction: spec.duckDbFunction as PredicateDuckDbFunction,
-    },
-    runtime,
-  );
-}
-
-function runTopologicalAttributeHelper(
-  operation: TopologicalRelationOperationId,
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions,
-  runtime: DuckDbRuntime | null,
-): Promise<MapshaperDataset> {
-  const spec = getDuckDbRelationOperationSpec(operation);
-  return runRelationHelper(
-    inputDataset,
-    maskDataset,
-    opts,
-    {
-      id: spec.id,
-      mode: 'attribute',
-      duckDbFunction: spec.duckDbFunction as PredicateDuckDbFunction,
-      outputColumn: opts.outputColumn ?? spec.outputColumn,
-    },
-    runtime,
-  );
-}
-
 export function intersectsDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runTopologicalFilterHelper('intersects', inputDataset, maskDataset, opts, runtime);
+  return runTopologicalOperation('intersects', 'filter', ...args);
 }
 
-export function containsDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
-): Promise<MapshaperDataset> {
-  return runTopologicalFilterHelper('contains', inputDataset, maskDataset, opts, runtime);
+export function containsDatasetWithDuckDb(...args: RelationRunnerArgs): Promise<MapshaperDataset> {
+  return runTopologicalOperation('contains', 'filter', ...args);
 }
 
-export function withinDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
-): Promise<MapshaperDataset> {
-  return runTopologicalFilterHelper('within', inputDataset, maskDataset, opts, runtime);
+export function withinDatasetWithDuckDb(...args: RelationRunnerArgs): Promise<MapshaperDataset> {
+  return runTopologicalOperation('within', 'filter', ...args);
 }
 
-export function touchesDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
-): Promise<MapshaperDataset> {
-  return runTopologicalFilterHelper('touches', inputDataset, maskDataset, opts, runtime);
+export function touchesDatasetWithDuckDb(...args: RelationRunnerArgs): Promise<MapshaperDataset> {
+  return runTopologicalOperation('touches', 'filter', ...args);
 }
 
-export function disjointDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
-): Promise<MapshaperDataset> {
-  return runTopologicalFilterHelper('disjoint', inputDataset, maskDataset, opts, runtime);
+export function disjointDatasetWithDuckDb(...args: RelationRunnerArgs): Promise<MapshaperDataset> {
+  return runTopologicalOperation('disjoint', 'filter', ...args);
 }
 
-export function overlapsDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
-): Promise<MapshaperDataset> {
-  return runTopologicalFilterHelper('overlaps', inputDataset, maskDataset, opts, runtime);
+export function overlapsDatasetWithDuckDb(...args: RelationRunnerArgs): Promise<MapshaperDataset> {
+  return runTopologicalOperation('overlaps', 'filter', ...args);
 }
 
-export function equalsDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
-): Promise<MapshaperDataset> {
-  return runTopologicalFilterHelper('equals', inputDataset, maskDataset, opts, runtime);
+export function equalsDatasetWithDuckDb(...args: RelationRunnerArgs): Promise<MapshaperDataset> {
+  return runTopologicalOperation('equals', 'filter', ...args);
 }
 
-export function crossesDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
-): Promise<MapshaperDataset> {
-  return runTopologicalFilterHelper('crosses', inputDataset, maskDataset, opts, runtime);
+export function crossesDatasetWithDuckDb(...args: RelationRunnerArgs): Promise<MapshaperDataset> {
+  return runTopologicalOperation('crosses', 'filter', ...args);
 }
 
-export function coversDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
-): Promise<MapshaperDataset> {
-  return runTopologicalFilterHelper('covers', inputDataset, maskDataset, opts, runtime);
+export function coversDatasetWithDuckDb(...args: RelationRunnerArgs): Promise<MapshaperDataset> {
+  return runTopologicalOperation('covers', 'filter', ...args);
 }
 
-export function coveredByDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
-): Promise<MapshaperDataset> {
-  return runTopologicalFilterHelper('coveredBy', inputDataset, maskDataset, opts, runtime);
+export function coveredByDatasetWithDuckDb(...args: RelationRunnerArgs): Promise<MapshaperDataset> {
+  return runTopologicalOperation('coveredBy', 'filter', ...args);
 }
 
 export function containsProperlyDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runTopologicalFilterHelper('containsProperly', inputDataset, maskDataset, opts, runtime);
+  return runTopologicalOperation('containsProperly', 'filter', ...args);
 }
 
 export function distanceWithinDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runDistanceWithinHelper('filter', inputDataset, maskDataset, opts, runtime);
+  return runDistanceWithinOperation('filter', ...args);
 }
 
 export function intersectsAttributeDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runTopologicalAttributeHelper('intersects', inputDataset, maskDataset, opts, runtime);
+  return runTopologicalOperation('intersects', 'attribute', ...args);
 }
 
 export function containsAttributeDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runTopologicalAttributeHelper('contains', inputDataset, maskDataset, opts, runtime);
+  return runTopologicalOperation('contains', 'attribute', ...args);
 }
 
 export function withinAttributeDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runTopologicalAttributeHelper('within', inputDataset, maskDataset, opts, runtime);
+  return runTopologicalOperation('within', 'attribute', ...args);
 }
 
 export function touchesAttributeDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runTopologicalAttributeHelper('touches', inputDataset, maskDataset, opts, runtime);
+  return runTopologicalOperation('touches', 'attribute', ...args);
 }
 
 export function disjointAttributeDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runTopologicalAttributeHelper('disjoint', inputDataset, maskDataset, opts, runtime);
+  return runTopologicalOperation('disjoint', 'attribute', ...args);
 }
 
 export function overlapsAttributeDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runTopologicalAttributeHelper('overlaps', inputDataset, maskDataset, opts, runtime);
+  return runTopologicalOperation('overlaps', 'attribute', ...args);
 }
 
 export function equalsAttributeDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runTopologicalAttributeHelper('equals', inputDataset, maskDataset, opts, runtime);
+  return runTopologicalOperation('equals', 'attribute', ...args);
 }
 
 export function crossesAttributeDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runTopologicalAttributeHelper('crosses', inputDataset, maskDataset, opts, runtime);
+  return runTopologicalOperation('crosses', 'attribute', ...args);
 }
 
 export function coversAttributeDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runTopologicalAttributeHelper('covers', inputDataset, maskDataset, opts, runtime);
+  return runTopologicalOperation('covers', 'attribute', ...args);
 }
 
 export function coveredByAttributeDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runTopologicalAttributeHelper('coveredBy', inputDataset, maskDataset, opts, runtime);
+  return runTopologicalOperation('coveredBy', 'attribute', ...args);
 }
 
 export function containsProperlyAttributeDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runTopologicalAttributeHelper(
-    'containsProperly',
-    inputDataset,
-    maskDataset,
-    opts,
-    runtime,
-  );
+  return runTopologicalOperation('containsProperly', 'attribute', ...args);
 }
 
 export function distanceDatasetWithDuckDb(
@@ -458,7 +349,7 @@ export function distanceDatasetWithDuckDb(
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
   assertProjectedCrsForDistance(inputDataset, maskDataset, opts);
-  return runRelationHelper(
+  return runRelation(
     inputDataset,
     maskDataset,
     opts,
@@ -467,17 +358,14 @@ export function distanceDatasetWithDuckDb(
       mode: 'attribute',
       duckDbFunction: 'ST_Distance',
       output: 'distance',
-      outputColumn: opts.outputColumn ?? 'duckdb_distance',
+      outputColumn: opts.outputColumn ?? RELATION_DESCRIPTORS.distance.outputColumn,
     },
     runtime,
   );
 }
 
 export function distanceWithinAttributeDatasetWithDuckDb(
-  inputDataset: MapshaperDataset,
-  maskDataset: MapshaperDataset,
-  opts: DuckDbRelationHelperOptions = {},
-  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+  ...args: RelationRunnerArgs
 ): Promise<MapshaperDataset> {
-  return runDistanceWithinHelper('attribute', inputDataset, maskDataset, opts, runtime);
+  return runDistanceWithinOperation('attribute', ...args);
 }

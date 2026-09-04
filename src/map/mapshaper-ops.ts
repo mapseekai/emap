@@ -120,26 +120,20 @@ import { addPart, deletePart } from './ops/parts';
 /**
  * Mapshaper command manager. Owned by Emap and exposed as `emap.ops`.
  * Every method delegates straight to the corresponding free function
- * under `src/map/ops/`. Construction takes the host; the per-call
- * `OpContext` is rebuilt on each access of `_ctx` so test paths that
- * substitute the manager via `Object.create(MapshaperOps.prototype)`
- * still see a working context once they wire up the host.
+ * under `src/map/ops/`. The shared operation context is created once with
+ * the manager instead of rebuilding the same proxy closures for every call.
  */
 export class MapshaperOps {
-  constructor(private _emap: EmapHostInternal) {}
+  private readonly _ctx: OpContext;
 
-  /**
-   * Lazily-built `OpContext` handed to every op function. Recomputed
-   * on every call so nothing captures a stale `this`.
-   */
-  private get _ctx(): OpContext {
-    return {
-      host: this._emap,
+  constructor(_emap: EmapHostInternal) {
+    this._ctx = {
+      host: _emap,
       runDatasetCommandParsed: (sourceId, commands, label, inputFiles) =>
-        _runDatasetCommandParsedShared(this._emap, sourceId, commands, label, inputFiles),
+        _runDatasetCommandParsedShared(_emap, sourceId, commands, label, inputFiles),
       runPreparedDatasetCommandParsed: (sourceId, commands, label, prepare, inputFiles) =>
         _runPreparedDatasetCommandParsedShared(
-          this._emap,
+          _emap,
           sourceId,
           commands,
           label,
@@ -147,11 +141,11 @@ export class MapshaperOps {
           inputFiles,
         ),
       runPreparedDatasetMutation: (sourceId, label, mutate) =>
-        _runPreparedDatasetMutationShared(this._emap, sourceId, label, mutate),
+        _runPreparedDatasetMutationShared(_emap, sourceId, label, mutate),
       runPreparedEditCommand: (sourceId, label, plan) =>
-        _runPreparedEditCommandShared(this._emap, sourceId, label, plan),
+        _runPreparedEditCommandShared(_emap, sourceId, label, plan),
       runPreparedEditCommandMany: (sourceIds, label, plan) =>
-        _runPreparedEditCommandManyShared(this._emap, sourceIds, label, plan),
+        _runPreparedEditCommandManyShared(_emap, sourceIds, label, plan),
     };
   }
 

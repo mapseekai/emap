@@ -29,8 +29,8 @@ const output = `// Generated from @zwishing/epsg-index/all.json by scripts/gener
 // bundles initialize quickly and do not ship the full EPSG JSON object with WKT,
 // bbox, area, and accuracy metadata.
 
-export const EPSG_PROJ4_TABLE = ${JSON.stringify(rows.join('\n'))};
-export const EPSG_CODES_WITHOUT_PROJ4 = ${JSON.stringify(`|${codesWithoutProj4.join('|')}|`)};
+export const EPSG_PROJ4_TABLE: string = ${JSON.stringify(rows.join('\n'))};
+export const EPSG_CODES_WITHOUT_PROJ4: string = ${JSON.stringify(`|${codesWithoutProj4.join('|')}|`)};
 `;
 
 writeFileSync(resolve(root, 'src/geo/epsg-proj4-data.ts'), output);
@@ -38,7 +38,7 @@ writeFileSync(resolve(root, 'src/geo/epsg-proj4-data.ts'), output);
 const projjsonOutput = `// Generated from @zwishing/epsg-index/all.json by scripts/generate-epsg-proj4-data.mjs.
 // Compact TSV of EPSG code to @zwishing/epsg-index PROJJSON asset path.
 
-export const EPSG_PROJJSON_PATH_TABLE = ${JSON.stringify(projjsonRows.join('\n'))};
+export const EPSG_PROJJSON_PATH_TABLE: string = ${JSON.stringify(projjsonRows.join('\n'))};
 `;
 
 writeFileSync(resolve(root, 'src/geo/epsg-projjson-data.ts'), projjsonOutput);

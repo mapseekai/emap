@@ -3,7 +3,6 @@
   "entryPoints": ["src/index.ts", "src/arrow/index.ts", "src/duckdb/index.ts"],
   "treatWarningsAsErrors": true,
   "intentionallyNotExported": [
-    "AffineDelta",
     "AttributeOps",
     "CircleLayerSpecification",
     "CorePainter",
@@ -40,7 +39,6 @@
     "PolygonFillOptions",
     "PreparedReprojection",
     "RelationDuckDbFunction",
-    "RenderAction",
     "RenderRequest",
     "SelectionHandlerHost",
     "TransactionInternal",

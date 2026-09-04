@@ -139,7 +139,6 @@ declare module 'mapshaper' {
     // Vertex editing — paths/mapshaper-vertex-utils.mjs
     findNearestVertices(point: [number, number], shape: number[][], arcs: ArcCollection): number[];
     snapVerticesToPoint(vertexIds: number[], point: [number, number], arcs: ArcCollection): void;
-    vertexIsArcEndpoint(vertexId: number, arcs: ArcCollection): boolean;
 
     // Vertex editing — paths/mapshaper-arc-utils.mjs
     insertVertex(arcs: ArcCollection, vertexId: number, point: [number, number]): void;

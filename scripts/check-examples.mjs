@@ -4,6 +4,7 @@ import {
   buildDocReferenceSet,
   buildReflectionIndex,
   collectDocs,
+  collectFiles,
   fileExists,
   normalizeDocReference,
   parseRootArg,
@@ -27,6 +28,22 @@ const docReferences = buildDocReferenceSet(docs);
 const violations = [];
 
 const exampleIds = new Set(examples.map((example) => example.id));
+const authoredRoutes = await collectFiles(
+  resolve(root, 'packages/examples/examples'),
+  ['index.html'],
+);
+for (const routePath of authoredRoutes) {
+  const routeId = relativePath(resolve(root, 'packages/examples/examples'), routePath).replace(
+    /\/index\.html$/,
+    '',
+  );
+  if (exampleIds.has(routeId)) continue;
+  violations.push({
+    path: relativePath(root, routePath),
+    reason: `missing example catalog entry ${routeId}`,
+  });
+}
+
 for (const authoredDocs of [docs, englishDocs]) {
   for (const doc of authoredDocs.values()) {
     for (const exampleId of readFrontMatterStringList(doc.frontMatter, 'examples')) {

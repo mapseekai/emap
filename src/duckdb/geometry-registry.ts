@@ -83,17 +83,55 @@ function processNamedGeometryOperation(
   );
 }
 
+/** @internal Execute a descriptor-backed geometry operation by id. */
+export async function runNamedDuckDbGeometryOperation(
+  dataset: MapshaperDataset,
+  operation: string,
+  opts: DuckDbUnaryGeometryOptions & {
+    tolerance?: number;
+    failOnGeographicCrs?: boolean;
+  } = {},
+  runtime: DuckDbRuntime | null | undefined = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  const resolvedRuntime = runtime === undefined ? getDuckDbRuntime() : runtime;
+  if (operation === 'simplify' || operation === 'simplifyPreserveTopology') {
+    const normalized = normalizeSimplifyOptions(
+      dataset,
+      { ...opts, tolerance: opts.tolerance as number },
+      operation,
+    );
+    return processGeometryWithDuckDb(
+      dataset,
+      normalized,
+      {
+        id: operation,
+        duckDbFunction: operation === 'simplify' ? 'ST_Simplify' : 'ST_SimplifyPreserveTopology',
+        args: [normalized.tolerance],
+      },
+      resolvedRuntime,
+    );
+  }
+
+  const spec =
+    DUCKDB_UNARY_GEOMETRY_OPERATION_SPECS[
+      operation as keyof typeof DUCKDB_UNARY_GEOMETRY_OPERATION_SPECS
+    ];
+  if (!spec) {
+    throw new DuckDbOperationError(
+      'validation',
+      `Unknown DuckDB geometry operation '${operation}'`,
+      { field: 'operation' },
+    );
+  }
+  return processNamedGeometryOperation(dataset, opts, spec, resolvedRuntime);
+}
+
 export function centroidDatasetWithDuckDb(
   dataset: MapshaperDataset,
   opts: DuckDbUnaryGeometryOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedGeometryOperation(
-    dataset,
-    opts,
-    DUCKDB_UNARY_GEOMETRY_OPERATION_SPECS.centroid,
-    runtime,
-  );
+  return runNamedDuckDbGeometryOperation(dataset, 'centroid', opts, runtime);
 }
 
 export function envelopeDatasetWithDuckDb(
@@ -101,12 +139,7 @@ export function envelopeDatasetWithDuckDb(
   opts: DuckDbUnaryGeometryOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedGeometryOperation(
-    dataset,
-    opts,
-    DUCKDB_UNARY_GEOMETRY_OPERATION_SPECS.envelope,
-    runtime,
-  );
+  return runNamedDuckDbGeometryOperation(dataset, 'envelope', opts, runtime);
 }
 
 export function convexHullDatasetWithDuckDb(
@@ -114,12 +147,7 @@ export function convexHullDatasetWithDuckDb(
   opts: DuckDbUnaryGeometryOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedGeometryOperation(
-    dataset,
-    opts,
-    DUCKDB_UNARY_GEOMETRY_OPERATION_SPECS.convexHull,
-    runtime,
-  );
+  return runNamedDuckDbGeometryOperation(dataset, 'convexHull', opts, runtime);
 }
 
 export function boundaryDatasetWithDuckDb(
@@ -127,12 +155,7 @@ export function boundaryDatasetWithDuckDb(
   opts: DuckDbUnaryGeometryOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedGeometryOperation(
-    dataset,
-    opts,
-    DUCKDB_UNARY_GEOMETRY_OPERATION_SPECS.boundary,
-    runtime,
-  );
+  return runNamedDuckDbGeometryOperation(dataset, 'boundary', opts, runtime);
 }
 
 export function makeValidDatasetWithDuckDb(
@@ -140,48 +163,23 @@ export function makeValidDatasetWithDuckDb(
   opts: DuckDbUnaryGeometryOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  return processNamedGeometryOperation(
-    dataset,
-    opts,
-    DUCKDB_UNARY_GEOMETRY_OPERATION_SPECS.makeValid,
-    runtime,
-  );
+  return runNamedDuckDbGeometryOperation(dataset, 'makeValid', opts, runtime);
 }
 
-export async function simplifyDatasetWithDuckDb(
+export function simplifyDatasetWithDuckDb(
   dataset: MapshaperDataset,
   opts: DuckDbSimplifyOptions,
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  const normalized = normalizeSimplifyOptions(dataset, opts, 'simplify');
-  return processGeometryWithDuckDb(
-    dataset,
-    normalized,
-    {
-      id: 'simplify',
-      duckDbFunction: 'ST_Simplify',
-      args: [normalized.tolerance],
-    },
-    runtime,
-  );
+  return runNamedDuckDbGeometryOperation(dataset, 'simplify', opts, runtime);
 }
 
-export async function simplifyPreserveTopologyDatasetWithDuckDb(
+export function simplifyPreserveTopologyDatasetWithDuckDb(
   dataset: MapshaperDataset,
   opts: DuckDbSimplifyOptions,
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  const normalized = normalizeSimplifyOptions(dataset, opts, 'simplifyPreserveTopology');
-  return processGeometryWithDuckDb(
-    dataset,
-    normalized,
-    {
-      id: 'simplifyPreserveTopology',
-      duckDbFunction: 'ST_SimplifyPreserveTopology',
-      args: [normalized.tolerance],
-    },
-    runtime,
-  );
+  return runNamedDuckDbGeometryOperation(dataset, 'simplifyPreserveTopology', opts, runtime);
 }
 
 export function getDuckDbUnaryGeometryOperationSpec(

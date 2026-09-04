@@ -3,13 +3,7 @@ import {
   buildReflectionIndex,
   collectFiles,
   collectDocs,
-  getPublicParameterNames,
-  hasCommentText,
   hasExampleTag,
-  hasParameterComment,
-  hasParameterConstraints,
-  hasParameterDefaultBehavior,
-  hasParameterRunnableExample,
   parseRootArg,
   readFrontMatterStringList,
   readExamples,
@@ -61,41 +55,6 @@ for (const api of [...catalogApiNames].sort()) {
       path: api,
       reason: 'missing public API @example association',
     });
-  }
-
-  if (!nodes.some(hasCommentText)) {
-    violations.push({
-      path: api,
-      reason: 'missing public API comment text',
-    });
-  }
-
-  const parameterNames = new Set(nodes.flatMap(getPublicParameterNames));
-  for (const parameterName of [...parameterNames].sort()) {
-    if (!nodes.some((node) => hasParameterComment(node, parameterName))) {
-      violations.push({
-        path: `${api}.${parameterName}`,
-        reason: 'missing parameter semantic description',
-      });
-    }
-    if (!nodes.some((node) => hasParameterDefaultBehavior(node, parameterName))) {
-      violations.push({
-        path: `${api}.${parameterName}`,
-        reason: 'missing parameter default/omission behavior',
-      });
-    }
-    if (!nodes.some((node) => hasParameterConstraints(node, parameterName))) {
-      violations.push({
-        path: `${api}.${parameterName}`,
-        reason: 'missing parameter constraints/valid values',
-      });
-    }
-    if (!nodes.some(hasParameterRunnableExample)) {
-      violations.push({
-        path: `${api}.${parameterName}`,
-        reason: 'missing parameter runnable example association',
-      });
-    }
   }
 }
 

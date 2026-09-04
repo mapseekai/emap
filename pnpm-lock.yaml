@@ -16,9 +16,6 @@ importers:
 
   .:
     dependencies:
-      '@zwishing/epsg-index':
-        specifier: ^3.0.0
-        version: 3.0.0
       apache-arrow:
         specifier: ^21.1.0
         version: 21.1.0
@@ -50,6 +47,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.4.16
         version: 2.4.16
+      '@zwishing/epsg-index':
+        specifier: ^3.0.0
+        version: 3.0.0
       '@rollup/plugin-alias':
         specifier: ^6.0.0
         version: 6.0.0(rollup@4.57.1)
