@@ -9,36 +9,149 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Attribute-driven fill styling (Phase 1): `map.ops.classifyFeatures()` bakes
-  mapshaper-compatible style fields (`fill` / `stroke` / `stroke-width` / `r`)
-  per record with quantile / equal-interval / nice / categorical methods and
-  explicit null colors, as an undoable op returning a discriminated
-  `ClassificationResult`. Fill layers opt in to rendering baked fields via
-  `styleSource: 'mapshaper'`, and `fill-color` accepts a validated expression
-  subset (`get` / `match` / `step` / `interpolate` linear). Results are cached
-  by (expression, dataset reference, attributeVersion) and rendered through
-  per-bucket `styleBuckets` fills; more than 256 classes still render and fire
-  a `warning` event. Worker routing now keys `classify`/`style` commands on
-  record count so attribute-heavy ops offload even at near-zero vertex counts.
-
-### Documentation
-
-- Aligned root and bilingual format, operation, interaction, control, selection,
-  and error-handling guidance with the current API, including KML import-only
-  support and the application-registered FlatGeobuf plugin. Documentation
-  checks now parse the complete `seed()` / `recipe()` catalog and reject unknown
-  frontmatter example IDs; runnable examples now branch on `OpResult.ok` and use
-  public `TopologySource.replaceDataset()` instead of internal mutation hooks.
+- Added `map.ops.fillRing()` and the `fill` mode of `map.ringEdit` to turn an
+  existing polygon hole into a new feature that reuses the hole's boundary
+  arcs. The advanced edit toolbar now exposes a **Fill Hole** action, and the
+  public `FeatureAppendCommand` / `FeatureAppendCommandOptions` API supports the
+  underlying undoable append workflow.
+- Added attribute-driven fill styling. `map.ops.classifyFeatures()` can classify
+  records with quantile, equal-interval, nice, or categorical methods and bake
+  mapshaper-compatible `fill`, `stroke`, `stroke-width`, or `r` fields. The
+  operation is undoable, returns a stable `ClassificationResult`, supports an
+  explicit null color, and publishes defensive copies of caller-owned arrays.
+  Rendering baked fields is opt-in through `styleSource: 'mapshaper'`; class
+  counts above the normal 256-bucket budget still render and emit a `warning`.
+- Added a validated `fill-color` expression subset for `get`, `match`, `step`,
+  linear `interpolate`, comparisons, and boolean composition. Expression results
+  are cached by expression, dataset identity, layer, and `attributeVersion`, then
+  rendered through Canvas fill buckets to avoid per-feature state changes.
+  `StyleExpression` and `bumpAttributeVersion()` are now public APIs.
+- Added real-browser smoke coverage for the generated example catalog, GeoJSON
+  loading, Canvas painting, pointer interaction, and wheel navigation in Chrome,
+  Firefox, and WebKit.
 
 ### Changed
 
-- Ring/part editing ops (`addRing`, `deleteRing`, `addPart`, `deletePart`) now commit in-place reversible commands instead of whole-dataset replacement: consecutive local edits support multi-level undo/redo, no per-op dataset clone, and deleting a ring/part no longer compacts the arc collection. MSX snapshot export serializes a compacted copy so orphan arcs never bloat the file.
-- `map.ops.reshapeSelected()` and `map.ops.splitSelected()` now use reversible in-place commands: they preserve the live dataset identity, support multi-level undo/redo, and avoid cloning the dataset for each operation.
+- Ring and multipart operations (`addRing`, `deleteRing`, `addPart`,
+  `deletePart`, and `fillRing`) now commit reversible in-place commands instead
+  of replacing an entire dataset. Consecutive edits preserve dataset identity,
+  support multi-level undo/redo, and avoid cloning the dataset for every action.
+  Deleting rings or parts no longer compacts the live arc collection; MSX export
+  compacts an isolated copy so orphan arcs are not serialized.
+- `map.ops.reshapeSelected()` and `map.ops.splitSelected()` now use isolated
+  mini-dataset planning followed by direct patch commands. Line and polygon
+  changes preserve shared-arc ownership, simplified-arc lineage, unselected
+  neighbour geometry, and the original live dataset identity. Multi-source
+  reshape is prepared atomically and recorded as one composite history entry.
+- Dataset state now tracks geometry and attribute changes independently through
+  `editVersion` and `attributeVersion`. Attribute commands invalidate style
+  caches without forcing geometry-index rebuilds, while stale operation checks
+  compare both versions before committing asynchronous results.
+- Worker routing now uses record count for `classify` workloads, so large
+  attribute operations can offload even when vertex count is near zero. The
+  `workerRouting` documentation now demonstrates a real application override
+  instead of returning the default decision unchanged.
+- Custom `MapshaperAdapter` implementations must now provide the batch arc APIs
+  `appendArcs`, `truncateArcs`, and `createArcCollection`. Long ring, part, and
+  split writes use batched allocation/truncation while preserving retained
+  intervals and simplification thresholds. The old compatibility shims were
+  removed after all edit commands migrated to the canonical adapter boundary.
+- DuckDB named geometry, attribute, relation, and overlay helpers now share
+  descriptor-backed dispatch while retaining their existing named public
+  functions. The `@mapseekai/emap/duckdb` entry point uses explicit exports to
+  prevent internal runners from becoming accidental API.
+- `apache-arrow`, `parquet-wasm`, and `@duckdb/duckdb-wasm` are now optional peer
+  dependencies rather than mandatory core dependencies. Applications importing
+  the Arrow or DuckDB subpaths must install the integrations they use; core-only
+  consumers no longer receive these packages through the normal runtime graph.
+- The published compatibility baseline is now Node.js `>=22.18 <25`, ES2022,
+  Chrome/Edge 109+, Firefox 115+, and Safari 16.4+. TypeScript compilation uses
+  bundler module resolution for the package's optional export subpaths.
+- `MapshaperOps` now creates one stable operation context per facade instance
+  instead of rebuilding the same host proxy object and closures for every call.
+
+### Removed
+
+- Removed the obsolete public exports `quoteCliArg`, `isValidLayerName`,
+  `HighlightFeatureRef`, and `LassoStyle`. Internal compatibility aliases,
+  string-command runner paths, duplicated control contracts, and superseded arc
+  helpers were also removed.
+- Removed generated TypeDoc HTML/JSON from version control. API reference output
+  is rebuilt by `api:build`, `docs:build`, and release verification instead of
+  being maintained as a second tracked copy of the public API.
+- Replaced completed `docs/superpowers` implementation plans with concise
+  architecture decision records under `docs/decisions`; legacy `docs/adr`
+  locations now contain compatibility pointers only.
 
 ### Fixed
 
-- The examples TypeScript configuration now uses package-local source aliases and bundler module resolution, so the optional `@mapseekai/emap/arrow` and `@mapseekai/emap/duckdb` subpaths resolve without legacy Node `TS2307` errors; consumer setup docs now explain the modern resolver requirement.
-- Transaction rollback now reverse-undoes captured commands, so in-place edits staged inside a transaction are actually reverted (previously only dataset-replacing ops rolled back correctly).
+- Transaction rollback now reverse-undoes captured in-place commands and reports
+  undo failures, so mixed direct-edit and dataset-replacement transactions no
+  longer leave partially applied edits behind.
+- Direct reshape and split operations now reject stale queued plans, own their
+  selection snapshots, undo composite changes atomically, preserve shared arcs,
+  translate only live mini-dataset arcs, and retain source arc provenance after
+  simplification. These fixes prevent selection drift, neighbour corruption,
+  extra arc reuse, and partial multi-source commits.
+- `fillRing()` now targets the correct hole in multipart features, reuses
+  multi-arc boundaries safely, and does not manufacture an attribute record for
+  layers without a data table.
+- Restored all descriptor-backed DuckDB relation routes, including `overlaps`,
+  `equals`, `crosses`, `covers`, `coveredBy`, `containsProperly`, `distance`, and
+  `distanceWithin`, in both filter and attribute modes. Invalid distance values
+  are again reported before geographic-CRS validation, and validation failures
+  retain the DuckDB error kind and field metadata.
+- Optional `@mapseekai/emap/arrow` and `@mapseekai/emap/duckdb` imports now resolve
+  correctly in the examples and in consumer projects using modern TypeScript
+  module resolution.
+- Public declaration generation no longer leaks the internal
+  `NormalizedDatasetCommit` type through `PreparedDatasetCommit`, and EPSG data
+  constants no longer expand their full lookup tables into `.d.ts` files.
+- Repaired the bilingual public API catalog and TypeDoc associations for newly
+  added commands, fill-ring options, classification APIs, style expressions,
+  and DuckDB SQL helpers.
+
+### Security
+
+- Rebuilt `SimplifyControl` dynamic form content with DOM APIs and runtime value
+  validation instead of interpolating option values into `innerHTML`, removing
+  the attribute-injection path available to untyped JavaScript callers.
+- Hardened ZIP imports by upgrading `fflate` to `0.8.3`, rejecting
+  case-insensitive duplicate basenames instead of silently overwriting
+  Shapefile sidecars, and enforcing separate 500 MiB compressed and uncompressed
+  limits before download, allocation, and extraction.
+- Patched vulnerable runtime dependency chains for XML, ZIP, multipart form,
+  protobuf schema, and query-string handling. Production auditing now fails
+  closed for new, expired, non-documentation, critical, or unclassified findings;
+  explicitly reviewed documentation-tool findings are kept in a dated allowlist.
+
+### Documentation
+
+- Reworked the root and bilingual documentation around the current source,
+  layer, operation, interaction, control, selection, worker, error, Arrow,
+  DuckDB, MapLibre, KML, FlatGeobuf, and compatibility contracts. The root
+  README files now provide a compact entry point and defer detailed workflows to
+  the documentation site.
+- Consolidated the runnable-example inventory into one typed manifest used by
+  Vite, the catalog UI, fixture loading, docs checks, and TypeDoc example links.
+  The previous TypeScript AST parser and duplicate route list were removed.
+- Simplified the TypeDoc plugin to internal-host filtering and runnable-example
+  association; public API ownership and accidental root exports are now checked
+  directly from source.
+
+### Development
+
+- Expanded pull-request and release gates to cover formatting, type checking,
+  explicit public API surface checks, unit tests, production builds, bundle
+  smoke checks, all DuckDB-Wasm integrations, documentation and example
+  contracts, package dry runs, and production dependency auditing. DuckDB and
+  browser suites run in independent jobs to keep core feedback fast.
+- Added package-export existence checks, browser-runtime import checks, a minimum
+  Node.js compatibility job, shared CanvasPainter test fixtures, and a
+  reproducible security-audit policy with tests.
+- Reduced repository maintenance state by removing tracked generated API files,
+  shrinking duplicate README and planning content, simplifying documentation
+  tooling, and preventing future EPSG declaration-size regressions.
 
 ## [0.8.1] - 2026-08-29
 
