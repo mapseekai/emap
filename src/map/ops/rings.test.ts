@@ -157,7 +157,7 @@ function integrationHarness(dataset: MapshaperDataset) {
     _fireSelectionChange: vi.fn(),
     fire: vi.fn(),
   } as unknown as EmapHostInternal;
-  return { ops: new MapshaperOps(host), source, selection, history };
+  return { ops: new MapshaperOps(host), host, source, selection, history };
 }
 
 describe('addRing', () => {
@@ -1231,7 +1231,7 @@ it('barrier probe: direct → replacement → undo replacement restores captured
   dataset.layers[0]!.name = 'rings';
   const harness = integrationHarness(dataset);
   const realHistory = new EditHistory(); // import from '../../edit/edit-history'
-  (harness.ops as any)._emap._history = realHistory;
+  (harness.host as any)._history = realHistory;
 
   const liveBefore = harness.source.getDataset();
   await expect(
@@ -1249,12 +1249,10 @@ it('barrier probe: direct → replacement → undo replacement restores captured
 
   // Replacement through the real prepared-mutation runner (no-op mutation,
   // but the commit path pushes a DatasetReplaceSelectionCommand barrier).
-  const result = await _runPreparedDatasetMutation(
-    (harness.ops as any)._emap,
-    'source',
-    'Probe replace',
-    () => ({ value: undefined, selection: [] }),
-  );
+  const result = await _runPreparedDatasetMutation(harness.host, 'source', 'Probe replace', () => ({
+    value: undefined,
+    selection: [],
+  }));
   expect(result.ok).toBe(true);
   expect(realHistory.size()).toBe(2); // stale placeholder + barrier command
   expect(realHistory.snapshot().staleCount).toBe(1);

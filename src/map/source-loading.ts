@@ -154,6 +154,7 @@ export class SourceLoadError extends Error {
   }
 }
 
+/** @internal */
 export interface PreparedDatasetCommit extends NormalizedDatasetCommit {
   readonly intendedMapCrs: string;
 }

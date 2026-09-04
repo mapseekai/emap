@@ -198,8 +198,8 @@ function runDistanceWithinOperation(
   opts: DuckDbRelationHelperOptions = {},
   runtime: DuckDbRuntime | null = getDuckDbRuntime(),
 ): Promise<MapshaperDataset> {
-  assertProjectedCrsForDistance(inputDataset, maskDataset, opts);
   const distance = requireDistance(opts.distance);
+  assertProjectedCrsForDistance(inputDataset, maskDataset, opts);
   return runRelation(
     inputDataset,
     maskDataset,
@@ -218,6 +218,54 @@ function runDistanceWithinOperation(
           distance,
           outputColumn: opts.outputColumn ?? RELATION_DESCRIPTORS.distanceWithin.outputColumn,
         },
+    runtime,
+  );
+}
+
+/** Execute a descriptor-backed relation operation for map-level adapters. */
+export function runNamedDuckDbRelationOperation(
+  mode: string,
+  operation: string,
+  inputDataset: MapshaperDataset,
+  maskDataset: MapshaperDataset,
+  opts: DuckDbRelationHelperOptions = {},
+  runtime: DuckDbRuntime | null = getDuckDbRuntime(),
+): Promise<MapshaperDataset> {
+  if (mode !== 'filter' && mode !== 'attribute') {
+    throw new DuckDbOperationError('validation', `Unknown DuckDB relation mode '${mode}'`, {
+      field: 'mode',
+    });
+  }
+
+  if (!(operation in RELATION_DESCRIPTORS)) {
+    throw new DuckDbOperationError(
+      'validation',
+      `Unknown DuckDB relation operation '${operation}'`,
+      { field: 'operation' },
+    );
+  }
+
+  if (operation === 'distance') {
+    if (mode === 'filter') {
+      throw new DuckDbOperationError(
+        'validation',
+        "DuckDB relation operation 'distance' only supports attribute mode",
+        { field: 'operation' },
+      );
+    }
+    return distanceDatasetWithDuckDb(inputDataset, maskDataset, opts, runtime);
+  }
+
+  if (operation === 'distanceWithin') {
+    return runDistanceWithinOperation(mode, inputDataset, maskDataset, opts, runtime);
+  }
+
+  return runTopologicalOperation(
+    operation as TopologicalRelationOperationId,
+    mode,
+    inputDataset,
+    maskDataset,
+    opts,
     runtime,
   );
 }
