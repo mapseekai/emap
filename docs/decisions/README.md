@@ -9,5 +9,7 @@ This directory preserves the durable decisions that were previously mixed with c
 | [0003](0003-geometric-merge-and-split.md) | Isolate selected-feature merge and split with mini datasets and undoable commands |
 | [0004](0004-reshape-ring-part-editing.md) | Model reshape, ring, and multipart edits as validated direct-edit plans |
 | [0005](0005-attribute-driven-fill-styling.md) | Separate attribute invalidation from geometry edits and render fill styles in buckets |
+| [0006](0006-public-api-surface.md) | Keep root exports explicit and prevent accidental API growth |
+| [0007](0007-optional-integration-dependencies.md) | Make Arrow, Parquet, and DuckDB-Wasm optional peers while retaining MapLibre compatibility |
 
 ADRs record why the implementation has its current shape. They are not task lists and do not represent unfinished work.

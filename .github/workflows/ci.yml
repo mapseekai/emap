@@ -34,12 +34,30 @@ jobs:
         run: pnpm run format:check
       - name: Typecheck
         run: pnpm run typecheck
+      - name: Check root public API surface
+        run: pnpm run api:check-surface
       - name: Unit tests
         run: pnpm run test:run
       - name: Build
         run: pnpm run build
       - name: Browser bundle smoke test
         run: pnpm run bundle:smoke
+
+  node-compatibility:
+    name: Minimum Node compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.18'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run api:check-surface
 
   duckdb:
     name: DuckDB-Wasm integration
@@ -55,6 +73,24 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run test:duckdb
+
+  browser:
+    name: Real browser smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Firefox and WebKit runtimes
+        run: pnpm run browser:install
+      - name: Run real-browser example smoke tests
+        run: pnpm run test:browser
 
   docs:
     name: Documentation and examples

@@ -54,9 +54,12 @@ describe('release documentation checklist', () => {
     const gates = [
       'format:check',
       'typecheck',
+      'api:check-surface',
       'test:run',
       'build',
+      'bundle:smoke',
       'test:duckdb',
+      'test:browser',
       'api:build',
       'examples:build',
       'docs:build',
@@ -64,6 +67,7 @@ describe('release documentation checklist', () => {
       'docs:check-i18n',
       'docs:check-api',
       'examples:check',
+      'audit:prod',
     ];
 
     for (const gate of gates) {
@@ -74,7 +78,7 @@ describe('release documentation checklist', () => {
     const docsVerify = manifest.scripts?.['docs:verify'] ?? '';
     for (const gate of [
       'typecheck',
-      'api:build',
+      'api:check-surface',
       'examples:build',
       'docs:build',
       'docs:compose-examples',
@@ -103,7 +107,6 @@ describe('release documentation checklist', () => {
 
     expect(previewSteps).toEqual([
       'pnpm run build',
-      'pnpm run api:build',
       'pnpm run examples:build',
       'pnpm run docs:build',
       'pnpm run docs:compose-examples',

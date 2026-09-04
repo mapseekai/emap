@@ -26,6 +26,24 @@ describe('documentation workspace config', () => {
     }
   });
 
+  it('declares the Node and evergreen-browser compatibility baseline', async () => {
+    const manifest = JSON.parse(await readFile(resolve(process.cwd(), 'package.json'), 'utf8')) as {
+      engines?: { node?: string };
+      browserslist?: string[];
+    };
+    const rollup = await readFile(resolve(process.cwd(), 'rollup.config.mjs'), 'utf8');
+
+    expect(manifest.engines?.node).toBe('>=22.18 <25');
+    expect(manifest.browserslist).toEqual([
+      'Chrome >= 109',
+      'Edge >= 109',
+      'Firefox >= 115',
+      'Safari >= 16.4',
+    ]);
+    expect(rollup).toContain("const browserSyntaxTarget = 'es2022';");
+    expect(rollup).toContain('target: browserSyntaxTarget');
+  });
+
   it('clears Docusaurus generated metadata before local docs startup', async () => {
     const manifest = JSON.parse(await readFile(resolve(process.cwd(), 'package.json'), 'utf8')) as {
       scripts?: Record<string, unknown>;
@@ -35,7 +53,7 @@ describe('documentation workspace config', () => {
       "node -e \"require('node:fs').rmSync('packages/docs/.docusaurus',{recursive:true,force:true})\"",
     );
     expect(manifest.scripts?.['docs:dev']).toBe(
-      'pnpm run docs:clean && pnpm --filter @mapseekai/emap-docs start',
+      'pnpm run docs:clean && pnpm run api:build && pnpm --filter @mapseekai/emap-docs start',
     );
   });
 

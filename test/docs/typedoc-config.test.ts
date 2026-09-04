@@ -8,7 +8,11 @@ const plugin = readFileSync(resolve(root, 'scripts/typedoc-hide-internals.mjs'),
 
 describe('TypeDoc configuration', () => {
   it('builds the three supported public entry points and excludes @internal declarations', () => {
-    expect(config.entryPoints).toEqual(['src/index.ts', 'src/arrow/index.ts', 'src/duckdb/index.ts']);
+    expect(config.entryPoints).toEqual([
+      'src/index.ts',
+      'src/arrow/index.ts',
+      'src/duckdb/index.ts',
+    ]);
     expect(config.excludeInternal).toBe(true);
     expect(config.treatWarningsAsErrors).toBe(true);
     expect(config.plugin).toEqual(['./scripts/typedoc-hide-internals.mjs']);
@@ -24,8 +28,6 @@ describe('TypeDoc configuration', () => {
   });
 
   it('keeps intentionallyNotExported entries unique', () => {
-    expect(config.intentionallyNotExported).toEqual([
-      ...new Set(config.intentionallyNotExported),
-    ]);
+    expect(config.intentionallyNotExported).toEqual([...new Set(config.intentionallyNotExported)]);
   });
 });

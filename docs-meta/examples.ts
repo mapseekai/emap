@@ -703,6 +703,8 @@ export const examples: readonly ExampleDefinition[] = [
   recipe('duckdb/relation/distance-within', 'data-analysis', 'DuckDB 距离范围关系', 'DuckDB distance-within relation', [docsDuckDb, docsOperations], 'Emap', ['duckdb', 'spatial', 'relation', 'distance'], ['fixtures/duckdb-distance-target.geojson', 'fixtures/duckdb-distance-mask.geojson'], { id: 'duckdb', section: 'relation' }),
 ];
 
+export const exampleIds = examples.map(({ id }) => id);
+
 function seed(
   id: ExampleId,
   category: string,

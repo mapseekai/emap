@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { CanvasPainter } from './canvas-painter';
 import type { PointMarkerShape, PointShape } from '../types/mapshaper-types';
+import { createCanvasPainterHarness } from '../../test/utils/canvas-painter';
 
 function makePainter(strokeCalls: string[], dashCalls: number[][] = []) {
   const ctx: any = {
@@ -23,11 +24,7 @@ function makePainter(strokeCalls: string[], dashCalls: number[][] = []) {
     },
     clearRect() {},
   };
-  const canvas = { getContext: () => ctx, width: 100, height: 100, style: {} };
-  const painter = new CanvasPainter(canvas as any);
-  (painter as any)._transform = { mx: 1, my: 1, bx: 0, by: 0 };
-  (painter as any)._pixelRatio = 1;
-  return painter;
+  return createCanvasPainterHarness(ctx).painter;
 }
 
 function makeArcs(size: number) {
@@ -119,11 +116,7 @@ function makePointPainter(
     },
     stroke() {},
   };
-  const canvas = { getContext: () => ctx, width: 100, height: 100, style: {} };
-  const painter = new CanvasPainter(canvas as any);
-  (painter as any)._transform = { mx: 1, my: 1, bx: 0, by: 0 };
-  (painter as any)._pixelRatio = 1;
-  return painter;
+  return createCanvasPainterHarness(ctx).painter;
 }
 
 describe('CanvasPainter batching', () => {

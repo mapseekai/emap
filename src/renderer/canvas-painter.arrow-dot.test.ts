@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 (globalThis as any).window = { devicePixelRatio: 1 };
 
-import { CanvasPainter } from './canvas-painter';
+import { createCanvasPainterHarness } from '../../test/utils/canvas-painter';
 
 type Segment = readonly [number, number, number, number];
 
@@ -33,10 +33,7 @@ function makePainter(width = 100, height = 100, pixelRatio = 1) {
     },
     clearRect() {},
   };
-  const canvas = { getContext: () => ctx, width, height, style: {} };
-  const painter = new CanvasPainter(canvas as any);
-  painter.setPixelRatio(pixelRatio);
-  painter.setTransform({ mx: 1, my: 1, bx: 0, by: 0 } as any);
+  const { painter } = createCanvasPainterHarness(ctx, { width, height, pixelRatio });
   return { painter, segments, strokes };
 }
 

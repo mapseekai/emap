@@ -22,21 +22,33 @@ Run the release verification chain from a clean checkout:
 ```bash
 npm run format:check
 npm run typecheck
+npm run api:check-surface
 npm run test:run
 npm run build
+npm run bundle:smoke
 npm run test:duckdb
-npm run api:build
+npm run test:browser
 npm run examples:build
 npm run docs:build
 npm run docs:compose-examples
 npm run docs:check-i18n
 npm run docs:check-api
 npm run examples:check
+pnpm pack --dry-run
+npm run audit:prod
 ```
 
 `npm run docs:verify` must also pass because it chains `typecheck`,
-`api:build`, `examples:build`, `docs:build`, `docs:compose-examples`,
-`docs:check-i18n`, `docs:check-api`, and `examples:check`.
+`api:check-surface`, `examples:build`, `docs:build`, `docs:compose-examples`,
+`docs:check-i18n`, `docs:check-api`, and `examples:check`. `docs:build` generates
+the TypeDoc API reference before Docusaurus starts, so callers do not need a
+second `api:build` step.
+
+`npm run audit:prod` fails closed when the registry cannot return a complete
+report. The only temporary exceptions are the exact advisory IDs and
+documentation-only paths recorded in `security/audit-allowlist.json`; the file
+expires on its declared date, and any new high or critical finding remains
+blocking.
 
 ## Local Preview
 
@@ -73,8 +85,8 @@ serving the composed output.
 
 - Bilingual documents have matching IDs, slugs, API front matter, example front
   matter, stability, and verified version.
-- API pages have generated prose, parameter descriptions, default or omission
-  behavior, constraints or valid values, and runnable example associations.
+- Public API names are explicitly exported, cataloged in documentation, and
+  associated with runnable examples where the guide declares them.
 - Example catalog entries point to existing routes, fixtures, docs IDs, and API
   reflections.
 - Root docs link to the static documentation, generated API, examples catalog,

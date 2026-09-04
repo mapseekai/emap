@@ -46,7 +46,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: '22.18'
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
@@ -64,9 +64,12 @@ jobs:
       - run: pnpm run format:check
       - run: pnpm run typecheck
       - run: pnpm run build
+      - run: pnpm run bundle:smoke
       - run: pnpm run test:run
       - run: pnpm run test:duckdb
       - run: pnpm run docs:verify
+      - run: pnpm pack --dry-run
+      - run: pnpm run audit:prod
 
       - name: Publish package
         run: npm publish --access public --ignore-scripts

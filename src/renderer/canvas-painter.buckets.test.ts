@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 (globalThis as any).window = { devicePixelRatio: 1 };
 
-import { CanvasPainter } from './canvas-painter';
+import { createCanvasPainterHarness } from '../../test/utils/canvas-painter';
 
 function makeFillHarness(shapeCount: number) {
   const styleSets: string[] = [];
@@ -27,12 +27,7 @@ function makeFillHarness(shapeCount: number) {
     closePath() {},
     clearRect() {},
   };
-  const canvas = { getContext: () => ctx, width: 100, height: 100, style: {} };
-  // 画布夹具：CanvasPainter 仅要求 getContext 返回非空 ctx。
-  const painter = new CanvasPainter(canvas as unknown as HTMLCanvasElement);
-  // 注入单位变换/像素比：绕过真实 DOM 读数。
-  (painter as unknown as { _transform: object })._transform = { mx: 1, my: 1, bx: 0, by: 0 };
-  (painter as unknown as { _pixelRatio: number })._pixelRatio = 1;
+  const { painter } = createCanvasPainterHarness(ctx);
   const arcs = {
     size: () => shapeCount,
     getVertexData: () => ({ nn: Int32Array.from({ length: shapeCount }, () => 2) }),

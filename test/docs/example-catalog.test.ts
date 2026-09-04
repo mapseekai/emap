@@ -258,8 +258,8 @@ describe('example catalog metadata', () => {
     expect(source).not.toContain('const recipes:');
     expect(source).not.toContain('function module(');
     expect(source).not.toContain('recipes[');
-    expect(viteConfig).toContain("import { examples } from '../../docs-meta/examples';");
-    expect(viteConfig).toContain('const routeIds = examples.map(({ id }) => id);');
+    expect(viteConfig).toContain("import { exampleIds } from '../../docs-meta/examples';");
+    expect(viteConfig).toContain('const routeIds = exampleIds;');
     expect(viteConfig).not.toContain("'getting-started/geojson-viewer'");
   });
 

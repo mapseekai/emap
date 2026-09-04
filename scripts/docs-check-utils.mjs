@@ -1,6 +1,6 @@
 import { access, readFile, readdir } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
-import ts from 'typescript';
+import { pathToFileURL } from 'node:url';
 
 export function parseRootArg(argv = process.argv.slice(2)) {
   const rootIndex = argv.indexOf('--root');
@@ -126,129 +126,12 @@ export function buildDocReferenceSet(docs) {
 
 export async function readExamples(root) {
   const catalogPath = resolve(root, 'docs-meta/examples.ts');
-  const source = await readFile(catalogPath, 'utf8');
-  return parseExamples(source);
-}
-
-function parseExamples(source) {
-  const file = ts.createSourceFile('examples.ts', source, ts.ScriptTarget.Latest, true);
-  const constants = new Map();
-  const arrays = new Map();
-
-  for (const statement of file.statements) {
-    if (!ts.isVariableStatement(statement)) continue;
-
-    for (const declaration of statement.declarationList.declarations) {
-      if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
-
-      if (ts.isStringLiteralLike(declaration.initializer)) {
-        constants.set(declaration.name.text, declaration.initializer.text);
-      }
-      if (ts.isArrayLiteralExpression(declaration.initializer)) {
-        arrays.set(declaration.name.text, declaration.initializer);
-      }
-    }
+  const moduleUrl = `${pathToFileURL(catalogPath).href}?check=${Date.now()}`;
+  const catalog = await import(moduleUrl);
+  if (!Array.isArray(catalog.examples)) {
+    throw new Error(`${catalogPath} must export an examples array`);
   }
-
-  const examples = [];
-  const literalArray = arrays.get('seeds') ?? arrays.get('examples');
-
-  if (literalArray) {
-    examples.push(
-      ...literalArray.elements
-        .map((node) => parseCatalogEntry(node, constants))
-        .filter((example) => example.id),
-    );
-  }
-
-  const recipes = arrays.get('recipes');
-  if (recipes) {
-    examples.push(
-      ...recipes.elements
-        .map((node) => parseCatalogEntry(node, constants))
-        .filter((example) => example.id),
-    );
-  }
-
-  return examples;
-}
-
-function parseExample(node, constants) {
-  return {
-    id: readStringProperty(node, 'id', constants),
-    docs: readStringArrayProperty(node, 'docs', constants),
-    api: readStringArrayProperty(node, 'api', constants),
-    fixtures: readStringArrayProperty(node, 'fixtures', constants),
-  };
-}
-
-function readStringProperty(node, key, constants) {
-  const property = findProperty(node, key);
-  if (!property || !ts.isPropertyAssignment(property)) return '';
-  return readStringExpression(property.initializer, constants);
-}
-
-function readStringArrayProperty(node, key, constants) {
-  const property = findProperty(node, key);
-  if (!property || !ts.isPropertyAssignment(property)) return [];
-  const value = property.initializer;
-  if (!ts.isArrayLiteralExpression(value)) return [];
-  return value.elements.map((element) => readStringExpression(element, constants)).filter(Boolean);
-}
-
-function parseCatalogEntry(node, constants) {
-  if (ts.isObjectLiteralExpression(node)) return parseExample(node, constants);
-  if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
-    return { id: '', docs: [], api: [], fixtures: [] };
-  }
-
-  const args = node.arguments;
-  if (node.expression.text === 'seed') {
-    return {
-      id: readStringExpression(args[0], constants),
-      docs: readStringArrayExpression(args[4], constants),
-      api: [readStringExpression(args[5], constants)].filter(Boolean),
-      fixtures: [readStringExpression(args[6], constants)].filter(Boolean),
-    };
-  }
-  if (node.expression.text === 'recipe') {
-    return {
-      id: readStringExpression(args[0], constants),
-      docs: readStringArrayExpression(args[4], constants),
-      api: [readStringExpression(args[5], constants)].filter(Boolean),
-      fixtures: readStringArrayExpression(args[7], constants),
-    };
-  }
-  return { id: '', docs: [], api: [], fixtures: [] };
-}
-
-function readStringArrayExpression(node, constants) {
-  if (!node) return [];
-  if (ts.isArrayLiteralExpression(node)) {
-    return node.elements.map((element) => readStringExpression(element, constants)).filter(Boolean);
-  }
-  if (ts.isIdentifier(node)) {
-    return constants.has(node.text) ? [constants.get(node.text)] : [];
-  }
-  return [];
-}
-
-function findProperty(node, key) {
-  return node.properties.find((property) => {
-    if (!ts.isPropertyAssignment(property)) return false;
-    const name = property.name;
-    return (
-      (ts.isIdentifier(name) && name.text === key) ||
-      (ts.isStringLiteralLike(name) && name.text === key)
-    );
-  });
-}
-
-function readStringExpression(node, constants) {
-  if (ts.isStringLiteralLike(node)) return node.text;
-  if (ts.isIdentifier(node)) return constants.get(node.text) ?? '';
-  if (ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
-  return '';
+  return catalog.examples;
 }
 
 export async function readReflections(root) {

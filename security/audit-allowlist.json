@@ -1,0 +1,30 @@
+{
+  "expiresOn": "2026-12-31",
+  "minimumSeverity": "high",
+  "allowedAdvisoryIds": [
+    "1113686",
+    "1124252",
+    "1130588",
+    "1130720",
+    "1130737",
+    "1138115",
+    "1138808",
+    "1138809",
+    "1138811",
+    "1139427",
+    "1139510",
+    "1153171",
+    "1153172",
+    "1153189",
+    "1158521",
+    "1158524",
+    "1158527",
+    "1158530"
+  ],
+  "allowedFindingPrefixes": [
+    "packages/docs>",
+    "packages__docs>",
+    "@mapseekai/emap-docs>"
+  ],
+  "reason": "Temporary allowance for the listed high-severity advisories reachable only through the Docusaurus documentation build toolchain. New advisory IDs, non-documentation paths, critical findings, and expired entries remain blocking."
+}

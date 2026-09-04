@@ -1,5 +1,11 @@
 # emap
 
+<p align="center">
+  <img src="packages/examples/public/emap.svg" alt="Emap logo" width="144" />
+</p>
+
+[简体中文](README.zh-CN.md)
+
 `@mapseekai/emap` is a browser-only TypeScript engine for rendering, querying, analysing, and editing topology-oriented vector data. It uses mapshaper data structures, renders editable business layers with Canvas2D, and can synchronize optional MapLibre basemaps and overlays.
 
 > The project is pre-1.0 and evolves quickly. Pin the package version and validate upgrades before using it in production-critical editing workflows.
@@ -183,6 +189,13 @@ The main thread validates source identity plus geometry and attribute versions b
 
 ## Optional Arrow and GeoParquet
 
+Install the optional peer used by the Arrow subpath; add `parquet-wasm` only for GeoParquet import or export:
+
+```bash
+pnpm add apache-arrow
+pnpm add parquet-wasm # GeoParquet only
+```
+
 Importing the Arrow subpath registers GeoArrow and GeoParquet formats:
 
 ```ts
@@ -193,6 +206,12 @@ import { fromArrowTable, toArrowTable } from '@mapseekai/emap/arrow';
 GeoParquet support loads `parquet-wasm` only when needed. Applications that do not import this entry point do not execute the optional format module.
 
 ## Optional DuckDB-Wasm
+
+Install the optional runtime peers before importing the DuckDB subpath:
+
+```bash
+pnpm add @duckdb/duckdb-wasm apache-arrow
+```
 
 ```ts
 import {

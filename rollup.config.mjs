@@ -112,6 +112,7 @@ function browserSafeMprojInitFallback() {
 
 const isProduction = process.env.BUILD === 'production';
 const shouldWriteSourcemap = !isProduction;
+const browserSyntaxTarget = 'es2022';
 const mainOutput = isProduction ? 'dist/emap.js' : 'dist/emap-dev.js';
 const moduleOutput = 'dist/emap.mjs';
 // Worker file is always called emap-worker.js so consumers don't have to
@@ -156,7 +157,7 @@ function esbuildTypeScript() {
       const result = await transform(code, {
         loader: normalizedId.endsWith('x') ? 'tsx' : 'ts',
         format: 'esm',
-        target: 'esnext',
+        target: browserSyntaxTarget,
         sourcemap: shouldWriteSourcemap,
         sourcefile: id,
         tsconfigRaw: {

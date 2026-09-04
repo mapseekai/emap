@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 (globalThis as { window?: { devicePixelRatio: number } }).window = { devicePixelRatio: 1 };
 
-import { CanvasPainter } from './canvas-painter';
+import type { CanvasPainter } from './canvas-painter';
+import { createCanvasPainterHarness } from '../../test/utils/canvas-painter';
 import type { MeasurementOverlayState } from './painter';
 
 type CanvasCall = [string, ...unknown[]];
@@ -95,16 +96,7 @@ function makeContext(): CanvasContextFixture {
 }
 
 function makePainter(ctx: CanvasContextStub): CanvasPainter {
-  const canvas = { getContext: () => ctx, width: 100, height: 100, style: {} };
-  const canvasElement = canvas as unknown as HTMLCanvasElement; // Test-only Canvas2D subset.
-  const painter = new CanvasPainter(canvasElement);
-  Reflect.set(painter, '_transform', {
-    mx: 1,
-    my: 1,
-    bx: 0,
-    by: 0,
-  });
-  return painter;
+  return createCanvasPainterHarness(ctx).painter;
 }
 
 const completedArea: MeasurementOverlayState = {

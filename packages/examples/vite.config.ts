@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
-import { examples } from '../../docs-meta/examples';
+import { exampleIds } from '../../docs-meta/examples';
 import { runtimeAssetsPlugin } from './build/runtime-assets-plugin';
 
 const { version } = JSON.parse(
@@ -13,7 +13,7 @@ if (assetMode !== 'local' && assetMode !== 'cdn') {
 }
 const assetIntegrity = JSON.parse(process.env.EMAP_EXAMPLES_ASSET_INTEGRITY ?? '{}') as unknown;
 
-const routeIds = examples.map(({ id }) => id);
+const routeIds = exampleIds;
 
 const htmlInput = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 

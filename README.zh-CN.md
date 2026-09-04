@@ -1,5 +1,11 @@
 # emap
 
+<p align="center">
+  <img src="packages/examples/public/emap.svg" alt="Emap 标志" width="144" />
+</p>
+
+[English](README.md)
+
 `@mapseekai/emap` 是面向浏览器的 TypeScript 矢量地图渲染、查询、分析与拓扑编辑引擎。它以 mapshaper 数据结构为基础，使用 Canvas2D 绘制可编辑业务图层，并可按需同步 MapLibre 底图和在线叠加服务。
 
 > 项目尚未达到 1.0，接口仍在快速演进。用于生产关键编辑流程时，应锁定版本并在升级前完成回归验证。
@@ -181,6 +187,13 @@ const map = new Emap({
 
 ## 可选 Arrow 与 GeoParquet
 
+先安装 Arrow 子路径使用的可选 peer；只有 GeoParquet 导入或导出才需要安装 `parquet-wasm`：
+
+```bash
+pnpm add apache-arrow
+pnpm add parquet-wasm # 仅 GeoParquet
+```
+
 导入 Arrow 子路径会注册 GeoArrow、GeoParquet 格式：
 
 ```ts
@@ -191,6 +204,12 @@ import { fromArrowTable, toArrowTable } from '@mapseekai/emap/arrow';
 只有实际使用 GeoParquet 时才会加载 `parquet-wasm`。
 
 ## 可选 DuckDB-Wasm
+
+导入 DuckDB 子路径前先安装可选运行时 peer：
+
+```bash
+pnpm add @duckdb/duckdb-wasm apache-arrow
+```
 
 ```ts
 import {

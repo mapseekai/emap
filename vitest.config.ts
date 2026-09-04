@@ -26,6 +26,6 @@ export default defineConfig({
     maxWorkers: 2,
     // Linked worktrees under .worktrees/ carry their own test suites and
     // config; keep root discovery on the canonical checkout only.
-    exclude: [...defaultExclude, '.worktrees/**'],
+    exclude: [...defaultExclude, '.worktrees/**', 'test/browser/**'],
   },
 });

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { CanvasPainter } from './canvas-painter';
 import { EMAP_THEME_COLORS, EMAP_THEME_FALLBACKS } from '../theme/colors';
+import { createCanvasPainterHarness } from '../../test/utils/canvas-painter';
 
 function makeArcIterator(points: Array<[number, number]>) {
   let index = 0;
@@ -44,11 +44,7 @@ function makePainter() {
     clearRect() {},
   } as unknown as CanvasRenderingContext2D;
   const canvas = document.createElement('canvas');
-  Object.defineProperty(canvas, 'getContext', { value: () => ctx });
-  canvas.width = 100;
-  canvas.height = 100;
-  const painter = new CanvasPainter(canvas);
-  Reflect.set(painter, '_transform', { mx: 1, my: 1, bx: 0, by: 0 });
+  const { painter } = createCanvasPainterHarness(ctx, { canvas });
   return { assignments, canvas, painter };
 }
 

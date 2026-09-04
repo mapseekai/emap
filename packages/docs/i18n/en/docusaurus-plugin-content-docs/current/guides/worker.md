@@ -106,12 +106,15 @@ ignored and remains caller-owned.
 const map = new Emap({
   container: 'map',
   useWorker: 'auto',
-  workerRouting: ({ defaultDecision }) => defaultDecision,
+  workerRouting: ({ heads, recordCount, defaultDecision }) =>
+    heads.includes('classify') ? recordCount >= 20_000 : defaultDecision,
 });
 ```
 
-The callback receives command heads, vertex count, threshold, and the default
-decision. Override it only after measuring representative application data.
+This example uses a 20,000-record threshold for attribute classification and
+keeps the default decision for every other command. The callback also receives
+vertex count and the configured threshold. Override it only after measuring
+representative application data.
 
 ## Operation state and cancellation
 

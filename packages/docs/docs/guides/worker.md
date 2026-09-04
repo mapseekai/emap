@@ -110,12 +110,14 @@ const map = new Emap({
 const map = new Emap({
   container: 'map',
   useWorker: 'auto',
-  workerRouting: ({ defaultDecision }) => defaultDecision,
+  workerRouting: ({ heads, recordCount, defaultDecision }) =>
+    heads.includes('classify') ? recordCount >= 20_000 : defaultDecision,
 });
 ```
 
-回调可以读取命令集合、顶点数和默认结果。只有掌握业务数据分布并完成实际测量后才覆盖；
-默认决策已经区分便宜和昂贵命令。
+上例针对属性分级数据把阈值调整为 2 万条记录，其他命令继续采用默认决策。回调还可以读取
+顶点数和配置阈值；只有掌握业务数据分布并完成实际测量后才覆盖，默认决策已经区分便宜和
+昂贵命令。
 
 ## 操作和错误状态
 

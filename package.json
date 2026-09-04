@@ -1,7 +1,17 @@
 {
   "name": "@mapseekai/emap",
   "version": "0.8.1",
+  "type": "module",
   "packageManager": "pnpm@11.15.1",
+  "engines": {
+    "node": ">=22.18 <25"
+  },
+  "browserslist": [
+    "Chrome >= 109",
+    "Edge >= 109",
+    "Firefox >= 115",
+    "Safari >= 16.4"
+  ],
   "description": "A modern, decoupled rendering engine for mapshaper data",
   "main": "dist/emap.mjs",
   "module": "dist/emap.mjs",
@@ -76,8 +86,14 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:bundle": "vitest run src/build/bundle-self-contained.test.ts src/build/package-exports.test.ts",
+    "bundle:smoke": "node scripts/check-bundle-smoke.mjs",
+    "browser:install": "playwright install --with-deps chrome firefox webkit",
+    "test:browser": "pnpm run examples:build && playwright test",
+    "test:browser:chrome": "pnpm run examples:build && playwright test --project=chrome",
     "test:duckdb": "DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/buffer.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/attribute.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/relation.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/query.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/geoparquet-query.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/overlay.integration.test.ts && DUCKDB_WASM_INTEGRATION=1 vitest run src/duckdb/spatial-aggregate-join.integration.test.ts",
-    "security:audit": "pnpm --filter @mapseekai/emap audit --prod --audit-level high",
+    "audit:prod": "node scripts/audit-production-dependencies.mjs",
+    "security:audit": "pnpm run audit:prod",
+    "api:check-surface": "node scripts/check-public-api-surface.mjs",
     "docs:clean": "node -e \"require('node:fs').rmSync('packages/docs/.docusaurus',{recursive:true,force:true})\"",
     "docs:dev": "pnpm run docs:clean && pnpm run api:build && pnpm --filter @mapseekai/emap-docs start",
     "docs:preview": "pnpm run build && pnpm run examples:build && pnpm run docs:build && pnpm run docs:compose-examples && node scripts/preview-docs.mjs",
@@ -90,8 +106,8 @@
     "docs:check-i18n": "node scripts/check-docs-i18n.mjs",
     "docs:check-api": "node scripts/check-docs-api.mjs",
     "examples:check": "node scripts/check-examples.mjs",
-    "docs:verify": "npm run typecheck && npm run examples:build && npm run docs:build && npm run docs:compose-examples && npm run docs:check-i18n && npm run docs:check-api && npm run examples:check",
-    "prepublishOnly": "npm run format:check && npm run typecheck && npm run build && npm run test:run && npm run test:duckdb"
+    "docs:verify": "npm run typecheck && npm run api:check-surface && npm run examples:build && npm run docs:build && npm run docs:compose-examples && npm run docs:check-i18n && npm run docs:check-api && npm run examples:check",
+    "prepublishOnly": "npm run format:check && npm run typecheck && npm run api:check-surface && npm run build && npm run bundle:smoke && npm run test:run && npm run test:duckdb && npm run audit:prod"
   },
   "keywords": [
     "mapshaper",
@@ -115,7 +131,11 @@
   "homepage": "https://github.com/mapseekai/emap#readme",
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",
+    "@duckdb/duckdb-wasm": "1.33.1-dev57.0",
+    "@playwright/test": "1.62.1",
     "@zwishing/epsg-index": "^3.0.0",
+    "apache-arrow": "^21.1.0",
+    "parquet-wasm": "^0.7.1",
     "@rollup/plugin-alias": "^6.0.0",
     "@rollup/plugin-commonjs": "^25.0.0",
     "@rollup/plugin-json": "^6.1.0",
@@ -132,17 +152,28 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
-    "apache-arrow": "^21.1.0",
     "fflate": "^0.8.3",
     "flatbush": "^4.5.0",
     "geographiclib-geodesic": "^2.2.0",
     "kdbush": "^4.0.2",
     "maplibre-gl": "^6.3.0",
     "mapshaper": "^0.6.113",
-    "mproj": "^0.1.2",
+    "mproj": "^0.1.2"
+  },
+  "peerDependencies": {
+    "@duckdb/duckdb-wasm": "1.33.1-dev57.0",
+    "apache-arrow": "^21.1.0",
     "parquet-wasm": "^0.7.1"
   },
-  "optionalDependencies": {
-    "@duckdb/duckdb-wasm": "1.33.1-dev57.0"
+  "peerDependenciesMeta": {
+    "@duckdb/duckdb-wasm": {
+      "optional": true
+    },
+    "apache-arrow": {
+      "optional": true
+    },
+    "parquet-wasm": {
+      "optional": true
+    }
   }
 }

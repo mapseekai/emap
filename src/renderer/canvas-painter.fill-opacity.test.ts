@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 // it before importing so node's default vitest environment doesn't blow up.
 (globalThis as any).window = { devicePixelRatio: 1 };
 
-import { CanvasPainter } from './canvas-painter';
+import { createCanvasPainterHarness } from '../../test/utils/canvas-painter';
 
 // Mock just enough of CanvasRenderingContext2D for drawPolygonFill to run.
 function makeCtx() {
@@ -38,14 +38,7 @@ function makeCtx() {
 }
 
 function makePainter(ctx: any) {
-  // `new CanvasPainter(canvasElement)` reaches for getContext('2d') etc.
-  // We construct a stub canvas + transform.
-  const canvas = { getContext: () => ctx, width: 100, height: 100, style: {} };
-  const p = new CanvasPainter(canvas as any);
-  // Attach a no-op transform so the inner math doesn't blow up.
-  (p as any)._transform = { mx: 1, my: 1, bx: 0, by: 0 };
-  (p as any)._pixelRatio = 1;
-  return p;
+  return createCanvasPainterHarness(ctx).painter;
 }
 
 function makeArcs() {

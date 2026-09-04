@@ -12,6 +12,18 @@ verifiedVersion: 0.8.1
 
 Emap 面向浏览器，需要有尺寸的 DOM 容器、Canvas 和现代模块工具链。可选 `duckdb` 子路径需要 DuckDB-Wasm；`arrow` 子路径的内存 Arrow 与 GeoArrow API 使用 `apache-arrow`，不需要 WASM，只有 GeoParquet 导入和导出会懒加载 `parquet-wasm`。
 
+## 支持基线
+
+| 环境 | 声明基线 | 自动验证 |
+|---|---|---|
+| Node.js 开发与发布工具 | `>=22.18 <25` | PR 使用 Node 22.18 和 Node 24；发布使用 Node 22.18 |
+| JavaScript 输出语法 | ES2022 | 生产 Bundle 构建和自包含检查 |
+| Chromium | Chrome / Edge 109+ | Playwright 使用稳定版 Chrome |
+| Firefox | Firefox 115+ | Playwright Firefox |
+| WebKit / Safari | Safari 16.4+ | Playwright WebKit |
+
+浏览器基线表示项目声明并持续验证的最低目标，不代表旧浏览器会被主动阻止。依赖触摸、Worker、WASM、文件上传或 MapLibre 的应用，应同时在自己的部署环境中验证 CSP、跨域资源和设备性能。
+
 ## TypeScript 模块解析
 
 `@mapseekai/emap/arrow` 与 `@mapseekai/emap/duckdb` 通过 `package.json` 的 `exports` 提供：

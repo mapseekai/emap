@@ -58,4 +58,18 @@ describe('published CSS type declaration', () => {
 
     expect(manifest.files).toContain('dist/emap-duckdb.mjs');
   });
+
+  it('keeps Arrow, Parquet, and DuckDB-Wasm optional for core-only consumers', () => {
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>;
+      peerDependencies?: Record<string, string>;
+      peerDependenciesMeta?: Record<string, { optional?: boolean }>;
+    };
+
+    for (const name of ['@duckdb/duckdb-wasm', 'apache-arrow', 'parquet-wasm']) {
+      expect(manifest.dependencies).not.toHaveProperty(name);
+      expect(manifest.peerDependencies?.[name]).toEqual(expect.any(String));
+      expect(manifest.peerDependenciesMeta?.[name]?.optional).toBe(true);
+    }
+  });
 });
