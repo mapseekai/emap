@@ -25,7 +25,7 @@ export interface FillPaint {
  * const paint: LinePaint = { 'line-color': '#335c99', 'line-width': 2 };
  */
 export interface LinePaint {
-  'line-color'?: string;
+  'line-color'?: string | StyleExpression;
   'line-width'?: number;
   /** Alternating dash and gap lengths in CSS pixels. */
   'line-dasharray'?: readonly number[];
@@ -38,7 +38,7 @@ export interface LinePaint {
 }
 
 export interface CirclePaint {
-  'circle-color'?: string;
+  'circle-color'?: string | StyleExpression;
   'circle-radius'?: number;
   'circle-fill'?: boolean;
   'circle-shape'?: PointMarkerShape;
@@ -57,7 +57,7 @@ interface LayerSpecificationBase {
   source: string;
   'source-layer'?: string;
   layout?: LayerLayout;
-  /** 显式 opt-in：读取 mapshaper 兼容烘焙样式字段（fill/stroke/stroke-width/r）。 */
+  /** 显式 opt-in：按图层类型读取 mapshaper 兼容烘焙颜色字段（fill / stroke）。 */
   styleSource?: 'mapshaper';
 }
 
@@ -152,7 +152,10 @@ export function resolveStrokeStyle(
   const resolvedDash = getDash();
 
   return {
-    color: p['line-color'] || fillColor || DEFAULT_LAYER_COLOR,
+    color:
+      (typeof p['line-color'] === 'string' ? p['line-color'] : undefined) ||
+      fillColor ||
+      DEFAULT_LAYER_COLOR,
     width: (p['line-width'] ?? 0.8) * lineScale,
     dashType,
     ...(dashType === 'arrow-dot'
@@ -168,7 +171,9 @@ export function resolveStrokeStyle(
 export function resolvePointStyle(paint: CirclePaint | undefined): PointStyle {
   const p = paint || {};
   return {
-    color: p['circle-color'] || DEFAULT_LAYER_COLOR,
+    color:
+      (typeof p['circle-color'] === 'string' ? p['circle-color'] : undefined) ||
+      DEFAULT_LAYER_COLOR,
     radius: p['circle-radius'] ?? 4,
     fill: p['circle-fill'] !== false,
     shape: p['circle-shape'] ?? 'circle',

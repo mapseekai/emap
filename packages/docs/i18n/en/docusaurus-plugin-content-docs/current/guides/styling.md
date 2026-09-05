@@ -3,7 +3,7 @@ id: styling
 slug: /guides/styling
 title: Styling layers
 api: ["ClassificationResult","ClassifyFeaturesOptions","Emap.setPaintProperty","FillPaint","LayerSpecification","LineDashStyle","LinePaint","PointMarkerShape","StyleExpression"]
-examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons"]
+examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
 verifiedVersion: 0.8.1
 ---
@@ -189,9 +189,9 @@ These methods schedule rendering. Do not mutate the object returned by
 
 ## Attribute-driven styling
 
-Since 0.9.0, fill layers support two attribute-driven fill paths. Both are
-**explicit opt-ins** and never change the behavior of layers that do not
-declare them.
+Since 0.9.0, fill, line, and circle layers support attribute-driven colors.
+All paths are **explicit opt-ins** and never change the behavior of layers that
+do not declare them.
 
 ### classifyFeatures: classified baking
 
@@ -217,15 +217,16 @@ if (result.ok) {
 }
 ```
 
-Field names are mapshaper-compatible (`fill` / `stroke` / `stroke-width` /
-`r`). Baking is an ordinary undoable op: undo restores every record's
-previous value.
+`classifyFeatures` can choose the baked field with `saveAs`. Color rendering
+uses the mapshaper-compatible `fill` / `stroke` fields: fill and circle layers
+read `fill`, while line layers read `stroke`. Baking is an ordinary undoable
+op: undo restores every record's previous value.
 
 ### styleSource opt-in: render baked fields
 
-When a fill layer declares `styleSource: 'mapshaper'`, the renderer reads
-each record's baked `fill` color and fills per bucket; layers without
-`styleSource` never read record fields:
+When a layer declares `styleSource: 'mapshaper'`, the renderer reads the baked
+color field for its geometry type: fill and circle layers read `fill`, while
+line layers read `stroke`. Layers without `styleSource` never read record fields:
 
 ```ts
 map.addLayer({
@@ -237,13 +238,14 @@ map.addLayer({
 });
 ```
 
-Precedence: an explicit scalar `fill-color` paint always wins (a layer with a
-declared static color is never hijacked by `styleSource`); baked fields are
-read only when no scalar paint is present.
+Precedence: an explicit scalar `fill-color`, `line-color`, or `circle-color`
+paint always wins (a layer with a declared static color is never hijacked by
+`styleSource`); baked fields are read only when no scalar paint is present.
 
 ### Paint expression subset
 
-`fill-color` also accepts an expression subset (no baking required):
+`fill-color`, `line-color`, and `circle-color` accept the same expression subset
+(no baking required):
 
 ```ts
 map.addLayer({
@@ -282,11 +284,9 @@ For an invisible layer, check:
 4. The camera is over the data extent.
 5. An opaque layer above it is not covering it.
 
-For fill layers, `fill-color` already supports the expression subset and the
-baked-field opt-in; see "Attribute-driven styling" above. Line and circle
-paint values are still layer-level constants — for attribute-driven
-categories, prepare multiple source layers or classify first, then assign
-separate paint to each render layer.
+Fill, line, and circle layers all support color expressions and baked-field
+opt-in; see "Attribute-driven styling" above. Fill and circle `styleSource`
+read `fill`, while line reads `stroke`.
 
 ## API
 
@@ -300,3 +300,6 @@ separate paint to each render layer.
 - [Line layer styling (color, width, and dashes)](/mapseekai/emap/examples/getting-started/lines/)
 - [Polygons](/mapseekai/emap/examples/getting-started/polygons/)
 - [Polygon fill](/mapseekai/emap/examples/getting-started/polygon-fill/)
+- [Polygon attribute-driven styling](/mapseekai/emap/examples/attribute-styling/)
+- [Line attribute-driven styling](/mapseekai/emap/examples/attribute-styling-line/)
+- [Point attribute-driven styling](/mapseekai/emap/examples/attribute-styling-point/)

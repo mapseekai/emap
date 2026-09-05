@@ -44,21 +44,33 @@ export function renderLayers(
     }
 
     const ml = ctx.resolveSourceLayer(layer.source, layer['source-layer']);
+    const dataset = source.getDataset?.();
     if (layer.type === 'line' && arcs) {
-      renderLineLayer(ctx, layer, ml, arcs, source.getDataset?.()?.editVersion ?? 0, lineScale);
+      renderLineLayer(ctx, layer, ml, arcs, dataset?.editVersion ?? 0, lineScale, dataset);
     } else if (layer.type === 'fill' && arcs && ml?.shapes) {
-      renderFillLayer(
-        ctx,
-        layer,
-        ml,
-        arcs,
-        source.getDataset?.()?.editVersion ?? 0,
-        lineScale,
-        source.getDataset?.(),
-      );
+      renderFillLayer(ctx, layer, ml, arcs, dataset?.editVersion ?? 0, lineScale, dataset);
     } else if (layer.type === 'circle' && ml?.shapes) {
       const style = resolvePointStyle(layer.paint);
-      ctx.painter.drawPoints(ml.shapes, style);
+      const resolution =
+        ctx.styleResolver && dataset
+          ? ctx.styleResolver.resolveCircle({
+              layerId: layer.id,
+              paint: layer.paint,
+              styleSource: layer.styleSource,
+              dataset,
+              layer: ml,
+            })
+          : null;
+      if (resolution) {
+        for (let i = 0; i < resolution.fillBuckets.length; i++) {
+          ctx.painter.drawPoints(selectShapes(ml.shapes, resolution.fillBuckets[i]), {
+            ...style,
+            color: resolution.styles[i],
+          });
+        }
+      } else {
+        ctx.painter.drawPoints(ml.shapes, style);
+      }
     }
   }
 }
@@ -91,14 +103,47 @@ function renderLineLayer(
   arcs: ArcCollection,
   geometryRevision: number,
   lineScale: number,
+  dataset?: MapshaperDataset,
 ): void {
   const style = resolveStrokeStyle(layer.paint, lineScale);
   if (ml?.shapes) {
     const viewportFilter = ctx.viewport.getArcFilter(arcs);
-    drawOutline(ctx, layer, ml, arcs, style, viewportFilter, geometryRevision);
+    const resolution =
+      ctx.styleResolver && dataset
+        ? ctx.styleResolver.resolveLine({
+            layerId: layer.id,
+            paint: layer.paint,
+            styleSource: layer.styleSource,
+            dataset,
+            layer: ml,
+          })
+        : null;
+    if (resolution) {
+      for (let i = 0; i < resolution.fillBuckets.length; i++) {
+        const shapes = selectShapes(ml.shapes, resolution.fillBuckets[i]);
+        const bucketStyle = { ...style, color: resolution.styles[i] };
+        if (bucketStyle.dashType === 'arrow-dot') {
+          ctx.painter.drawArcs(arcs, bucketStyle, viewportFilter, undefined, {
+            shapes: shapes as readonly (PathShape | null)[],
+            cacheKey: `${layer.source}:${layer['source-layer'] || 'default'}:${layer.id}:${i}`,
+            geometryRevision,
+          });
+        } else {
+          ctx.painter.drawPaths(shapes, bucketStyle, arcs);
+        }
+      }
+    } else {
+      drawOutline(ctx, layer, ml, arcs, style, viewportFilter, geometryRevision);
+    }
   } else {
     ctx.painter.drawArcs(arcs, style, ctx.viewport.getArcFilter(arcs));
   }
+}
+
+function selectShapes<T>(shapes: readonly T[], indices: Uint32Array): (T | null)[] {
+  const selected = new Array<T | null>(shapes.length).fill(null);
+  for (const index of indices) selected[index] = shapes[index];
+  return selected;
 }
 
 function renderFillLayer(

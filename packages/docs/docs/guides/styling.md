@@ -3,7 +3,7 @@ id: styling
 slug: /guides/styling
 title: 样式图层
 api: ["ClassificationResult","ClassifyFeaturesOptions","Emap.setPaintProperty","FillPaint","LayerSpecification","LineDashStyle","LinePaint","PointMarkerShape","StyleExpression"]
-examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons"]
+examples: ["getting-started/lines","getting-started/point-style","getting-started/polygon-fill","getting-started/polygons","attribute-styling"]
 stability: stable
 verifiedVersion: 0.8.1
 ---
@@ -184,8 +184,8 @@ map.removeLayer('district-outline');
 
 ## 属性驱动样式
 
-自 0.9.0 起，fill 图层支持两种属性驱动填色路径，均为**显式 opt-in**，不改变
-未声明图层的任何行为。
+自 0.9.0 起，fill / line / circle 图层都支持属性驱动颜色，均为**显式 opt-in**，
+不改变未声明图层的任何行为。
 
 ### classifyFeatures：分级烘焙
 
@@ -209,13 +209,14 @@ if (result.ok) {
 }
 ```
 
-字段命名与 mapshaper 兼容（`fill` / `stroke` / `stroke-width` / `r`）。烘焙是
-普通的可撤回 op：undo 恢复全部记录原值。
+`classifyFeatures` 可通过 `saveAs` 指定烘焙字段。颜色渲染使用与 mapshaper 兼容的
+`fill` / `stroke`：fill 与 circle 读取 `fill`，line 读取 `stroke`。烘焙是普通的
+可撤回 op：undo 恢复全部记录原值。
 
 ### styleSource opt-in：渲染烘焙字段
 
-fill 图层加 `styleSource: 'mapshaper'` 后，渲染器读取每条记录烘焙的 `fill`
-颜色并逐桶填充；未声明 `styleSource` 的图层完全不读记录字段：
+图层加 `styleSource: 'mapshaper'` 后，渲染器按几何类型读取每条记录烘焙的颜色：
+fill / circle 读取 `fill`，line 读取 `stroke`；未声明 `styleSource` 的图层完全不读记录字段：
 
 ```ts
 map.addLayer({
@@ -227,12 +228,12 @@ map.addLayer({
 });
 ```
 
-优先序：显式标量 `fill-color` paint 永远胜出（声明了静态色的图层不会被
-`styleSource` 劫持）；无标量 paint 时才读烘焙字段。
+优先序：显式标量 `fill-color` / `line-color` / `circle-color` paint 永远胜出
+（声明了静态色的图层不会被 `styleSource` 劫持）；无标量 paint 时才读烘焙字段。
 
 ### paint 表达式子集
 
-`fill-color` 也接受表达式子集（无需预先烘焙）：
+`fill-color`、`line-color` 和 `circle-color` 都接受同一套表达式子集（无需预先烘焙）：
 
 ```ts
 map.addLayer({
@@ -272,9 +273,8 @@ map.addLayer({
 
 ### 属性驱动样式
 
-fill 图层的 `fill-color` 已支持表达式子集与烘焙字段 opt-in，见上文
-「属性驱动样式」。line/circle 图层的 paint 仍是图层级常量；需要按属性分组时，
-可准备多个 source layers，或先生成分类字段再分别配置 paint。
+fill / line / circle 图层都支持颜色表达式与烘焙字段 opt-in，见上文「属性驱动样式」。
+其中 fill 与 circle 的 `styleSource` 读取 `fill`，line 读取 `stroke`。
 
 ## API
 
@@ -288,3 +288,6 @@ fill 图层的 `fill-color` 已支持表达式子集与烘焙字段 opt-in，见
 - [线图层样式（颜色、宽度和虚线）](/mapseekai/emap/examples/getting-started/lines/)
 - [面图层](/mapseekai/emap/examples/getting-started/polygons/)
 - [面填充](/mapseekai/emap/examples/getting-started/polygon-fill/)
+- [面属性驱动样式（classifyFeatures 烘焙与 fill-color 表达式）](/mapseekai/emap/examples/attribute-styling/)
+- [线属性驱动样式](/mapseekai/emap/examples/attribute-styling-line/)
+- [点属性驱动样式](/mapseekai/emap/examples/attribute-styling-point/)

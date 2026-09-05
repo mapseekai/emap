@@ -115,6 +115,18 @@ const exampleDescriptions = {
     zh: '对图层记录运行属性表达式，批量计算并更新 density 等字段。',
     en: 'Runs attribute expressions across layer records to calculate and update fields such as density.',
   },
+  'attribute-styling': {
+    zh: '按属性字段渲染面填充：classifyFeatures 分级烘焙配合 styleSource，或直接使用 fill-color 表达式。',
+    en: 'Renders polygon fills from attribute fields: classifyFeatures baking with styleSource opt-in, or fill-color expressions.',
+  },
+  'attribute-styling-line': {
+    zh: '按属性字段渲染线颜色：classifyFeatures 烘焙 stroke 配合 styleSource，或直接使用 line-color 表达式。',
+    en: 'Renders line colors from attributes using baked stroke values with styleSource or line-color expressions.',
+  },
+  'attribute-styling-point': {
+    zh: '按属性字段渲染点颜色：classifyFeatures 烘焙 fill 配合 styleSource，或直接使用 circle-color 表达式。',
+    en: 'Renders point colors from attributes using baked fill values with styleSource or circle-color expressions.',
+  },
   'data-engineering': {
     zh: '按顺序执行删除、排序、去重、筛选字段和重命名字段等数据整理操作。',
     en: 'Runs drop, sort, deduplication, field filtering, and field renaming as a data-cleaning batch.',
@@ -590,6 +602,9 @@ export const examples: readonly ExampleDefinition[] = [
     'fixtures/getting-started-polygon-fill.geojson',
     'The polygon layer renders with a translucent fill and visible outline.',
   ),
+  recipe('attribute-styling', 'style-interaction', '属性驱动样式', 'Attribute-driven styling', [docsStyling, docsAttributes], 'ClassifyFeaturesOptions', ['styling', 'attributes', 'history'], ['fixtures/attribute-styling.geojson']),
+  recipe('attribute-styling-line', 'style-interaction', '线属性驱动样式', 'Attribute-driven line styling', [docsStyling, docsAttributes], 'LinePaint', ['styling', 'attributes', 'line'], ['fixtures/attribute-styling-line.geojson']),
+  recipe('attribute-styling-point', 'style-interaction', '点属性驱动样式', 'Attribute-driven point styling', [docsStyling, docsAttributes], 'CirclePaint', ['styling', 'attributes', 'point'], ['fixtures/attribute-styling-point.geojson']),
   recipe('interaction-handlers', 'style-interaction', '交互 Handler', 'Interaction handlers', [docsEvents, docsControls], 'Emap', ['handlers'], [task6Fixture]),
   recipe('measurement', 'style-interaction', '球面测量', 'Spherical measurement', [docsControls, docsCrs], 'MeasureControl', ['measurement', 'controls', 'geodesic'], [task6Fixture]),
   recipe('feature-attributes', 'style-interaction', '要素属性查询', 'Feature attributes', [docsAttributes, docsEvents], 'Emap', ['query', 'highlight', 'basemap'], [task6Fixture]),

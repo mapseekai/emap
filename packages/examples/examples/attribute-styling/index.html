@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 属性驱动样式</title>
+</head>
+
+<body class="emap-example-with-floating-header">
+  <div id="header">
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>属性驱动样式</strong>
+  </div>
+  <div id="map" tabindex="0"></div>
+
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>属性驱动样式</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field">
+          <label for="file-input">文件</label>
+          <input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" />
+        </div>
+        <div class="emap-example-field">
+          <label for="target">面图层</label>
+          <select id="target"></select>
+        </div>
+        <div class="emap-example-field">
+          <label class="emap-example-check"><input type="radio" name="mode" value="baked" checked /> 分级烘焙</label>
+          <label class="emap-example-check"><input type="radio" name="mode" value="expression" /> 表达式</label>
+        </div>
+      </section>
+      <section class="emap-example-section" id="baked-group">
+        <h2>classifyFeatures 分级烘焙</h2>
+        <div class="emap-example-field">
+          <label for="field">字段</label>
+          <select id="field"></select>
+        </div>
+        <div class="emap-example-field">
+          <label for="method">方法</label>
+          <select id="method">
+            <option value="quantile">quantile 分位数</option>
+            <option value="equal-interval">equal-interval 等距</option>
+            <option value="nice">nice 美观断点</option>
+            <option value="categorical">categorical 类别</option>
+          </select>
+        </div>
+        <div class="emap-example-field">
+          <label for="classes">类别数</label>
+          <input id="classes" type="number" min="2" max="7" step="1" value="4" />
+        </div>
+        <button id="classify-btn" class="emap-example-primary-button" disabled>执行分级</button>
+      </section>
+      <section class="emap-example-section" id="expression-group" hidden>
+        <h2>fill-color 表达式</h2>
+        <div class="emap-example-field">
+          <label for="expr-field">字段</label>
+          <select id="expr-field"></select>
+        </div>
+        <div class="emap-example-field">
+          <label for="template">模板</label>
+          <select id="template">
+            <option value="step">step 分档</option>
+            <option value="interpolate">interpolate 连续</option>
+            <option value="match">match 类别</option>
+          </select>
+        </div>
+        <div class="emap-example-field">
+          <label for="expr">表达式</label>
+          <textarea id="expr" rows="4" spellcheck="false"></textarea>
+        </div>
+        <button id="expr-btn" class="emap-example-primary-button" disabled>应用表达式</button>
+      </section>
+      <section class="emap-example-section">
+        <p id="status" class="emap-example-status">加载一个含 polygon 图层的文件</p>
+        <p class="emap-example-hint">
+          分级烘焙:<code>map.ops.classifyFeatures()</code> 把颜色写入每条记录的 <code>fill</code> 字段(可 Ctrl+Z 撤销),
+          fill 图层声明 <code>styleSource: 'mapshaper'</code> 后按烘焙字段渲染。
+          表达式:<code>fill-color</code> 直接接受 <code>match</code> / <code>step</code> /
+          <code>interpolate</code> 子集,无需烘焙;非法表达式在 <code>addLayer</code> 时抛错。
+          字段为 null 的记录使用 null 色。
+        </p>
+      </section>
+    </div>
+  </details>
+
+  <script type="module">
+    import { installExampleMapUi } from '/src/example-runtime.ts';
+    import { autoLoadExampleFixtures, loadExampleRuntime } from '/src/example-runtime.ts';
+
+    const emap = await loadExampleRuntime();
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    installExampleMapUi(map, emap);
+    map.addControl(new HistoryControl(), 'top-left');
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'style-source';
+    const FILL_ID = 'style-fill';
+    const OUTLINE_ID = 'style-outline';
+    const RAMP = ['#f7fbff', '#deebf7', '#c6dbef', '#9ecae1', '#6baed6', '#4292c6', '#2171b5'];
+    const CATEGORICAL = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#a65628', '#f781bf'];
+    const NULL_COLOR = '#eeeeee';
+
+    const fileInput = document.getElementById('file-input');
+    const targetSel = document.getElementById('target');
+    const fieldSel = document.getElementById('field');
+    const methodSel = document.getElementById('method');
+    const classesInput = document.getElementById('classes');
+    const classifyBtn = document.getElementById('classify-btn');
+    const bakedGroup = document.getElementById('baked-group');
+    const expressionGroup = document.getElementById('expression-group');
+    const exprFieldSel = document.getElementById('expr-field');
+    const templateSel = document.getElementById('template');
+    const exprInput = document.getElementById('expr');
+    const exprBtn = document.getElementById('expr-btn');
+    const status = document.getElementById('status');
+
+    function currentMode() {
+      return document.querySelector('input[name="mode"]:checked').value;
+    }
+
+    function currentLayer() {
+      const src = map.getSource(SOURCE_ID);
+      const target = targetSel.value;
+      if (!src || !target) return null;
+      return src.getLayers().find((l, i) => (l?.name || l?.id || `layer-${i}`) === target) ?? null;
+    }
+
+    function fieldValues(field) {
+      const records = currentLayer()?.data?.getRecords?.() ?? [];
+      return records.map((r) => r?.[field]);
+    }
+
+    // Layer spec re-issue (remove → add), matching polygon-fill conventions.
+    // Baked mode omits `fill-color` so the styleSource opt-in reads the
+    // per-record `fill` field; expression mode puts it in paint instead.
+    function applyStyle(expression) {
+      const target = targetSel.value;
+      if (!target) { status.textContent = '没有 polygon 图层可渲染'; return; }
+      for (const id of [OUTLINE_ID, FILL_ID]) if (map.getLayer(id)) map.removeLayer(id);
+      const spec = { id: FILL_ID, type: 'fill', source: SOURCE_ID, 'source-layer': target };
+      if (expression) spec.paint = { 'fill-color': expression, 'fill-opacity': 0.85 };
+      else spec.styleSource = 'mapshaper';
+      map.addLayer(spec);
+      map.addLayer({
+        id: OUTLINE_ID,
+        type: 'line',
+        source: SOURCE_ID,
+        'source-layer': target,
+        paint: { 'line-color': '#ffffff', 'line-width': 0.5 },
+      });
+    }
+
+    function clampClasses() {
+      return Math.max(2, Math.min(RAMP.length, Number(classesInput.value) || 4));
+    }
+
+    async function runClassify() {
+      const target = targetSel.value;
+      const field = fieldSel.value;
+      if (!target || !field) return;
+      const method = methodSel.value;
+      const classes = clampClasses();
+      const opts = { source: SOURCE_ID, target, field, method, nullValue: NULL_COLOR };
+      if (method === 'categorical') {
+        const seen = [];
+        for (const v of fieldValues(field)) {
+          if (v == null || seen.includes(v)) continue;
+          seen.push(v);
+          if (seen.length === CATEGORICAL.length) break;
+        }
+        opts.categories = seen;
+        opts.colors = CATEGORICAL.slice(0, seen.length);
+      } else {
+        opts.classes = classes;
+        opts.colors = RAMP.slice(RAMP.length - classes);
+      }
+      classifyBtn.disabled = true;
+      try {
+        const result = await map.ops.classifyFeatures(opts);
+        if (!result.ok) { status.textContent = `分级失败: ${result.error?.message ?? '未知错误'}`; return; }
+        const v = result.value;
+        status.textContent = v.kind === 'categorical'
+          ? `已按 ${field} 烘焙 ${v.categories.length} 类: ${v.categories.join(', ')}; 计数 ${v.counts.join(' / ')}; null ${v.nullCount} 条。Ctrl+Z 撤销。`
+          : `已按 ${field} (${method}) 烘焙 ${v.counts.length} 类; 断点 ${v.breaks.map((b) => +b.toFixed(1)).join(', ')}; 计数 ${v.counts.join(' / ')}; null ${v.nullCount} 条。Ctrl+Z 撤销。`;
+      } catch (err) {
+        status.textContent = `错误: ${err?.message ?? err}`;
+      } finally {
+        classifyBtn.disabled = false;
+      }
+    }
+
+    function numericStats(field) {
+      const values = fieldValues(field).filter((v) => typeof v === 'number');
+      return { min: Math.min(...values), max: Math.max(...values) };
+    }
+
+    function buildExpression() {
+      const field = exprFieldSel.value;
+      if (!field) return null;
+      const classes = clampClasses();
+      const colors = RAMP.slice(RAMP.length - classes);
+      if (templateSel.value === 'match') {
+        const seen = [];
+        for (const v of fieldValues(field)) {
+          if (v == null || seen.includes(v)) continue;
+          seen.push(v);
+          if (seen.length === CATEGORICAL.length) break;
+        }
+        return ['match', ['get', field], ...seen.flatMap((v, i) => [v, CATEGORICAL[i]]), NULL_COLOR];
+      }
+      const { min, max } = numericStats(field);
+      if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return null;
+      if (templateSel.value === 'interpolate') {
+        const mid = (min + max) / 2;
+        return ['interpolate', 'linear', ['get', field],
+          min, colors[0], +mid.toFixed(2), colors[Math.floor(colors.length / 2)], max, colors[colors.length - 1]];
+      }
+      // step: equal-interval interior breaks between class colors.
+      const expr = ['step', ['get', field], colors[0]];
+      for (let i = 1; i < colors.length; i++) {
+        expr.push(+(min + ((max - min) * i) / colors.length).toFixed(2), colors[i]);
+      }
+      return expr;
+    }
+
+    function refreshExpression() {
+      const expr = buildExpression();
+      exprInput.value = expr ? JSON.stringify(expr) : '';
+    }
+
+    function applyExpression() {
+      try {
+        applyStyle(JSON.parse(exprInput.value));
+        status.textContent = '已应用 fill-color 表达式。';
+      } catch (err) {
+        status.textContent = `错误: ${err?.message ?? err}`;
+      }
+    }
+
+    function populate(source) {
+      targetSel.innerHTML = '';
+      const polygonLayers = source.getLayers().filter((l) => l?.geometry_type === 'polygon');
+      polygonLayers.forEach((lyr, i) => {
+        const name = lyr?.name || `layer-${i}`;
+        targetSel.appendChild(new Option(name, name));
+      });
+      fieldSel.innerHTML = '';
+      exprFieldSel.innerHTML = '';
+      const records = polygonLayers[0]?.data?.getRecords?.() ?? [];
+      Object.keys(records[0] || {}).forEach((field) => {
+        fieldSel.appendChild(new Option(field, field));
+        exprFieldSel.appendChild(new Option(field, field));
+      });
+      fieldSel.value = 'pop';
+      exprFieldSel.value = 'pop';
+      const ready = polygonLayers.length > 0;
+      classifyBtn.disabled = !ready;
+      exprBtn.disabled = !ready;
+      if (ready) {
+        applyStyle();
+        refreshExpression();
+        runClassify();
+      } else {
+        status.textContent = '此文件没有 polygon 图层';
+      }
+    }
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      status.textContent = `正在加载 ${file.name}...`;
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const content = new Uint8Array(ev.target.result);
+        const source = new TopologySource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        // Load initial data before registration: await setData, then addSource and setExtent.
+        try {
+          await source.setData({ filename: file.name, content });
+          await map.addSource(SOURCE_ID, source);
+          map.setExtent(source.getExtent());
+          populate(source);
+        } catch (err) {
+          console.error(err);
+          status.textContent = `错误: ${err?.message ?? err}`;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    targetSel.addEventListener('change', () => { applyStyle(); });
+    document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener('change', () => {
+      const baked = currentMode() === 'baked';
+      bakedGroup.hidden = !baked;
+      expressionGroup.hidden = baked;
+      if (baked) applyStyle();
+    }));
+    classifyBtn.addEventListener('click', runClassify);
+    exprFieldSel.addEventListener('change', refreshExpression);
+    templateSel.addEventListener('change', refreshExpression);
+    classesInput.addEventListener('change', refreshExpression);
+    exprBtn.addEventListener('click', applyExpression);
+    await autoLoadExampleFixtures('attribute-styling');
+  </script>
+</body>
+
+</html>

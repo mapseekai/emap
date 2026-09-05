@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emap 示例 - 线属性驱动样式</title>
+</head>
+<body class="emap-example-with-floating-header">
+  <div id="header">
+    <a class="emap-example-banner-brand" href="/mapseekai/emap/examples/" aria-label="返回 Emap 示例目录"><img src="/mapseekai/emap/examples/emap.svg" alt="" /><span>Emap / Examples</span></a>
+    <strong>线属性驱动样式</strong>
+  </div>
+  <div id="map" tabindex="0"></div>
+  <details class="emap-example-workbench panel" open>
+    <summary><h1>线属性驱动样式</h1></summary>
+    <div class="emap-example-workbench-body">
+      <section class="emap-example-section">
+        <div class="emap-example-field"><label for="file-input">文件</label><input id="file-input" type="file" accept=".geojson,.json,.topojson,.zip" /></div>
+        <div class="emap-example-field"><label for="field">字段</label><select id="field"></select></div>
+        <div class="emap-example-field">
+          <label class="emap-example-check"><input type="radio" name="mode" value="baked" checked /> 分级烘焙</label>
+          <label class="emap-example-check"><input type="radio" name="mode" value="expression" /> 表达式</label>
+        </div>
+        <button id="apply" class="emap-example-primary-button" disabled>应用样式</button>
+      </section>
+      <section class="emap-example-section">
+        <p id="status" class="emap-example-status">加载一个 polyline 图层</p>
+        <p class="emap-example-hint">
+          分级烘焙使用 <code>classifyFeatures({ saveAs: 'stroke' })</code>，线图层通过 <code>styleSource: 'mapshaper'</code> 读取每条记录的 <code>stroke</code>；表达式模式直接把表达式写入 <code>line-color</code>。
+        </p>
+      </section>
+    </div>
+  </details>
+  <script type="module">
+    import { autoLoadExampleFixtures, installExampleMapUi, loadExampleRuntime } from '/src/example-runtime.ts';
+
+    const emap = await loadExampleRuntime();
+    const { Emap, TopologySource, NavigationControl, HistoryControl } = emap;
+    const map = new Emap({ container: 'map' });
+    map.addControl(new NavigationControl(), 'top-left');
+    map.addControl(new HistoryControl(), 'top-left');
+    installExampleMapUi(map, emap);
+    map.bindHistoryShortcuts();
+
+    const SOURCE_ID = 'line-style-source';
+    const LAYER_ID = 'line-style';
+    const COLORS = ['#eff3ff', '#bdd7e7', '#6baed6', '#3182bd', '#08519c'];
+    const NULL_COLOR = '#eeeeee';
+    const fileInput = document.getElementById('file-input');
+    const fieldSelect = document.getElementById('field');
+    const applyButton = document.getElementById('apply');
+    const status = document.getElementById('status');
+    let target = '';
+
+    function currentLayer() {
+      const source = map.getSource(SOURCE_ID);
+      return source?.getLayers().find((layer, i) => (layer?.name || layer?.id || `layer-${i}`) === target) ?? null;
+    }
+
+    function addStyledLayer(expression = null) {
+      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
+      const layer = { id: LAYER_ID, type: 'line', source: SOURCE_ID, 'source-layer': target };
+      if (expression) layer.paint = { 'line-color': expression, 'line-width': 5 };
+      else {
+        layer.styleSource = 'mapshaper';
+        layer.paint = { 'line-width': 5 };
+      }
+      map.addLayer(layer);
+    }
+
+    function buildExpression(field) {
+      const values = (currentLayer()?.data?.getRecords?.() ?? []).map((record) => Number(record?.[field])).filter(Number.isFinite);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return ['match', ['get', 'group'], 'a', '#e41a1c', 'b', '#377eb8', '#4daf4a'];
+      return ['interpolate', 'linear', ['get', field], min, COLORS[0], max, COLORS[COLORS.length - 1]];
+    }
+
+    async function applyStyle() {
+      const field = fieldSelect.value;
+      if (!target || !field) return;
+      const mode = document.querySelector('input[name="mode"]:checked').value;
+      if (mode === 'expression') {
+        addStyledLayer(buildExpression(field));
+        status.textContent = `已应用 line-color 属性表达式：${field}`;
+        return;
+      }
+      const result = await map.ops.classifyFeatures({
+        source: SOURCE_ID,
+        target,
+        field,
+        method: 'quantile',
+        classes: COLORS.length,
+        colors: COLORS,
+        nullValue: NULL_COLOR,
+        saveAs: 'stroke',
+      });
+      if (!result.ok) {
+        status.textContent = `分级失败：${result.error?.message ?? '未知错误'}`;
+        return;
+      }
+      addStyledLayer();
+      status.textContent = `已按 ${field} 烘焙 stroke，共 ${result.value.featureCount} 条线。Ctrl+Z 可撤销。`;
+    }
+
+    function populate(source) {
+      const lineLayers = source.getLayers().filter((layer) => layer?.geometry_type === 'polyline');
+      const layer = lineLayers[0];
+      if (!layer) {
+        status.textContent = '此文件没有 polyline 图层';
+        applyButton.disabled = true;
+        return;
+      }
+      target = layer.name || layer.id || 'layer-0';
+      const records = layer.data?.getRecords?.() ?? [];
+      fieldSelect.innerHTML = '';
+      Object.keys(records[0] || {}).forEach((field) => fieldSelect.appendChild(new Option(field, field)));
+      fieldSelect.value = Object.hasOwn(records[0] || {}, 'value') ? 'value' : fieldSelect.value;
+      applyButton.disabled = false;
+      applyStyle();
+    }
+
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (loadEvent) => {
+        const source = new TopologySource(SOURCE_ID);
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        try {
+          await source.setData({ filename: file.name, content: new Uint8Array(loadEvent.target.result) });
+          await map.addSource(SOURCE_ID, source);
+          map.setExtent(source.getExtent());
+          populate(source);
+        } catch (error) {
+          status.textContent = `错误：${error?.message ?? error}`;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+    applyButton.addEventListener('click', applyStyle);
+    document.querySelectorAll('input[name="mode"]').forEach((radio) => radio.addEventListener('change', applyStyle));
+    fieldSelect.addEventListener('change', applyStyle);
+    await autoLoadExampleFixtures('attribute-styling-line');
+  </script>
+</body>
+</html>

@@ -4,7 +4,7 @@
 
 import { EMAP_THEME_COLORS } from '../theme/colors';
 import type { MapshaperDataset, MapshaperLayer } from '../types/mapshaper-types';
-import type { FillLayerPaint } from './layer';
+import type { CirclePaint, FillLayerPaint, LinePaint } from './layer';
 import {
   compileStyleExpression,
   isStyleExpression,
@@ -43,15 +43,47 @@ export class StyleResolver {
     dataset: MapshaperDataset;
     layer: MapshaperLayer;
   }): StyleResolution | null {
-    const fillSpec = args.paint?.['fill-color'];
-    // 逐键回退第 1 级：显式标量 paint 优先——已声明 fill-color 的图层
-    // 永远走静态 painter 路径，styleSource 不得劫持（spec §4.2）。
-    if (typeof fillSpec === 'string') return null;
-    const expr = isStyleExpression(fillSpec) ? fillSpec : null;
-    const baked = expr === null && args.styleSource === 'mapshaper';
-    if (expr === null && !baked) return null; // 完全未声明：静态默认色
+    return this._resolveColor(args, args.paint?.['fill-color'], 'fill');
+  }
 
-    const fingerprint = JSON.stringify(fillSpec ?? null) + '|' + (args.styleSource ?? '');
+  resolveLine(args: {
+    layerId: string;
+    paint: LinePaint | undefined;
+    styleSource: 'mapshaper' | undefined;
+    dataset: MapshaperDataset;
+    layer: MapshaperLayer;
+  }): StyleResolution | null {
+    return this._resolveColor(args, args.paint?.['line-color'], 'stroke');
+  }
+
+  resolveCircle(args: {
+    layerId: string;
+    paint: CirclePaint | undefined;
+    styleSource: 'mapshaper' | undefined;
+    dataset: MapshaperDataset;
+    layer: MapshaperLayer;
+  }): StyleResolution | null {
+    return this._resolveColor(args, args.paint?.['circle-color'], 'fill');
+  }
+
+  private _resolveColor(
+    args: {
+      layerId: string;
+      styleSource: 'mapshaper' | undefined;
+      dataset: MapshaperDataset;
+      layer: MapshaperLayer;
+    },
+    colorSpec: string | StyleExpression | undefined,
+    bakedField: 'fill' | 'stroke',
+  ): StyleResolution | null {
+    // 逐键回退第 1 级：显式标量 paint 优先。已声明静态颜色的图层永远
+    // 走静态 painter 路径，styleSource 不得劫持（spec §4.2）。
+    if (typeof colorSpec === 'string') return null;
+    const expr = isStyleExpression(colorSpec) ? colorSpec : null;
+    const baked = expr === null && args.styleSource === 'mapshaper';
+    if (expr === null && !baked) return null;
+
+    const fingerprint = `${bakedField}|${JSON.stringify(colorSpec ?? null)}|${args.styleSource ?? ''}`;
     const hit = this._cache.get(args.layerId);
     const attrVersion = args.dataset.attributeVersion ?? 0;
     if (
@@ -63,7 +95,7 @@ export class StyleResolver {
       return hit.resolution;
     }
     try {
-      return this._rebuild(args, expr, fingerprint, attrVersion);
+      return this._rebuild(args, expr, bakedField, fingerprint, attrVersion);
     } catch (error) {
       // 重建失败：保留旧缓存 stale 渲染 + warn，不出现空白帧（spec §6）。
       this._opts.onWarn?.({ layerId: args.layerId, error });
@@ -72,8 +104,13 @@ export class StyleResolver {
   }
 
   private _rebuild(
-    args: Parameters<StyleResolver['resolveFill']>[0],
+    args: {
+      layerId: string;
+      dataset: MapshaperDataset;
+      layer: MapshaperLayer;
+    },
     expr: StyleExpression | null,
+    bakedField: 'fill' | 'stroke',
     fingerprint: string,
     attrVersion: number,
   ): StyleResolution {
@@ -90,7 +127,7 @@ export class StyleResolver {
       let value: unknown = null;
       try {
         if (compiled) value = compiled(records[i]);
-        else value = records[i]?.['fill'];
+        else value = records[i]?.[bakedField];
       } catch {
         value = null; // 渲染期隔离：单条异常 → null 桶
       }
